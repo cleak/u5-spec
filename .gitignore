@@ -1,0 +1,7 @@
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*.bak
+Thumbs.db
+.DS_Store
