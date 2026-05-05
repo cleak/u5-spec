@@ -105,7 +105,6 @@ The modern engine will render audio with a contemporary stack; only the music da
 | DUNGEON.DAT | Dungeon levels (3D wireframe) | ⬜ | `formats/dungeon-dat.md` |
 | BRIT.CBT | Combat arenas indexed by overworld terrain | ⬜ | `formats/cbt.md` |
 | DUNGEON.CBT | Combat arenas for dungeon encounters | ⬜ | `formats/cbt.md` |
-| END.DAT | Endgame map | ⬜ | `formats/end-dat.md` |
 
 The four-class location grouping (CASTLE / KEEP / TOWNE / DWELLING) is shared structure: each class has DAT + NPC + TLK in lockstep. The format spec at `formats/location-dat.md` should describe the shared layout once, with per-class specifics as deltas.
 
@@ -129,6 +128,7 @@ Schedules and pathfinding probably live in `NPC.OVL` operating on `*.NPC` and `*
 | STORY.DAT | Intro/story text screens | ⬜ | `formats/story-dat.md` |
 | QUESTION.DAT | Character creation questionnaire | ⬜ | `formats/question-dat.md` |
 | ENDMSG.DAT | Endgame messages | ⬜ | `formats/endmsg-dat.md` |
+| END.DAT | Endgame narrative text | ⬜ | `formats/end-dat.md` |
 | MISCMSG.DAT | Miscellaneous game messages | ⬜ | `formats/miscmsg-dat.md` |
 | SHOPPE.DAT | Shop inventory and pricing tables | ⬜ | `formats/shoppe-dat.md` |
 
