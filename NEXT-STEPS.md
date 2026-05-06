@@ -27,6 +27,14 @@ A durable handoff document for resuming specification work. Updated after each m
   data and logs corrections. The first run bound Lord British's castle evidence
   to `CASTLE:0` and corrected the older "fifth castle slot" wording.
 
+### V1 deferrals
+
+The long-running open questions below are explicitly deferred to follow-up
+implementation/parity work. They are useful next investigations, but they no
+longer block the first cleanroom spec release: the non-optional prose inventory
+exists, the first verification slice runs, and the remaining exactness gaps are
+called out where they matter.
+
 ## Locations
 
 ### Sibling repositories
