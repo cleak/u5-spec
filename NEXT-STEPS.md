@@ -63,9 +63,10 @@ u5-spec/
 
 Continue with one of these narrow batches:
 
-- Extend the `..\u5-engine` verification slice from a data-loading/pathfinding
-  smoke test into an interactive first-playable room loop if exact movement and
-  conversation parity becomes required.
+- Extend the `..\u5-engine` verification slice from its current
+  data-loading/render-hash/pathfinding/door/conversation smoke test into an
+  interactive first-playable room loop if exact movement and conversation
+  parity becomes required.
 - Analyze EGA.DRV only if exact display-driver behaviour becomes a required public spec.
 
 ## Long-running open questions
