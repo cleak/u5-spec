@@ -2,12 +2,12 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
-**Last updated:** 2026-05-06 - quest graph catalog landed.
+**Last updated:** 2026-05-06 - first verification slice landed.
 
 ## Repository status
 
 - **Branch:** `master` (private — to be flipped public once content is ready)
-- **Latest spec commit:** `504848a Add quest graph catalog`
+- **Latest spec commit:** `bdf28bc Correct Lord British castle binding`
 - **Previous priority commits:** `015430e Add endgame and world data specs`; `8665799 Add intro and priority catalog specs`
 - **Push target:** `https://github.com/cleak/u5-spec`
 
@@ -23,7 +23,9 @@ A durable handoff document for resuming specification work. Updated after each m
 
 - Non-optional Priority A prose docs are now covered for the analyzed DOS baseline.
 - `formats/ega-driver.md` remains optional unless exact display-driver behaviour becomes in scope.
-- The first-playable verification slice still needs a concrete pass against Lord British's throne room.
+- The first verification slice now runs in `..\u5-engine` against local game
+  data and logs corrections. The first run bound Lord British's castle evidence
+  to `CASTLE:0` and corrected the older "fifth castle slot" wording.
 
 ## Locations
 
@@ -61,7 +63,9 @@ u5-spec/
 
 Continue with one of these narrow batches:
 
-- Run the Lord British throne-room verification slice against the current specs and log corrections.
+- Extend the `..\u5-engine` verification slice from a data-loading/pathfinding
+  smoke test into an interactive first-playable room loop if exact movement and
+  conversation parity becomes required.
 - Analyze EGA.DRV only if exact display-driver behaviour becomes a required public spec.
 
 ## Long-running open questions
