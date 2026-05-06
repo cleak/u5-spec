@@ -2,12 +2,12 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
-**Last updated:** 2026-05-06 — launcher/startup spec landed.
+**Last updated:** 2026-05-06 - quest graph catalog landed.
 
 ## Repository status
 
 - **Branch:** `master` (private — to be flipped public once content is ready)
-- **Latest spec commit:** `de43bfc Add launcher startup spec`
+- **Latest spec commit:** `504848a Add quest graph catalog`
 - **Previous priority commits:** `015430e Add endgame and world data specs`; `8665799 Add intro and priority catalog specs`
 - **Push target:** `https://github.com/cleak/u5-spec`
 
@@ -15,13 +15,13 @@ A durable handoff document for resuming specification work. Updated after each m
 
 - README documenting purpose, structure, and specification style guidelines.
 - [`EXTRACTION.md`](EXTRACTION.md) — master inventory derived from the actual GOG release file listing. Catalogs every code module, data file, algorithm, and cross-cutting reference table the engine will need to reproduce.
-- 57 cleanroom spec docs: 26 system specs, 25 format specs, and 6 catalogs (~171,000 words).
+- 58 cleanroom spec docs: 26 system specs, 25 format specs, and 7 catalogs (~173,500 words).
 - Major game-mode and first-playable systems are covered: launcher/startup, main loop, input, text, save/load, overworld, town mode, dungeon mode, combat, visibility, time, magic, karma, doors/Z transitions, active objects, animation, shops, NPC schedules, encounters, conversation, intro, endgame, lighting, weather, and U4 transfer.
-- Recent additions: `systems/launcher.md`, `systems/animation.md`, `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md`, `formats/bit.md`, `formats/look2-dat.md`, `formats/signs-dat.md`, `formats/question-dat.md`, `formats/karma-dat.md`, `formats/story-dat.md`, `formats/endmsg-dat.md`, `formats/miscmsg-dat.md`, `formats/shoppe-dat.md`, `formats/end-dat.md`, and `catalogs/gazetteer.md`.
+- Recent additions: `systems/launcher.md`, `systems/animation.md`, `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md`, `formats/bit.md`, `formats/look2-dat.md`, `formats/signs-dat.md`, `formats/question-dat.md`, `formats/karma-dat.md`, `formats/story-dat.md`, `formats/endmsg-dat.md`, `formats/miscmsg-dat.md`, `formats/shoppe-dat.md`, `formats/end-dat.md`, `catalogs/gazetteer.md`, and `catalogs/quest-graph.md`.
 
 ### Remaining high-value gaps
 
-- `catalogs/quest-graph.md` remains. It is the expensive one because it needs bulk TLK decoding and keyword-chain analysis.
+- Non-optional Priority A prose docs are now covered for the analyzed DOS baseline.
 - `formats/ega-driver.md` remains optional unless exact display-driver behaviour becomes in scope.
 - The first-playable verification slice still needs a concrete pass against Lord British's throne room.
 
@@ -61,7 +61,6 @@ u5-spec/
 
 Continue with one of these narrow batches:
 
-- Build the TLK keyword-chain tooling needed for `catalogs/quest-graph.md`.
 - Run the Lord British throne-room verification slice against the current specs and log corrections.
 - Analyze EGA.DRV only if exact display-driver behaviour becomes a required public spec.
 
