@@ -1,0 +1,182 @@
+# UNDER.DAT
+
+Format specification for `UNDER.DAT`, the static Underworld map. Runtime movement, lighting, encounters, plane transitions, and rendering are covered by the overworld and related system specs; this document covers the file shape and the map-reader contract.
+
+## 1. Overview
+
+`UNDER.DAT` represents the Underworld, the dark lower plane beneath Britannia. It uses the same logical surface-map geometry as `BRIT.DAT`: a 256-by-256 grid of one-byte tile indices, divided into 256 chunks arranged as a 16-by-16 chunk grid. Each chunk is 16 cells wide by 16 cells tall, for 256 bytes per chunk.
+
+Unlike `BRIT.DAT`, `UNDER.DAT` is dense. All 256 logical chunks are present in the file in logical order. A reader can reconstruct any tile by arithmetic alone; no sparse chunk-index table is needed for the on-disk layout. The runtime may still route both surfaces through shared loader logic, but the file format itself is direct: logical chunk slot `n` is stored block `n`.
+
+The file stores terrain only. It does not store active monsters, vehicles, dropped items, party position, visibility state, transition metadata, or encounter definitions.
+
+## 2. File Shape
+
+The file is exactly 65,536 bytes:
+
+| Quantity | Value |
+|----------|------:|
+| Stored chunk count | 256 |
+| Bytes per stored chunk | 256 |
+| Total file size | 65,536 |
+| Logical chunk count | 256 |
+| Logical world size | 256 x 256 cells |
+| Cell size | 1 byte |
+
+There is no file header, footer, checksum, compression envelope, per-chunk header, or row padding. The 256-byte chunk is the only disk block unit described by this format. It is sector-sized, but the file carries no sector metadata. The file is a dense sequence of 256 chunk blocks:
+
+```text
+chunk_start = chunk_slot * 256
+```
+
+Because every logical chunk is stored, `chunk_slot` and stored-block index are the same value.
+
+## 3. Chunk Organization
+
+The logical world is a 16-by-16 grid of chunks. Chunk slots are ordered west-to-east within a row, then north-to-south across rows:
+
+```text
+chunk_x = floor(x / 16)
+chunk_y = floor(y / 16)
+chunk_slot = chunk_y * 16 + chunk_x
+```
+
+Each chunk is a 16-by-16 row-major grid:
+
+```text
+local_x = x mod 16
+local_y = y mod 16
+offset_in_chunk = local_y * 16 + local_x
+file_offset = chunk_slot * 256 + offset_in_chunk
+```
+
+To read tile `(x, y)`, wrap both coordinates into `0..255`, compute the chunk slot and local offset, then read the byte at `file_offset`.
+
+## 4. Coordinate Wrapping
+
+Underworld coordinates are byte-sized world coordinates and wrap modulo 256 on both axes. Terrain sampling, viewport construction, and chunk-window loading should use wrapped coordinates:
+
+- `x = -1` samples column `255`.
+- `x = 256` samples column `0`.
+- The same rule applies to `y`.
+- Chunk coordinates wrap modulo 16 after world coordinates wrap.
+- A viewport centered near a world edge can draw from chunks on both sides of the logical grid.
+
+Movement legality remains separate from coordinate sampling. Tile class, vehicle state, active objects, chasms, ascents, and scripted handlers decide whether the party can move or transition after a wrapped coordinate has been resolved.
+
+## 5. Tile Encoding
+
+Every cell byte is a tile index in the lower half of the shared tile space, `0..255`. These are map-cell tiles: terrain, walls, paths, special static features, and other world tiles. The upper half of the tile space is reserved for sprites and active objects and is not stored directly in the map file.
+
+The file stores tile identity only. It does not encode:
+
+- graphics pixels, which come from `TILES.16` or `TILES.4`;
+- passability or sight-blocking attributes;
+- light level or visited state;
+- random-encounter probabilities;
+- active monsters, vehicles, objects, or the party;
+- ascent coordinates or scripted transition targets.
+
+Preserve unknown or uninterpreted tile values as raw tile indices. Gameplay semantics belong to the tile catalogue and consuming systems.
+
+## 6. Surface Differences
+
+`UNDER.DAT` and `BRIT.DAT` share the same logical dimensions, chunk size, coordinate wrapping, tile-byte encoding, viewport model, and overworld-mode loop. The important format and runtime differences are:
+
+| Aspect | Britannia (`BRIT.DAT`) | Underworld (`UNDER.DAT`) |
+|--------|------------------------|--------------------------|
+| On-disk chunks | Sparse, water-only chunks omitted | Dense, all chunks stored |
+| File size | 52,480 bytes | 65,536 bytes |
+| Chunk lookup | Requires chunk-index table | Direct logical chunk order |
+| Default omitted terrain | Deep water synthesized by loader | No omitted terrain |
+| Ambient light | Day-night surface model | Forced dark underworld model |
+| Fixed features | Towns, keeps, castles, shrines, moongates, dungeon entrances, falls | Cavern terrain, dungeon/ascend features, underworld-specific transitions |
+| Object seed | Surface object layer | Underworld object layer |
+
+The differences after loading are mostly system behavior, not file structure. The same renderer and visibility producer can consume both planes once the proper chunks are in the live buffer.
+
+## 7. Relationship To Location Entry And Plane Transitions
+
+The party's current plane selects whether the overworld loader samples `BRIT.DAT` or `UNDER.DAT`. Britannia uses the surface plane value; the Underworld uses the underworld plane value. Falling, ascending, and some moongate outcomes change that plane state and reinitialize the active-object layer for the destination plane.
+
+`UNDER.DAT` itself does not name transition coordinates, destination points, or scene identities. It stores only the terrain bytes at those cells. The overworld system and resident coordinate tables decide which underworld cells lift the party back to the surface, which cells lead to dungeon or special scenes, and how the active-object table is reseeded.
+
+Unlike the surface, the Underworld does not dispatch into the town, dwelling, castle, or keep location files. When it does leave the 256-by-256 map, the destination is a plane transition, dungeon-mode scene, combat or scripted scene, not a `TOWNE.DAT`-style interior chosen from a named surface settlement.
+
+## 8. Relationship To Visibility And Rendering
+
+The Underworld uses the same 2-by-2 live chunk window and 11-by-11 viewport model as Britannia. The renderer receives tile indices from the live chunk buffer, not directly from disk on every frame.
+
+Visibility is not stored in `UNDER.DAT`. The visibility producer reads terrain tiles from the chunk buffer, applies line-of-sight and light-radius rules, and writes a separate viewport grid for the renderer. The Underworld differs from Britannia because its ambient light is forced to the dark model. Torches, spells, and special light sources can affect the visible region, but the map bytes remain unchanged.
+
+Active objects are composited after terrain visibility. Monsters, vehicles, items, effects, and the party do not live in `UNDER.DAT`.
+
+## 9. Relationship To Encounters
+
+The Underworld participates in the overworld random-encounter system. The encounter probe uses the tile under the party and runtime state to decide whether to spawn a hostile active object. `UNDER.DAT` supplies terrain classification but no encounter records.
+
+When combat begins, the tactical terrain is loaded from the combat arena data, not from the local Underworld map slice. The encounter and combat systems may treat the Underworld plane as a variant for placement, lighting, or monster selection, but the `UNDER.DAT` file itself remains a static terrain source.
+
+## 10. Persistence
+
+`UNDER.DAT` is read-only static content during play. Saves persist runtime state such as the party's coordinates, current plane, vehicle state, active objects, and object-layer state. The Underworld's mutable active-object layer is handled outside the map file.
+
+Runtime changes should be modeled as overlays or live-buffer mutations:
+
+- active monsters and objects live in active-object state;
+- opened or temporary effects belong to live runtime buffers;
+- visibility and light are recalculated each frame or turn;
+- combat setup uses separate arena files.
+
+No save/load path should rewrite `UNDER.DAT`.
+
+## 11. Validation
+
+A reader should enforce or check the following:
+
+- The file length is exactly 65,536 bytes.
+- The file contains exactly 256 chunks.
+- Each chunk is exactly 256 bytes.
+- Chunk slots are dense and logical-order: `chunk_slot == stored_block_index`.
+- Local chunk offsets are row-major 16-by-16 offsets.
+- Coordinate sampling wraps modulo 256 before chunk-slot selection.
+- Every byte is a map-cell tile index in `0..255`.
+
+For visual or gameplay audits:
+
+- Rendering the materialized 256-by-256 grid through the tile catalogue should produce a continuous underworld map with no chunk-boundary decoding seams.
+- Viewports crossing world edges should wrap cleanly.
+- Tiles that appear impassable, opaque, damaging, or transitional should be verified through tile attributes and system specs rather than inferred from file position.
+
+## 12. Implementation Notes
+
+A complete materializing decoder is straightforward:
+
+1. Verify the file is 65,536 bytes.
+2. Split it into 256 consecutive 256-byte chunks.
+3. For each chunk slot, map it to `(chunk_x, chunk_y)` with `chunk_x = slot mod 16` and `chunk_y = floor(slot / 16)`.
+4. Copy the chunk's 16 row-major rows into the corresponding region of a 256-by-256 output grid.
+5. Render or analyze the output grid through the shared tile catalogue.
+
+An engine can instead stream four chunks at a time, exactly as for Britannia, with the simplification that every requested chunk maps directly to a stored file block.
+
+## 13. Gaps
+
+- The exact set of ascent, dungeon, and scripted-transition coordinates in the Underworld belongs in system or gazetteer specs and is not enumerated here.
+- The full tile-attribute tables for underworld passability, sight blocking, damage, and special triggers are not fully enumerated in the tile specs yet.
+- The chunk-loader's substitution behavior for animated or alternate terrain is not fully specified.
+- Underworld-specific encounter probabilities, monster selection, and arena variant behavior remain partially open in the encounter system spec.
+- It is not yet fully audited whether any long-lived world mutation can patch the live terrain layer across saves. Current evidence points to static `UNDER.DAT` plus mutable active-object/object-layer state.
+- The exact relationship between every underworld special tile and first-person dungeon entry remains to be tied to the dungeon-mode and gazetteer specs.
+
+## 14. Sources
+
+This spec is a cleanroom prose rewrite derived from the project notes and existing specs below. It intentionally omits decompiled code, assembly, raw private addresses, and copied byte dumps.
+
+- `u5-decomp/formats/maps.md`
+- `u5-spec/systems/overworld.md`
+- `u5-spec/formats/location-dat.md`
+- `u5-spec/systems/visibility.md`
+- `u5-spec/systems/encounters.md`
+- `u5-spec/formats/tiles.md`
+- `u5-spec/catalogs/tile-catalog.md`
