@@ -169,7 +169,7 @@ Castle rows use `CASTLE:n` keys and load `CASTLE.DAT`, `CASTLE.NPC`, and
 
 | Name | Current binding status | Engine notes |
 |---|---|---|
-| Lord British's Castle | Castle-family location; fifth castle slot in current town-mode notes | Has an audience prompt and quest-flag side effects on entry. |
+| Lord British's Castle | Castle-family location; current verification slice binds the roster/dialogue evidence to `CASTLE:0` | Has an audience prompt and quest-flag side effects on entry. |
 | Lord Blackthorn's Castle | Castle-family location indicated by Blackthorn roster and combat/event specs | Contains Blackthorn-related NPC and hostile/scripted behaviour. |
 
 Other castle-family display names must be resolved through the resident
@@ -302,10 +302,12 @@ The following gaps are intentional in this first catalog:
 2. **Sub-map-to-name order.** Town ordering is currently presumed from existing
    format notes; dwelling, castle, and keep ordering still needs confirmation
    from resident names, scene-byte observations, and paired map/NPC/TLK data.
-3. **Castle and keep full display-name set.** Lord British's Castle and
-   Lord Blackthorn's Castle are identified by current specs, and some keep
-   examples appear in extraction notes, but the complete public table is not
-   yet cleanly bound.
+3. **Castle and keep full display-name set.** Lord British's Castle now has a
+   verification-slice binding to `CASTLE:0`, and Lord Blackthorn's Castle is
+   identified by current specs. Some keep examples appear in extraction notes,
+   but the complete public table is not yet cleanly bound. One private
+   town-entry note still has a conflicting special-scene label and should be
+   rechecked before using it as a public location binding.
 4. **Dungeon index-to-name order.** The named dungeon set is firm; the exact
    index binding should be published only after resident scene selection is
    transcribed.
@@ -343,6 +345,8 @@ Public specs used:
   and sub-map/name open question.
 - `u5-spec/catalogs/npc-roster.md` - current named NPC rows and unresolved
   `FAMILY:n` to display-place mapping.
+- `u5-engine/reports/lb-throne-room-slice.txt` - first verification slice
+  binding Lord British's castle evidence to `CASTLE:0`.
 - `u5-spec/systems/karma.md` - virtue order and shrine mantras.
 - `u5-spec/catalogs/tile-catalog.md` - shrine, moongate, entrance, ladder,
   sign, well, spring, cave, and other tile-trigger classes.

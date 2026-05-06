@@ -155,7 +155,10 @@ Hole-up is the only path that runs the schedule processor outside the per-turn e
 
 ## 13. Lord British's castle
 
-One scene byte (the fifth castle slot) is Lord British's Castle, distinct in two ways:
+One castle-family scene is Lord British's Castle, distinct in two ways. The
+first verification slice binds the strongest roster/dialogue evidence to
+`CASTLE:0`; do not rely on older notes that describe this as the fifth castle
+slot until that private special-scene label is rechecked.
 
 1. **Audience prompt on entry.** A quest-flag-gated check at the end of the entry pass examines a small audience-pending table; for each pending audience, an inline prompt fires that prints a per-audience preamble and waits for the player to acknowledge. The first time the player reaches Lord British, an introductory cutscene runs; subsequent entries are gated on quest progress.
 
@@ -230,4 +233,6 @@ The behaviour described above was derived by reading the function and format not
 - The per-turn cleanup that advances the clock and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - The location tile-grid file format and the two-floor-per-location layout — `u5-decomp/formats/maps.md`.
 - The NPC roster and dialogue file formats — `u5-decomp/formats/npc-tlk-pth.md`.
+- The first verification slice for Lord British's castle scene binding and
+  town-mode load smoke checks — `u5-engine/reports/lb-throne-room-slice.txt`.
 - The save image's scene-byte encoding and the per-location coordinate state — `u5-decomp/formats/saves.md`.
