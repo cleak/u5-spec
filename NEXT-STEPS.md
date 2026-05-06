@@ -2,24 +2,30 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
-**Last updated:** 2026-05-03 — initial scaffolding and extraction inventory complete.
+**Last updated:** 2026-05-06 — priority spec batches landed.
 
 ## Repository status
 
 - **Branch:** `master` (private — to be flipped public once content is ready)
-- **Latest commit:** initial extraction inventory and repo scaffolding
+- **Latest commit:** `015430e Add endgame and world data specs`
+- **Previous priority commit:** `8665799 Add intro and priority catalog specs`
 - **Push target:** `https://github.com/cleak/u5-spec`
 
 ### What is done
 
-- README documenting purpose, structure, and specification style guidelines
-- [`EXTRACTION.md`](EXTRACTION.md) — master inventory derived from the actual GOG release file listing. Catalogs every code module, data file, algorithm, and cross-cutting reference table the engine will need to reproduce. ~150+ files categorized into code (resident, overlays, drivers), data (maps, NPCs/dialogue, text, graphics, audio), saves, algorithms, and cross-cutting catalogs.
+- README documenting purpose, structure, and specification style guidelines.
+- [`EXTRACTION.md`](EXTRACTION.md) — master inventory derived from the actual GOG release file listing. Catalogs every code module, data file, algorithm, and cross-cutting reference table the engine will need to reproduce.
+- 41 cleanroom spec docs: 24 system specs, 12 format specs, and 5 catalogs (~153,000 words).
+- Major game-mode and first-playable systems are covered: main loop, input, text, save/load, overworld, town mode, dungeon mode, combat, visibility, time, magic, karma, doors/Z transitions, active objects, shops, NPC schedules, encounters, conversation, intro, endgame, lighting, weather, and U4 transfer.
+- Recent additions: `systems/intro.md`, `systems/endgame.md`, `systems/lighting.md`, `systems/weather.md`, `systems/u4-transfer.md`, `formats/brit-dat.md`, `formats/under-dat.md`, `formats/dungeon-dat.md`, `formats/cbt.md`, `formats/ool.md`, `formats/data-ovl.md`, `catalogs/npc-roster.md`, `catalogs/monster-bestiary.md`, and `catalogs/item-list.md`.
 
-### What is not yet started
+### Remaining high-value gaps
 
-- Any actual specification document. `systems/` and `formats/` directories do not exist yet.
-- The shared format spec for the four-class location grouping (CASTLE / KEEP / TOWNE / DWELLING)
-- The first-playable verification slice (Lord British's throne room)
+- `systems/launcher.md` needs fresh `ULTIMA5.COM` analysis before it can be written.
+- `systems/animation.md` remains open, though it may be folded into `systems/active-objects.md`.
+- Medium/low format specs remain for fonts, bitmap images, LOOK2, signs, questions, shop text, story/end/misc/karma text, and optionally the EGA driver.
+- `catalogs/gazetteer.md` and `catalogs/quest-graph.md` remain. The quest graph is the expensive one because it needs bulk TLK decoding and keyword-chain analysis.
+- The first-playable verification slice still needs a concrete pass against Lord British's throne room.
 
 ## Locations
 
@@ -38,39 +44,12 @@ This repo deliberately has no external dependencies. Specs are written from deco
 
 ```
 u5-spec/
-├── .gitignore
-├── README.md
-├── NEXT-STEPS.md       # this file
-└── EXTRACTION.md       # master inventory of everything to be specified
-```
-
-### Repo layout (planned)
-
-```
-u5-spec/
-├── systems/            # one spec per coherent gameplay system
-│   ├── main-loop.md
-│   ├── overworld.md
-│   ├── town-mode.md
-│   ├── npc-schedules.md
-│   ├── conversation.md
-│   ├── combat.md
-│   ├── visibility.md
-│   ├── time.md
-│   ├── doors.md
-│   └── ...
-├── formats/            # one spec per data file format
-│   ├── tiles.md
-│   ├── location-dat.md     # shared format for CASTLE/KEEP/TOWNE/DWELLING DAT
-│   ├── npc.md
-│   ├── tlk.md
-│   ├── saved-gam.md
-│   └── ...
-└── catalogs/           # cross-cutting reference tables
-    ├── tile-catalog.md
-    ├── npc-roster.md
-    ├── spell-list.md
-    └── ...
+|-- README.md
+|-- NEXT-STEPS.md       # this file
+|-- EXTRACTION.md       # master inventory of everything to be specified
+|-- systems/            # coherent gameplay systems
+|-- formats/            # data file formats
+`-- catalogs/           # cross-cutting reference tables
 ```
 
 ## Specification style (reiterated from README)
@@ -82,26 +61,12 @@ u5-spec/
 
 ## Recommended next session
 
-The first real spec should fall out of u5-decomp's first decomp work, not be written speculatively. Two natural first specs depending on which decomp path is taken:
+Continue with one of these narrow batches:
 
-### If u5-decomp goes Option A (Ghidra walkthrough on a Phase 1 leaf)
-
-Write `systems/text-output.md` covering:
-
-- The print primitives (`putchar`, `print_string`, `print_number`)
-- The cursor model (`set_cursor_pos`, `get_cursor_x`)
-- The display-mode flag (`set_display_mode`)
-- How text rendering interacts with the overlay loader
-- What font is used and how characters map to bitmaps (will cross-reference `formats/font-ch.md` when that exists)
-
-### If u5-decomp goes Option B (DATA.OVL dissection)
-
-Write `formats/data-ovl.md` covering:
-
-- File structure overview
-- Identified tables (string pools, lookup tables, etc.)
-- Per-table format with offsets, types, and meaning
-- Cross-references to which overlays consume which tables
+- Write the medium-priority graphics/text format specs: `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md`, `formats/bit.md`, `formats/look2-dat.md`, `formats/signs-dat.md`, and `formats/question-dat.md`.
+- Write the remaining low-priority text data specs: `formats/story-dat.md`, `formats/endmsg-dat.md`, `formats/miscmsg-dat.md`, `formats/karma-dat.md`, and `formats/end-dat.md`.
+- Write `catalogs/gazetteer.md` from the already specced map/location systems.
+- If more decomp work is preferred first, analyze `ULTIMA5.COM` so `systems/launcher.md` can be written, or analyze EGA.DRV if display-driver behavior becomes in scope.
 
 ## Long-running open questions
 
