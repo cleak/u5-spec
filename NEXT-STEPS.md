@@ -2,29 +2,28 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
-**Last updated:** 2026-05-06 — priority spec batches landed.
+**Last updated:** 2026-05-06 — remaining data-format and gazetteer specs landed.
 
 ## Repository status
 
 - **Branch:** `master` (private — to be flipped public once content is ready)
-- **Latest commit:** `015430e Add endgame and world data specs`
-- **Previous priority commit:** `8665799 Add intro and priority catalog specs`
+- **Latest spec commit:** `9027f7b Add animation and remaining data specs`
+- **Previous priority commits:** `015430e Add endgame and world data specs`; `8665799 Add intro and priority catalog specs`
 - **Push target:** `https://github.com/cleak/u5-spec`
 
 ### What is done
 
 - README documenting purpose, structure, and specification style guidelines.
 - [`EXTRACTION.md`](EXTRACTION.md) — master inventory derived from the actual GOG release file listing. Catalogs every code module, data file, algorithm, and cross-cutting reference table the engine will need to reproduce.
-- 41 cleanroom spec docs: 24 system specs, 12 format specs, and 5 catalogs (~153,000 words).
-- Major game-mode and first-playable systems are covered: main loop, input, text, save/load, overworld, town mode, dungeon mode, combat, visibility, time, magic, karma, doors/Z transitions, active objects, shops, NPC schedules, encounters, conversation, intro, endgame, lighting, weather, and U4 transfer.
-- Recent additions: `systems/intro.md`, `systems/endgame.md`, `systems/lighting.md`, `systems/weather.md`, `systems/u4-transfer.md`, `formats/brit-dat.md`, `formats/under-dat.md`, `formats/dungeon-dat.md`, `formats/cbt.md`, `formats/ool.md`, `formats/data-ovl.md`, `catalogs/npc-roster.md`, `catalogs/monster-bestiary.md`, and `catalogs/item-list.md`.
+- 56 cleanroom spec docs: 25 system specs, 25 format specs, and 6 catalogs (~170,000 words).
+- Major game-mode and first-playable systems are covered: main loop, input, text, save/load, overworld, town mode, dungeon mode, combat, visibility, time, magic, karma, doors/Z transitions, active objects, animation, shops, NPC schedules, encounters, conversation, intro, endgame, lighting, weather, and U4 transfer.
+- Recent additions: `systems/animation.md`, `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md`, `formats/bit.md`, `formats/look2-dat.md`, `formats/signs-dat.md`, `formats/question-dat.md`, `formats/karma-dat.md`, `formats/story-dat.md`, `formats/endmsg-dat.md`, `formats/miscmsg-dat.md`, `formats/shoppe-dat.md`, `formats/end-dat.md`, and `catalogs/gazetteer.md`.
 
 ### Remaining high-value gaps
 
 - `systems/launcher.md` needs fresh `ULTIMA5.COM` analysis before it can be written.
-- `systems/animation.md` remains open, though it may be folded into `systems/active-objects.md`.
-- Medium/low format specs remain for fonts, bitmap images, LOOK2, signs, questions, shop text, story/end/misc/karma text, and optionally the EGA driver.
-- `catalogs/gazetteer.md` and `catalogs/quest-graph.md` remain. The quest graph is the expensive one because it needs bulk TLK decoding and keyword-chain analysis.
+- `catalogs/quest-graph.md` remains. It is the expensive one because it needs bulk TLK decoding and keyword-chain analysis.
+- `formats/ega-driver.md` remains optional unless exact display-driver behaviour becomes in scope.
 - The first-playable verification slice still needs a concrete pass against Lord British's throne room.
 
 ## Locations
@@ -63,10 +62,10 @@ u5-spec/
 
 Continue with one of these narrow batches:
 
-- Write the medium-priority graphics/text format specs: `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md`, `formats/bit.md`, `formats/look2-dat.md`, `formats/signs-dat.md`, and `formats/question-dat.md`.
-- Write the remaining low-priority text data specs: `formats/story-dat.md`, `formats/endmsg-dat.md`, `formats/miscmsg-dat.md`, `formats/karma-dat.md`, and `formats/end-dat.md`.
-- Write `catalogs/gazetteer.md` from the already specced map/location systems.
-- If more decomp work is preferred first, analyze `ULTIMA5.COM` so `systems/launcher.md` can be written, or analyze EGA.DRV if display-driver behavior becomes in scope.
+- Decompile/analyze `ULTIMA5.COM`, then write `systems/launcher.md`.
+- Build the TLK keyword-chain tooling needed for `catalogs/quest-graph.md`.
+- Run the Lord British throne-room verification slice against the current specs and log corrections.
+- Analyze EGA.DRV only if exact display-driver behaviour becomes a required public spec.
 
 ## Long-running open questions
 
