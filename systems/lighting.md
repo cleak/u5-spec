@@ -23,7 +23,7 @@ Lighting state consists of three runtime values:
 
 The torch and spell counters are independent. A torch can expire while the spell remains active, and a spell can expire while a torch remains active. The dungeon renderer treats either one as sufficient to see; both being zero is the blackout state.
 
-The exact numeric counter values are implementation detail. A modern implementation should expose them as durations or radii, not as raw memory bytes.
+The original stores these as byte-sized duration counters. A modern implementation should expose them as turn durations or visibility profiles, not as raw memory bytes, but the starting values and saturation behavior are part of the compatibility contract.
 
 ## 3. Ambient Daylight
 
@@ -37,6 +37,11 @@ The ambient model is:
 - During the daytime band, the surface reaches full daylight.
 - The Underworld and dungeons force dark ambient light regardless of the hour.
 
+On the original light scale, full daylight is 50 and full darkness is 2. Values
+51 or higher are special "do not recompute" sentinels used by callers that want
+to hold a scene's lighting fixed. Dawn uses six ten-minute levels:
+`2, 5, 10, 20, 34, 49`; dusk uses the same levels in reverse.
+
 The cleanup routine marks visibility dirty when the recomputed ambient value changes. Rendering then rebuilds the visible grid instead of reusing the previous one.
 
 Ambient daylight also gates moongate presentation: moongates only animate when the ambient level is high enough for the daytime condition. That gate is a consumer of lighting, not a lighting rule in its own right.
@@ -45,18 +50,24 @@ Ambient daylight also gates moongate presentation: moongates only animate when t
 
 Torches and light spells modify visibility after the base ambient value has been chosen. They do not replace the clock. Outdoors at noon, daylight is already sufficient; at night, in the Underworld, and in dungeons, a personal light source is what lets the party see around itself.
 
-The original engine applies the torch and spell effects as clamps on the shared light value. The spell and torch clamps are different, which is why implementations should keep two counters rather than collapsing them into one boolean "has light" flag.
+The original engine applies the torch and spell effects as separate minimum-light floors on the cached ambient value. On the original light scale, the torch floor is 18 and the spell-light floor is 10. The torch and spell profiles are different, which is why implementations should keep two counters rather than collapsing them into one boolean "has light" flag.
 
 For modern gameplay purposes, the contract is:
 
 - If both counters are zero, personal light contributes nothing.
-- If the torch counter is nonzero, the party has torch lighting until the counter decays to zero.
-- If the spell counter is nonzero, the party has spell lighting until the counter decays to zero.
-- If both are nonzero, the stronger or more restrictive original visibility profile should win; do not stack them into an unlimited radius.
+- If the torch counter is nonzero, the party has torch lighting until the counter decays to zero; the cached ambient value is raised to the torch floor when it would otherwise be darker than that floor.
+- If the spell counter is nonzero, the party has spell lighting until the counter decays to zero; the cached ambient value is raised to the spell-light floor when it would otherwise be darker than that floor.
+- If both are nonzero, the torch floor dominates this cached ambient value because it is applied first and is brighter than the spell-light floor; do not stack them into an unlimited radius.
 
 ## 5. Counter Decay
 
-The counters decay through the same turn cadence that advances time. A normal town, dungeon, or combat turn spends the indoor increment; a normal overworld turn spends the outdoor increment. The per-turn cleanup applies the same vehicle adjustments that it applies to time before it decays the counters.
+The counters decay through the same turn cadence that advances time. A normal town, dungeon, or combat turn spends one counter unit; a normal overworld turn spends two. Longer waits spend their requested increment. The per-turn cleanup applies the same vehicle adjustments that it applies to time before it decays the counters.
+
+This section covers only torches and light spells. Combat active effects
+(`P`, `Q`, `C`, `N`) and Time Stop are non-light spell state with separate
+decrement paths.
+
+Decay is saturating subtraction: if the remaining counter is greater than the spent increment, subtract the increment; otherwise set the counter to zero. Counters never underflow or wrap.
 
 Mode-zero lighting refreshes do not spend counter duration. They recompute ambient lighting only.
 
@@ -66,7 +77,7 @@ Dungeon mode also runs a dungeon-local torch/light upkeep hook before drawing th
 
 Dungeon mode has the strictest lighting gate. Before the first-person wireframe view is drawn, the renderer checks the torch and spell counters. If both are zero, it does not draw the corridor view at all. The side/status UI can still exist, but the dungeon scene itself is black.
 
-Dungeon L-Look follows the same rule: with no torch and no light spell, the player receives darkness instead of the true cell description. With either counter nonzero, Look can describe the cell ahead and the renderer can draw the wireframe.
+Dungeon L-Look follows the same rule: with no torch and no light spell, the player receives darkness instead of the true focus-cell description. With either counter nonzero, Look can describe the selected dungeon focus cell and the renderer can draw the wireframe.
 
 This means dungeon light is gameplay-critical. Ambient daylight does not reach dungeon levels, and the dungeon view does not use the surface dawn/day/dusk curve.
 
@@ -78,11 +89,18 @@ The surface renderer does not have the dungeon's all-or-nothing wireframe blacko
 
 ## 8. Commands And Spells
 
-The I-Ignite command is the player-facing torch entry point. It consumes a torch and starts or refreshes the torch counter. The precise inventory debit path is outside this spec because the cited command notes have not yet isolated the Ignite handler.
+The I-Ignite command is the player-facing torch entry point. It consumes one torch from inventory; with no torches available it refuses and leaves the light state unchanged.
+
+Ignite has two duration rules:
+
+- Outside dungeon scenes, it sets the torch counter to 240 counter units.
+- In dungeon scenes, it adds a random 112..127 counter units to the current torch counter, capped at 255.
+
+This means re-lighting a torch in a dungeon can extend an already-burning torch, while non-dungeon use refreshes to a fixed 240-unit value. Since normal dungeon and town turns spend one unit and normal overworld turns spend two, a counter unit is not always the same as one player-visible turn.
 
 Light spells are cast through the normal C-Cast pipeline. The magic system owns charge, mana, level, and scene gating. Once the spell succeeds, lighting owns the resulting light-spell counter and its decay.
 
-The spell list currently identifies the light family as the ordinary Light spell and the stronger Great Light spell. Exact duration values should be confirmed when the individual spell-effect handlers are fully decoded.
+The ordinary Light spell, *In Lor*, sets the light-spell counter to 100 counter units. Great Light, *Vas Lor*, sets the same counter to 255 counter units. These spells overwrite the spell-light duration rather than adding to it, and they do not consume torches.
 
 ## 9. Persistence
 
@@ -92,9 +110,6 @@ Implementations should persist the counters, the clock, and the scene/position s
 
 ## 10. Open Questions
 
-- **Exact torch and spell durations.** The counter behavior and consumers are known, but the starting values written by Ignite and by each light spell still need per-handler confirmation.
-- **Torch inventory debit.** The command dispatcher proves there is an Ignite command, but the exact handler has not been separated into a dedicated note.
-- **Spell strength mapping.** The original keeps separate torch and spell profiles. The exact modern radius/brightness interpretation should be tuned after the light spell handlers are decoded.
 - **Special scene lighting.** The time system supports a "do not recompute" style sentinel for special scenes. Which scenes deliberately freeze lighting has not been exhaustively catalogued.
 
 ## 11. Sources
@@ -102,6 +117,8 @@ Implementations should persist the counters, the clock, and the scene/position s
 The behavior described here was derived from cleanroom reading of the following notes and sibling specs. No assembly excerpts, raw offsets, or implementation-specific byte tables are reproduced here.
 
 - Ambient daylight recomputation, dawn/dusk behavior, forced darkness in Underworld/dungeons, torch and spell counter decay, and visibility dirtying - `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- Saturating counter decrement and Ignite's torch debit/start rules - local helper analysis of the resident counter helpers and the CMDS Ignite command path.
+- Light spell counter writes for *In Lor* and *Vas Lor* - `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`, `u5-decomp/functions/CAST2_OVL/_OVERVIEW.md`, and the CAST2 helper reached through the overlay dispatch map in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
 - Dungeon first-person blackout when both light counters are zero, plus dungeon-local light upkeep - `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 - Shared resident data model and relevant string/table regions - `u5-decomp/formats/data-ovl.md`.
 - Existing cleanroom descriptions of time, dungeon lighting consumers, magic spell categories, and overworld visibility integration - `u5-spec/systems/time.md`, `u5-spec/systems/dungeon-mode.md`, `u5-spec/systems/magic.md`, and `u5-spec/systems/overworld.md`.

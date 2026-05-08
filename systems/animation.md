@@ -18,7 +18,13 @@ system is waiting for the next key and while mode loops finish a consumed turn.
 This document describes the behaviour contract for those animation layers. It
 does not prescribe the renderer's pixel pipeline, the active-object record's
 private memory address, or the original executable's jump tables. Those details
-remain in the private decompilation notes.
+remain in the private analysis notes.
+
+The historical `FLAMES.OVL` file is not one of these animation layers. Its
+public role is limited to supporting a temporary screen-preservation buffer
+used by the proportional-font / Return-to-View path. The title-menu flame-style
+idle effect is owned by the loaded display driver and is specified from the
+intro/display contract, not from this gameplay animation system.
 
 ## 2. Cadence
 
@@ -159,8 +165,8 @@ family.
 
 The global tile-animation step increments a shared frame counter after updating
 the selectors. Some families use every tick; others use only selected bits of
-the counter so they toggle more slowly. The exact private selector table belongs
-in the decompilation workspace; the public contract is that animated terrain is
+the counter so they toggle more slowly. The exact private selector table stays
+in the private analysis notes; the public contract is that animated terrain is
 family-wide, deterministic, and driven by the same tick cadence as active
 objects.
 
@@ -170,7 +176,8 @@ The animation tick ends by asking the active display driver to present or flush
 the updated frame. The resident core does not know the details of EGA, CGA,
 Tandy, or Hercules presentation at this point. It writes a driver command
 through the display-driver dispatch cell and lets the loaded driver perform the
-hardware-specific work.
+hardware-specific work. The public rendering contract is described in
+`display-driver.md`.
 
 This has two consequences for an implementation:
 
@@ -285,8 +292,8 @@ An implementation should follow these rules:
 ## 12. Sources
 
 This spec is a cleanroom rewrite derived from the following analysis notes and
-public-bound specs. It intentionally omits private addresses, assembly, and raw
-tables from the decompilation workspace.
+public-bound specs. It intentionally omits private addresses, assembly,
+decompiler output, implementation listings, and raw private tables.
 
 - Active-object record shape, persistence, renderer order, and system
   interactions - `systems/active-objects.md`.
@@ -301,3 +308,5 @@ tables from the decompilation workspace.
 - Combat save/restore interaction -
   `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md` and
   `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
+- `FLAMES.OVL` non-animation role and title-effect ownership -
+  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`.

@@ -99,25 +99,15 @@ The four boundary values are not required to be sorted ascending. The engine com
 
 `X[i]` and `Y[i]` are zero-based map cell coordinates within the location's thirty-two-by-thirty-two tile grid, with X increasing eastward and Y increasing southward. Both are unsigned eight-bit values; valid range is `0..31`. Coordinates outside that range are not validated by the engine and would produce out-of-bounds reads on the location's tile buffer.
 
-`Z[i]` is the location's floor index for waypoint *i*, matching the per-location floor convention used by the location data file: floor zero is the ground floor, floor one is upper or basement, occasional higher values address re-purposed extra floors. The schedule processor compares `Z[i]` against the player's current floor byte before moving the NPC; an NPC whose active waypoint is on a different floor from the player's view is suspended (in a "Z-mismatch" state) and resumes only when the player switches floors.
+`Z[i]` is the location's floor index for waypoint *i*, matching the per-location floor convention used by the location data file: floor zero is the ground floor, floor one is upper or basement, occasional higher values address re-purposed extra floors. Treat it as an unsigned byte. Runtime initialisation widens the selected schedule Z byte into the per-NPC runtime state without preserving a signed sentinel, and the schedule processor compares the resulting value against the player's current floor byte. An NPC whose active waypoint is on a different floor from the player's view enters a Z-mismatch movement state and resumes visible movement when the player switches floors or when the NPC reaches a stair-transition path.
 
-The `Z[i]` byte's signedness is open: shipped content uses only the unsigned range `0x00..0x07`, but the engine reads the byte as if it were unsigned in some code paths and treats specific sentinel values ("below" / "above") as triggers in others. For all shipped schedules, treating `Z[i]` as an unsigned byte gives correct behaviour. See Section 11 for the open question.
+Shipped content uses only small unsigned floor values in the range `0x00..0x07`. Values above the shipped range are not validated by the engine; a compatible content tool should preserve them, but a gameplay implementation should not interpret `0x80..0xFF` as negative floor numbers for the stock DOS baseline.
 
 ### 5.3 The AI byte
 
-Each waypoint has its own `AI[i]` byte. The AI byte tells the schedule processor *how* the NPC behaves while at that waypoint — does the NPC stand still, wander in a small radius, follow a fixed route, or react to the player's approach? The AI byte is consumed by the per-tick walker and by the action-readiness classifier; it is the schedule's per-waypoint behaviour switch.
+Each waypoint has its own `AI[i]` byte. The byte is a per-waypoint behaviour selector: it belongs to the same waypoint tuple as `X[i]`, `Y[i]`, and `Z[i]`, and it affects what the NPC does after the time system has selected that waypoint. It does not affect which waypoint is active; the active waypoint is selected solely from `time[4]` and the current hour.
 
-The shipped value range is small. The most common values observed in `TOWNE.NPC` and the other class files cluster around `0x00`, `0x01`, `0x02`, and a sentinel `0x0F`. The full enumeration of AI values is not yet pinned down; the working hypothesis (subject to verification against in-game behaviour) is:
-
-| AI value | Probable meaning                                      |
-|----------|-------------------------------------------------------|
-| `0x00`   | Stationary at waypoint (sit, sleep, stand still).     |
-| `0x01`   | Wander a small radius around the waypoint.            |
-| `0x02`   | Patrol along a fixed route.                           |
-| `0x03+`  | Other patrol or interaction modes (children playing, beggars approaching, etc.). |
-| `0x0F`   | Sentinel — possibly "ignore this waypoint."           |
-
-The runtime dispatches on the AI byte through multiple states and branches; a complete enumeration belongs in the schedules systems spec, not in this format spec. This spec records the byte's location and width but not its full dispatch table.
+For v1, treat this byte as opaque unless you are implementing the original NPC behaviour dispatcher. The shipped value range is small and includes common low values plus an occasional `0x0F`, but the exact byte-to-behaviour map is not pinned down. The schedules systems spec names the observed behaviour families; this format spec only fixes the byte's location, width, and per-waypoint association.
 
 ### 5.4 The time array
 
@@ -142,19 +132,74 @@ The "occupancy" use of the type byte is unconditional: any slot whose `type[n]` 
 
 ## 7. The dialog index byte
 
-Each NPC slot has a one-byte dialog index at offset `+0x220..+0x23F` of the sub-map (one byte per slot). The dialog index is a one-based pointer into the matching `.TLK` file's NPC table.
+Each NPC slot has a one-byte dialog index at offset `+0x220..+0x23F` of the sub-map (one byte per slot). For ordinary speaking residents, the dialog index is a one-based pointer into the matching `.TLK` file's NPC table.
 
 The matching is by file class: a town NPC's dialog index points into `TOWNE.TLK`, a castle NPC's into `CASTLE.TLK`, and so on. Within the matched `.TLK` file, the dialog index is compared against the `npc_id` field of each header entry; the first match identifies the NPC's blob. See the TLK format spec for the header layout.
 
 Dialog index zero on a populated slot is a valid value: it means "this NPC has no dialogue." The engine dispatches the Talk command against an NPC whose dialog index is zero by emitting a "funny look" or equivalent stub message; no `.TLK` lookup happens. The format reserves `npc_id == 1` in `.TLK` files as a sentinel that no live NPC carries (because dialog index `1` is unused — every speaking NPC has dialog index `2` or above). The result is that `.TLK` files always start with a `(npc_count, 1)` leading pair, with the count word occupying the slot a regular header entry would use for its blob offset; see the TLK format spec for that mechanism.
 
-A non-zero dialog index that does not resolve to any header entry in the matching `.TLK` file is a content error in the source data. The engine does not validate the lookup; an unresolved index will cause the talk dispatcher to read garbage from the working buffer.
+High dialog-index values are not `.TLK` ids. In the shipped rosters, the
+values `0x81` through `0x88` are Talk-entry shop triggers:
+
+| Value | Meaning |
+|-------|---------|
+| `0x81` | Weaponsmith / armourer shop trigger. |
+| `0x82` | Tavern, meal-counter, or sage-style interactive shop trigger. |
+| `0x83` | Horse-trader shop trigger. |
+| `0x84` | Ship-broker / shipwright shop trigger. |
+| `0x85` | Herbalist / reagent shop trigger. |
+| `0x86` | Guild shop trigger. |
+| `0x87` | Healer / sanctum shop trigger. |
+| `0x88` | Innkeeper shop trigger. |
+
+The value identifies the shop family; the active scene and resident shop tables
+select the local shop instance, display name, vendor name, prices, and stock.
+The shipped rosters also contain special high values outside this range, such as
+`0xFF`, for non-shop Talk special cases. Treat those as conversation/town-system
+special markers rather than `.TLK` ids.
+
+A non-zero ordinary dialog index that does not resolve to any header entry in the matching `.TLK` file is a content error in the source data. The engine does not validate the lookup; an unresolved index will cause the talk dispatcher to read garbage from the working buffer.
 
 ## 8. Sub-map ordering
 
-The on-disk file format preserves only the sub-map *index* (zero through seven). The mapping from sub-map index to in-game location name (which town is sub-map zero of `TOWNE.NPC`?) lives in a separate per-class name table in the resident data segment, not in the per-class file. The mapping is parallel between the `.DAT`, `.NPC`, and `.TLK` files: the *k*-th sub-map of `TOWNE.NPC` corresponds to the *k*-th block of `TOWNE.DAT` and the *k*-th block of `TOWNE.TLK`.
+The on-disk file format preserves only the sub-map *index* (zero through seven). The mapping from sub-map index to the overworld entry and resident location-name string lives in the DATA.OVL-derived world-location table, not in the per-class file. The mapping is parallel between the `.DAT`, `.NPC`, and `.TLK` files: the *k*-th sub-map of `TOWNE.NPC` corresponds to the *k*-th block of `TOWNE.DAT` and the *k*-th block of `TOWNE.TLK`.
 
-The shipped sub-map orderings are believed to follow the canonical Ultima V town ordering — Moonglow, Britain, Jhelom, Yew, Minoc, Trinsic, Skara Brae, New Magincia for towns; the four castles plus four keeps in lord-by-lord order for the castle and keep files; and the eight named dwellings in their canonical order for the dwelling file. This ordering is provisional; it can be confirmed empirically by loading a save in each location and reading the live scene byte. See Section 11 for the open question.
+The resident world-location table confirms the scene/sub-map order below. The class names here are storage families, not necessarily the in-world type of the place; for example Paws and Cove live in the `CASTLE.*` storage family.
+
+| Scene | Key | Resident location name |
+|---:|---|---|
+| 1 | `TOWNE:0` | Moonglow |
+| 2 | `TOWNE:1` | Britain |
+| 3 | `TOWNE:2` | Jhelom |
+| 4 | `TOWNE:3` | Yew |
+| 5 | `TOWNE:4` | Minoc |
+| 6 | `TOWNE:5` | Trinsic |
+| 7 | `TOWNE:6` | Skara Brae |
+| 8 | `TOWNE:7` | New Magincia |
+| 9 | `DWELLING:0` | Fogsbane |
+| 10 | `DWELLING:1` | Stormcrow |
+| 11 | `DWELLING:2` | Greyhaven |
+| 12 | `DWELLING:3` | Waveguide |
+| 13 | `DWELLING:4` | Iolo's Hut |
+| 14 | `DWELLING:5` | Blank resident name |
+| 15 | `DWELLING:6` | Blank resident name |
+| 16 | `DWELLING:7` | Blank resident name |
+| 17 | `CASTLE:0` | Blank resident name; roster and verification slice identify this as Lord British's Castle |
+| 18 | `CASTLE:1` | Blank resident name; roster content identifies this as Lord Blackthorn's Castle |
+| 19 | `CASTLE:2` | West Britanny |
+| 20 | `CASTLE:3` | North Britanny |
+| 21 | `CASTLE:4` | East Britanny |
+| 22 | `CASTLE:5` | Paws |
+| 23 | `CASTLE:6` | Cove |
+| 24 | `CASTLE:7` | Buccaneer's Den |
+| 25 | `KEEP:0` | Ararat |
+| 26 | `KEEP:1` | Bordermarch |
+| 27 | `KEEP:2` | Farthing |
+| 28 | `KEEP:3` | Windemere |
+| 29 | `KEEP:4` | Stonegate |
+| 30 | `KEEP:5` | The Lycaeum |
+| 31 | `KEEP:6` | Empath Abbey |
+| 32 | `KEEP:7` | Serpent's Hold |
 
 The engine reads the *(scene − 1) & 7*-th sub-map on town entry; the engine never reads the entire file at once and never iterates across sub-maps for a single play session.
 
@@ -166,33 +211,35 @@ The sentinel is structural, not optional. The schedule processor iterates from s
 
 A sub-map with fewer than thirty-one NPCs uses the empty-slot sentinel — `type[n] == 0` — to mark the unused tail. The schedule and dialog index entries for an unused slot are unconstrained by the format, but in shipped content they are zeroed.
 
-## 10. Worked example — `TOWNE.NPC` first sub-map
+## 10. Worked example — one schedule record
 
-This example walks the first non-stub NPC slot of the first sub-map of `TOWNE.NPC` to illustrate the on-disk layout.
+This example walks one schedule record to illustrate the on-disk layout without
+reproducing raw shipped bytes.
 
 The file begins at byte zero of `TOWNE.NPC`. The first five hundred seventy-six bytes are the per-sub-map block for sub-map zero. Within that block, bytes zero through five hundred eleven are the schedule array (thirty-two records of sixteen bytes); bytes five hundred twelve through five hundred forty-three are the type array (thirty-two bytes); bytes five hundred forty-four through five hundred seventy-five are the dialog index array (thirty-two bytes).
 
 The first sixteen bytes of the schedule array (bytes zero through fifteen) are slot zero's schedule, which is all zeros. Slot zero's type byte (byte five hundred twelve) is zero. Slot zero's dialog index byte (byte five hundred forty-four) is zero. This is the unused sentinel slot.
 
-The second schedule record (bytes sixteen through thirty-one) is slot one — the first real NPC of the first sub-map. A representative byte run is:
+The second schedule record (bytes sixteen through thirty-one) is slot one: the
+first real NPC slot of that sub-map. Interpreting the sixteen bytes in the
+record-layout order gives:
 
-```
-00 00 01    13 17 1D    15 13 1D    01 00 01    15 09 11 12
-```
+| Field       | Decoded example                                                          |
+|-------------|---------------------------------------------------------------------------|
+| `AI[3]`     | Stationary at waypoint zero, stationary at waypoint one, and a third behaviour mode at waypoint two. |
+| `X[3]`      | Three waypoint columns, one per waypoint.                                |
+| `Y[3]`      | Three waypoint rows, one per waypoint.                                   |
+| `Z[3]`      | A floor byte for each waypoint.                                          |
+| `time[4]`   | Four hour boundaries, interpreted by the segment rule in Section 5.1.    |
 
-The fields decode as:
+Reading the time boundaries against the waypoint selection rule (Section 5.1):
+the segment from the first boundary through the second boundary routes to
+waypoint zero; the next segment routes to waypoint one; the next routes to
+waypoint two; and the wraparound segment routes back through waypoint one.
 
-| Bytes              | Field       | Decoded                                                                   |
-|--------------------|-------------|---------------------------------------------------------------------------|
-| `00 00 01`         | `AI[3]`     | Stationary at waypoint zero, stationary at waypoint one, mode `0x01` at waypoint two. |
-| `13 17 1D`         | `X[3]`      | Column nineteen at waypoint zero, twenty-three at waypoint one, twenty-nine at waypoint two. |
-| `15 13 1D`         | `Y[3]`      | Row twenty-one at waypoint zero, nineteen at waypoint one, twenty-nine at waypoint two. |
-| `01 00 01`         | `Z[3]`      | Floor one, floor zero, floor one across the three waypoints.              |
-| `15 09 11 12`      | `time[4]`   | Boundaries at hours twenty-one, nine, seventeen, eighteen.                |
-
-Reading the time boundaries against the waypoint selection rule (Section 5.1): from hour twenty-one (nine PM) until hour nine (nine AM the next day), the NPC is at waypoint zero — column nineteen, row twenty-one, floor one. From nine AM until five PM, the NPC is at waypoint one — column twenty-three, row nineteen, floor zero. From five PM until six PM, the NPC is at waypoint two — column twenty-nine, row twenty-nine, floor one. From six PM until nine PM (the wraparound segment), the NPC is at waypoint one — column twenty-three, row nineteen, floor zero.
-
-In other words, this NPC sleeps upstairs (waypoint zero) from nine PM until nine AM, works on the ground floor (waypoint one) from nine AM until five PM, briefly visits a second upstairs location (waypoint two) from five PM until six PM, and returns to the ground-floor work spot (waypoint one) from six PM until bedtime.
+In game terms, a typical record uses waypoint zero for a night/rest location,
+waypoint one for the main daytime location, waypoint two for a short alternate
+location, then waypoint one again for the evening wraparound segment.
 
 The matching type byte and dialog index — at sub-map offset five hundred thirteen and five hundred forty-five — identify the NPC's role and dialogue. A type byte of `0x50` would indicate one role class (e.g., "common townsfolk"); a dialog index of `0x02` would point into `TOWNE.TLK`'s header entries to locate the NPC's blob.
 
@@ -206,15 +253,11 @@ A reader can sanity-check a `.NPC` decoder by:
 
 The format is verified by direct byte inspection at the file-structure level (file size, sub-map stride, schedule record stride, slot-zero sentinel) and by behavioural inspection at the schedule-processor level (waypoint selection rule, AI byte dispatch outline, type byte occupancy use, dialog index use). The following points remain open.
 
-- **Sub-map index → location name mapping.** The on-disk format records only the sub-map index. The mapping is presumed to follow the canonical Ultima V ordering (Moonglow → Britain → Jhelom → Yew → Minoc → Trinsic → Skara Brae → New Magincia for towns; analogous orderings for the other classes), but this needs empirical confirmation by loading a save in each location and reading the live scene byte.
+- **Blank resident location-name rows.** Scenes 14 through 18 have blank resident location-name strings in the world-location table. Two of them are semantically identified by roster and special-behaviour evidence (`CASTLE:0` = Lord British's Castle, `CASTLE:1` = Lord Blackthorn's Castle); the three blank dwelling-family rows should keep their stable `DWELLING:n` keys until another clean source names them.
 
-- **AI byte enumeration.** A complete enumeration of value-to-behaviour mapping is not yet pinned down. The working hypothesis (`0x00` stationary, `0x01` wander, `0x02` patrol, `0x0F` sentinel) covers the most common values but is not exhaustive. A full enumeration belongs in the schedules systems spec.
+- **AI byte enumeration.** The byte's location and role as a per-waypoint behaviour selector are fixed, but the individual value-to-behaviour mapping and the `0x0F` value's exact role remain open. Treat values as opaque for format reading. The sit/chair-search marker IDs are fixed in the schedules systems spec; the remaining format gap is the byte-value-to-behaviour map.
 
 - **Type byte enumeration.** Shipped values cluster around `0x1C`, `0x50`, `0x54`, `0x70`, `0x82`, `0x86`, suggesting an enum plus per-bit flags. The split between role bits and flag bits has not been pinned down. A full enumeration belongs in the schedules systems spec.
-
-- **Z byte signedness.** The schedule processor reads `Z[i]` as an unsigned byte in some paths and treats specific sentinels as triggers in others. All shipped schedules use only the unsigned range `0x00..0x07`, so unsigned interpretation gives correct behaviour for shipped content. Signedness becomes load-bearing only for user-supplied or modded schedules using values above `0x7F`.
-
-- **Sentinel AI value.** The value `0x0F` appears occasionally in shipped schedules and is pre-tested against a sentinel by initialisation code. Its exact role — "ignore this waypoint" versus "this waypoint is special" versus authoring stub — is unconfirmed.
 
 - **Dialog index zero on populated slots.** A populated slot (`type[n] != 0`) with `dialog[n] == 0` is a valid "NPC has no dialogue" configuration. Whether the engine routes such an NPC to a generic fallback or emits a "funny look" stub is engine-side.
 
@@ -236,8 +279,16 @@ The format described above was derived from the analysis notes listed below. Non
 
 - The first-pass survey of the four `.NPC` files, file size, sub-map partition, schedule stride, and slot-zero sentinel — `u5-decomp/formats/npc-tlk-pth.md`.
 - The schedule processor's entry point — class-to-file dispatch, sub-map indexing, and the three back-to-back reads of schedule, type, and dialog arrays — `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md`.
+- Shipped roster scan of the four clean `.NPC` files and Talk shop-dispatch
+  evidence from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md` -- high
+  dialog-index shop-trigger values.
+- Resident world-location table verification that binds scene bytes 1 through
+  32 to storage-family sub-map keys and resident location-name strings:
+  `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md` and
+  `u5-decomp/formats/data-ovl.md`.
 - The per-tick walker — per-NPC state machine, AI-byte dispatch, type-byte occupancy use, pathfinding, and cross-overlay sprite-position writeback — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
 - The waypoint selection routine — four-boundary, three-waypoint, wraparound-through-waypoint-one rule — `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
 - Runtime schedule field semantics confirmed against the schedule processor's read sites — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
 - Runtime initialisation that snapshots schedule waypoints to per-NPC runtime fields — `u5-decomp/functions/NPC_OVL/0x00D6_npc_init_runtime_state.md`.
-- The schedules systems spec covering the runtime semantics this format spec only references — `u5-spec/systems/npc-schedules.md` (planned).
+- The schedules systems spec covering the runtime semantics this format spec only references — `u5-spec/systems/npc-schedules.md`.

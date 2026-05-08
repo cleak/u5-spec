@@ -30,11 +30,11 @@ On load, both halves are read into memory. On save, both halves are written back
 
 ### `BRIT.OOL`
 
-`BRIT.OOL` is the per-plane surface file. It ships as the surface seed object table. The confirmed load flow rewrites it so it mirrors the surface half of `SAVED.OOL`. Save-time references to this mirror exist, but the exact branch conditions remain open.
+`BRIT.OOL` is the per-plane surface file. It ships as the surface seed object table. The confirmed load flow rewrites it so it mirrors the surface half of `SAVED.OOL`. The traced save flow reads it into the surface staging buffer; no unconditional save-time rewrite of `BRIT.OOL` has been proven.
 
 ### `UNDER.OOL`
 
-`UNDER.OOL` is the per-plane underworld file. It ships as the underworld seed object table. In a clean install, the seed table is empty. The confirmed load flow rewrites it so it mirrors the underworld half of `SAVED.OOL`. Save-time references to this mirror exist, but the exact branch conditions remain open.
+`UNDER.OOL` is the per-plane underworld file. It ships as the underworld seed object table. In a clean install, the seed table is empty. The confirmed load flow rewrites it so it mirrors the underworld half of `SAVED.OOL`. The traced save flow reads it into the underworld staging buffer and conditionally writes that staging half back to `UNDER.OOL`.
 
 ### `INIT.OOL`
 
@@ -73,9 +73,9 @@ The distinction matters:
 
 - The main save image stores current scene state, party state, inventory, and the current active-object table.
 - `SAVED.OOL` stores the two overworld-plane object tables that need to survive map transitions.
-- `BRIT.OOL` and `UNDER.OOL` are per-plane mirrors of the two halves of `SAVED.OOL`, with unconditional mirror refresh confirmed during load. Older disk-swap and map-entry paths can then load the right per-plane table directly.
+- `BRIT.OOL` and `UNDER.OOL` are per-plane mirrors of the two halves of `SAVED.OOL`, with unconditional mirror refresh confirmed during load. The save handler also uses them as staging sources, with a conditional underworld mirror write. Older disk-swap and map-entry paths can then load the right per-plane table directly.
 
-A modern implementation can keep a single in-memory object-overlay cache, but a byte-compatible implementation must preserve the file split and the confirmed load-time mirror-write behaviour. Save-time mirror writes should remain marked as conditional or unresolved until the branch is fully decoded.
+A modern implementation can keep a single in-memory object-overlay cache, but a byte-compatible implementation must preserve the file split and the confirmed load-time mirror-write behaviour. If an implementation refreshes both per-plane mirrors after save, it should document that as a deliberate policy rather than a proven original save action.
 
 ## 6. Load And Save Semantics
 
@@ -87,7 +87,7 @@ On load, the engine unconditionally refreshes the per-plane mirrors:
 4. Writes the underworld half back out to `UNDER.OOL`.
 5. If the loaded save resumes on the underworld surface, runs an underworld disk-swap probe and rewrites the underworld mirror once the data disk is present.
 
-On save, the engine writes `SAVED.GAM` and `SAVED.OOL`, and it also reaches logic that references both per-plane `.OOL` mirror files. The exact branch structure for save-time mirror writes is not fully pinned down. Do not state that the original engine refreshes both plane mirrors for each save; a byte-compatible implementation should either reproduce the branch once decoded or document any deliberate policy of refreshing mirrors after save.
+On save, the engine reads `UNDER.OOL` and `BRIT.OOL` into the two staging halves, conditionally writes the underworld staging half back to `UNDER.OOL`, then writes `SAVED.GAM` and the concatenated `SAVED.OOL`. Do not state that the original engine refreshes both plane mirrors for each save; a byte-compatible implementation should either reproduce the traced disk-state branch or document any deliberate policy of refreshing mirrors after save.
 
 ## 7. Seed-State Observations
 
@@ -108,7 +108,7 @@ A byte-compatible reader should enforce these invariants:
 - Coordinates are byte-sized. Map-level validity depends on the owning plane and should be checked by the map system, not by the `.OOL` decoder alone.
 - The common surface-object Z sentinel should be preserved as a byte value, not converted to a nullable field unless the original byte can be reconstructed.
 - After the confirmed load sequence, the surface half of `SAVED.OOL` should match `BRIT.OOL`, and the underworld half should match `UNDER.OOL`.
-- After save, mirror equality depends on the still-open save-time branch unless an implementation deliberately refreshes the mirrors as a compatibility policy.
+- After save, `SAVED.OOL` is the canonical object-overlay file. Mirror equality depends on the save-time disk-state branch unless an implementation deliberately refreshes the mirrors as a compatibility policy.
 
 ## 9. Implementation Notes
 
@@ -120,12 +120,13 @@ A decoder should:
 4. Preserve every byte of every record, including unknown auxiliary bytes.
 5. Keep slot index stable across read and write.
 
-For a high-level engine, the record can be mapped to an object struct. For byte compatibility, write the exact eight bytes back in the same slot order.
+For a high-level engine, the record can be mapped to an object record or entity component. For byte compatibility, write the exact eight bytes back in the same slot order.
 
 ## 10. Cross-References
 
 - Save/load system lifecycle, mirror writes, empty-save guard, and disk-swap behaviour: `systems/save-load.md`.
 - Active-object table runtime semantics and record interpretation: `systems/active-objects.md`.
+- Vehicle boarding/exiting and parked-vehicle persistence: `systems/vehicles.md`.
 - Main save-image layout and its embedded active-object table: `formats/saved-gam.md`.
 - Outdoor mode and world-plane transitions that consume the object overlays: `systems/overworld.md`.
 - Combat's temporary backup and restore of the active-object table: `systems/combat.md`.
@@ -134,7 +135,7 @@ For a high-level engine, the record can be mapped to an object struct. For byte 
 
 - **Name expansion.** The meaning of "OOL" is unattested. Treat it as an opaque extension.
 - **Auxiliary byte enumeration.** The three auxiliary bytes are class-specific and not fully enumerated for every object family.
-- **Save-time mirror branching.** Load-time mirror writes are clear. Save-time writes reference both per-plane files, but the exact conditional structure depends on a world-state byte whose full enumeration remains open.
+- **Save-time disk-state branch.** Load-time mirror writes are clear. Save-time staging reads both per-plane files and conditionally writes `UNDER.OOL`; the exact disk/phase-state value names that gate this branch remain open.
 - **Runtime readers of mirror files.** The best explanation for mirror-writing `BRIT.OOL` and `UNDER.OOL` is that gameplay overlays read those files directly on plane transitions. The full reader set is not yet exhaustively catalogued.
 - **Underworld population.** The clean underworld seed is empty. Later gameplay may populate it; confirming every underworld object source requires played saves or targeted runtime probes.
 
@@ -143,7 +144,7 @@ For a high-level engine, the record can be mapped to an object struct. For byte 
 This spec is a cleanroom prose rewrite derived from the project notes below. It intentionally omits decompiled code, assembly, implementation addresses, and raw private offset tables.
 
 - First-pass save and `.OOL` survey, including file roles, sizes, record shape, seed observations, and the surface/underworld split: `u5-decomp/formats/saves.md`.
-- Internal save-handler analysis, including save-image write, object-overlay write, and mirror-file references.
+- Internal save-handler analysis, including per-plane `.OOL` staging reads, the conditional `UNDER.OOL` mirror write, and canonical `SAVED.OOL` write.
 - Internal load-flow analysis, including `SAVED.OOL` read, unconditional mirror writes to `BRIT.OOL` and `UNDER.OOL`, and underworld disk-swap path.
 - Active-object runtime model used to interpret each eight-byte record: `u5-spec/systems/active-objects.md`.
 - Save/load system prose used for cross-checking lifecycle semantics: `u5-spec/systems/save-load.md`.

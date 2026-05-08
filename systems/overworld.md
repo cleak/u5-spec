@@ -4,7 +4,7 @@
 
 Ultima V's overworld is the open-air mode the player spends the most time in. Two surfaces share the mode: **Britannia**, the surface world the game opens on, and the **Underworld**, the lightless mirror beneath it. Both are 256-by-256 tile grids driven by the same mode loop, the same camera, the same per-turn cadence. They differ only in which on-disk grid the engine reads tiles from, what default lighting the time system applies, and which cells contain the small fixed set of features that distinguish them — moongates and town entries on the surface, a uniformly dark and chasm-strewn cavern below.
 
-Within either surface the player commands a small party (or a vehicle carrying that party) and walks one cell per turn. Around the party live the *active objects* — wandering monsters, vehicles, dropped items, the moongates when visible, the player avatar slot itself. Each turn, the engine reads a command, dispatches it, advances time by two minutes, ticks every animated entity, rolls the random-encounter check, refreshes the daylight value, and rebuilds the on-screen viewport. When the command is "Enter" on a town tile, "fall" on a chasm, or "land on the gate", the loop sets a scene byte that the resident main-game loop sees on its next iteration, and overworld mode exits back to the dispatcher, which spins up town mode, dungeon mode, or the moongate teleport.
+Within either surface the player commands a small party (or a vehicle carrying that party) and walks one cell per turn. Around the party live the *active objects* — wandering monsters, vehicles, dropped items, the moongates when visible, the player avatar slot itself. Each turn, the engine reads a command, dispatches it, advances time by two minutes, ticks every animated entity, rolls the random-encounter check, refreshes the daylight value, and rebuilds the on-screen viewport. When the command is "Enter" on a fixed town-mode or dungeon location coordinate, "fall" on a chasm, or "land on the gate", the loop sets a scene byte that the resident main-game loop sees on its next iteration, and overworld mode exits back to the dispatcher, which spins up town mode, dungeon mode, or the moongate teleport.
 
 The overworld is a thin shell over the resident systems. Almost everything that has its own spec — input, time, active objects, visibility, save/load — does the same work in this mode that it does anywhere else. The overworld's specific logic is small: which command goes where, when to load a chunk from disk, how to recognise the eight or nine tile types that mean "something special happens here", and a per-turn animator that is the dual of the town-mode NPC scheduler but does *not* consult the in-world hour. This spec describes those overworld-specific pieces and how they hook into the rest of the engine.
 
@@ -75,7 +75,7 @@ Every iteration walks the same sequence:
    a. Run the per-turn cleanup (see `time.md`) with a minute increment of two — the standard outdoor turn cost.
    b. Re-read the tile under the (now possibly moved) party.
    c. Camp / wishing-well dispatch if the tile matches.
-   d. Pirate-ship ambush if the tile and vehicle byte indicate one.
+   d. Pirate-ship ambush if the tile and transport state indicate one.
    e. Moongate landing prompt if on a moongate cell on the surface plane.
    f. In-water side-effect handler if the in-water flag is set.
    g. Per-turn party-status tick (Section 13).
@@ -94,6 +94,16 @@ Like every other gameplay mode, the overworld owns a 32-slot *active-object tabl
 - **Pre-placed objects** — chests, items dropped by previous play, plot-significant overworld props.
 - **Moongates** — when active. The animator writes directly to the rendered buffer rather than placing a slot, but the moongate's spawn-and-despawn determines whether a "moongate tile" appears in the player's view.
 
+Before the main loop begins, overworld entry also consumes a one-shot
+pending-action state shared with a few out-of-mode interactions. If that state
+carries a queued vehicle acquisition, entry allocates a free active-object slot
+at the stored pending-action coordinates, chooses ship-family versus
+skiff-family placement from the acquisition class, initializes ship-family hull
+state where applicable, copies the queued skiff-count payload for a purchased
+frigate, and clears the pending state before normal input begins. The shipwright
+sale flow is a confirmed writer of this handshake; exact numeric vehicle marker
+variants remain with `vehicles.md`.
+
 Each turn that the per-turn block reaches the animator, the animator walks the active-object table from slot 31 down to slot 1. For each non-empty slot whose tile class is *animated* (a small set of class ranges including monsters, certain vehicles, animated effects), it:
 
 1. **Animates the slot.** Advance the slot's animation phase, swap to the next frame's tile id, and roll a wandering-AI step for hostile monsters (see `active-objects.md`).
@@ -107,7 +117,7 @@ A small *pendulum gate* sits on top of the animator: when the scene-type byte in
 
 The per-turn block fires a random-encounter check on every turn that reaches the animator. The check is roll-and-threshold:
 
-1. The encounter probe consults the current world tile class, party state (vehicle byte, Z plane), and a few hidden modifiers (encounter-suppression flags, double-encounter flag), producing a *threshold* in a range covered by a 30-sided RNG.
+1. The encounter probe consults the current world tile class, party state (transport marker and Z plane), and a few hidden modifiers (encounter-suppression flags, double-encounter flag), producing a *threshold* in a range covered by a 30-sided RNG.
 2. The mode loop draws a 30-sided random integer.
 3. If the draw exceeds the threshold, the spawner fires.
 
@@ -123,9 +133,13 @@ A handful of *scripted* encounters bypass the random system. Pirate ships, for e
 
 A small set of tile classes triggers special handling in the per-turn block, recognised by the post-action tile probe at step 6b. Each class corresponds to a small handler that may print a prompt, dispatch into another mode, or apply a status effect:
 
-- **Town/keep/dwelling/castle entrance.** When the player's last action was Enter (E) on a coordinate matching one of the entries in the resident *location-coords* tables, the entry helper prints the location's name, waits for the appropriate disk to be inserted, clears the active-object table, sets the scene byte to the matching town index (a value in the town/keep/dwelling/castle range), and sets the party position to the conventional town-entry coordinates inside the destination town. The mode loop sees the non-zero scene byte and exits to town mode.
+- **Town/keep/dwelling/castle entrance.** When the player's last action was Enter (E), the entry helper compares the party's current overworld coordinate against the first thirty-two rows of the DATA.OVL-derived `WorldLocationTable`. Row zero maps to scene byte one, row one maps to scene byte two, and so on through row thirty-one mapping to scene byte thirty-two. The scene-to-name and scene-to-file-family binding is published in `catalogs/gazetteer.md` and `formats/npc.md`.
 
-- **Dungeon entrance.** Same shape as town entry, but the scene byte goes into the dungeon range that the resident main-game loop dispatches into dungeon mode rather than town mode.
+  On a match, the original path emits the location-entry prompt, performs any needed surface-disk availability check, clears or reseeds the active-object table, writes the scene byte to `matched_row + 1`, and seeds the party's town-mode coordinates on floor zero. The following town entry pass owns the final player attach point; see `systems/town-mode.md` for the `LocationEntryYTable` rule. If no row matches, E-Enter does not change mode.
+
+- **Dungeon entrance.** E-Enter compares the party's current coordinate against rows thirty-two through thirty-nine of the same DATA.OVL-derived `WorldLocationTable`. Row thirty-two maps to `DUNGEON:0` / scene byte thirty-three, row thirty-three maps to `DUNGEON:1` / scene byte thirty-four, and so on through row thirty-nine mapping to `DUNGEON:7` / scene byte forty. The name and data-record order is Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, Doom.
+
+  On a match, the engine emits the dungeon-entry prompt, loads the selected 512-byte `DUNGEON.DAT` record into the active dungeon tile buffer, writes the scene byte to `matched_row + 1`, and seeds dungeon-mode level, X/Y, and facing. Surface-plane entry lands at level `0`, X `1`, Y `1`, facing east. Underworld-plane entry into non-Doom dungeons lands at level `7`, X `7`, Y `7`, facing west. Doom uses the surface-style entry seed even when reached from the underworld. If no dungeon row matches, E-Enter does not change mode.
 
 - **Shrine.** A meditation prompt with its own subsystem handlers; from the overworld's perspective, the trigger is a tile-class match.
 
@@ -135,7 +149,7 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 
 - **Camp / wishing well.** The H (Hole-up) command runs a multi-screen UI for rest, eating, and a per-camp event roll. Camp is its own mini-system; from the overworld it is a sub-handler that runs to completion and returns the party to the same cell.
 
-- **Ship-with-pirate.** When the under-tile is the boarded-ship class and the vehicle byte indicates an enemy ship has been engaged, the per-turn block dispatches into ship-combat ambush. This is the overworld's only non-movement combat trigger.
+- **Ship-with-pirate.** When the under-tile is the boarded-ship class and the transport state indicates an enemy ship has been engaged, the per-turn block dispatches into ship-combat ambush. This is the overworld's only non-movement combat trigger.
 
 - **Wells, springs, caves.** Smaller tile classes with their own minor handlers — give a hint, restore a small amount of MP, drop a chest.
 
@@ -143,7 +157,7 @@ The order in which the per-turn block tests these classes matters for correctnes
 
 ## 9. Moongates
 
-Moongates are the surface plane's signature feature. Eight of them, one per virtue, appear and disappear at fixed in-game hours and teleport the party between fixed locations on a multi-day cycle.
+Moongates are the surface plane's signature feature. Eight of them, one per virtue, appear and disappear according to the in-game calendar and teleport the party between fixed locations on a multi-day cycle.
 
 The moongate state is kept in five bytes in the resident data:
 
@@ -151,11 +165,16 @@ The moongate state is kept in five bytes in the resident data:
 - **Destination (X, Y).** The cell the gate teleports to. The all-ones sentinel means "single-ended" — a gate that exists for visual effect but does not teleport on landing.
 - **Animation phase counter.** A byte cycling through a 16-frame open/full/close animation. The all-ones value is the "uninitialised" state; the first valid call paints the open frames, subsequent calls advance the cycle, and on overflow the counter wraps.
 
+This time-driven moongate state is separate from the Moonstone slots used by
+*Vas Rel Por* / Gate Travel. Gate Travel selects one of eight persisted
+Moonstone destinations saved in `SAVED.GAM`; natural moongates use only the
+temporary gate origin, destination, and animation state described here.
+
 The moongate animator runs once per render frame from the overworld redraw orchestrator. It checks two preconditions: ambient light at or above the daytime threshold (gates do not appear at night) and an active origin (the all-ones sentinel skips the body). When both pass, the animator stamps the moongate sprite into the rendered tile buffer at the origin (and at the destination if not the all-ones sentinel) using a 16-byte sprite plate indexed by the current phase, then bumps the counter.
 
 The animator is self-contained — it writes directly to the rendered buffer rather than placing an active-object slot. This means the moongate appears and disappears based purely on the animator's two preconditions; the active-object animator does not need to know moongates exist.
 
-The *placer* — the code that sets origin and destination — runs from the time system's hour-change hook. On each hour change while the player is on the surface, the hook recomputes moongate state from the in-world calendar:
+The *placer* is the still-open piece: it is the code that sets origin and destination from the in-world calendar. The time system has a surface-only hour-change hook, and that hook is the likely owner of moongate phasing, but the hook body is not yet mapped to public semantic depth. A v1 implementation should model natural moongates as an hourly calendar update and keep the placer isolated from the render-frame animator.
 
 - The day of the lunar cycle (derived from day-of-month and the per-13-day counter; see `time.md`) selects a position on the eight-virtue ring.
 - Each gate has a fixed *origin* per day on the ring.
@@ -164,7 +183,7 @@ The *placer* — the code that sets origin and destination — runs from the tim
 
 The *landing prompt* fires from the per-turn block when the party stands on a coordinate matching the current origin. The prompt asks whether to enter the gate; on yes, the destination is written into the party position (or, on certain phase combinations, the destination is in the underworld and the Z byte flips); on no, the prompt closes and the player remains on the cell.
 
-The gates' destinations form Britannia's in-game fast travel. The four "sleep" hours of each day are when most gates are visible; a fast traveller manages their schedule around the gate hours and their day-of-month around the desired destination.
+The gates' destinations form Britannia's in-game fast travel. A fast traveller manages their schedule around visible gate hours and their day-of-month around the desired destination. Exact original placement schedule data remains an open table, separate from the animator and landing prompt.
 
 ## 10. Lord British's path
 
@@ -172,29 +191,33 @@ A scripted path drives one cosmetic animation in the title sequence: Lord Britis
 
 ## 11. Vehicles
 
-The party's transport state lives in two bytes of the resident data: the *vehicle byte* and the *scene-type* byte. Together they describe what the party is in or on; the per-turn block consults them to decide turn cost, terrain restrictions, and special handling.
+The party's transport state lives in the resident player record as an avatar/vehicle tile or transport marker. A nearby scene/action tag participates in timing and animation pendulums. These are related during movement, but they are not one byte and should not be collapsed into a single vehicle enum.
 
-The vehicle byte takes one of a small set of single-character values:
+This section is the overworld summary. The command-level vehicle contract
+for B-Board, X-Xit, ship broadsides, cannon fire, and vehicle object
+persistence is centralized in `vehicles.md`.
 
-- **On foot.** The default. No vehicle byte set; standard 2-minute outdoor turn.
+The transport state covers the visible vehicle families:
+
+- **On foot.** The default. Standard 2-minute outdoor turn.
 - **Horse.** Faster overland travel — uses the standard 2-minute increment, but the dispatch system treats horse-mode movement as a multi-cell stride per turn. Cannot enter water.
-- **Skiff.** Water-only, slow. The vehicle byte's value is the letter `Q`. The time system halves the turn's minute increment, with a one-minute floor — water travel takes half as long per cell as land but is never instantaneous.
+- **Skiff.** Water-only transport. The time system has a `Q` state-tag modifier that halves the turn's minute increment, with a one-minute floor; public specs associate that timing with skiff/raft-like water travel without using `Q` as the full vehicle identity.
 - **Ship.** Water-bound but faster than skiff. Uses the standard outdoor turn cost.
-- **Tower / magic carpet (`T`).** A zero-time vehicle. The time system recognises this byte's value and skips the minute increment entirely. The exact identity of the `T` vehicle — whether the magic carpet, a tower-mounted vehicle, or another entry in the in-game list — is one of the open questions (see `time.md` Section 12).
+- **Magic carpet.** Boardable carpet transport. The current public trace does not prove that carpet travel sets the `T` timing tag, so v1 should not make carpet travel minute-free solely from that tag.
 - **Balloon.** Wind-driven aerial travel, with its own movement constraints (cannot land except on certain tiles, drifts on the wind direction). Uses the standard outdoor cost.
 
-The vehicle byte is part of the save image and persists across save/load. Boarding (B-board) sets it; exiting (X-it) clears it. Dismounted vehicles live as active-object slots on the world stage and remain there indefinitely.
+The transport state is part of the save image and persists across save/load. Boarding (B-board) sets it; exiting (X-it) clears it. Dismounted vehicles live as active-object slots on the world stage and remain there indefinitely.
 
 ## 12. Time advancement
 
 Each overworld turn that consumes the player's action advances the clock by **two minutes**. The time system's per-turn cleanup is called by the mode loop's per-turn block with the increment value 2.
 
-Two vehicle modifiers apply:
+Two state-tag modifiers can apply before the cascade:
 
-- **Skiff.** The increment is halved (with a one-minute floor) before the cascade runs.
-- **Tower / magic carpet (`T`).** The increment is forced to zero — cleanup still runs (still recomputes daylight, still checks for hour boundaries that may force special events) but the minute counter does not advance.
+- **`Q` tag.** The increment is halved (with a one-minute floor) before the cascade runs. Use this for the skiff/raft timing contract.
+- **`T` tag.** The minute and light-counter writes are skipped for that cleanup call. Cleanup still recomputes daylight and can still mark visibility dirty. Current public evidence treats `T` as a scene/action tag, not as a proved vehicle identity.
 
-The cleanup itself does the cascade — minutes to hours, hours to days, days to weeks, weeks to years — and runs the day-rollover bundle (per-character daily counter, day-scope flag clears) at midnight crossings. On any hour change while the player is on the surface, an "hour event" callback fires; this is the hook that updates moongates and may also be where the hourly random-encounter roll and a few minor world events live. The full cleanup contract is in `time.md`.
+The cleanup itself does the cascade — minutes to hours, hours to days, days to months, months to years. Daily NPC-schedule maintenance runs at midnight, while character month counters and long-period flag clears run only when the day wraps past 28. On any hour change while the player is on the surface, an "hour event" callback fires; current evidence treats it as the likely owner of natural moongate phasing and possibly other hourly world events, but the callback body remains open. The full cleanup contract is in `time.md`.
 
 Two notable absences from the overworld's per-turn cleanup compared to town mode:
 
@@ -205,13 +228,13 @@ Two notable absences from the overworld's per-turn cleanup compared to town mode
 
 **Visibility.** The producer reads the chunk buffer for terrain blockers, the active-object table for dynamic blockers, the daylight value for ambient light, and the player's torch / spell counters for personal light sources. Daylight on the surface follows the time system's day-night curve; on the underworld, the time system forces full-darkness regardless of hour. A water-tile under the party clears the light radius for the duration of the iteration.
 
-**Command dispatch.** The mode loop hands every printable letter to the resident command dispatcher (see `input.md`). The dispatcher routes A-Attack and E-Enter to in-overlay handlers, X-Exit and B-Board to vehicle handlers, K-Klimb and D-Descend to ascent/descent handlers, and the rest of the alphabet to action overlays loaded on demand.
+**Command dispatch.** The mode loop hands every printable letter to the resident command dispatcher (see `commands.md`). The dispatcher routes A-Attack and E-Enter to in-overlay handlers, X-Exit and B-Board to vehicle handlers documented in `vehicles.md`, K-Klimb to ascent/descent handling, and the rest of the recognised alphabet to action overlays loaded on demand. `D` has no confirmed resident world-command handler and falls through to the stock refusal when it reaches the dispatcher.
 
 **Active objects.** The overworld owns the player slot and a fixed quota of monster/vehicle/object slots. The per-turn animator, the random-encounter spawner, and the off-screen pruner all operate through the table. The combat framer save-and-restores the table around fights so the world resumes exactly as it was. Plane-swap (Z change) re-initialises the slots from the destination plane's seed `.OOL` file.
 
-**Time.** Per-turn cleanup runs once per consumed turn at increment 2; mode-zero recomputes run from the per-tick init at entry. The moongate hook fires on hour change.
+**Time.** Per-turn cleanup runs once per consumed turn at increment 2; mode-zero recomputes run from the per-tick init at entry. A surface-only hour hook fires on hour change; natural moongate placement is the likely main consumer, but the placer body is still open.
 
-**Save / load.** The full state — party position, plane, active-object table, vehicle byte, scene-type byte — sits in the save-image region described in `save-load.md`. The seed `.OOL` files are mirror-written on every save so per-plane state is always current.
+**Save / load.** The full state - party position, plane, active-object table, transport marker, scene/action tag - sits in the save-image region described in `save-load.md`. `SAVED.OOL` is the canonical per-plane object-overlay companion. The load path refreshes `BRIT.OOL` and `UNDER.OOL` from it so plane-entry paths can read the appropriate per-plane file; the save path stages from the per-plane files, writes `SAVED.OOL`, and only has a traced conditional save-time `UNDER.OOL` write.
 
 **Combat.** Entered when a movement command targets a hostile monster's tile, when the per-turn block matches a pirate-ship trigger, or when an ambush event fires. The framer suspends the active-object table, runs a self-contained fight, and restores the table on return. See `combat.md`.
 
@@ -221,15 +244,15 @@ Two notable absences from the overworld's per-turn cleanup compared to town mode
 
 ## 14. Open questions
 
-- **Encounter probability formula.** The 30-sided draw and threshold-exceeds gate are confirmed; the formula behind the threshold (which tile classes give which biases, how the vehicle byte modulates the rate, whether time-of-day affects it) is not.
+- **Encounter probability formula.** The 30-sided draw and threshold-exceeds gate are confirmed; the formula behind the threshold (which tile classes give which biases, how the transport marker modulates the rate, whether time-of-day affects it) is not.
 
 - **Tile-class enumeration.** Several tile-class checks in the per-turn block test against specific class ranges (camp class, moongate class, falls coordinates, ship-with-pirate class). The full enumeration of these ranges and their corresponding visual tiles is partially documented but not exhaustively mapped. The boundary between "monster classes the animator ticks" and "static prop classes" needs the full tile palette.
 
 - **Fall-trigger coordinates.** The full set of "fall into the underworld" coordinates on Britannia is not exhaustively enumerated; only one centrally located trigger is documented. The mirror set of underworld-to-surface ascents is similarly open.
 
-- **Vehicle byte values and full set.** The skiff (`Q`) and tower (`T`) byte values are documented because the time system reads them. The full table — horse, ship, balloon, magic carpet, raft, the various types in the in-game manual — and which letter each maps to is not fully traced.
+- **Transport marker values and timing tags.** The known transport-marker family contracts are centralized in `vehicles.md`, but exact numeric subranges, facing/sail variants, balloon write path, raft naming, and terrain-specific movement rules still need a promoted table. Separately, the time cleanup's `Q` and `T` tags are documented only as timing/state modifiers; `T` is not currently a proved vehicle identity.
 
-- **Moongate placement schedule.** The animator and landing prompt are documented; the per-day, per-hour table that drives where each gate appears and where it sends the player is encoded in resident data but the specific layout is one of the still-open questions.
+- **Moongate placement schedule and hook body.** The animator and landing prompt are documented; the per-day, per-hour table that drives where each natural gate appears and where it sends the player, plus the hour-event callback body that likely installs that state, remain open. This is distinct from Gate Travel's saved Moonstone slots.
 
 - **Per-turn modulators.** A few flag bytes in resident state modulate the per-turn block (suppress encounters during a quest segment, force a double-roll after a specific event). The day-rollover bundle (`time.md` Section 7) clears them at midnight; what sets them and how they affect the encounter probe is open.
 
@@ -244,6 +267,8 @@ Two notable absences from the overworld's per-turn cleanup compared to town mode
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
+- Local MAINOUT outer-loop analysis -- one-shot pending vehicle-acquisition
+  active-object placement before normal outdoor input.
 - The per-tick init that recomputes the scroll base and refreshes redraw flags — `u5-decomp/functions/MAINOUT_OVL/0x0000_mainout_entry.md`.
 - The per-turn epilogue that walks the active-object table, animates and prunes, and rolls the random-encounter trigger — `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The OUTSUBS overlay's collection of overworld helpers — `u5-decomp/functions/OUTSUBS_OVL/OVERVIEW.md` and the eleven per-function notes in that directory: `0x0000_outsubs_water_check.md`, `0x004A_outsubs_chunk_classify.md`, `0x0098_outsubs_load_chunk.md`, `0x01B4_outsubs_load_4chunks.md`, `0x02C8_outsubs_scroll_chunks.md`, `0x0368_outsubs_world_filename.md`, `0x0388_outsubs_check_town_entry.md`, `0x0458_outsubs_falls_handler.md`, `0x0566_outsubs_actor_init.md`, `0x05FC_outsubs_check_status.md`, `0x0658_outsubs_camp_or_save.md`.
@@ -253,4 +278,9 @@ The behaviour described above was derived by reading the function and format not
 - The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
 - The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - The on-disk format of the surface and underworld grids — `u5-decomp/formats/maps.md`.
-- The data-segment layout, including moongate state, chunk-index tables, and location-coords tables — `u5-decomp/formats/data-ovl.md`.
+- The data-segment layout, including moongate state, chunk-index tables, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
+- Public scene/name binding for town-mode location rows — `catalogs/gazetteer.md`,
+  `formats/npc.md`, and `formats/data-ovl.md`.
+- Public dungeon scene/name/record binding — `systems/dungeon-mode.md`,
+  `formats/dungeon-dat.md`, and the MAINOUT E-Enter helper re-derived from
+  the private analysis workspace.

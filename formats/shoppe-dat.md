@@ -40,7 +40,8 @@ Within a record, bytes are interpreted by the shop text renderer:
 | NUL | End of the current shop record |
 
 The high-byte range is available for phrase tokens; it should not be treated as
-an end-of-record marker. Records end at NUL, matching the sequential string
+an end-of-record marker. This includes `0xFF`, which is a valid token byte in
+the shared dictionary. Records end at NUL, matching the sequential string
 layout observed in the file survey.
 
 ## 4. Substitution Placeholders
@@ -81,8 +82,8 @@ Known shipped record clusters are:
 |---|---|
 | 0-7 | Shared short barks and farewells |
 | 8-48 | Weapon and armour item descriptions |
-| 49-56 | Sell-back or pawnbroker-style haggle lines |
-| 57-88 | Tavern and food-merchant prompts and menus |
+| 49-56 | Arms `S`-menu haggle, confirmation, and refusal lines |
+| 57-88 | Tavern, meal-counter, and related interactive prompts and menus |
 | 84-91 | Sage rumour records, overlapping the tavern/food cluster |
 | 92-104 | Horse-trader barks |
 | 105-126 | Ship-broker barks |
@@ -93,6 +94,11 @@ Known shipped record clusters are:
 
 These ranges are consumer conventions. The file does not include range
 headers, shop-kind ids, item ids, or price fields.
+The healer/sanctum cluster supplies the yes/no treatment prompt, the Cure/Heal/
+Resurrect service menu, condition refusals, ordinary paid-service quotes, the
+sanctum Cure/Heal treatment lines, and the exit line; the treatment eligibility,
+gold debit, status writes, and HP writes are owned by the shop overlay rather
+than by `SHOPPE.DAT`.
 
 ## 7. Consumer Behavior
 
@@ -102,7 +108,7 @@ shop kinds populate different substitution values before rendering:
 
 - Arms shops set item names and prices.
 - Reagent vendors set quantity and gold totals.
-- Sages set the asked-about subject and destination place.
+- Sages set the rumour fee, asked-about subject, and destination place.
 - Innkeepers set room-rate or guest-list values.
 - Generic greetings use vendor name, shop name, and time of day.
 
@@ -126,8 +132,10 @@ clear asset error rather than a partial shop menu.
 
 ## 9. Known Uncertainties
 
-- The per-NPC shop-kind selector that leads from conversation into a shop
-  overlay remains unresolved.
+- The Talk-entry shop dispatcher, shipped shop-trigger values, stock tables,
+  pricing, and side effects are documented in `formats/npc.md`,
+  `formats/data-ovl.md`, and `systems/shops.md`; this file only owns the
+  text-record container.
 - Some record ids in the shipped range are unused or overlap between shop
   families; the exact caller for every id is not fully catalogued.
 

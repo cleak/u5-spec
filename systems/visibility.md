@@ -16,7 +16,7 @@ The visibility grid is a rectangular block of bytes in the resident data segment
 
 The layout looks like this, with columns zero through ten as the active window and the player at the centre:
 
-```
+```text
        col 0   col 5   col 10
        v       v       v
 row  0 [..........]                .. = active cells (terrain or marker)
@@ -33,7 +33,7 @@ row 10 [..........]
        (each row: 11 active bytes + 21 trailing scratch bytes = 32 bytes)
 ```
 
-The thirty-two-byte stride lets the engine address a row by shifting the row index left by five — much faster than a multiply by eleven on the target processor. The trailing twenty-one bytes per row are not touched by the producer's main pass; they are used opportunistically by callees that need scratch within the loop and by the renderer for per-row staging.
+The thirty-two-byte stride makes each visibility row a fixed-size slot even though only the first eleven bytes are active visibility cells. The trailing twenty-one bytes per row are not touched by the producer's main pass; they are scratch/staging space for adjacent visibility and rendering work.
 
 The grid coexists with a *terrain band* of identical row count but a different stride. The terrain band uses sixteen bytes per row, also row-major over eleven rows, holding the underlying terrain tile bytes that the renderer falls back to when the visibility grid emits a "use companion buffer" marker. The two grids are fed by different producers (the visibility grid by the per-frame redraw, the terrain band by mode-entry and scroll-recentre handlers) and consumed together by the renderer; their contents are kept in lockstep by mode-entry initialisation.
 
@@ -96,7 +96,7 @@ The producer runs in three stages.
 
 End-of-stage state, per case:
 
-```
+```text
 positive light:  grid cells inside radius and unblocked = real tile bytes;
                  grid cells on the radius edge but blocked = 0xFF;
                  grid cells outside the radius = 0xFF.
@@ -155,14 +155,14 @@ A few special cases:
 
 After the producer returns, a post-pass walks the grid and refines the fog edges. The pass runs in non-combat scenes only — combat materialises terrain through a separate path (Section 11) and skips the refinement.
 
-The refinement uses a fixed five-cell light-periphery radius, distinct from the producer's light radius. It re-checks every cell against this periphery and toggles two specific marker bytes:
+The refinement uses a small squared-distance lookup centred on viewport cell `(5, 5)`, distinct from the producer's light radius. The helper folds each coordinate around the centre (`folded = min(coord, 10 - coord)`), indexes a resident 6×6 table, and returns `(5 - folded_x)^2 + (5 - folded_y)^2`. The post-pass compares that squared distance to the literal threshold `5` and toggles two specific marker bytes:
 
-- A cell currently holding the *clear-visible* marker (`0xDD`) whose distance from the player exceeds five cells is downgraded to the *dim-periphery* marker (`0x1C`). It is still visible, but the renderer will dim it.
-- A cell currently holding the *dim-periphery* marker (`0x1C`) whose distance from the player is at most five cells is upgraded back to the *clear-visible* marker (`0xDD`).
+- A cell currently holding the *clear-visible* marker (`0xDD`) whose squared distance is greater than `5` is downgraded to the *dim-periphery* marker (`0x1C`). It is still visible, but the renderer will dim it.
+- A cell currently holding the *dim-periphery* marker (`0x1C`) whose squared distance is at most `5` is upgraded back to the *clear-visible* marker (`0xDD`).
 
-The five-cell threshold uses a quadrant-folded distance metric — distances are looked up in a small per-(dx, dy) table rather than computed via square roots. The table treats the four quadrants symmetrically (the metric is mirror-equivalent across both axes) and produces a small-integer distance approximating Chebyshev or octile.
+This is not a five-cell radius. The clear-marker core covers the centre cell and cells within squared Euclidean distance `5` of it; marker cells farther out in the eleven-by-eleven viewport are dimmed. The lookup is reflection-symmetric across the viewport centre and avoids computing a square root at runtime.
 
-The five-cell periphery is independent of the producer's light radius. In practice the producer's radius is usually equal to or larger than five (full daylight is much further), so the dim periphery sits inside the producer's visible region. Light sources whose radius is less than five — a torch in a dungeon, say — produce a fully-visible region with no dim periphery; the refinement passes idle on those frames.
+This marker refinement is independent of the producer's light radius. The producer decides which terrain cells are visible at all; the post-pass only adjusts cells already carrying the two renderer marker bytes. It is a no-op for grids where the line-of-sight helper has emitted real tile bytes instead of `0xDD` / `0x1C` markers.
 
 The refinement only toggles between the two marker bytes; cells holding any other value (a real tile byte, the hidden marker, the use-companion marker, the already-rendered marker) are left unchanged. The pass is a no-op for grids where the line-of-sight helper has not emitted those markers — most ordinary frames have a visible-region full of *real tile bytes* rather than markers, so the toggle does nothing. The markers are written only by the active-object compositor (Section 8) and by certain mode-entry handlers; the refinement is what keeps them consistent with the player's current radius.
 
@@ -238,15 +238,13 @@ The lighting subsystem's per-turn cleanup runs the inflation rules and produces 
 
 ## 13. Open questions
 
-- **Exact LOS step algorithm.** The line-of-sight helper's six-hundred-byte body has not been fully decompiled. Plausible candidates are Bresenham-style integer rasterisation per ray, quadrant-symmetric shadow-casting, or a precomputed sight-ray table. The function's large frame is consistent with any of these. A runtime probe with a known map would discriminate.
+- **Exact LOS step algorithm.** The line-of-sight helper has not yet been fully mapped in the private notes. Plausible candidates are Bresenham-style integer rasterisation per ray, quadrant-symmetric shadow-casting, or a precomputed sight-ray table. The helper's large working state is consistent with any of these. A runtime probe with a known map would discriminate.
 
 - **The blocks-sight tile-class bitmap.** The set of tile ids that block sight is a per-tile-class attribute, but the table itself has not been transcribed. The Section 6 list is interpretation; derive the blocking set from the engine's combined attribute table when it is mapped.
 
 - **The dim-periphery vs fully-obscured semantics.** Whether the dim-periphery marker is *only* a renderer cue or whether some other system reads it is unconfirmed. Treat it as renderer-only until a reader is found.
 
 - **The negative-light full-fill path's call sites.** No production game scene uses a negative radius in the data so far observed; the path may be a debug or development holdover. Implementers can omit it without behavioural difference in normal play.
-
-- **Active-object record byte interpretation.** The active-objects spec reads bytes five through seven differently in different modes. The two interpretations should be reconciled against a per-class union.
 
 - **The use-companion marker's full encoding.** The renderer's contract for `0x00`, `0xDC`, and `0xDD` is described in static-analysis notes but has not been confirmed against a live render. Treat as a renderer-internal contract.
 
@@ -261,9 +259,10 @@ The lighting subsystem's per-turn cleanup runs the inflation rules and produces 
 The behaviour described above was derived by reading the function and format notes listed below. None of those notes' assembly excerpts, byte offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The visibility producer's three-stage shape (hidden-fill, line-of-sight delegation, post-pass), the negative-light full-fill path, and the radius-sign branching — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
-- The fog post-pass — five-cell-radius marker toggling and the active-object compositor that walks the table backwards and gates each slot on the visibility grid's cell value — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
+- The fog post-pass — squared-distance marker toggling and the active-object compositor that walks the table backwards and gates each slot on the visibility grid's cell value — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
+- The 6×6 folded squared-distance helper used by the fog post-pass and combat AI — `u5-decomp/functions/ULTIMA_EXE/0x6FF0_range_to_player.md`.
 - The redraw orchestrator that calls the producer on dirty frames, takes the cheap path on clean frames, blat-copies the combat terrain on combat frames, and clears the dirty flag after the producer returns — `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
 - The world-tile getter that dispatches between combat, overworld 2×2 chunk window, and town/dungeon-explore single-grid buffers, including the out-of-bounds sentinel — `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`.
 - The overworld map family's chunk layout (BRIT.DAT sparse, UNDER.DAT dense), the four-class location-DAT format, and the combat arena format that combat pre-composites — `u5-decomp/formats/maps.md`.
 - The resident data segment's fixed locations for the visibility grid, the terrain band, and the per-cell scrap regions — `u5-decomp/formats/data-ovl.md`.
-- The visibility-system reverse-engineering notebook from the companion-app project, used as a starting reference for buffer addresses, scene-to-routine map, and the asynchronous-read race observations — `ninth-virtue/docs/visibility-re.md:11-352`.
+- The visibility-system analysis notebook from the companion-app project, used as a starting reference for buffer addresses, scene-to-routine map, and the asynchronous-read race observations — `ninth-virtue/docs/visibility-re.md:11-352`.

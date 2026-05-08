@@ -5,7 +5,8 @@
 `STORY.DAT` contains the proportional-font narrative text for the Ultima V
 Introduction path reached from the intro menu. It is paired with the story art
 slides, but it stores only text. Graphics, palette changes, screen placement,
-and slide timing are owned by the intro and rendering systems.
+special inline lines, and slide timing are owned by the intro and rendering
+systems.
 
 The format is intentionally simple: a run of page records using the same
 paragraph markers as the character-creation question text.
@@ -20,7 +21,7 @@ Records are stored sequentially, with no header and no offset table.
 | Text record | A NUL-terminated low-ASCII paragraph/page stream |
 | End of record | NUL byte |
 | End of file | Two NUL bytes after the final non-empty record in the shipped data |
-| Record order | Intro slide order, selected by the intro slide loop |
+| Record order | Intro story order, selected by the intro slide loop |
 
 The file does not carry per-slide filenames, art ids, rectangles, colours, or
 wait durations. The intro system supplies those from code and resident tables.
@@ -42,10 +43,17 @@ advance behavior.
 
 ## 4. Consumer Behavior
 
-The intro menu's Introduction option plays the story sequence. For each slide,
-the intro path loads or selects the corresponding art panel, selects the next
-`STORY.DAT` text record, renders the art, renders the proportional text, waits
-for the player to advance, and then proceeds to the next slide.
+The intro menu's Introduction option plays a twenty-one-step story sequence.
+For each text-consuming step, the intro path loads or selects the
+corresponding art panel, selects the next `STORY.DAT` text record, renders the
+art, renders the proportional text, and then advances according to the intro
+system's step rules.
+
+The sequence contains one visual step that does not consume `STORY.DAT`: step 6
+uses two inline doorway-transition lines owned by the intro code. The remaining
+twenty steps consume the twenty non-empty `STORY.DAT` records in order. Step 0
+consumes the first record but advances automatically; the later text-consuming
+steps wait for a key in the intro system before advancing.
 
 `STORY.DAT` does not mutate game state. Playing the sequence returns to the
 intro menu afterward. No save file is created or modified.
@@ -54,7 +62,7 @@ intro menu afterward. No save file is created or modified.
 
 A reader should treat records as sequential and bounded by NUL bytes. For a
 faithful data set, expect twenty non-empty records followed by an empty trailer.
-If fewer records are available than the intro sequence requests, a modern
+If fewer than twenty records are available, a modern
 implementation should fail the asset load or show a missing-page diagnostic
 rather than reading into later memory.
 
@@ -65,10 +73,8 @@ the markers listed above.
 
 ## 6. Known Uncertainties
 
-- The exact slide-to-record pacing, transition timing, and text placement are
-  intro-system concerns and are not fully specified by this file.
-- The record reader is known behaviorally, but the exact location of every
-  loader call remains partly open in the intro notes.
+- The exact transition timing, waits, and special secondary draws are
+  intro-system concerns and are not specified by this file.
 - The empty final trailer is best treated as a sentinel or padding; no
   gameplay meaning is known.
 

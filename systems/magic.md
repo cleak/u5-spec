@@ -2,16 +2,16 @@
 
 ## 1. Overview
 
-Ultima V has the richest magic system of the early Ultima series. The player can cast forty-eight distinct spells, organised into eight ascending circles of six spells each. Every spell is named by a short sequence of one to four runic syllables drawn from a fixed twenty-four-syllable vocabulary; every spell's effect requires a specific recipe of two or more of the eight reagents to be combined ahead of time into a "charge" that the cast itself consumes. A spell's circle determines its mana cost (a circle-N spell costs N magic points), the minimum experience level required to cast it, and roughly its power.
+Ultima V has the richest magic system of the early Ultima series. The player can cast forty-eight distinct spells, organised into eight ascending circles of six spells each. Every spell is named by a short sequence of one to four runic syllables drawn from a fixed twenty-four-syllable vocabulary; every spell's effect requires a specific recipe of one or more of the eight reagents to be combined ahead of time into a "charge" that the cast itself consumes. A spell's circle determines its mana cost (a circle-N spell costs N magic points), the minimum experience level required to cast it, and roughly its power.
 
 Magic is therefore a chain of three preparations and one act:
 
 1. **Buy or find reagents.** The eight reagents are sold by herbalists in towns, can be picked up from despoiled enemies, or grown in certain locations. Each is an item the player carries in inventory in a per-reagent counter.
-2. **Mix reagents into spell charges.** The `M` command opens a per-spell mixing prompt. The player picks a spell, chooses a quantity, and the engine debits the recipe's reagents from inventory once per charge while incrementing the per-spell charge counter.
-3. **Have enough mana and experience level.** The active caster must be alive and awake, must have at least N mana points where N is the spell's circle, and must be at least level N. Casting outside these bounds either silently rejects ("None mixed!") or accepts the cast but fails it after debiting mana ("M.P. too low!") — the second case is a real penalty for a low-level character attempting a high-circle spell.
-4. **Cast.** The `C` command opens the cast pipeline. The player types the spell's rune-name in compact letter-coded form; the engine parses it against a forty-eight-entry table, runs the prerequisite gate, debits a charge, debits mana, and dispatches to the spell's effect handler.
+2. **Mix reagents into spell charges.** The `M` command opens a per-spell mixing prompt. The player picks a spell, selects reagents, and chooses a quantity. The engine debits the selected reagents; it increments the per-spell charge counter only if the selected reagent mask exactly matches the spell's recipe.
+3. **Have a mixed charge, enough mana, and enough experience level.** The active caster must be alive and awake, must have at least N mana points where N is the spell's circle, and must be at least level N. Once the scene accepts the spell and a charge exists, the charge is spent before mana and level are checked. Low mana loses the charge only; low level loses both charge and mana.
+4. **Cast.** The `C` command opens the cast pipeline. The player types the spell's rune-name in compact selector-letter form; the engine parses it against a forty-eight-entry table, runs the context, charge, mana, and level gates, then dispatches to the spell's effect handler.
 
-This spec describes the reagents, the rune vocabulary, the eight circles and their forty-eight spells, the cast and mix command flows, the prerequisite gates, the effect categories, the differences between casting in the overworld and casting in combat, and the linkage between spells and the eight virtue shrines that bestow stat boosts on meditation.
+This spec describes the reagents, the rune vocabulary, the eight circles and their forty-eight spells, the cast and mix command flows, the prerequisite gates, the effect categories, the differences between casting in the overworld and casting in combat, and the narrow linkage between magic and the virtue-shrine stat rewards that can raise the Avatar's intelligence.
 
 ## 2. The eight reagents
 
@@ -49,12 +49,10 @@ Every spell's name is a phrase built from one to four syllables drawn from a fix
 | Grav     | field, energy field           |
 | Hur      | wind, weather                 |
 | In       | create, make, cause           |
-| Jux      | harm, danger (rare)           |
 | Kal      | summon, invoke                |
 | Lor      | light                         |
 | Mani     | life, healing                 |
 | Nox      | poison                        |
-| Ort      | magic (rare)                  |
 | Por      | movement, motion              |
 | Quas     | illusion, image               |
 | Rel      | change                        |
@@ -67,9 +65,9 @@ Every spell's name is a phrase built from one to four syllables drawn from a fix
 | Ylem     | matter, substance             |
 | Zu       | sleep                         |
 
-(The rune dictionary in the resident data segment contains exactly twenty-four entries; Jux and Ort are listed here for completeness because they appear in lore but are seldom or never used by spell names.)
+Jux and Ort appear in broader Ultima lore, but they are not resident U5 spell selectors and are not accepted by this prompt.
 
-A spell name is the concatenation of its syllables in order. "Mani" alone is *Heal* (circle 1); "Vas Mani" is *Great Heal* (circle 5; same root, "great" prefix); "In Mani Corp" is the resurrection family; "An Xen Corp" is the slay-undead family. Most U5 spells follow this pattern, with subject-verb-object readable as the chain of runes. A few have conventional names (*Vas Rel Por* — "Great Change Movement" — is the marquee gate-travel teleport).
+A spell name is the concatenation of its syllables in order. "Mani" alone is *Heal* (circle 1); "Vas Mani" is *Great Heal* (circle 5; same root, "great" prefix); "In Mani Corp" is the resurrection family; "An Xen Corp" is the repel-undead family. Most U5 spells follow this pattern, with subject-verb-object readable as the chain of runes. A few have conventional names (*Vas Rel Por* — "Great Change Movement" — is the marquee gate-travel teleport).
 
 The rune vocabulary is also used outside the spell system: NPC dialogue mentions runes by name; the Words of Power that disable Stonegate's doors are runic. The syllable table is shared, but the spell-name parser is its own pipeline.
 
@@ -81,56 +79,56 @@ The full table:
 
 | Circle | Spell name (runes)        | Common name        | Effect summary                                            |
 |:------:|---------------------------|--------------------|-----------------------------------------------------------|
+| 1      | In Lor                    | Light               | Set the light-spell counter to 100 units.                   |
+| 1      | Grav Por                  | Magic Missile       | Single-target combat attack: roll 1..16, then target defense. |
 | 1      | An Zu                     | Awaken              | Wake a sleeping party member.                              |
 | 1      | An Nox                    | Cure                | Cure poison on a party member.                             |
 | 1      | Mani                      | Heal                | Restore moderate HP to a party member.                     |
-| 1      | An Ylem                   | Light               | Bright light around the party.                             |
-| 1      | An Sanct                  | Unlock Magic        | Open a magically locked door.                              |
-| 1      | An Xen Corp               | Repond              | Calm/dispel one undead.                                    |
-| 2      | Rel Hur                   | Wind Change         | Rotate the prevailing wind one quarter.                    |
-| 2      | In Wis                    | Locate              | Read the party's current X, Y, Z position.                 |
-| 2      | Kal Xen                   | Summon Creature     | Tame a single small creature (rabbit, etc.).               |
-| 2      | In Xen Mani               | Heal Animal         | Heal one tame mount or summoned creature.                  |
-| 2      | Vas Lor                   | Great Light         | Bright, long-duration light.                               |
-| 2      | Vas Flam                  | Fireball            | Single-target ranged fire damage.                          |
+| 1      | An Ylem                   | Vanish              | Remove or vanish an object/effect.                         |
+| 2      | An Sanct                  | Open                | Safely open a trapped chest.                               |
+| 2      | An Xen Corp               | Repel Undead        | Repel or dispel undead.                                    |
+| 2      | Rel Hur                   | Wind Change         | Change the prevailing wind state.                          |
+| 2      | In Wis                    | Locate              | Read the caster's current location.                        |
+| 2      | Kal Xen                   | Conjure             | Summon an animal.                                          |
+| 2      | In Xen Mani               | Create Food         | Create food/rations.                                       |
+| 3      | Vas Lor                   | Great Light         | Set the light-spell counter to 255 units.                   |
+| 3      | Vas Flam                  | Fireball            | Single-target ranged fire damage: roll 1..30, then target defense. |
 | 3      | In Flam Grav              | Fire Field          | Place a burning-tile field at a chosen cell.               |
 | 3      | In Nox Grav               | Poison Field        | Place a poison-tile field at a chosen cell.                |
 | 3      | In Zu Grav                | Sleep Field         | Place a sleep-tile field at a chosen cell.                 |
 | 3      | In Por                    | Blink               | Short teleport to a same-map cell.                         |
-| 3      | An Grav                   | Dispel Field        | Remove a placed field at a chosen cell.                    |
-| 3      | In Sanct                  | Protection          | Single-target magic armour buff.                           |
-| 4      | In Sanct Grav             | Mass Protection     | Party-wide magic armour buff.                              |
+| 4      | An Grav                   | Dispel Field        | Remove a placed field at a chosen cell.                    |
+| 4      | In Sanct                  | Protection          | Install a `P`/20 active effect that adds 3 to party defense. |
+| 4      | In Sanct Grav             | Energy Field        | Create an impenetrable field.                              |
 | 4      | Uus Por                   | Up                  | Move the party up one dungeon level.                       |
 | 4      | Des Por                   | Down                | Move the party down one dungeon level.                     |
-| 4      | Wis Quas                  | Reveal              | Make hidden / illusion creatures visible.                  |
-| 4      | In Bet Xen                | Insect Swarm        | Summon a small insect cloud as ranged attacker.            |
-| 4      | An Ex Por                 | Negate Field        | Open a magically barred passage.                           |
-| 5      | In Ex Por                 | Magic Lock          | Magically lock a door against a passer-by.                 |
+| 4      | Wis Quas                  | Reveal              | Undo invisibility/illusion effects.                        |
+| 5      | In Bet Xen                | Swarm               | Summon insects.                                            |
+| 5      | An Ex Por                 | Magic Lock          | Apply a magical lock.                                      |
+| 5      | In Ex Por                 | Unlock Magic        | Unlock magical locks.                                      |
 | 5      | Vas Mani                  | Great Heal          | Strong HP restoration.                                     |
-| 5      | In Zu                     | Sleep               | Single-target sleep.                                        |
-| 5      | Rel Tym                   | Quickness           | Speed-up buff (acts more often per round).                 |
-| 5      | In Vas Por Ylem           | Earthquake          | Area damage, all on-screen.                                |
-| 5      | Quas An Wis               | Mass Confuse        | Confuse all visible enemies.                               |
-| 6      | In An                     | Negate Magic        | Suppress active enchantments and spells in scene.          |
-| 6      | Wis An Ylem               | View                | Open the world-map view from current location.             |
-| 6      | An Xen Ex                 | Dispel Monster      | Remove one specific summon/illusion.                       |
-| 6      | Rel Xen Bet               | Polymorph           | Change a target into a small creature.                     |
-| 6      | Sanct Lor                 | Invisibility        | Single-target invisibility buff.                           |
-| 6      | Xen Corp                  | Slay Living         | Single-target instant-kill against living creatures.       |
-| 7      | In Quas Xen               | Conjure             | Summon a creature to fight on the party's side.            |
-| 7      | In Quas Wis               | Confuse             | Single-target confusion.                                   |
+| 5      | In Zu                     | Sleep               | Single-target sleep.                                       |
+| 5      | Rel Tym                   | Quickness           | Install a `Q`/30 active effect that randomly gates player-side combat dispatch. |
+| 6      | In Vas Por Ylem           | Tremor              | Table-wide damage check against eligible combat actors.    |
+| 6      | Quas An Wis               | Mass Charm          | Install a `C`/20 active effect that gates monster target-remap rolls. |
+| 6      | In An                     | Negate Magic        | Install an `N`/10 active effect that absorbs combat casts. |
+| 6      | Wis An Ylem               | X-Ray               | X-ray / remote-view effect.                                |
+| 6      | An Xen Ex                 | Charm               | Charm an enemy.                                            |
+| 6      | Rel Xen Bet               | Polymorph           | Transform a target into a Giant Rat.                       |
+| 7      | Sanct Lor                 | Invisibility        | Single-target invisibility buff.                           |
+| 7      | Xen Corp                  | Kill                | Single-target combat instant-kill attack.                  |
+| 7      | In Quas Xen               | Clone               | Clone a person or creature.                                |
+| 7      | In Quas Wis               | Peer                | Reveal the map.                                            |
 | 7      | In Nox Hur                | Poison Wind         | Area poison-effect with wind-direction shape.              |
-| 7      | In Quas Corp              | Fear                | Make targets flee.                                         |
-| 7      | In Mani Corp              | Resurrection        | Bring a dead party member back to life (with cost).        |
-| 7      | Kal Xen Corp              | Summon Daemon       | Summon a demon as ally.                                    |
-| 8      | In Vas Grav Corp          | Cataclysm           | Heavy area damage.                                         |
-| 8      | In Flam Hur               | Fire Storm          | Wide-area fire damage.                                     |
-| 8      | Vas Rel Por               | Gate Travel         | Long-range teleport via moongate phase.                    |
-| 8      | An Tym                    | Time Stop           | Freeze monster turns for several rounds.                   |
-| 8      | (eighth slot; resurrection long form) | Resurrection (rare) | Alternate, more reliable resurrection.        |
-| 8      | (eighth slot; final negate) | Negate Time      | Stronger Time Stop.                                        |
+| 7      | In Quas Corp              | Cause Fear          | Make targets flee.                                         |
+| 8      | In Mani Corp              | Resurrect           | Bring a dead party member back to life.                    |
+| 8      | Kal Xen Corp              | Summon              | Summon a daemon.                                           |
+| 8      | In Vas Grav Corp          | Death Wind          | High-power death/energy attack.                            |
+| 8      | In Flam Hur               | Flame Wind          | Wide-area fire attack.                                     |
+| 8      | Vas Rel Por               | Gate Travel         | Long-range teleport via saved Moonstone slot.               |
+| 8      | An Tym                    | Time Stop           | Freeze the passage of time for actors.                     |
 
-The exact assignment of names and effects to the last two circle-8 slots is uncertain in the project's analysis (Section 13). Implementations should treat the table as a working framework and verify each circle-8 entry against the in-game manual when the per-handler decompilation completes.
+The parser tokens, incantation strings, circles, recipes, and table order are fixed for all forty-eight spells. Handler-level details such as monster spell-like effects remain incomplete for several effects (Section 13).
 
 The mana cost for any spell is `(spell_index / 6) + 1` (integer division, zero-based index 0..47). Equivalently, the circle number. Circle 1 costs 1 MP, circle 8 costs 8 MP. There are no half-costs, no cost-reduction items, and no per-class cost adjustments — magic is uniform across casters.
 
@@ -140,41 +138,57 @@ The `C` (Cast) command is the player's gateway to the spell system. It is availa
 
 **Step 1 — active-player resolve.** The dispatcher first asks "who is casting?" by reading the active-player slot. If no party member is selected, the cast aborts silently. Outside combat, the active-player byte is whatever the player most recently set with the digit keys. Inside combat, the active-player byte is whichever party-slot the round walker is currently dispatching.
 
-**Step 2 — prompt for the spell name.** The dispatcher prints `Spell name:` and a colon-prompt, switches the input pipeline into prompt mode, and reads the spell name. The name is typed as a compact letter-coded form: the player types only the *distinguishing letters* of each rune in the spell, not the rune syllables in full. Examples: `IL` for *An Zu* (Awaken — circle 1); `IPVY` for *In Vas Por Ylem* (Earthquake — circle 5); `CGIV` for the eight-rune Gate Travel; just `M` for the lone-mani Heal. The forty-eight legal codes are stored in a small token table.
+**Step 2 — prompt for the spell name.** The dispatcher prints `Spell name:` and a colon-prompt, switches the input pipeline into prompt mode, and reads the spell name. The name is typed as a compact letter-coded form: the player types selector letters for the spell, not the rune syllables in full. Examples: `IL` for *In Lor* (Light — circle 1); `GP` for *Grav Por* (Magic Missile — circle 1); `IPVY` for *In Vas Por Ylem* (Tremor — circle 6); `PRV` for *Vas Rel Por* (Gate Travel — circle 8); and `M` for *Mani* (Heal — circle 1). The forty-eight legal codes are stored in a small token table.
 
-The compact letter-coded form is convenient for fast typing — there are forty-eight legal codes, each two to four letters — but it is unique only as a set: the player must know the code for the spell they want. The U5 manual lists the codes as part of each spell's entry, and the Z-stats spell-book panel displays them in-game. Typing a code that does not match prints `No effect!`; pressing Enter on an empty buffer prints `None!`; pressing Escape cancels with no time consumed.
+The compact letter-coded form is convenient for fast typing: there are forty-eight legal codes, each one to four letters, and the parser sorts the typed letters before lookup. Order therefore does not matter for the selector itself: `FV` and `VF` both resolve to *Vas Flam*. The echo shown while typing is friendlier than the stored token: each letter prints its associated rune word followed by a space, but that echo is not a long-form input alias. Typing full words such as `VAS FLAM` does not invoke a separate long-form parser; it just feeds selector letters until the four-letter cap or a terminating space/Return is reached.
 
-**Step 3 — context gate.** Each spell carries a four-bit allow-mask describing which scene-types the spell may be cast in: overworld, town, shrine, or combat. The dispatcher reads the current scene byte, computes the matching mask bit, and tests it against the spell's mask. If the spell is not allowed in this scene (for example, an Earthquake cast in a town), the dispatcher prints `Not here!` and aborts. Time is *not* consumed on this rejection — the player can change scenes and try again.
+Return or Space completes the prompt, Backspace erases one selector, and Escape cancels. `J` and `O` are ignored because no rune selector is keyed by those letters. An empty completed buffer returns `None!`; a nonempty selector that does not match any of the forty-eight tokens prints `No effect!`.
+
+**Step 3 — context gate.** Each spell carries a four-bit allow-mask describing which scene-types the spell may be cast in: combat, dungeon, indoor/town-mode, or overworld. The dispatcher reads the current scene byte, computes the matching mask bit, and tests it against the spell's mask. If the spell is not allowed in this scene (for example, a combat-only attack spell outside combat), the dispatcher prints `Not here!` and aborts. Time is *not* consumed on this rejection — the player can change scenes and try again. The complete per-spell scene masks and scene-byte-to-mask mapping are in `catalogs/spell-list.md`.
+
+Two special indoor scene states bypass the normal mask test: scene byte `18` while the casting gate byte is clear, and scene byte `29`. These print `Absorbed!` and abort before charge or mana consumption.
 
 **Step 4 — charges gate.** The dispatcher reads the per-spell charge counter. If the counter is zero, the dispatcher prints `None mixed!` and aborts. Otherwise the counter is decremented immediately, before any further checks — the charge is "spent" the moment the dispatcher commits to the cast.
 
-**Step 5 — mana and level gate.** The dispatcher reads the active player's current mana points and compares against the spell's mana cost. If insufficient, the dispatcher prints `M.P. too low!` and aborts. A second comparison checks the player's experience level against the same cost. If the level is below the cost, the dispatcher *also* prints `M.P. too low!` — but only after debiting the mana. This is a deliberate penalty: a level-3 character attempting a circle-7 spell loses seven points of mana and watches the cast fail.
+**Step 5 — mana gate.** The dispatcher reads the active player's current mana points and compares against the spell's mana cost. If insufficient, the dispatcher prints `M.P. too low!` and aborts. The charge has already been spent, but no mana is debited.
 
-**Step 6 — debit mana.** Mana is subtracted from the active player's record. (At this point, both the charge counter and the mana have been spent.)
+**Step 6 — debit mana and check level.** Mana is subtracted from the active player's record, then the dispatcher compares the player's experience level against the same cost. If the level is below the cost, the dispatcher also prints `M.P. too low!` and aborts without refunding mana or the charge. This is a deliberate penalty: a level-3 character attempting a circle-7 spell loses seven points of mana and watches the cast fail.
 
 **Step 7 — dispatch to the effect handler.** The dispatcher computes the spell's index (0..47) into a forty-eight-entry jump table and calls the matching handler. Handlers fall into a small set of families described in Section 8.
 
-**Step 8 — narrate the result.** Most handlers print a short success message: `Light!`, `Wind change!`, `Protection!`, `View!`, `Resurrection!`, `Negate magic!`, `Negate time!`, `Summon Daemon!`. A handful print nothing on success (the projectile spells, the field placements). A failure path prints `Failed!`; a success without a spell-specific message prints `Success!`.
+**Step 8 — narrate the result.** Most handlers print a short success message: `Light!`, `Wind change!`, `Protection!`, `View!`, `Resurrection!`, `Negate magic!`, `Summon Daemon!`. A handful print nothing on success (the projectile spells, the field placements), and Time Stop has a special absorption message when it is blocked by a magic-absorber in the scene. A failure path prints `Failed!`; a success without a spell-specific message prints `Success!`.
 
 The command then returns to the calling mode loop. Time advances by the standard per-mode increment. A spell cast costs one turn regardless of the spell's power.
 
 ## 6. The M-Mix command
 
-The `M` (Mix Reagents) command is the player's tool for converting raw reagents into pre-mixed charges. It is available from the overworld and town mode loops; from a dungeon mode loop the command exists but is rarely useful (the player typically mixes between dungeon expeditions). The command is *not* available inside combat — there is no time to mix in a fight.
+The world-mode `M` (Mix Reagents) command is the player's tool for converting raw reagents into pre-mixed charges. It is available from the overworld and town mode loops; from a dungeon mode loop the command exists but is rarely useful (the player typically mixes between dungeon expeditions). It is *not* available inside combat: the combat command handler still recognizes the letter `M`, but prints `Mix-Not here` and returns instead of entering the reagent mixer.
 
 **Step 1 — pre-flight check.** The handler verifies the player has at least one of any reagent. With an empty reagent inventory, it prints `No reagents owned!` and aborts.
 
-**Step 2 — pick a spell.** The handler prints `For what spell?` and uses the same compact letter-coded prompt as the C-Cast command. The spell name is parsed against the forty-eight-entry token table, returning the spell index 0..47. Cancel and unknown-name responses behave the same as in C-Cast.
+**Step 2 — pick a spell.** The handler prints `For what spell?` and uses the same compact letter-coded prompt as the C-Cast command. The spell name is parsed against the forty-eight-entry token table, returning the spell index 0..47. Blank input or Escape prints `None!` and aborts before reagent selection. A nonblank selector with no table match returns the shared parser's no-match value; M-Mix does not print C-Cast's `No effect!` at this point, so the player can still enter reagent selection. If they then choose a nonzero mix and quantity, the selected reagents are consumed and no charges are added.
 
-**Step 3 — pick a quantity.** The handler prints `How much?` and reads a small unsigned digit. The quantity is the number of *charges* the player wants to mix; each charge consumes one full copy of the spell's recipe.
+**Step 3 — select reagents.** The handler shows only the reagent rows whose
+inventory counters are nonzero and lets the player toggle a selected set. The
+selection cursor moves with the same four directional keys used by compact
+menus, Return or Space toggles the highlighted reagent, `M` accepts the current
+mask, and Escape cancels before any inventory change. The returned value is an
+eight-bit mask in the reagent order documented in `catalogs/spell-list.md`.
 
-**Step 4 — verify reagents available.** The handler reads the spell's recipe — a per-spell mask of which of the eight reagents are needed — and checks the player's inventory against the requested quantity. If any reagent is short, the handler prints `Insufficient reagents!` and aborts (no reagents are consumed).
+**Step 4 — pick a quantity.** The handler prints `How much?` and reads a
+two-digit unsigned quantity. Zero cancels through the cleanup path before any
+inventory change. Nonzero quantities are validated against every selected
+reagent counter. If any selected reagent has less than the requested quantity,
+it prints `Insufficient reagents!` and repeats the quantity prompt before any
+inventory change.
 
-**Step 5 — mix.** The handler prints `Mixing...`, runs a short progress-style delay, and then for each requested charge: decrements one of each required reagent in inventory, increments the per-spell charge counter, and increments a per-iteration progress display. The reagent debits are done one at a time so a partially-completed mix can in principle be detected mid-loop, although with the pre-flight verification a partial mix is unreachable.
+**Step 5 — reject empty selection.** If the selected reagent mask is zero, the handler prints `Nothing to mix!` and exits through the cleanup path.
 
-A `Nothing to mix!` rejection appears if the player names a spell they have no recipe-fit reagents for at all — the system distinguishes "you tried to mix but you had nothing" from "you have some but not enough".
+**Step 6 — debit selected reagents.** The handler prints `Mixing...`, then subtracts the requested quantity from each selected raw reagent counter.
 
-The recipe list — which reagents each spell needs — is fixed and matches the U5 manual. Common patterns: heals tend to use Ginseng + Spider Silk; lights tend to use Sulfur Ash + Mandrake Root; fire spells use Sulfur Ash + Black Pearl; protections use Garlic + Ginseng + Mandrake; the rare top-circle spells (Resurrection, Cataclysm, Gate Travel) use four or five reagents and consume some of the rarer ones (Mandrake, Nightshade) — which is what makes them strategic.
+**Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, capped at 99. If the masks do not match, the selected reagents are already spent, no spell charges are added, and the wrong-mix side-effect path runs.
+
+The recipe list is fixed in the resident data segment. The full decoded recipe table is in `catalogs/spell-list.md`.
 
 The per-spell charge counters are part of the persistent save image: forty-eight bytes, one per spell. The counters survive saving, loading, dying, and combat. They are consumed only by C-Cast and replenished only by M-Mix; no other path writes to them.
 
@@ -186,42 +200,120 @@ Combat introduces an additional prerequisite gate that runs *before* the C-Cast 
 
 1. **Target validity.** The combat target picker writes a target slot for the casting party member; the prereq checks the slot is non-empty (the all-ones sentinel value means "no target picked"). Failure aborts the cast silently — no time consumed.
 2. **Target visibility and awakeness.** The target's combat-state flags must indicate alive, visible (not currently in an "unrevealed" or "invisible" state), and awake (not asleep). A spell at a sleeping or invisible target fails the gate.
-3. **Vehicle gate.** The caster's current vehicle must permit casting. The "tower" vehicle (carpet at altitude, in U5's framing) blocks all spellcasting; the gate aborts the cast if the caster is currently in that state.
-4. **Resource gate.** A separate per-class check verifies the caster has the basic resources (mana > 0, target type compatible with caster's class). On success the gate runs a small AI hook (the target reacts to being targeted) and prints a continuation message — typically combining with a name to read like "*<spell> interferes!*".
+3. **State-tag gate.** A combat-side state tag must permit casting. The traced gate rejects the `T` tag; current public evidence does not prove that `T` is the magic carpet or any specific boarded vehicle. Treat it as a prohibited scene/action state for v1.
+4. **Resource/allowed gate.** A separate combat-side check receives the caster and target and decides whether the spell may be queued. Its internal resource/class rules are not fully decoded, so v1 should treat it as a pre-dispatch allowed check distinct from the later shared charge, mana, and level gates. On success the pre-gate runs a target-reaction hook and prints a continuation message - typically combining with a name to read like "*<spell> interferes!*". The hook's exact gameplay effect remains open.
 
 **Dispatcher gates** (run after the combat pre-gate, or as the only gate outside combat):
 
-5. **Charges gate** — `[per-spell charge] > 0`, otherwise `None mixed!`.
-6. **Scene gate** — per-spell allow-mask matches the current scene byte, otherwise `Not here!`.
-7. **Mana gate** — `[active-player mana] >= circle`, otherwise `M.P. too low!` (no mana spent).
-8. **Level gate** — `[active-player level] >= circle`, otherwise `M.P. too low!` (mana *is* spent).
+5. **Scene gate** — per-spell allow-mask matches the current scene byte, otherwise `Not here!`.
+6. **Charges gate** — `[per-spell charge] > 0`, otherwise `None mixed!`; on success, the charge is decremented immediately.
+7. **Mana gate** — `[active-player mana] >= circle`, otherwise `M.P. too low!` (no mana spent, but the charge has already been consumed).
+8. **Level gate** — `[active-player level] >= circle`, otherwise `M.P. too low!` (mana and charge are both spent).
 
-The two-stage failure for "M.P. too low!" is a player-visible artefact: a low-mana character can re-cast after recovering mana with no penalty, but a low-level character casting a high-circle spell loses mana every attempt. The intended message is the same; the underlying penalties differ.
+The two-stage failure for "M.P. too low!" is a player-visible artefact: a low-mana character loses a premixed charge but no mana, while a low-level character loses both the charge and the mana. The intended message is the same; the underlying penalties differ.
 
 The *order* of the gates matters:
 
-- The charges-gate runs before the mana-gate, so a player without a charge does not waste mana trying.
-- The mana-gate runs before the level-gate, so a player without enough mana does not waste a charge — the charge has already been decremented at this point in the original implementation, and the engine refunds it on a mana-gate failure (the per-spell charge counter is bumped back up). The level-gate sees the post-decrement state, so a level-failure does *not* refund the charge or the mana. Implementations targeting period-faithful behaviour should preserve this asymmetry.
+- The scene gate runs before charge consumption, so `Not here!` does not spend a charge.
+- The charge counter is decremented before mana and level validation. A failed mana gate does not refund the charge. A failed level gate happens after mana debit and does not refund either resource. Implementations targeting period-faithful behaviour should preserve this asymmetry.
 
 ## 8. Spell effects
 
 The forty-eight spell effects fall into seven broad categories. Each handler takes the active-player slot and the dispatcher's per-spell context as input; each returns a success/failure code that the dispatcher uses to print the trailing `Failed!` if appropriate.
 
-**Utility effects.** Light, Great Light, Wind Change, Locate, Magic Lock, Magic Unlock, Protection, Mass Protection, Quickness, View, Reveal, Up, Down, Negate Field. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. Most have a short narration message and finish in a single handler call.
+**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Most utility effects have a short narration message and finish in a single handler call.
 
-**Healing effects.** Heal, Great Heal, Cure, Awaken, Heal Animal, Resurrection. These read the target's character record, modify HP / status / mana fields, and update the displayed stats. Healing accepts a target party-member slot (asked separately, or implicit via active player); resurrection only succeeds on a target whose status byte is `'D'` (dead) and writes back `'G'` (good) on success.
+**Healing effects.** Heal, Great Heal, Cure, Awaken, and Resurrect. These read the target's character record, modify HP / status / mana fields, and update the displayed stats. Healing accepts a target party-member slot (asked separately, or implicit via active player); resurrection only succeeds on a target whose status byte is `'D'` (dead) and writes back `'G'` (good) on success.
 
-**Buff and debuff effects.** Protection, Mass Protection, Quickness, Polymorph, Invisibility, Confuse, Mass Confuse, Fear. These set or clear flags in the target's combat-state record. Most have per-round timers that the round walker consults.
+**Buff and debuff effects.** Repel Undead, Protection, Sleep, Quickness,
+Mass Charm, Negate Magic, Charm, Polymorph, Invisibility, and Cause Fear.
+These either mutate combat actor state or install a shared active-effect
+indicator that later combat logic consults. Protection, Quickness, Mass Charm,
+and Negate Magic share that active-effect path: each passes an
+animation/effect kind, a visible tag, and a counter value. The confirmed
+tag/counter pairs are Protection `P` / 20, Quickness `Q` / 30,
+Mass Charm `C` / 20, and Negate Magic `N` / 10. The helper stores one global visible
+tag/counter pair, runs the common effect animation, and refreshes the stats
+panel; it is not a per-character status byte. Combat then ages the counter
+from a resident update helper: zero and 255 are ignored, other values decrement
+on helper invocation, and expiry clears the visible tag and requests a redraw.
+This is separate from the time/lighting cleanup counters: the confirmed
+contract is helper-invocation aging, not one decrement per minute, light-spell
+unit, or complete actor-table pass. In combat the aging helper is reached from
+post-action and no-target fallback paths, so a full thirty-two-slot table scan
+has no fixed decrement count: only slots whose phase reaches zero dispatch an
+action, and target-fallback paths can add helper invocations. The separate
+time/render cleanup runs on the combat action counter's ten-ready-action wrap
+and does not define these P/Q/C/N counter units. Four active-effect consumers
+are now confirmed.
+Protection's `P` tag adds 3 to the resident party-member defense helper after
+equipment defense is summed. Quickness's `Q` tag is consumed at the start of
+player-side combat dispatch: each ready dispatch rolls an inclusive 0..1
+random gate; a zero result consumes that ready dispatch without reading a
+command, while a one result continues through the normal command/status path.
+Mass Charm's `C` tag is consumed by monster AI target selection: each target
+pick rolls one uniform random byte in `[0, 255]` against the acting monster's
+class charm threshold. Rolls strictly greater than that threshold remap the
+acting monster to neutral group 0 before the friend/foe filter, making targets
+outside the monster's normal hostile set eligible for that AI decision. Negate
+Magic's `N` tag is consumed by the combat C-Cast path; while active, combat
+casts are absorbed before the shared cast dispatcher runs, so the premixed
+charge and MP debit gates are not reached. Polymorph removes the accepted
+creature target and places a class 20 Giant Rat at the target's same combat
+coordinates.
+Invisibility is active-caster only: it marks the current combat actor
+hidden/phase-shifted and updates the parallel visual actor state for that same
+slot. Cause Fear is not a single-target prompt; it sweeps the combat actor
+table and marks each valid hostile actor as fleeing.
 
-**Direct damage attacks.** Fireball, Magic Missile equivalent (some circle-1/2 spells are simple ranged attacks — the project's analysis maps several to single-target damage spells), Slay Living, Earthquake, Cataclysm, Fire Storm. These walk the actor table, pick targets either by direction (line-of-effect) or by area (every visible enemy), and call the same damage-and-status handler combat uses for melee attacks (the unified attack primitive). Range and damage are per-spell; the AOE shape is per-spell.
+**Direct damage and wind attacks.** Magic Missile, Fireball, Tremor, Kill, Poison Wind, Death Wind, and Flame Wind. Magic Missile, Fireball, and Kill are active-target attack wrappers: the spell prints the shared aiming prompt, uses the combat aiming/projectile path, and on an actor collision calls the combat spell-damage wrapper with the caster slot, target slot, and active spell tag. Magic Missile rolls raw damage in `[1, 16]`; Fireball rolls raw damage in `[1, 30]`; Kill uses the shared decimal `99` instant-kill sentinel. Magic Missile and Fireball then subtract a random defense roll from the target's applicable combat defense value; if the subtraction drives damage negative, the normal miss/no-damage path is used. Kill bypasses that defense subtraction by using the instant-kill sentinel. Tremor is a table-wide combat scan, not a directional spell: it walks every combat actor slot, skips empty or non-damageable records, applies the shared resistance/random gate, rolls 1..20 damage for each accepted actor, and calls the combat damage/status handler with that roll and actor slot. If that handler returns a raw monster-kill reward unit, Tremor adds it to the caster's experience word with the normal 9999 cap. Tremor does not run the friend/foe lookup; party actors and monsters are both eligible if they pass the common gates. Poison Wind, Death Wind, and Flame Wind share the directed target-walk family described below. Poison Wind runs a per-target resistance/random gate and then routes accepted targets to the poison-status helper. Death Wind passes the decimal `99` instant-kill sentinel into the shared combat damage/status path. Flame Wind rolls raw damage in `[1, 30]` before the same damage/status path. Death Wind and Flame Wind add returned monster-kill reward units to the caster's experience with the normal 9999 cap. The shared directed scan and these per-effect branches do not run the friend/foe lookup, do not skip same-faction actors, and do not skip the caster if the caster's cell is in the selected directed area.
 
-**Field placement.** Fire Field, Poison Field, Sleep Field, Dispel Field. These place or remove a tile-effect entry on the active map at a chosen cell; the field persists for several turns (consumed by the per-turn world tick) and applies its effect to any actor that enters or starts a turn on the cell. Field-removal and Negate Field share an underlying dispel routine.
+**Field placement.** Fire Field, Poison Field, Sleep Field, and Energy Field share a dungeon-map placement helper. In dungeon scenes, the spell selects a direction/target cell, accepts only an open passage byte in the live dungeon image (`0x00`) or the same passage with the visit marker bit set (`0x08`), and overwrites that live cell with the matching field byte while preserving bit `0x08`. The spell-to-byte mapping is:
 
-**Summoning and conjuration.** Summon Creature (small, peaceful), Conjure (combat ally), Insect Swarm, Summon Daemon. These insert a new entry into the actor table (or the world's dynamic-objects table) with a tile drawn from a per-spell summoned-class list. Summoned creatures are then run by the standard AI; they vanish when killed or after a per-spell duration.
+| Spell | Base field byte | Marker-preserving byte |
+|---|---:|---:|
+| Fire Field (*In Flam Grav*) | `0x82` | `0x8A` |
+| Poison Field (*In Nox Grav*) | `0x81` | `0x89` |
+| Sleep Field (*In Zu Grav*) | `0x80` | `0x88` |
+| Energy Field (*In Sanct Grav*) | `0x83` | `0x8B` |
 
-**Special / marquee effects.** Negate Magic, Negate Time, Time Stop, Gate Travel, In Quas Wis Xen (the rune-codex visit). These are the fewest-use spells with the largest gameplay impact. Negate Magic suppresses every active enchantment and field within the scene, including buffs on enemies. Time Stop and Negate Time freeze monster turns for several rounds, allowing the party to reposition or attack freely. Gate Travel teleports the party to a moongate destination keyed to the current moon phase; it is the one spell whose target is the *world* map, not the caster's record. The In Quas Wis Xen path is a unique scripted spell that opens the codex view; it uses the same dispatcher but its handler has unique narration and effect.
+These are visit-local mutations to the loaded map image, not writes to `DUNGEON.DAT`. If the selected dungeon cell is anything other than `0x00` or `0x08`, the helper fails and leaves the live map unchanged. The same four spells dispatch through one shared field helper with a field-kind argument; in combat/non-dungeon scenes that helper uses a separate field-kind table before entering the arena helper:
 
-The full per-handler effect map is incomplete in the current decompilation. Section 13 records the spells whose handlers have not yet been fully decoded.
+| Spell | Combat field-kind byte |
+|---|---:|
+| Fire Field (*In Flam Grav*) | `0x35` |
+| Poison Field (*In Nox Grav*) | `0x33` |
+| Sleep Field (*In Zu Grav*) | `0x34` |
+| Energy Field (*In Sanct Grav*) | `0x36` |
+
+The arena helper receives the field kind and active target slot instead of writing dungeon terrain directly. It splits placement from field-contact/application work, with contact routed onward to a per-field application helper. Placement is gated before any marker/application callback: target selection must produce an in-arena coordinate, the combat-coordinate lookup must resolve a compatible combat-table entry at that coordinate, and the COMBAT acceptance callback must accept the field pair. The coordinate lookup scans combat slots in ascending slot order and returns the first coordinate match whose descriptor has either live/selectable bit (`0x80` or `0x40`) set, has neither the marked-dead bit (`0x20`) nor the hidden/not-yet-revealed bit (`0x04`) set, and whose linked renderer active-object record does not have tile byte `0xF4`. Rejected matches do not stop the scan; no accepted match returns failure. In the normal combat-cast state, Poison Field's kind byte is on that callback's immediate-accept path; Fire, Sleep, and Energy route through its per-slot lookup plus random gate. Rejection stops before the marker materialization and field-application callbacks. Actor contact with arena fields is therefore not handled by the dungeon byte-placement helper. The confirmed movement boundary is the post-step effect hook in `combat.md`: it runs only after a step-or-attack succeeds and commits the actor's new coordinate.
+
+Arena field contact resolves the actor at the field coordinate, skips contact if that actor is the current active actor slot, and otherwise proceeds without the creature-prompt friend/foe lookup. Combat fields are materialized as active-object markers in the temporary combat table; the post-action hook later matches those marker coordinates against the actor's committed coordinate before applying the field result. Contact is non-consuming: the hook applies the mapped field result without clearing, aging, or rewriting the matched marker record. Poison Field contact has one extra hook-level gate: if the actor's linked active-object tile/class byte is `>= 0x80`, the poison result is skipped. Otherwise the poison helper sets party-member status to poisoned only when the target character is currently Good; monsters and already non-Good party targets fall through to the normal damage/status path with a 1..20-style poison damage roll. Field contact passes no caster-credit slot to that helper, so this fallback damage does not credit experience through the poison path. Sleep Field contact skips dead party members; otherwise it sets party-member status to asleep, or for non-party targets sets the combat sleep/disabled bit and steadies the linked renderer animation. Fire Field contact enters the normal combat damage/value path with a raw roll in `[1, 21]`, then subtracts the target's normal random defense roll before damage/status application. Energy Field uses the same damage/value path with a raw zero value, so it produces no positive damage through that endpoint. Field markers are placed in the temporary active-object table without a paired combat-effect descriptor, so the monster death/record-clear path does not age or remove them. The traced CAST/COMSUBS/COMBAT paths, the accepted-placement resident redraw helper, the post-action contact hook, and the generic active-object tick expose no field countdown, decrement, or pre-exit removal step. A placed combat field persists until combat exits, when the combat framer restores the pre-combat active-object table. Dispel Field uses a separate removal helper rather than this four-byte placement table, and broader Negate Magic is handled by its own effect.
+
+**Summoning and conjuration.** Conjure, Swarm, Clone, and Summon. These insert a new entry into the actor table (or the world's dynamic-objects table) with a tile drawn from a per-spell summoned-class list. Clone is target-derived rather than list-derived: after the `Creature:` target is accepted, it searches for one free combat actor slot and one free dynamic-object slot, copies the target's paired records only after both slots exist, relinks the new combat record to the new dynamic-object slot, then places the copy at a random legal coordinate in the eleven-by-eleven arena. If either table has no free slot, Clone writes no partial record. The original leaves the spell-result word undefined on that capacity path, so compatibility layers may need to preserve the original's unpredictable success/failure narration; deterministic engines should model it as a no-op failure. Clone is not an adjacency-based spell. Summoned or cloned creatures are then run by the standard AI; they vanish when killed or after any per-spell duration.
+
+**Special / marquee effects.** Negate Magic, Gate Travel, and Time Stop. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when outside dungeon/combat scenes and on accepted world-tile ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. Time Stop scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it sets the runtime time-stop state and a countdown value of 10, then redraws.
+
+### Handler-family map
+
+The cast dispatcher has one entry per spell id, but many entries are short wrappers around shared helpers. The public spell-order mapping is now known at the handler-family level:
+
+| Handler family | Spells | Public contract now known |
+|---|---|---|
+| Light counter | In Lor, Vas Lor | Set the shared light-spell counter to 100 or 255, then return through the common cast-success path. |
+| Active-target attack wrapper | Grav Por, Vas Flam, Xen Corp | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage, Vas Flam rolls 1..30 raw damage, and Xen Corp passes the decimal 99 instant-kill sentinel. Non-instant rolls subtract target defense before the shared damage/status path. |
+| Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Prompt or resolve a party-member target, then mutate that character's status/HP record. Resurrection additionally requires dead status. |
+| Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind plus active target slot to the arena-field helper. The arena helper splits placement from contact/application: placement requires target selection, coordinate lookup, and COMBAT acceptance before marker/application callbacks run. Coordinate lookup scans low-to-high combat slots for the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Poison's kind is immediate-accept in the normal combat-cast state; Fire, Sleep, and Energy use the callback's per-slot lookup plus random gate. Arena placement uses active-object field markers in the temporary combat table; the post-action hook matches those markers by coordinate. Arena contact skips the current active actor but does not run the friend/foe lookup, and contact does not consume the marker. Poison Field skips linked active-object classes `>= 0x80`; for accepted targets it poisons Good party members and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members, otherwise sleeps party targets or marks non-party targets with the combat sleep/disabled bit. Fire Field rolls raw 1..21 before defense, and Energy Field supplies raw zero to the same damage/value path. The traced placement/contact/redraw path and generic active-object tick show no field countdown/decrement; placed markers persist until combat exit restores the pre-combat active-object table. |
+| Directed target-walk effects | In Zu, In Nox Hur, In Vas Grav Corp, In Flam Hur | Build a directed set of up to twenty-one arena cells from the active target/caster state, then scan the combat actor table for actors whose arena coordinates match those cells. The common application layer skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common target-walk layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors and the caster are eligible if their cells are in the directed area and they pass the non-faction gates. In Zu applies the sleep-status branch, In Nox Hur applies a resistance/random gate before the poison-status branch, In Vas Grav Corp uses the decimal `99` instant-kill sentinel through the shared damage/status path, and In Flam Hur rolls raw `[1, 30]` damage through that same damage/status path. The two damage winds credit returned monster-kill reward units to the caster's experience with the 9999 cap. |
+| Table-wide tremor damage | In Vas Por Ylem | Scans all thirty-two combat actor slots. For each non-empty slot that passes the generic damageability and resistance/random gates, the spell rolls 1..20 damage and feeds that roll plus the actor slot to the shared combat damage/status handler. The handler applies HP damage, death effects, split checks, and temporary drop markers as usual. Any raw monster-kill reward unit returned by the handler is added to the caster's experience word, capped at 9999. Tremor does not run a faction filter, so friendly-fire is allowed for any party actor that passes the common gates. |
+| Active-effect display wrapper | In Sanct, Rel Tym, Quas An Wis, In An | Pass an animation/effect kind, visible tag, and counter to a shared active-effect helper: In Sanct uses `P` / 20, Rel Tym uses `Q` / 30, Quas An Wis uses `C` / 20, and In An uses `N` / 10. The helper stores one global visible tag/counter pair, plays the common animation, and refreshes the stats panel; resident update helpers age the counter until expiry clears the tag. This aging is separate from torch/light-spell cleanup cadence. Confirmed consumers: `P` adds 3 to party-member defense, `Q` runs a 0..1 random gate before player-side combat command dispatch, `C` lets monster AI target selection roll a random byte against the acting monster's class charm threshold and remap the monster to neutral group 0 on a strictly greater roll, and `N` absorbs combat casts before the shared dispatcher consumes charge or MP. |
+| Creature-prompt targeters | An Xen Ex, Rel Xen Bet, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, reject walls, empty cells, protected/immune classes, and same-faction targets, then apply the spell-specific result: Charm toggles the target's charm allegiance flag, Polymorph replaces the target with a class 20 Giant Rat at the same coordinates, and Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. |
+| Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
+| Table-wide fear | In Quas Corp | Scans all combat actor slots, skips empty/dead, protected/immune, and same-faction actors, and marks each remaining hostile actor as fleeing. |
+| Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
+| Time stop | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise starts time stop with a countdown value of 10. Its decrement cadence is non-light spell state and is not owned by the light/torch counter cleanup. |
+
+This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's active-effect defense bonus, Quickness's player-side dispatch gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-step boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
 
 ## 9. Casting in combat
 
@@ -233,21 +325,34 @@ The C-Cast command is also bound in the combat command set. The implementation r
 
 **Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. Several spells (the heal/restore family, the resurrect, the protection-target) take an explicit target separately from the caster; in combat the target picker has already chosen, and the spell handler reads the picked target slot.
 
-**Scene gate selects spells.** The four-bit scene allow-mask uses bit 4 (combat) as one option; spells without that bit are rejected with `Not here!` even if the player names them inside combat. So Earthquake or Fire Storm — combat-allowed AOEs — fire normally inside combat; while a fireside utility like Wind Change, which is overworld-tagged, is silently rejected.
+**Scene gate selects spells.** The four-bit scene allow-mask uses `0x01` for combat, `0x02` for dungeon, `0x04` for indoor/town-mode scenes, and `0x08` for overworld. Spells without the active scene bit are rejected with `Not here!`; for example, combat-only attack spells reject outside combat, while overworld-only utility such as Wind Change rejects inside combat.
 
-**Monster casters.** Monsters that have spell-like attacks do *not* go through the dispatcher. Their effects are hand-coded as part of the monster's per-class AI script and are gated by per-class flags rather than by the spell-cast pipeline. A Daemon's flame breath, a dragon's freeze gaze, a shadowlord's curse — these read no charge counter, consume no reagent, and obey no circle rule. The shared infrastructure is the damage-and-status handler at the end of the chain; the upstream dispatch differs.
+**Monster spell-like effects.** The traced dispatcher contract above is the
+player/party C-Cast path. Monster turns use the combat AI path first: target
+selection, direction synthesis, and a synthesized command byte enter the combat
+command parser. Current public evidence now bounds this to a class-script
+dispatch and shared runner. Live actors of the same monster class share a
+mutable class-state resource for that path, while dead or inactive actors use
+the class's static script entry. Current public evidence does not yet map the
+state fields, runner instruction set, class-specific branch that chooses every
+monster spell-like effect, or a complete per-class effect table. Until that path
+is decoded, treat monster spell-like effects as unresolved combat-AI behaviour
+outside the forty-eight player spell definitions. They do not route through the
+party C-Cast prompt or the forty-eight-entry player spell dispatcher. No current
+trace shows them consuming the party's reagents, premixed charges, MP, or circle
+gates.
 
-**Combat ends with state preserved.** Spell-cast charges are decremented and mana is debited inside combat exactly as outside; both effects survive the combat exit and are part of the persistent save. A spell cast inside combat is real and permanent; the framer that brackets combat with save-and-restore preserves the cast's after-effects (just as it preserves damage).
+**Combat ends with state preserved.** Charge and mana side effects follow the same order inside combat as outside: charge loss and any successful or under-level mana debit survive combat exit and are part of the persistent save. A spell cast inside combat is real and permanent; the framer that brackets combat with save-and-restore preserves the cast's after-effects (just as it preserves damage).
 
 ## 10. Linkage to the eight virtue shrines
 
-The eight virtue shrines (Honesty, Compassion, Valour, Justice, Honor, Sacrifice, Spirituality, Humility) are not part of the spell system proper, but they are the principal means of permanently increasing the active character's mana cap and other stats. The shrines are the indirect "level up your magic" mechanic.
+The eight virtue shrines (Honesty, Compassion, Valor, Justice, Honor, Sacrifice, Spirituality, Humility) are not part of the spell system proper. Their only magic-facing consequence is that some shrine quest turn-ins permanently increase the Avatar's intelligence, which in turn raises the mana cap used by the cast dispatcher.
 
-When the active character kneels at a shrine and presses `M` (Meditate — distinct from the mix command of the same letter), the engine prompts for the shrine's mantra. The eight mantras are short fixed words: `Ahm`, `Mu`, `Ra`, `Beh`, `Cah`, `Summ`, `Om`, `Lum`. They map one-to-one with the eight virtues.
+Meditation is driven by the `M` command while standing at a shrine, but it is distinct from reagent mixing. The engine prompts for the shrine mantra (`Ahm`, `Mu`, `Ra`, `Beh`, `Cah`, `Summ`, `Om`, or `Lum`) and then branches on the shrine quest masks described in `systems/karma.md`.
 
-A correct mantra unlocks an offering prompt. The character offers gold from the shared party pool; a digit `0–9` is read, multiplied by 100, and debited from the gold counter. On a valid offering, the engine prints `ALAKAZAM` and applies the shrine's blessing — the active character's strength, dexterity, or intelligence (the choice depends on which shrine and on the exact karma state) is incremented by one. The intelligence stat is the one that drives mana cap, so a sustained pilgrimage to all eight shrines produces a meaningful per-cast budget.
+Gold offerings are not the stat-up path. After a virtue's shrine quest is complete, a valid offering consumes party gold and raises the active shrine standing. The permanent stat rewards happen on the Codex-read turn-in state, when the ordained bit is cleared and the Codex bit remains set. Those rewards write to the Avatar record: Honesty raises intelligence; Justice, Honor, and Spirituality include intelligence among their rewards; the other shrines affect strength and/or dexterity or, for Humility, standing only.
 
-A small per-virtue "ordained" bitmap in the save image records which shrines have been completed for the current character; many shrines accept only one stat-up per character, with subsequent visits providing the offering text but no stat change. Exceeding the karma threshold for a virtue gives a "no effect" rejection; falling below it gives a different rejection. The full karma logic is described in `karma.md` (when written); from the magic system's point of view, the shrines are an external income source for the intelligence stat that bounds mana, and the magic system itself is unaware of the meditation flow.
+From the magic system's point of view, the shrine system is an external writer of the Avatar intelligence byte. The cast dispatcher only reads the current intelligence-derived mana state; it does not know why the stat changed and it performs no shrine or karma checks of its own.
 
 ## 11. Z-stats integration
 
@@ -269,7 +374,7 @@ Every piece of persistent magic state is in the save image:
 - **Per-character mana** — one byte per character record, in the stats quartet (STR, DEX, INT, MP).
 - **Per-character intelligence** — one byte per character record (drives mana cap).
 - **Per-character level** — one byte per character record (gates level-cost).
-- **Shrine ordained bits** — two bitmasks of eight bits each (one for "ordained at this shrine", one for "Codex-visited or related").
+- **Shrine quest masks** — two bitmasks of eight bits each (ordained and Codex visited), owned by the karma/shrine system but relevant because shrine turn-ins can raise Avatar intelligence.
 
 There is no separate "magic state" file: every byte is part of the standard `.GAM` runtime image, flushed and loaded on save and restore. The same is true of the eight reagent counters and the forty-eight charge counters. There are no file-borne tables that the magic system reads at runtime — every per-spell datum (the rune-code table, the recipe table, the allow-mask) is interned in the resident `DATA.OVL` data segment and copied into RAM at startup.
 
@@ -277,34 +382,45 @@ There is no separate "magic state" file: every byte is part of the standard `.GA
 
 This section records places where the picture is not yet complete, where evidence is partially decoded, or where the project's analysis records uncertainty.
 
-- **Per-spell handler effects beyond the well-known cases.** The dispatcher's forty-eight-entry jump table has been mapped to handler offsets, and the handler shapes have been classified into five recurring patterns. Roughly twelve handlers — those with print-on-success messages like `Light!`, `Negate Magic!`, `Resurrection!` — have confirmed effect mappings. The rest are best-guesses based on the rune-name and the manual; verification requires per-handler decompilation.
+- **Per-spell effect math beyond handler families.** The dispatcher's forty-eight-entry jump table has been mapped in public spell order, and the major shared handler families are now identified: light counter writes, field placement, active-target attack wrappers with exact Magic Missile/Fireball/Kill damage, Tremor's exact table-wide damage/reward path, directed target-walk effects including wind/sleep friendly-fire behavior, creature-prompt targeters including Polymorph's Giant Rat replacement and Clone's paired-slot capacity behavior, table-wide fear, Gate Travel moonstone-slot prompting, Time Stop setup, and shared active-effect display wrappers. The remaining handler work is the monster combat-AI effect path, which is separate from the forty-eight player spell definitions.
 
-- **Tentative rune-code-to-name mappings at the high circles.** Several circle-7 and circle-8 entries are provisional. The compact letter-coded form is not always the literal first-letter sequence of the rune syllables — for some spells the encoding picks distinguishing letters. The forty-eight-entry token table is correctly aligned and the count is right, but the human-readable name attached to a few entries is uncertain.
+- **Absorption pre-gate identity.** The scene-mask table and scene-byte-to-mask mapping are transcribed in `catalogs/spell-list.md`. The remaining edge is assigning stable public names to the two special indoor states that print `Absorbed!` before the normal scene-mask comparison, especially the exact meaning of the gate byte used by scene `18`.
 
-- **Per-spell allow-mask byte-by-byte.** The forty-eight-byte mask in the resident data segment has not yet been transcribed into a public table. Each byte's bits — dungeon, town, shrine, overworld — should be enumerated against each spell. Combat is not one of the four bits; combat-only checks happen inside individual handlers via a scene-byte equality test.
+- **Field status-helper edges.** The combat field path has a clear faction boundary: the arena helper skips the current active actor slot, but no friend/foe lookup appears before Poison/Sleep status application or Fire/Energy damage/value dispatch. Fire and Energy damage inputs are fixed, Poison/Sleep routing is fixed, and the COMBAT post-action hook is confirmed to match active-object field markers by coordinate after movement commits. The hook does not consume the matched marker. Poison Field skips linked active-object classes `>= 0x80`; for accepted targets it poisons only Good party members, while monsters and already non-Good party members fall through to poison damage with no field-contact XP credit. Sleep Field skips dead party members, otherwise applies asleep status to party targets and the combat sleep/disabled bit to non-party targets. The placement path is gated by target selection, coordinate lookup, and a COMBAT acceptance callback before marker/application callbacks run. The coordinate lookup accepts the first selected-coordinate descriptor with `0x80` or `0x40` set, rejects descriptors marked by `0x20` or `0x04`, and also rejects linked active-object tile byte `0xF4`. Field markers persist until combat exit restores the pre-combat active-object table; no traced placement, contact, redraw, generic active-object tick, or monster death/record-clear path decrements or removes them earlier.
 
-- **Recipe table.** The forty-eight-entry recipe-mask table (which reagents each spell needs) lives in the resident data segment; the M-Mix handler reads it. The exact location and format have not been transcribed. Implementations should cross-check against the U5 manual.
+- **Target picking for the remaining unique spells.** Sleep, Poison Wind, Death Wind, and Flame Wind share the directed target-walk family and now have fixed non-faction eligibility plus per-effect result semantics; Magic Missile, Fireball, and Kill are active-target attack wrappers with fixed damage semantics; Tremor and Cause Fear are full actor-table sweeps; Charm, Polymorph, and Clone use the `Creature:` target prompt; and Mass Charm enters the shared active-effect path whose `C` tag is consumed by combat AI target selection with a class-threshold random remap. The remaining target/effect work is the monster combat-AI effect path.
 
-- **Per-spell charge cap.** Charge counters are bytes, so the natural cap is 255. The U5 standard inventory cap is 99, which is the most likely intended cap. The M-Mix handler may clamp on increment; verification requires tracing the increment site.
-
-- **Mana refund semantics.** The charge-gate runs before the mana-gate, with a refund on the latter and no refund on the level-gate. The exact refund semantics in the original code need cross-checking; this spec describes the simpler "each gate cleanly aborts before the next" model that an implementer can target without losing observable correctness.
-
-- **Friendly-fire policy for AOE spells.** Earthquake, Cataclysm, Fire Storm, Mass Confuse, and the field-placement spells affect every cell within their radius. Whether the party's own slots are damaged by these spells when standing in the area is per-spell — some are coded to skip friendly slots, others damage everyone.
-
-- **Target picking for area-effect spells.** Single-target spells (Heal, Sleep, Slay Living) prompt for a target either by direction (combat) or by an explicit slot prompt (overworld). Multi-target spells choose their targets by walking the actor table. The exact picker per spell is per-spell.
-
-- **Monster spell effects.** Monsters that "cast" spells — daemons, dragons, shadowlords, certain liches — have hand-coded effects per monster class. The full map belongs in the combat-AI spec.
-
-- **Karma effects on the shrines.** The shrines reject characters whose karma is too low for the virtue, with a different message than the "no effect" rejection. The threshold and the rejection text are part of the karma system; the magic system's contract is only that the meditate command exists and that successful offerings increment the active character's stat byte.
+- **Monster spell effects.** Monsters may reach spell-like or special effect
+  behavior through AI command synthesis and class-specific combat helpers. The
+  class-script dispatch/storage boundary is identified, including class-wide
+  live state and the static inactive-script entry. This path is separate from
+  the party C-Cast prompt/dispatcher, but the state fields, runner instruction
+  set, complete class-to-effect map, selection cadence, and result semantics
+  are not yet public. That map belongs with the combat-AI and monster-bestiary
+  specs, not with the forty-eight player spell table.
 
 ## 14. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions and format notes in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived by reading the private function and format notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The C-Cast dispatcher itself — its prompt, the forty-eight-entry token table, the charges/mana/level gate cascade, the scene gate, the per-spell handler dispatch, the print-on-success and print-on-failure narration — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`.
+- The C-Cast dispatcher itself — its prompt, the forty-eight-entry token table, the charges/mana/level gate cascade, the scene gate, the per-spell handler dispatch, the light-spell duration writes, the field-placement byte mapping, the handler-family map, and the print-on-success and print-on-failure narration — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`, local CAST/CAST2 helper analysis, and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+- The directed target-walk and actor-scan family used by several combat spells, including the absence of top-level and per-effect friend/foe filters in the Sleep/Poison Wind/Death Wind/Flame Wind branches, is derived from local CAST helper analysis and the clean semantic trace of their COMBAT/COMSUBS helper calls.
+- The local handlers for Tremor, Charm, Polymorph, Clone, Cause Fear, Gate Travel, Time Stop, and Invisibility are derived from fresh local CAST.OVL helper analysis summarized here without copying assembly or source.
+- The active-target attack wrapper path for Magic Missile, Fireball, and Kill — aiming/projectile routing, spell-tag damage lookup, defense subtraction, and instant-kill sentinel — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
+- Arena-field placement, contact, non-consuming markers, Poison/Sleep status gates, and combat-exit marker lifetime are derived from local CAST, COMSUBS, COMBAT, active-object tick, and combat-framer helper analysis summarized without copying implementation text.
+- Mass Charm's active-effect target-selection consumer and class-threshold
+  random remap are derived by linking the CAST2 active-effect helper to
+  `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the COMBAT
+  damage/death note that identifies the same random-byte helper.
+- Protection's defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, and the active-effect counter-aging rule are derived from local ULTIMA.EXE and COMBAT helper analysis summarized without copying implementation text.
+- Moonstone Search/Get recovery is derived from `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`, `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`, and local SJOG helper analysis summarized without copying implementation text.
 - The CAST.OVL function inventory and the misclassification correction (CAST is the spell-cast overlay, not character creation) — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
+- The shared spell-name input helper — accepted selector letters, order-insensitive compact-token matching, blank/cancel/no-match returns, and M-Mix's no-match fall-through — derived from local CAST2 helper analysis and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
 - The combat-only spell-prereq cascade — target validity, target awakeness, vehicle gate, resource check — derived from `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
-- The M-Mix command's pre-flight check, spell-name prompt, quantity prompt, recipe verification, and per-charge mixing loop — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
-- The shrine meditation handler — its mantra prompt, gold-offering, stat increment, and ordained-bitmap update — derived from `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`.
-- The forty-eight runic spell incantations, the twenty-four-entry rune-syllable dictionary, the eight reagent abbreviations and full names, the eight shrine mantras, and the forty-eight-entry compact rune-code table — derived from `u5-decomp/formats/data-ovl.md`.
-- The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine ordained bitmaps — derived from `u5-decomp/formats/saves.md`.
+- The monster AI storage boundary and class-wide live-state split are derived
+  from `u5-decomp/functions/COMSUBS_OVL/0x0094_ai_pick_direction.md`, without
+  copying implementation text or private offsets.
+- The M-Mix command's pre-flight check, spell-name prompt, reagent-selection UI, quantity prompt, wrong-mix resource loss, recipe-mask comparison, charge cap, and charge increment — derived from `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`.
+- The shrine meditation handler — its mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, and ordained/Codex bitmap updates — derived from `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`.
+- The forty-eight runic spell incantations, the twenty-four-entry rune-syllable dictionary, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/data-ovl.md` and local `DATA.OVL` table reads.
+- The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine quest masks — derived from `u5-decomp/formats/saves.md`.

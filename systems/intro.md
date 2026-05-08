@@ -43,9 +43,39 @@ After boot setup, the intro builds the title presentation in layers:
 6. Play the signature animation over the title screen unless the player skips it.
 7. Load and draw the start/menu screen used behind the six menu options.
 
-The compressed bitmap and screen-panel assets are decoded by the display and graphics pipeline, not by intro-specific code. The intro orchestrates file selection, loading, and draw calls; the data formats themselves belong to `formats/tiles.md` and the display-driver layer.
+The compressed bitmap and screen-panel assets use the shared LZW resource envelope. The intro orchestrates file selection, loading, placement, and draw calls; the data formats themselves belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
 
 The title phase accepts an early `J` keystroke. If the player presses `J` during the first title wait, the intro skips the remaining title flourish and commits to the Journey Onward load path. This is a convenience fast path into the same load behaviour reached by selecting `J` from the finished menu.
+
+The fixed title-screen bitmap placements use 320-by-200 pixel coordinates with
+the origin at the upper-left corner. `TITLE.BIT` slots 0 through 6 form the
+initial title mark: draw them in ascending slot order, center each slot
+horizontally, start at `y = 0`, and advance `y` by the drawn slot's height
+before drawing the next slot.
+
+| `TITLE.BIT` slot | Top-left X | Top-left Y | Size |
+|---:|---:|---:|---|
+| 0 | 148 | 0 | 24 x 3 |
+| 1 | 140 | 3 | 40 x 7 |
+| 2 | 124 | 10 | 72 x 11 |
+| 3 | 104 | 21 | 112 x 20 |
+| 4 | 84 | 41 | 152 x 32 |
+| 5 | 52 | 73 | 216 x 45 |
+| 6 | 20 | 118 | 280 x 61 |
+
+The remaining title sequence consumes the rest of the decoded bitmap blocks:
+
+| Asset | Slot | Top-left X | Top-left Y | Size |
+|---|---:|---:|---:|---|
+| `TITLE.BIT` | 7 | 108 | 140 | 104 x 33 |
+| `TITLE.BIT` | 8 | 152 | 0 | 16 x 15 |
+| `BRITISH.BIT` | 0 | 24 | 66 | 272 x 62 |
+| `TITLE.BIT` | 9 | 104 | 160 | 112 x 33 |
+
+Before slot 7 is drawn, the title flow clears the lower screen band from
+`y = 140` through the bottom of the 320-by-200 surface. The `BRITISH.PTH`
+signature walker then draws its four path segments from these pen origins, in
+order: `(68, 44)`, `(94, 64)`, `(78, 143)`, and `(105, 167)`.
 
 ## 4. `BRITISH.PTH` signature animation
 
@@ -57,7 +87,37 @@ The animation is intentionally interruptible. The walker polls the keyboard betw
 
 The path format, segmentation, and pen-up rule are specified in `formats/pth.md`. This system spec defines only how the intro uses that format: load once, draw four title-screen segments, poll for early exit, then continue to the menu.
 
-## 5. Intro menu model
+## 5. Title Tick And Idle Animation
+
+The title sequence has a small display-driver-owned tick distinct from the
+gameplay world tick. It is used while the signature animation is running and
+again while the finished intro menu is waiting for input. The tick advances the
+driver's title/flame-style visual state and presents the updated frame; it does
+not run gameplay animation, NPC schedules, or the world clock.
+
+During the signature phase, the intro alternates between path drawing,
+keyboard polling, and title ticks. A keypress stops the remaining signature
+strokes and proceeds to the start/menu view; it does not skip boot setup or
+menu rendering. During the finished menu, input polling runs in bounded idle
+chunks. If no accepted key arrives during a chunk, the intro runs one title
+tick and resumes polling. This is why the menu remains visually alive without
+advancing any saved-game state.
+
+The historical driver implements the title tick behind a display dispatch
+rather than in `FLAMES.OVL`. The observed EGA/CGA/Hercules/Tandy paths use a
+small four-frame counter. A modern renderer can implement the same visible
+contract as a four-frame loop tied to the intro menu's idle cadence.
+
+For the EGA-compatible baseline, one title tick draws one driver-local frame
+strip over the title screen at pixel `(0, 65)` with size `320 x 49`, then
+advances the driver-local frame index modulo four. The source pixels are not in
+`TITLE.BIT`, `BRITISH.BIT`, or another external art file; they are embedded in
+the loaded display driver. A cleanroom renderer that does not use the original
+driver binaries should treat the tick as an intro-only four-frame overlay in
+that rectangle, preserving the cadence and destination even if the replacement
+frames are independently authored.
+
+## 6. Intro menu model
 
 The intro menu is a six-entry key menu. It is rendered after the title/start screen is ready and remains the controlling loop until a play-producing option commits or the process exits by another path. Keys are folded to uppercase before dispatch, matching the input-system contract in `input.md`.
 
@@ -70,13 +130,20 @@ The accepted keys are:
 | `T` | Transfer from Ultima IV | Enter the transfer/roster path and commit or abort from there. |
 | `U` | Ultima V Introduction | Play the story slide sequence, then return to the intro menu. |
 | `A` | Acknowledgements | Show credits/acknowledgements, then return to the intro menu. |
-| `R` | Return to View | Restore the title/start view through the intro's view-render path, then remain in intro mode. |
+| `R` | Return to View | Run the non-interactive Return-to-View preview, restore the menu surface, then remain in intro mode. |
 
-Invalid keys are ignored and the menu continues polling. Behaviourally, the player sees a stable six-option menu that waits for one of the accepted keys and returns to that same menu after non-play sub-screens finish.
+Invalid keys are ignored and the menu continues polling. The menu also keeps a
+short recent-selection cache for repeat-by-Enter behaviour; pressing Enter can
+reuse a cached menu selection while the intro menu remains active. If there is
+no cached selection, Enter behaves like any other ignored key.
+
+Behaviourally, the player sees a stable six-option menu that waits for one of
+the accepted keys and returns to that same menu after non-play sub-screens
+finish.
 
 While the menu waits, the intro continues to run its lightweight title tick so the screen does not become a dead static wait. This is separate from the gameplay world tick. No gameplay time advances while the intro menu is active because no gameplay mode has started.
 
-## 6. Journey Onward (`J`)
+## 7. Journey Onward (`J`)
 
 `J` is the standard load path. It is reachable both from the finished menu and from the early title wait. The intro performs the load inline before returning to the main loop; there is no general-purpose "load game" function that other systems call.
 
@@ -94,7 +161,7 @@ After the intro returns, the main loop reads the scene state that came from the 
 
 The file roles, empty-save guard, object-overlay mirror writes, and disk-swap semantics are specified in `save-load.md`, `formats/saved-gam.md`, and `formats/ool.md`.
 
-## 7. Create New Character (`C`)
+## 8. Create New Character (`C`)
 
 `C` hands control from the intro menu to the character-creation flow. The hand-off goes through a resident trampoline into the proportional-font overlay, which owns both the paragraph renderer used by the questionnaire and the chargen driver.
 
@@ -110,7 +177,7 @@ The intro does not automatically enter Britannia after character creation. This 
 
 The questionnaire, seed-file cloning, name/gender prompts, stat assignment, and save commit are specified in `chargen.md`. The intro spec only owns the menu hand-off and return-to-menu behaviour.
 
-## 8. Transfer from Ultima IV (`T`)
+## 9. Transfer from Ultima IV (`T`)
 
 `T` enters the transfer path for players bringing forward an Ultima IV character. This path is intro-owned rather than part of the proportional-font questionnaire flow, but it shares the same end goal as chargen: produce a playable U5 save state and return control through the normal intro/main-loop boundary.
 
@@ -126,38 +193,118 @@ The observed transfer path:
 
 The exact U4-to-U5 stat translation is not fully specified here. It belongs with the chargen and transfer specs because it determines the contents of the resulting save, not the intro menu's control flow. The roster-preview and disk-swap behaviour are included here because the intro overlay owns that screen and its polling loop.
 
-## 9. Ultima V Introduction (`U`)
+## 10. Ultima V Introduction (`U`)
 
 `U` plays the story slide sequence. This is a non-play path: after the sequence ends, the player returns to the intro menu.
 
-The sequence begins by making sure the intro/start-screen state is active, then iterates through a fixed set of story-art screens. Each slide iteration follows the same pattern:
+The sequence begins by making sure the intro/start-screen state is active. It
+loads the proportional font art, the shared `TEXT.16` art strip, and the first
+story-art file, then iterates through twenty-one fixed narrative steps. A step
+uses one of the six story-art files `STORY1.16` through `STORY6.16`; the art
+file changes only at fixed step boundaries:
 
-1. Load the next story-art panel for the active display depth.
-2. Load or select the corresponding story text.
-3. Draw the panel through the screen-art renderer.
-4. Render the narrative text through the proportional-font renderer.
-5. Wait for the player to advance.
-6. Optionally run the local fade or palette transition used by that slide.
+| Zero-based steps | Story art file |
+|---|---|
+| 0-1 | `STORY1.16` |
+| 2-6 | `STORY2.16` |
+| 7-8 | `STORY3.16` |
+| 9-10 | `STORY4.16` |
+| 11-12 | `STORY5.16` |
+| 13-20 | `STORY6.16` |
 
-The graphic sequence covers the six numbered story panels plus the Warriors of Destiny panels used to bookend or extend the introduction. The narrative text comes from the intro story data file and uses the same paragraph conventions as other proportional-font narrative screens.
+Each normal step follows the same pattern:
+
+1. Ensure the story-art file for the current step is loaded, reloading only
+   when the fixed step boundary changes the file.
+2. Select the story-art subimage and placement for this narrative step.
+3. Load or select the corresponding story text.
+4. Draw the panel through the screen-art renderer.
+5. Render the narrative text through the proportional-font renderer.
+6. Wait for the player to advance, except for the automatic opening step.
+7. Run any local display effect tagged to that step: transition-strip art, the step-1 rectangle transition, or secondary story art.
+
+Step 0 is an automatic opening transition: it consumes the first story text
+record and advances into the rest of the sequence without waiting for input.
+Steps 1 through 20 wait until the keyboard poll returns a non-zero key. This
+wait is local to the intro; it does not run gameplay world ticks, NPC
+schedules, active-object animation, or the saved-game clock.
+
+The shipped `STORY.DAT` file supplies twenty non-empty text records. The intro
+sequence has one additional visual step: step 6 uses two inline
+doorway-transition lines owned by the intro code instead of consuming a
+`STORY.DAT` record. Every other step consumes the next `STORY.DAT` record in
+sequence and uses the same paragraph conventions as other proportional-font
+narrative screens.
+
+Primary story-art placement uses 320-by-200 pixel coordinates with the origin
+at the upper-left corner. The following table records the story-art subimage
+chosen by each narrative step; special-effect steps can replace this primary
+draw or add an additional text-strip or story-art draw around it.
+
+| Step | Art file | Subimage | Top-left X | Top-left Y | Notes |
+|---:|---|---:|---:|---:|---|
+| 0 | `STORY1.16` | 0 | 0 | 0 | Opening transition step |
+| 1 | `STORY1.16` | 1 | 0 | 74 | Post-wait transition |
+| 2 | `STORY2.16` | 0 | 136 | 0 |  |
+| 3 | `STORY2.16` | 1 | 0 | 38 |  |
+| 4 | `STORY2.16` | 2 | 152 | 76 |  |
+| 5 | `STORY2.16` | 2 | 0 | 0 |  |
+| 6 | `STORY2.16` | 2 | 72 | 38 | Inline doorway text |
+| 7 | `STORY3.16` | 0 | 0 | 0 | Transition step |
+| 8 | `STORY3.16` | 1 | 0 | 82 |  |
+| 9 | `STORY4.16` | 0 | 0 | 82 |  |
+| 10 | `STORY4.16` | 1 | 0 | 82 |  |
+| 11 | `STORY5.16` | 0 | 0 | 82 |  |
+| 12 | `STORY5.16` | 1 | 0 | 82 |  |
+| 13 | `STORY6.16` | 0 | 176 | 0 |  |
+| 14 | `STORY6.16` | 1 | 0 | 0 | Transition step |
+| 15 | `STORY6.16` | 2 | 176 | 0 | Secondary art pass |
+| 16 | `STORY6.16` | 6 | 0 | 46 | Secondary art pass |
+| 17 | `STORY6.16` | 4 | 176 | 78 | Secondary art pass |
+| 18 | `STORY6.16` | 2 | 0 | 0 | Secondary art pass |
+| 19 | `STORY6.16` | 6 | 176 | 55 | Secondary art pass |
+| 20 | `STORY6.16` | 4 | 0 | 87 | Secondary art pass |
+
+Special transition steps use the following additional draws and text sources:
+
+| Steps | Extra behavior |
+|---|---|
+| 0, 7, 14 | Draw two `TEXT.16` transition subimages before the story-art draw. Step 0 uses transition subimages 0 and 1 at `(224, 30)` and `(168, 58)`. Step 7 uses transition subimages 0 and 2 at `(232, 26)` and `(200, 54)`. Step 14 uses transition subimages 0 and 3 at `(184, 0)` and `(248, 0)`. |
+| 1 | After the step's key wait, draw `STORY1.16` subimage 2 at `(40, 86)` and run a local rectangular transition over the inclusive region from `(40, 86)` to `(75, 120)`. |
+| 6 | Draw an additional `STORY2.16` subimage 3 at `(96, 39)` and render two inline doorway-transition text lines instead of reading a `STORY.DAT` record. |
+| 15, 20 | Draw a second `STORY6.16` subimage 3 at the same X coordinate and 55 pixels below the primary story-art Y coordinate. |
+| 16, 18 | Draw a second `STORY6.16` subimage 5 at the same X coordinate and 55 pixels below the primary story-art Y coordinate. |
+| 17, 19 | Draw a second `STORY6.16` subimage 7 at the same X coordinate and 55 pixels below the primary story-art Y coordinate. |
+
+The transition effects are local to the story loop and do not advance gameplay
+time. Steps 0, 7, and 14 are static transition-strip pre-draws before the
+primary story art. Step 1 is the only confirmed rectangular transition: after
+the player advances that step, the extra `STORY1.16` art is drawn at `(40, 86)`
+and the intro delegates the inclusive rectangle `(40, 86)..(75, 120)` once to
+the resident/display transition helper. The intro loop itself does not contain
+a per-frame wipe schedule for this effect. The exact historical pixel pattern
+and pacing are therefore helper-local; the public v1 contract is the affected
+region, ordering, and the final visible pixels.
 
 The slide loop does not mutate gameplay state, does not create a save, and does not select a gameplay scene. Its only persistent effect is that, when it returns, the intro reloads or redraws the start/menu view so the six-option menu can continue.
 
-The screen-panel asset container is specified in `formats/tiles.md`. The proportional text output contract is described in `text-output.md`. The story text file does not yet have a dedicated cleanroom format spec in this repository.
+The screen-panel asset container is specified in `formats/tiles.md`. The proportional text output contract is described in `text-output.md`, and the story text file is specified in `formats/story-dat.md`.
 
-## 10. Acknowledgements (`A`)
+## 11. Acknowledgements (`A`)
 
 `A` displays the acknowledgement/credits screen and then returns to the intro menu. It uses the same already-initialised display and text systems as the title and story paths. The acknowledgement path is self-contained: it does not read or write the save image, does not change the gameplay scene, and does not exit the program.
 
 After the acknowledgement screen finishes, the intro returns to its menu loop with intro state still active. A later `J`, `C`, or `T` selection is required to leave the intro.
 
-## 11. Return to View (`R`)
+## 12. Return to View (`R`)
 
-`R` is a visual return/reset path for the intro view. It invokes a renderer in the font/display overlay family to restore the title/start view and then remains in intro mode. It is not a saved-game resume command; saved-game resume is `J`.
+`R` is a visual preview path for the intro view. It invokes a renderer in the font/display overlay family to run the non-interactive Return-to-View scene, then returns to the intro menu. It is not a saved-game resume command; saved-game resume is `J`.
 
-This path is useful after a sub-screen has displaced the title/menu view or when the player wants to return from an intro-side display to the main view. Its exact visual result should be verified against a captured run; the control-flow contract is clear: render the view, keep the intro scene active, and continue polling the six-option menu.
+When entered from the normal intro menu, the path preserves the underlying title/menu surface, runs the preview until its local script or input wait completes, then restores the preserved surface before menu polling resumes. The renderer loads `MISCMAPS.DAT` from the Return-to-View section: the first four records are 19-by-4 map strips, and the following 655-byte stream drives preview actors, map-strip switches, movement, waits, and repeated animation beats. The file layout is specified in `formats/location-dat.md`.
 
-## 12. Hand-off back to gameplay
+The control-flow contract is clear: run the preview as an intro-local screen, keep the intro scene active, do not load or resume a save, and continue polling the six-option menu afterward. The preview command-byte table, argument shapes, loop rule, actor/map side effects, and fixed script-level helper schedules are specified in `formats/location-dat.md`. Asset-compatible tooling that does not implement the preview interpreter should still preserve the command stream unchanged.
+
+## 13. Hand-off back to gameplay
 
 Only play-producing paths should cause the intro overlay to return in a gameplay-ready state:
 
@@ -169,7 +316,7 @@ On a successful hand-off, the intro leaves resident state arranged so the main l
 
 This keeps the boot architecture consistent with all later scene transitions: systems set state and return, and the main loop decides which mode owns control next. See `main-loop.md` for the outer dispatch rules and `save-load.md` for the load path's final commit.
 
-## 13. Implementation notes
+## 14. Implementation notes
 
 A modern implementation does not need to reproduce the overlay loader, DOS interrupt setup, or disk-swap callbacks literally. It should preserve their user-visible contracts:
 
@@ -177,29 +324,37 @@ A modern implementation does not need to reproduce the overlay loader, DOS inter
 - Select one graphics depth/backend for the whole intro session.
 - Treat disk-swap prompts as file-availability prompts; on a single-directory install they can be no-ops.
 - Keep intro input one-keystroke-at-a-time and case-insensitive.
-- Suppress gameplay world ticks while the intro is active.
+- Suppress gameplay world ticks while the intro is active; only the intro title
+  tick continues during title/menu waits.
 - Make every non-play submenu return to the intro menu without mutating gameplay state.
 - Make the Journey load path validate the save before leaving the intro.
 - Route successful gameplay entry through the main-loop scene dispatcher.
 
-For pixel-perfect reproduction, an implementation will also need the fixed title-screen origins for the four `BRITISH.PTH` segments and the exact visual timings of palette/fade transitions. Those are implementation constants recovered from the intro overlay, not part of the `BRITISH.PTH` file itself.
+For pixel-perfect reproduction, an implementation will also need the resident
+helper's internal wipe pattern and timing for the story rectangle transition
+and some sub-screens. The title/menu idle contract is narrower: run the
+driver-style title tick while waiting, and keep that tick separate from
+gameplay time.
 
-## 14. Open questions and variations
+## 15. Open questions and variations
 
-- **Return to View visual semantics.** The control-flow role of `R` is known, but the exact screen it restores should be verified against live capture.
+- **Return-to-View resident helper internals.** The `R` path now has a traced owner, asset layout, command-byte table, argument shapes, loop rule, actor/map side effects, local cell-effect step loops, fixed rectangle sequence, and preview tick counts. The remaining gap is the low-level resident display helper implementation behind the special actor draw, local cell-effect raster, and short wait if the preview must match the original renderer frame-for-frame.
 - **Transfer stat mapping.** The intro-owned transfer path and roster screen are identified, but the exact U4-to-U5 stat translation belongs to a deeper transfer/chargen pass and remains incomplete.
-- **Story text file format.** The story slide text source is known at a behavioural level, but there is no dedicated cleanroom `formats/story-dat.md` yet.
-- **Slide layout and pacing.** The fixed slide list and render/wait pattern are known. Per-slide rectangle placement, fade timing, and exact wait semantics need a capture or a fuller renderer pass if the intro must be pixel-perfect.
+- **Story rectangle-transition helper.** The fixed story-step list, primary story-art placement, secondary draws, text source, key-advance behavior, and affected rectangle for the one local transition are known. The intro call site delegates that rectangle once to a resident/display helper; the helper's internal wipe pattern and pacing still need a focused helper trace or capture if the intro must be pixel-perfect.
 - **Acknowledgement screen content.** The acknowledgement branch is identified as a self-contained intro submenu, but its exact text and pagination are not specified here to avoid copying binary text dumps.
-- **Display-driver opcodes.** The intro uses several driver calls for compressed bitmap drawing, palette/fade work, and title ticks. Their ABI belongs in a future display-driver spec rather than this intro spec.
+- **Title tick replacement art.** The EGA baseline destination rectangle, four-frame cadence, and driver-local ownership are known. The original frame pixels live inside the historical display driver rather than an external asset; a modern cleanroom renderer needs independently authored replacement frames if exact driver binary reuse is out of scope.
+- **Display-driver binary entries.** The intro uses several display operations for bitmap drawing, rectangle transitions, display-state changes, and title ticks. Their public rendering contract is in `display-driver.md`; exact binary driver entries remain deferred.
 
-## 15. Sources
+## 16. Sources
 
 The behaviour described here was derived by reading the function and format notes listed below. None of those notes' assembly excerpts, decompiled code, private addresses, or binary text dumps appear in this spec; this document is a cleanroom prose re-derivation of the observed behaviour.
 
 - Boot initialisation, title-screen orchestration, asset-depth selection, intro menu rendering, key dispatch, and the high-level hand-off to the main loop: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+- Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh local rectangle-transition helper analysis.
+- Return-to-View entry point, preview map-strip loader, script-stream start, helper schedules, and screen save/restore behaviour: `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
+- Title tick ownership, EGA destination rectangle, four-frame cadence, and the clarification that `FLAMES.OVL` is a scratch-buffer thunk, not the flame renderer: `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md` and fresh local title-animation helper analysis.
+- Compressed-bitmap rectangle dispatch and driver-side title/bitmap rendering relationship: `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`.
 - Journey Onward load path, empty-save guard, `SAVED.GAM` and `SAVED.OOL` reads, object-overlay mirror writes, underworld disk-swap branch, and final return to the main loop: `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - Transfer/continue roster path, transfer disk-state setup, seed loads, roster/status screen rendering, and commit/abort behaviour: `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - Outer main-loop boot context, scene dispatch after intro return, and overlay call model: `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
@@ -208,3 +363,7 @@ The behaviour described here was derived by reading the function and format note
 - `BRITISH.PTH` file structure and its confirmation as a title-screen path stream rather than an NPC schedule file: `u5-decomp/formats/npc-tlk-pth.md`.
 - Title, start-screen, and story-panel graphics container format: `u5-decomp/formats/tile-graphics.md`.
 - Story text data observations used to identify the intro slide text source: `u5-decomp/formats/data-tables.md`.
+- Fresh local title-sequence verification identified the fixed placements for
+  all ten decoded `TITLE.BIT` blocks, the decoded `BRITISH.BIT` bitmap, and the
+  four `BRITISH.PTH` pen origins; no code, disassembly, or raw data is
+  reproduced here.

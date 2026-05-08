@@ -63,14 +63,13 @@ Window rectangles use absolute cell coordinates. Cursor positions and width argu
 
 The system exposes four families of operations. None of them takes a window argument — they all operate on whichever window is currently active.
 
-**The per-cell emitter** takes one byte and either renders one glyph at the active window's cursor or interprets the byte as a control action. It is the foundation of the system; both the wrap-aware printer and the numeric printer go through it. Its behaviour:
+**The per-cell emitter** takes one byte and either renders one glyph at the active window's cursor or interprets newline/carriage-return as cursor movement. It is the foundation of the system; both the wrap-aware printer and the numeric printer go through it. Its behaviour:
 
-- A byte with the high bit clear and not equal to a recognised control code is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, the window scrolls (Section 7) and the cursor is left on the now-blank bottom row.
+- A byte with the high bit clear and not equal to line-feed or carriage-return is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, the window scrolls (Section 7) and the cursor is left on the now-blank bottom row.
 - A line-feed byte advances the cursor down one row without emitting a glyph and without resetting the column. If that step carries the cursor past `bottom_right_y`, the window scrolls.
 - A carriage-return byte returns the cursor to the window's left edge without changing the row and without emitting a glyph.
-- A small set of bytes near the top of the byte range are reserved as control codes that toggle window flags or clear the window. One code toggles the underline flag, one toggles the inverse-video flag, and one clears the active window's rectangle to the current background colour (leaving the cursor at the window's top-left corner). The exact byte-to-action mapping is observed at three codes near the top of the byte range; see Section 9.
-- Any other high-bit-set byte is silently dropped. There is no error.
-- An optional "no-advance" gate, when set on the active window, suppresses the cursor advance after a glyph emit. The glyph is still rendered, but the cursor stays put. This is used for static labels that overdraw the same cell repeatedly. Whether this gate is one of the descriptor's flag bits or separate state is not yet pinned down (see Section 9).
+- Any high-bit-set byte is silently dropped by the decoded per-cell path. There is no error.
+- A resident cursor-advance gate can suppress the cursor advance after a glyph emit. The glyph is still rendered, but the cursor stays put. This gate is shared runtime state rather than one of the descriptor style bits; the input cursor blink temporarily disables it so blink frames paint in place.
 
 **The wrap-aware string printer** takes a near pointer to a NUL-terminated byte string and emits it into the active window with word wrapping. It accumulates characters in a fixed-size internal line buffer (large enough for the widest possible window) while tracking the most recent point at which a word break could have happened. When a soft break (space, line-feed, or carriage-return) is reached and the line still fits in the window's width, the line is emitted via the per-cell emitter. When the next character would carry the line past the window's right edge, the printer backs up to the most recent soft break, emits everything up to that break, and begins a new line with the remainder. A NUL forces a final flush. Line-feed and carriage-return bytes embedded in the source string force an immediate flush at that point and pass through to the per-cell emitter so the cursor moves accordingly.
 
@@ -110,7 +109,7 @@ When the per-cell emitter decides to render a glyph, it does so in three concept
 
 3. **Driver dispatch.** The emitter asks the driver to render one cell at absolute screen position `(top_left_x + cursor_x, top_left_y + cursor_y)` in the active window's colour, using the working buffer as the cell's bitmap. The driver does whatever is needed to put those pixels on display — for an EGA-style driver, this is a per-plane write into video memory with bit-fielded foreground/background masks; for a modern backend, it could be a glyph-indexed blit or a terminal-style cell update.
 
-The text system's contract with the driver is "render this prepared cell at this position in this colour". Anything beyond that — scrolling a rectangle, clearing a rectangle, setting an attribute on a rectangle — is also a driver call, but invoked from elsewhere in the text system (auto-scroll on overflow, the "clear window" control code) and is described in the driver ABI document rather than here.
+The text system's contract with the driver is "render this prepared cell at this position in this colour". Anything beyond that — scrolling a rectangle, clearing a rectangle, setting an attribute on a rectangle — is also a driver call, but invoked from elsewhere in the text system, such as auto-scroll on overflow or a higher-level clear-window helper, and is described in the driver ABI document rather than here.
 
 ## 8. Boot-Time Setup and Window Configuration
 
@@ -130,9 +129,17 @@ The colour and flag setters write one byte of one descriptor; their effects are 
 
 This section records places where the picture is not yet complete or where evidence is internally inconsistent.
 
-- **Exact mapping of control bytes.** Three codes near the top of the byte range are intercepted by the per-cell emitter: one toggles underline, one toggles inverse, one clears the window. The full code-to-action table has not been pinned down across all observed call sites; an implementer should treat this as "three reserved style/clear codes near the top of the byte range" and confirm against in-game behaviour.
+- **Style and clear writers.** The descriptor/cache carries underline,
+  centring, inverse, colour, and rectangle-clear state used by the text and
+  display paths. The decoded per-cell emitter itself only handles line-feed and
+  carriage-return, and drops high-bit bytes. The remaining writer paths for
+  toggling underline/inverse and clearing the active window are not fully
+  pinned down in public prose yet.
 
-- **No-advance gate exposure.** The per-cell emitter consults a flag that, when set, skips the cursor advance after a glyph emit. Whether this gate is one of the descriptor's flag bits or a separate piece of state is not yet clear; either reading is consistent with the observed behaviour. Implementers can treat it as a per-window flag.
+- **No-advance gate writers.** The per-cell emitter consults a shared resident
+  cursor-advance gate, and the input cursor blink is one confirmed writer. Any
+  additional gameplay/UI writers outside the blink path still need call-site
+  enumeration.
 
 - **Screen size constants under non-EGA drivers.** The cursor-write bounds check, the rectangle clamps, and the descriptor defaults all assume a 40-column by 25-row grid. The original game ships drivers for four hardware targets, and at least one (Hercules) triples the per-cell pixel stride. Whether the *cell* dimensions ever change — whether 40×25 is the same on all drivers — has not been verified. The conservative reading: 40×25 is a system-wide constant, and drivers vary only in pixel size per cell. A modern backend can treat 40×25 as fixed.
 
@@ -140,13 +147,13 @@ This section records places where the picture is not yet complete or where evide
 
 - **Live-snapshot anomaly for descriptor 0.** A memory snapshot taken at the title screen shows record 0 with a rectangle that violates the invariant (right < left). The most likely explanation is that the title-screen overlay reuses the descriptor table memory as scratch; under normal gameplay, the API never produces an inverted rectangle. Implementations following the API described here cannot reach that state and need not handle it.
 
-- **Scroll-by-N semantics.** The auto-scroll path that runs when the cursor steps off the bottom invokes a driver opcode with what appears to be a one-cell pixel argument. Whether this is generic "scroll by N pixels" or specifically "scroll by one cell" is a driver-ABI question. The text system's contract is "scroll up by exactly one cell, leaving the bottom row blank in the current background colour."
+- **Scroll-by-N semantics.** The auto-scroll path that runs when the cursor steps off the bottom invokes a driver operation with what appears to be a one-cell pixel argument. Whether this is generic "scroll by N pixels" or specifically "scroll by one cell" is a driver-ABI question. The text system's contract is "scroll up by exactly one cell, leaving the bottom row blank in the current background colour."
 
 - **Single-driver collapse.** A modern implementation almost certainly does not need four parallel hardware drivers. The text-system behaviour described here is independent of which driver is loaded; treating the system as if exactly one (EGA-equivalent) driver is always present is a sound simplification.
 
 ## 10. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - The per-cell emitter and its glyph and scroll helpers — derived from `u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`, `u5-decomp/functions/ULTIMA_EXE/0x17F4_glyph_to_cell_buffer.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1F77_descriptor_to_pixel_rect.md`.
 - The wrap-aware string printer and its centring branch — derived from `u5-decomp/functions/ULTIMA_EXE/0x1850_print_string.md`.

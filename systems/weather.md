@@ -23,15 +23,15 @@ The wind state is a small enumerated value with five user-facing presentations:
 | East | A cardinal wind state. |
 | West | A cardinal wind state. |
 
-The UI helper prints the current wind state as a short transition/status message when entering the world flow. The helper is presentation-only: it reads the wind state and displays the corresponding label, then returns to the normal mode dispatch.
+The presentation labels are stored in DATA.OVL in the order Calm, North, South, East, and West, followed by the shared "Winds" suffix. The UI helper prints the current wind state as a short transition/status message when entering the world flow. The helper is presentation-only: it reads the wind state and displays the corresponding label, then returns to the normal mode dispatch.
 
-The exact internal numbering is not part of this spec. Implementations should store wind as an enum, not as a raw byte.
+The label order does not by itself prove the saved byte values. Implementations should store wind as a semantic enum internally, not as an exposed raw byte. Save import/export is the exception: `SAVED.GAM` carries the original wind state byte, and byte-compatible tooling should preserve that byte exactly. Until the byte-to-label table is verified, loaders should avoid clamping or normalizing unknown wind bytes; preserve the original byte for round-trip writes and map only recognised values into the public enum.
 
 ## 3. Rel Hur
 
 Rel Hur is the spell-system hook into weather. The C-Cast pipeline identifies it as the Wind Change spell, applies the normal spell prerequisites, consumes the appropriate pre-mixed charge, and then routes to the spell effect.
 
-The gameplay contract is that a successful Rel Hur changes the prevailing wind. The existing magic spec treats the change as a quarter-turn rotation through the cardinal winds. That is the intended modern-engine behavior unless later handler decompilation proves a different calm-state rule.
+The confirmed gameplay contract is that a successful Rel Hur invokes the Wind Change effect and changes the prevailing wind state. Current public evidence does not yet prove the exact state transition order, the calm-state rule, or the saved-byte mapping. A v1 implementation should expose a deterministic wind-change operation, preserve the raw saved wind byte for round-trip compatibility, and keep the chosen transition documented until the handler is traced or captured.
 
 Rel Hur should not:
 
@@ -40,7 +40,7 @@ Rel Hur should not:
 - Create rain, storms, or map hazards.
 - Override dungeon blackout.
 
-If the current state is calm, the exact original transition out of calm remains an open question. A practical implementation can choose a deterministic first cardinal direction and keep the choice documented.
+Until the transition order is proven, a practical implementation can choose a deterministic rule and keep the choice documented.
 
 ## 4. Ships And Sails
 
@@ -100,14 +100,14 @@ Any modern additions such as rain overlays, thunder, wave animation, or storm en
 
 Wind is part of the runtime game state and should be saved with the rest of the world state. Loading a game should restore the prevailing wind before the overworld loop resumes, so ship motion and the wind display agree immediately after load.
 
-Because the displayed wind message is cosmetic, it can be recomputed from the enum on demand rather than saved as text.
+Because the displayed wind message is cosmetic, it can be recomputed from the mapped wind state on demand rather than saved as text. The rendered text itself is never part of the save.
 
 ## 10. Open Questions
 
-- **Rel Hur calm handling.** The cast pipeline and Wind Change identity are known, but the exact state transition when wind is calm has not been isolated in a per-effect handler note.
+- **Rel Hur transition order.** The cast pipeline and Wind Change identity are known, but the exact state transition order and calm handling have not been isolated in a per-effect handler note.
 - **Compass convention.** The wind cadence table proves axis-based movement, but the direction labels still need a final convention decision before assigning "with wind" and "against wind" language.
 - **Player ship versus active-object ship path.** The active-object wind path is clearer than the player command path. The modern implementation should keep the visible behavior aligned, then refine once the movement helpers are fully documented.
-- **Initial wind seed.** Save notes identify a wind-related saved byte, while the world-entry helper can also be called with an argument that writes the displayed wind state. The load/entry ordering should be confirmed before treating the seed value as canonical.
+- **Wind byte mapping.** The display label order is identified, and the load path displays the wind after reading the save. The exact saved-byte-to-label mapping still needs the display helper body or runtime capture before assigning stable public numeric values.
 
 ## 11. Sources
 

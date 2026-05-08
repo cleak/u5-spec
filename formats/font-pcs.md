@@ -2,28 +2,23 @@
 
 Format specification for Ultima V's proportional character-set file,
 `PROPORT.PCS`. This file supplies the proportional font used by the intro
-narrative and character-creation text renderer. The on-disk compression and
-the runtime font metadata are only partly recovered, so this document separates
-confirmed container and consumer behaviour from hypotheses about the decoded
-glyph body.
+narrative and character-creation text renderer. The on-disk compression and the
+decoded glyph table are specified here.
 
 ## 1. Overview
 
 `PROPORT.PCS` is a compressed proportional font resource. Unlike the fixed-cell
 `.CH` and `.HCS` font files, it is not directly field-walkable from disk: the
-file begins with a small compressed-resource envelope, followed by an
-entropy-dense payload that must be expanded by the original engine before glyph
-metrics and bitmap rows can be used.
+file begins with the shared Ultima V LZW resource envelope, followed by a
+compressed payload that expands to a compact proportional glyph table.
 
 The file is loaded during character creation and reused by the paragraph
 renderer. Runtime text layout uses per-character widths rather than a fixed
 cell advance. This is the key behavioural distinction between `PROPORT.PCS` and
 the raw monospace font files.
 
-The exact decompression algorithm and exact post-decompression glyph-body
-layout are not yet specified. A compatible implementation should therefore
-treat the compressed bytes as an opaque original-engine resource until the
-codec and decoded layout have been re-derived from the loader path.
+The decoded table covers the printable range from space through lowercase `z`.
+Each decoded glyph carries an advance width and eleven one-bit bitmap rows.
 
 ## 2. File Identity
 
@@ -31,7 +26,7 @@ There is one known `.PCS` file in the Ultima V DOS asset set:
 
 | File | Role | On-disk form |
 |---|---|---|
-| `PROPORT.PCS` | Proportional text font for narrative and character creation | Compressed resource with a small length-prefixed envelope |
+| `PROPORT.PCS` | Proportional text font for narrative and character creation | LZW-compressed resource |
 
 The resident asset-name table points at `PROPORT.PCS`, and the character
 creation overlay loads it before rendering the gypsy-wagon narrative,
@@ -53,49 +48,54 @@ rectangle. Ordinary status, prompt, and map text can still use the engine's
 fixed-cell text primitives; `PROPORT.PCS` is for the richer paragraph layout
 paths.
 
-## 4. Container Layout
+## 4. LZW Container
 
-The on-disk file belongs to the same compressed-resource family as the
-compressed `.BIT` title images. The confirmed outer shape is:
+`PROPORT.PCS` uses the same resource-compression envelope as the paired
+graphics archives and the compressed `.BIT` files:
 
-1. A little-endian declared output length stored at the start of the file.
-2. A zero word following that length.
-3. A compressed payload occupying the rest of the file.
+1. A four-byte little-endian unsigned decoded length.
+2. A variable-width LZW payload.
 
-For the shipped `PROPORT.PCS`, the declared decoded size is 1,276 bytes and the
-compressed file is 802 bytes. Those values are useful validation anchors, but
-they do not by themselves identify the codec.
+For the shipped file, the decoded length is 1,276 bytes and the compressed file
+is 802 bytes. The high word of the decoded length is zero, which is why earlier
+surveys described the header as a length word followed by a zero word.
 
-This is not the GIF-style LZW envelope used by the paired tile graphics
-archives (`.16` and `.4`). The tile-graphics family uses a four-byte decoded
-length and a known LZW dialect. `PROPORT.PCS` uses a smaller header shape shared
-with the compressed `.BIT` family, and its decompressor has not been fully
-recovered.
+The LZW dialect is the same one specified in `formats/tiles.md`: codes start at
+nine bits, use little-endian bit packing, reserve code 256 as clear and 257 as
+end, add user dictionary entries starting at 258, grow to twelve bits, and
+handle the standard self-reference case. A decoder must expand exactly the
+declared number of bytes before the resource body is interpreted.
 
-## 5. Decoded Font Model
+## 5. Decoded Font Layout
 
-The decoded data is expected to contain both glyph metrics and glyph bitmap
-data. Runtime evidence confirms that the text renderer reads a 128-entry
-character-width table from resident state while laying out proportional text.
-That table is indexed by the character byte value used by the text stream.
+After LZW expansion, the body is a small indexed glyph table:
 
-The source of that width table is not yet proven byte-for-byte. The strongest
-working interpretation is that loading `PROPORT.PCS` initializes the runtime
-font segment and/or resident width table from the decoded resource. However,
-the decoded 1,276-byte body has not yet been walked, so this spec does not
-assign byte offsets, table ordering, glyph heights, row strides, or bitmap
-packing for the decoded font.
+| Field | Width | Meaning |
+|---|---:|---|
+| Glyph count | 2 bytes | Little-endian count. The shipped file contains 91 glyphs. |
+| Offset table | 2 x count bytes | Little-endian body-relative offsets, one per glyph. |
+| Glyph blocks | 12 bytes each | One width byte followed by eleven bitmap-row bytes. |
 
-Implementations should model the decoded resource at a semantic level:
+The shipped decoded body has a 184-byte table header (`2 + 91 * 2`) followed by
+91 fixed-size glyph blocks. Every offset points to the start of one 12-byte
+block, and the blocks are contiguous.
 
-- A set of up to 128 character slots.
-- A width metric for each character slot.
-- Monochrome glyph shapes used by the proportional renderer.
-- Character advances measured in pixels rather than cells.
+Glyph slot zero corresponds to character code `0x20` (space). Slot `n`
+corresponds to code `0x20 + n`, so the covered range is `0x20..0x7A`
+inclusive. Codes outside that range do not have glyph records in this file.
 
-Do not assume that glyph bitmap data is a simple fixed-size array. The file is
-small enough that variable-width glyph rows, compact row storage, or shared
-metadata are all plausible. These details remain open.
+Each glyph block has this layout:
+
+| Field | Width | Meaning |
+|---|---:|---|
+| Advance width | 1 byte | Pixel advance used by the proportional renderer for this glyph. Observed values fit in 0..7. |
+| Bitmap rows | 11 bytes | One byte per row, top to bottom. Bits are most-significant-bit first within each row; a set bit is foreground. |
+
+The bitmap rows are one byte wide even for narrow glyphs. The width byte tells
+the renderer how far to advance and how much of the row is visually meaningful;
+unused right-side bits are padding. The space glyph is blank and has a zero
+width in the resource, so any visible word spacing beyond that is renderer text
+layout behaviour, not bitmap content.
 
 ## 6. Rendering Behaviour
 
@@ -134,46 +134,31 @@ otherwise.
 
 ## 8. Validation And Error Handling
 
-A byte-compatible loader should enforce only the invariants that are currently
-known:
+A byte-compatible loader should enforce these invariants:
 
-- The file name is `PROPORT.PCS`.
-- The file starts with the compressed-resource envelope described above.
-- The declared decoded size for the shipped file is 1,276 bytes.
-- The compressed input should not be interpreted as glyph rows until the codec
-  succeeds.
-- Text rendering should reject or substitute any character whose decoded glyph
-  metadata is unavailable.
+- The four-byte decoded length must match the number of bytes produced by LZW.
+- The shipped `PROPORT.PCS` decoded length is 1,276 bytes.
+- The decoded glyph count must be nonzero and the offset table must fit inside
+  the decoded body.
+- Every glyph offset must point to a complete 12-byte glyph block.
+- The shipped file contains exactly 91 glyphs covering `0x20..0x7A`.
+- Character codes outside the covered range should be rejected, substituted, or
+  handled by caller-specific text control logic rather than indexing past the
+  table.
 
-Because the codec is not yet specified, a modern cleanroom implementation has
-two practical options:
-
-1. Treat `PROPORT.PCS` as an opaque asset and use an independently authored
-   replacement proportional font.
-2. Defer support for exact original rendering until the decompressor and
-   decoded glyph layout are re-derived.
-
-A tolerant analysis tool may report the declared decoded size and payload
-length without decoding. A compatibility-mode loader should fail closed if the
-declared size, header shape, or decompression result does not match the
-expected resource model.
+A strict loader should reject short LZW output, overlong output, malformed
+offsets, or a glyph block that would run past the decoded body.
 
 ## 9. Known Uncertainties
 
-- **Compression algorithm.** The codec used by `PROPORT.PCS` has not been
-  recovered. It appears related to the compressed `.BIT` resource family, but
-  the exact algorithm and bitstream rules are not specified.
-- **Decoded body layout.** The decoded file probably contains a width table and
-  compact glyph bitmap data, but the ordering and row encoding are not known.
-- **Width-table origin.** Runtime layout definitely consults a 128-entry width
-  table. Whether that table is copied directly from decoded `PROPORT.PCS`,
-  generated by the loader, or partly resident in the executable remains open.
-- **Glyph coverage.** Runtime layout indexes widths by 7-bit character values,
-  but the exact printable range and handling of control-marker bytes still need
-  a decoded font walk.
-- **Display-driver split.** Compressed `.BIT` rendering is known to pass through
-  the display driver. The `PROPORT.PCS` load path is a font-loader path, and
-  its relationship to the driver-side bitmap decompressor is not fully known.
+- **Renderer spacing for blanks and markers.** The decoded space glyph has zero
+  width. The paragraph renderer may apply additional spacing or control-marker
+  handling outside the font file.
+- **Runtime width-table copy.** The decoded glyph width byte is the source a
+  clean implementation should use. The exact original-memory copy path into the
+  renderer's width table is an implementation detail.
+- **Codes above lowercase `z`.** The decoded table ends at `0x7A`. Any original
+  text stream use of higher printable ASCII would need a caller-side fallback.
 
 ## 10. Cross-References
 
@@ -193,8 +178,8 @@ dumps, and private implementation identifiers.
 - First-pass font and bitmap survey, including the `PROPORT.PCS` compressed
   envelope, file size, declared decoded size, and comparison with `.BIT`:
   `u5-decomp/formats/fonts-bitmaps.md`.
-- Tile-graphics survey, used only to distinguish the known `.16`/`.4` LZW
-  envelope from the separate `.PCS`/compressed-`.BIT` family:
+- Tile-graphics survey, used for the shared LZW envelope and compression
+  dialect:
   `u5-decomp/formats/tile-graphics.md`.
 - Character-creation loader and `PROPORT.PCS` consumer path:
   `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
@@ -202,3 +187,6 @@ dumps, and private implementation identifiers.
   `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
 - Intro slide-loop use of the proportional renderer:
   `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+- Fresh local loader-path verification decoded `PROPORT.PCS` with the shared
+  LZW dialect and field-walked the 91 decoded glyph records; no disassembly or
+  raw glyph bytes are reproduced here.

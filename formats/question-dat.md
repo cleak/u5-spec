@@ -70,7 +70,9 @@ paragraphs selected by the chargen logic.
 
 For each question, the chargen system:
 
-1. Selects two distinct virtues still eligible in the tournament.
+1. Selects two distinct virtues still eligible in the tournament. The first
+   selected virtue is marked as selected before the second draw, so a virtue
+   cannot be paired with itself.
 2. Sorts the pair for stable A/B presentation.
 3. Looks up the pair in a resident symmetric pair-to-question table.
 4. Seeks to the selected `QUESTION.DAT` record.
@@ -80,10 +82,45 @@ There are twenty-eight dilemma records because eight virtues have twenty-eight
 unique unordered pairings. The diagonal "virtue paired with itself" case does
 not occur and has no record.
 
-The record order in the file should not be treated as a simple formula such as
-"all pairs in row-major order" unless the resident pair table has been
-consulted. The pair table is the source of truth for which record belongs to
-which virtue pairing.
+The record order in the file should not be treated as a simple formula unless
+the resident pair table has been consulted. For the shipped IBM PC data, that
+table resolves to this clean record-ordinal mapping:
+
+| Record | Virtue pair |
+|---:|---|
+| 2 | Honesty / Compassion |
+| 3 | Honesty / Valor |
+| 4 | Honesty / Justice |
+| 5 | Honesty / Sacrifice |
+| 6 | Honesty / Honor |
+| 7 | Honesty / Spirituality |
+| 8 | Honesty / Humility |
+| 9 | Compassion / Valor |
+| 10 | Compassion / Justice |
+| 11 | Compassion / Sacrifice |
+| 12 | Compassion / Honor |
+| 13 | Compassion / Spirituality |
+| 14 | Compassion / Humility |
+| 15 | Valor / Justice |
+| 16 | Valor / Sacrifice |
+| 17 | Valor / Honor |
+| 18 | Valor / Spirituality |
+| 19 | Valor / Humility |
+| 20 | Justice / Sacrifice |
+| 21 | Justice / Honor |
+| 22 | Justice / Spirituality |
+| 23 | Justice / Humility |
+| 24 | Sacrifice / Honor |
+| 25 | Sacrifice / Spirituality |
+| 26 | Sacrifice / Humility |
+| 27 | Honor / Spirituality |
+| 28 | Honor / Humility |
+| 29 | Spirituality / Humility |
+
+The diagonal table cells are unreachable because a virtue is marked selected
+before the second draw. A modern implementation can use the ordinal table above
+directly, or can reproduce the original symmetric lookup as long as it resolves
+to the same records.
 
 ## 5. Loading Behaviour
 
@@ -157,13 +194,10 @@ For runtime robustness:
 
 ## 9. Open Questions
 
-- **Complete pair table transcription.** The existence and role of the
-  symmetric virtue-pair table are understood, but this format spec does not
-  publish a byte-exact table. A future public appendix could name each
-  virtue-pair-to-record mapping in prose after it is re-derived cleanly.
 - **Pacing details.** The broad paragraph-pacing model is known, but the exact
-  key handling for the introductory records and whether any cancel key is
-  accepted should be confirmed in gameplay.
+  low-level key-polling helper for the introductory records is not specified
+  here. At the format level, the two introductory records advance on any key
+  after rendering; cancellation is not encoded in `QUESTION.DAT`.
 - **Markup edge cases.** The `{` and `_` conventions are understood for shipped
   content. Behaviour for repeated markers, markers at end of record, or unknown
   high-bit bytes is not yet specified.
@@ -179,7 +213,8 @@ cross-reference alignment.
   dilemma split, NUL-terminated record structure, markup conventions, and
   consumer attribution -- derived from `u5-decomp/formats/data-tables.md`.
 - The chargen flow, virtue tournament, pair-table selection semantics,
-  proportional-font renderer role, stat effects, and save-writing context --
+  pair-to-record ordinal mapping, proportional-font renderer role, stat
+  effects, and save-writing context --
   derived from `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`,
   `u5-decomp/functions/FONT_OVL/0x09C8_questionnaire_iter.md`,
   `u5-decomp/functions/FONT_OVL/0x0998_pick_random_unused_virtue.md`, and

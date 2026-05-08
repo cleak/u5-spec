@@ -4,7 +4,7 @@ System-level specifications and file format documentation for an Ultima V engine
 
 ## Purpose
 
-This repository is the contract between reverse engineering and implementation. It describes how Ultima V works without reproducing its code.
+This repository is the contract between private analysis and implementation. It describes how Ultima V works without reproducing its code.
 
 Each document explains one system or one file format clearly enough that an implementer can build it without ever seeing the original executable or game data.
 
@@ -21,7 +21,7 @@ Specs describe behavior and structure, not code. They should be:
 - **Implementation-agnostic** — no Rust types, no C structs, no opinions about data layout in the engine. Describe what is true about the original; leave how to represent it to the engine.
 - **Complete enough to implement against** — if a number is involved, document its range, units, and where it changes. If a transition is involved, document every condition.
 - **Self-contained** — a reader who has never seen the game or its code should be able to follow.
-- **Sourced** — every nontrivial claim names where it was derived from (file offset, function address, or empirical observation).
+- **Sourced** — every nontrivial claim names the semantic evidence it was derived from, such as a private analysis note, a public asset/file-format observation, or an empirical verification result. Do not publish private source, decompiler output, assembly excerpts, raw byte dumps, or private address tables.
 
 ## License
 
@@ -31,5 +31,5 @@ The original game and its data files are © Origin Systems / Electronic Arts. No
 
 ## Sibling repositories
 
-- `../u5-decomp` — private decompilation working area; do not reference its contents from implementation work
-- `../ninth-virtue` — companion app for the original game; partial reverse-engineering reference
+- `../u5-decomp` — private analysis workspace. Public specs may cite analysis-note paths as provenance, but implementation work should rely on this repository's cleanroom prose rather than private analysis content.
+- `../ninth-virtue` — companion app for the original game; private analysis reference

@@ -23,23 +23,24 @@ The world has thirty-two named non-overworld locations divided evenly into four 
 
 The engine tracks the active scene in a single resident byte. Zero means "overworld"; values one through thirty-two put the engine in town mode for one named location; values above thirty-two are used for dungeon and combat states (described in their own specs). Walking onto an enclosed cell sets the scene byte; leaving via a boundary tile clears it.
 
-Per-location data lives in four parallel families of files — one tile-grid file per class, one NPC roster file per class, one dialogue file per class — and within each file the eight per-class blocks are addressed by `scene & 7`. The dwelling at scene byte twelve is the fourth block of `DWELLING.DAT`, `DWELLING.NPC`, and `DWELLING.TLK`. The engine resolves the file family from `(scene − 1) >> 3` against a four-entry pointer table.
+Per-location data lives in four parallel families of files — one tile-grid file per class, one NPC roster file per class, one dialogue file per class. The roster and dialogue files use the per-class location index directly; the tile-grid file uses the same physical ordering but active floor pages are selected through the resident base-page table described below. The engine resolves the file family from `(scene - 1) >> 3` against a four-entry pointer table.
 
 ## 3. Per-location map data
 
-A location's map is a thirty-two-by-thirty-two grid of one-byte tile indices, totalling 1,024 bytes per floor. Each location has up to two floors — typically *ground* and *upper* (or *basement*) — stored back-to-back in the per-class file as a 2,048-byte pair. The four shared files each hold eight such pairs, totalling 16,384 bytes per file.
+A location's map is a thirty-two-by-thirty-two grid of one-byte tile indices, totalling 1,024 bytes per floor. Each per-class file contains sixteen such floor pages, physically arranged as eight two-page location pairs. Runtime floor selection is driven by a resident per-scene base-page table, not just by the physical pair: logical floor zero is the scene's base page, floor one is the next page, and floor `0xFF` is the previous page.
 
 The active floor is loaded into a single 32×32 byte buffer in the resident data segment. Cell `(row, col)` is at buffer offset `row × 32 + col`; row indices increase southward, column indices increase eastward. The renderer reads this buffer for the static terrain layer; the active-object table (described in the active-objects spec) layers sprites on top.
 
-The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID — wall, floor, grass, water, door, chair, ladder — that the renderer paints directly. A handful of special tile values are *markers* that the location-load pass strips out and converts into runtime state:
+The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID — wall, floor, grass, water, door, chair, ladder — that the renderer paints directly. A handful of special tile values are *markers* that the location-load pipeline and NPC scheduler harvest, rewrite, or consume:
 
-- **NPC start markers** (one of two paired tile values) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and the underlying tile that should appear there at runtime.
+- **NPC start markers** (`0x48` or `0x49`) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and exact marker byte.
 - **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). Locations with no asterisk inherit a default per-scene spawn coordinate.
-- **Waypoint hint markers** (two paired tile values matching the dash and period characters) carry per-NPC route hints, processed by a secondary pass that runs after the player has been placed.
+- **Dash/period markers** (the dash and period tile values) are processed by a secondary pass that runs after the player has been placed. When the runtime predicate accepts them, they rewrite to nearby ordinary tile-detail values; they are not currently proven to be per-NPC route hints.
+- **Chair/seat markers** (`0xC8` and `0xC9`) are consumed by the NPC scheduler's sitting pathfinder after map load. They must remain distinguishable in the live tile buffer for the schedule processor.
 
-Marker stripping is *destructive*: by the time the load pass returns, the runtime tile buffer no longer contains marker bytes. Subsequent reads of the buffer see only ordinary terrain plus the dynamic sprite layer.
+Marker processing is in-memory only: the on-disk `.DAT` floor is unchanged. By the time normal play begins, runtime passes have harvested the markers needed for spawn/NPC state and may have rewritten selected marker cells, while visible actors are represented through the dynamic sprite layer. Some markers, notably the chair/seat pair, remain meaningful to runtime consumers after the initial load pass.
 
-The two-floor stride is uniform: floor zero is the first 1,024 bytes of the location's pair; floor one is the next 1,024. A handful of locations encode a third level (basement plus ground plus upper) by repurposing the floor-index byte's high values; the engine treats those as additional floors using the same encoding.
+The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a scene place its ground floor in the middle of nearby authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
 
 ## 4. Per-location NPC and dialogue data
 
@@ -55,15 +56,15 @@ Entering a town is a single setup pass that runs once per entry, before the per-
 
 1. **State reset.** Active-object slots one through thirty-one are freed (type byte cleared); slot zero is left for the player. The "town entered" flag and visibility-dirty flag are set; transient frame-scoped flags are cleared.
 
-2. **Tile-grid load.** The per-location map is loaded into the tile buffer (Section 3). Exactly 1,024 bytes — one floor of 32×32 — are read.
+2. **Tile-grid load.** The per-location floor page is loaded into the tile buffer (Section 3). Exactly 1,024 bytes — one floor of 32×32 — are read.
 
-3. **Marker harvest.** The load pass walks the freshly-read tile grid cell-by-cell, finds NPC start markers and asterisk spawn markers, records their coordinates into per-NPC-slot arrays and into the primary/secondary spawn slots, and overwrites the marker bytes with their underlying tile.
+3. **Marker harvest.** The load pass walks the freshly-read tile grid cell-by-cell, finds NPC start markers and asterisk spawn markers, and records their coordinates into per-NPC-slot arrays and into the primary/secondary spawn slots. Later load-time passes handle any runtime tile-buffer cleanup or conditional marker rewrites.
 
-4. **Dawn/dusk substitution.** When the current hour is in the *daytime* band (5 AM through 7 PM inclusive — the same band the lighting model uses for full daylight), a pass runs over the tile buffer applying a fixed per-tile substitution that swaps "night-form" tiles to "day-form" tiles. The maps ship in night form; the daytime pass procedurally produces the day form. At night the substitution is skipped. Section 6 describes the substitution in detail.
+4. **Dawn/dusk substitution.** The shipped maps store gate cells in their daytime, open form. When the current hour is in the night band (8 PM through 4 AM), a pass runs over the tile buffer and toggles the cell paired with each archway marker into its night, closed form. Section 6 describes the substitution in detail.
 
 5. **NPC roster load.** For each occupied NPC slot in the location's `.NPC` block, the schedule and type are loaded into the resident schedule and type tables, the dialogue index is unpacked into the per-NPC runtime block, and the NPC's runtime state is initialised by sampling the schedule for the current hour. NPCs whose initial waypoint floor matches the current floor are linked into the active-object table; off-floor NPCs exist only in the schedule tables.
 
-6. **Player attach.** The player is added to the active-object table at slot zero (the avatar) and given a phantom NPC entry — a high-indexed NPC slot whose schedule is three identical waypoints fixed at the location's per-scene entry coordinate. Section 8 describes the dual representation. The player's spawn cell is `(15, entry_y, 0)` where `entry_y` is read from a per-scene entry-Y table; X is hard-coded to fifteen and Z is the ground floor.
+6. **Player attach.** The player is added to the active-object table at slot zero (the avatar) and given a phantom NPC entry — a high-indexed NPC slot whose schedule is three identical waypoints fixed at the location's per-scene entry coordinate. Section 8 describes the dual representation. The player's default spawn cell is `(15, entry_y, 0)`: X is fixed at fifteen, Y is read from the DATA.OVL-derived `LocationEntryYTable`, and Z is the ground floor. If the map-load pass found explicit asterisk spawn markers, command handlers may use those marker slots for stair/alternate landing paths, but the player-as-NPC attach contract uses the resident entry-Y table.
 
 After these six steps return, the entry pass calls a final screen redraw and hands off to the per-turn loop. The player is in town mode until the loop's per-turn epilogue notices that the scene byte has been cleared (Section 15).
 
@@ -71,24 +72,24 @@ A *re-entry* — a player returning to a town that the engine briefly suspended 
 
 ## 6. The dawn/dusk substitution
 
-Maps ship in their night form: lamps lit, torches blazing, windows glowing. At runtime, when the current hour is in the daytime band, a load-time pass walks every cell of the freshly-loaded tile buffer and applies a fixed substitution to lit-tile bytes — turning them into their unlit-tile equivalents (unlit windows, dark torches, dim lamps). The substitution is a pure XOR of the tile byte against a small constant; the lit and unlit tile-encodings differ in exactly the bits the constant covers, so a single XOR walks one to the other.
+Town-class maps ship with gate approaches in their daytime, open form. Tile `0x87` is the marker: its `LOOK2.DAT` string names an archway, and the pass does not rewrite that marker cell. Instead, for every `0x87` it finds, the pass XORs the tile byte immediately south of the marker (`same column, row + 1`) with `0xDD`.
 
-The pass runs only on entry and on re-entry. Hour transitions across the band boundary *inside* a town are handled by the per-turn cleanup's daylight recompute on the visibility side, not by re-running the tile substitution. The visible effect is:
+The stock assets use a single authored pair: every `0x87` marker that participates in the pass has `0x44` cobble in the paired south cell on disk. Applying the pass changes that byte to `0x99`, the portcullis tile; applying it again changes the byte back to `0x44`. The routine does not validate the paired byte before XORing it, so custom maps should only place `0x87` above a byte whose `value ^ 0xDD` partner is intentional.
 
-- A player who enters at 6 AM sees the day form throughout the visit; if they stay until midnight, the lighting darkens but the tiles themselves do not flip back to lit.
-- A player who enters at 4 AM sees the night form; if they stay until 6 AM, the visibility brightens but the tiles remain in night form.
-- A player who leaves and re-enters across the band boundary sees the substitution applied or not according to the current hour at re-entry.
+On entry and floor reload, the loader runs the pass only in the night band: hours `0..4` and `20..23`. It skips the pass during the daytime band, hours `5..19`, leaving the shipped open-gate bytes in place. While the player remains in town, the normal turn epilogue watches for hour changes; when the new hour is `5` or `20`, it runs the same XOR pass against the current tile buffer. The visible effect is:
 
-The asymmetry between map and visibility avoids the mid-stay flicker that would result from re-running the substitution every hour. A modern engine that prefers continuous behaviour can re-run the substitution at the band boundary; the visible artefact is a one-frame change in lit-tile bytes without affecting any other state.
+- A player who enters at 6 AM sees open gates; if they stay until 8 PM, the boundary pass toggles those paired cells to portcullises.
+- A player who enters at 4 AM has the loader close the gates; when the clock reaches 5 AM, the boundary pass opens them again.
+- A player who leaves and re-enters across the band boundary gets the tile buffer normalized from disk according to the saved/current hour.
 
 ## 7. The per-turn loop
 
 After entry, control sits in a tight loop that reads one command per iteration and runs it to completion:
 
 1. **Read a command.** The input pipeline blocks until a keystroke arrives, applies its translation rules (key-to-command, numpad-to-direction, queue handling), and returns a single byte.
-2. **Pre-dispatch checks.** A short prologue handles meta-states (combat in progress, turn already in flight) and the cursed-by-spell timer. If the scene byte has been cleared during the previous turn — meaning the player just walked across a boundary tile — the loop breaks out (Section 15).
+2. **Pre-dispatch checks.** A short setup step handles meta-states (combat in progress, turn already in flight) and the cursed-by-spell timer. If the scene byte has been cleared during the previous turn — meaning the player just walked across a boundary tile — the loop breaks out (Section 15).
 3. **Dispatch.** Movement commands walk through a small jump table indexed by direction code; letter commands flow into the shared per-letter dispatcher described in the commands spec. Many handlers live in the town-mode overlay (Attack, Klimb); others are shared across modes (Cast, Get, Look, Talk, Use) and resolve to the appropriate cross-mode handler after a scene-byte check.
-4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop advances the time clock by one minute via the time spec's per-turn cleanup, copies the party's current map coordinates into slot zero, ticks down the curse/buff counter, and calls the NPC schedule processor with the current hour byte.
+4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, copies the party's current map coordinates into slot zero, ticks down the curse/buff counter, and calls the NPC schedule processor with the current hour byte.
 5. **Render.** If the schedule processor reported any NPC moved, or the visibility-dirty flag is set, a full render runs. Otherwise the screen is left as-is and the loop reads the next command.
 
 The dispatcher's return code decides when to skip parts of the epilogue: actions that take no turn (a cancelled command, a "What?" fallthrough, the buffer-toggle key) skip both the time advance and the schedule tick. Actions that consume more than one turn advance the clock once per inner action.
@@ -121,7 +122,7 @@ The Talk command is town-mode-only. The shared per-letter dispatcher routes T-Ta
 
 Several letter commands map to per-tile interactions that are interesting in town mode.
 
-**Look.** L-Look prompts for a direction and reads the tile at the facing cell. The tile ID is mapped through a lookup table (described in the look spec) to a short prose description loaded from the location-look data file. Look does not consume a turn.
+**Look.** L-Look prompts for a direction and samples the facing cell, then routes the terrain tile and active-object context through the shared world/town look handler. That handler resolves command-layer overlay markers to the tile being described, then either runs a special look path for wells, signs, and dungeon-mouth tiles or indexes `LOOK2.DAT` by the final tile id. Clock, shrine, and dungeon-entrance tiles print the base description and append their current context. Look does not consume a turn.
 
 **Read sign.** Tile-class encoding for sign tiles triggers a prompt that loads the sign's text from a per-location sign data file, indexed by the sign's coordinates.
 
@@ -139,7 +140,7 @@ All these interactions except Look and inspect-style actions consume a turn and 
 
 Several locations span more than one floor. A castle has a throne room above and a great hall below; a dwelling may have a basement; a keep has watchtowers above the main floor. Floor changes are mediated by stairway tiles — ladders, staircases, and occasionally trapdoors.
 
-The current floor is tracked in a single resident byte. When the player walks onto a stairway tile and triggers the climb (via K-Klimb, or automatically on certain stair tiles), the floor byte is updated, the tile buffer is reloaded with the new floor's data (running the marker-harvest and dawn/dusk passes again), the active-object table is partially reset (NPCs not on the new floor are unlinked, NPCs on the new floor are linked), and the player's slot is updated with the new Z. The schedule processor handles its own side through its Z-mismatch state machine described in the NPC schedules spec.
+The current floor is tracked in a single resident byte. When the player walks onto a stairway tile and triggers the climb (via K-Klimb, or automatically on certain stair tiles), the floor byte is updated, the tile buffer is reloaded with the new floor's data (running the marker-harvest and dawn/dusk gate-normalization passes again), the active-object table is partially reset (NPCs not on the new floor are unlinked, NPCs on the new floor are linked), and the player's slot is updated with the new Z. The schedule processor handles its own side through its Z-mismatch state machine described in the NPC schedules spec.
 
 Visibility is per-floor: the visibility producer treats the active map as the only walkable surface and computes line-of-sight only against tiles in the current floor's tile buffer. NPCs on other floors are invisible and silent.
 
@@ -176,7 +177,7 @@ NPCs whose hostile predicate is *always* true — robbers, bandits in certain ba
 
 ## 15. Exit
 
-The player leaves a town by walking onto a boundary tile — typically the same gate or threshold they entered through. The boundary is encoded in the tile-class table: a small set of tile values are flagged as exit tiles, and stepping onto one runs the exit handler, which clears the scene byte, computes the player's overworld coordinate from the per-scene entry-coordinate table, and signals the loop to break.
+The player leaves a town by walking onto a boundary tile — typically the same gate or threshold they entered through. The boundary is encoded in the tile-class table: a small set of tile values are flagged as exit tiles, and stepping onto one runs the exit handler, which clears the scene byte, computes the player's overworld coordinate from the fixed world-location coordinate tables, and signals the loop to break.
 
 The town turn loop's per-turn epilogue checks the scene byte each iteration. When the byte clears, the loop returns to the main game loop, which reloads the overworld map, restores the overworld active-object table from the on-disk overlay, and resumes overworld mode at the location's overworld cell.
 
@@ -194,23 +195,19 @@ Soft exits — combat returning to the town, sub-modes re-entering the same town
 
 **Conversation.** The Talk command hands the dialogue engine the NPC's dialogue index; the engine runs a self-contained per-NPC loop until the player exits.
 
-**Time.** Each consumed turn calls the time spec's per-turn cleanup with a one-minute increment. The cleanup advances the clock, refreshes daylight, and triggers any once-per-hour side effects.
+**Time.** Each consumed turn calls the time spec's per-turn cleanup with a one-minute increment. The cleanup advances the clock, refreshes daylight, and triggers any once-per-hour side effects. When that one-minute cleanup changes the hour to `5` or `20`, town mode also runs the dawn/dusk gate substitution against the loaded tile buffer.
 
 **Active objects.** Town mode owns the active-object table during a town visit. Entry clears it (preserving slot zero), the schedule walker fills it from the NPC roster, the per-turn loop refreshes slot zero from world-state on each iteration, and the combat framer transiently swaps it during attack handling.
 
-**Save / load.** A save inside town freezes the scene byte, the floor byte, the player position, the active-object table, and the world-state clock. On load, the engine notices the non-zero scene byte, re-runs the entry pass, and snaps the player and NPCs to saved-or-re-derived positions. The runtime NPC block is not persisted as a chunk; it is re-derived from the schedule and the saved hour, producing NPCs at their currently-scheduled location regardless of mid-route progress. The dawn/dusk pass runs at load time using the saved hour.
+**Save / load.** A save inside town freezes the scene byte, the floor byte, the player position, the active-object table, and the world-state clock. On load, the engine notices the non-zero scene byte, re-runs the entry pass, and snaps the player and NPCs to saved-or-re-derived positions. The runtime NPC block is not persisted as a chunk; it is re-derived from the schedule and the saved hour, producing NPCs at their currently-scheduled location regardless of mid-route progress. The dawn/dusk gate pass runs at load time using the saved hour.
 
 ## 17. Open questions and variations
-
-- **Exact dawn/dusk substitution sentinel.** The substitution swaps lit-tile bytes to unlit-tile bytes via a fixed XOR; the precise tile values matched and the constant used are observable from the load-pass code, but the encoding of which tile classes participate is not fully enumerated here. An engine that wants a different lighting model can replace the pass with a more general lighting layer.
 
 - **Audience-prompt logic at Lord British's Castle.** The audience-pending table is consulted on every entry, but the data flow that populates it (which quest events set which entries) is plot-dependent and not enumerated here. A modern engine should treat the table as data and drive it from the quest-flag store.
 
 - **Hidden-room mechanics.** A few locations have rooms accessible only via Push or via a quest-flag-gated tile change. There is no engine-level "hidden rooms" feature; the gating lives in the per-location tile data.
 
 - **The Y == 4 short-circuit on town entry.** The player-attach helper has a special-case path that skips the perm-loc search when the player's Y coordinate equals four. Plausibly a "returning from sub-mode" sentinel, but the exact write site has not been confirmed.
-
-- **Per-scene entry-coordinate table.** The thirty-two-byte entry-Y table gives one Y per location; X is hard-coded to fifteen. An engine that wants bidirectional per-scene entry coordinates can extend the table to two bytes per scene.
 
 - **The two paired NPC start markers.** Two adjacent tile values both serve as NPC start markers, with the low bit ignored. The intent of the low-bit distinction — facing hint, static-versus-walker — is not pinned down. The marker harvest treats them identically.
 
@@ -222,13 +219,14 @@ Soft exits — combat returning to the town, sub-modes re-entering the same town
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk substitution, and attaches the player — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
-- The per-turn loop that reads commands, dispatches, runs the schedule walker, and advances time — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
-- The per-location map loader, the marker harvest, and the dawn/dusk substitution — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
+- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and attaches the player — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
+- The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
+- The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
 - The player-as-NPC attachment helper and the phantom-NPC schedule synthesis — `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`.
 - The world-mutation primitive that links logical NPC state to active-object slots — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
 - The NPC roster loader for one location — `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md`.
 - The per-tick NPC walker invoked once per turn from the town loop — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
+- The NPC pathfinder notes that bind chair/seat marker IDs `0xC8` and `0xC9` to the sitting schedule path — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md` and `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
 - The shared per-letter command dispatcher routed by mode — `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
 - The per-turn cleanup that advances the clock and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - The location tile-grid file format and the two-floor-per-location layout — `u5-decomp/formats/maps.md`.

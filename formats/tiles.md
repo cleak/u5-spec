@@ -10,13 +10,18 @@ Both depths share an identical outer envelope and an identical container structu
 
 The full file roster covers the canonical tile atlas (`TILES`), the inventory sprite sheet (`ITEMS`), the eight monster sprite sheets (`MON0` through `MON7`), the dungeon wall billboard sets (`DNG1`, `DNG2`, `DNG3`), the font and glyph strip set (`TEXT`), the chargen panel set (`CREATE`), the universal banner panels (`ULTIMA`), the start-of-game and end-of-game cutscene frames (`STARTSC`, `ENDSC`, `END1`, `END2`), and the six story screens (`STORY1` through `STORY6`). Every file in this list ships as both `.16` and `.4`. There are no other tile-graphics files; the set is exhaustive.
 
-Every file is wrapped in an LZW envelope. After unwrap, the body is one of three small container layouts — a flat tile array, a directory of variable-shape images, or a directory of variable-shape image-and-mask sprites. The container choice is implicit per file (no tag, no magic number, no version); a reader knows which layout to apply because the file family's role is fixed. Sections 5 and 6 enumerate the layouts; Section 7 lists which files use which layout.
+Every file is wrapped in the shared Ultima V LZW envelope. After unwrap, the body is one of three small container layouts — a flat tile array, a directory of variable-shape images, or a directory of variable-shape image-and-mask sprites. The container choice is implicit per file (no tag, no magic number, no version); a reader knows which layout to apply because the file family's role is fixed. Sections 5 and 6 enumerate the layouts; Section 7 lists which files use which layout.
 
 The format carries no embedded palette. The sixteen-entry palette for `.16` is the standard IBM EGA hardware palette; the four-entry palette for `.4` is one of the standard IBM CGA hardware palettes selected by the display driver at mode set time. Both palettes are baked into the executable's display driver, not into the asset files, and a reader that wants to render the bytes faithfully must source the palette separately.
 
 ## 2. The LZW envelope
 
 Every tile-graphics file, regardless of depth or container layout, begins with a four-byte little-endian unsigned integer giving the *uncompressed* length of the body in bytes, immediately followed by the LZW-compressed body itself. There is no magic number, no version word, no flag byte, no checksum, and no envelope footer. A reader allocates a buffer of exactly the declared size and decompresses the remaining bytes into it.
+
+The same outer LZW envelope is also used by `PROPORT.PCS` and by the compressed
+`.BIT` resources. Those files have different post-LZW body layouts, specified
+in `formats/font-pcs.md` and `formats/bit.md`; this document specifies the
+post-LZW layouts for the paired graphics archive family only.
 
 The LZW dialect is the GIF variant, byte-for-byte identical to the dialect used by the Compuserve GIF87a image format that was contemporary with the game's release. Codes start at nine bits wide and grow by one bit each time the dictionary fills, capping at twelve bits. Bit packing is little-endian: the first emitted code occupies the low nine bits of the first compressed byte, and subsequent codes pack into adjacent bit positions, crossing byte boundaries freely. The dictionary holds up to four thousand ninety-six entries.
 
@@ -104,6 +109,11 @@ The image sub-block follows the Section 5.2 image format — width word, height 
 
 The mask is row-major, packed as a flat run of bits across the width times height pixel grid with no per-row stride. A set bit means "this pixel is transparent — do not draw the corresponding image pixel"; a cleared bit means "draw the image pixel". Implementations use the mask to composite sprites onto background tiles without requiring a designated colour-key value in the image plane.
 
+Local asset sanity over `ITEMS` and `MON0` through `MON7` in both `.16` and
+`.4` forms confirms the polarity: paired image and mask dimensions match for
+every shipped sprite slot, and set mask bits correspond to transparent image
+regions rather than visible silhouette pixels.
+
 The sixteen-bit offset table sets a hard ceiling of sixty-five thousand five hundred thirty-five bytes for the body; every sprite-sheet file fits comfortably under this limit (the largest sprite sheet is around ten thousand bytes uncompressed). Slot count is always even by construction — the count word equals twice the sprite count.
 
 The five-bits-per-pixel (`.16` plus mask) and three-bits-per-pixel (`.4` plus mask) totals explain why the `.16` and `.4` sprite-sheet sizes are not in 2:1 ratio: the depth-dependent image plane scales 2:1, but the depth-independent mask plane does not. The observed ratio across the sprite-sheet family is approximately five over three (about 1.67), matching the predicted ratio.
@@ -128,7 +138,7 @@ The full set of tile-graphics files, with their container layouts, sub-image cou
 
 Several roles deserve dedicated commentary.
 
-The **tile atlas** is the heart of the rendering pipeline. Every overworld cell, every interior cell, every dungeon floor cell renders by indexing one of these five hundred twelve tiles. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, the dungeon-level grids, and the active-object tile bytes.
+The **tile atlas** is the heart of the two-dimensional rendering pipeline. Every overworld cell, town/interior cell, combat-arena terrain cell, and active-object sprite resolves to one of these five hundred twelve tiles. First-person dungeon floors are the exception: `DUNGEON.DAT` uses its own packed-nibble cell encoding and the dungeon renderer draws wireframe wall art rather than indexing the world tile atlas for each floor cell. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, combat arenas, and active-object tile bytes.
 
 The **inventory sprites** in `ITEMS` are larger-than-tile artwork shown on the inventory and trade screens. The ten sprites are paired into the standard image-and-mask layout. Sprite dimensions vary — the larger ones are around forty by eighty pixels — and the iconography is rendered at a higher resolution than world tiles to fill the inventory panel.
 
@@ -148,13 +158,13 @@ The four-entry `.4` palette is one of the IBM CGA hardware palettes set by the C
 
 The fact that no palette is embedded means a reader extracting the bytes to a portable image format must source the palette from the executable (technically from the resident data and the CGA or EGA driver). The repository's tile-graphics analysis notes carry the canonical sixteen-entry RGB list for the EGA palette; readers targeting visual fidelity should reuse it rather than re-deriving from the raw VGA register dumps.
 
-The rendering pipeline that consumes the unwrapped pixels is described in `systems/rendering.md`; this format spec restricts itself to the on-disk arrangement.
+The rendering pipeline that consumes the unwrapped pixels is distributed across the mode specs (`systems/overworld.md`, `systems/town-mode.md`, `systems/dungeon-mode.md`, `systems/text-output.md`, and `systems/animation.md`); this format spec restricts itself to the on-disk arrangement.
 
-## 8. Worked example — `TILES.16`'s leading bytes
+## 8. Worked example — `TILES.16` container layout
 
-The first bytes of `TILES.16` look like this:
+`TILES.16` uses the shared LZW container layout:
 
-- Bytes zero through three: the four-byte little-endian uncompressed length. For a five-hundred-twelve-tile EGA atlas with each tile costing one hundred twenty-eight bytes, the value is sixty-five thousand five hundred thirty-six (`00 00 01 00`).
+- Bytes zero through three: the four-byte little-endian uncompressed length. For a five-hundred-twelve-tile EGA atlas with each tile costing one hundred twenty-eight bytes, the decoded length is sixty-five thousand five hundred thirty-six bytes.
 - Bytes four onward: the variable-width LZW codes. The first nine-bit code occupies the low nine bits of byte four and the low bit of byte five; subsequent codes pack into adjacent bit positions, growing to ten bits when the dictionary fills its first one hundred twenty-six user slots, and so on through twelve bits.
 
 A reader processes the file in three stages:
@@ -173,8 +183,8 @@ For `TILES.4`, the procedure is identical except the declared length is thirty-t
 
 ## 9. Cross-references
 
-- The display drivers that consume this format and translate it to scanout — `systems/rendering.md` (a separate system spec).
-- The world tile-index-to-attribute catalogue — the per-tile walkability and animation flags consumed by movement and rendering — `systems/tile-attributes.md` (a separate system spec).
+- The display and mode systems that consume this format and translate it to visible output — `systems/overworld.md`, `systems/town-mode.md`, `systems/dungeon-mode.md`, `systems/text-output.md`, and `systems/animation.md`.
+- The world tile-index-to-attribute catalogue — the per-tile walkability and animation flags consumed by movement and rendering — `catalogs/tile-catalog.md`.
 - The location tile grids that index into the world tile atlas — `formats/location-dat.md`.
 - The active-object table whose tile bytes index into the world tile atlas — `systems/active-objects.md`.
 - The text-output pipeline that renders glyphs by slicing the `TEXT` strips — `systems/text-output.md`.
@@ -187,8 +197,6 @@ For `TILES.4`, the procedure is identical except the declared length is thirty-t
 The format is verified at the structural level (LZW envelope, directory layouts, image and mask sub-block headers, depth-dependent row strides) and at the byte-budget level (every container's expected size matches the declared LZW length exactly, including the sprite-and-mask family's deviation from the 2:1 inter-depth ratio). The following points remain open.
 
 - **Per-screen palette overrides.** The CGA palette is set by driver state at mode-switch time and may differ between scenes. Whether any specific scene transition triggers a palette change — and which scenes carry which palette — is a property of the CGA driver and the scene-mode initialisers, not of the file format. A reader that wants to faithfully render the CGA artwork must either source the active palette from the running engine or assume one of the standard CGA mode-four palettes per scene.
-
-- **Mask polarity sanity check.** The convention is "set bit = transparent, cleared bit = draw"; this matches the byte-budget arithmetic (a sprite plus its mask plus two image-block headers exactly fills the inter-offset gap). A visual sanity check against an actual sprite has not been performed; an implementer should verify on a known sprite (e.g. a monster against a known background) before committing.
 
 - **Per-strip glyph ranges in `TEXT`.** The six strips' widths and heights are known, but the assignment of strips to character sets — printable ASCII, runic glyphs, status-bar bitmaps, party-status icons — is a property of the text-output overlay's slicing logic, not of the file format. A content tool that wants to extract the printable font as a per-character bitmap must read the text-output overlay's slicing parameters.
 
@@ -207,6 +215,9 @@ The format is verified at the structural level (LZW envelope, directory layouts,
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
 - The first-pass survey of every tile, sprite, font, and screen-panel file in both depths, the LZW envelope identification and verification, the three container layouts, the sprite-and-mask budget arithmetic, and the cross-file size and ratio audits — `u5-decomp/formats/tile-graphics.md`.
+- Fresh local sprite-mask verification over `ITEMS` and `MON0` through `MON7`
+  in both `.16` and `.4` forms confirmed matching image/mask dimensions and
+  the "set bit = transparent" polarity.
 - The display drivers' byte-by-byte unpacking of the chunky packed (EGA) and packed two-bit (CGA) row data into hardware framebuffer form — `u5-decomp/code-inventory.md` (the `EGA.DRV`, `CGA.DRV`, `HERC.DRV`, and `TANDY.DRV` driver entries).
 - The text-output overlay's slicing of the `TEXT` strips into per-character glyphs — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and the text-output overlay's per-character draw function.
 - The world tile attribute table held in the resident data slab — referenced by the location tile grids' decoded tile indices — `u5-decomp/formats/data-ovl.md`.

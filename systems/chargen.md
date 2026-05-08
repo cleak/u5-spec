@@ -20,12 +20,12 @@ The hand-off is a one-way call: chargen runs in its own scope, never returns con
 
 Ultima V ships with a pair of factory-seed files that hold the starting world state for a brand-new game:
 
-- `INIT.GAM` — a 4,192-byte image with all sixteen party-roster slots pre-populated. Records 1 through 15 are the canonical companion roster (Shamino, Iolo, Mariah, Geoffrey, Jaana, Julia, Dupre, Katrina, Sentri, Gwenno, Johne, Gorn, Maxwell, Toshi, Saduj). Their names, classes, genders, stats, equipment, and inventory are all baked into this file. Record 0 is the avatar slot — name field empty, class set to Avatar, all other stat bytes zero.
+- `INIT.GAM` — a 4,192-byte image with all sixteen party-roster slots pre-populated. Records 1 through 15 are the canonical companion roster (Shamino, Iolo, Mariah, Geoffrey, Jaana, Julia, Dupre, Katrina, Sentri, Gwenno, Johne, Gorn, Maxwell, Toshi, Saduj). Their names, classes, genders, stats, equipment, and inventory are all baked into this file. Record 0 is the Avatar seed slot: name field empty, class set to Avatar, status good, and the non-questionnaire fields already populated.
 - `INIT.OOL` — a 256-byte image of the surface map's pre-placed movable objects (a skiff and a small handful of other markers).
 
 Both files are read-only seeds shipped with the game. They are never overwritten at runtime; the engine only ever reads them. The corresponding read/write working files are `SAVED.GAM` (4,192 bytes) and `SAVED.OOL` (512 bytes — surface concatenated with underworld). The save system writes the latter pair on quit and re-reads them on load.
 
-The character-creation routine begins by reading `INIT.GAM` whole into the in-memory save image. After this read, every byte of the eventual `SAVED.GAM` file is in place except the avatar's record; chargen will overwrite a small fixed slice of that record (eight name bytes, one gender byte, three stat bytes, one MP byte) and leave everything else — companion records, inventory, world coordinates, NPC met/kill flags, shrine quest flags, calendar, weather, vehicle state — exactly as the seed file shipped them.
+The character-creation routine begins by reading `INIT.GAM` whole into the in-memory save image. After this read, every byte of the eventual `SAVED.GAM` file is in place except the Avatar customisation fields; chargen will overwrite a small fixed slice of that record (eight entered-name bytes, one gender byte, three stat bytes, one MP byte) and leave everything else — the Avatar's class, status, HP, experience, level byte, equipment slots, all companion records, inventory, world coordinates, NPC met/kill flags, shrine quest flags, calendar, weather, and vehicle state — exactly as the seed file shipped them.
 
 This "clone the template" pattern is why the campaign begins in a known initial state. The party's starting position, gold, food, keys, gems, equipped weapons, time of day, and weather are not chosen by the player; they are dictated by `INIT.GAM`. Chargen's job is to personalise one record, not to construct a fresh game.
 
@@ -35,7 +35,7 @@ This "clone the template" pattern is why the campaign begins in a known initial 
 
 After the seed is loaded, chargen renders two prompts in sequence.
 
-**The name prompt.** The text "By what name shalt thou be known?" is printed in the proportional font, and a free-text input prompt is opened with a maximum length of eight characters. The avatar's name is written directly into the seed-loaded save image at the eight bytes that constitute the avatar record's name field. Names shorter than eight characters are null-padded; names exactly eight characters fill the field with no terminator (the field is fixed-width). The name prompt accepts printable ASCII; backspace deletes; Enter terminates.
+**The name prompt.** The text "By what name shalt thou be known?" is printed in the proportional font, and a free-text input prompt is opened with a maximum length of eight characters. The avatar's name is written directly into the first eight bytes of the seed-loaded Avatar name field; the save record has a fixed nine-byte name field, and the ninth byte remains seed padding for questionnaire-created names. Names shorter than eight characters are null-padded; names exactly eight characters fill the entered-name slice with no terminator. The name prompt accepts printable ASCII; backspace deletes; Enter terminates.
 
 If the player presses Enter at the empty prompt — a zero-length name — chargen takes its **abort path**. It skips the rest of the flow, leaves `SAVED.GAM` on disk untouched, and returns to the intro menu. The in-memory save image will have been clobbered with the seed contents (since the read happened before the prompt), but that is harmless because nothing has written it back to disk and the next "Journey Onward" or "Create New Character" attempt will start over from the working file.
 
@@ -47,7 +47,7 @@ After both prompts are answered, chargen sets up a full-screen text rectangle fo
 
 The questionnaire's text content lives in `QUESTION.DAT`, a 7,746-byte data file shipped with the game. It is laid out as thirty NUL-terminated text records in plain ASCII, sharing two lightweight markup conventions with the intro narrative file: a leading `{` marking the start of a paragraph (consumed by the renderer as a paragraph-break sigil that produces no glyph), and `_` anywhere mid-word as a soft hyphen — a syllable-break the line-wrapper may use as a wrap candidate but which produces no glyph otherwise.
 
-The thirty records decompose as: record 0, the gypsy-wagon arrival narrative (about 800 bytes); record 1, the gypsy's "So be it!" invitation (about 900 bytes); and records 2 through 29, the twenty-eight virtue-pair dilemmas, each a short prose paragraph (150 to 300 bytes) asking the player to choose between an option A and an option B. Twenty-eight is the count of unique unordered pairs of eight virtues, and the records cover exactly those twenty-eight pairings. The mapping from pair to record is held in an eight-by-eight symmetric table in the data segment: indexing by the smaller-numbered virtue along one axis and the larger-numbered along the other yields the byte offset of that pair's record. The diagonal cells are zero (no virtue paired with itself).
+The thirty records decompose as: record 0, the gypsy-wagon arrival narrative (about 800 bytes); record 1, the gypsy's "So be it!" invitation (about 900 bytes); and records 2 through 29, the twenty-eight virtue-pair dilemmas, each a short prose paragraph (150 to 300 bytes) asking the player to choose between an option A and an option B. Twenty-eight is the count of unique unordered pairs of eight virtues, and the records cover exactly those twenty-eight pairings. The mapping from pair to record is held in an eight-by-eight symmetric table in the resident data image: indexing by the smaller-numbered virtue along one axis and the larger-numbered along the other yields the selected record. The diagonal cells are zero and unreachable because no virtue is paired with itself. The public record-ordinal mapping is listed in `formats/question-dat.md`.
 
 The file is read in slices during chargen, never as a whole. Records 0 and 1 are loaded at the start for the gypsy scene; the remaining seven slices are one-per-question, with the file seek calculated from the pair table. The game opens the file, seeks to the requested record, reads two kilobytes (more than any record but small enough for the scratch buffer), and the proportional-font renderer reads up to the NUL terminator. The same scratch buffer is reused across all reads.
 
@@ -81,17 +81,17 @@ Two flag arrays support the elimination logic:
 - The **selected-this-round** array — one byte per virtue — is set when a virtue is drawn for any question in the current round. It prevents a virtue from being asked twice in the same round even if the random number generator picks it again. It is cleared by the chargen driver between rounds, so winners from round 1 are eligible again in round 2, and round-2 winners are eligible again in round 3.
 - The **lost-forever** array — one byte per virtue — is set on the loser of each question. It persists across rounds; once a virtue is eliminated, it cannot be drawn again until the next chargen run.
 
-A virtue is eligible for a question only if both arrays are clear for it. The random virtue-picker is rejection-sampled — it draws a random index in zero through seven and rolls again if the chosen virtue is flagged. With four eligible virtues drawn two at a time per round, the picker never has fewer than two candidates and so cannot loop forever.
+A virtue is eligible for a question only if both arrays are clear for it. The random virtue-picker is rejection-sampled — it draws a random index in zero through seven and rolls again if the chosen virtue is flagged. When a virtue is accepted, the picker immediately marks it selected for the current round before returning. Because each question calls the picker twice, the second draw cannot return the first draw's virtue; self-pairings are unreachable. With four eligible virtues drawn two at a time per round, the picker never has fewer than two candidates and so cannot loop forever.
 
 For each question, after the two virtues are drawn, chargen sorts them by index: smaller-numbered virtue gets the "A" slot (top), larger-numbered the "B" slot (bottom). The internal record of which random draw ended up as the smaller number lets the engine map the player's A/B keypress back to winner/loser. The question record is loaded from `QUESTION.DAT` at the offset given by the symmetric pair table (which makes draw order irrelevant to question selection), and the two option tiles are drawn at fixed-per-virtue screen positions.
 
-The player presses A or B; any other key loops silently. On a valid answer, chargen adds the winner virtue's three stat deltas into running totals (INT, DEX, STR) and sets the loser's lost-forever flag. The winner remains eligible for subsequent rounds; the loser does not.
+The player presses A or B; any other key loops silently. On a valid answer, chargen adds the winner virtue's three stat deltas into running totals (INT, DEX, STR) and sets the loser's lost-forever flag. The loser contributes no stat deltas, including in the final round. The winner remains eligible for subsequent rounds; the loser does not.
 
 ## 7. Stat assignment
 
 After the seven questions complete, chargen converts the running stat totals into the avatar's STR, DEX, INT, and MP fields. The INT total is written directly into the INT byte; the same value is also written into the MP byte (a freshly created avatar's magic points equal intelligence — subsequent gameplay depletes and restores MP independently). The DEX total is written directly into the DEX byte. The STR total is written after a one-step floor: if below twenty, it is replaced with twenty.
 
-The floor appears to always fire. The maximum STR contribution from any virtue is two, and seven questions of two-per-question contribute at most fourteen, well below twenty. So in practice every avatar emerges with exactly STR twenty, and STR is the one stat the questionnaire does not actually influence. INT and DEX, by contrast, do reflect the player's choices — the spread is small (low double-digits at the high end) but real.
+The floor always fires for the questionnaire path. The maximum STR contribution from any virtue is two, and seven questions of two-per-question contribute at most fourteen, well below twenty. So every newly-created questionnaire avatar emerges with exactly STR twenty, and STR is the one stat the questionnaire does not influence. INT and DEX, by contrast, do reflect the player's choices — the spread is small (low double-digits at the high end) but real.
 
 The avatar's class field is **not written by chargen**. The class byte stays at whatever `INIT.GAM` shipped — the ASCII letter `A`, denoting "Avatar". Despite the eight-virtues-eight-classes parallel from Ultima IV, Ultima V's chargen does not pick a Fighter / Bard / Mage / Druid / Tinker / Paladin / Ranger / Shepherd class for the avatar based on the questionnaire winner. The avatar is always class Avatar. The class letters that *do* appear in the save file belong to the companion records (Shamino is a Ranger, Iolo a Bard, Mariah a Mage, and so on) — all preset by `INIT.GAM` and not modified by chargen.
 
@@ -99,29 +99,46 @@ The questionnaire is therefore a **stat-rolling mechanism** rather than a class-
 
 ## 8. Initial inventory and world state
 
-Because chargen seeds the save from `INIT.GAM` and customises only a handful of bytes in the avatar's record, every other piece of the starting state is dictated by the seed file: the sixteen-slot party roster (avatar plus fifteen companions, with classes, genders, stats, and equipment all preset), inventory (food, gold, keys, gems, torches, weapons, armor, runes, spells learned, reagents, quest-item flags), starting position (a known town tile in Britannia, with date and time-of-day baked in), and the all-zero NPC met/kill bitmaps, shrine flags, dungeon-map dump, and codex-page flags. The seeded surface-map object overlay places a small handful of pre-positioned objects (a skiff and a few cargo-shaped tiles) at fixed coordinates.
+Because chargen seeds the save from `INIT.GAM` and customises only a handful of
+bytes in the Avatar's record, every other piece of the starting state is
+dictated by the seed file: the sixteen-slot party roster (Avatar plus fifteen
+companions, with classes, genders, stats, and equipment all preset), inventory,
+starting position, NPC met/kill bitmaps, shrine flags, dungeon-map dump, and
+codex-page flags.
+
+For a questionnaire-created Avatar, the seed supplies current HP 60, maximum HP
+150, experience 2, the unset-level sentinel, class Avatar, and good status; the
+questionnaire supplies only name, gender, STR, DEX, INT, and MP. The same seed
+starts the party with food 63, gold 150, keys 2, gems 0, torches 4, magic powder
+0, and reagent counters of black pearl 4, blood moss 6, garlic 7, ginseng 6,
+mandrake 0, nightshade 3, spider silk 0, and sulfurous ash 0. The travelling
+party size is 3, the save clock starts at year 139, month 4, day 5, 08:35, and
+the starting map tuple is scene 13 (Iolo's Hut), saved-scene scratch 0, floor/Z
+0, X 15, Y 15. The seeded surface-map object overlay places a small handful of
+pre-positioned objects (a skiff and a few cargo-shaped tiles) at fixed
+coordinates.
 
 A modern reimplementation that wants a fresh-game start without shipping `INIT.GAM` as an opaque blob has two reasonable choices: ship the seed unchanged (small, read-only, easiest path to behaviour-parity), or hand-author equivalent data tables in source. The seed's contents are not generated by any code path; they were authored at Origin and shipped frozen.
 
 ## 9. Persistence
 
-Once the avatar's record has been customised, chargen commits the result to disk in a single sequence: it reads `INIT.OOL` (the surface-map object overlay) into a scratch buffer, zeros a second scratch buffer (the underworld overlay, all zero because the seed places no underworld objects), writes the 512-byte `SAVED.OOL` from the two scratches concatenated, and finally writes the 4,192-byte `SAVED.GAM` from the in-memory save image. Every companion record, every inventory byte, every world flag — all bytes the seed shipped — are written verbatim alongside the eight bytes of avatar customisation.
+Once the avatar's record has been customised, chargen commits the result to disk in a single sequence: it reads `INIT.OOL` into one object-overlay scratch buffer, prepares a second blank plane buffer, writes a 512-byte `SAVED.OOL` companion, and finally writes the 4,192-byte `SAVED.GAM` from the in-memory save image. Every companion record, every inventory byte, every world flag — all bytes the seed shipped — are written verbatim alongside the eight bytes of avatar customisation.
+
+For consumers of the file, the canonical `SAVED.OOL` interpretation remains the one specified in `formats/ool.md`: surface plane first, underworld plane second. The chargen writer's scratch-buffer ordering still needs a runtime capture before this document can say whether the original writes that canonical order directly or produces an equivalent file that the next Journey Onward load/mirror pass normalises.
 
 Both writes are unconditional once the player has confirmed a name. There is no "are you sure?" Y/N prompt; commit is implicit in completing the questionnaire.
 
-After the writes, chargen sets the scene byte to "intro mode" and returns. The intro overlay re-runs its menu with the just-written save now present on disk; the player must press the "Journey Onward" key explicitly to load it. The save writer used at chargen time is specific to chargen — distinct from the Q-Quit save routine used during normal gameplay. Both produce byte-identical output (both are writing the canonical `SAVED.GAM` format), but they live in different overlays because of the source-side overlay split. Neither writer touches `INIT.GAM` or `INIT.OOL`, which are read-only seeds.
+After the writes, chargen sets the scene byte to "intro mode" and returns. The intro overlay re-runs its menu with the just-written save now present on disk; the player must press the "Journey Onward" key explicitly to load it. The save writer used at chargen time is specific to chargen — distinct from the resident Q save command used during normal gameplay. Both write the same `SAVED.GAM` byte-image format, but they live in different overlays because of the source-side overlay split. Neither writer touches `INIT.GAM` or `INIT.OOL`, which are read-only seeds.
 
-Because the chargen writer overwrites the whole save image, any existing `SAVED.GAM` is destroyed at this step. A player who already has a save in the slot and chooses "Create New Character" by accident loses that save without warning. (See Section 11 for the abort-path's effect on the on-disk save.)
+Because the chargen writer overwrites the whole save image, any existing `SAVED.GAM` is destroyed at this step. A player who already has a save in the slot and chooses "Create New Character" by accident loses that save without warning. If the player aborted earlier at the empty-name prompt, this commit step is never reached and the on-disk save is left untouched.
 
 ## 10. Transfer from Ultima IV
 
-The intro menu offers a third path: instead of running the questionnaire, the player can transfer their completed Ultima IV avatar's stats forward by selecting "Transfer from Ultima IV" instead of "Create New Character". The transfer flow is implemented in the intro overlay rather than the proportional-font overlay, but it shares the same goal — produce a populated `SAVED.GAM` from `INIT.GAM` plus a small delta.
+The intro menu offers a third path: instead of running the questionnaire, the player can transfer their completed Ultima IV avatar's stats forward by selecting "Transfer from Ultima IV" instead of "Create New Character". The transfer flow is implemented in the intro overlay rather than the proportional-font overlay, but it shares the same goal: produce a populated `SAVED.GAM` plus `SAVED.OOL` from Ultima V seed data and a small Avatar-record delta.
 
-The transfer reads the U4 saved-game files from a designated transfer disk (the player is prompted to insert the disk when the path begins), parses the U4 character record, and copies a subset of the U4 stats forward into the new U5 avatar's record. The exact mapping — which U4 fields become which U5 fields, how Ultima IV's eight-class breakdown projects onto Ultima V's avatar-only model, and whether levels or experience are translated as well as primary stats — has not been fully decompiled and is open. What is observed is:
+At v1 depth, the transfer source filename is pinned as `PARTY.SAV` on the Ultima IV player disk. The destination baseline comes from Ultima V's transfer seed pair, `BRIT.GAM` and `BRIT.OOL`, not from the current `SAVED.GAM`. The transfer path uses the standard disk-swap/retry dance to read the predecessor save and then return to Ultima V media before writing the resulting save. The exact mapping - which U4 fields become which U5 fields, how Ultima IV's eight-class breakdown projects onto Ultima V's avatar-only model, and whether levels or experience are translated as well as primary stats - is owned by `systems/u4-transfer.md` and remains open.
 
-- The transfer flow reads two files: `BRIT.GAM` (a Britannia-state seed structurally identical to `INIT.GAM`) and `BRIT.OOL`. It uses the standard Ultima V disk-swap dance to handle floppy-disk media — prompt the user to insert the U4 disk, read what it needs, prompt for the U5 disk, and proceed.
-- It renders a character-roster screen showing all sixteen party slots with their current stats, equipment, and status, presumably so the player can confirm what is being transferred.
-- It supports both an "abort" path (return to menu without writing) and a "commit" path (proceed into Britannia with the transferred avatar).
+The observed transfer path renders a character-roster/status preview, lets the player confirm or replace name/gender, and supports both an abort path and a commit path. Abort returns to the intro menu without writing; commit writes the standard Ultima V save pair and then returns through the intro flow, where Journey Onward performs the normal load.
 
 Both the questionnaire path and the transfer path produce a `SAVED.GAM` in the same on-disk format, so the rest of the engine sees no difference between them. Players who arrive into Britannia via either path see the same town tile, the same companion roster, and the same calendar; only the avatar's stats and (for transfers) name and gender differ.
 
@@ -129,27 +146,22 @@ Both the questionnaire path and the transfer path produce a `SAVED.GAM` in the s
 
 Several aspects of the chargen flow are firm; others remain to be confirmed against in-game observation.
 
-- **Whether the STR floor of twenty ever fails to fire.** The maximum possible STR tally over seven questions is fourteen — below twenty — so the floor appears to always fire, making STR an effectively constant twenty on every run and the player's choices affect only INT, DEX, and (derived) MP. Confirmation against the delta tables is done; an in-game check would catch any code path that bypasses the floor.
-
-- **Whether the round-3 loser's deltas are skipped or added.** Rounds 1 and 2 ignore the loser's deltas; round 3's implementation is the same, but verify no late code path adds the round-3 loser's contribution as a "consolation" before writeout.
-
-- **The exact eight-by-eight question-record table contents.** The pair-to-record mapping is held in a 128-byte symmetric table; spot-checks confirm a handful of pairings, but a full decoded transcript of every (i, j) cell would supplement the spec.
-
 - **The on-disk byte order of `SAVED.OOL` after chargen.** The seed `SAVED.OOL` has its surface overlay in the first 256 bytes and zeros in the second 256. Reading the chargen writer, the buffer it composes appears to have the opposite order. Either the writer's two scratch-buffer addresses combine in a way that has been read incorrectly, or chargen produces a different byte order than the shipping seed. A single in-DOSBox capture immediately after chargen would resolve it.
 
-- **The abort path's effect on an existing `SAVED.GAM`.** Pressing Enter at the empty name prompt aborts before writing. The on-disk save is therefore preserved, but the in-memory image has been clobbered with the seed; this is harmless because the engine only reads from disk when "Journey Onward" is selected. Verify by triggering the abort with an existing save and confirming the file is intact.
+- **Transfer class mapping.** Chargen itself never writes the class byte; a
+  questionnaire-created avatar remains class Avatar. The unresolved class
+  question belongs only to the Ultima IV transfer path, where the transfer UI
+  may display or normalise an imported class before commit.
 
-- **Whether the avatar's class can ever become anything other than Avatar.** Chargen never writes the class byte. The transfer flow may overwrite it with the U4 character's class — pending decomp of the transfer's class translation.
+- **Pacing and interruption of the gypsy paragraphs.** The renderer's paragraph-pacing convention is "render one record, wait for any keypress, advance"; the questionnaire follows the same model with A/B as the advance keys. The analyzed chargen flow treats the two gypsy paragraphs as any-key advances, with no record-local cancel path.
 
-- **Pacing and interruption of the gypsy paragraphs.** The renderer's paragraph-pacing convention is "render one record, wait for any keypress, advance"; the questionnaire follows the same model with A/B as the advance keys. Whether the gypsy paragraphs accept escape as a cancel is open; the observed behaviour is "any key advances".
+- **`BRIT.OOL`/`UNDER.OOL` lifecycle.** The chargen writer does not appear to refresh either per-plane mirror; it writes only `SAVED.OOL` and `SAVED.GAM`. The standard load path later refreshes both per-plane mirrors from `SAVED.OOL`, while the in-game save path stages through those files and conditionally writes the underworld mirror. This belongs to the save/load system rather than chargen; it is flagged here only because the filenames overlap.
 
-- **`BRIT.OOL`/`UNDER.OOL` mirror-write behaviour.** A recent finding suggests the in-game save/load path mirror-writes the seed alongside the working file under some conditions and mirror-reads on load. The chargen writer does not appear to do this — it writes only `SAVED.OOL` and `SAVED.GAM`. The mirror behaviour belongs to the in-game save/load path rather than chargen; flagged here because the filenames overlap.
-
-- **The avatar's seeded starting equipment, level, HP, and experience.** All taken from `INIT.GAM` unchanged. A full enumeration of the seed avatar's starting items belongs in the save-file format spec.
+- **The Avatar's seeded equipment-slot interpretation.** HP, maximum HP, experience, level sentinel, class, and status are taken from `INIT.GAM` unchanged and are now documented in `formats/saved-gam.md`. The exact item mapping for the preserved equipment-slot bytes still belongs in the save-file and item-catalog specs.
 
 ## 12. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions and format dissections in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, byte-level structure tables, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - The chargen entry point, the eight-phase flow, the abort path, the per-virtue stat-delta tables, the seed file relationships, the gender encoding, the class byte's preservation, and the STR floor — derived from `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 - The per-question logic, the random-draw sort into A/B slots, the symmetric eight-by-eight pair-to-record table, the tournament's three-round structure, and the two flag arrays — derived from `u5-decomp/functions/FONT_OVL/0x09C8_questionnaire_iter.md`.
@@ -161,3 +173,6 @@ The behaviour described here was derived by reading the disassembly notes for th
 - The in-game save/quit writer (referenced for context; the chargen writer is a separate path) — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`.
 - The `QUESTION.DAT` file's thirty-record layout and the markup conventions shared with the intro narrative — derived from `u5-decomp/formats/data-tables.md`.
 - The `SAVED.GAM` image layout, the 32-byte character record fields, the seed-file shipping equivalences, and the gender-byte encoding — derived from `u5-decomp/formats/saves.md`.
+- The fresh-seed supplies, reagent counters, clock, and location tuple were
+  cross-checked against a clean local asset image using the public save-field
+  layout, without copying raw seed bytes.

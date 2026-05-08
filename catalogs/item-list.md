@@ -11,7 +11,7 @@ This catalog covers things the player can carry, equip, buy, consume, find, or b
 - **Spell stock**: raw reagents and pre-mixed spell charges. The full spell list lives in `catalogs/spell-list.md`; this catalog treats spells only as inventory stock.
 - **Vehicles**: horses, ships, skiffs, magic carpets, balloons, and special wish vehicles.
 
-Confidence varies by field. Names and broad categories are high confidence because they come from resident name pools, inventory narration strings, save-image categories, and the Z-stats/equipment refusal strings. Behaviour is medium confidence for items with traced command handlers, such as reagents, keys, torches, gems, vehicles, and the major quest items. Numeric stats are mostly open: weapon damage, armour class, weight, strength thresholds, exact shop prices, sell-back formulas, item IDs, tile IDs, and per-class equipment compatibility have not been fully decoded into a clean catalog.
+Confidence varies by field. Names and broad categories are high confidence because they come from resident name pools, inventory narration strings, save-image categories, and the Z-stats/equipment refusal strings. Behaviour is medium confidence for items with traced command handlers, such as reagents, keys, torches, gems, vehicles, and the major quest items. Numeric stats are mostly open: weapon damage, armour class, weight, strength thresholds, exact shop prices, item IDs, tile IDs, and per-class equipment compatibility have not been fully decoded into a clean catalog.
 
 ## 2. Inventory model
 
@@ -40,17 +40,17 @@ The active-object table is the third inventory-adjacent store. Vehicles and drop
 | Tools and commodities | Keys, gems, torches, magic powder | Shared counters | Guild shops, treasure, scripted rewards | Exact caps and some use effects |
 | Reagents | Sulfur Ash, Ginseng, Mandrake | Eight shared counters | Herbalists, treasure, harvesting | Per-vendor price table not transcribed |
 | Spell charges | Forty-eight spell stocks | One counter per spell | M-Mix command | Some charge cap/refund details cross-system |
-| Equipment | Weapons, armour, helms, shields, rings, amulets | Inventory counts plus character equipment slots | Arms shops, treasure, drops | Damage, armour value, weight, class restrictions, price |
+| Equipment | Weapons, armour, helms, shields, rings, amulets | Forty-eight item-id keyed counters plus character equipment slots | Arms shops, treasure, drops | Damage, armour value, weight, class restrictions, price |
 | Scrolls and potions | Spell-code scrolls, colored potions | Shared counters or item slots | Treasure, shops or scripted finds | Exact use effects and item ordering |
 | Quest and utility items | Moonstone, Crown, Sceptre, Shards | Shared flags/counters | Scripted finds and story events | Full use-item effect map |
-| Vehicles | Horse, ship, skiff, magic carpet, balloon | Active-object records plus vehicle state | Seed objects, brokers, special finds | Full vehicle byte table and purchase prices |
+| Vehicles | Horse, ship, skiff, magic carpet, balloon | Active-object records plus party transport state | Seed objects, brokers, special finds | Exact numeric marker subranges, terrain rules, and purchase prices |
 
 ## 4. Currency, tools, and commodities
 
 | Item | Type | Known role | Gaps |
 |------|------|------------|------|
-| Gold | Currency | Shared party money. Shops debit it; treasure and sale paths credit it. | Exact treasure generation and all maximum-display rules. |
-| Food | Provision | Shared food stock. Time/rest systems consume it; food merchants buy and sell it. | Carrying-capacity formula and per-merchant prices. |
+| Gold | Currency | Shared party money. Shops debit it; treasure and reward paths credit it. | Exact treasure generation and all maximum-display rules. |
+| Food | Provision | Shared food stock. Time/rest systems consume it; tavern and meal-counter flows are the confirmed shop-adjacent surface. | Food carry cap, per-meal/rest consumption, and any exact food-pricing path beyond tavern/meal flows. |
 | Keys / Skull Keys | Tool | Used by lock and door interactions. Failed lockpicks can break a key. Guild shops sell key stock. | Exact split between ordinary keys, skull keys, and odd keys. |
 | Odd Key | Quest/tool | Inventory narration distinguishes an odd key from ordinary keys. | Which lock or quest gate consumes it. |
 | Gems | Tool | The command verb identifies a gem-view action; shops sell gems. | Exact map reveal radius, whether a gem is consumed, and mode restrictions. |
@@ -128,7 +128,13 @@ The equipment list below is the currently derivable master list. The row order i
 
 ## 6. Reagents and spell stock
 
-Raw reagents are party-shared counters. The M-Mix command reads the eight raw reagent counters, lets the player select a reagent set and quantity, and compares the selected set to the recipe for the chosen spell. A matching recipe creates pre-mixed spell charges; a wrong recipe consumes the selected reagents but creates no charges. Spell charge counters are capped at 99 in the current command note.
+Raw reagents are party-shared counters. The M-Mix command reads the eight raw
+reagent counters, shows only nonzero reagent counters in its selection list,
+lets the player select a reagent set and nonzero quantity, and compares the
+selected set to the recipe for the chosen spell. A matching recipe creates
+pre-mixed spell charges; a wrong recipe consumes the selected reagents but
+creates no charges. Spell charge counters are capped at 99 in the current
+command note.
 
 The display order for mixing is:
 
@@ -155,13 +161,13 @@ Eight scroll labels are currently derivable by their compact spell-code labels:
 
 | Scroll code | Cross-reference | Known status |
 |-------------|-----------------|--------------|
-| `VL` | Vas Lor / Great Light | Label identified; use effect not traced. |
-| `RH` | Rel Hur / Wind Change | Label identified; use effect not traced. |
+| `LV` | Vas Lor / Great Light | Label identified; use effect not traced. |
+| `HR` | Rel Hur / Wind Change | Label identified; use effect not traced. |
 | `IS` | In Sanct / Protection | Label identified; use effect not traced. |
-| `IA` | In An / Negate Magic | Label identified; use effect not traced. |
+| `AI` | In An / Negate Magic | Label identified; use effect not traced. |
 | `IQW` | In Quas Wis family | Label identified; exact scroll effect not traced. |
-| `KXC` | Kal Xen Corp / Summon Daemon | Label identified; use effect not traced. |
-| `IMC` | In Mani Corp / Resurrection | Label identified; use effect not traced. |
+| `CKX` | Kal Xen Corp / Summon | Label identified; use effect not traced. |
+| `CIM` | In Mani Corp / Resurrect | Label identified; use effect not traced. |
 | `AT` | An Tym / Time Stop | Label identified; use effect not traced. |
 
 The labels strongly suggest one-shot spell-scroll items. The U-Use Item handler is known to dispatch by item id, but the per-scroll branches have not been decoded into clean prose.
@@ -189,8 +195,8 @@ These items are named by inventory strings, save-image categories, use-item disp
 
 | Item | Known role | Gaps |
 |------|------------|------|
-| Moonstone | Story item tied to Blackthorn rescue/refuge handling. | Full acquisition and use flow. |
-| Magic Carpet | Both an inventory item and a vehicle/boarding target. Also appears as a climb/vehicle gate in overworld logic. | Exact inventory flag, vehicle byte identity, and terrain exceptions. |
+| Moonstone | Story item tied to Blackthorn rescue/refuge handling and Gate Travel. Burying one records the current valid location into that stone's saved gate slot when outside dungeon/combat scenes and when the underfoot tile is `4..10`, `44`, or `45`; *Vas Rel Por* later teleports to the selected slot. Searching a matching buried coordinate surfaces a "strange rock" pickup, and collecting it grants the Moonstone and invalidates that slot. | Full acquisition path. |
+| Magic Carpet | Both an inventory item and a vehicle/boarding target. Older notes conflated it with the outdoor climb gate, but the traced Klimb handler reads a separate unresolved gear byte. | Exact inventory flag, numeric marker variant, and terrain exceptions. |
 | Sandalwood Box | Story item returned to Lord British in the endgame sequence. | Pickup flag and full prerequisite chain. |
 | Plans for the HMS Cape | Named story item. | Full quest use and effect. |
 | Crown of Lord British | Unique royal item; U-Use handler dispatches crown-family items. | Exact use effect and quest flags. |
@@ -215,28 +221,48 @@ Vehicles straddle inventory and world state. A vehicle can be a map object, a sh
 
 | Vehicle | Form | Known behaviour | Gaps |
 |---------|------|-----------------|------|
-| Horse | Active-object vehicle; stable purchase path | Boardable when available. Overland transport. | Full speed/terrain table and price. |
-| Ship | Active-object vehicle; ship-broker purchase path | Boardable; carries condition and skiff-count state; can fire broadsides; warns when badly damaged or without skiffs. | Purchase price, wind/speed rules, repair rules. |
-| Skiff | Active-object vehicle; also ship-carried | Boardable; water transport; time system halves movement time for the skiff/raft state. | Exact terrain allowance and full vehicle byte mapping. |
-| Magic Carpet | Inventory item and active vehicle | Boardable as a carpet; likely the zero-time aerial/hover vehicle described by the time and overworld specs. | Exact identity of the zero-time vehicle byte and all terrain restrictions. |
-| Balloon | Vehicle tile family | Aerial vehicle in the tile and overworld catalogs. | Boarding, purchase/acquisition path, and movement rules. |
+| Horse | Active-object vehicle; Talk-entered stable purchase path | Boardable when available. Overland transport. | Full speed/terrain table and exact price table. |
+| Ship | Active-object vehicle; ship-broker purchase path | Boardable; carries condition and skiff-count state; can fire broadsides; warns when badly damaged or without skiffs; sail state determines whether wind cadence applies. Shipwright Frigate purchases create a full-hull ship with two skiffs. | Purchase price table, repair rules, and exact compass/facing convention. |
+| Skiff | Active-object vehicle; also ship-carried | Boardable; water transport; time system halves movement time for the skiff/raft timing state. | Exact terrain allowance and numeric marker subrange. |
+| Magic Carpet | Inventory item and active vehicle | Boardable as a carpet. The current timing-tag cleanup no longer treats the `T` tag as proof of carpet identity; the outdoor Klimb gear gate is unresolved and should not be assumed to be this vehicle. | Exact numeric marker variant and all terrain restrictions. |
+| Balloon | Vehicle tile family | Aerial vehicle in the tile and overworld catalogs. | Boarding, purchase/acquisition path, transport marker, and movement rules. |
 | Corvette, Ferrari, Lamborghini, Lotus, Porsche | Wishing-well vehicle names | Easter-egg vehicle names in wishing-well strings. | Whether any creates durable transport or only maps to a horse/carpet branch. |
 
-Vehicles are persisted through the active-object and save/load systems. Dismounting leaves a vehicle object on the map; loading restores the per-plane object tables through the `.OOL` companion files.
+Vehicles are persisted through the active-object and save/load systems. Dismounting leaves a vehicle object on the map; loading restores the per-plane object tables through the `.OOL` companion files. Command-level boarding, exiting, and ship-fire behaviour lives in `systems/vehicles.md`. Outdoor Klimb separately requires an unresolved inventory/gear byte; current evidence does not identify that byte as the carpet.
 
 ## 10. Shops and acquisition
 
 Known acquisition paths:
 
-- **Weaponsmiths and armourers** buy and sell equipment from fixed per-shop stock tables. Purchases do not deplete stock. Sell-back exists, but the formula is not yet decoded.
+- **Weaponsmiths and armourers** sell equipment from fixed per-shop stock
+  tables. The `B` buy list is a per-shop list of up to eight equipment item ids;
+  each id maps directly to the item-name row, base-price row, and shared
+  equipment counter. Buy quotes use the canonical equipment price adjusted by
+  the speaking party member's Intelligence, check gold and carry capacity,
+  debit gold on acceptance, increment the shared equipment counter, and do not
+  deplete shop stock. The `S` sell path scans nonzero carried equipment
+  counters, refuses unsellable rows, and on acceptance adds gold and decrements
+  the sold counter.
 - **Guild shops** sell keys, gems, and torches.
-- **Herbalists** sell reagents, with fixed per-vendor reagent prices.
-- **Food merchants** buy and sell food, with an additional carrying-capacity check.
-- **Horse traders and ship brokers** handle vehicle purchases through a vehicle-oriented path rather than the normal Talk shop loop.
+- **Herbalists** sell reagents, with fixed per-vendor availability and prices.
+  Zero-priced resident entries are omitted from the shop menu rather than sold.
+- **Tavern and meal-counter flows** are the known shop-adjacent food/provision
+  surface. Food remains a shared party counter consumed by time/rest systems,
+  but no separate provision-shop trigger is present in the shipped `.NPC`
+  shop-trigger range.
+- **Horse traders** handle a Talk-entered vehicle sale that places a horse
+  active object after payment. **Ship brokers** also have a Talk-entered
+  shop-triggered sale flow; after payment, the next overworld entry places a
+  watercraft active object at the sale coordinates. `F` purchases a Frigate
+  ship-family object with full hull and two skiffs aboard; `S` purchases a
+  standalone Skiff unless a Frigate is already queued, in which case the Skiff
+  is added to that Frigate's carried-skiff count. A second standalone Skiff
+  before delivery is refused. Do not model shipwrights as an ordinary
+  carried-item inventory menu.
 - **Treasure, search, chest, and body results** can grant food, gold, torches, gems, keys, scrolls, potions, equipment, or story items.
 - **Scripted story events** grant unique items such as the moonstone, regalia, shards, plans, and boxes.
 
-Prices are intentionally not listed in this catalog. The resident price and stock tables are known to exist, and the shop system uses fixed per-shop prices rather than karma-modulated prices, but the numeric table has not been cleanly decoded into item rows.
+Prices are intentionally not listed in this catalog. The resident price and stock tables are known to exist, arms equipment pricing has decoded buy and sell formulas, and the shop system does not use karma-modulated prices. For arms equipment, the shop stock, base price, display name, and inventory counter rows share the same equipment item id.
 
 ## 11. Completion and gaps
 
@@ -244,17 +270,16 @@ Prices are intentionally not listed in this catalog. The resident price and stoc
 
 **Not complete enough for mechanics.** The following fields remain open and should not be guessed by an implementation seeking original-compatible balance:
 
-1. Internal item IDs and item-to-tile IDs.
+1. Item-to-tile IDs outside the arms-shop equipment id mapping.
 2. Weapon damage, hit chance, range, breakage, and ammo consumption.
 3. Armour/shield defence values and weight.
 4. Equipment class restrictions and strength thresholds.
-5. Exact prices per shop, reagent, treatment, food merchant, horse, and ship.
-6. Sell-back formula for equipment.
-7. Potion color effects.
-8. Scroll use effects and whether scrolls are consumed on use.
-9. Full U-Use Item dispatch for Crown, Sceptre, Amulet, moonstone, keys, tools, and quest boxes.
-10. Exact vehicle byte table and terrain rules for horse, ship, skiff, carpet, and balloon.
-11. Caps for most byte counters beyond the confirmed spell-charge cap.
+5. Exact prices per shop, reagent, treatment, tavern/meal, horse, and ship.
+6. Potion color effects.
+7. Scroll use effects and whether scrolls are consumed on use.
+8. Full U-Use Item dispatch for Crown, Sceptre, Amulet, keys, tools, and quest boxes; Moonstone gate-slot writes and Search/Get recovery are known, but its acquisition path remains open.
+9. Exact transport-marker numeric subranges and terrain rules for horse, ship, skiff, carpet, and balloon.
+10. Caps for most byte counters beyond the confirmed spell-charge cap.
 
 ## 12. Sources
 
@@ -266,6 +291,10 @@ This catalog is a cleanroom prose rewrite from the following source notes and sa
 - `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`
 - `u5-decomp/functions/CMDS_OVL/0x1C20_cmds_klimb.md`
 - `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`
+- local CAST Moonstone helper analysis
+- `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`
+- `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`
+- `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`
 - `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`
 - `u5-decomp/functions/SHOPPES_OVL/0x12B2_arms_main.md`
 - `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`
@@ -280,3 +309,4 @@ This catalog is a cleanroom prose rewrite from the following source notes and sa
 - `u5-spec/systems/overworld.md`
 - `u5-spec/systems/save-load.md`
 - `u5-spec/systems/shops.md`
+- `u5-spec/systems/vehicles.md`

@@ -144,9 +144,9 @@ Animated-static classes are deliberately rare. Walls, doors, paths, terrain, veg
 
 Whether a tile is walkable is encoded as a single bit per tile in a thirty-two-byte bitmap in the resident data segment. The bitmap covers tile ids `0..255` — the world-tile range. Sprite-only tile ids (`256..511`) never live in a map cell and have no passability bit.
 
-For a tile id in `0..255`, the passability bit is at byte `id >> 3`, bit `id & 7`. A set bit indicates passable; a cleared bit indicates impassable.
+For a tile id in `0..255`, the passability byte is `id >> 3`. Bits inside each byte are numbered most-significant first: the mask is `0x80 >> (id & 7)`. Tile zero is therefore the high bit of byte zero, tile seven is the low bit of byte zero, and tile eight starts again at the high bit of byte one. A set bit indicates passable; a cleared bit indicates impassable.
 
-The bitmap is consulted by the movement handlers in town and dungeon modes, by the NPC schedule walker's flood-fill workspace prep, and by the P-Push handler's "won't budge" guard. Combat composites the world-tile passability with arena-specific walkability rules, so a wall that is passable in the overworld may still be impassable in a combat arena that overlays it.
+The bitmap is consulted by the movement handlers for world-tile maps, by the NPC schedule walker's flood-fill workspace prep, and by the P-Push handler's "won't budge" guard. Dungeon first-person floors use the separate packed-nibble `DUNGEON.DAT` encoding rather than this bitmap. Combat composites the world-tile passability with arena-specific walkability rules, so a wall that is passable in the overworld may still be impassable in a combat arena that overlays it.
 
 The bitmap is *not* mutated at runtime. Tile-state changes that affect walkability — a closed door becoming open, a destroyed wall becoming rubble — are implemented by *changing the tile id* in the live tile buffer, not by flipping a passability bit. The engine treats tile id and passability as a one-to-one fixed map.
 
@@ -172,7 +172,7 @@ A small set of world tiles drives scripted handlers. These tiles do not look or 
 
 **Shrines.** The eight shrine tiles, one per virtue. Stepping onto a shrine triggers the meditation handler — prompt for a duration, consume gold, apply karma adjustments, print a verdict from the karma table.
 
-**Town and dungeon entrances.** Stepping onto an entrance coord sets the scene byte and dispatches the town-mode or dungeon-mode setup. The trigger is recognised by the location-coord table in the resident data, not by tile id alone.
+**Town and dungeon entrances.** Entering on a fixed entrance coordinate sets the scene byte and dispatches the town-mode or dungeon-mode setup. The trigger is recognised by the resident world-location table, not by tile id alone; rows 0..31 select town-mode scenes and rows 32..39 select dungeon scenes.
 
 **Waterfalls.** Specific water-tile variants drive a "you are swept downstream" handler that moves the party several cells in the waterfall's direction.
 
@@ -186,19 +186,19 @@ A small set of world tiles drives scripted handlers. These tiles do not look or 
 
 **Beds.** A bed tile in an inn enables H-Hole-up. Outside an inn or off a bed, H prints "Not here!" and consumes no turn.
 
-**Chairs.** Two chair-marker bytes — `0xC8` and `0xC9` — flank the chair tiles in on-disk town tile grids. The location-load pass strips them out, replacing them with the underlying chair tile id, and uses them as a cue that the party member spawning at the cell should sit. The runtime tile buffer never contains marker bytes.
+**Chairs.** Two chair/seat marker bytes - `0xC8` and `0xC9` - appear in town tile grids and are consumed by the NPC scheduler's chair-search variant. When a schedule waypoint asks an NPC to sit, the pathfinder searches the live tile buffer for cells containing one selected marker ID and uses those cells as goals. The exact visual-facing correspondence between `0xC8` and `0xC9` remains open. Do not treat these IDs as ordinary passable terrain, and do not assume they are unavailable to runtime consumers.
 
 **Wishing-wells, springs, caves.** Wishing-wells run the wish-for-a-vehicle handler (the easter-egg "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse" dialogue); springs restore MP; caves drop a chest.
 
 **Camp / fire.** Camp tiles and brazier tiles trigger the camp-and-rest handler when H-Hole-up is invoked on them.
 
-The exact tile-id-to-trigger mapping is implementation-detail of the per-mode walk loops, captured in those loops' decompilation rather than as a free-standing table here.
+The exact tile-id-to-trigger mapping is implementation-detail of the per-mode walk loops, captured in the private per-mode loop notes rather than as a free-standing table here.
 
 ## 7. Monster tiles
 
 Monster sprites occupy indices `256..383`. Each monster — sea horse, squid, sea serpent, shark, giant rat, bat, giant spider, ghost, slime, gremlin, mimic, reaper, gazer, crawler, gargoyle, insect swarm, orc, skeleton, python, ettin, headless, wisp, daemon, dragon, sand trap, troll, mongbat, corpser, rot worm, shadow lord — owns a small range of indices, typically four sequential frames (one per facing or one per animation phase).
 
-Cross-reference: `catalogs/monster-bestiary.md` (planned) for per-monster stats, AI archetype, encounter rate per terrain, and the singular and plural display names from the resident data string tables.
+Cross-reference: `catalogs/monster-bestiary.md` for per-monster stats, AI archetype, encounter rate per terrain, and the singular and plural display names from the resident data string tables.
 
 Monsters appear in two contexts:
 
@@ -211,7 +211,7 @@ Hostile humans (brigands, pirates, hostile guards) sit in the *NPC* range, not t
 
 NPC sprites occupy indices `192..255`. Each NPC type — villager, merchant, jester, child, beggar, guard, wanderer, named NPCs (Lord British, Blackthorn, named ship captains), shadow lords — owns one or more indices, typically two frames per facing for an idle / walk cycle.
 
-Cross-reference: `catalogs/npc-roster.md` (planned) for per-NPC names, dialogue file links, default schedules, and which location each NPC lives in. The role-name strings ("Avatar", "Villager", "Merchant", "Jester", "Bard", "Child", "Beggar", "Guard", "Wanderer", "Blackthorn", "Lord British") in the resident data anchor the partition.
+Cross-reference: `catalogs/npc-roster.md` for per-NPC names, dialogue file links, default schedules, and which location each NPC lives in. The role-name strings ("Avatar", "Villager", "Merchant", "Jester", "Bard", "Child", "Beggar", "Guard", "Wanderer", "Blackthorn", "Lord British") in the resident data anchor the partition.
 
 NPCs appear only in town mode and in scripted overworld events. The active-object table records the current sprite tile id directly; the per-tick walker advances the schedule and updates the position and sprite fields.
 
@@ -219,7 +219,7 @@ A pre-conversation gate inspects the candidate NPC's current sprite tile to dete
 
 ## 9. Item tiles
 
-Item sprites occupy indices `384..447`. Items are weapons, armor, reagents, food, gems, torches, scrolls, potions, keys, and special story items. Cross-reference `catalogs/item-list.md` (planned).
+Item sprites occupy indices `384..447`. Items are weapons, armor, reagents, food, gems, torches, scrolls, potions, keys, and special story items. Cross-reference `catalogs/item-list.md`.
 
 Items appear in two contexts:
 
@@ -236,16 +236,21 @@ Vehicle sprites occupy indices `160..191`. Five vehicles — **horse** (mounted)
 
 Vehicles appear as active-object entries. Mounting a vehicle moves the avatar's sprite from the avatar range (`496..511`) to the vehicle range; the original vehicle slot (a dropped horse, a moored ship) clears or remains as a ridable sprite.
 
+For B-Board, `systems/vehicles.md` publishes the clean boardable family shapes:
+horse object frames, a single carpet object frame, compact ship-facing and
+skiff-facing runs, and no promoted balloon boarding path yet. This catalog still
+owns the lower-level per-sprite ID verification inside the vehicle range.
+
 Vehicles affect movement and turn timing:
 
 - **Foot.** Default. Standard outdoor turn cost.
 - **Horse.** Two cells per turn on grass and path, one on rougher terrain.
-- **Ship.** Water-bound. Faster than foot but limited to water cells. Wind-affected speed (the Rel Hur spell changes wind).
+- **Ship.** Water-bound. Sail state and facing determine whether the wind/heading cadence described in `systems/weather.md` applies.
 - **Skiff.** Slower than ship; usable in shoals and shallow water that ship cannot enter.
 - **Magic carpet.** Can cross water and most terrain. Cannot enter mountains, walls, or doors. Tile-effect (lava, fire, poison field) damage still applies.
 - **Balloon.** Flies above all terrain. Cannot land in mountain or wall cells. Wind determines direction.
 
-The vehicle byte in the resident data tracks the current vehicle; it is consulted by movement, by the encounter probe, and by the disembark handler. See `systems/overworld.md` for the full dispatch.
+The resident transport marker tracks the current boarded vehicle for movement, encounter probes, and disembark handling. A separate timing/state tag supplies the `Q`/`T` cleanup modifiers described in `systems/time.md`; do not derive the full vehicle table from those letters. See `systems/vehicles.md` for the command-level vehicle contract and `systems/overworld.md` for outdoor movement.
 
 ## 11. Effect tiles
 
@@ -256,10 +261,10 @@ The principal effect families:
 - **Moongate frames.** Eight indices, one per moon-phase combination. The moongate animator stamps the appropriate frame onto the rendered buffer at the gate's coordinates each render frame.
 - **Projectile frames.** Arrow, axe, sling, magic missile sprites in flight. The combat handler walks a projectile from caster to target one cell per render frame.
 - **Splash / explosion / impact.** Multi-frame sprites for fireball impact, lightning hit, explosion clouds, smoke. The effect handler runs through the frames and clears.
-- **Fields.** Fire field, poison field, sleep field, energy field, electric field. These are *placed* effects that persist on the map for several turns. Field placement writes a special-class tile id (`152..159`) into the live tile buffer; stepping onto a field tile triggers the field-effect handler before the move resolves.
+- **Fields.** Fire field, poison field, sleep field, energy field, electric field. Dungeon field placement writes the field terrain bytes documented in `systems/magic.md` into the live dungeon image, optionally preserving the dungeon visit marker bit. Combat arena fields are handled by the arena-field helper instead of direct dungeon terrain writes; contact is checked after a successful step commits, then routes to the per-field status or damage/value helper.
 - **Wind / smoke / sparkle.** Atmospheric effects driven by per-mode handlers (the dungeon wind tile, the storm wind, the spell-cast sparkle).
 
-Several effect tiles double as world-tile sentinels in the special class range — the Fire Field special-class id is also the rendering id, so the renderer needs no special case. The animator that sweeps live tile buffer for animated-static cells handles all field tiles uniformly: each owns a four-frame run, and the animator advances it.
+Several effect tiles double as world-tile sentinels in the special class range, so renderers should keep map-cell field bytes and transient combat-field visuals in the same semantic family even when their storage paths differ. The animator that sweeps live tile buffer for animated-static cells handles dungeon field tiles uniformly: each owns a four-frame run, and the animator advances it.
 
 ## 12. Tile-byte encoding
 
@@ -278,7 +283,7 @@ Some class-specific encodings layer on top:
 
 - **Dungeon tiles.** Dungeon `.DAT` cells pack two four-bit fields: high nibble is dungeon tile class (open, wall, door, ladder, chest, trap, fountain, field), low nibble is class-specific attribute. Dungeon tile bytes are *not* indices into the unified five-hundred-and-twelve-tile space — they are a separate dungeon tile-class encoding rendered by the wireframe renderer.
 - **Combat arenas.** Combat `.CBT` cells use the standard one-byte tile id plus a per-row metadata band (twenty-one bytes per row beyond the eleven-cell terrain) carrying party-slot starting markers, monster-spawn cells, and replacement-tile entries.
-- **Markers in town maps.** Marker bytes — NPC start markers, waypoint hint markers, the chair markers `0xC8` and `0xC9` — appear in on-disk tile grids and are stripped to their underlying tile id by the location-load pass. The runtime tile buffer never contains marker bytes.
+- **Markers in town maps.** Marker bytes — NPC start markers `0x48`/`0x49`, spawn marker `0x2A`, dash/period conditional markers `0x2D`/`0x2E`, dawn/dusk archway marker `0x87`, and the chair/seat markers `0xC8`/`0xC9` — appear in on-disk tile grids and are consumed by location-load or NPC-scheduler passes. Some are harvested into runtime state, some are conditionally rewritten in the runtime tile buffer, and `0xC8`/`0xC9` remain queryable as runtime chair-search goals. They should not be treated as ordinary terrain. For the dawn/dusk pass, `0x87` marks the south-adjacent gate cell; shipped maps pair it with `0x44` cobble, which toggles to `0x99` portcullis via XOR `0xDD` at night.
 
 ## 13. Graphics-asset encoding
 
@@ -298,14 +303,14 @@ The graphics file, the look-at table, and the passability bitmap are the three s
 
 The data here is drawn from four sources. Each tile's position in the partition is anchored to a bytes-on-disk observation (the `LOOK2.DAT` string, the passability bit), to a per-class engine behaviour (the animator's class-range tests, the special-trigger comparisons), or to the canonical naming from the published manual.
 
-**From the project's decompilation work** (`u5-decomp/formats/tile-graphics.md`, `data-tables.md`, `data-ovl.md`, `maps.md`, function notes under `functions/LOOKOBJ_OVL/`, `CMDS_OVL/`, `OUTSUBS_OVL/`):
+**From the project's private analysis notes** (`u5-decomp/formats/tile-graphics.md`, `data-tables.md`, `data-ovl.md`, `maps.md`, function notes under `functions/LOOKOBJ_OVL/`, `CMDS_OVL/`, `OUTSUBS_OVL/`, `NPC_OVL/`):
 
 - The five-hundred-and-twelve-tile count and the EGA / CGA file-size invariants.
 - The `LOOK2.DAT` layout (five hundred and twelve sixteen-bit offsets, two hundred and sixteen unique strings, one sentinel).
-- The thirty-two-byte passability bitmap in the resident data segment.
+- The thirty-two-byte passability bitmap in the resident data segment, including MSB-first bit ordering within each byte.
 - The active-object animator's class-range tests.
 - The special-trigger comparisons in the per-mode walk loops.
-- The marker-byte stripping pass (NPC start markers, waypoint markers, chair markers `0xC8` and `0xC9`).
+- The marker-byte consumers (NPC start markers, waypoint markers, dawn/dusk archway marker `0x87`, and the NPC chair-search markers `0xC8` and `0xC9`).
 - The two-nibble dungeon tile encoding and its separate tile-class space.
 
 **From the published Ultima V manual** (`The Book of Lore`, `The Book of Play`):
@@ -317,6 +322,7 @@ The data here is drawn from four sources. Each tile's position in the partition 
 **From `LOOK2.DAT`'s string pool, decoded directly:**
 
 - Tile id one is "deep water"; ids two through nine walk through "water", "shoals", "swamp", "grass", "brush", "parched desert", "brush", "trees".
+- The dawn/dusk gate pair is named by the same table: `0x87` is an archway, `0x44` is cobble, and `0x99` is a portcullis.
 - The last unique string is "a shadow lord".
 - Two hundred and sixteen of the five hundred and twelve ids carry unique strings; the rest share a string with a prior id.
 
@@ -324,35 +330,34 @@ The data here is drawn from four sources. Each tile's position in the partition 
 
 - **High confidence (~160 tiles, indices `0..159`).** The world-tile classes are well-attested by their `LOOK2.DAT` strings and the special-trigger comparisons. The grass / brush / desert sub-divisions, the door variants, and the eight moongate / shrine specials are individually identified.
 - **Medium confidence (~220 tiles, indices `160..383`).** Vehicle, NPC, and monster ranges are established by the animator's class-range tests, but per-tile assignments within each range (which monster is at which id, which NPC role is at which id) are inferred from the manual and `LOOK2.DAT`. Per-id verification is open work — see the bestiary and roster cross-references.
-- **Low-to-medium confidence (~130 tiles, indices `384..511`).** Item, effect, and avatar classes are partly inferred from the inventory panel, the special-handler dispatches, and the per-vehicle sprite swaps. Per-id verification depends on completing decomp of `COMBAT.OVL`, `CMDS.OVL`'s G-Get / U-Use handlers, and the effect dispatchers.
+- **Low-to-medium confidence (~130 tiles, indices `384..511`).** Item, effect, and avatar classes are partly inferred from the inventory panel, the special-handler dispatches, and the per-vehicle sprite swaps. Per-id verification depends on completing private analysis of `COMBAT.OVL`, `CMDS.OVL`'s G-Get / U-Use handlers, and the effect dispatchers.
 
 All five hundred and twelve indices have a class assignment. Approximately three hundred and twenty have a high-confidence per-tile description (name and role); the remaining one hundred and ninety carry a class-level description but the per-tile name is provisional pending the cross-reference catalogs.
 
 ## 15. Cross-references
 
 - `systems/overworld.md` — Overworld mode specification, including the active-object animator, the per-turn tile probe, and the moongate animator. Section 8 lists the special tile classes the per-turn block recognises.
-- `systems/town-mode.md` — Town-mode specification, including the marker-stripping load pass (Section 3 / Section 6), the dawn-dusk substitution table (Section 6), and the per-tile interaction commands (Section 9).
+- `systems/town-mode.md` — Town-mode specification, including marker harvest/runtime marker handling (Section 3 / Section 6), the dawn/dusk gate substitution (Section 6), and the per-tile interaction commands (Section 9).
 - `systems/dungeon-mode.md` — Dungeon-mode specification, including the two-nibble dungeon tile encoding (Section 4) and the wireframe renderer's wall checks (Section 7).
 - `systems/active-objects.md` — Active-object table specification, including the per-slot record format and the animator pass.
+- `systems/vehicles.md` — Boarding, exiting, parked-vehicle persistence, and ship-fire behaviour.
 - `systems/visibility.md` — Visibility producer, including the per-tile "blocks line of sight" predicate.
 - `systems/doors-and-z-transitions.md` — Door interaction and floor-change handlers, including the per-door tile id and the stair / ladder dispatchers.
 - `formats/saved-gam.md` — Save image, including the active-object table snapshot and the `.OOL` file (the persistent active-object slice).
-- `formats/look-table.md` — `LOOK2.DAT` format spec.
-- `formats/tile-graphics.md` (planned) — `TILES.{16,4}` graphics format spec.
+- `formats/look2-dat.md` — `LOOK2.DAT` format spec.
+- `formats/tiles.md` — `TILES.{16,4}` graphics format spec.
 - `catalogs/spell-list.md` — Spell catalog (the field-placement spells reference the field-tile entries here).
-- `catalogs/monster-bestiary.md` (planned) — Per-monster names, stats, and tile-id ranges.
-- `catalogs/npc-roster.md` (planned) — Per-NPC names, dialogue indices, and tile-id ranges.
-- `catalogs/item-list.md` (planned) — Per-item names, prices, and tile-id ranges.
+- `catalogs/monster-bestiary.md` — Per-monster names, stats, and tile-id ranges.
+- `catalogs/npc-roster.md` — Per-NPC names, dialogue indices, and tile-id ranges.
+- `catalogs/item-list.md` — Per-item names, prices, and tile-id ranges.
 
 ## 16. Open work
 
 1. Verify the per-tile id within each monster's frame run by walking `MON0.16` through `MON7.16` against the manual's monster list and the resident data monster-name pool.
 2. Verify the per-NPC tile-id assignments against the role-name string pool ("Avatar", "Villager", ..., "Lord British") and the named-NPC list.
 3. Verify the per-item tile-id assignments against the item-name pool and the Z-stats inventory panel.
-4. Decode the marker-byte mapping precisely — confirm the chair markers `0xC8` and `0xC9` are the only two markers that flank a furniture tile, document the underlying chair tile id each marker points at, and resolve the NPC-start and waypoint-hint marker pairs.
-5. Locate and document the passability bitmap's exact byte offset and ordering in the resident data segment (the `DS:0x367E` reference in the source notes is a working location pending verification of the DGROUP shift; the bitmap covers tile ids `0..255` at one bit per tile, but the per-byte bit ordering — whether bit zero is tile zero or tile seven — is open).
-6. Document the per-tile "blocks line of sight" predicate that the visibility producer consults; check whether it is a separate bitmap, derived from the passability bitmap, or class-derived.
-7. Document the dawn-dusk tile substitution table — the per-tile-id swap from night-form to day-form that the town-mode entry pass applies — by tracing the substitution loop in `TOWN.OVL`.
-8. Document the field-tile per-frame tile-id runs (Fire Field, Poison Field, Sleep Field, Energy Field, Wall of Fire, Electric Field) and their per-frame durations.
-9. Identify any tile ids that double as render-only sentinels in the upper half of the space (for example, the player avatar sprite sentinel value `0xFC` referenced in the town-entry handler — confirm whether this is a tile id, an active-object table marker, or both).
-10. Verify the tile-id partition boundaries against runtime DOSBox traces for water, mountain, lava, and door classes — the ranges given in Section 3 are working approximations.
+4. Decode the marker-byte mapping precisely — resolve the exact facing or underlying-furniture correspondence for the chair markers `0xC8` and `0xC9`, and resolve the NPC-start and waypoint-hint marker pairs.
+5. Document the per-tile "blocks line of sight" predicate that the visibility producer consults; check whether it is a separate bitmap, derived from the passability bitmap, or class-derived.
+6. Document the field-tile per-frame tile-id runs (Fire Field, Poison Field, Sleep Field, Energy Field, Wall of Fire, Electric Field) and their per-frame durations.
+7. Identify any tile ids that double as render-only sentinels in the upper half of the space (for example, the player avatar sprite sentinel value `0xFC` referenced in the town-entry handler — confirm whether this is a tile id, an active-object table marker, or both).
+8. Verify the tile-id partition boundaries against runtime DOSBox traces for water, mountain, lava, and door classes — the ranges given in Section 3 are working approximations.

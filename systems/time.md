@@ -2,11 +2,11 @@
 
 ## 1. Overview
 
-Ultima V keeps a single in-world clock that advances during play and is consulted by every system that cares about when something happens — NPC schedules, lighting, hour-prompted events, the date displayed on the look-at-the-sky tile, and per-day book-keeping like character ageing. The clock is driven from one cleanup routine that every active mode loop calls once per consumed turn; that routine takes a "minute increment" argument from its caller, advances minutes, and cascades minute → hour → day → month → year through fixed wrap thresholds. The same routine is also called with a zero increment as a "recompute, do not advance" form so that systems whose state depends on the current time (most notably ambient light) can be brought up to date when the player crosses between modes without spending a turn.
+Ultima V keeps a single in-world clock that advances during play and is consulted by every system that cares about when something happens — NPC schedules, lighting, hour-prompted events, the date displayed on the look-at-the-sky tile, daily schedule maintenance, and month-boundary character counters. The clock is driven from one cleanup routine that every active mode loop calls once per consumed turn; that routine takes a "minute increment" argument from its caller, advances minutes, and cascades minute → hour → day → month → year through fixed wrap thresholds. The same routine is also called with a zero increment as a "recompute, do not advance" form so that systems whose state depends on the current time (most notably ambient light) can be brought up to date when the player crosses between modes without spending a turn.
 
 The clock is part of the saved game. Year, month, day, hour, and minute are persistent fields in the save image and survive every save/load cycle.
 
-This spec describes the clock's state, the cascade rules, the per-mode minute costs, the daylight model that sits on top of the clock, the per-day events that run at midnight, the NPC-schedule contract, and how everything is persisted.
+This spec describes the clock's state, the cascade rules, the per-mode minute costs, the daylight model that sits on top of the clock, the day and month rollover events, the NPC-schedule contract, and how everything is persisted.
 
 ## 2. Clock state
 
@@ -25,7 +25,7 @@ Day, month, hour, and minute are bytes; year is a word. Two derived values that 
 - A 12-hour display hour, recomputed whenever the hour changes. It is `12` when the underlying hour is `0`, the hour itself when the hour is in `1..12`, and `hour − 12` when the hour is in `13..23`. There is no separate AM/PM flag — the caller that displays the time uses the underlying hour to decide which suffix to print.
 - A pre-cascade snapshot of the hour, taken at the start of every cleanup pass. It is compared against the post-cascade hour to detect "the hour just ticked over" so that hour-driven side effects fire exactly once per crossing.
 
-Several other variables sit alongside the clock in the save image (vehicle byte, scene byte, party Z, and so on). Those are not part of the time system; the time system only reads them where noted below.
+Several other variables sit alongside the clock in the save image (transport marker, timing/state tag, scene byte, party Z, and so on). Those are not part of the time system; the time system only reads them where noted below.
 
 ## 3. The per-turn cleanup contract
 
@@ -43,37 +43,28 @@ A larger argument is also legitimate: the rest/wait command passes twenty minute
 
 The mode-zero call exists because daylight is a function of hour and scene, and crossing scene boundaries can change daylight without consuming a turn. Mode-zero turns are also the way the engine forces a fresh repaint after entry to overworld view from town or dungeon.
 
-## 4. Vehicle modifiers
+## 4. State-tag modifiers
 
-Two vehicles change the per-turn minute cost. The engine inspects a single byte that records the current vehicle (it is one of the player-state bytes, with a single ASCII letter as its value); the time system only checks two values:
+Two single-character state tags can change the per-turn minute cost before the minute counter is touched. This tag byte sits near the saved player-state fields, but it is not the same byte as the party's boarded vehicle/transport tile used by B-Board, X-Xit, movement, and rendering. Public specs should therefore treat it as a timing/state tag, not as a complete vehicle identity table.
 
-- **Skiff / raft.** When the player is in a skiff or raft, the minute increment is *halved* before being applied. If the original increment was non-zero but halving rounds it down to zero, it is forced back to one. This makes water-cell movement take half as long as land-cell movement, but never instantaneous.
-- **"Tower" vehicle.** When the vehicle byte indicates the "tower" state, the minute counter is *not advanced at all* this turn. (The exact in-game vehicle this corresponds to — the magic carpet is a strong candidate — is not yet pinned down and is flagged in Section 12.) Other per-turn work (daylight refresh, daily events on hour change) still happens, because trips of this kind can still cross hour boundaries indirectly via mode-zero recomputes.
+- **`Q` tag.** The minute increment is *halved* before being applied. If the original increment was non-zero but halving rounds it down to zero, it is forced back to one. Existing notes associate this with skiff or raft-like water travel, so a v1 implementation should use it for the slow-water transport timing contract without treating `Q` as the whole vehicle table.
+- **`T` tag.** The minute counter and the light-source counters are not advanced on this cleanup pass. The rest of cleanup still runs, especially daylight recomputation and visibility-dirty detection. Other mode-loop notes also use `T` as a town/transition-pending or scene-type tag, so this spec no longer maps it to the magic carpet or any named vehicle.
 
-No other vehicle alters the increment. Horses, ships, and on-foot travel all use the unmodified increment supplied by the caller.
+No other value in this tag byte alters the increment. Horses, ships, carpet travel, and on-foot travel use the unmodified increment supplied by the caller unless a separate movement handler explicitly sets one of the timing tags above.
 
-The vehicle modifier is applied *before* the minute counter is touched. The cascade then runs against the modified value. There are also a few non-time per-turn counters that get the unmodified increment (light-source timers; see Section 6); those are bumped via a saturating-byte-arithmetic helper that the time system shares with the lighting system.
+The tag modifier is applied *before* the minute counter is touched. The cascade then runs against the modified value. There are also a few non-time per-turn counters that get the same effective increment after the tag modifier has been applied (light-source timers; see Section 6); those are bumped via a saturating-byte-arithmetic helper that the time system shares with the lighting system, except that the `T` tag skips that bump along with the minute write.
 
 ## 5. The cascade
 
 Once the per-turn cleanup has the effective minute increment, it runs the cascade. The cascade has four wrap thresholds, each strictly greater than the highest valid value of the field below it.
 
-```
-minute += increment
-if minute >= 60:
-    minute -= 60
-    hour   += 1
-    if hour >= 24:
-        hour = 0
-        day  += 1
-        run "midnight" daily events     (Section 7)
-        if day > 28:
-            day   = 1
-            month += 1
-            if month > 13:
-                month = 1
-                year += 1
-```
+The cascade order is:
+
+1. Add the effective increment to the minute field.
+2. If minutes reach or exceed 60, subtract 60 and advance the hour by one.
+3. If the hour reaches or exceeds 24, reset it to 0, advance the day by one, and run the midnight daily events described in Section 7.
+4. If the day becomes greater than 28, reset it to 1 and advance the month by one.
+5. If the month becomes greater than 13, reset it to 1 and advance the year by one.
 
 Several things follow from the exact form of this cascade.
 
@@ -86,7 +77,7 @@ Several things follow from the exact form of this cascade.
 **Hour tick triggers a side bundle.** At the moment the hour changes, three things happen in addition to the day check above:
 
 1. A 12-hour display value is recomputed from the new hour (Section 2).
-2. If the player is on the surface (overworld, no dungeon depth), an "hour event" callback fires. This is the hook used for moongate phasing and for any other once-per-hour world event — the time system itself does not care what the callback does, only that it fires exactly once per hour change while on the surface.
+2. If the player is on the surface (overworld, no dungeon depth), an "hour event" callback fires. The current public contract is the hook boundary: it fires exactly once per hour change while on the surface. Natural moongate phasing is the leading expected consumer, but the callback body is not yet mapped to public semantic depth.
 3. The full HUD repaint flag is set so that the next render shows the new hour.
 
 The hour-change check is made *after* the cascade has had its chance to bump the hour, and uses the pre-cascade snapshot from Section 2 as its baseline. So a turn that increments minutes from 55 to 5 will fire the bundle once (hour changed); a turn from 30 to 31 will not.
@@ -102,34 +93,50 @@ The recompute proceeds in three stages.
 - If the player is on a fixed-dark scene type (the underworld is the obvious case) **or** at any dungeon depth (Z is positive), the base value is the *full-darkness* level. The hour does not matter; the underworld and dungeons are always dark.
 - Otherwise, if the hour is before five in the morning or after seven in the evening, the base value is again the full-darkness level. Britannia is dark at night.
 - Otherwise, if the hour is exactly five, the base value is read from a small dawn-gradient table indexed by `minute / 10`. The table interpolates between full darkness and full daylight across the six tens of minutes in the hour, so 5:00 starts at dark and 5:59 ends at near-daylight.
-- Otherwise, if the hour is exactly nineteen, the base value is read from a dusk-gradient table indexed by `(60 − minute) / 10`. This interpolates from full daylight at the top of the hour to full darkness at 19:59. The table is the same one the dawn lookup uses, indexed in reverse, so dawn and dusk are mirror images of each other.
+- Otherwise, if the hour is exactly nineteen, the base value is read from the same gradient table indexed by `(59 - minute) / 10`. This interpolates from near-daylight at the top of the hour to full darkness at 19:59, making dusk the reverse of dawn.
 - Otherwise — that is, between six and eighteen inclusive on the surface — the base value is the *full-daylight* level.
 
-Three particular values matter to consumers: full daylight is the highest value the system produces, full darkness is the lowest non-zero value, and a sentinel "skip recompute" value sits one above full daylight. If the caller sets the daylight to the sentinel before calling cleanup, the recompute is skipped entirely — that is how special scenes (cutscenes, shrines, and so on) freeze the lighting at whatever they set.
+Three particular values matter to consumers on the original light scale: full daylight is 50, full darkness is 2, and values 51 or higher are treated as "skip recompute" sentinels. If the caller sets the daylight to a sentinel value before calling cleanup, the recompute is skipped entirely - that is how special scenes (cutscenes, shrines, and so on) freeze the lighting at whatever they set.
 
-**Stage two — light-source clamps.** Two byte counters track the time remaining on the player's torch and on the active light spell. Either being non-zero clamps the daylight value down to a fixed ceiling (the torch ceiling is more permissive; the spell ceiling is tighter still). When both are zero, no clamp applies. The clamps are minimum-only — they reduce a too-bright value but do not raise a darker one — so the torch and spell genuinely "let you see in the dark" rather than overriding daylight outdoors.
+The dawn/dusk gradient levels are:
 
-**Stage three — change detection.** The pre-recompute daylight value is saved on the local stack before stage one runs. After the clamps, the new value is compared against the saved one; if they differ, a visibility-dirty flag is set so that the next render runs the full visibility recompute rather than reusing the cached one. Daylight that *did not* change does not force a visibility repaint.
+| Minute range | Dawn value at hour 5 | Dusk value at hour 19 |
+|---|---:|---:|
+| `00..09` | 2 | 49 |
+| `10..19` | 5 | 34 |
+| `20..29` | 10 | 20 |
+| `30..39` | 20 | 10 |
+| `40..49` | 34 | 5 |
+| `50..59` | 49 | 2 |
 
-The light-source counters themselves are advanced as part of the per-turn cleanup, with the unmodified minute increment, via the saturating-arithmetic helper mentioned in Section 4. They count down toward zero; reaching zero ends the effect. An hour-rollover-only counter (used by the once-per-hour spell timer) is also incremented at the moment of hour change, before the daylight recompute runs, so that "this spell expires at the top of the hour" effects work correctly.
+**Stage two — light-source floors.** Two byte counters track the time remaining on the player's torch and on the active light spell. Either being non-zero raises the cached ambient value to at least a fixed personal-light floor: the torch floor is 18 and the light-spell floor is 10 on the original light scale. When both counters are zero, no floor applies. These floors only raise a darker value below their threshold; they do not lower daylight or other brighter ambient values. The visibility and dungeon renderers also read the light-source counters as state, so an implementation should preserve the counters separately rather than modelling personal light solely as a rewritten ambient byte.
+
+**Stage three — change detection.** The pre-recompute daylight value is saved on the local stack before stage one runs. After the personal-light floors, the new value is compared against the saved one; if they differ, a visibility-dirty flag is set so that the next render runs the full visibility recompute rather than reusing the cached one. Daylight that *did not* change does not force a visibility repaint.
+
+The light-source counters themselves are advanced as part of the per-turn cleanup, with the same effective increment after the state-tag modifier described in Section 4, via the saturating-arithmetic helper. They count down toward zero; reaching zero ends the effect. An hour-rollover-only counter (used by the once-per-hour spell timer) is also incremented at the moment of hour change, before the daylight recompute runs, so that "this spell expires at the top of the hour" effects work correctly.
+
+This cleanup path is not the owner of every magical countdown. The shared
+combat active-effect counters (`P`, `Q`, `C`, and `N`) age through a resident
+combat helper, and Time Stop's decrement path is tracked with spell/combat
+state rather than with torch or light-spell duration.
 
 ## 7. Per-day events
 
-When the day rolls over (the hour-to-day path in Section 5), the cleanup routine runs a small bundle of "midnight" events before the normal end-of-pass daylight recompute. The bundle has three pieces.
+When the day rolls over (the hour-to-day path in Section 5), the cleanup routine runs the midnight NPC-schedule maintenance before the normal end-of-pass daylight recompute and before any month rollover side effects. The daily bundle has one confirmed piece.
 
-**NPC-schedule slot maintenance.** A small three-row table — used by the NPC scheduler to track which schedule slot is currently active across day boundaries — is walked once per day. Each row's high bit is a "pinned" flag; rows without the bit are advanced through their slot rotation. The rotation logic is described in detail in `npc-schedules.md` (the NPC-schedule spec, when written); from the time system's point of view, the only thing that matters is that the table is touched at the moment of day rollover and not at any other time.
+**NPC-schedule slot maintenance.** A small three-row table — used by the NPC scheduler to track which schedule slot is currently active across day boundaries — is walked once per day. Each row's high bit is a "pinned" flag; rows without the bit are advanced through their slot rotation. The rotation logic is described in detail in `npc-schedules.md`; from the time system's point of view, the only thing that matters is that the table is touched at the moment of day rollover and not at any other time.
 
-**Per-character daily counter.** Each of the sixteen character record slots in the party roster carries a one-byte counter, and the day rollover increments it. The counter is capped at 25 (it stops climbing past that), so a character does not "rot" indefinitely once their counter reaches the cap. The most likely interpretation is a *days-since-fed* hunger meter — incremented daily, reset by eating, with downstream systems reading the value to apply starvation-style penalties — but the time system itself only increments it. Whatever consumes it belongs in another spec.
-
-**Day-scope flag clears.** A small set of byte flags that govern once-per-day behaviour are cleared at midnight. The known cases include a "double encounter" flag used by sleep ambushes, a flag that the inn check-in logic uses to enforce "one stay per night", and a pair of bytes that gate certain endgame and quest events. These are not exhaustively enumerated here because they are consumed by gameplay systems that themselves belong in other specs; the time system's contract is that *they are reset at the moment of day rollover* and stay reset until something writes them again.
-
-After the bundle, the day rollover continues with the day → month → year cascade and finally with the daylight recompute.
+After the daily schedule maintenance, the day field is tested against the 28-day month length. If it remains in range, no character counters or long-period flags are touched. If it has advanced past 28, the month rollover bundle in Section 8 runs.
 
 ## 8. Per-month and per-year events
 
-There are no separate "per-month" or "per-year" event bundles. The month and year fields are tracked, persisted, and displayed (the look-at-the-sky tile prints the full date), but no gameplay event is gated on a month boundary or a year boundary. The cascade runs them only because the hierarchy demands it: day cannot exceed 28, so a thirty-day-month rollover would fall apart, but no game mechanic looks at "is it a new month" or "is it a new year" the way several mechanics look at "is it a new day" or "is it a new hour". Implementations may freely treat month and year as display-only.
+When the day field advances past 28, cleanup resets it to 1 and runs a small month-boundary bundle before incrementing the month.
 
-The month and year increments themselves carry no side effects.
+**Long-period flag clears.** A small set of saved byte flags is cleared at the month boundary. These flags are consumed by other gameplay systems, so the time system's contract is only that they are reset when the day wraps from 28 to 1, not at ordinary midnight.
+
+**Per-character month counter.** Each of the sixteen character record slots carries a one-byte counter. The month rollover increments it, capped at 25. This is the same field the inn uses as a lodged guest's stay counter: leaving a companion at an inn zeroes the field in the copied guest record; each later 28-day rollover adds one billable unit up to the cap; pickup treats zero as one billable unit. Outside the inn billing consumer, the meaning of this counter for active or non-lodged roster records remains open.
+
+After this bundle, the month field increments. If it advances past 13, it resets to 1 and the year word increments. No separate year-boundary side effects are currently identified.
 
 ## 9. NPC schedules and time
 
@@ -154,7 +161,7 @@ The relationship between the time system and NPC schedules is therefore simple: 
 
 The per-turn cleanup is called from each mode loop with the increment shown in Section 3 — one minute indoors, two minutes outdoors. Special command handlers may pass their own argument:
 
-- **Movement.** Move one cell using the standard mode-loop turn cost. Indoor moves are one minute, outdoor moves are two minutes, water moves are halved by the skiff modifier, carpet moves cost zero.
+- **Movement.** Move one cell using the standard mode-loop turn cost. Indoor moves are one minute and outdoor moves are two minutes. Water transport uses the `Q` timing tag's half-increment rule. Carpet movement is not proven to use the `T` tag; implement it with the standard committed-turn cost unless a separate movement trace supplies a different modifier.
 - **Hole up / camp.** The rest command prompts for an hours count, and per hour requested it issues several cleanup calls in series at twenty minutes each, advancing the clock by sixty minutes per requested in-world hour. Resting outdoors may roll an ambush, which interrupts the elapsing without rolling back the time that has already elapsed.
 - **Wait / pass-time commands.** Where a command wants to advance the clock without consuming a movement turn, it calls the cleanup directly with whatever increment it wants.
 - **Combat round.** Combat rounds end with a one-minute increment, applied once when the round counter wraps (rather than once per actor-turn within the round).
@@ -186,27 +193,26 @@ The seed save (copied to the player's save slot at "new game") starts the campai
 
 This section records places where the picture is not yet complete or where evidence is not fully nailed down.
 
-- **Which hour-event callback fires on a surface hour change.** The cleanup routine calls a "hour event" hook when the hour changes while the player is on the surface, but the hook's full body has not been decompiled. Strong candidates are moongate phase advancement (the moongates move with the time of day) and once-per-hour random-encounter rolls. An implementer can scaffold the hook as "moongate phase + reserved future hooks" and fill it in when the hour-event handler is mapped.
+- **Surface hour-event callback body.** The cleanup routine calls an hour-event hook when the hour changes while the player is on the surface, but the hook's full body has not been mapped. Natural moongate phase advancement is the leading expected consumer, and once-per-hour world events may also live there. An implementer can scaffold the hook as "moongate phase plus reserved future hooks" and fill it in when the handler is mapped.
 
-- **Per-character daily counter — interpretation.** The byte that increments on every character record at midnight, capped at 25, is most consistent with a hunger meter, but might equally be a "rest debt" or a generic days-since-event counter consumed by a different system. The advance is correct; the response to a high value belongs in another spec.
-
-- **The dawn/dusk gradient table.** The six-byte table that interpolates daylight between full dark and full daylight at hours 5 (dawn) and 19 (dusk) lives in the data segment. The exact byte values have not been transcribed into this spec — they are driver-side numerics. Implementations should pick a smooth six-step ramp and tune visually; matching the original requires reading the bytes.
+- **Per-character month counter — non-inn interpretation.** The byte that increments on every character record at month rollover, capped at 25, is now identified as the inn stay counter when a record is lodged. Its meaning for active or non-lodged roster records is still open; a high value might be consumed by a hunger, rest-debt, or generic days-since-event mechanic outside the inn.
 
 - **Mode-zero recompute call sites.** Mode-zero cleanup calls are confirmed from overworld entry (twice, around viewport rebuild) and town entry (once, after the entry tile-render). Combat enter, dungeon enter, and save-restore have not been exhaustively mapped. Conservative assumption: every mode entry should fire one mode-zero cleanup before the first frame of the new mode.
 
 - **Why exactly thirteen months.** Britannia's calendar has thirteen 28-day months, totalling 364 days per year. The design choice — neither the lunar 12 nor the solar 12 — is part of the game's lore (a thirteen-month "lunar" calendar suits the moongate cycle), not an engine quirk. Implementations should not "fix" this to twelve months.
 
-- **Time during prompts.** When a prompt is active (Y/N, hours-to-rest, NPC keyword), the input system suppresses the world-tick that would otherwise advance time during idle polling. The clock advances only when an action commits; sitting at a prompt does not pass time. This is already true of the input system as described in `input.md`; flagged here because the contract is part of "what advances time".
+- **Time during prompts and idle waits.** When a prompt is active (Y/N, hours-to-rest, NPC keyword), the input system suppresses the idle world-tick redraw path. That redraw path itself is visual/animation work and does not advance the clock; the clock advances only when an action commits and a mode loop or time-elapsing command calls the per-turn cleanup. Sitting at a prompt or at the open command cursor does not pass in-world time by itself.
 
 - **Year overflow.** The year is a 16-bit word; the cascade overflows after 65,535 years. The original game makes no provision for that. Implementations targeting modern playthroughs need not either; the cleanest behaviour is to clamp.
 
-- **Identity of the "tower" vehicle.** The vehicle byte that suppresses minute advance (Section 4) holds the letter `T` in that state, called "tower" in the source notes. Whether this is the magic carpet or some other zero-time-cost transit mode is not yet confirmed. The time system's contract — "this byte means do not advance minutes" — is unaffected.
+- **Full meaning of the `Q` and `T` state tags.** The time cleanup's local contract is fixed: `Q` halves the minute increment and `T` skips the minute and light-counter writes. The broader mode meaning of those letters belongs to the movement and mode-loop specs. Current public evidence is strong enough to avoid mapping `T` to the magic carpet or any other specific vehicle identity.
 
 ## 13. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The per-turn cleanup routine itself — its mode-argument handling, the vehicle modifiers, the minute-to-year cascade, the day-rollover bundle, the daylight recompute, and the hour-change hooks — derived from `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- The per-turn cleanup routine itself — its mode-argument handling, the state-tag modifiers, the minute-to-year cascade, the day-rollover bundle, the daylight recompute, and the hour-change hooks — derived from `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- The distinction between the timing/state tag byte and the boarded vehicle/transport byte — derived from `u5-decomp/formats/ds-bss-map.md` and `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The selection of an NPC's active waypoint from the four-byte time field, including the wrap-back-to-waypoint-1 behaviour — derived from `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
 - The per-tick NPC scheduler's consumption of the shared hour byte — derived from `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
 - The overworld mode loop's per-turn invocation of the cleanup with the two-minute increment, including the mode-zero entry calls used for daylight refresh — derived from `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.

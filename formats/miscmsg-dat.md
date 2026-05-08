@@ -74,8 +74,8 @@ those flows.
 ## 6. Validation and Error Handling
 
 A full shipped-compatible asset should contain forty-seven records. Tools
-should reject unterminated records and should preserve the raw bytes of
-tile-glyph records rather than normalizing them as prose.
+should reject unterminated records and should preserve tile-glyph records
+unchanged rather than normalizing them as prose.
 
 If a consumer requests a record outside the available count, a modern
 implementation should report a missing-message error. Falling through to the

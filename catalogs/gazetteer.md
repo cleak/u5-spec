@@ -125,28 +125,30 @@ this family:
 - may have special tile, NPC, dialogue, or quest behaviour encoded by data.
 
 The location file format does not carry the display name. Names and overworld
-entrance coordinates are resident metadata. The current cleanroom docs treat
-the town sub-map order as provisional except where directly identified by
-special behaviour or roster contents.
+entrance coordinates are resident metadata. The DATA.OVL-derived world-location
+table now binds scene bytes one through thirty-two to the storage-family keys
+below. Some resident name strings are intentionally blank; those rows still have
+stable scene bytes and storage keys.
 
 ### Towns
 
-The canonical town-family names currently used by the clean specs are:
+Town rows use `TOWNE:n` keys and load `TOWNE.DAT`, `TOWNE.NPC`, and
+`TOWNE.TLK`. Their resident order is:
 
-| Name | Engine notes |
-|---|---|
-| Moonglow | Town-mode interior; part of the eight-town sequence. |
-| Britain | Town-mode interior; reagent/shop references distinguish it in shop and magic specs. |
-| Jhelom | Town-mode interior; part of the eight-town sequence. |
-| Yew | Town-mode interior; herbalist references appear in magic/shop specs. |
-| Minoc | Town-mode interior; part of the eight-town sequence. |
-| Trinsic | Town-mode interior; part of the eight-town sequence. |
-| Skara Brae | Town-mode interior; reagent/shop references distinguish it in magic specs. |
-| New Magincia | Town-mode interior; part of the eight-town sequence. |
+| Scene | Key | Resident name |
+|---:|---|---|
+| 1 | `TOWNE:0` | Moonglow |
+| 2 | `TOWNE:1` | Britain |
+| 3 | `TOWNE:2` | Jhelom |
+| 4 | `TOWNE:3` | Yew |
+| 5 | `TOWNE:4` | Minoc |
+| 6 | `TOWNE:5` | Trinsic |
+| 7 | `TOWNE:6` | Skara Brae |
+| 8 | `TOWNE:7` | New Magincia |
 
-The presumed sub-map order is Moonglow, Britain, Jhelom, Yew, Minoc, Trinsic,
-Skara Brae, New Magincia. Treat that order as provisional until confirmed by
-the resident location-name table or an empirical scene-byte pass.
+Shop/healer cross-reference: the healer Cure/Heal no-price branch is keyed to
+the Minoc town scene, which the shop tables resolve to `The Healers Mission`.
+The service flow is documented in `systems/shops.md`.
 
 ### Dwellings
 
@@ -157,60 +159,80 @@ identify several dwelling-associated named inhabitants, including Jennifer,
 Jotham, Windmire, Emilly, Anthony, Charlotte, Smith, Lord Kenneth, David,
 Gregory, Grendel, Jacqueline, Sutek, and Sin'Vraal.
 
-The exact sub-map-to-place-name mapping for all eight dwellings is still a
-known gap. Do not bind `DWELLING:n` to a display name in engine data until the
-resident location table and overworld coordinate table have been cleanly
-transcribed.
+The first five dwelling rows have resident names; the last three rows have
+blank resident name strings and should be displayed through their stable keys
+until another clean source names them.
+
+| Scene | Key | Resident name |
+|---:|---|---|
+| 9 | `DWELLING:0` | Fogsbane |
+| 10 | `DWELLING:1` | Stormcrow |
+| 11 | `DWELLING:2` | Greyhaven |
+| 12 | `DWELLING:3` | Waveguide |
+| 13 | `DWELLING:4` | Iolo's Hut |
+| 14 | `DWELLING:5` | Blank resident name |
+| 15 | `DWELLING:6` | Blank resident name |
+| 16 | `DWELLING:7` | Blank resident name |
 
 ### Castles
 
 Castle rows use `CASTLE:n` keys and load `CASTLE.DAT`, `CASTLE.NPC`, and
-`CASTLE.TLK`. Current specs identify two castle-family locations by behaviour:
+`CASTLE.TLK`. In this spec, "Castle" is the storage family, not a claim that
+every row is an in-world castle. The resident order is:
 
-| Name | Current binding status | Engine notes |
-|---|---|---|
-| Lord British's Castle | Castle-family location; current verification slice binds the roster/dialogue evidence to `CASTLE:0` | Has an audience prompt and quest-flag side effects on entry. |
-| Lord Blackthorn's Castle | Castle-family location indicated by Blackthorn roster and combat/event specs | Contains Blackthorn-related NPC and hostile/scripted behaviour. |
-
-Other castle-family display names must be resolved through the resident
-location-name table and cross-checked against the paired map, NPC, and dialogue
-blocks. Until then, engine data should retain `CASTLE:n` keys rather than
-inventing names from roster contents.
+| Scene | Key | Resident name / binding |
+|---:|---|---|
+| 17 | `CASTLE:0` | Blank resident name; roster and verification slice identify Lord British's Castle |
+| 18 | `CASTLE:1` | Blank resident name; roster content identifies Lord Blackthorn's Castle |
+| 19 | `CASTLE:2` | West Britanny |
+| 20 | `CASTLE:3` | North Britanny |
+| 21 | `CASTLE:4` | East Britanny |
+| 22 | `CASTLE:5` | Paws |
+| 23 | `CASTLE:6` | Cove |
+| 24 | `CASTLE:7` | Buccaneer's Den |
 
 ### Keeps
 
 Keep rows use `KEEP:n` keys and load `KEEP.DAT`, `KEEP.NPC`, and `KEEP.TLK`.
-Existing extraction notes name Stonegate, Serpent's Hold, and the Lycaeum as
-keep-family examples. NPC roster rows also associate companions and named
-inhabitants with keep-family sub-maps, but they do not by themselves prove the
-display-name order.
-
 Keep interiors are town-mode locations with schedule-driven NPCs, doors,
-stairs, possible hostility, and quest-specific scripts. Treat keep names as a
-resident-table concern and keep the `KEEP:n` key stable until the order is
-confirmed.
+stairs, possible hostility, and quest-specific scripts. Their resident order is:
+
+| Scene | Key | Resident name |
+|---:|---|---|
+| 25 | `KEEP:0` | Ararat |
+| 26 | `KEEP:1` | Bordermarch |
+| 27 | `KEEP:2` | Farthing |
+| 28 | `KEEP:3` | Windemere |
+| 29 | `KEEP:4` | Stonegate |
+| 30 | `KEEP:5` | The Lycaeum |
+| 31 | `KEEP:6` | Empath Abbey |
+| 32 | `KEEP:7` | Serpent's Hold |
 
 ## 6. Dungeons
 
-There are eight named dungeons. Dungeon mode and the dungeon data format agree
-on this named set:
+There are eight named dungeons. Dungeon mode, `DUNGEON.DAT`, and the DATA.OVL
+world-location rows agree on this scene/name/record order:
 
-| Name | Runtime notes |
-|---|---|
-| Despise | Eight levels; dungeon-mode scene. |
-| Destard | Eight levels; dungeon-mode scene. |
-| Doom | Eight levels; dungeon-mode scene. |
-| Hythloth | Eight levels; bottom-level underworld transition remains a specific open question. |
-| Shame | Eight levels; dungeon-mode scene. |
-| Wrong | Eight levels; dungeon-mode scene. |
-| Covetous | Eight levels; dungeon-mode scene. |
-| Deceit | Eight levels; standard dungeon-mode scene. |
+| Scene | Key | `DUNGEON.DAT` record | Resident name | Runtime notes |
+|---:|---|---:|---|---|
+| 33 | `DUNGEON:0` | 0 | Deceit | Dungeon-mode scene; presentation flavour byte 3. |
+| 34 | `DUNGEON:1` | 1 | Despise | Dungeon-mode scene; normal presentation flavour. |
+| 35 | `DUNGEON:2` | 2 | Destard | Dungeon-mode scene; normal presentation flavour. |
+| 36 | `DUNGEON:3` | 3 | Wrong | Dungeon-mode scene; presentation flavour byte 3. |
+| 37 | `DUNGEON:4` | 4 | Covetous | Dungeon-mode scene; presentation flavour byte 3. |
+| 38 | `DUNGEON:5` | 5 | Shame | Dungeon-mode scene; mine presentation flavour. |
+| 39 | `DUNGEON:6` | 6 | Hythloth | Dungeon-mode scene; mine presentation flavour; bottom-level underworld transition remains a specific open question. |
+| 40 | `DUNGEON:7` | 7 | Doom | Dungeon-mode scene; normal presentation flavour. |
 
-The `DUNGEON.DAT` file is dungeon-major and stores eight dungeon records, but
-the format spec leaves the index-to-name mapping to resident tables and scene
-selection. The gazetteer should therefore store a dungeon display name, a
-stable dungeon index once confirmed, its flavour group once confirmed, its
-surface entry record, and any special exit or scripted transition behaviour.
+The `DUNGEON.DAT` file is dungeon-major and stores eight dungeon records in the
+same order. The gazetteer row should therefore carry a dungeon display name,
+its `DUNGEON:n` key, its scene byte, its surface or underworld entry record,
+and any special exit or scripted transition behaviour.
+
+The standard dungeon-mode entry seed is `(Z=0, X=1, Y=1)` facing east when
+entered from Britannia. When entered from the underworld, non-Doom dungeons use
+`(Z=7, X=7, Y=7)` facing west; Doom is the exception and still uses the
+surface-style seed.
 
 Dungeon rows must not be modeled as town interiors. They have no `*.NPC` roster
 and no `*.TLK` block. Talking in dungeon mode always follows the dungeon-mode
@@ -270,14 +292,14 @@ A content loader or audit tool should enforce these rules:
   family and a sub-map index in `0..7`.
 - The paired `*.DAT`, `*.NPC`, and `*.TLK` sub-map indexes match for a row.
 - Dungeon rows use dungeon-mode data, not town-mode data.
-- Dungeon indexes, once published, are unique and in `0..7`.
+- Dungeon indexes are unique and in `0..7`.
 - Shrine rows are exactly the eight virtues, in the karma system's virtue
   order, and each has exactly one mantra.
 - Landmark coordinates, when published, wrap or validate according to the
   owning plane's coordinate rules.
 - No coordinate-only record should override scene-byte class rules.
-- Unknown names or unconfirmed sub-map orders should remain explicit
-  placeholders rather than guessed display strings.
+- Unknown names or blank resident-name rows should remain explicit placeholders
+  rather than guessed display strings.
 
 Runtime error handling should be conservative:
 
@@ -299,18 +321,16 @@ The following gaps are intentional in this first catalog:
 1. **Exact overworld coordinates.** Resident tables are known to exist for
    locations and shrines, but their byte-exact contents have not been published
    in a cleanroom spec.
-2. **Sub-map-to-name order.** Town ordering is currently presumed from existing
-   format notes; dwelling, castle, and keep ordering still needs confirmation
-   from resident names, scene-byte observations, and paired map/NPC/TLK data.
-3. **Castle and keep full display-name set.** Lord British's Castle now has a
-   verification-slice binding to `CASTLE:0`, and Lord Blackthorn's Castle is
-   identified by current specs. Some keep examples appear in extraction notes,
-   but the complete public table is not yet cleanly bound. One private
-   town-entry note still has a conflicting special-scene label and should be
-   rechecked before using it as a public location binding.
-4. **Dungeon index-to-name order.** The named dungeon set is firm; the exact
-   index binding should be published only after resident scene selection is
-   transcribed.
+2. **Blank resident town-mode names.** Scenes 14 through 18 have blank resident
+   location-name strings. `CASTLE:0` and `CASTLE:1` are semantically identified
+   by roster and special-behaviour evidence; `DWELLING:5` through
+   `DWELLING:7` remain stable keyed rows with no public display name.
+3. **Location coordinate publication.** The scene/name binding is public, but
+   the exact overworld coordinates for those rows are still omitted from this
+   cleanroom catalog.
+4. **Dungeon return and special-transition coordinates.** The dungeon
+   scene/name/data-record order is public, but exact entrance and return
+   coordinates are still omitted from this cleanroom catalog.
 5. **Moongate schedule.** The overworld spec describes the state machine, but
    the full per-day, per-hour origin/destination table remains open.
 6. **Plane-transition pairs.** Falls and Underworld ascents are known system
@@ -334,17 +354,18 @@ Public specs used:
   exit, location classes, Lord British's Castle special entry behaviour, and
   hostile NPC notes.
 - `u5-spec/systems/dungeon-mode.md` - dungeon scene model, named dungeon set,
-  flavour classes, movement, exits, and Hythloth open question.
+  scene/name/data-record order, flavour classes, movement, exits, and Hythloth
+  open question.
 - `u5-spec/formats/brit-dat.md` - Britannia map shape and relationship between
   terrain cells and resident location metadata.
 - `u5-spec/formats/under-dat.md` - Underworld map shape and plane-transition
   relationship.
 - `u5-spec/formats/location-dat.md` - four per-class location files, sub-map
   partition, floor layout, markers, and resident name/floor table dependency.
-- `u5-spec/formats/npc.md` - `.NPC` scene partition, provisional town ordering,
-  and sub-map/name open question.
-- `u5-spec/catalogs/npc-roster.md` - current named NPC rows and unresolved
-  `FAMILY:n` to display-place mapping.
+- `u5-spec/formats/npc.md` - `.NPC` scene partition, scene-to-storage-key
+  order, and blank resident-name rows.
+- `u5-spec/catalogs/npc-roster.md` - current named NPC rows and roster-based
+  identification of special blank-name locations.
 - `u5-engine/reports/lb-throne-room-slice.txt` - first verification slice
   binding Lord British's castle evidence to `CASTLE:0`.
 - `u5-spec/systems/karma.md` - virtue order and shrine mantras.
@@ -358,3 +379,10 @@ Private analysis provenance:
 - `u5-decomp/formats/data-ovl.md` - confirms the resident image contains
   location coordinate tables, shrine coordinate tables, location/name
   vocabulary, and map metadata. This catalog cites only those semantic facts.
+- `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md` -
+  confirms that overworld location-table index plus one becomes the town-mode
+  scene byte for entries one through thirty-two.
+- MAINOUT E-Enter helper analysis in `u5-decomp` - confirms that rows
+  thirty-two through thirty-nine use the same row-plus-one scene rule for
+  dungeons, load the matching `DUNGEON.DAT` record, and seed the dungeon entry
+  position by plane.

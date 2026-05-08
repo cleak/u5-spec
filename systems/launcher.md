@@ -58,9 +58,9 @@ and should be ignored unless future startup tracing proves otherwise.
 Startup proceeds in layers:
 
 1. DOS loads `ULTIMA.EXE` as an MZ program and transfers control to the
-   executable's runtime startup stub.
-2. The runtime startup stub establishes the program stack and transfers control
-   to the resident main function.
+   executable's runtime startup layer.
+2. The runtime startup layer establishes the process state and transfers
+   control to the resident main function.
 3. The resident main function parses the optional display selector, initializes
    early resident state, records DOS drive information, and calls the intro
    overlay.
@@ -170,8 +170,9 @@ not part of this IBM PC engine baseline.
   supplied should be verified against the startup detection path and hardware
   assumptions. The driver loader's four explicit selector flags are known; the
   no-selector fallback is a startup policy detail.
-- Driver initialization has a second dispatch cell whose complete ABI belongs
-  with the optional display-driver spec, not this launcher spec.
+- Driver initialization has a second dispatch cell whose complete binary ABI
+  remains deferred in `display-driver.md`; this launcher spec owns only the
+  selection and startup contract.
 - This document covers the analyzed DOS/GOG file set. Other historical PC
   distributions should be compared before making cross-version claims.
 

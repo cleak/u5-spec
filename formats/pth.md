@@ -1,140 +1,136 @@
 # PTH files
 
-Format specification for `BRITISH.PTH`, the only `.PTH` file shipped with Ultima V. It is a 2,783-byte byte stream of nibble-encoded movement deltas that drives the title-screen "Lord British" calligraphic-signature animation. The file is a stream of pen movements rather than a list of waypoints or coordinates: each byte advances a pen position by a small vector and (optionally) sets a pixel at the new position, building the cursive "Lord British" inscription one tiny stroke at a time.
+Format specification for `BRITISH.PTH`, the only `.PTH` file shipped with Ultima V. It is a 2,783-byte stream of nibble-encoded pen movement deltas used by the title-screen "Lord British" signature animation. It is not a waypoint list and it is not related to NPC schedules.
 
 ## 1. Overview
 
-The file's role is purely cosmetic. It is read once per game session — during the title sequence — by the introduction overlay, walked end-to-end while the player watches the signature draw itself, and never consulted again. Nothing in the simulation, the gameplay loops, or the save image references the path data; the file's contents have no effect on play.
+The file's role is cosmetic. The intro loads it during the title sequence, walks it while the player watches the signature draw itself, and never consults it again. Nothing in the simulation, gameplay loops, or save image references the path data.
 
-Although the `.PTH` extension suggests a generic "path" format that might also describe NPC schedules or quest routes, no other `.PTH` file ships in the game directory. The four NPC-class roster files (`*.NPC`) carry their own per-NPC schedule encoding (see `formats/npc.md`); they do not share the byte stream layout described here. `BRITISH.PTH` is a one-off used only for the title-screen flourish.
+Although the `.PTH` extension sounds generic, no other `.PTH` file ships in the analyzed DOS baseline. NPC routes use the fixed-stride records in the four `.NPC` files, not this delta stream.
 
-The file is a flat byte stream with no header, no magic number, no version word, no length prefix, no offset table, and no embedded text. There is also no padding: every byte is consumed by the walker. The file's only structural feature beyond the per-byte delta encoding is segmentation by NUL bytes — three mid-file NUL terminators plus one at the file end split the stream into four contiguous "stroke" segments, each rendered from a different starting screen position.
+The file is a flat byte stream with no header, magic number, version word, length prefix, offset table, embedded text, or padding. Every byte is part of the stream. The only structural markers are four zero bytes: three internal segment terminators plus one terminator at end of file.
 
-A reader writing a `.PTH` decoder works at the level of "which nibble of which byte does what to the pen", and that is the entire format. There is no out-of-line storage, no escape sequence, and no mode change beyond what the byte values themselves trigger.
+## 2. File-Level Layout
 
-## 2. File-level layout
+The whole file is:
 
-The file is a contiguous run of two thousand seven hundred eighty-three bytes:
-
-```
-.PTH file:
-  uint8 stream[2783]    // pen-delta byte stream, NUL-segmented
+```text
+stream[2783]    NUL-segmented pen-delta byte stream
 ```
 
-There is no per-file header. The walker reads the file's bytes from offset zero up through the final byte, treating each non-zero byte as a delta-pair and each zero byte as a segment terminator. The stream contains exactly four NUL bytes, three at internal offsets and one as the final byte of the file, dividing the run into four segments.
+The walker consumes bytes from offset zero until it reaches a zero byte. Each call consumes one segment. The intro calls the walker four times, once per segment, with a different starting pen origin for each call.
 
-The file's size is not encoded inside the file. The walker tracks how many bytes it has consumed against a fixed buffer-size constant (about four kilobytes in the engine's working buffer; the file is shorter than the buffer and ends before the buffer does). A reader that does not have an out-of-band file size can detect end of stream by reaching the fourth NUL byte (Section 4).
+The four zero bytes are at file offsets `856`, `1405`, `1817`, and `2782`. They divide the file into four non-empty segments:
 
-## 3. Per-byte encoding
+| Segment | Byte range | Length |
+|---:|---|---:|
+| 1 | `0..855` | 856 bytes |
+| 2 | `857..1404` | 548 bytes |
+| 3 | `1406..1816` | 411 bytes |
+| 4 | `1818..2781` | 964 bytes |
 
-Each byte in the stream is split into two four-bit nibbles:
+The final zero byte is the final byte of the file. A reader that has the file size should stop at end of file after the fourth terminator. A reader that only has a stream can treat the fourth terminator as the natural end for the shipped file.
 
-| Bit position | Nibble | Role                                          |
-|--------------|--------|-----------------------------------------------|
-| `7..4`       | High   | Horizontal motion delta for the pen.          |
-| `3..0`       | Low    | Vertical motion delta for the pen.            |
+## 3. Per-Byte Encoding
 
-The two nibbles are decoded independently using the same scheme. Each nibble splits further into a sign bit and a three-bit magnitude:
+Each non-zero byte is split into two four-bit nibbles:
 
-| Bit position within nibble | Field      | Meaning                                                          |
-|----------------------------|------------|------------------------------------------------------------------|
-| Bit 3 (`0x8`)              | Sign       | `0` for positive, `1` for negative.                              |
-| Bits 2..0 (`0x0..0x7`)     | Magnitude  | Unsigned three-bit count of pixels to advance along this axis.   |
+| Bits | Nibble | Role |
+|---:|---|---|
+| `7..4` | High | Horizontal movement delta. |
+| `3..0` | Low | Vertical movement delta. |
 
-Concretely, given a byte `b`:
+Each nibble uses one sign bit and three magnitude bits:
 
-- Horizontal nibble: `hi = (b >> 4) & 0x0F`. Magnitude `mh = hi & 0x07`. Sign-aware delta `dx = (hi & 0x08) ? -mh : +mh`.
-- Vertical nibble: `lo = b & 0x0F`. Magnitude `mv = lo & 0x07`. Sign-aware delta `dy = (lo & 0x08) ? -mv : +mv`.
+| Nibble bit | Meaning |
+|---:|---|
+| `3` | Sign: clear for positive, set for negative. |
+| `2..0` | Magnitude, unsigned range `0..7`. |
 
-The pen's screen position advances by `(dx, dy)` for each byte processed. The convention is screen-space: positive `dx` moves the pen rightward, positive `dy` moves the pen downward (toward the bottom of the screen), which means the sign bit being clear corresponds to "right" or "down" and being set corresponds to "left" or "up".
+For a byte `b`:
 
-The maximum per-axis delta is therefore `±7` pixels per byte. In practice the shipped file uses much smaller deltas: a histogram of the nibble values shows `0` and `1` together accounting for over four thousand of the file's roughly five thousand five hundred nibbles, with `9` (which is `1` with the sign bit set, i.e. a delta of `-1`) the next most common. The file is dominated by single-pixel steps in any of four diagonal-or-cardinal directions, with a small admixture of larger jumps.
+- Horizontal magnitude is `(b >> 4) & 7`; horizontal sign is bit `7`.
+- Vertical magnitude is `b & 7`; vertical sign is bit `3`.
+- Positive X moves right. Positive Y moves down.
+- The largest per-axis movement encoded by one byte is seven pixels.
 
-## 4. Segmentation
+The shipped stream is dominated by one-pixel and zero-pixel nibble movements, with occasional larger skip movements.
 
-Four NUL bytes (`0x00`) appear in the stream. They sit at file offsets `856`, `1405`, `1817`, and `2782`. The fourth NUL is the file's last byte; the first three are internal segment terminators. The four NULs partition the stream into four contiguous segments:
+## 4. Segment Terminators
 
-| Segment | Byte range (inclusive) | Length    |
-|---------|------------------------|-----------|
-| 1       | `0..855`               | 856 bytes |
-| 2       | `857..1404`            | 548 bytes |
-| 3       | `1406..1816`           | 411 bytes |
-| 4       | `1818..2781`           | 964 bytes |
+The byte value `0x00` is not processed as a `(0, 0)` delta. It terminates the current segment and returns control to the intro. The next intro call resumes at the following byte with a fresh pen origin.
 
-A NUL byte's encoding under the per-byte rule of Section 3 is degenerate: both nibbles are zero, so the per-byte delta is `(0, 0)` — neither axis advances. The walker treats a NUL byte specially: rather than processing it as a no-op delta, it interprets the NUL as an end-of-segment marker, halts processing of the current segment, and returns to its caller. The caller resumes walking with the next segment when it next invokes the walker, supplying a fresh pen origin (Section 6).
+No other byte terminates a segment. Because both nibbles being zero implies the whole byte is zero, `0x00` is unambiguous.
 
-A byte whose two nibbles are individually zero but which is not the byte value `0x00` cannot exist — both nibbles being zero implies the whole byte is zero. A `0x00` byte is therefore unambiguously a segment terminator and is never consumed as a delta-pair. Conversely, no other byte value triggers segment termination.
+The four segment boundaries are part of the animation contract. They allow the intro to draw the signature in four stroke groups from four different origins.
 
-The four-segment structure is the file's only non-flat structural feature. It is plausibly aligned with the four major letter-groups of "Lord British" (the four words "Lord" and "British" if one counts a stylised flourish, or the four pen-lift boundaries in a calligraphic ductus), but the title-screen rendering is fast enough to make a precise letter-to-segment mapping a matter of inspection rather than format spec. See Section 9.
+## 5. Pen-Up Signalling
 
-## 5. Pen-up signalling
+For each non-zero byte, the walker first decodes the movement delta, then decides whether the new pen position should be painted.
 
-A second mechanism modulates the per-byte delta: when a nibble's magnitude exceeds two, the byte is treated as a pen-up move. The walker advances the pen position by the decoded `(dx, dy)` as usual, but suppresses the pixel-set at the new position. The next byte resumes ordinary pen-down behaviour unless it, too, has a magnitude greater than two.
+The pen-state rule is:
 
-Concretely, the pen-state rule is:
+| Nibble magnitudes in the byte | Action |
+|---|---|
+| Both magnitudes `0..2` | Pen down: advance and paint at the new position. |
+| Either magnitude `3..7` | Pen up for this byte: advance but do not paint. |
 
-- Magnitude `0..2` on either axis: pen-down step. The walker paints a pixel at the new position before continuing.
-- Magnitude `3..7` on either axis: pen-up step. The walker advances the pen but does not paint.
+Equivalently, the byte is a pen-up move when the larger of its two nibble magnitudes is greater than two. This is not a sticky state. The next byte returns to pen-down behaviour if both of its nibble magnitudes are two or smaller.
 
-The check is independent per byte: a magnitude-five byte does not set a sticky pen-up flag, only a per-byte one. The next byte (assuming both its nibble magnitudes are two or smaller) returns the pen to drawing.
+Pen-up bytes encode short skips inside one segment. NUL terminators encode major segment breaks and return to the caller for a new origin.
 
-The pen-up rule lets the file encode visible discontinuities — one part of the signature ends and another begins, so the pen lifts and moves to the new origin without leaving a trail. Without it, the only way to lift the pen would be to terminate a segment (Section 4), which would commit the walker to a fresh origin from the caller. Pen-up bytes are the format's way of saying "skip this short distance without drawing", typically used for the inter-letter gaps within one segment.
+## 6. Synthetic Decoding Example
 
-The threshold `> 2` (rather than `> 1` or `> 3`) is verified empirically against the walker's disassembly. Implementations should use the same cutoff to reproduce the original animation faithfully.
+This synthetic example illustrates the byte interpretation without reproducing original file-byte values from `BRITISH.PTH`.
 
-## 6. Worked example — the file's first sixteen bytes
+| Byte meaning | High nibble | Low nibble | Pen action |
+|---|---|---|---|
+| Small positive X step | Magnitude one, positive sign | Magnitude zero | Move one pixel right and paint. |
+| Small positive Y step | Magnitude zero | Magnitude one, positive sign | Move one pixel down and paint. |
+| Small negative X step | Magnitude one, negative sign | Magnitude zero | Move one pixel left and paint. |
+| Large X skip | Magnitude greater than two | Magnitude zero | Move without painting. |
 
-The first sixteen bytes of `BRITISH.PTH` are `10 10 01 10 10 01 90 10 …`. Decoded byte-by-byte:
-
-| Byte  | Hex   | High nibble (dx)              | Low nibble (dy)              | Pen action       |
-|-------|-------|-------------------------------|------------------------------|------------------|
-| 0     | `10`  | `1` → `+1`                    | `0` → `0`                    | Down: paint at `(x+1, y)` |
-| 1     | `10`  | `1` → `+1`                    | `0` → `0`                    | Down: paint at `(x+2, y)` |
-| 2     | `01`  | `0` → `0`                     | `1` → `+1`                   | Down: paint at `(x+2, y+1)` |
-| 3     | `10`  | `1` → `+1`                    | `0` → `0`                    | Down: paint at `(x+3, y+1)` |
-| 4     | `10`  | `1` → `+1`                    | `0` → `0`                    | Down: paint at `(x+4, y+1)` |
-| 5     | `01`  | `0` → `0`                     | `1` → `+1`                   | Down: paint at `(x+4, y+2)` |
-| 6     | `90`  | `9` → `-1` (sign bit + mag 1) | `0` → `0`                    | Down: paint at `(x+3, y+2)` |
-| 7     | `10`  | `1` → `+1`                    | `0` → `0`                    | Down: paint at `(x+4, y+2)` |
-
-All eight bytes have nibble magnitudes of at most one, so the pen stays down throughout and the walker paints a pixel on every step. The trace describes a small zigzag — two rightward steps, a step down, two more rightward, another step down, a leftward step, then another rightward — which is the start of one of the cursive strokes on the title screen.
-
-A reader can sanity-check a decoder by reproducing this trace against the file's first sixteen bytes and confirming that no NUL appears in that span, that the running pen position matches the table above, and that the pen never lifts (no nibble magnitude exceeds two).
+A decoder can sanity-check itself by confirming that bytes whose two magnitudes are both `0..2` paint, while any byte with either magnitude `3..7` moves without painting.
 
 ## 7. Consumer
 
-The file has a single consumer: the introduction overlay's path-walker, invoked four times during the title sequence — once per segment — to draw the four pieces of the signature at four different starting screen positions. The walker reads the file from a four-kilobyte buffer that holds the entire file (plus trailing zeros into the buffer's tail), maintains a rolling byte index, and advances through the stream until it hits a NUL terminator. Each call to the walker consumes one segment.
+The file has a single consumer: the intro path walker. The intro loads the complete file into a scratch buffer and invokes the walker four times.
 
-The four starting positions are baked into the introduction overlay as constants — one `(x, y)` pair per call site. Concretely the four origins are at title-screen coordinates roughly corresponding to the four corners of the inscribed phrase, with each segment laying down one stroke or letter group from its starting origin outward. The walker also polls the keyboard between bytes and aborts the animation if the player presses any key, so the introduction can be skipped without waiting for all four segments to complete.
+The four title-screen origins, in segment order, are:
 
-The walker's full behaviour — its cooperation with the per-driver paint primitive, its keyboard-poll cadence, its interaction with the title-screen palette, and its exit-on-keypress contract — is described under `systems/intro.md`. From the format's perspective, the only contract that matters is that a segment ends at the first NUL byte after a fresh origin and that the four segments collectively consume the entire file.
+| Segment | X | Y |
+|---:|---:|---:|
+| 1 | 68 | 44 |
+| 2 | 94 | 64 |
+| 3 | 78 | 143 |
+| 4 | 105 | 167 |
 
-## 8. Cross-references
+Each call consumes one segment, drawing one stroke group from the supplied origin. The walker polls the keyboard between steps. Any key press aborts the remaining signature animation and lets the intro continue without waiting for all four segments to finish.
 
-- The introduction sequence and its title-screen orchestration — `systems/intro.md`.
-- The display drivers that the walker calls to paint each pixel — `drivers/display.md`.
-- The per-driver palette and mode setup that gates whether pixels are emitted at all — `systems/text-output.md`.
-- The other "path"-themed format in the game (the per-NPC schedule waypoints inside the four `.NPC` files) — `formats/npc.md`. The two formats share only their extension family; the NPC schedule format is a fixed-stride waypoint record, not a delta stream.
-- The save image, which does not reference `BRITISH.PTH` directly — `formats/saved-gam.md`. The signature animation runs once per game launch, not per save load.
+The intro system spec owns the title-screen orchestration and early-skip behaviour. This format spec owns only the stream layout and decode rule.
 
-## 9. Open questions
+## 8. Cross-References
 
-The format is verified by direct byte inspection at the file-structure level (the four-NUL segmentation, the file size, the dominance of small-magnitude nibbles in the histogram) and by behavioural inspection at the walker level (the per-byte nibble decode, the sign-and-magnitude split, the `> 2` pen-up threshold). The following points remain open.
+- `systems/intro.md` describes the title sequence that loads and walks `BRITISH.PTH`.
+- `systems/display-driver.md` describes the display contract used to paint the signature pixels.
+- `formats/npc.md` describes the unrelated NPC schedule records that should not be confused with `.PTH`.
+- `formats/saved-gam.md` confirms the save image does not reference this title-only asset.
 
-- **Exact pen-up threshold rule.** The walker's disassembly shows the cutoff as "magnitude greater than two", consistent across both nibbles of a byte. Whether the rule is "either nibble magnitude > 2 ⇒ pen-up" or "the maximum of the two nibble magnitudes > 2 ⇒ pen-up" produces identical observable behaviour for the encoded file (no nibble within an otherwise-pen-down byte exceeds two), so the two readings are not distinguishable from the data alone. The walker's flow has the per-nibble check applied independently, with the pen-up state being write-once per byte, which suggests "either nibble triggers pen-up for this byte" is the operative semantics. An implementation that treats it as a logical-OR across nibbles is safe.
+## 9. Limits and Non-Format Notes
 
-- **Segment-to-letter mapping.** The four segments of the file are presumably aligned with four pen-lift boundaries in the calligraphic rendering of "Lord British" — possibly the spaces between word groups, possibly the boundaries between major loops in the cursive script. Mapping each segment to the letter group it draws would require playback against the title screen with the pen position annotated. The format spec does not constrain the mapping; any segmentation that draws the same pixels in the same screen positions is equivalent.
+The byte-format contract is closed for the analyzed DOS baseline: file size, segmentation, nibble signs, nibble magnitudes, pen-up threshold, consumer, and four origins are specified.
 
-- **Existence of `.PTH` files beyond `BRITISH.PTH`.** No other `.PTH` file ships with the game. The walker's invocation site is the introduction overlay; no other overlay or system reads the file, and no external reference attests another `.PTH`. The format is therefore a one-shot, despite the generic-sounding extension. Whether the original developers contemplated a broader use is not known.
+These points are intentionally outside the format contract:
 
-- **Pen-up versus segment-break distinction.** Both pen-up bytes (Section 5) and NUL segment terminators (Section 4) lift the pen, but they differ in whether the walker continues internally (pen-up) or returns to the caller for a fresh origin (segment-break). The encoded file uses both mechanisms. Whether they correspond to qualitatively different visual events — a small inter-letter gap versus a major stroke restart — is consistent with the four-segment-as-major-stroke reading but not directly verifiable from the format alone.
-
-- **Title-screen origin coordinates.** The four `(x, y)` origins for the four segments are baked into the introduction overlay rather than into the file. An implementation reproducing the title screen needs the origin coordinates as a sibling input; they are not part of the `.PTH` format and are documented under `systems/intro.md`.
+- **Segment-to-letter mapping.** The four segments likely align with major pen-lift groups in the visual signature, but a renderer only needs to consume the four segments in order from the four specified origins.
+- **Other `.PTH` files.** No other `.PTH` file ships in the analyzed baseline, and no traced system consumes one. The format is specified as a one-shot title asset.
+- **Visual interpretation of pen-up skips.** Pen-up bytes and NUL terminators both lift the pen, but they have different mechanics. Pen-up continues inside the current segment; a NUL returns to the caller for a fresh origin.
 
 ## 10. Sources
 
-The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
+The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, implementation-specific identifiers, source code, disassembly, or original path bytes from those notes appear in this spec.
 
-- The first-pass survey of `BRITISH.PTH`, the nibble-histogram observation, the discovery of exactly four NUL bytes at internal offsets and end-of-file, and the conjectural mapping to four-stroke segmentation — `u5-decomp/formats/npc-tlk-pth.md`.
-- The path walker's full disassembly — the per-byte nibble decode, the sign-and-magnitude split, the `> 2` pen-up threshold, the keyboard-poll early-exit contract, the sole-caller analysis showing four invocation sites with four distinct starting origins, and the resolution of the "consumer is INTRO.OVL" open question — `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- The introduction overlay's title-screen orchestration, which supplies the four origin coordinates and drives the walker once per segment — `u5-decomp/functions/INTRO_OVL/` (the introduction-overlay function notes).
+- The first-pass survey of `BRITISH.PTH`, the nibble-histogram observation, and the discovery of exactly four NUL bytes at internal offsets and end-of-file - `u5-decomp/formats/npc-tlk-pth.md`.
+- The path walker's behavioural analysis - nibble decode, sign-and-magnitude split, pen-up threshold, keyboard early-exit, sole consumer, and four call-site origins - `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
+- The intro title-screen orchestration that supplies the four origins and calls the walker once per segment - `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+- Fresh local title-sequence verification identified the four screen-space pen origins; no original path bytes or implementation excerpts are reproduced here.

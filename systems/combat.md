@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Ultima V's combat system is a turn-based, party-versus-monsters tactical mode that plays out on a small fixed-size arena grid. When a world-mode loop (overworld, town, or dungeon) triggers a fight, the engine suspends what it was doing, swaps the on-screen scene for an arena, populates the arena with the player's party at one set of fixed entry points and a randomised set of monsters at another, and runs a self-contained round loop until one side is wiped out or the player flees. When the loop returns, the engine restores the suspended world state — player position, the dynamic-objects table, the scene byte — and returns control to the calling mode loop with the fight's after-effects baked in: damage taken, characters dead or asleep, time advanced, loot dropped.
+Ultima V's combat system is a turn-based, party-versus-monsters tactical mode that plays out on a small fixed-size arena grid. When a world-mode loop (overworld, town, or dungeon) triggers a fight, the engine suspends what it was doing, swaps the on-screen scene for an arena, populates the arena with the player's party at one set of fixed entry points and a randomised set of monsters at another, and runs a self-contained round loop until one side is wiped out or the player flees. When the loop returns, the engine restores the suspended world state — player position, the dynamic-objects table, the scene byte — and returns control to the calling mode loop with the fight's after-effects baked in: damage taken, characters dead or asleep, time advanced by the round loop, and resources consumed by combat actions.
 
 Combat is "inside-out" — the world freezes while the fight plays through, the fight has its own table of actors, its own per-letter command dispatch, its own AI, and its own arena terrain — and then the function call returns and the world resumes exactly where it left off. The mode-loops above combat are unaware that combat happened beyond the visible state changes.
 
@@ -22,7 +22,7 @@ Once one of the three setup paths has prepared the arena, the framer clears a fe
 
 ## 3. The arena
 
-A combat arena is a rectangle of terrain tiles plus a band of metadata describing where actors enter and which terrain pieces hold special meaning (spawn points, hazards, ladders). Two on-disk files hold the engine's full set of arenas: a bank of sixteen outdoor arenas keyed by overworld terrain class (each tied to a tile family — grass, forest, hills, swamp), and a much larger bank of dungeon-encounter arenas (over a hundred records).
+A combat arena is a rectangle of terrain tiles plus a band of metadata describing where actors enter and which terrain pieces hold special meaning (spawn points, hazards, ladders). Two on-disk files hold the engine's full set of arenas: a bank of sixteen outdoor arenas keyed by overworld terrain class (each tied to a tile family — grass, forest, hills, swamp), and a much larger bank of dungeon-encounter arenas (one hundred twelve records).
 
 Each arena occupies a fixed-size record. The first part is the **terrain grid** — an eleven-by-eleven array of tile bytes describing the arena floor. The remainder is the **placement metadata band** — a flat run of bytes per row that the engine reads at setup to decide how the arena is populated. The band identifies valid party-arrival cells, valid monster-arrival cells, and cells containing hazards. The arena format spec covers the byte-by-byte layout; from combat's perspective the contract is "given an arena ID, the on-disk record tells us a 121-cell terrain grid and a placement plan."
 
@@ -68,7 +68,7 @@ A short combat banner ("CONFLICT") is printed at the start of setup, before any 
 
 **Picking tiles per monster.** The first monster always uses the arena's signature tile class (the class derived from the triggering creature's tile). Subsequent monsters fall into two groups by index: the first `count / 4 + 1` are **leaders** and get the per-arena "leader replacement" tile from a separate per-arena table; the rest are **followers** and reuse the original arena tile. A side-channel predicate suppresses the leader override in some arena classes (underworld, certain unique-creature encounters), in which case all monsters spawn as the same class.
 
-Each placed monster's record is initialised with the chosen tile, the chosen arena coordinates, a phase counter and base-step value derived from the class (Section 7), and the appropriate flag bits. The placement helper returns when all monsters are written.
+Placement initialises two linked records per monster. The renderer-facing active-object record receives the chosen tile and arena coordinates. The parallel combat-effect descriptor receives the class-derived base-step, phase counter, target/owner field, coordinates used by the round walker, and the appropriate flag bits. The placement helper returns when all monsters are written.
 
 ## 6. The actor table
 
@@ -88,11 +88,24 @@ When an actor dies, the "marked dead" bit is set; when a slot is freed completel
 
 A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the step-or-attack primitive (Section 11): when an actor moves, its (X, Y) is written into both.
 
+Spell effects that create or duplicate actors allocate records in both tables.
+Clone copies the accepted target's combat actor record and its linked
+dynamic-object record, relinks the new combat record to the new dynamic-object
+slot, and then places the copy at a random legal arena coordinate. Clone needs
+one free slot in each table before it copies either record; if either table is
+full, no partial clone is written. The original handler does not initialize its
+spell-result word on this capacity-failure exit, so exact bug compatibility may
+preserve an undefined success/failure narration result. A deterministic
+reimplementation should treat that case as a no-op failure unless deliberately
+emulating stack-state leakage. Clone does not try to place the copy adjacent to
+the original target. The placement coordinate is accepted only after the same
+combat placement probe agrees that the cell can hold the cloned actor.
+
 ## 7. Per-round structure
 
-Each round is one walk over the thirty-two-slot actor table. The round loop is a per-round prologue, a per-actor body that runs zero or one times per slot, and a per-round epilogue that checks the three exit conditions. When the body has visited all thirty-two slots, the round restarts (unless an exit fires).
+Each round is one walk over the thirty-two-slot actor table. The round loop has start-of-round setup, a per-actor body that runs zero or one times per slot, and end-of-round exit checks. When the body has visited all thirty-two slots, the round restarts (unless an exit fires).
 
-**Per-round prologue.** A small bundle of housekeeping calls: screen redraw, combat-begin overlay refresh, screen flush, per-round init that resets per-slot scratch state, and clearing the "any spell cast this round" flag.
+**Start-of-round setup.** A small bundle of housekeeping work: screen redraw, combat-begin overlay refresh, screen flush, per-round init that resets per-slot scratch state, and clearing the "any spell cast this round" flag.
 
 **Per-actor body.** For each slot 0–31:
 
@@ -104,7 +117,7 @@ Each round is one walk over the thirty-two-slot actor table. The round loop is a
 6. **Dispatch the actor's turn.** A single function asks "is this slot a player or a monster?" — for a player, control passes to the player command handler (Section 8); for a monster, to the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch (Section 9).
 7. **Mark the slot acted, run the post-action render.** Redraws changed cells and runs any post-action sound or particle effect. Death narration runs here when relevant.
 
-**Per-round epilogue / exit checks.** Three flags control exit:
+**End-of-round exit checks.** Three flags control exit:
 
 - **Defeat flag**: the entire party is dead, asleep, or fled. Result is "defeat".
 - **Leave-combat flag**: the player has chosen to leave (via the X-it command, walking off an open edge, or a spell that ends combat). On the *first* such trigger per fight, the exit-message string is printed; subsequent reads pass through silently.
@@ -116,38 +129,40 @@ The phase-counter / base-step structure means actors act at *staggered* paces. T
 
 ## 8. Player commands in combat
 
-When the round walker dispatches a player slot, the player command handler reads exactly one keystroke from the input pipeline (using the same input system that drives the rest of the engine). The keystroke is folded to upper case, case-checked against the combat command set, and dispatched.
+When the round walker dispatches a player slot, the player command handler normally reads exactly one keystroke from the input pipeline (using the same input system that drives the rest of the engine). If Quickness's shared `Q` active-effect tag is live, that handler first rolls an inclusive 0..1 random gate: a zero result consumes the ready dispatch without reading input, while a one result continues normally. When input is read, the keystroke is folded to upper case, case-checked against the combat command set, and dispatched.
 
-The combat command set consists of letter keys A–Z plus a small set of control codes (Escape, Ctrl-S, Space, digits, direction codes). The recognised letter commands are:
+The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Space, digits, direction codes). Dispatcher-level coverage is complete for all twenty-six letters and the special inputs listed below. Recognition is not the same as world-mode success: several letter branches print the familiar verb label and then run the combat scene-message/abort tail, while others enter delegated follow-up helpers whose exact target rules are still open.
 
-| Key   | Meaning                                                      |
-|-------|--------------------------------------------------------------|
-| **A** | Attack in a direction. Prompts for a direction key, then runs the step-or-attack primitive (Section 11). |
-| **B** | Board ship or horse.                                          |
-| **C** | Cast a spell (Section 10).                                    |
-| **E** | Enter a portal, town, or moongate.                            |
-| **F** | Fire a ship cannon.                                           |
-| **G** | Get an item. Prompts for direction.                           |
-| **H** | Hole up & camp.                                               |
-| **I** | Ignite a torch.                                                |
-| **J** | Jimmy a lock. Prompts for direction.                          |
-| **K** | Klimb a ladder/cliff.                                          |
-| **L** | Look at a tile. Prompts for direction, narrates the tile's name. |
-| **M** | Mix reagents.                                                  |
-| **N** | New order — re-arrange the party order.                       |
-| **O** | Open a chest or door. Prompts for direction.                  |
-| **P** | Push a barrel/item.                                            |
-| **Q** | Quit (save and exit).                                          |
-| **R** | Ready — equip an item from inventory.                         |
-| **S** | Search the current cell.                                       |
-| **T** | Talk to a monster. (Almost always rejected.)                  |
-| **U** | Use an item from inventory.                                    |
-| **V** | View the world map.                                            |
-| **X** | X-it — leave combat voluntarily. Sets the leave-combat flag (Section 14). |
-| **Y** | Yell an activation word.                                       |
-| **Z** | Z-stats — show the active character's stat panel.             |
+| Key   | Combat behaviour |
+|-------|------------------|
+| **A** | Attack. Prompts for a direction key, then runs the step-or-attack primitive (Section 11). |
+| **B** | Recognised as Board, then routed to the combat scene-message/abort tail. |
+| **C** | Cast a spell through the combat spell path (Section 10). |
+| **D** | Prints the combat-specific `D-What?` refusal and aborts the command. |
+| **E** | Recognised as Enter, then routed to the combat scene-message/abort tail. |
+| **F** | Recognised as Fire, then routed to the combat scene-message/abort tail. |
+| **G** | Get. Enters a follow-up command path; exact success/refusal targets are delegated to the combat sub-handler. |
+| **H** | Recognised as Hole up, then routed to the combat scene-message/abort tail. |
+| **I** | Recognised as Ignite torch, then routed to the combat scene-message/abort tail; no torch counter update is proven on this combat branch. |
+| **J** | Jimmy. Enters a follow-up command path; exact success/refusal targets are delegated to the combat sub-handler. |
+| **K** | Klimb. Dispatches through the combat sub-handler; exact ladder/edge behaviour remains arena-dependent. |
+| **L** | Recognised as Look, then routed to the combat scene-message/abort tail; this dispatcher does not run the world/town LOOKOBJ flow. |
+| **M** | Recognised as Mix, then routed to the combat scene-message/abort tail; it does not open the reagent mixer. |
+| **N** | Recognised as New order, then routed to the combat scene-message/abort tail. |
+| **O** | Open. Enters a follow-up command path; exact success/refusal targets are delegated to the combat sub-handler. |
+| **P** | Push. Dispatches through the combat sub-handler; exact arena object effects remain unresolved. |
+| **Q** | Recognised as combat Quit through the combat command parser. This is separate from the resident Q save-game command, and the exact prompt/exit semantics remain unresolved. |
+| **R** | Ready. Enters a follow-up command path to select/equip inventory. |
+| **S** | Search. Enters a follow-up command path; exact target rules remain delegated to the combat sub-handler. |
+| **T** | Recognised as Talk, then routed to the combat scene-message/abort tail. |
+| **U** | Use item. Enters a follow-up command path through the combat sub-handler. |
+| **V** | Recognised as View, then routed to the combat scene-message/abort tail; it is not the resident gem-view map path. |
+| **W** | Prints the combat-specific `W-What?` refusal and aborts the command. |
+| **X** | X-it - leave combat voluntarily. Sets the leave-combat flag (Section 14). |
+| **Y** | Yell. Dispatches through the combat sub-handler. |
+| **Z** | Z-stats. Shows the active character's stat panel through the combat sub-handler. |
 
-Letters that have no meaning in combat (D, W) print a short refusal ("D-What?", "W-What?"). Other inputs:
+Other inputs:
 
 - **Space** — pass / wait one phase.
 - **Escape** — abort whichever multi-stage prompt is active.
@@ -156,26 +171,86 @@ Letters that have no meaning in combat (D, W) print a short refusal ("D-What?", 
 - **Digits `1`–`6`** — select party member 1 through 6 as the active player.
 - **Direction codes** (the eight movement codes the input system translates from numpad / arrow keys) — move one cell in the given direction. Movement uses the step-or-attack primitive: if the cell is occupied by a hostile, attack instead; if it is on the open edge, leave combat.
 
-Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Klimb, Look, Open, Push, Use, Yell): they print a short prompt and call back into the input system to read a second keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' command set so muscle memory transfers cleanly between play modes; the most distinctive combat-only commands are A, C, and X.
+Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Search, Use, Yell, and some delegated arena handlers): they print a short prompt or call a sub-handler that reads a follow-up keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' visible vocabulary so muscle memory transfers cleanly between play modes, but the combat parser owns its own branches and refusals. The most distinctive combat-only commands are A, C, and X.
 
 ## 9. Monster AI
 
 When the round walker dispatches a monster slot, the AI runs as a sequence of three passes that ultimately produce a *synthesised keystroke* — the AI generates the same bytes the player would press if they were controlling this monster, and the synthesised byte runs through the same per-letter dispatcher as a player turn. Monsters and players share the action infrastructure.
 
-**Pass 1 — Intent.** A small helper clears the per-actor narration buffer, picks animation flags, and decides whether the monster should act normally, perform a special-effect action (sleep aura, poison breath, charm), or do nothing this turn. The intent is written into the actor's record so subsequent passes can read it.
+**Pass 1 - Dispatch setup and intent.** The per-actor dispatcher clears the
+actor's combat-status presentation area, prepares narration scratch, and checks
+whether the current slot should run a normal turn, yield to a queued
+animation/effect, or continue into AI decision-making. For a monster that can
+act, the first AI-specific stage is an intent selector keyed by the acting
+monster's class. It can record the target slot or queue a visible/sound effect
+request before direction synthesis runs. This stage does not itself define the
+movement vector; it stages the facts that the shared combat input gate will
+later expose to the ordinary command parser.
 
-**Pass 2 — Direction.** A second helper consults the per-class AI script for this monster, looks at the arena around it, and writes a unit-step `(dx, dy)` vector to two well-known data-segment scratch slots. Each component is `-1`, `0`, or `+1`. The script may consult a per-instance state block (for active monsters) or a per-class static script pointer (for inactive or dead-ish monsters that still need to run an animation script).
+**Pass 2 - Class-script dispatch and direction.** Monster decision-making enters
+a class-script dispatch boundary before the shared command parser sees a
+synthetic key. This boundary is a data selector, not the geometric target
+picker itself. It uses the acting actor's class and live/inactive state to
+choose one of two class-scoped AI resources: live actors use a mutable
+class-state record shared by all live actors of that class, while dead or
+inactive actors use the class's static script entry. Slot-local facts such as
+position, target slot, flags, and phase still live in the combat actor/effect
+tables; the AI state selected here is class-scoped rather than per combat slot.
+A shared runner consumes the selected resource and produces the AI decision
+outputs used by combat, including the unit-step `(dx, dy)` vector whose
+components are each `-1`, `0`, or `+1`.
+
+The public v1 contract stops at that boundary for class-specific special
+behaviour. The storage/dispatch shape, target picker, movement vector, and
+parser reuse are specified here; the intent selector's class-specific effect
+map, class-state field layout, class-script instruction set, and runner
+effect map are still open.
 
 **Target selection** is the heart of Pass 2. Given the acting monster's slot index, the target picker walks the actor table backwards from slot 31 to slot 0, computes the squared distance to each candidate, and picks the closest one that survives a chain of filters:
 
 - Not the acting monster itself.
 - Slot is not empty and not marked dead.
 - Not on the same *faction* — friend/foe is decided by a "slot-to-group" helper that maps each slot to a faction id; party members are one faction, monsters typically a single hostile faction, with a third "neutral" faction for some monster types.
-- Visible to the acting monster (the "invisible / not-yet-revealed" flag is clear) — except in specific encounter types where this filter is bypassed.
+- Not in a suppressed phase/hidden state, except that one saved-combat scene
+  family and one special monster class bypass this extra suppression filter.
+  The public labels for that scene and class-specific exception remain open,
+  but the exception is separate from ordinary invisibility.
+- Visible to the acting monster: the "invisible / not-yet-revealed" flag is
+  still rejected after the phase/hidden check. This ordinary invisibility
+  filter is not the same as the special suppression-filter bypass above.
 
-The target's distance is consulted via a precomputed squared-distance table indexed by folded coordinate pair (the table is reflection-symmetric about the centre cell of the arena). Backwards walk plus strict less-than comparison means *the lowest-numbered slot among candidates of equal distance wins*, biasing toward party members (low slots) when distances tie.
+When Mass Charm is active, the same target picker first checks the shared
+active-effect tag for `C`. It resolves the acting monster's class charm
+threshold from the per-class combat record, then rolls one uniform random byte
+in `[0, 255]`. If the roll is strictly greater than the threshold, the acting
+monster's faction for this target pick is forced to neutral group 0 before the
+filter above runs; otherwise the monster keeps its normal faction. This does not
+mark individual actors as charmed; it changes which candidates survive the
+normal same-faction filter for the current AI decision. For a threshold `T`, the
+remap chance is `(255 - T) / 256` for `0 <= T <= 255`; the current class
+thresholds are catalogued in `catalogs/monster-bestiary.md`.
 
-**Step direction.** Once a target is picked, the unit-step vector is the per-axis sign of `(target − self)`. If the acting monster's "fleeing" flag is set, both axes are negated — the monster moves *away* from the target. If no target survives the filters, the AI falls back: a per-turn cleanup helper produces a default target, or, failing that, the step vector is left at `(0, 0)` (stay put).
+The target's distance is consulted via the same precomputed squared-distance table used by the 2D visibility post-pass. Each eleven-by-eleven arena coordinate is folded around centre cell five (`folded = min(coord, 10 - coord)`), and the table returns `(5 - folded_x)^2 + (5 - folded_y)^2`. The table is therefore reflection-symmetric about the centre cell of the arena. Backwards walk plus strict less-than comparison means *the lowest-numbered slot among candidates of equal distance wins*, biasing toward party members (low slots) when distances tie.
+
+The target scan also tracks whether any of the first five party slots survived
+the filters. If no target and no counted party member survive, the AI asks the
+per-turn cleanup/effect helper for a fallback target. If that still leaves no
+usable target, the original moves toward the centre of the eleven-by-eleven
+arena and marks pending-action monster slots for follow-up. Slot 5 still
+participates in the normal closest-target competition when it survives the
+filters, but by itself it does not suppress this no-party fallback.
+
+**Step direction.** Once a target or fallback point is picked, the unit-step
+vector is the per-axis sign of `(target - self)`: each component is `-1`, `0`,
+or `+1`. If the acting monster's "fleeing" flag is set, both axes are negated
+— the monster moves *away* from the target or fallback point. The no-target
+centre fallback therefore moves actors toward the centre unless they are
+already aligned with it.
+
+The confirmed public writer for the fleeing flag is the Cause Fear spell: it
+sweeps eligible hostile combat actors and marks each accepted target as fleeing.
+Other possible writers, such as low-HP morale, class-script decisions, or
+monster special effects, remain unclassified.
 
 **Pass 3 — Synthesise.** A combat-specific input gate reads the synthesised byte from the actor's record. The AI's chosen direction is encoded as the byte the player would press if they wanted to walk the same way (`'N'`, `'S'`, `'E'`, `'W'` direction codes), or the byte for "Attack" if the chosen direction puts the target adjacent. The byte falls into the same per-letter dispatcher as the player command handler. Before the command runs, the AI assembles a one-line narration string — for example `<monster name> attacks <target name>, armed with <weapon>!` — by stitching together a short verb composer.
 
@@ -185,13 +260,19 @@ The architectural consequence: **all damage and movement effects in combat go th
 
 Combat shares the spell engine with the rest of the game; the C (Cast) command dispatches via the same routing as the overworld C. The combat-specific path adds three things.
 
-**Prerequisite check.** Before queueing a spell, a short prereq cascade runs: the caster has a valid target, the target is not invisible or asleep, the caster is not in a prohibited vehicle (the "tower" vehicle disables casting), and the caster has enough MP and reagents. Failure prints a short refusal and aborts.
+**Prerequisite and active-effect checks.** Before queueing a spell, a short prereq cascade runs: the caster has a valid target from the combat cast target mapping, the target slot is non-empty, the target is not invisible or asleep, the current combat/state tag is not the prohibited `T` value, and the caster passes a combat-side resource/allowed check. A failed pre-gate aborts before the shared spell dispatcher prompts for a spell; not every failure has its own printed refusal. On success, the gate can run a target-reaction hook and print the combat "interferes" continuation. After those prereqs, the combat C-Cast path also checks the shared active-effect tag: when Negate Magic's `N` tag is active, the cast is absorbed/refused before the shared spell dispatcher runs, so the premixed charge and MP debit gates are not reached. Otherwise the shared spell dispatcher still performs the scene, charge, mana, and level gates described in `magic.md`.
 
-**Scene gate.** Each spell carries a four-bit allow-mask for the scenes it works in (overworld, town, shrine, combat). Scenes for which the spell has no entry print a "Not here!" refusal. Most damaging spells are gated to combat-only.
+**Scene gate.** Each spell carries a four-bit allow-mask for the scenes it works in: combat, dungeon, indoor/town-mode, and overworld. Scenes for which the spell has no entry print a `Not here!` refusal. Most damaging spells are gated to combat-only.
 
-**MP and reagent debit.** The spell's MP cost is `(spell_id / 6) + 1` — eight circles of six spells each. The caster's MP is debited; the pre-mixed reagent stock for that spell (a per-spell counter built via the M-Mix command) is decremented; the spell-effect handler runs.
+**Charge and MP debit.** The spell's MP cost is `(spell_id / 6) + 1` - eight circles of six spells each. The pre-mixed charge counter for that spell is decremented before MP and level validation. If MP is too low, the charge is not refunded; if the caster's level is too low, both charge and mana are spent. The spell-effect handler runs only after these gates pass.
 
-The full spell system is described in its own spec; only the combat-side gating and dispatch are covered here. The AI's monster-cast path does *not* run through the same dispatcher — monsters with spell-like attacks have hand-coded effects that don't consume reagents or check MP.
+The full spell system is described in its own spec; only the combat-side gating
+and dispatch are covered here. Monster turns use AI command synthesis before
+they enter the shared combat parser. The current public spec has bounded that
+path to a class-script dispatch and shared runner, but it does not yet map the
+script instruction set or the class-specific branch that chooses monster
+spell-like or special effects. No current trace ties those effects to party
+reagents, premixed charges, MP, or player circle gates.
 
 ## 11. Attack resolution
 
@@ -207,25 +288,44 @@ Movement and attack share a single primitive, called once per actor turn. The pr
 5. **On success**, the round walker's post-action render redraws the new positions.
 6. **On failure**, narrate "Blocked!" — a short blocked-message and a beep tone are emitted; the actor stays in place.
 
-A side path — controlled by a flag bit in the combat-state byte — runs a **post-step effect** when a special encounter mode is active (notably the per-monster sleep auras and certain spell echoes). The post-step effect runs after a successful step but before control returns to the round walker.
+A side path — controlled by special-combat state bits — runs a **post-step effect** when a placed-field, arena hazard, or special encounter mode is active. This hook is reached only after the step-or-attack primitive succeeds and commits the actor's new coordinate to both combat actor tables. Range failures, blocked cells, and failed attacks do not fire it. It is therefore the confirmed contact boundary for arena hazards and placed-field effects; Poison/Sleep field routing, Fire/Energy damage inputs, non-consuming contact, and combat-exit lifetime for placed fields are fixed below.
 
-Damage application is the responsibility of the inner-pass attack roll (when the destination is a hostile actor), which calls into Section 12's damage-and-status handler with the rolled damage value and the target's slot.
+Combat field casting itself enters a shared arena-field helper that separates placement from contact/application before any per-field result is applied. The CAST field-kind table maps Fire/Poison/Sleep/Energy to `0x35`/`0x33`/`0x34`/`0x36` for this path. Placement is gated before marker materialization: target selection must produce an in-arena coordinate, a coordinate lookup must resolve a compatible combat-table entry there, and the COMBAT acceptance callback must accept the field pair. The coordinate lookup scans slots in ascending order and returns the first descriptor at the selected coordinate with either live/selectable bit (`0x80` or `0x40`) set, without marked-dead bit `0x20`, without hidden/not-yet-revealed bit `0x04`, and without linked active-object tile byte `0xF4`. Poison Field's kind is immediate-accept in the normal combat-cast state; Fire, Sleep, and Energy use the callback's per-slot lookup plus random gate. Accepted placement materializes a field as an active-object marker in the temporary combat table without creating a paired combat-effect descriptor. The post-action hook matches marker coordinates against the actor's committed coordinate when checking contact. The contact side resolves the actor at the field coordinate, skips the current active actor slot, and does not run the creature-prompt friend/foe lookup. Contact does not consume the marker: the hook applies the field result and returns without clearing or aging the matched active-object record. Poison Field contact first rejects actors whose linked active-object tile/class byte is `>= 0x80`; accepted party targets are poisoned only if their character status is Good, while monsters and already non-Good party targets fall through to poison damage with no field-contact XP credit. Sleep Field contact ignores dead party targets; otherwise it writes asleep status for party targets or the combat sleep/disabled bit for non-party targets. Fire Field rolls raw damage in `[1, 21]` before the normal random defense subtraction, and Energy Field supplies raw zero to the same damage/value path. The traced CAST/COMSUBS/COMBAT callbacks, the accepted-placement resident redraw helper, the post-action contact hook, the generic active-object tick, and the monster death/record-clear path do not contain a field countdown, decrement, or pre-exit removal. Placed markers persist until combat exits, when the combat framer restores the pre-combat active-object table.
+
+Damage application is the responsibility of the inner-pass attack roll (when the destination is a hostile actor), which calls into Section 12's damage-and-status handler with the rolled damage value and the target's slot. The same damage/status endpoint is also used by combat spells after their own targeting and raw-damage calculation.
 
 ## 12. Damage and status
 
 The damage-and-status handler bundles "apply damage, update status, narrate the result, and handle special-class death effects" into one function. It takes a damage amount and a target slot.
 
-**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
+**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill reaches it with the instant-kill sentinel and skips that defense subtraction. Party-member combat defense is computed by summing the readied equipment defense values; when Protection's shared `P` tag is active, that helper adds 3 after the equipment sum. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
 
 **Apply to HP.** For party members, damage is subtracted from the character record's HP word; on death, the status byte is set to `'D'`, the active-player byte is cleared if this character was the active one, and a death-tile is written to the dynamic-objects table. For monsters, damage is subtracted from the slot's HP byte; on death, control passes to the class-specific death paths.
 
-**Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. **Vanish on death** for boss-tier classes (the Wanderer, Lord Blackthorn, Lord British): the slot prints `<monster name> vanishes!`, the dynamic-objects tile becomes a gravestone, the actor record is cleared, a fade-out animation plays. **Special tile transitions** for the Gazer (eye-burst tile + particle effect) and the Daemon (lava pool left under the corpse) — hand-tweaked deaths encoded as conditional branches on the class byte. **Default** kill: the slot's tile becomes a generic dead-monster tile; a random-loot byte is rolled (a quantity bounded by max-HP) and written to the active-object record; a second roll may set a "special drop" flag.
+**Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. A traced **vanish on death** branch prints `<monster name> vanishes!`, changes the dynamic-object tile to a gravestone, clears the actor record, and plays a fade-out animation, but no class row in the analyzed `DATA.OVL` baseline currently sets the high vanish bit; treat it as a reachable code branch only if a supported asset set supplies a class flag for it. **Special tile transitions** for the Gazer (eye-burst tile + particle effect) and the Gargoyle (lava pool left under the corpse) are hand-tweaked deaths encoded as conditional branches on the class byte. **Default** kill: the death path runs two random checks against the class's drop-cap byte. If the first check accepts, the combat-instance active-object tile becomes the generic dead-monster/drop marker, and byte five of that record stores the class drop-cap value; if the second check also accepts, bit `0x80` is ORed into that same byte as a special-drop marker. If the first check rejects, the active-object tile becomes the alternate no-drop death marker and byte five is not promoted into a loot marker. The combat framer restores the world active-object table afterward, so any visible world loot handoff must be owned by a caller or cleanup path outside the framer restore.
 
-Each monster killed produces a small XP/gold reward (roughly a quarter of max-HP plus one), returned to the round walker for the calling code to aggregate.
+Each monster killed computes a small raw reward unit (roughly a quarter of max-HP plus one). The currently traced COMBAT-level callers use the helper for death finalisation and do not forward that return value through the combat framer. Spell-side callers may consume it immediately: Tremor adds the returned unit to the caster's experience word after each accepted actor, capped at 9999. Whether the ordinary encounter-victory path consumes the value as XP, gold, karma credit, loot selection, or no-op remains part of the durable reward-accounting gap.
 
 **Splitting / replicating monsters.** Some classes (slimes, certain gargoyles) carry a "split on damage" flag. When such a monster is *damaged but not killed*, the function looks for an empty slot in the table, copies the parent's class byte into it, and prints `<monster name> divides!`. Up to eight attempts are made to find a free slot.
 
 **Other status changes** — Sleep, Poison, Charm — are applied by separate per-effect handlers (a poison-tick handler firing once per round, a sleep-effect handler invoked when the Sleep spell hits). Those handlers update the character status byte to `'S'` (asleep) or `'P'` (poisoned) and run their own narration.
+
+**Active-effect display counter.** Protection, Quickness, Mass Charm, and
+Negate Magic install a single shared visible tag/counter rather than writing a
+per-character status byte. A resident update helper ages this counter: zero and
+255 are inert, other values decrement when that helper runs, and expiry clears
+the visible tag and requests a redraw. This counter is not the time system's
+torch/light-spell counter; do not model it as one decrement per minute or per
+full actor-table sweep. The tag is not display-only.
+Protection's `P` tag adds 3 to party-member combat defense; Quickness's `Q` tag
+randomly gates player-side combat command dispatch with a 0..1 roll; Mass
+Charm's `C` tag lets the AI target picker roll against the acting monster's
+class charm threshold and, on success, remap that monster to neutral group 0
+before friend/foe filtering; Negate Magic's `N` tag absorbs combat casts before
+the shared spell dispatcher spends charge or MP. The character status byte `C`
+for "casting" is separate from the shared active-effect `C` tag. The exact
+number of decrements per full actor-table pass depends on which command/AI
+paths run, so per-round parity remains tied to actor dispatch.
 
 The character status byte is the load-bearing summary value: `'G'` good, `'P'` poisoned, `'D'` dead, `'S'` asleep, `'C'` casting, plus other state-specific letters. Other systems read the byte to decide whether the character can act, can be selected as active player, or counts toward the party-defeat check.
 
@@ -237,9 +337,10 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 |----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | Per-arena spawn-count table      | One byte per arena. Combined with the random reroll, decides how many monsters spawn.                                                            |
 | Per-arena leader replacement     | One byte per arena. The tile assigned to the first `count/4 + 1` "leader" monsters.                                                              |
-| Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, vanish-on-death, faction-override, plus several un-classified bits the AI scripts read. |
-| Per-class AI script pointers     | One pointer per class to the byte-coded AI script the runner walks during Pass 2 of the AI.                                                      |
-| Per-class HP/AC/damage stats     | Eight bytes per class. Byte 0 is a base value used by the reward formula; byte 2 is a max-HP/cap value used by the loot roll.                  |
+| Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, special death checks, and several un-classified bits still under analysis. The damage handler also has a vanish-on-death branch, but the analyzed baseline has no class row with that high bit set. |
+| Per-class AI scripts and state   | Class-scoped decision data consulted by monster turns and related interaction helpers. Live actors of the same class share one mutable class-state record; dead or inactive actors use the class's static script entry. The runner consumes the selected resource and emits AI decision outputs, but its state fields, instruction set, and class-to-special-effect map remain open. |
+| Per-class display/narration data | Pointer data used by combat narration and class labels; this is not an AI behavior table.                                                        |
+| Per-class HP/AC/damage stats     | Eight bytes per class. Includes the base value used by the reward formula, the drop-cap byte used by the default death loot gate, and the Mass Charm threshold used by target-selection remaps. Remaining bytes are only broadly classified. |
 | Per-class name pointers          | Sixteen-bit pointers per class to the printable monster name strings.                                                                            |
 
 The class byte is set at spawn time and never changes (death may cause a tile swap, but the class byte stays). The same class index is used for party members (classes 0–15, one per character record slot) and monsters (classes 16+); the AI's friend/foe filter relies on the slot index range to distinguish them.
@@ -248,13 +349,13 @@ The class byte is set at spawn time and never changes (death may cause a tile sw
 
 Three exit conditions end combat; each sets one of the round-loop's flag bytes, and the per-round epilogue checks them.
 
-**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round-loop exits with result code "1". Cleanup happens in the framer's restore phase: party stats are refreshed, loot drops left in the dynamic-objects table by the death paths become part of the world's items table, karma and XP are aggregated by the calling mode loop. No separate victory message prints — the death-tile transitions tell the story.
+**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round-loop exits with result code "1". The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the currently traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a durable encounter reward. A spell handler can consume the helper return before the framer boundary, as Tremor does for caster experience, but that is not the ordinary victory handoff. No separate victory message prints — the death-tile transitions tell the story.
 
 **Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine sets the defeat flag and the round loop returns "0". What happens next depends on the calling mode loop — typically a game-over sequence; a few specific encounters (the Blackthorn capture path) treat defeat as a scripted plot event rather than a death.
 
 **Escape.** When the player chooses to leave (the X-it command, or walking off an open arena edge), the leave-combat flag fires. On the *first* trigger per fight, an exit message is printed; the round loop exits with code "1". Surviving party members and monsters are *not* given a chance to land final blows — escape is immediate.
 
-The framer's restore phase runs the same way for all three — the only difference is the result code returned. Time advances by one minute (the cleanup routine is called once at combat exit).
+The framer's restore phase runs the same way for all three — the only difference is the result code returned. Combat time advances from the round loop's round-counter wrap, which fires the per-turn cleanup with a one-minute increment; a separate one-minute exit increment is not part of the currently traced framer restore.
 
 ## 15. Hooks into other systems
 
@@ -266,7 +367,14 @@ Combat is built on top of several other systems and integrates cleanly with each
 
 - **Time.** Combat advances time at one specific point — when the round counter wraps inside a round (corresponding to one full actor walk under typical game pacing). The wrap fires the per-turn cleanup with a one-minute increment, exactly as the town and dungeon loops do.
 
-- **Spell system.** Combat shares the single spell dispatcher described in `magic.md` (when written). Combat-specific gates wrap the dispatcher's call from within the combat C-handler. Monster spells are *not* dispatched through this system — they have hand-coded effects keyed by monster class.
+- **Spell system.** Combat shares the single player/party spell dispatcher
+  described in `magic.md`. Combat-specific gates wrap the dispatcher's call
+  from within the combat C-handler. Monster turns first pass through AI intent,
+  target selection, direction synthesis, and the shared combat command parser.
+  The class-specific branch that may choose monster special or spell-like
+  effects is not yet mapped to public semantic depth, and no current trace ties
+  those effects to the player spell table, premixed charges, MP, reagents, or
+  circle gates.
 
 - **Visibility.** The arena's visibility model is similar to the world model but uses the combat terrain grid rather than the world map. Each cell ends up with one of the standard visibility byte values, and the renderer composites actors over those values.
 
@@ -276,17 +384,49 @@ Combat is built on top of several other systems and integrates cleanly with each
 
 This section records places where the picture is not yet complete or where evidence is internally inconsistent.
 
-- **Per-class flag word — un-classified bits.** Six of the sixteen flag bits in the per-class table are tested by some readers but their exact effect is not yet fully traced. Strong candidates: damage-type modifiers (fire / cold / electric), AI traits (passive / aggressive / ranged-preferring), and tile-interaction bits (incorporeal / water-bound / floats-over-terrain).
+- **Per-class flag word — un-classified bits.** Several bits in the per-class table are still unnamed. Confirmed readers cover damage/status, faction override, death behaviour, and target selection, but the remaining consumers have not been decoded to public semantic depth. Candidate buckets include damage-type modifiers, movement/terrain interaction, and monster special-action selection; do not assign stable names until the resident helper bodies are mapped.
+
+- **Vanish-on-death branch reachability.** The damage/status helper contains a vanish branch, but direct asset verification of the analyzed `DATA.OVL` class table found no row with the corresponding high bit set. Keep the branch as an implementation option for variant data, but do not assign it to Wanderer, Blackthorn, Lord British, Shadow Lords, or any other v1 baseline class without fresh table evidence.
 
 - **The "double-encounter" world flag writer.** The flag in the data segment that causes the spawn count to be re-rolled (Section 5) has a not-yet-pinned-down setter. Strong candidates are sleep ambushes and a specific mid-game scripted encounter family.
 
 - **Wait commands in combat.** Space is "pass". Best evidence is "advance the actor's phase counter past zero so it does not act this round but does not lose its position in the table." Implementers should treat Space as "no movement, no attack, end the actor's turn cleanly".
 
-- **Multi-target spells.** Several combat spells are AOE (Cataclysm, Fire-storm, Mass Heal). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application reuses the damage-and-status handler. The exact AOE shape and friendly-fire policy is per-spell.
+- **Combat Q branch body.** Combat owns a separate Q/Quit branch. It is not the resident Q save-game command, but the exact prompt, cancellation, and exit behaviour behind that branch should be traced before specifying it further.
+
+- **Combat command branch bodies.** The dispatcher-level map for all twenty-six
+  letters and the special keys is complete. Several delegated branches (G, J,
+  K, O, P, R, S, U, Y, Z) still need their helper bodies traced before this
+  spec can enumerate every success/refusal case.
+
+- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16, Fireball rolls 1..30, and Kill passes the decimal 99 instant-kill sentinel after the shared aiming/projectile path accepts a collision target. The directed target-walk family is also exact at public semantic depth for faction behavior: the shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup, reject same-faction actors, or reject the caster if the caster's cell is selected. Sleep applies sleep status, Poison Wind applies a resistance/random gate before poison status, Death Wind uses the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact is bounded to the post-step effect hook, and combat field casting reaches a shared arena-field helper before splitting placement from application. Placed fields live as active-object markers in the temporary combat table, and the contact scan matches those markers by coordinate while skipping only the current active actor slot; contact applies without consuming the marker. Poison Field skips linked active-object classes `>= 0x80`, poisons only Good party members, and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members and otherwise writes party sleep status or the non-party combat sleep/disabled bit. Fire Field contact rolls raw 1..21 before defense, Energy Field supplies raw zero to the same path, and the placement path's target-selection/coordinate-lookup/acceptance gate is bounded down to slot-order and flag eligibility. Field markers are not aged by the placement, contact, redraw, generic active-object tick, or monster death/record-clear paths; they persist until combat exit restores the pre-combat active-object table.
 
 - **Status narration.** "Sleep!", "Poison!", "Charm!" lines are not produced by the damage-and-status handler. They live in separate per-effect handlers (one per status). The exact wording and trigger mechanics belong in those handlers' specs.
 
-- **Flee mechanics.** A monster's "fleeing" flag (Section 9) reverses its movement direction. What *sets* the fleeing flag — low HP threshold? specific spell effects? — is per-class and not yet fully traced.
+- **Active-effect side effects.** The shared display counter for Protection,
+  Quickness, Mass Charm, and Negate Magic is now traced through cast setup and
+  the helper-invocation aging boundary. Combat distinguishes that helper path
+  from the time/render cleanup on ten-ready-action wraps; exact helper-body
+  semantics and Time Stop's separate decrement path remain in magic/spell-list
+  open work. Confirmed consumers are Protection's `P` defense bonus, Quickness's
+  `Q` player-dispatch random gate, Mass Charm's `C` class-threshold AI-target
+  remap, and Negate Magic's `N` combat-cast absorption path.
+
+- **Flee mechanics beyond Cause Fear.** The Cause Fear spell is a confirmed
+  public writer of the fleeing flag, and Section 9 specifies how the flag
+  reverses movement. Other possible writers — low-HP morale, class-script
+  decisions, or monster special effects — are not yet fully traced.
+
+- **Monster special-action/effect map.** The monster-turn path proves intent
+  staging, shared target selection, phase/hidden/invisibility filters,
+  no-target fallback, movement-vector synthesis, synthesized command dispatch,
+  and parser reuse. The class-script dispatch boundary is now identified,
+  including the class-wide live-state versus inactive-script split, but the
+  intent selector's class-effect map and the script runner's state fields,
+  instruction set, and effect mapping are not yet decoded to public semantic
+  depth.
+  Treat monster spell-like effects as unresolved per-class combat-AI behavior
+  until those helper bodies are mapped.
 
 - **Round counter wrap at ten.** The per-round counter wraps at ten and fires a tile-render on every wrap. Likely a "render every N actor-turns" cadence balancing CPU cost on original hardware. A modern implementation can treat it as "redraw every frame" without preserving the cadence.
 
@@ -296,18 +436,34 @@ This section records places where the picture is not yet complete or where evide
 
 ## 17. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions and format notes in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - The combat enter/exit framer with its three-way entry-mode dispatch, save-and-restore of player position and the dynamic-objects table, the scene-byte sentinel, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
 - The terrain-combat setup, the per-arena spawn-count lookup, the optional Fisher-Yates shuffle for ambush placement, the leader-vs-follower count-and-tile split, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
 - The per-round walk over the thirty-two-slot actor table, the phase-counter mechanic, the round-counter wrap, the dispatch to player vs. monster handlers, and the three exit conditions — derived from `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
-- The per-actor turn dispatcher, the player command set with its inline jump tables, the AI synthesis path for monster turns, the verb-stitching narration buffer, and the unified per-letter parser — derived from `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
-- The AI target-selection helper, the backwards walk and filter chain, the squared-distance scoring with closest-wins tie-break, and the unit-step direction output with flee inversion — derived from `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md`.
+- The per-actor turn dispatcher, complete dispatcher-level combat command map
+  for all twenty-six letters and seven special inputs, the AI synthesis path for
+  monster turns, the verb-stitching narration buffer, and the unified
+  per-letter parser — derived from
+  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
+- The AI target-selection helper, the backwards walk and filter chain, the Mass
+  Charm active-effect tag remap with class-threshold random gate, the
+  phase/hidden suppression exception, the ordinary invisibility filter, the
+  first-five-party-slot fallback guard, centre fallback, pending-action marker,
+  squared-distance scoring with closest-wins tie-break, and the unit-step
+  direction output with flee inversion — derived from
+  `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the sibling
+  COMBAT damage/death note that identifies the same random-byte helper.
+- Protection's active-effect defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, and the active-effect counter-aging rule — derived from local ULTIMA.EXE and COMBAT helper analysis summarized without copying implementation text.
 - The damage application and status transitions, the per-monster-class flag word's effect on damage and death, the special-class death paths, and the slime-divide replication path — derived from `u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`.
 - The step-or-attack primitive — direction-to-unit-step translation, arena range check, on-success and on-failure narration, and the post-step effect gate — derived from `u5-decomp/functions/SJOG_OVL/0x1C56_actor_step_or_attack.md`.
-- The AI direction-picker dispatch — alive-vs-dead split between per-instance state blocks and per-class script pointers — derived from `u5-decomp/functions/COMSUBS_OVL/0x0094_ai_pick_direction.md`.
+- The AI class-script dispatch boundary, live-state versus inactive-script split,
+  and direction-vector handoff, derived from
+  `u5-decomp/functions/COMSUBS_OVL/0x0094_ai_pick_direction.md`.
 - The combat-side spell prereq cascade — target validity, target visibility/awakeness, vehicle gate, MP/resource check — derived from `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
 - The shared spell dispatcher used by combat casts — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`.
+- The combat spell-damage wrapper used by Magic Missile, Fireball, and Kill — derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
+- The Clone spell's allocation and random legal arena placement behaviour — derived from local CAST and COMBAT helper analysis summarized without copying implementation text.
 - The dynamic-objects table that combat overlays and the sprite animator that walks it during world ticks — derived from `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
 - The fog/visibility post-pass that consumes the same active-object table during world rendering — derived from `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
 - The squared-distance primitive used by combat AI target scoring, with its 11×11 arena coordinate space and reflection-folded precomputed table — derived from `u5-decomp/functions/ULTIMA_EXE/0x6FF0_range_to_player.md`.

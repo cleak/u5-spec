@@ -305,4 +305,4 @@ Public spec cross-checks:
 - `systems/conversation.md` - Talk command, keyword loop, and dialogue-control
   runtime.
 - `catalogs/tile-catalog.md` - broad NPC tile range and role-tag follow-up.
-- `catalogs/gazetteer.md` (planned) - final place names for each `Loc` key.
+- `catalogs/gazetteer.md` - final place names for each `Loc` key.

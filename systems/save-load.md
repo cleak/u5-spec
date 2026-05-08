@@ -4,9 +4,9 @@
 
 Ultima V persists the entire run-time game state by writing one contiguous slab of memory directly to disk. The save is not a structured serialisation — no record header, no field-by-field marshalling, no version stamp. It is a byte-image dump of a fixed-length region of the engine's data segment, paired with a smaller companion buffer holding the per-map active-object table. Loading is the inverse: read the same bytes back into the same memory region and let the running engine pick up where it left off.
 
-Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as the read-only seed object tables for Britannia and the Underworld, but the engine's load and save paths re-write them on every cycle so the on-disk state for both world planes always matches the player's most recent save. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
+Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` so older plane-entry paths can read the per-plane files directly. The save path stages data through the per-plane files and conditionally updates the underworld mirror, but the traced original save handler does not prove an unconditional refresh of both mirror files on every save. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
 
-The save flow is gated by Quit-and-Save (`Q`) and returns to the title screen rather than exiting to DOS. The load flow is the `J` "Journey Onward" branch of the title-menu dispatcher. A second variant — `T` for the Ultima IV character transfer — re-uses the byte-image read primitive but pulls character stats from a Ultima IV save disk rather than from a `SAVED.GAM`.
+The save flow is gated by Quit-and-Save (`Q`) and returns to the caller after the save prompt completes; it is not the DOS-exit path by itself. The load flow is the `J` "Journey Onward" branch of the title-menu dispatcher. A second variant — `T` for the Ultima IV character transfer — re-uses the byte-image read primitive but pulls character stats from a Ultima IV save disk rather than from a `SAVED.GAM`.
 
 This spec describes the on-disk format, the byte-image save and load contracts, the role of each save-related file, the I/O layer's disk-prompt and retry behaviour, the empty-save guard, the underworld disk-swap path, the U4-Transfer variant, and open questions about versioning and multi-slot saves.
 
@@ -18,7 +18,7 @@ The save image is a fixed 4192-byte region of memory whose contents reflect the 
 
 - The **character roster.** Sixteen records of thirty-two bytes each, totalling 512 bytes. The first record is the Avatar; the remaining fifteen hold every companion who can join the party, whether or not they have been recruited yet. Each record carries a name (null-padded), a gender byte, a class letter, a status letter (`G` for "Good"/alive being the typical case), the four primary stats (strength, dexterity, intelligence, magic-points), current and maximum hit points as little-endian words, an experience word, a level byte, and an eight-byte equipment-and-padding tail.
 
-- **Inventory and runtime state.** Word counters for food, gold, and other consumables, byte counters for keys and gems, and a span of single-byte fields covering the active-player index, wind direction, scene id, and party Z/X/Y. The day, month, hour, and minute fields of the world clock live in this region (see `time.md`).
+- **Inventory and runtime state.** Word counters for food, gold, and other consumables, byte counters for keys and gems, and a span of single-byte fields covering the timing/status tag, active-player index, transport/action marker, wind direction, scene id, and party Z/X/Y. The day, month, hour, and minute fields of the world clock live in this region (see `time.md`).
 
 - **Quest progress.** Two bitmasks tracking which shrines have been ordained and which Codex pages have been visited.
 
@@ -47,8 +47,8 @@ Alongside the save image, the engine maintains a smaller buffer for the active-o
 | File | Size | Role |
 |---|---|---|
 | `SAVED.OOL` | 512 bytes | Runtime working copy. Surface object table in the first 256 bytes; underworld in the second 256 bytes. |
-| `BRIT.OOL` | 256 bytes | Surface seed. Originally read-only; in practice the engine re-writes it on every load and every save to mirror the surface half of `SAVED.OOL`. |
-| `UNDER.OOL` | 256 bytes | Underworld seed. Same dual role as `BRIT.OOL`. |
+| `BRIT.OOL` | 256 bytes | Surface seed and load-time mirror of the surface half of `SAVED.OOL`; the traced save path reads it as a staging source. |
+| `UNDER.OOL` | 256 bytes | Underworld seed and load-time mirror of the underworld half of `SAVED.OOL`; the traced save path reads it as a staging source and conditionally writes it. |
 | `INIT.OOL` | 256 bytes | Factory seed for the surface (companion to `INIT.GAM`). Read-only at runtime. |
 
 The on-disk record layout matches the in-memory eight-byte layout exactly: `(tile, frame, x, y, z, depends1, depends2, depends3)`, with `z = 0xFF` as the "above-ground / no z" sentinel. The surface seed contains a small fixed set of pre-placed objects — canonical Britannia ferry-skiffs and a few clustered objects — and the rest of its records are zero. The underworld seed is all zeros: there are no objects on the seed underworld map.
@@ -57,9 +57,9 @@ The mnemonic "Object Overlay Layer" is a working guess; the actual extension exp
 
 ### 3.2 Why three files for two halves
 
-Naively, the engine could carry only `SAVED.OOL` and never touch `BRIT.OOL` / `UNDER.OOL` after the install. Empirically, the load and save paths both mirror-write the per-plane halves out to `BRIT.OOL` and `UNDER.OOL`, keeping all three files in sync.
+Naively, the engine could carry only `SAVED.OOL` and never touch `BRIT.OOL` / `UNDER.OOL` after the install. Empirically, the load path does refresh both per-plane files from `SAVED.OOL`: the surface half is written to `BRIT.OOL`, the underworld half is written to `UNDER.OOL`, and the underworld half may be written again after the underworld disk-swap probe. The save path is different. It refreshes the staging buffers from the per-plane files, conditionally writes the underworld mirror, and writes the canonical `SAVED.OOL`.
 
-The likely reason is that the gameplay overlays read from `BRIT.OOL` or `UNDER.OOL` (rather than from the in-memory copy) when bringing a map online — when the player crosses from one world plane to the other, or when the engine needs to re-seed the active object table after a transient mode (combat, dungeon) clobbered it. The mirror-write contract makes the per-plane files always reflect the most recent committed state. A modern engine that funnels all object-table reads through a single in-memory cache can collapse the three files into one, but a byte-compatible engine must round-trip all of them.
+The likely reason for the file split is that gameplay overlays read from `BRIT.OOL` or `UNDER.OOL` (rather than from the in-memory copy) when bringing a map online - when the player crosses from one world plane to the other, or when the engine needs to re-seed the active object table after a transient mode (combat, dungeon) clobbered it. The load-time mirror contract makes the per-plane files reflect the most recently loaded canonical save. A modern engine that funnels all object-table reads through a single in-memory cache can collapse the three files into one internally, but a byte-compatible file set must preserve all four save-related files and document any deliberate post-save mirror refresh policy.
 
 ## 4. The load flow
 
@@ -101,13 +101,15 @@ The save handler is a callable function, distinct from the inline load flow. The
 
 3. **Open the save channel.** The handler asks the I/O layer to set up the save-disk channel. On a system that requires a disk swap to the player disk, this is where the swap prompt fires.
 
-4. **Write `SAVED.GAM`.** The full 4192 bytes of the save image are written from memory to disk in one operation.
+4. **Refresh object-overlay staging buffers.** The handler reads the underworld and surface per-plane `.OOL` files into the two staging halves that will become the canonical `SAVED.OOL` payload.
 
-5. **Write `SAVED.OOL`.** The full 512 bytes — surface and underworld halves concatenated — are written from memory to disk in one operation.
+5. **Conditionally refresh `UNDER.OOL`.** A disk/phase-state branch can write the underworld staging half back to `UNDER.OOL`. No matching unconditional save-time write to `BRIT.OOL` has been proven in the traced handler.
 
-6. **Mirror-write `BRIT.OOL` and `UNDER.OOL`.** As on load, the per-plane halves are written out to their named seed files. The handler's exact branching on the world-state byte gates which writes always run versus which run conditionally; the project notes do not yet pin down the conditional structure precisely. The conservative implementation is to always write both files on every save, matching the load flow's unconditional mirror.
+6. **Write `SAVED.GAM`.** The full 4192 bytes of the save image are written from memory to disk in one operation.
 
-7. **Close and acknowledge.** The handler closes the file handles, prints `Done.`, and returns. Control returns to the gameplay mode loop; the player is back in the same scene with the in-memory state unchanged. Q-Quit is "save and continue", not "save and exit"; exit-to-DOS is a separate command verb handled by a different code path.
+7. **Write `SAVED.OOL`.** The full 512 bytes - surface and underworld halves concatenated - are written from the staging region to disk in one operation.
+
+8. **Close and acknowledge.** The handler closes the file handles, prints `Done.`, and returns. Control returns to the gameplay mode loop; the player is back in the same scene with the in-memory state unchanged. The resident Q save command saves and continues play; exit-to-DOS is a separate mode-loop control path handled by different code.
 
 ### 5.3 What does not happen on save
 
@@ -119,7 +121,7 @@ The title menu's `T` key is a variant of the load flow for players who have comp
 
 The transfer flow loads a U5 factory seed (a `BRIT.GAM` template is referenced as a transfer-time source) into the save-image region, paints the character-roster preview screen, and accepts the player's confirmation. Once committed, the transferred Avatar's stats overwrite the seed Avatar's stats in record 0, and the result is written out as the first `SAVED.GAM` of the new game. From that point onward, the player's progress is saved and loaded through the standard `J` / `Q` paths.
 
-The transfer flow is part of the chargen contract; see `chargen.md` (when written) for the U4-to-U5 stat translation. From the save-load system's perspective, the transfer is just one way of producing the first `SAVED.GAM`.
+The transfer flow is part of the chargen contract; see `chargen.md` for the U4-to-U5 stat translation. From the save-load system's perspective, the transfer is just one way of producing the first `SAVED.GAM`.
 
 ## 7. The I/O layer
 
@@ -129,13 +131,17 @@ The save and load paths sit on top of two small disk-I/O wrappers in the residen
 
 The read wrapper is a four-argument routine: filename, target buffer, expected byte count, and a flags word. Its job is the read-with-retry contract: ask the inner I/O primitive to read the requested bytes, and if the primitive returns "error" (typically because no disk is in the drive, or the wrong disk is), wait for the disk-swap prompt to be acknowledged and retry. The retry loop is unbounded — the wrapper spins until the read succeeds.
 
-The inner primitive opens the file, optionally seeks to a sub-file offset, reads up to a count of bytes, closes the handle, and reports either the byte count read or zero on error. On error it sets a resident error-code cell and dispatches a far-call to a resident critical-error handler — the disk-swap prompt routine. The wrapper re-invokes the primitive after the prompt returns, until a non-zero count comes back.
+The inner primitive opens the existing file, optionally seeks to an absolute sub-file offset, reads up to a count of bytes, closes the handle, and reports either the byte count read or zero on error. Passing a zero seek offset skips the seek step and reads from the start of the file. Passing a zero byte count means "read as much as this primitive can hold", capped at 65,535 bytes. The primitive returns the operating system's byte count directly: a nonzero short read is success, while a zero return is treated by the wrapper as retry-needed. The read result is preserved across close, so close-time failures are not surfaced through this primitive.
+
+On open, seek, or read error, the primitive records the error and dispatches to the resident critical-error handler — the disk-swap prompt routine. The wrapper re-invokes the primitive after the prompt returns, until a non-zero count comes back.
 
 ### 7.2 The write wrapper
 
-The write wrapper is a three-argument routine: byte count, source buffer, and filename. Like the read wrapper, it provides retry-with-prompt. It also momentarily swaps the resident critical-error handler to a write-specific variant for the duration of the write, restoring the read variant afterward. The write-specific handler is presumed to print a disk-full or write-protected message rather than the read variant's "please insert disk" message. The inner write primitive creates the file (truncating if it exists), writes the byte count, closes the handle, and reports success.
+The write wrapper is a three-argument routine: byte count, source buffer, and filename. Like the read wrapper, it provides retry-with-prompt. It also momentarily swaps the resident critical-error handler to a write-specific variant for the duration of the write, restoring the read variant afterward. The write-specific handler is presumed to print a disk-full or write-protected message rather than the read variant's "please insert disk" message. The wrapper retries while the inner writer reports zero bytes written.
 
-The save handler does not use these wrappers directly: it goes through a small set of dedicated open/write helpers in the same overlay family, because the save runs in a known-good context and wants to manage the file handle across a series of writes rather than re-opening for each. The semantics are equivalent — retry on disk swap, fail with error code on persistent fault.
+The inner write primitive creates or truncates the target file, writes the requested buffer, closes the handle, and returns the operating system's written-byte count. A create or write failure records the error, invokes the current critical-error handler, and returns zero so the wrapper retries. The writer preserves the write result across close and does not report close-time failures. It also does not compare the returned byte count against the requested byte count, so a nonzero short write is treated as success by callers that only test for zero.
+
+The save handler also uses save-overlay open/write helpers to manage its multi-file sequence. At the file-contract level the same overwrite semantics apply: `SAVED.GAM` and `SAVED.OOL` are immediately replaced by the emitted byte images, without a temporary file, backup, post-write byte-count verification, or close-error recovery path. A compatibility mode should preserve those edge cases; a modern safe-save mode can add write-then-rename and explicit length checks outside the original contract.
 
 ### 7.3 Disk swapping
 
@@ -165,17 +171,22 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
 
 - **Conversation flags.** The "have I met" / "have I killed" bitmasks live in the save image's NPC-flag region. A loaded save restores them in place; the conversation engine reads them as-is. See `conversation.md`.
 
-- **Combat.** Combat state is *not* in the save image. The `Q` verb is gated by the gameplay mode loop and not accepted during a combat round. An implementation that wants to allow mid-combat saves must extend the save format.
+- **Combat.** Combat state is *not* in the save image. Combat has its own Q/Quit parser branch, but that branch is separate from the resident save writer. An implementation that wants to allow mid-combat saves must extend the save format.
 
-- **Chargen.** New games and U4 transfers both produce the first `SAVED.GAM` of a fresh playthrough. See `chargen.md` (when written).
+- **Chargen.** New games and U4 transfers both produce the first `SAVED.GAM` of a fresh playthrough. See `chargen.md`.
+
+- **Inn registry.** Lodged companions are persisted in the shifted inn-guest
+  view documented by `formats/saved-gam.md`. Save/load does not special-case
+  that view; the marker byte, month/stay counter, and copied character payload
+  round-trip as ordinary save-image bytes.
 
 - **Bitmap and resource loading.** The same I/O layer is used by the endgame cinematic loader and the character-roster preview. The disk-prompt and retry contracts apply uniformly across all reads.
 
 ## 11. Open questions and variations
 
-- **Save-time mirror-write structure.** The save handler's exact branching between always-writing and conditionally-writing the per-plane mirror files is not yet pinned down. Both files are referenced and both write paths invoked, with at least one branch gated on a world-state byte. The conservative implementation is to write both unconditionally on every save, matching the load flow.
+- **Save-time disk-state branch.** The save handler's v1 file targets are pinned at semantic depth: per-plane `.OOL` files are read into staging, `UNDER.OOL` has a conditional write, and `SAVED.GAM` / `SAVED.OOL` are written as the canonical save pair. The remaining open part is the exact naming of the disk/phase-state values that gate the underworld mirror write and channel setup.
 
-- **The world-state byte that gates the underworld disk-swap.** The load flow's branch tests scene-byte and party-Z; the save flow tests a different byte compared against constants. The exact semantics — likely a tri-state for "surface", "underworld", and "in-dungeon" — are not yet confirmed.
+- **The load-time underworld disk-swap condition.** The load flow's branch tests the saved scene and party floor before probing for the underworld data disk. The branch behaviour is clear, but the surrounding disk-inventory state machine is still documented only at compatibility depth.
 
 - **Format versioning.** No version marker exists. An implementation that extends the save format must add a sentinel of its own and decide on a backward-compatibility policy.
 
@@ -183,15 +194,15 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
 
 - **Backup-on-save.** The original game does not write a backup before overwriting `SAVED.GAM`. A power-loss or disk-error during the save can corrupt the player's save with no recovery path. Implementations should consider write-then-rename atomicity at minimum.
 
-- **Mid-combat saves.** The save verb is not accepted during combat. An implementation that wants to allow mid-combat saves must extend the save format with combat state and remove the mode-loop gating.
+- **Mid-combat saves.** The resident save writer is not reached through the combat command parser. An implementation that wants to allow mid-combat saves must extend the save format with combat state and add an explicit combat-save route.
 
 - **Two-drive vs one-drive original behaviour.** Disk-swap prompts originally fired differently on single- vs dual-floppy systems. A modern implementation against a single mounted directory can treat all prompts as no-ops; an emulator faithful to the original needs to model the per-drive disk inventory.
 
 ## 12. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions and format dissections in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- Save handler — confirmation prompt, status messages, open/write/close sequence, file selection, and world-state branching — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`.
+- Save handler — confirmation prompt, status messages, per-plane `.OOL` staging reads, conditional `UNDER.OOL` mirror write, canonical `SAVED.GAM` / `SAVED.OOL` writes, and disk-state branching — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`, with helper roles cross-checked against `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 
 - Load flow — byte-image read, empty-save guard, dual-half `SAVED.OOL` read, unconditional mirror-write of both per-plane seed files, underworld disk-swap loop, and final commit — derived from `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 
@@ -199,8 +210,8 @@ The behaviour described here was derived by reading the disassembly notes for th
 
 - Read-and-write retry wrapper, disk-prompt contract, wait-cursor phase signalling — derived from `u5-decomp/functions/ULTIMA_EXE/0x82DE_load_lzw_image.md`.
 
-- Inner read primitive — DOS open / seek / read / close sequence and critical-error dispatch — derived from `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
+- Inner read primitive — open, optional absolute seek, zero-count default, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-read edge — derived from `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 
-- Inner write primitive — DOS create / write / close sequence — referenced from the same wrapper note.
+- Inner write primitive — create-or-truncate, write, close, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-write edge — derived from `u5-decomp/functions/ULTIMA_EXE/0xF0C6_write_file.md`.
 
 - Save-image layout, `SAVED.OOL` split, the `BRIT.OOL` / `UNDER.OOL` / `INIT.OOL` / `INIT.GAM` family, and the object-record structure — derived from `u5-decomp/formats/saves.md`.

@@ -89,7 +89,7 @@ Three parallel side tables, indexed by NPC slot, hold pathfinding-only state:
 
 - **Move queue** — thirty-two bytes per NPC, holding packed direction codes for replay one-cell-at-a-time. Filled by the pathfinder, drained by the walker.
 - **Move-queue read pointer** — a word per NPC; sentinel "all bits set" means "queue inactive".
-- **Stuck counter** — a word per NPC, incremented every tick the NPC fails to make progress. A small threshold forces a queue reset and replan.
+- **Stuck counter** — a word per NPC, incremented every tick the NPC fails to make progress. Once the counter is greater than three, the move-queue read pointer is reset to the inactive sentinel and the counter is cleared, forcing a fresh route on a later tick.
 
 Two per-tick scratch booleans are shared by every NPC: an "any NPC moved" flag and an "any tile changed" flag. Both are cleared at the start of every tick; the town turn loop reads "any NPC moved" to decide whether the screen needs a repaint.
 
@@ -107,7 +107,7 @@ Per call, the processor:
 4. **Looks up the active waypoint** for the current hour.
 5. **Reads the current state byte.** If state is "idle" (state ≤ 1), the processor first calls a *boundary trigger* sub-step (Section 6) that detects whether the current hour exactly matches one of the NPC's four schedule boundaries; on a hit it reclassifies the state byte.
 6. **Dispatches on the (possibly updated) state byte** through the eight-state machine (Section 7) — cardinal-direction probes, optionally a pathfinder invocation, and zero or one position update via the world-mutation primitive (Section 11).
-7. **Maintains the move queue.** If the dispatch chose to replay a cached path, the next direction byte is dequeued and applied. If the dispatch produced a new path, the queue is filled. If the NPC fails to make progress, the stuck counter is bumped and may force a queue reset.
+7. **Maintains the move queue.** If the dispatch chose to replay a cached path, the next direction byte is dequeued and applied. If the dispatch produced a new path, the queue is filled. If the NPC fails to make progress, the stuck counter is bumped. A value greater than three resets the queue read pointer and clears the counter so the NPC can replan.
 
 The processor is a single sequential pass — no per-NPC concurrency, no priority queue, no skip-list. Every NPC gets one chance to act per tick, in slot order. An NPC moves at most one cell per turn the player takes.
 
@@ -134,7 +134,7 @@ The boundary trigger is the sub-step the processor calls on idle NPCs. It detect
 
 After classifying, the trigger does one extra check: if the NPC's runtime `(target_x, target_y, current_z)` already equals the new waypoint's `(x, y, z)`, the NPC is already on the waypoint and state is reset to "idle".
 
-The trigger does *not* update the cached waypoint field. As long as cached differs from new-waypoint, every subsequent boundary-tick fires the same transition path, keeping the NPC moving on consecutive boundary ticks until they actually arrive — at which point the next idle-tick's "already on the waypoint" check resets the state and updates the cached value.
+The trigger does *not* update the cached waypoint field. It only compares the cached value against the active waypoint and writes the movement state. The later cached-waypoint write site is not isolated in the current clean notes; a compatible implementation should keep this field as transition memory and bring it into sync once the NPC has settled at the newly active waypoint, otherwise the same boundary transition would keep refiring.
 
 ## 7. The state machine
 
@@ -197,11 +197,11 @@ The builder constructs the workspace in five phases.
 **Phase 1: marker selection.** A mode byte from the caller selects one of three search shapes:
 
 - *Coordinate goal* — caller supplied an explicit (x, y) target. No tile-ID search; goal stamped at the supplied cell in phase 5.
-- *Tile-ID goal A* / *Tile-ID goal B* — find the nearest tile matching one of two paired chair tile IDs (the chair-search variant; Section 8.5).
+- *Tile-ID goal A* / *Tile-ID goal B* — find the nearest tile whose live tile byte is one of the two paired chair/seat marker IDs, `0xC8` or `0xC9` (the chair-search variant; Section 8.5).
 
-**Phase 2: per-cell walkability fill.** The builder iterates every cell. For each, it asks a walkability predicate "could this NPC legally stand on this cell, given its schedule waypoint and the location's current floor?". The predicate consults a per-tile passability bitmap (256 bits indexed by tile ID; "1" means passable for NPCs) plus a few extra rules — out-of-bounds returns "blocked", tiles where another NPC is mid-route return "blocked". Accepted cells are stamped open; rejected cells become obstacles.
+**Phase 2: per-cell walkability fill.** The builder iterates every cell. For each, it asks a walkability predicate "could this NPC legally stand on this cell, given its schedule waypoint and the location's current floor?". The predicate consults a per-tile passability bitmap (256 bits indexed by tile ID, MSB-first within each byte; "1" means passable for NPCs) plus a few extra rules — out-of-bounds returns "blocked", tiles where another NPC is mid-route return "blocked". Accepted cells are stamped open; rejected cells become obstacles.
 
-**Phase 3: tile-ID goal markers.** When the mode flag is one of the two tile-ID modes, the builder walks the live world-tile array; cells whose live tile equals the marker become goal sentinels.
+**Phase 3: tile-ID goal markers.** When the mode flag is one of the two tile-ID modes, the builder walks the live world-tile array; cells whose live tile equals the selected marker become goal sentinels. For the chair-search variant, the selected marker is either `0xC8` or `0xC9`.
 
 **Phase 4: dynamic-obstacle overlay.** The builder walks the active-object table and, for each occupied slot whose Manhattan distance from the NPC's destination is less than four, stamps the object's cell as obstacle. The player's position is included. The Manhattan-radius-four cutoff is deliberate: the BFS queue is small enough that obstacles further away cannot influence the route.
 
@@ -227,7 +227,9 @@ Once BFS succeeds, the walker traces the high-nibble trail from goal back to sta
 
 A common NPC routine is "go sit on a chair". The schedule's waypoint coords for "sit at the bar" point to the cell *in front of* the chair, not to the chair itself, because the chair is impassable terrain and the schedule waypoint must be a cell the NPC can reach. The chair-search variant bridges that gap.
 
-The walker invokes the variant when an NPC's schedule says "sit" (Section 9) and the NPC has reached the schedule waypoint coords. The variant runs the pathfinder in tile-ID search mode with the marker set to one of two paired chair tile IDs. Two markers exist because chairs come in two facing-direction pairs in the tile encoding, and the walker picks a marker based on which cardinal direction the NPC is approaching from. The pathfinder returns the coordinates of the nearest matching chair tile, and the walker steers the NPC there for a final "sit" pose. Implementations that do not care about chair-facing match can use a single chair-tile-ID set; the visible behaviour is "the NPC sits on the chair adjacent to their schedule waypoint".
+The walker invokes the variant when an NPC's schedule says "sit" (Section 9) and the NPC has reached the schedule waypoint coords. The variant runs the pathfinder in tile-ID search mode with the marker set to one of the two paired chair/seat marker IDs: `0xC8` or `0xC9`. The workspace builder searches the live tile buffer for cells whose byte equals the selected marker, stamps those cells as BFS goals, and starts the search from the schedule waypoint cell.
+
+The walker selects between the two marker IDs from the cardinal-direction sweep. That is enough to show that the pair carries a facing or approach-direction distinction, but the exact visual-facing names for `0xC8` versus `0xC9` are not pinned down here. The pathfinder returns the coordinates of the nearest matching marker cell, and the walker steers the NPC there for a final "sit" pose. Implementations that do not care about chair-facing match can use the union of both marker IDs; the visible behaviour is "the NPC sits on the chair adjacent to their schedule waypoint".
 
 ## 9. AI behaviours
 
@@ -247,7 +249,7 @@ The AI byte does not affect the *target* the schedule resolves to — that is pu
 
 Several rules govern whether a candidate cell is a legal step. All are consulted by the workspace builder's per-cell walkability predicate (Section 8.3).
 
-**Tile passability.** A 256-bit bitmap, indexed by tile ID, identifies which tiles are walkable for NPCs. Walls, water, and lava are clear; floors, grass, and stone roads are set.
+**Tile passability.** A 256-bit bitmap, indexed by tile ID, identifies which tiles are walkable for NPCs. The byte index is `tile_id >> 3`; the bit mask is `0x80 >> (tile_id & 7)`. Walls, water, and lava are clear; floors, grass, and stone roads are set.
 
 **Active-object collisions.** Other NPCs and the player occupy cells in the active-object table. Occupied cells are reported as "blocked" when the occupant is within the dynamic-obstacle scan radius (Manhattan four from the destination). Outside that radius, the cell is treated as walkable — the BFS budget cannot reach there anyway.
 
@@ -282,7 +284,7 @@ A special-case rule covers the "default human" NPC type: when the type byte is a
 
 **World tiles.** The schedule system reads the live world-tile array for the chair-search variant (Section 8.5). It does not modify the array directly; tile changes that happen as a side effect of NPC movement (e.g. a door tile being walked through) are owned by other code paths.
 
-**Look / inspect.** The paired "chair" tile IDs are also recognised by the look/inspect system. The schedule system writes nothing to look/inspect tables; it only consumes the same tile-ID encoding.
+**Look / inspect.** The paired chair/seat marker IDs share the global tile-ID space with the look/inspect tables. The schedule system writes nothing to look/inspect tables; it only consumes the live tile bytes for pathfinding goals.
 
 The scheduler does *not* talk to the dialogue system. The `dialog_index` byte loaded with the schedule is consumed by the dialogue overlay when the player initiates a conversation.
 
@@ -296,13 +298,15 @@ The scene byte and floor byte that drive location selection *are* persisted (the
 
 - **AI-byte value enumeration.** Section 9 names the behaviours but does not pin individual byte values to them. A dump of `AI[]` values from `TOWNE.NPC` and empirical correlation against in-game routines is the next step.
 
-- **Chair tile IDs.** The chair-search variant's two markers correspond to two tile IDs, but the empirical correspondence between tile ID and "north-facing chair" or "east-facing chair" has not been verified.
+- **Chair marker facing correspondence.** The chair-search variant's two marker IDs are `0xC8` and `0xC9`, but the empirical correspondence between each ID and a specific visual chair facing or approach direction has not been verified.
 
 - **Hidden-NPC bitmask.** Section 11's per-scene mask is one bit per NPC slot per scene, but the encoding of which conditions cause which bits to be set is plot-dependent and not enumerated here.
 
-- **State 8.** Transitions in are clear (Section 6); transitions out happen indirectly via the next hour tick's boundary trigger. An implementer may safely treat state 8 as "re-enter the boundary check at the next opportunity".
+- **Cached-waypoint update site.** Initialisation writes the current waypoint and the boundary trigger reads it, but the public notes have not isolated the later write that records arrival at a newly active waypoint. Implementations should preserve the observable role of this field as transition memory.
 
-- **Stuck counter thresholds.** The exact threshold at which the counter forces a queue reset is a small constant; implementations should pick a value that produces smooth behaviour and tune empirically.
+- **State 8.** Transitions in are clear (Section 6); direct dispatch semantics are still weakly verified. For v1, treat state 8 as a transient replan/no-visible-step state that re-enters normal boundary handling at the next opportunity.
+
+- **Long-stall counter behaviour.** The short queue-reset threshold is confirmed: greater than three failed-progress ticks resets the move queue. Higher long-stall guard values exist in the analyzed walker, but their exact visible side effects are not yet specified.
 
 - **Out-of-town NPCs.** Lord British in the intro and various plot-scripted overworld NPCs do not use this system; they belong to a separate "outdoor NPC" path.
 

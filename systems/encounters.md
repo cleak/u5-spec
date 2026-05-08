@@ -37,9 +37,9 @@ Scripted encounters are dispatched from places like the town mode loop's hostili
 
 ### 2.3 Dungeon room encounters
 
-Dungeon mode runs its own per-turn block, but it does not roll the random-encounter probe. Instead, certain tile classes inside a dungeon level trigger a deterministic combat call: stepping onto a *room* tile loads a fixed arena from the dungeon-encounter arena bank, and springing a *trap chest* loads a different arena (typically a smaller, fixed-monster encounter — gremlins, snakes, or similar). The arena selection is keyed by the tile (and, for chests, by the chest's randomly-rolled trap value); the rest of the pipeline — count, placement, leader/follower split — runs the same way as for overworld encounters.
+Dungeon mode runs its own per-turn block, but it does not roll the random-encounter probe. Instead, certain tile classes inside a dungeon level trigger a deterministic combat call: stepping onto a *room* tile loads a fixed arena from the dungeon-encounter arena bank, and springing a *trap chest* loads a different arena (typically a smaller, fixed-monster encounter — gremlins, snakes, or similar). Room arena selection is keyed by the active dungeon scene and the trigger cell's low nibble; for chests, the trap-specific lookup remains separate. The rest of the pipeline — count, placement, leader/follower split — runs the same way as for overworld encounters.
 
-Dungeon encounters do not consult the overworld terrain class or the time of day. The dungeon-encounter arena bank is much larger than the overworld bank (over a hundred records versus sixteen), reflecting the wider variety of fixed-content dungeon situations.
+Dungeon encounters do not consult the overworld terrain class or the time of day. The dungeon-encounter arena bank is much larger than the overworld bank (one hundred twelve records versus sixteen), reflecting the wider variety of fixed-content dungeon situations.
 
 ## 3. The probability of a random encounter
 
@@ -60,7 +60,7 @@ When the probe fires, the *spawner* picks a monster type, picks an off-screen ti
 
 When the player steps onto (or attacks) an active-object tile that the engine recognises as hostile, the world loop calls the combat framer with `entry_mode = 0` (terrain combat). The framer then runs the **terrain-combat setup pipeline** described in `combat.md`. From the encounter system's side, the relevant sub-stages of that pipeline are:
 
-**Arena selection.** The active-object's tile-class byte picks one of sixteen *outdoor arenas* via a small linear formula: `arena_id = (class − 0x40) / 4` for class bytes in the range `0x40..0x7F`, with two known exceptions (a "skiff" class is hard-coded to arena 1 to handle pirate-ship encounters; classes outside the linear range fall through to scripted handling). The sixteen outdoor arenas are stored in the on-disk **outdoor combat arena bank**; each arena is an 11×11 terrain grid with a band of placement metadata (see `formats/maps.md` for the on-disk format).
+**Arena selection.** The active-object's tile-class byte picks one of sixteen *outdoor arenas* via a small linear formula: `arena_id = (class − 0x40) / 4` for class bytes in the range `0x40..0x7F`, with two known exceptions (a "skiff" class is hard-coded to arena 1 to handle pirate-ship encounters; classes outside the linear range fall through to scripted handling). The sixteen outdoor arenas are stored in the on-disk **outdoor combat arena bank**; each arena is an 11×11 terrain grid with a band of placement metadata (see `formats/cbt.md` for the on-disk format).
 
 **Underworld variant.** If the active-object's stored Z byte indicates the underworld (the high bit of the Z byte is set), a flag is raised that biases later table reads toward underworld variants of the same arena. The arena bank itself is shared between surface and underworld; only the player-Z value the placer writes into each placed monster's record differs.
 
@@ -102,9 +102,9 @@ Functionally, town hostility uses the same arena bank and the same placement pip
 
 ## 8. Dungeon room and chest-trap encounters
 
-Inside a dungeon, the per-turn block of the dungeon mode loop watches for two specific tile classes:
+Inside a dungeon, encounter triggers split into fixed room tiles and Open-handler chest traps:
 
-- **Room tiles.** Stepping onto a tile classified as a "dungeon room" triggers an encounter call into the combat framer. The arena selected comes from the **dungeon-encounter arena bank** (over a hundred arenas, in a separate on-disk file from the outdoor bank). The tile's specific value picks the arena index. Dungeon rooms are pre-authored: the same dungeon-room tile in the same dungeon level always loads the same arena, so the player can learn rooms over multiple visits.
+- **Room tiles.** Stepping onto a tile classified as a "dungeon room" triggers an encounter call into the combat framer. The arena selected comes from the **dungeon-encounter arena bank** (one hundred twelve arenas, in a separate on-disk file from the outdoor bank). The helper treats the room tile's low nibble as a slot and combines it with an adjusted dungeon-scene bank: `arena_index = arena_bank * 16 + (tile & 0x0F)`. Dungeon rooms are pre-authored: the same dungeon-room tile in the same dungeon level always loads the same arena, so the player can learn rooms over multiple visits.
 - **Trap chests.** Opening a chest in a dungeon (and only in a dungeon — overworld chests use a separate trap-effect pipeline) may, depending on the chest's roll, trigger a small monster encounter from a fixed sub-set of dungeon arenas (gremlins, rats, slimes). This "encounter trap" is one of several possible chest-trap effects; others are damage, poison, or sleep.
 
 Dungeon arenas are typically smaller and tighter than outdoor arenas, with fewer entry edges. The placement pipeline runs the same way as for terrain encounters: the per-arena spawn-count, the leader/follower split, and the per-arena leader-replacement tile all live in the same data-segment tables.
@@ -130,15 +130,11 @@ The probe's threshold formula is the only place where party state (conscious-mem
 
 ## 11. Returning to the world after combat
 
-The combat framer's restore phase (see `combat.md` Section 4) restores the *active-object table* exactly to its pre-combat state. This means: a monster that was on the world map when combat started is *still on the world map after combat ends*, even if it died inside the arena. The world is unaware that combat happened.
+The combat framer's restore phase (see `combat.md` Section 4) restores the *active-object table* exactly to its pre-combat state. This means: a monster that was on the world map when combat started is *still on the world map after combat ends*, even if it died inside the arena. Combat death paths can write temporary loot metadata and compute a raw reward unit while the combat-instance table is live, but the currently traced framer restores the backup over those active-object bytes rather than merging them into the world table. For default monster deaths, the temporary loot marker is a class drop-cap byte with an optional high-bit special marker, gated by random checks; it is not itself the durable post-combat loot award.
 
-Two reconciliation steps run during the framer's restore phase:
+Durable effects proven at the framer boundary are the ones stored outside the active-object table: party HP/status changes, active-player clearing when the saved active character is dead or asleep, resource consumption by combat actions, combat-round time advances, visibility/stat redraw requests, and any post-combat trap flag handled before the redraw. Terrain loot promotion, XP/karma accounting, and trigger-slot removal are encounter-side handoff questions until the caller or a deeper cleanup helper is traced. The traced COMBAT-level callers do not forward the raw reward-unit return through the framer; spell-side callers can still consume it before that boundary, as Tremor does by crediting caster experience.
 
-- **Loot drops.** During combat, killed monsters write *random-loot bytes* into a side region of the active-object backup table — these are bags of gold, dropped weapons, or food items. On combat exit, those items are written back into the world's active-object table at the encounter coordinate, replacing whatever monster slot occupied that coordinate before. From the player's perspective, the monster's tile is replaced by a treasure-chest tile when the world reappears, and walking onto that tile picks up the loot.
-- **Time advance.** The framer calls the per-turn cleanup once with a one-minute increment when combat exits (regardless of how many round-loop wraps happened inside). This is the only time advance for a combat encounter; the round counter's per-wrap world tick (see `combat.md` Section 7) advances time *inside* the fight, but the framer adds exactly one extra minute on exit.
-- **XP and karma.** The combat framer aggregates per-killed-monster XP and karma deltas into return values that the calling mode loop applies after the framer returns. The exact aggregation is per-class, looked up in the per-monster-class data tables described in `combat.md` Section 13.
-
-The active-object slot the player attacked to *trigger* the encounter is one of the most interesting cases. If the player won, that slot is now a loot tile (Section 11's "Loot drops"); if the player fled, the original active-object slot is restored *intact* and the monster keeps walking around the world as if nothing happened. There is no "fled monsters remain weakened" mechanic — fleeing is a clean rewind.
+The active-object slot the player attacked to *trigger* the encounter is the clearest boundary case. If the player fled, the original active-object slot is restored *intact* and the monster keeps walking around the world as if nothing happened. If the player won, replacing that slot with loot or removing it from the world must be implemented only once the caller-side reconciliation path is pinned; it is not an automatic effect of the framer restore.
 
 ## 12. Hooks into other systems
 
@@ -149,12 +145,12 @@ The encounter system is the connecting tissue between several other systems:
 - **Time.** The probe consumes a single RNG draw per overworld turn but does not advance time. Time advances are mediated by the per-turn cleanup, which the encounter system itself never calls (the world mode loops do).
 - **Active objects.** Spawning writes a new active-object record. The placement pipeline writes one record per spawned monster into the combat-instance overlay of the same table.
 - **Save / load.** Encounter state is *not* mid-flow saveable — the player cannot save during the probe, the framer's setup phase, or the round loop (the input system gates saves to the world mode loops' wait-for-input states). The "fortunes of war" flag is part of the save image so that a save-and-reload preserves the doubler's effect.
-- **Karma.** Won encounters award karma proportional to monster class; fled encounters award none. The accounting is per-monster-class (see `karma.md`).
+- **Karma and rewards.** Combat computes a per-class raw reward value and temporary drop markers, but the traced COMBAT-level callers do not propagate them through the framer. Tremor is a spell-side exception: it consumes the damage/status helper's return immediately by adding it to the caster's experience with a 9999 cap. The durable encounter-side path that turns ordinary kill results into XP, gold, virtue deltas, loot, or no-op for fled encounters is still open (see `karma.md`).
 - **Visibility.** Off-screen monsters are pruned from the active-object table but stay alive conceptually — the engine's "thirty-two-cell sliding window" means the player's far-away wanderings are not tracking specific monsters' positions.
 
 ## 13. Open questions and partial information
 
-Several aspects of the encounter system are not fully reverse-engineered as of this writing.
+Several aspects of the encounter system are not fully mapped as of this writing.
 
 - **Exact threshold formula for the random-encounter probe.** The probe consults the under-party tile, the conscious-party-member count, and possibly the daylight value, but the exact arithmetic combining these into the chance-out-of-thirty has not been fully traced. Strong candidates: a per-tile-class base value indexed by tile, multiplied by a small `f(party_size)` factor, possibly biased by daylight. Implementers may match the *observed* feel of the game (mountains very dangerous, roads safe, smaller party more likely to be ambushed) without committing to the exact formula.
 
@@ -166,19 +162,21 @@ Several aspects of the encounter system are not fully reverse-engineered as of t
 
 - **Sleep-ambush probability per terrain.** The ambush probe runs once per simulated hour during rest, but the exact per-tile-class threshold is not yet pinned down. Inn rooms and towns are clearly safe; deep wilderness is clearly risky. The middle ground (a meadow on the edge of a forest, a road near a swamp) is unclear.
 
-- **Dungeon-room arena indexing.** The dungeon-encounter arena bank has over one hundred records, but the exact mapping from "dungeon room tile class" or "chest-trap value" to arena index has not been fully traced. The pattern is one-room-tile-to-one-arena, but the lookup table that performs the indexing is presumably in the data segment and has not been fully labelled.
+- **Dungeon chest-trap arena indexing.** Dungeon room-tile indexing is fixed by dungeon scene and trigger low nibble. Chest-trap values may also select from the dungeon arena bank, but that Open-handler mapping has not been fully traced.
 
 - **The "fortunes of war" flag's writer.** The flag is read in two places (the spawn-count reroll and possibly the probe threshold), but its setter is empirical — a sleep-ambush success is one confirmed setter; a mid-game scripted event may be another.
 
-- **Town-hostility's relationship to the arena bank.** Town hostility uses the outdoor arena bank with the count-override forcing one. *Which* outdoor arena it picks for an indoor fight is determined by the hostile NPC's tile class, but the outdoor arenas don't have a "town interior" variant — so the player ends up fighting one guard in, say, a forest-themed arena. This is the engine's behaviour as confirmed, but the visual mismatch suggests there may be an undiscovered "use the town's tile grid as the arena" path that has not yet surfaced in the decomp.
+- **Town-hostility's relationship to the arena bank.** Town hostility uses the outdoor arena bank with the count-override forcing one. *Which* outdoor arena it picks for an indoor fight is determined by the hostile NPC's tile class, but the outdoor arenas don't have a "town interior" variant — so the player ends up fighting one guard in, say, a forest-themed arena. This is the engine's behaviour as confirmed, but the visual mismatch suggests there may be an undiscovered "use the town's tile grid as the arena" path that has not yet surfaced in the current analysis.
 
 - **Random-monster type for sleep ambushes.** The ambush probe spawns *some* monster type, but the per-terrain monster table that drives this selection has not been fully labelled. The intuition is "the forest spawns forest-appropriate monsters", and the per-arena leader-replacement table is the most likely source of the type.
 
+- **Post-combat loot and reward reconciliation.** Combat death paths produce temporary drop markers while the combat instance is live and compute a raw reward unit, but the framer restores the world active-object table exactly and the traced COMBAT-level callers do not forward the reward return through that framer. Tremor proves that spell-side callers may consume the return before the framer restores the world, but it does not explain the ordinary encounter-victory path. The caller or deeper cleanup helper that promotes drops, removes the triggering monster, or applies XP/karma still needs tracing.
+
 ## 14. Sources
 
-The behaviour described here was derived by reading the disassembly notes for the following functions and format notes in the project's decompilation working area. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - The 30-sided per-turn random-encounter probe in the overworld loop's per-turn block, including the call-out to the encounter spawner — derived from `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The combat enter/exit framer with its three-way entry-mode dispatch (terrain, ambush, alternate), the active-object backup-and-restore around the round loop, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
 - The terrain-combat setup pipeline, the per-arena spawn-count and leader-replacement tables, the optional Fisher-Yates shuffle for ambush placement, the leader-vs-follower count-and-tile split, the town-style single-attacker override, and the "fortunes of war" double-roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
-- The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, and the surface/underworld variant model — derived from `u5-decomp/formats/maps.md`.
+- The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the surface/underworld variant model — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.

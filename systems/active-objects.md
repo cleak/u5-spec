@@ -4,9 +4,9 @@
 
 Ultima V's runtime stage — the place where everything visible and not painted-on-the-floor lives — is a single fixed-size array called the *active-object table*. Thirty-two slots of eight bytes each: two hundred fifty-six bytes total in the resident data segment. One slot is the player; the rest are NPCs, monsters, projectiles, vehicles, animated tiles, scripted props, and any other moving or otherwise non-static entity on the player's current view of the world.
 
-Every mode reads and writes this same table. The renderer composites it into the viewport. The visibility producer consults it for line-of-sight blockers. The NPC scheduler links into it when its NPCs cross onto the player's floor. The combat framer swaps it for an isolated combat instance and swaps it back when the fight ends. The save image preserves it byte-for-byte.
+The top-down world modes and combat read and write this same table. The renderer composites it into the top-down viewport. The visibility producer consults it for line-of-sight blockers. The NPC scheduler links into it when its NPCs cross onto the player's floor. Dungeon exploration is the main exception: its first-person view is rendered from dungeon coordinate globals and the loaded dungeon grid, not from active-object slots. When a dungeon room or ambush enters combat, the normal combat framer swaps the table for an isolated combat instance and swaps it back when the fight ends. The save image preserves the table byte-for-byte.
 
-The design is "simple, fixed, and shared." There is no spatial index, no linked list, no per-mode subclass. Every system that touches dynamic on-screen content goes through these thirty-two slots, and every slot is a flat eight-byte record interpreted differently by different systems. This shared, untyped, fixed-size table is what lets the engine's sub-modes hand the world cleanly back and forth.
+The design is "simple, fixed, and shared." There is no spatial index, no linked list, no per-mode subclass. In top-down world scenes and combat, dynamic on-screen content goes through these thirty-two slots, and every slot is a flat eight-byte record interpreted differently by different systems. This shared, untyped, fixed-size table is what lets the engine's sub-modes hand the world cleanly back and forth while still allowing dungeon exploration to use its separate first-person renderer.
 
 ## 2. Table shape
 
@@ -37,7 +37,7 @@ A few observations on the field encoding:
 
 **The phase byte.** Byte 6 packs two pieces of state into one byte: the low nibble counts down through animation frames (with the all-ones value meaning "rest at steady frame, do not animate"), and the high nibble holds a direction-step counter that AI movement uses. The animator's per-tick rule is: if the low nibble is at the steady-state marker, leave the slot alone; if non-zero, decrement; if zero, the slot is eligible for an AI tick that may pick a new direction or move the slot one cell.
 
-**Auxiliary bytes 5 and 7.** Different systems use these slots differently. The renderer reads them only for specific tile families (vehicles, water creatures, projectiles), where they hold rider type or next-tile-overlay data. Combat-instance records repurpose byte 5 as a per-actor speed counter and bytes 6 and 7 as per-actor X and Y in arena coordinates. Byte interpretation is therefore not type-uniform across world and combat instances; readers must know which mode is active.
+**Auxiliary bytes 5 and 7.** Different systems use these slots differently. The renderer reads them only for specific tile families (vehicles, water creatures, projectiles), where they hold rider type or next-tile-overlay data. Combat-instance active-object records are still the renderer-facing table: arena coordinates are in bytes 2 and 3, while byte 5 can be overwritten by the default monster-death path with a raw drop marker. The round-loop fields named in the combat spec — base-step, phase counter, target slot, flags, and duplicate arena coordinates — live in the parallel combat-effect descriptor table, not in these active-object auxiliary bytes. Byte interpretation is therefore not type-uniform across world and combat instances; readers must know which mode is active.
 
 **Coordinate axes.** Bytes 2 and 3 hold cell coordinates. In overworld and town/dwelling/castle/keep modes, they are world coordinates. In combat-instance use, they are arena coordinates on the eleven-by-eleven arena. The renderer's projection step subtracts the player's position to find each slot's offset in the on-screen viewport.
 
@@ -93,11 +93,13 @@ The per-NPC runtime descriptor's slot index and the active-object slot index are
 
 Combat mode uses the same active-object table for combatants, but the contents are different — a combat instance, not a world snapshot. The combat framer's enter/exit save-and-restore (Section 9) is what makes this work: combat overwrites the table with combatant records and restores the world's table on exit.
 
-Within combat, slot zero is still the player. Slots one through twenty-five (capped at twenty-six total combatants) are populated by the monster-placement helper at entry. Each spawned monster gets one slot with the monster's tile class in byte 0, the per-frame tile byte at byte 1, arena coordinates in bytes 2 and 3, and a floor flag at byte 4. The auxiliary bytes 5..7 are repurposed: byte 5 is a per-actor speed counter, bytes 6 and 7 hold per-arena coordinates duplicated for the combat round walker.
+Within combat, slot zero is still the player. Slots one through twenty-five (capped at twenty-six total combatants) are populated by the monster-placement helper at entry. Each spawned monster gets one renderer-facing active-object slot with the monster's tile class in byte 0, the per-frame tile byte at byte 1, arena coordinates in bytes 2 and 3, and a floor/plane flag at byte 4. The higher auxiliary bytes remain mode-specific render/drop scratch rather than round-loop scheduling fields; the default monster-death path can write a raw drop marker to byte 5 while the temporary combat table is live.
 
 A *parallel* combat-effect descriptor table holds the additional per-actor state combat needs — base-step, phase counter, target index, flag bits — at a different data-segment location, indexed by the same slot index. The two tables are kept in sync by the per-action primitive: when an actor moves, its coordinates are written into both.
 
-The split keeps combat-only state out of the world-mode table. When combat exits, the active-object table can be restored cleanly because it never accumulated combat-internal flags during the fight. The combat round walker, described in the combat spec, iterates the combat-effect descriptor table for action selection and reads the active-object table for sprite rendering.
+Placed combat fields also live in this temporary active-object table. Their marker records use arena coordinates and are matched by the combat post-action hook when an actor finishes a successful step on the same cell. Marker creation is gated by the arena field helper: target selection and coordinate lookup must succeed, then the COMBAT acceptance callback must accept before the marker/application callbacks run. The coordinate lookup scans combat slots in ascending order and accepts the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Contact is non-consuming: the post-action hook applies the field result without clearing, aging, or rewriting the matched marker record. Field markers are active-object-only records rather than paired combat-effect descriptors, so the monster death/record-clear path cannot age or remove them. The accepted-placement resident redraw helper and the generic active-object tick do not allocate, remove, or decrement field marker records. Their presence is combat-local: they persist until the framer restores the pre-combat active-object table on exit.
+
+The split keeps combat-only state out of the world-mode table. When combat exits, the framer restores the live active-object table from its pre-combat backup, so combat movement, deaths, and loot-marker writes in the temporary table do not directly merge back into world objects. Durable combat outcomes travel through character records, clock/status globals, resources consumed by combat actions, and any encounter-side reconciliation traced outside the table restore. The combat round walker, described in the combat spec, iterates the combat-effect descriptor table for action selection and reads the active-object table for sprite rendering.
 
 ## 8. Animation
 
@@ -117,7 +119,7 @@ Two responsibilities sit slightly outside the per-slot loop. A *frame-counter ad
 
 Some slots also receive AI ticks during the same pass: hostile creature classes that wander on the overworld (or in towns past their schedule) get an RNG roll on their phase-zero tick that may turn or step them one cell. Probability is gated by tile class — different monsters wander with different rates — and the eight-way direction decision is dispatched through a small jump table indexed by the current direction nibble.
 
-The animator does not move the player. Player movement is owned by the input system and per-mode command handlers; the animator only refreshes slot zero from world-state globals at the start of its pass.
+The animator does not move the player. Player movement is owned by the input system and per-mode command handlers. Slot zero is refreshed from world-state globals by the renderer/compositor path before objects are stamped into the viewport, not by the animator itself.
 
 ## 9. Combat backup and restore
 
@@ -137,9 +139,9 @@ Each mode's entry handler initialises the table according to its needs.
 
 **Town / dwelling / castle / keep entry.** Clears every slot except slot zero. Runs the per-NPC roster load (building runtime descriptors and schedules), the per-NPC initial-waypoint placement (calling the world-mutation helper for each NPC currently on the player's floor, allocating slots), and finally the player-as-NPC attachment helper (which finds an empty NPC slot, allocates an active-object slot for the player, and stamps the player sentinel value into both). Result: slot zero has the avatar, a handful of low-indexed slots have on-screen NPCs, and the highest empty NPC index gets the player-as-NPC mirror.
 
-**Overworld entry.** Slot zero is the player. The remainder of the table is populated from the on-disk overworld object overlay (per-map static object lists). Each non-zero record from the overlay is copied into a free slot. Random encounters, dropped items, and spawned creatures appear in the table over the course of overworld play and are pruned when they leave the player's viewport: the overworld per-turn walker checks each slot's distance from the scroll bases and frees slots more than thirty-two cells away.
+**Overworld entry.** Slot zero is the player. The remainder of the table is populated from the on-disk overworld object overlay (per-map static object lists). Each non-zero record from the overlay is copied into a free slot. Before normal outdoor input begins, entry also consumes the one-shot pending vehicle-acquisition state used by shipwright purchases: if set, it allocates a free slot, writes the pending coordinates, initializes either a ship-family object with hull/skiff auxiliary state or a skiff-family object, and clears the pending state. Random encounters, dropped items, and spawned creatures appear in the table over the course of overworld play and are pruned when they leave the player's viewport: the overworld per-turn walker checks each slot's distance from the scroll bases and frees slots more than thirty-two cells away.
 
-**Dungeon entry.** Whether dungeon mode populates the table is an open question (Section 13). The available decompilation is consistent with "dungeon uses the same table for player only, plus combat instances when fighting."
+**Dungeon entry.** Dungeon exploration does not populate the table for its first-person view. The dungeon loop reads the player's dungeon Z/X/Y and facing globals, renders from the loaded dungeon record, and does not run the town NPC scheduler or the overworld active-object walker. The active-object table remains part of global saved state, but it is not the dungeon renderer's actor list. If a dungeon room, trap, ambush, or attack enters combat, the combat framer takes over as described in Section 9.
 
 **Combat entry.** Section 9.
 
@@ -171,9 +173,7 @@ The on-disk overworld object overlay (per-map static object list) is a *seed* fi
 
 ## 13. Open questions
 
-- **Combat-instance byte interpretation.** The combat instance repurposes the auxiliary bytes for round state. Which world fields are preserved and which are overwritten by combat setup is a point that needs verification; the Section 7 mapping is the working hypothesis.
-
-- **Dungeon-mode use of the table.** Dungeon mode may use a separate table or share this one with only the player slot populated. The available decompilation does not yet show a dungeon equivalent of the town scheduler or the overworld per-turn walker driving this table; the working hypothesis is "player only, plus combat instances when fighting."
+- **Combat-instance byte interpretation.** World preservation is now pinned: the framer snapshots and restores the full two hundred fifty-six-byte active-object table, so combat-internal active-object mutations do not merge back directly. The remaining open part is the exact meaning of the combat-instance auxiliary bytes while the temporary table is live.
 
 - **The allocator's full algorithm.** First-empty-slot is the established behaviour, but the table-full edge case (sentinel? wrap?) is not fully traced. Call-site discipline keeps the table from filling in practice; the allocator may simply trust this.
 
@@ -183,13 +183,13 @@ The on-disk overworld object overlay (per-map static object list) is a *seed* fi
 
 - **The boat-and-water-creature compositor branches.** The renderer dispatches on type-byte family for water-bound objects and water-creature monsters. The full set of triggering values has not been integrated here.
 
-- **Mode-entry initialisation for dungeon mode.** Tied to the dungeon question above.
-
 - **Cell-collision rules for the player-as-NPC slot.** Town-mode helpers walking the NPC table for collision detection must recognise the player sentinel and skip it. The exact tests are not yet documented.
 
 ## 14. Sources
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
+
+- The dungeon loop's first-person rendering path and its absence of NPC/active-object population during exploration — `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 
 - The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
 - The compositor that walks the table backwards to stamp on-screen sprites into the viewport, plus the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.

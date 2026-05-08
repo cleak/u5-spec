@@ -27,7 +27,7 @@ The file is a sequential string table:
 
 Records are packed back-to-back. To read record `n`, a reader starts at the
 beginning of the file and skips `n` NUL-terminated records. The file itself
-does not store tier thresholds, virtue ids, karma scores, or record offsets.
+does not store tier thresholds, virtue ids, standing values, or record offsets.
 
 ## 3. Record Semantics
 
@@ -46,7 +46,7 @@ content.
 
 The shrine meditation flow is the primary known consumer. After the player
 meditates at a shrine and the engine computes the relevant virtue's standing,
-the handler maps the score to a tier index and prints the corresponding
+the handler maps that standing to a tier index and prints the corresponding
 `KARMA.DAT` record.
 
 Blackthorn-related rescue or judgement paths also load `KARMA.DAT` and select
@@ -66,13 +66,14 @@ unless an implementation is running in a strict asset-verification mode.
 If fewer than six records are present, the original-style behavior would be an
 out-of-bounds text read. A modern implementation should fail the asset load or
 fall back to a clear missing-text placeholder. It should not silently treat
-missing verdicts as zero karma, because scores and text are separate systems.
+missing verdicts as zero karma, because standing values and text are separate
+systems.
 
 ## 6. Known Uncertainties
 
-- The exact score thresholds that choose records zero through five are not
+- The exact standing thresholds that choose records zero through five are not
   encoded in `KARMA.DAT` and remain part of the meditation and event-handler
-  decompilation work.
+  analysis work.
 - The distinction between the two highest-tier records is unresolved.
 - The full list of non-shrine consumers has not been exhaustively mapped.
 

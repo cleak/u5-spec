@@ -44,13 +44,12 @@ The counts include the universal sentinel slot at index one (Section 6); the num
 
 Every `.TLK` file is laid out as a fixed-size header followed by a concatenated run of variable-size NPC blobs:
 
-```
-.TLK file:
-  uint16  npc_count                      // total NPC slots, including sentinel
-  uint16  sentinel                       // always 0x0001
-  HeaderEntry  entries[npc_count − 1]    // one per real NPC, sorted by id ascending
-  uint8        blob_data[]               // concatenated NPC blobs, XOR-obfuscated
-```
+| Region | Width / count | Meaning |
+|--------|---------------|---------|
+| NPC count | 2 bytes | Total NPC slots in the file, including the sentinel. |
+| Sentinel | 2 bytes | Always `0x0001`. |
+| Real NPC entries | 4 bytes each, `npc_count - 1` entries | One entry per real NPC, sorted by id ascending. |
+| Blob data | Remainder of file | Concatenated NPC blobs containing XOR-obfuscated text and control bytes. |
 
 The first four bytes form a special leading pair `(npc_count, 0x0001)`: the count value occupies the slot a regular entry would use for its blob offset, and the sentinel `1` occupies the slot a regular entry would use for its NPC id. After this pair, the remaining `npc_count − 1` entries describe real NPCs, sorted by ascending NPC id starting at id `2`.
 
@@ -100,9 +99,9 @@ Each leading entry is a NUL-terminated stream of post-obfuscation bytes. The fiv
 
 The keyword body is a sequence of paired NUL-terminated streams: a keyword string followed by a response stream. The keyword string is obfuscated text representing a word the player can type, e.g. `JOIN`, `QUEST`, `HORSE`. The response stream is the engine's reply and may contain any control codes the format supports.
 
-Both sides use the same obfuscation and byte-runner semantics. Keywords are matched against the player's typed input by a bit-7-stripping, case-insensitive, full-string equality compare. There is no explicit "end of blob" sentinel; the engine walks the keyword pointer table populated at load time and stops when it has visited each entry. A reader can use the next NPC's `blob_offset` (or end-of-file for the last blob) as the implicit terminator.
+Both sides use the same obfuscation and byte-runner semantics. Keywords are matched against the player's typed input by a bit-7-stripping, case-insensitive space-boundary compare: the keyword must end at the match point, and the typed input must either end there or have a literal space there. There is no arbitrary substring or fuzzy match. There is no explicit "end of blob" sentinel; the engine walks the keyword pointer table populated at load time and stops when it has visited each scan slot. A reader can use the next NPC's `blob_offset` (or end-of-file for the last blob) as the implicit terminator.
 
-The conversation engine reserves up to thirty-four pointer-table slots (five mandatory leading entries plus up to twenty-nine variable keywords). NPCs with more keywords than that ceiling do not exist in shipped content; the cap is implicit in the engine, not in the file format. The pointer-table semantics are covered in `systems/conversation.md`.
+The conversation engine reserves thirty-four pointer-table slots for the in-memory scan. The five mandatory leading entries are fixed blob ordinals used by the conversation envelope; variable keyword/response pairs fill the matchable body after them. The exact slot-population routine is engine-side and remains open, but shipped content stays within the thirty-four-slot scan ceiling. The pointer-table semantics are covered in `systems/conversation.md`.
 
 ## 8. XOR obfuscation
 
@@ -155,6 +154,12 @@ The full runtime semantics of each code — how PAUSE redraws, how IF-ELSE walks
 
 The exact encoding of the three argument bytes for `0x85` is not pinned down in the format; an implementation must inspect the gold-payment handler. The single argument byte for `0x86` is a printable letter (typically `'A'` through `'K'`) drawn from the printable-text range without obfuscation — that is, the argument byte is consumed *after* the introducer's bit-7 transparency, so the on-disk byte may already carry the high bit set or clear depending on the per-NPC blob's authoring convention.
 
+Shop entry is not encoded as a `.TLK` keyword-response control stream. When a
+Talk target is a shop-capable resident, a high-range `.NPC` dialog-index value
+can route to the shop system before loading the resident's normal `.TLK` blob.
+`formats/npc.md` owns those trigger byte values, and `systems/shops.md` owns
+the semantic shop-kind dispatch and current shop-instance resolution.
+
 ### 9.2 The `0xA2` quote sentinel
 
 The byte runner inspects each incoming byte against the previous byte to detect repeated `0xA2` sequences. A `0xA2` byte (which decodes to `"`) immediately following another `0xA2` is silently suppressed. The most likely interpretation is paired-quote artefact suppression — the `0x82` END-STREAM emit followed by a newly-opened quoted phrase would otherwise produce a doubled close-quote character. Implementations targeting byte-exact output should reproduce this suppression to avoid doubled quotes in the rendered text.
@@ -202,7 +207,7 @@ A reader can sanity-check a `.TLK` decoder by:
 
 The format is verified by direct byte inspection at the file-structure level (header layout, NPC counts, sentinel mechanism, blob alignment) and by behavioural inspection at the byte-runner level (control-byte dispatch, dictionary substitution, obfuscation). The following points remain open.
 
-- **Keyword pointer table populator.** The engine populates a thirty-four-slot pointer table at blob-load time. The exact populator routine — whether it pre-walks every NUL terminator in the blob, stores a fixed-size map of entry ordinals, or is built lazily on first scan — is unconfirmed. The format does not constrain the populator.
+- **Keyword pointer table populator.** The engine scans a thirty-four-slot pointer table during keyword input. The exact populator routine — whether it pre-walks every NUL terminator in the blob, stores a fixed-size map of entry ordinals, or is built lazily on first scan — is unconfirmed. The format does not constrain the populator.
 
 - **The `0xA2` quote sentinel.** The byte runner suppresses a `0xA2` byte (which decodes to `"`) immediately following another `0xA2`. The most likely interpretation is paired-quote artefact suppression — close-quote bytes that appear adjacent because of a stream-control sequence between them. A content tool generating `.TLK` files should avoid `0xA2 0xA2` runs to be safe.
 

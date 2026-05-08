@@ -75,7 +75,9 @@ analysis proves a control convention.
 The sentinel string is a normal string in the pool. It is shared by many tile
 ids and means "there is no meaningful look description for this tile." Public
 specs should refer to it semantically rather than requiring user interfaces to
-display the original sentinel glyph.
+display the original sentinel glyph. In the original default LOOK2 path, the
+selected sentinel string is still handed to text output like any other selected
+string; suppressing or replacing it is a modern presentation choice.
 
 ## 5. Rendering Behaviour
 
@@ -93,8 +95,27 @@ semantics:
 - Allow duplicate offsets and shared strings.
 - Treat the sentinel as "not lookable" rather than as an ordinary terrain name.
 
-The exact precedence between terrain and active-object descriptions is a
-look-command behaviour, not a property of `LOOK2.DAT`.
+For world and town L-Look, the command handler owns the layer resolution before
+`LOOK2.DAT` is indexed. The direction prompt and facing-cell lookup produce a
+terrain tile plus active-object context, and LOOKOBJ resolves any command-layer
+overlay marker to the terrain or object tile that should actually be described.
+The final resolved tile id is then used as the `LOOK2.DAT` table index; there
+is no class remapping step.
+
+A few tile ids have command-specific handling around the table lookup:
+
+- `0x59`, `0xA1`, and `0xD8..0xDB` route to special look handlers instead of
+  printing the base `LOOK2.DAT` string. This covers wishing wells, dungeon
+  mouth or entrance flavour, and sign or signpost text paths.
+- `0xFA` and `0xFB` print their base `LOOK2.DAT` description, then append the
+  current clock time with an AM/PM suffix.
+- `0xDE` prints its base description, then appends the current shrine
+  principle or virtue context.
+- `0xDF` prints its base description, then appends the dungeon name selected
+  from the command context.
+
+These rules belong to the L-Look command path. The data file itself remains a
+plain table from final raw tile id to base description string.
 
 ## 6. Validation and Error Handling
 
@@ -116,18 +137,13 @@ fallback when one tile's entry is bad.
 
 - `catalogs/tile-catalog.md` describes the global tile-id space and how look-at
   strings fit alongside sprites, passability, animation, and triggers.
+- `systems/town-mode.md` describes the town command loop that routes L-Look into
+  this shared world/town look path.
 - `systems/text-output.md` describes the text window and wrapping behaviour
   used after a description string is selected.
 
 ## 8. Open Questions
 
-- **Layer precedence.** The table is keyed by tile id, but the exact look-command
-  rule for choosing between terrain and active-object layers belongs to the
-  look handler and remains to be documented in a system spec.
-- **Sentinel presentation.** The original data uses a compact sentinel string.
-  Whether the UI prints that glyph literally in every context, suppresses it,
-  or replaces it with a stock refusal message should be confirmed against the
-  look-command path.
 - **Inline controls.** No control bytes are currently known in the file. Future
   analysis should confirm whether all strings are plain printable text.
 

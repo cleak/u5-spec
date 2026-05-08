@@ -88,10 +88,11 @@ transfer commit step. A committed transfer overwrites the working save slot.
 
 ## 5. Transfer Source
 
-The transfer reads a saved party or character record from the Ultima IV disk.
-The exact predecessor filename and record-level parse are not fully specified
-yet. The current function note identifies the Ultima IV party save as the
-likely source, but the field-by-field reader still needs a deeper pass.
+The transfer reads the Ultima IV player disk's `PARTY.SAV` file. The filename
+is now pinned for the analyzed DOS transfer path; the record-level parse is
+not. The reader treats the source as a predecessor party save, extracts only
+Avatar-facing fields, and leaves the field-by-field layout and conversion
+formulas for a deeper transfer pass.
 
 The source data is used only for the Avatar-facing portion of the Ultima V
 save:
@@ -183,9 +184,10 @@ single canonical working save.
 
 The transfer path does not write `INIT.GAM` or `INIT.OOL`. It also does not
 itself perform the Journey Onward mirror writes to `BRIT.OOL` and `UNDER.OOL`;
-those belong to the standard load/save system. After transfer, Journey Onward
-will read the newly-written `SAVED.GAM` and run the ordinary save-load
-housekeeping.
+those belong to the standard load path. After transfer, Journey Onward will
+read the newly-written `SAVED.GAM`, read `SAVED.OOL`, and refresh the per-plane
+mirrors as ordinary load housekeeping. The separate Q-save staging and
+conditional underworld mirror update are owned by `systems/save-load.md`.
 
 ## 9. Save-State Effects
 
@@ -234,7 +236,7 @@ A compatible implementation should model transfer as:
 
 1. Enter from the intro menu's transfer command.
 2. Locate and read the Ultima V transfer seed image and object seed.
-3. Locate and read the Ultima IV source save.
+3. Locate and read the Ultima IV player disk's `PARTY.SAV` source save.
 4. Build an in-memory Ultima V save image from the seed.
 5. Patch only the Avatar-facing fields that transfer owns.
 6. Render a roster/status preview and allow name/gender correction.
@@ -248,8 +250,9 @@ or malformed transfer data must not overwrite the existing Ultima V save.
 
 ## 12. Open Questions
 
-- **Ultima IV source parse.** The exact predecessor filename, record layout,
-  completion checks, and malformed-save behavior remain unresolved.
+- **Ultima IV source parse.** The source filename is pinned to `PARTY.SAV`.
+  The record layout, completion checks, and malformed-save behavior remain
+  unresolved.
 
 - **Primary stat mapping.** The transfer definitely normalizes primary stats
   into Ultima V fields, but the exact scale factors, caps, and lower bounds
@@ -287,8 +290,9 @@ The behavior described here is cleanroom prose derived from the notes and
 existing cleanroom specs listed below. No assembly excerpts, decompiled code,
 private offsets, or binary text dumps are reproduced.
 
-- Transfer seed reads, disk-state setup, roster/status preview, confirmation
-  loop, field writes, and final `SAVED.GAM` / `SAVED.OOL` commit:
+- Transfer seed reads, `PARTY.SAV` source-save filename, disk-state setup,
+  roster/status preview, confirmation loop, field writes, and final
+  `SAVED.GAM` / `SAVED.OOL` commit:
   `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - Intro menu entry and return-to-menu context:
   `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
