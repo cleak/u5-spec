@@ -234,8 +234,11 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
   to that slot's saved scene/X/Y/Z destination. Moonstone burying writes those
   slots only outside dungeon/combat scenes and only from underfoot tile ids
   `4..10`, `44`, or `45`; Search/Get recovery invalidates the matching slot.
-  `AT` starts Time Stop with a 10-count runtime countdown unless blocked by
-  magic absorption. Tremor does not run a friend/foe lookup; party actors and
+  `AT` starts Time Stop with shared runtime tag `T` and a 10-count countdown
+  unless blocked by magic absorption. Command-dispatch cleanup and the combat
+  active-player/selection cleanup path age nonzero/non-255 countdowns and clear
+  the tag on expiry; ordinary clock cleanup only observes `T` to skip minute
+  advancement while stopped time is active. Tremor does not run a friend/foe lookup; party actors and
   monsters are eligible alike after the common damageability and resistance
   gates. The directed target-walk path de-duplicates actors for the
   current spell pass and skips common empty/status-masked records. Its
@@ -285,16 +288,15 @@ Manual/player-facing data:
 
 Remaining open work:
 
-1. Trace the monster combat-AI effect path. Monster special or spell-like
-   effects are now bounded to a class-script dispatch path with class-wide live
-   AI state, not to the forty-eight-entry player spell table; current public
-   evidence does not yet provide the state fields, runner instruction set, or
-   class-to-effect map.
-2. Trace the remaining non-light counter internals: P/Q/C/N counters are
-   helper-invocation based, not light/torch cleanup, minute cleanup, or complete
-   table-pass based. Existing combat notes identify post-action and no-target
-   fallback helper call sites, while the helper body and Time Stop decrement path
-   still need mapping for exact parity.
+1. Keep monster special abilities separate from this player spell table.
+   Possess, blink/phase, and summon-daemon are class-flag combat-AI branches,
+   not forty-eight-entry spell handlers; the v1 baseline class assignments are
+   tracked in `catalogs/monster-bestiary.md`.
+2. Remaining exact-parity work is outside the player spell table: non-hook
+   combat AI state details and item/equipment consumption edges tracked in the
+   item and combat docs. The shared P/Q/C/N active-effect counter shape, Time
+   Stop's `T`/10 decrement/expiry path, and combat C-Cast adjacent-target
+   interference gate are now specified at public semantic depth.
 
 ## 8. Cross-References
 

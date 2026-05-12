@@ -4,7 +4,7 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-05-07.
+Last updated: 2026-05-11.
 
 ## Status Legend
 
@@ -26,7 +26,7 @@ and the primary asset/data formats needed by those systems.
 
 The public spec set currently contains:
 
-- 30 system specs in `systems/`.
+- 32 system specs in `systems/`.
 - 25 file-format specs in `formats/`.
 - 7 cross-cutting catalogs in `catalogs/`.
 
@@ -39,8 +39,11 @@ or raw copyrighted data dumps.
 These items are intentionally not treated as blockers for the v1 visible-MVP
 baseline, but they remain important for exact parity:
 
-- Exact binary display-driver ABI and hardware page-flip behaviour (`EGA.DRV`).
-  The public v1 rendering contract is covered in `systems/display-driver.md`.
+- Alternate-driver exact rendering, non-load-bearing EGA helper slots, and
+  hardware page-flip behaviour. The EGA dispatch ABI, back-buffer plane layout,
+  front-buffer tile/glyph paths, bitmap sparse-strip resources, and major
+  effect entries are now covered in `systems/display-driver-abi.md`; exact CGA,
+  Hercules, and Tandy conversion details remain parity follow-up work.
 - Music/audio playback for distributions that ship external music resources.
   The analyzed clean DOS baseline at `C:\Games\U5-Clean` contains no `.XMI`
   files, so XMIDI is not a v1 asset-format requirement for this baseline.
@@ -52,13 +55,11 @@ baseline, but they remain important for exact parity:
   display helper implementation behind special actor draws, local cell-effect
   rastering, and the short fixed wait.
 - Several per-table enumerations called out in their docs: full tile-id
-  verification, remaining monster class metadata and AI state fields/effect
-  selectors, some NPC type/AI-byte names (chair-search marker IDs are fixed),
-  the monster combat-AI runner instruction set and class effect map, non-light
-  active-effect helper body and Time Stop decrement path, combat reward/loot
-  handoff (temporary drop-marker
-  shape and Tremor's spell-side reward consumer are fixed), and a few
-  combat metadata bits.
+  verification, remaining monster class metadata and ordinary AI helper labels, some NPC
+  type/AI-byte names (chair-search marker IDs are fixed), caller-side combat
+  reward/loot consumers (framer non-merge, temporary drop-marker shape, and
+  Tremor's spell-side reward consumer are fixed), and a few combat metadata
+  bits.
 
 ## 1. Code Modules
 
@@ -82,7 +83,7 @@ and overlay behavior.
 | `TOWN.OVL` | Town/keep interior setup and loop | Verified slice | `systems/town-mode.md`, `systems/npc-schedules.md`, `formats/location-dat.md` |
 | `DUNGEON.OVL` | First-person dungeon loop | Complete | `systems/dungeon-mode.md`, `formats/dungeon-dat.md` |
 | `DNGLOOK.OVL` | Dungeon look/view commands | Complete | `systems/dungeon-mode.md`, `systems/visibility.md` |
-| `COMBAT.OVL` | Combat mode, actor rounds, target selection | Complete/partial | `systems/combat.md`, `systems/encounters.md`, `catalogs/monster-bestiary.md`; core loop/framer/death reward unit, target-picker filters/fallback, Gargoyle/Gazer special-death branch assignment, and unassigned vanish branch are covered, while durable reward/loot reconciliation and some metadata bits remain open. |
+| `COMBAT.OVL` | Combat mode, actor rounds, target selection | Complete/partial | `systems/combat.md`, `systems/encounters.md`, `catalogs/monster-bestiary.md`; core loop/framer/death reward unit, target-picker filters/fallback, ordinary AI command synthesis, framer non-merge of temporary drop markers, Gargoyle/Gazer special-death branch assignment, and unassigned vanish branch are covered, while caller-side reward/loot consumers, helper labels, and some metadata bits remain open. |
 | `COMSUBS.OVL` | Shared combat/spell helpers | Complete | `systems/combat.md`, `systems/magic.md` |
 | `TALK.OVL` | NPC conversation runtime | Verified slice | `systems/conversation.md`, `formats/tlk.md`, `catalogs/quest-graph.md` |
 | `NPC.OVL` | NPC runtime state, schedules, pathfinding | Verified slice | `systems/npc-schedules.md`, `formats/npc.md`, `formats/pth.md`, `catalogs/npc-roster.md` |
@@ -93,16 +94,16 @@ and overlay behavior.
 | `BLCKTHRN.OVL` | Blackthorn audience/rescue/challenge scenes | Complete | `systems/conversation.md`, `systems/karma.md`, `systems/endgame.md`, `catalogs/quest-graph.md` |
 | `CMDS.OVL` | A-Z world command handlers | Complete | `systems/main-loop.md`, `systems/commands.md`, `systems/overworld.md`, `systems/town-mode.md`, `systems/doors-and-z-transitions.md`, `systems/vehicles.md`, `systems/magic.md` |
 | `SJOG.OVL` | Search/Jimmy/Open/Get command family | Complete | `systems/commands.md`, `systems/containers.md`, `systems/doors-and-z-transitions.md`, `systems/overworld.md`, `systems/town-mode.md`, `systems/dungeon-mode.md`, `catalogs/item-list.md` |
-| `ZSTATS.OVL` | Character/inventory status display | Complete | `systems/text-output.md`, `formats/saved-gam.md`, `catalogs/item-list.md`, `catalogs/spell-list.md` |
+| `ZSTATS.OVL` | Character/inventory status display and R-Ready equipment flow | Complete/partial | `systems/inventory.md`, `systems/text-output.md`, `formats/saved-gam.md`, `catalogs/item-list.md`, `catalogs/spell-list.md`; Z-stats page families, inventory band browsing, equipment slot order, R-Ready picker flow, hand-occupancy gates, and carried-equipment counter mutations are covered. Remaining exactness gaps are item class-table values, ring-family vanish details, and combat-time ready edges outside the confirmed armour lock. |
 | `FONT.OVL` | Proportional text and chargen renderer | Complete | `systems/chargen.md`, `systems/text-output.md`, `formats/font-pcs.md` |
 | `LOOKOBJ.OVL` | Look-at-object/inspection text | Complete | `systems/conversation.md`, `systems/dungeon-mode.md`, `formats/look2-dat.md`, `catalogs/tile-catalog.md` |
-| `CAST.OVL`, `CAST2.OVL` | Spell casting/effects, shrine meditation, save game | Complete/partial | `systems/magic.md`, `systems/karma.md`, `systems/save-load.md`, `catalogs/spell-list.md`; player spell dispatcher order, parser, recipes, scene masks, major handler families, active-target attack-wrapper damage, Tremor's table-wide damage/reward path, Protection/Quickness/Mass Charm/Negate Magic active-effect consumers, Clone's paired-slot capacity behavior, combat field marker/contact/lifetime semantics, Poison/Sleep field-contact status gates, Fire/Energy field damage inputs, and directed wind/sleep friendly-fire behavior are fixed. Remaining magic/combat parity gaps are the monster combat-AI class effect map and exact non-light countdown decrement cadence, not the forty-eight-entry player spell table. |
+| `CAST.OVL`, `CAST2.OVL` | Spell casting/effects, shrine meditation, save game | Complete/partial | `systems/magic.md`, `systems/karma.md`, `systems/save-load.md`, `catalogs/spell-list.md`; player spell dispatcher order, parser, recipes, scene masks, major handler families, active-target attack-wrapper damage, Tremor's table-wide damage/reward path, Protection/Quickness/Mass Charm/Negate Magic active-effect consumers, shared active-effect counter aging, Time Stop `T`/10 countdown semantics, combat C-Cast interference gating, Clone's paired-slot capacity behavior, combat field marker/contact/lifetime semantics, Poison/Sleep field-contact status gates, Fire/Energy field damage inputs, directed wind/sleep friendly-fire behavior, and monster special separation from the player spell table are fixed. Remaining magic parity gap is indoor absorption state naming, not the forty-eight-entry player spell table. Equipment counter semantics are delegated to `systems/inventory.md`; ordinary combat AI is delegated to `systems/combat.md`. |
 
 ### Display Drivers
 
 | File | Role | Status | Spec docs |
 |------|------|--------|-----------|
-| `EGA.DRV` | 16-colour IBM PC display backend | Partial/deferred | Public rendering contract and asset-facing EGA-compatible path are covered by `systems/display-driver.md`, `formats/tiles.md`, `formats/bit.md`, and font specs. Exact binary driver ABI/page-flip behaviour remains deferred. |
+| `EGA.DRV` | 16-colour IBM PC display backend | Complete/partial | Public rendering contract, dispatch ABI, back-buffer plane layout, direct front-buffer tile/glyph entries, compressed-bitmap resource decoding, and major visual-effect entries are covered by `systems/display-driver.md`, `systems/display-driver-abi.md`, `formats/tiles.md`, `formats/bit.md`, and font specs. Exact hardware page-flip details and non-load-bearing helper slots remain partial. |
 | `CGA.DRV`, `HER.DRV`, `T1K.DRV` | Alternate historical display backends | Out of scope | Modern v1 targets EGA-compatible visual assets; alternate hardware parity is deferred/out of scope. |
 
 ### Sound, DOS Runtime, And Installer Files
@@ -157,9 +158,9 @@ and overlay behavior.
 | `ULTIMA.*`, `ITEMS.*`, `TEXT.*`, `CREATE.*`, `DNG1.*`, `DNG2.*`, `DNG3.*`, `MON0.*`-`MON7.*`, `STARTSC.*`, `ENDSC.*`, `END1.*`, `END2.*`, `STORY1.*`-`STORY6.*` | Paired `.16`/`.4` graphics archive family | Complete/partial | `formats/tiles.md`; container/pixel encoding is covered, while some per-slot semantic mappings remain catalog work. |
 | `IBM.CH`, `RUNES.CH` | 8x8 fixed-cell fonts | Complete | `formats/font-ch.md` |
 | `IBM.HCS`, `RUNES.HCS` | 16x12 fixed-cell fonts | Complete | `formats/font-hcs.md` |
-| `PROPORT.PCS` | Compressed proportional font | Complete | `formats/font-pcs.md` |
-| `TITLE.BIT`, `BRITISH.BIT` | Compressed title/portrait bitmaps | Complete/partial | `formats/bit.md`; LZW codec, decoded bodies, intro placements, title/menu idle ticking, and the story step-1 rectangle-transition handoff are covered, while exact resident helper wipe timing for slide/sub-screen transitions remains a display/intro renderer concern. |
-| `WD.BIT` | Raw monochrome title lettering bitmap | Complete | `formats/bit.md` |
+| `PROPORT.PCS` | Driver-compressed proportional font resource | Complete/partial | `formats/font-pcs.md`; driver resource envelope and paragraph-renderer use are covered, while exact glyph-table extraction remains tied to the proportional renderer's width-table setup. |
+| `TITLE.BIT`, `BRITISH.BIT` | Driver-compressed title/portrait bitmaps | Complete/partial | `formats/bit.md`, `systems/display-driver-abi.md`; sparse strip resource format, driver dispatch ownership, title/menu idle ticking, and the story step-1 rectangle-transition handoff are covered, while exact resident helper wipe timing for slide/sub-screen transitions remains a display/intro renderer concern. |
+| `WD.BIT` | Driver-compressed Warriors of Destiny title lettering bitmap | Complete | `formats/bit.md`, `systems/display-driver-abi.md` |
 
 ### Save And Object State
 
@@ -177,14 +178,14 @@ and overlay behavior.
 | Character creation and U4 transfer entry | Complete/partial | `systems/chargen.md`, `systems/u4-transfer.md`; questionnaire stat finalization, fixed Avatar class, seed-preserved HP/experience/level fields, starting counters/reagents/clock/location, abort-before-write behavior, questionnaire pair-to-record mapping, and `PARTY.SAV` transfer source are covered. Remaining parity gaps are seeded equipment and full item/spell/quest-stock enumeration, transfer stat/class/HP/level mapping, object-companion half order, and transfer post-commit UI details. |
 | Main loop and command dispatch | Complete | `systems/main-loop.md`, `systems/commands.md` |
 | Input pipeline | Complete | `systems/input.md` |
-| Display driver/rendering contract | Complete/partial | `systems/display-driver.md`; v1 semantic rendering contract is covered, while exact binary driver ABI and page-flip behaviour remain deferred. |
+| Display driver/rendering contract | Complete/partial | `systems/display-driver.md`, `systems/display-driver-abi.md`; v1 semantic rendering contract and EGA dispatch ABI are covered, while exact alternate-driver conversion and page-flip behaviour remain deferred. |
 | Text output/windowing | Complete | `systems/text-output.md` |
 | Save/load | Complete/partial | `systems/save-load.md`, `formats/saved-gam.md`; byte-image save/load, `.OOL` companions, mirrors, empty-save guard, inn-registry round-trip behavior, and resident read/write primitive edge cases are covered. Remaining save-format gaps include unverified dungeon-map / NPC-flag region layouts. |
 | Overworld/underworld | Verified slice | `systems/overworld.md` |
 | Town/interior mode | Verified slice | `systems/town-mode.md` |
 | Dungeon mode | Complete | `systems/dungeon-mode.md` |
-| Combat | Complete/partial | `systems/combat.md`; core loop, framer, complete dispatcher-level command map, target selection including phase/invisibility filters and no-target fallback, class-script AI dispatch boundary and class-wide live-state ownership, combat C-Cast target mapping/pre-gate boundary, spell field contact, damage/death, Cause Fear flee-setting, and active-effect consumers are covered; Gargoyle/Gazer special deaths and unassigned vanish-branch reachability are separated. Remaining gaps are durable reward/loot reconciliation, delegated combat command branch bodies, unnamed class/metadata bits, non-Cause-Fear flee setters, AI state fields and runner instruction set, combat resource/allowed check body, target-reaction hook effect, and monster special-action/effect mapping. |
-| Encounters | Complete/partial | `systems/encounters.md`; random/scripted/dungeon trigger families are covered; remaining gaps are exact random-encounter threshold formula, terrain/arena and monster distribution tables, sleep-ambush details, dungeon chest-trap arena indexing, and post-combat reward reconciliation. |
+| Combat | Complete/partial | `systems/combat.md`; core loop, framer, complete dispatcher-level command map, delegated overlay targets for most combat commands, X-it-vs-edge-flee distinction, target selection including phase/invisibility filters and no-target fallback, ordinary AI command synthesis, class-flag monster special hook, combat C-Cast interference gating, spell field contact, damage/death, Cause Fear flee-setting, active-effect consumers, and framer non-merge of temporary drop markers are covered; Gargoyle/Gazer special deaths and unassigned vanish-branch reachability are separated. Remaining gaps are caller-side reward/loot consumers, combat U-Use CAST continuation and item effects, P-Push scene/object edge cases, unnamed class/metadata bits, non-Cause-Fear flee setters, and helper labels for ordinary AI edge paths. |
+| Encounters | Complete/partial | `systems/encounters.md`; random/scripted/dungeon trigger families and the combat-framer non-merge boundary are covered; remaining gaps are exact random-encounter threshold formula, terrain/arena and monster distribution tables, sleep-ambush details, dungeon chest-trap arena indexing, and caller-side post-combat reward consumers. |
 | Conversation | Verified slice | `systems/conversation.md` |
 | NPC schedules/pathfinding | Verified slice | `systems/npc-schedules.md` |
 | Doors and Z transitions | Verified slice | `systems/doors-and-z-transitions.md` |
@@ -196,7 +197,7 @@ and overlay behavior.
 | Lighting | Complete/partial | `systems/lighting.md`; daylight, original light-scale endpoints, exact dawn/dusk gradient levels, torch/spell personal-light floors, torches, light spells, and saturating counter decay are covered; remaining gap is special scene lighting override enumeration. |
 | Weather/wind | Complete/partial | `systems/weather.md`; wind presentation states, DATA.OVL label order, saved wind-byte preservation, Wind Change identity, and ship wind cadence are covered; remaining gaps are Rel Hur transition order and calm handling, exact saved-byte-to-label mapping, compass convention naming, and player-ship versus active-object ship path. |
 | Animation | Complete | `systems/animation.md` |
-| Magic/spells/reagents | Complete/partial | `systems/magic.md`; player spell order, parser, resources, major handler families, combat fields, directed winds, active effects, shrine linkage, monster-spell separation from the party C-Cast dispatcher, and monster AI state ownership are covered; remaining gaps are the monster combat-AI state fields, runner instruction set, and class effect map, indoor absorption state naming, and the non-light active-effect helper body plus Time Stop decrement path. |
+| Magic/spells/reagents | Complete/partial | `systems/magic.md`; player spell order, parser, resources, major handler families, combat fields, directed winds, active effects, shared active-effect counter aging, Time Stop countdown semantics, combat C-Cast interference gating, shrine linkage, monster-spell separation from the party C-Cast dispatcher, and the possess/blink/summon-daemon monster special hook are covered; remaining gap is indoor absorption state naming. Equipment counter semantics are delegated to `systems/inventory.md`, and ordinary combat AI is delegated to `systems/combat.md`. |
 | Karma/virtues/shrines | Complete/partial | `systems/karma.md`; virtue order, shrine quest-state machine, confirmed shrine standing changes, offering/stat-reward boundary, and non-shrine action inventory are covered; remaining gaps are exact non-shrine action coverage and delta magnitudes, byte layout, tier thresholds, combat/endgame karma branches, chargen seed, and non-shrine clamp/overflow policy. |
 | Shops | Complete/partial | `systems/shops.md`; shop text records, main menu flows, table-driven pricing, Talk-entry shop dispatch and caller context, shipped `.NPC` shop-trigger values, horse-trader Talk purchase and horse-object placement, shipwright Talk sale trigger, shipwright active-object placement handoff, shipwright Frigate/Skiff payload semantics and duplicate-purchase edges, arms `B` stock-table item-id mapping, arms `S` sell-back inventory browser, arms buy/sell Intelligence formulas and zero-price suppression, reagent compact-menu availability, sage topic/fee/rumour substitution flow and input boundary, shipwright pending-action ownership, karma non-modulation, healer/sanctum treatment flow including The Healers Mission no-price Cure/Heal branch, and inn registry marker/clear/death-source/month-counter behavior are covered. |
 | Endgame | Complete | `systems/endgame.md` |
@@ -209,9 +210,9 @@ and overlay behavior.
 | NPC roster | Complete/partial | `catalogs/npc-roster.md`; location rosters, schedule summaries, keyword counts, and major named NPCs are covered; remaining gaps are sub-map place names, role tag semantics, AI/mode byte meanings, one punctuation-only name, and full keyword graph integration. |
 | Quest graph | Complete/partial | `catalogs/quest-graph.md`; major artifact, word, shard, mantra, social, and endgame dependencies are covered without dialogue text; remaining gaps are full TLK VM branch execution, item-side-effect confirmation, Doom's in-world teaching edge, and reachability of embedded/trailing records. |
 | Gazetteer | Complete | `catalogs/gazetteer.md` |
-| Spell list | Complete/partial | `catalogs/spell-list.md`; all forty-eight player spells have parser tokens, recipes, scene masks, and broad/fixed handler semantics; remaining gaps are the monster combat-AI runner instruction set/class effect map and the non-light active-effect helper body plus Time Stop decrement path. |
-| Item list | Complete/partial | `catalogs/item-list.md`; inventory families, equipment categories, arms-shop equipment item-id mapping, reagents/spell stocks, vehicles, and key quest items are named; remaining gaps are item-to-tile IDs outside the arms-shop equipment mapping, combat values, armour values, restrictions, prices, potion/scroll effects, U-Use dispatch, exact transport-marker numeric subranges and terrain rules, and byte-counter caps. |
-| Monster bestiary | Complete/partial | `catalogs/monster-bestiary.md`; class IDs, sprite runs, HP, reward units, drop caps, Mass Charm thresholds, target-picker filter/fallback behaviour, AI class-state ownership, and decoded traits are covered; unsupported vanish traits were removed from the v1 baseline rows after asset-table verification. Remaining gaps are leftover stat/flag fields, vanish-branch variant reachability, AI state fields and runner instruction set, monster special-action/spell-like effect selection, spawn distribution tables, ordinary reward/drop consumers, sprite tile verification, and runtime verification of special deaths. |
+| Spell list | Complete/partial | `catalogs/spell-list.md`; all forty-eight player spells have parser tokens, recipes, scene masks, broad/fixed handler semantics, shared active-effect counter aging, and Time Stop countdown semantics; monster special abilities are separated into combat AI; remaining exact-parity gaps are outside the public player spell table. |
+| Item list | Complete/partial | `catalogs/item-list.md` and `systems/inventory.md`; inventory families, equipment categories, equipment slot order, R-Ready stock movement, arms-shop equipment item-id mapping, reagents/spell stocks, vehicles, and key quest items are named; remaining gaps are item-to-tile IDs outside the arms-shop equipment mapping, combat values, armour values, exact restriction-table values, prices, potion/scroll effects, U-Use dispatch, exact transport-marker numeric subranges and terrain rules, and byte-counter caps. |
+| Monster bestiary | Complete/partial | `catalogs/monster-bestiary.md`; class IDs, sprite runs, HP, reward units, drop caps, Mass Charm thresholds, target-picker filter/fallback behaviour, ordinary AI command synthesis, possess/blink/summon-daemon special-hook semantics, v1 possess row assignments, and decoded traits are covered; unsupported vanish traits were removed from the v1 baseline rows after asset-table verification. Remaining gaps are leftover stat/flag fields, vanish-branch variant reachability, ordinary AI helper edge labels, spawn distribution tables, caller-side ordinary reward/drop consumers, sprite tile verification, and runtime verification of special deaths. |
 
 ## 5. Verification Slice
 

@@ -38,7 +38,9 @@ The confirmed per-class data supports these fields:
   The first random check decides whether the combat-instance active-object
   becomes a dead-monster/drop marker; when it does, byte five of that record
   stores this drop-cap value. A second random check may set bit `0x80` in the
-  same byte as a special-drop marker. Zero means the current notes do not show a
+  same byte as a special-drop marker. The combat framer restores the pre-combat
+  world active-object table after the round loop, so this marker is not a
+  durable world object by itself. Zero means the current notes do not show a
   default drop bound for that class; it does not prove the absence of all
   post-kill effects.
 - **Charm threshold** - the class byte used by Mass Charm's target-selection
@@ -50,16 +52,18 @@ The confirmed per-class data supports these fields:
   cell therefore means "no decoded trait here," not "no flag bits are set."
 
 The eight-byte class stat records contain more data than this table exposes.
-Armor, attack damage, spell power, movement cadence, unnamed flag bits, and
-monster special-action or spell-like effect selection are not fully decoded
-yet; section 8 records those gaps.
+Armor, attack damage, spell power, movement cadence, and unnamed flag bits are
+not fully decoded yet; section 8 records those gaps. The class-flag monster
+special hook is now bounded to possess, blink/phase, and summon-daemon, with
+baseline row assignments listed in the trait column where present.
 
 ## 2. Shared AI And Reward Units
 
 Monster turns run through the same command-dispatch architecture as player
-turns: an AI path first stages a class-keyed intent, then produces a direction,
-synthesizes the equivalent command byte, and uses the normal combat command
-parser. The target picker scans the 32 combat slots, filters out empty, dead,
+turns: the AI path runs status and class-flag gates, picks a target, produces a
+movement direction, synthesizes the equivalent command byte, and uses the
+normal combat command parser. The target picker scans the 32 combat slots,
+filters out empty, dead,
 same-faction, suppressed, and invisible actors, then chooses the closest
 surviving enemy. One saved-combat scene family and one special monster class
 bypass the extra suppressed-state filter, but not the ordinary invisibility
@@ -71,7 +75,8 @@ direction so the same movement code handles both pursuit and retreat.
 
 Current traces prove shared target selection, Cause Fear's flee setter, flee
 inversion, and several per-class combat flags. The bestiary therefore records
-only the class traits confirmed by the damage, spell, and target-picker readers:
+only the class traits confirmed by the damage, spell, target-picker, and
+monster-special readers:
 
 | Trait | Confirmed effect |
 |-------|------------------|
@@ -81,14 +86,20 @@ only the class traits confirmed by the damage, spell, and target-picker readers:
 | `team override` | The class participates in special faction handling used by target selection. |
 | `vanish branch` | The damage handler has a vanish-on-death branch, but the analyzed `DATA.OVL` baseline does not assign its high flag bit to any listed class. |
 | `special death` | A class-specific tile/effect transition runs on death. |
+| `possess` | On a monster AI turn, the class may pick a random eligible party target, run resistance, and mark the target controlled for combat. Daemon-class possessors self-clear after a successful landing path. |
+| `blink` | On a monster AI turn, the class may toggle its phase/hidden state and linked visual tile. Implemented by the engine, but not set by the analyzed v1 baseline rows. |
+| `summon-daemon` | On a monster AI turn, the class may attempt to place a Daemon-class actor near the AI step direction. Implemented by the engine, but not set by the analyzed v1 baseline rows. |
 
 Default monster kills can update the combat-instance active-object table with
 post-kill markers. The current notes confirm the class drop-cap marker and
-special-drop high bit, but not the final item, gold, XP, karma, or score
-interpretation. The raw reward unit is not forwarded by the traced COMBAT-level
-caller path; Tremor consumes it only from its spell handler before that boundary.
-Classes that use a special death path may bypass the default drop path. The
-traced vanish branch remains an unassigned variant-data branch in this baseline.
+special-drop high bit, and also confirm that the combat framer restores the
+pre-combat active-object table instead of making those markers durable. The
+final item, gold, XP, karma, or score interpretation is therefore caller-side
+work not defined by this catalog. The raw reward unit is not forwarded by the
+traced COMBAT-level caller path; Tremor consumes it only from its spell handler
+before that boundary. Classes that use a special death path may bypass the
+default drop path. The traced vanish branch remains an unassigned variant-data
+branch in this baseline.
 
 ## 3. Aquatic Creatures
 
@@ -141,15 +152,15 @@ class. The contexts below are therefore broad.
 |------:|----------|------------|---:|------------:|---------:|---------------:|--------|-------------------|
 | 26 | Mimic | `0xA8..0xAB` | 30 | 8 | 20 | 12 | team override | Chest-like or ambush-style monster |
 | 27 | Reaper | `0xAC..0xAF` | 40 | 11 | 25 | 12 | team override | Forest or fixed dungeon encounter |
-| 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death | Eye-burst death effect |
+| 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death; possess | Eye-burst death effect |
 | 29 | Crawler | `0xB4..0xB7` | 35 | 9 | 0 | 12 | - | Dungeon or underworld encounter |
 | 30 | Gargoyle | `0xB8..0xBB` | 40 | 11 | 0 | 5 | splits; team override; special death | Terrain-hazard transition before normal cleanup; exact visual needs verification |
 | 32 | Orc | `0xC0..0xC3` | 10 | 3 | 11 | 10 | team override | Humanoid wilderness or dungeon group |
 | 33 | Skeleton | `0xC4..0xC7` | 20 | 6 | 13 | 5 | physical half | Undead encounter |
 | 35 | Ettin | `0xCC..0xCF` | 30 | 8 | 17 | 12 | team override | Large humanoid encounter |
 | 36 | Headless | `0xD0..0xD3` | 20 | 6 | 12 | 8 | team override | Wilderness or underworld encounter |
-| 37 | Wisp | `0xD4..0xD7` | 40 | 11 | 0 | 20 | - | Magical or spectral encounter |
-| 38 | Daemon | `0xD8..0xDB` | 75 | 19 | 0 | 25 | physical half | High-tier magical/dungeon encounter |
+| 37 | Wisp | `0xD4..0xD7` | 40 | 11 | 0 | 20 | possess | Magical or spectral encounter |
+| 38 | Daemon | `0xD8..0xDB` | 75 | 19 | 0 | 25 | physical half; possess | High-tier magical/dungeon encounter |
 | 39 | Dragon | `0xDC..0xDF` | 99 | 25 | 30 | 25 | - | High-tier wilderness or dungeon encounter |
 | 40 | Sand Trap | `0xE0..0xE3` | 80 | 21 | 25 | 5 | - | Desert or fixed trap-like encounter |
 | 41 | Troll | `0xE4..0xE7` | 15 | 4 | 15 | 9 | - | Mountain, bridge, or wilderness encounter |
@@ -173,9 +184,9 @@ spawns.
 |------:|-------|------------|---:|------------:|---------:|---------------:|--------|-------------------|
 | 12 | Guard | `0x70..0x73` | 99 | 25 | 5 | 10 | - | Town hostility or scripted guard fight |
 | 13 | Wanderer | `0x74..0x77` | 99 | 25 | 0 | 30 | physical immune | Special NPC combat class |
-| 14 | Blackthorn | `0x78..0x7B` | 99 | 25 | 0 | 30 | physical immune | Scripted boss or special encounter |
+| 14 | Blackthorn | `0x78..0x7B` | 99 | 25 | 0 | 30 | physical immune; possess | Scripted boss or special encounter |
 | 15 | Lord British | `0x7C..0x7F` | 99 | 25 | 0 | 30 | physical immune | Special protected NPC class |
-| 47 | Shadow Lord | `0xFC..0xFF` | 99 | 25 | 0 | 30 | physical half | Scripted Shadowlord encounter |
+| 47 | Shadow Lord | `0xFC..0xFF` | 99 | 25 | 0 | 30 | physical half; possess | Scripted Shadowlord encounter |
 
 The combat table also contains non-hostile town roles and party classes, but
 those belong in an NPC roster rather than this bestiary. Guards are included
@@ -227,19 +238,21 @@ mapping is not yet labelled in the current notes.
    bits need names. Armor class, attack damage, hit chance, spell power,
    movement cadence, status attack strength, terrain handling, and other
    high-bit traits are not safely decoded.
-2. Monster special-action and spell-like effect selection is bounded to the
-   staged intent plus class-script dispatch path. Live actors of the same class
-   share mutable class-state for that path, while dead or inactive actors use
-   the class's static script entry, but the intent selector's class-effect map,
-   runner state fields, runner instruction set, and final class-to-effect map
-   are not fully mapped. Per-class tactics beyond closest-target pursuit, Cause
-   Fear-driven fleeing, flee inversion, and faction overrides are incomplete.
+2. Monster special-action selection is bounded to the class-flag hook for
+   possess, blink/phase, and summon-daemon. The analyzed v1 baseline assigns
+   only the possess branch, to Blackthorn, Gazer, Wisp, Daemon, and Shadow
+   Lord. Blink and summon-daemon should remain implemented as data-driven
+   variant branches, but they are not listed as v1 baseline traits. Remaining
+   ordinary AI exactness work is helper labels and edge cases around step
+   permission, step validity, fallback targeting, and non-Cause-Fear flee
+   writers, not a separate class-script table.
 3. The exact terrain-to-monster and dungeon-room-to-monster distribution tables
    are not labelled. Encounter contexts in this catalog are broad, not exact
    spawn tables.
-4. Ordinary drop contents and encounter reward consumers are not decoded. The
-   default kill path can set a class drop-cap marker and a special-drop high
-   bit, and the damage/death handler returns a raw reward unit. Tremor's
+4. Caller-side ordinary drop contents and encounter reward consumers are not
+   decoded. The default kill path can set a temporary class drop-cap marker and
+   a special-drop high bit, and the damage/death handler returns a raw reward
+   unit. The framer does not make those markers or returns durable. Tremor's
    spell-side consumer of that return value is known, but the ordinary final
    item, gold, XP, karma, or score interpretation is still open.
 5. The public tile catalog still needs a verification pass that maps these
@@ -268,8 +281,8 @@ offsets, raw private addresses, binary dumps, or private note prose.
   nearest-target scoring, and flee-direction inversion.
 - COMBAT overlay actor AI/command-dispatch note - synthesized monster command
   dispatch and shared combat command parser.
-- COMSUBS overlay AI direction note - class-script dispatch, live-state versus
-  inactive-script split, and direction-vector output.
+- COMSUBS overlay monster-special note - possess, blink/phase,
+  summon-daemon, branch order, and baseline class-flag assignments.
 - ULTIMA executable combat-framer note - combat entry branches and
   town-hostility count override.
 - ULTIMA executable terrain-combat setup note - encounter count roll, placement

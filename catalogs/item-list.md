@@ -19,7 +19,11 @@ The party has one shared inventory pool plus per-character equipment slots.
 
 Shared inventory holds currency, commodities, consumables, reagents, spell charges, and story items. Food and gold are larger counters; most other carried quantities are byte-sized counters or one-byte present/absent flags. The save image persists all of these values. Shops, treasure, conversation rewards, chest results, searches, and item pickups add to the pool; spells, use-item actions, lockpicking, lighting, shopping, and food consumption remove from it.
 
-Equipment is per character. Each character record carries several equipment slot bytes for the currently readied weapon, armour, helm, ring, amulet or neck item, and one additional equipment/padding byte. The exact slot-to-item encoding has not been publicly decoded. What is known from refusal text and command behaviour is:
+Equipment is per character. Each character record carries six readied-equipment
+slot bytes in this order: helm, body armour, weapon hand, shield/off hand,
+ring, and amulet/neck item. Empty readied slots use the `0xFF` sentinel; any
+other value is an equipment item id shared with the carried equipment counter
+band. What is known from refusal text and command behaviour is:
 
 - Armour cannot be changed during heated battle.
 - A character must have ammunition for an ammunition-using weapon.
@@ -29,6 +33,15 @@ Equipment is per character. Each character record carries several equipment slot
 - Only one amulet and only one magic ring can be worn at once.
 - Some equipment has a strength requirement.
 - Some ring use path can destroy the ring after use or expiration.
+
+R-Ready moves items between the carried equipment band and these six readied
+slots. It lists only nonzero carried equipment counters that the selected
+character does not already have readied, applies class/capability, occupied
+slot, combat-armour, and hand-occupancy gates, then decrements the carried
+counter only after an equip is accepted. Displaced equipment is returned to the
+shared counter band through the inventory increment helper. The exact
+intermediate swap timing and ring-vanish item list remain parity details; the
+public flow lives in `systems/inventory.md`.
 
 The active-object table is the third inventory-adjacent store. Vehicles and dropped objects exist as active objects while they are on the map. Boarding a vehicle moves the party into a vehicle state; exiting creates or restores an active-object vehicle on the map so it can be boarded later.
 
@@ -40,7 +53,7 @@ The active-object table is the third inventory-adjacent store. Vehicles and drop
 | Tools and commodities | Keys, gems, torches, magic powder | Shared counters | Guild shops, treasure, scripted rewards | Exact caps and some use effects |
 | Reagents | Sulfur Ash, Ginseng, Mandrake | Eight shared counters | Herbalists, treasure, harvesting | Per-vendor price table not transcribed |
 | Spell charges | Forty-eight spell stocks | One counter per spell | M-Mix command | Some charge cap/refund details cross-system |
-| Equipment | Weapons, armour, helms, shields, rings, amulets | Forty-eight item-id keyed counters plus character equipment slots | Arms shops, treasure, drops | Damage, armour value, weight, class restrictions, price |
+| Equipment | Weapons, armour, helms, shields, rings, amulets | Forty-eight item-id keyed counters plus character equipment slots | Arms shops, R-Ready, treasure, drops | Damage, armour value, weight, class restrictions, price |
 | Scrolls and potions | Spell-code scrolls, colored potions | Shared counters or item slots | Treasure, shops or scripted finds | Exact use effects and item ordering |
 | Quest and utility items | Moonstone, Crown, Sceptre, Shards | Shared flags/counters | Scripted finds and story events | Full use-item effect map |
 | Vehicles | Horse, ship, skiff, magic carpet, balloon | Active-object records plus party transport state | Seed objects, brokers, special finds | Exact numeric marker subranges, terrain rules, and purchase prices |
@@ -168,7 +181,7 @@ Eight scroll labels are currently derivable by their compact spell-code labels:
 | `IQW` | In Quas Wis family | Label identified; exact scroll effect not traced. |
 | `CKX` | Kal Xen Corp / Summon | Label identified; use effect not traced. |
 | `CIM` | In Mani Corp / Resurrect | Label identified; use effect not traced. |
-| `AT` | An Tym / Time Stop | Label identified; use effect not traced. |
+| `AT` | An Tym / Time Stop | Referenced spell effect is traced; scroll U-Use branch still not traced. |
 
 The labels strongly suggest one-shot spell-scroll items. The U-Use Item handler is known to dispatch by item id, but the per-scroll branches have not been decoded into clean prose.
 
@@ -273,7 +286,8 @@ Prices are intentionally not listed in this catalog. The resident price and stoc
 1. Item-to-tile IDs outside the arms-shop equipment id mapping.
 2. Weapon damage, hit chance, range, breakage, and ammo consumption.
 3. Armour/shield defence values and weight.
-4. Equipment class restrictions and strength thresholds.
+4. Exact equipment class-restriction table values and strength/capability
+   thresholds.
 5. Exact prices per shop, reagent, treatment, tavern/meal, horse, and ship.
 6. Potion color effects.
 7. Scroll use effects and whether scrolls are consumed on use.

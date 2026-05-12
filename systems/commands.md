@@ -91,7 +91,7 @@ handoffs.
 | `O` | Open. | Routes to the Open handler for doors, chests, and dungeon underfoot cases. |
 | `P` | Push. | Refuses in dungeons; otherwise routes to the push/movable-tile handler. |
 | `Q` | Save game. | Routes to the save-game handler, which prompts whether to save. On `N`, it returns without writing. On `Y`, it writes the save files, acknowledges completion, and returns to the caller. This letter is not the DOS-terminate path by itself. |
-| `R` | Ready. | Routes to the equipment-ready handler in the status/equipment overlay. |
+| `R` | Ready. | Routes to the equipment-ready handler in the status/equipment overlay. The picker, slot mapping, stock-counter mutations, and hand-occupancy gates are specified in `inventory.md`. |
 | `S` | Search. | Routes to the Search handler, including secret-door and searchable-object paths. |
 | `T` | Talk. | Town-family scenes route to the conversation engine. Overworld and dungeon scenes refuse; the overworld path may still prompt for a direction before printing its refusal. |
 | `U` | Use. | Routes to the item-use handler. The implementation lives with the spell/item overlays rather than in the command dispatcher. |
@@ -99,7 +99,7 @@ handoffs.
 | `W` | Default refusal. | No resident world-command handler is currently confirmed; it falls through to the stock "What?" response when it reaches this dispatcher. |
 | `X` | X-it. | Routes to the vehicle-exit/dismount handler. Ordinary dungeon `X` is a refusal/no-op; spell contexts may call a separate dungeon-escape helper that shares the escape wording. |
 | `Y` | Yell. | Routes to the Yell handler. Shipboard Y toggles sails as specified in `vehicles.md` and `weather.md`; non-ship branches handle words of power and Shadowlord-name effects. |
-| `Z` | Z-stats. | Routes to the character/status display overlay. |
+| `Z` | Z-stats. | Routes to the character/status display overlay. Character stat pages, equipment display, and shared-inventory browsing are specified in `inventory.md` and `text-output.md`. |
 
 ## 5. Verb Prefixes And Prompts
 

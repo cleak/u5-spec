@@ -204,6 +204,9 @@ known or likely roles include:
 - Item-name and abbreviation pointer tables.
 - Per-item or per-equipment records for cost, combat value, armour value,
   carried/equipped constraints, and shop or inventory display.
+- Equipment-class metadata consumed by R-Ready. The public slot/counter
+  contract is in `systems/inventory.md`; exact class-table bytes remain catalog
+  work until every item row is named.
 - Character-class and party-class lookup data used by stats, equipment, magic,
   and combat.
 - Read-only shop stock and pricing resources. Arms shops combine a canonical
@@ -244,22 +247,24 @@ global combat metadata that is not stored in arena files:
   raw reward units, decoded damage/death flags, and class-name pointers. The
   analyzed baseline's class-flag table confirms split-on-damage,
   halve-physical-damage, physical immunity, faction override, and the
-  Gazer/Gargoyle special-death branches through their consumers. The
-  damage/status helper also contains a vanish-on-death branch, but no class row
-  in the analyzed `DATA.OVL` baseline sets the corresponding high flag bit; keep
-  that branch data-driven for variant assets. The remaining class-stat bytes,
-  unknown flag bits, and AI script/effect-selector semantics are still open.
-- Per-class AI decision data: a class-indexed mutable state area used for live
-  actors, plus static script entries used when an actor is dead or inactive.
-  Live actors of the same class share the same mutable AI state rather than
-  receiving per-combat-slot AI state here; slot-local position, target, phase,
-  and flag data remain in the combat actor/effect tables. The shared runner
-  consumes the selected class resource and emits AI direction scratch, but the
-  state fields, instruction set, and class-to-special-effect map remain open.
-- Combat cast target mapping: a per-combat-slot byte map from caster slot to
-  selected target slot. The all-ones sentinel means no target has been
-  selected. The combat spell prerequisite gate reads this before the shared
-  spell dispatcher runs; writers and exact lifetime are still open.
+  Gazer/Gargoyle special-death branches through their consumers. The same flag
+  table also drives the monster-turn special hook: `0x0040` is
+  possess/charm-on-turn, `0x0800` is blink/phase, and `0x0400` is
+  summon-daemon. In the analyzed v1 baseline, listed classes assign only the
+  possess bit; blink and summon-daemon are implemented variant-data branches.
+  The damage/status helper also contains a vanish-on-death branch, but no class
+  row in the analyzed `DATA.OVL` baseline sets the corresponding high flag bit;
+  keep that branch data-driven for variant assets. The remaining class-stat
+  bytes and unknown flag bits are still open. Current COMSUBS re-decode removed
+  the older class-script-table hypothesis: the ordinary monster AI path uses
+  combat actor/effect records, target-selection scratch, helper outputs, and
+  the per-class flag/stat tables rather than a separate mutable per-class script
+  state table.
+- Combat target mapping: a per-combat-slot byte map from caster slot to the
+  current target slot. The all-ones sentinel means no target is mapped. The
+  combat C-Cast interference gate reads this before the shared spell dispatcher
+  runs; an adjacent valid visible/awake mapped target can interrupt casting.
+  Writers and exact lifetime are still open.
 - Per-arena or per-terrain spawn-count and leader-replacement data.
 - Fixed combat placement slots or placement-shuffle support tables.
 - Distance or range lookup data used by target selection.
@@ -305,6 +310,11 @@ At a behavioural level this save-backed region contains:
 - World clock and calendar.
 - Scene byte, party position, floor/plane value, wind, vehicle, and redraw
   hints.
+- Runtime spell/effect counters, including personal-light counters and the
+  shared active-effect/runtime tag plus countdown.
+- Carried equipment/use-item counters: a byte-indexed inventory band used by
+  Z-stats/R-Ready, arms shops, and some combat/spell helper paths. These are
+  inventory quantities, not spell effect timers.
 - Quest progress bitmasks, shrine progress, conversation/NPC flags, and
   per-turn state that happens to sit inside the saved slab.
 - Dungeon-map memory and other persistent exploration records.
@@ -523,8 +533,7 @@ When preserving compatibility with original files:
   consumers only.
 - Several compact numeric table families are only broadly identified:
   item/equipment records, remaining class-stat and class-flag fields,
-  dungeon/encounter records, moongate/world-transition records, and possible
-  monster AI script metadata.
+  dungeon/encounter records, and moongate/world-transition records.
 - Per-spell recipe masks and scene allow masks are now transcribed in
   `catalogs/spell-list.md`. Remaining unidentified numeric table families are
   outside the spell metadata block.
@@ -545,11 +554,13 @@ dissection in `u5-decomp/formats/data-ovl.md`, cross-checked against the public
 specs listed in Section 7. Viewport-buffer semantics were cross-checked against
 `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`. Combat class-table
 semantics were cross-checked against
-`u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md` and
-`u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md`. Combat AI script
-storage was cross-checked against
-`u5-decomp/functions/COMSUBS_OVL/0x0094_ai_pick_direction.md`. Combat cast
-target mapping was cross-checked against
+`u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`,
+`u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md`, and
+`u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`.
+The removal of the old class-script-table hypothesis was cross-checked against
+the corrected COMSUBS actor-name and monster-special notes plus the COMBAT
+actor-dispatch, target-picker, and movement notes. Combat cast target mapping
+was cross-checked against
 `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`. Input runtime
 state was cross-checked against
 `u5-decomp/functions/ULTIMA_EXE/0x266C_get_command.md`,

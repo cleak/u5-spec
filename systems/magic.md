@@ -194,14 +194,17 @@ The per-spell charge counters are part of the persistent save image: forty-eight
 
 ## 7. Casting prerequisites in detail
 
-Combat introduces an additional prerequisite gate that runs *before* the C-Cast command's own checks; outside combat, only the dispatcher's checks apply. The combined gate hierarchy is:
+Combat introduces an additional interference gate that runs *before* the C-Cast command's own checks; outside combat, only the dispatcher's checks apply. The combined gate hierarchy is:
 
-**Combat-only pre-gate.** Reached when the player presses `C` inside a combat round. Before the dispatcher even prompts for the spell name, a four-step combat prereq cascade runs:
+**Combat-only interference gate.** Reached when the player presses `C` inside a combat round. Before the dispatcher even prompts for the spell name, combat asks whether the caster's current target can interfere:
 
-1. **Target validity.** The combat target picker writes a target slot for the casting party member; the prereq checks the slot is non-empty (the all-ones sentinel value means "no target picked"). Failure aborts the cast silently — no time consumed.
-2. **Target visibility and awakeness.** The target's combat-state flags must indicate alive, visible (not currently in an "unrevealed" or "invisible" state), and awake (not asleep). A spell at a sleeping or invisible target fails the gate.
-3. **State-tag gate.** A combat-side state tag must permit casting. The traced gate rejects the `T` tag; current public evidence does not prove that `T` is the magic carpet or any specific boarded vehicle. Treat it as a prohibited scene/action state for v1.
-4. **Resource/allowed gate.** A separate combat-side check receives the caster and target and decides whether the spell may be queued. Its internal resource/class rules are not fully decoded, so v1 should treat it as a pre-dispatch allowed check distinct from the later shared charge, mana, and level gates. On success the pre-gate runs a target-reaction hook and prints a continuation message - typically combining with a name to read like "*<spell> interferes!*". The hook's exact gameplay effect remains open.
+1. **Mapped target.** The per-slot combat target map must contain a target other than the all-ones sentinel.
+2. **Target validity.** The target slot must hold a valid live actor and pass the actor-group validity helper.
+3. **Target state.** The target must be visible/revealed and awake; targets with the hidden/not-yet-revealed or asleep/disabled bits do not interfere.
+4. **Runtime tag.** Time Stop's `T` tag suppresses interference. While that tag is active, this gate returns clear and the cast may continue to the dispatcher.
+5. **Adjacency.** The caster and target must be at distance one in the eleven-by-eleven arena coordinate space.
+
+Only when all five conditions pass does the gate block the cast: it prints a newline, the target actor's name, and ` interferes!`, then returns to combat command input before the spell prompt. If any condition fails, the spell dispatcher runs normally. This gate is therefore not a combat-side MP, reagent, level, or spell-allowed check; those resource checks remain in the shared dispatcher below.
 
 **Dispatcher gates** (run after the combat pre-gate, or as the only gate outside combat):
 
@@ -232,20 +235,18 @@ indicator that later combat logic consults. Protection, Quickness, Mass Charm,
 and Negate Magic share that active-effect path: each passes an
 animation/effect kind, a visible tag, and a counter value. The confirmed
 tag/counter pairs are Protection `P` / 20, Quickness `Q` / 30,
-Mass Charm `C` / 20, and Negate Magic `N` / 10. The helper stores one global visible
-tag/counter pair, runs the common effect animation, and refreshes the stats
-panel; it is not a per-character status byte. Combat then ages the counter
-from a resident update helper: zero and 255 are ignored, other values decrement
-on helper invocation, and expiry clears the visible tag and requests a redraw.
-This is separate from the time/lighting cleanup counters: the confirmed
-contract is helper-invocation aging, not one decrement per minute, light-spell
-unit, or complete actor-table pass. In combat the aging helper is reached from
-post-action and no-target fallback paths, so a full thirty-two-slot table scan
-has no fixed decrement count: only slots whose phase reaches zero dispatch an
-action, and target-fallback paths can add helper invocations. The separate
-time/render cleanup runs on the combat action counter's ten-ready-action wrap
-and does not define these P/Q/C/N counter units. Four active-effect consumers
-are now confirmed.
+Mass Charm `C` / 20, and Negate Magic `N` / 10. The helper stores one global
+visible tag/counter pair, runs the common effect animation, and refreshes the
+stats panel; it is not a per-character status byte. That shared runtime counter
+has an exact aging rule: zero and 255 are inert, other values decrement when an
+aging endpoint is reached, and expiry clears the tag and requests a redraw. The
+traced endpoints are command-dispatch cleanup outside combat and the combat
+active-player/selection cleanup path, not the clock/light cleanup. Do not model
+these units as one decrement per minute, one light-spell unit, or one complete
+actor-table pass. Do not conflate this runtime tag/counter with the carried
+equipment/use-item counter band used by inventory, R-Ready, and some
+combat/spell helper paths; those item counters are inventory stock, not combat
+effect timers. Four active-effect consumers are now confirmed.
 Protection's `P` tag adds 3 to the resident party-member defense helper after
 equipment defense is summed. Quickness's `Q` tag is consumed at the start of
 player-side combat dispatch: each ready dispatch rolls an inclusive 0..1
@@ -292,7 +293,7 @@ Arena field contact resolves the actor at the field coordinate, skips contact if
 
 **Summoning and conjuration.** Conjure, Swarm, Clone, and Summon. These insert a new entry into the actor table (or the world's dynamic-objects table) with a tile drawn from a per-spell summoned-class list. Clone is target-derived rather than list-derived: after the `Creature:` target is accepted, it searches for one free combat actor slot and one free dynamic-object slot, copies the target's paired records only after both slots exist, relinks the new combat record to the new dynamic-object slot, then places the copy at a random legal coordinate in the eleven-by-eleven arena. If either table has no free slot, Clone writes no partial record. The original leaves the spell-result word undefined on that capacity path, so compatibility layers may need to preserve the original's unpredictable success/failure narration; deterministic engines should model it as a no-op failure. Clone is not an adjacency-based spell. Summoned or cloned creatures are then run by the standard AI; they vanish when killed or after any per-spell duration.
 
-**Special / marquee effects.** Negate Magic, Gate Travel, and Time Stop. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when outside dungeon/combat scenes and on accepted world-tile ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. Time Stop scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it sets the runtime time-stop state and a countdown value of 10, then redraws.
+**Special / marquee effects.** Negate Magic, Gate Travel, and Time Stop. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when outside dungeon/combat scenes and on accepted world-tile ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. Time Stop scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
 
 ### Handler-family map
 
@@ -311,7 +312,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
 | Table-wide fear | In Quas Corp | Scans all combat actor slots, skips empty/dead, protected/immune, and same-faction actors, and marks each remaining hostile actor as fleeing. |
 | Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
-| Time stop | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise starts time stop with a countdown value of 10. Its decrement cadence is non-light spell state and is not owned by the light/torch counter cleanup. |
+| Time stop | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
 This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's active-effect defense bonus, Quickness's player-side dispatch gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-step boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
 
@@ -321,26 +322,23 @@ The C-Cast command is also bound in the combat command set. The implementation r
 
 **Same dispatcher.** From the dispatcher's point of view, a combat cast is identical to an overworld cast. The same prompt is shown, the same forty-eight-entry table is consulted, the same charge / mana / level gates run. The dispatcher reads the same DS state — including the per-spell charge counters and the per-character mana — so the in-combat cast and the out-of-combat cast are perfectly interchangeable for state purposes.
 
-**Combat-specific prereq pre-gate.** Section 7 listed the four-step combat-only pre-gate. It runs before the dispatcher prompts for the spell name; an aborted pre-gate skips the dispatcher entirely.
+**Combat-specific interference pre-gate.** Section 7 listed the combat-only
+interference gate. It runs before the dispatcher prompts for the spell name; an
+interfering adjacent target skips the dispatcher entirely.
 
-**Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. Several spells (the heal/restore family, the resurrect, the protection-target) take an explicit target separately from the caster; in combat the target picker has already chosen, and the spell handler reads the picked target slot.
+**Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. The combat target map used by the interference gate is not a replacement for spell-specific targeting. Several spells still take an explicit target separately from the caster, and active-target combat spells still use their own aiming/targeting path.
 
 **Scene gate selects spells.** The four-bit scene allow-mask uses `0x01` for combat, `0x02` for dungeon, `0x04` for indoor/town-mode scenes, and `0x08` for overworld. Spells without the active scene bit are rejected with `Not here!`; for example, combat-only attack spells reject outside combat, while overworld-only utility such as Wind Change rejects inside combat.
 
 **Monster spell-like effects.** The traced dispatcher contract above is the
-player/party C-Cast path. Monster turns use the combat AI path first: target
-selection, direction synthesis, and a synthesized command byte enter the combat
-command parser. Current public evidence now bounds this to a class-script
-dispatch and shared runner. Live actors of the same monster class share a
-mutable class-state resource for that path, while dead or inactive actors use
-the class's static script entry. Current public evidence does not yet map the
-state fields, runner instruction set, class-specific branch that chooses every
-monster spell-like effect, or a complete per-class effect table. Until that path
-is decoded, treat monster spell-like effects as unresolved combat-AI behaviour
-outside the forty-eight player spell definitions. They do not route through the
-party C-Cast prompt or the forty-eight-entry player spell dispatcher. No current
-trace shows them consuming the party's reagents, premixed charges, MP, or circle
-gates.
+player/party C-Cast path. Monster turns use the combat AI path first: a
+class-flag special hook may possess a party member, blink/phase the actor, or
+summon a Daemon-class actor, then target selection, direction synthesis, and a
+synthesized command byte enter the combat command parser. These three monster
+branches are outside the forty-eight player spell definitions. They do not
+route through the party C-Cast prompt or the forty-eight-entry player spell
+dispatcher, and they do not consume the party's reagents, premixed charges, MP,
+or circle gates.
 
 **Combat ends with state preserved.** Charge and mana side effects follow the same order inside combat as outside: charge loss and any successful or under-level mana debit survive combat exit and are part of the persistent save. A spell cast inside combat is real and permanent; the framer that brackets combat with save-and-restore preserves the cast's after-effects (just as it preserves damage).
 
@@ -382,22 +380,20 @@ There is no separate "magic state" file: every byte is part of the standard `.GA
 
 This section records places where the picture is not yet complete, where evidence is partially decoded, or where the project's analysis records uncertainty.
 
-- **Per-spell effect math beyond handler families.** The dispatcher's forty-eight-entry jump table has been mapped in public spell order, and the major shared handler families are now identified: light counter writes, field placement, active-target attack wrappers with exact Magic Missile/Fireball/Kill damage, Tremor's exact table-wide damage/reward path, directed target-walk effects including wind/sleep friendly-fire behavior, creature-prompt targeters including Polymorph's Giant Rat replacement and Clone's paired-slot capacity behavior, table-wide fear, Gate Travel moonstone-slot prompting, Time Stop setup, and shared active-effect display wrappers. The remaining handler work is the monster combat-AI effect path, which is separate from the forty-eight player spell definitions.
+- **Per-spell effect math beyond handler families.** The dispatcher's forty-eight-entry jump table has been mapped in public spell order, and the major shared handler families are now identified: light counter writes, field placement, active-target attack wrappers with exact Magic Missile/Fireball/Kill damage, Tremor's exact table-wide damage/reward path, directed target-walk effects including wind/sleep friendly-fire behavior, creature-prompt targeters including Polymorph's Giant Rat replacement and Clone's paired-slot capacity behavior, table-wide fear, Gate Travel moonstone-slot prompting, Time Stop setup and countdown aging, and shared active-effect display wrappers. The decoded monster possess/blink/summon-daemon hook is separate from these forty-eight player spell definitions.
 
 - **Absorption pre-gate identity.** The scene-mask table and scene-byte-to-mask mapping are transcribed in `catalogs/spell-list.md`. The remaining edge is assigning stable public names to the two special indoor states that print `Absorbed!` before the normal scene-mask comparison, especially the exact meaning of the gate byte used by scene `18`.
 
 - **Field status-helper edges.** The combat field path has a clear faction boundary: the arena helper skips the current active actor slot, but no friend/foe lookup appears before Poison/Sleep status application or Fire/Energy damage/value dispatch. Fire and Energy damage inputs are fixed, Poison/Sleep routing is fixed, and the COMBAT post-action hook is confirmed to match active-object field markers by coordinate after movement commits. The hook does not consume the matched marker. Poison Field skips linked active-object classes `>= 0x80`; for accepted targets it poisons only Good party members, while monsters and already non-Good party members fall through to poison damage with no field-contact XP credit. Sleep Field skips dead party members, otherwise applies asleep status to party targets and the combat sleep/disabled bit to non-party targets. The placement path is gated by target selection, coordinate lookup, and a COMBAT acceptance callback before marker/application callbacks run. The coordinate lookup accepts the first selected-coordinate descriptor with `0x80` or `0x40` set, rejects descriptors marked by `0x20` or `0x04`, and also rejects linked active-object tile byte `0xF4`. Field markers persist until combat exit restores the pre-combat active-object table; no traced placement, contact, redraw, generic active-object tick, or monster death/record-clear path decrements or removes them earlier.
 
-- **Target picking for the remaining unique spells.** Sleep, Poison Wind, Death Wind, and Flame Wind share the directed target-walk family and now have fixed non-faction eligibility plus per-effect result semantics; Magic Missile, Fireball, and Kill are active-target attack wrappers with fixed damage semantics; Tremor and Cause Fear are full actor-table sweeps; Charm, Polymorph, and Clone use the `Creature:` target prompt; and Mass Charm enters the shared active-effect path whose `C` tag is consumed by combat AI target selection with a class-threshold random remap. The remaining target/effect work is the monster combat-AI effect path.
+- **Target picking for the remaining unique spells.** Sleep, Poison Wind, Death Wind, and Flame Wind share the directed target-walk family and now have fixed non-faction eligibility plus per-effect result semantics; Magic Missile, Fireball, and Kill are active-target attack wrappers with fixed damage semantics; Tremor and Cause Fear are full actor-table sweeps; Charm, Polymorph, and Clone use the `Creature:` target prompt; and Mass Charm enters the shared active-effect path whose `C` tag is consumed by combat AI target selection with a class-threshold random remap. The remaining player-spell target/effect work is no longer blocked on the monster special hook.
 
-- **Monster spell effects.** Monsters may reach spell-like or special effect
-  behavior through AI command synthesis and class-specific combat helpers. The
-  class-script dispatch/storage boundary is identified, including class-wide
-  live state and the static inactive-script entry. This path is separate from
-  the party C-Cast prompt/dispatcher, but the state fields, runner instruction
-  set, complete class-to-effect map, selection cadence, and result semantics
-  are not yet public. That map belongs with the combat-AI and monster-bestiary
-  specs, not with the forty-eight player spell table.
+- **Monster spell effects.** Monsters may reach special-effect behavior through
+  the combat AI class-flag hook. That hook is now bounded to
+  possess/charm-on-turn, blink/phase, and summon-daemon branches, separate from
+  the party C-Cast prompt/dispatcher. The v1 baseline assigns the possess bit
+  to the classes listed in `catalogs/monster-bestiary.md`; blink and
+  summon-daemon remain implemented but unassigned variant-data branches.
 
 ## 14. Sources
 
@@ -412,14 +408,19 @@ The behaviour described here was derived by reading the private function and for
   random remap are derived by linking the CAST2 active-effect helper to
   `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the COMBAT
   damage/death note that identifies the same random-byte helper.
-- Protection's defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, and the active-effect counter-aging rule are derived from local ULTIMA.EXE and COMBAT helper analysis summarized without copying implementation text.
+- The monster possess/blink/summon-daemon hook is derived from
+  `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`
+  and the `DATA.OVL` class-flag table; it is summarized here only to separate
+  those effects from the player spell dispatcher.
+- Protection's defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Time Stop's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
 - Moonstone Search/Get recovery is derived from `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`, `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`, and local SJOG helper analysis summarized without copying implementation text.
 - The CAST.OVL function inventory and the misclassification correction (CAST is the spell-cast overlay, not character creation) — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
 - The shared spell-name input helper — accepted selector letters, order-insensitive compact-token matching, blank/cancel/no-match returns, and M-Mix's no-match fall-through — derived from local CAST2 helper analysis and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
-- The combat-only spell-prereq cascade — target validity, target awakeness, vehicle gate, resource check — derived from `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
-- The monster AI storage boundary and class-wide live-state split are derived
-  from `u5-decomp/functions/COMSUBS_OVL/0x0094_ai_pick_direction.md`, without
-  copying implementation text or private offsets.
+- The combat C-Cast adjacent-target interference gate - mapped target, target validity, target awakeness, Time Stop suppression, and adjacency - is derived from `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
+- The monster AI boundary correction is derived from the corrected COMSUBS
+  actor-name note, the COMSUBS monster-special hook, and the COMBAT
+  actor-dispatch/target-picker notes; current evidence does not support a
+  general class-script table for player-spell purposes.
 - The M-Mix command's pre-flight check, spell-name prompt, reagent-selection UI, quantity prompt, wrong-mix resource loss, recipe-mask comparison, charge cap, and charge increment — derived from `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`.
 - The shrine meditation handler — its mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, and ordained/Codex bitmap updates — derived from `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`.
 - The forty-eight runic spell incantations, the twenty-four-entry rune-syllable dictionary, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/data-ovl.md` and local `DATA.OVL` table reads.

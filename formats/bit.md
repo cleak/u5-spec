@@ -1,288 +1,186 @@
 # Standalone Bitmap Files (`.BIT`)
 
-Format specification for Ultima V's standalone `.BIT` image resources. The
-extension covers LZW-compressed display-independent images used by the title
-sequence and one raw monochrome bitmap used by the introduction.
+Format specification for Ultima V's standalone `.BIT` image resources in the
+IBM PC DOS display-driver path.
 
 ## 1. Overview
 
-`.BIT` files are standalone images rather than members of the paired
-tile-graphics archive family. They are not shipped as parallel `.16` and `.4`
-assets. Instead, the original engine loads one `.BIT` file and lets the active
-display driver render it appropriately for EGA, CGA, Hercules, or Tandy output.
+The `.BIT` files are not members of the paired `.16`/`.4` graphics archive
+family, and they do not use the shared LZW envelope described in
+`formats/tiles.md`. The updated EGA driver analysis shows that the `.BIT`
+family uses the display driver's sparse strip resource format. The driver
+walks a pointer table inside the loaded file, decodes each nonempty strip, and
+converts the strip to the active display representation.
 
-Three `.BIT` files are currently identified:
+Known `.BIT` files:
 
-| File | Role | Observed form |
+| File | Role | Driver-resource form |
 |---|---|---|
-| `TITLE.BIT` | Main title-screen artwork region | Compressed resource |
-| `BRITISH.BIT` | Lord British title-sequence portrait/signature artwork | Compressed resource |
-| `WD.BIT` | "Warriors of Destiny" introduction lettering | Raw monochrome bitmap |
+| `TITLE.BIT` | Main title-screen lettering/artwork resource | Sparse strip table |
+| `BRITISH.BIT` | Lord British title-sequence portrait/signature artwork | Sparse strip table |
+| `WD.BIT` | "Warriors of Destiny" story lettering | Sparse strip table with one populated strip |
 
-The compressed files use the same LZW resource envelope as `PROPORT.PCS` and
-the paired graphics archives. `WD.BIT` does not use that envelope and is
-directly renderable as a one-bit image after its dimension header.
+The same high-level resource family is also used by `PROPORT.PCS`; see
+`formats/font-pcs.md`.
 
-## 2. Relationship To Tile Graphics
+## 2. Relationship To Other Graphics
 
-`.BIT` files are separate from the `.16` and `.4` tile-graphics resources:
+Ultima V has two separate compressed graphics families:
 
-- `.16` and `.4` files are paired by display depth and use the shared Ultima V
-  LZW envelope.
-- Compressed `.BIT` files are single-source resources rendered through the
-  active display driver.
-- `.BIT` files do not contain image directories, sprite masks, tile atlases, or
-  palette tables.
+| Family | Files | Compression/container owner |
+|---|---|---|
+| Paired graphics archives | `TILES.16`, `STARTSC.16`, `STORY1.16`, matching `.4` files, etc. | Shared LZW envelope plus archive-specific post-LZW layout. |
+| Driver bitmap resources | `TITLE.BIT`, `BRITISH.BIT`, `WD.BIT`, `PROPORT.PCS` | Display-driver sparse strip table. |
 
-The distinction is in the decoded image body, not the compression layer. A
-reader can reuse the LZW decoder specified in `formats/tiles.md`, then interpret
-the decoded `.BIT` body according to the layouts below.
+Do not feed `.BIT` files to the LZW decoder. Their first word is an entry
+count for the driver resource table, not a decoded-length field.
 
-## 3. Compressed `.BIT` Container
+## 3. File Layout
 
-`TITLE.BIT` and `BRITISH.BIT` begin with the shared LZW resource envelope:
-
-1. A four-byte little-endian decoded length.
-2. A variable-width LZW payload using the dialect specified in
-   `formats/tiles.md`.
-
-For the shipped files, the declared decoded sizes are:
-
-| File | Compressed size | Declared decoded size |
-|---|---:|---:|
-| `TITLE.BIT` | 3,323 bytes | 5,364 bytes |
-| `BRITISH.BIT` | 784 bytes | 2,116 bytes |
-
-The high word of the decoded length is zero for both shipped files, so the
-first four bytes look like a length word followed by a zero word. Treating them
-as one 32-bit decoded length keeps this family consistent with the other LZW
-resources.
-
-### 3.1 `TITLE.BIT` decoded body
-
-After LZW expansion, `TITLE.BIT` is a directory of ten one-bit bitmap blocks:
+Every identified `.BIT` file starts with a sparse pointer table:
 
 | Field | Width | Meaning |
 |---|---:|---|
-| Block count | 2 bytes | Little-endian count. The shipped value is 10. |
-| Offset table | 2 x count bytes | Little-endian offsets from the start of the decoded body. |
-| Bitmap blocks | variable | Each block begins with width and height words, followed by packed one-bit pixels. |
+| Entry count | 2 bytes | Number of pointer-table entries scanned by the driver. |
+| Entries | `entry_count * 4` bytes | Each entry is a pointer word followed by a metadata word. |
+| Strip bodies | variable | Pixel strip records pointed to by nonzero pointer words. |
 
-Each bitmap block has this layout:
+Pointer-table entry:
 
 | Field | Width | Meaning |
 |---|---:|---|
-| Width | 2 bytes | Width in pixels. All shipped `TITLE.BIT` widths are multiples of eight. |
-| Height | 2 bytes | Height in pixels. |
-| Pixel bits | `width * height / 8` bytes | Row-major, most-significant-bit first within each byte. |
+| Strip pointer | 2 bytes | Byte offset from the start of the file to a strip body; zero means no strip. |
+| Metadata | 2 bytes | Not consumed during pointer-table scanning. Preserve when round-tripping; if a strip pointer targets this word, treat it as part of that strip body. |
 
-The shipped block dimensions are:
+Strip body:
 
-| Slot | Width | Height |
-|---:|---:|---:|
-| 0 | 24 | 3 |
-| 1 | 40 | 7 |
-| 2 | 72 | 11 |
-| 3 | 112 | 20 |
-| 4 | 152 | 32 |
-| 5 | 216 | 45 |
-| 6 | 280 | 61 |
-| 7 | 104 | 33 |
-| 8 | 16 | 15 |
-| 9 | 112 | 33 |
+| Field | Width | Meaning |
+|---|---:|---|
+| Width-related word | 2 bytes | Source width parameter converted by the driver into packed bytes per row. |
+| Row count | 2 bytes | Number of rows in this strip. |
+| Pixel payload | variable | Packed source bytes consumed by the display-driver decoder. |
 
-The directory stores shapes, not final screen positions. The shipped DOS intro
-uses fixed title-screen coordinates for all ten blocks; those coordinates are
-part of the intro renderer contract rather than fields in this file. See
-`systems/intro.md` for the placement sequence.
+For the EGA baseline, the width-related word is converted to the number of
+packed bytes per row across the four planes, rounded up to a four-byte
+boundary. The strip payload is then transformed into planar EGA data by the
+driver.
 
-### 3.2 `BRITISH.BIT` decoded body
+## 4. File-Specific Notes
 
-After LZW expansion, `BRITISH.BIT` is one raw one-bit bitmap using the same
-four-word header shape as `WD.BIT`:
+### 4.1 `TITLE.BIT`
 
-| Field | Meaning |
+`TITLE.BIT` is a sparse multi-strip resource. Its entry count is much larger
+than the number of strips that visibly draw; zero pointer entries are skipped.
+The title intro loads the file, hands the loaded segment to the display-driver
+bitmap path, and lets the driver walk the table.
+
+The title sequence still owns the visible flow: clear/configure the title
+surface, draw the title resource, draw the Lord British resource and path
+animation, then enter the menu/start-screen flow. The file format does not
+encode menu timing, input handling, or the title/menu idle animation.
+
+### 4.2 `BRITISH.BIT`
+
+`BRITISH.BIT` uses the same sparse strip resource model as `TITLE.BIT`. It is
+drawn during the title sequence before or during the `BRITISH.PTH` path-stroke
+animation. The path file supplies the animated pen movement; `BRITISH.BIT`
+supplies bitmap artwork consumed by the driver.
+
+### 4.3 `WD.BIT`
+
+`WD.BIT` is no longer treated as a separate raw bitmap header. Its leading
+words fit the same sparse strip model:
+
+| Resource fact | Meaning |
 |---|---|
-| Format marker | Little-endian word. The shipped value is `1`. |
-| Bitmap-mode marker | Little-endian word. The shipped value is `4`. |
-| Width | Image width in pixels. The shipped value is 272. |
-| Height | Image height in pixels. The shipped value is 62. |
+| Entry count is one | The driver scans one pointer-table entry. |
+| First pointer targets offset 4 | In this single-entry file, the pointed strip body starts at the entry's metadata word. |
+| The metadata word also serves as the strip width word | This overlap is valid for this resource because the EGA decoder follows the pointer and reads the strip body from there. |
+| The strip row count is 49 | The visible lettering is 49 rows tall. |
 
-The post-header payload is exactly `width * height / 8` bytes, row-major and
-most-significant-bit first within each byte. The first two words match the raw
-`WD.BIT` header. Their higher-level driver-facing names are not yet proven, but
-they are fixed header constants for the single-image one-bit bitmap form in the
-analyzed DOS assets.
-
-## 4. Raw `WD.BIT` Container
-
-`WD.BIT` is an observed raw exception within the same extension family. It does
-not start with the compressed-resource envelope. Instead, it has a small
-four-word header followed by one-bit-per-pixel row data.
-
-The confirmed semantic fields are:
-
-| Field | Meaning |
-|---|---|
-| Format marker | Little-endian word. The shipped value is `1` |
-| Bitmap-mode marker | Little-endian word. The shipped value is `4` |
-| Width | Image width in pixels |
-| Height | Image height in pixels |
-
-The shipped `WD.BIT` dimensions are 288 pixels wide by 49 pixels high. After
-the header, the payload is exactly large enough for one bit per pixel. Bits are
-stored most-significant-bit first within each byte, in row-major order. Rendering
-the payload with those dimensions produces the expected "Warriors of Destiny"
-lettering.
-
-The raw form has no palette. It should be treated as monochrome artwork whose
-foreground and background colours are supplied by the active display mode or
-caller.
+The practical visible role is unchanged: the resource supplies the "Warriors
+of Destiny" lettering used by the story/intro presentation.
 
 ## 5. Rendering Behaviour
 
-Compressed `.BIT` loading first expands the LZW envelope into the decoded body
-described above. Rendering then passes through the display-driver interface:
-the caller normalizes a destination rectangle to the 320-by-200 screen and
-dispatches into the active display path. The driver or modern renderer converts
-the decoded one-bit artwork to the active display representation and clips it to
-the requested rectangle.
+The resident intro and story code load a `.BIT` file into memory and call the
+display-driver bitmap entry. The EGA driver then:
 
-Confirmed behaviour:
+1. Reads the resource entry count.
+2. Iterates pointer-table entries in order.
+3. Skips entries with a zero strip pointer.
+4. For each nonzero strip pointer, reads the strip width parameter and row
+   count.
+5. Converts the strip payload into the driver's native pixel representation.
+6. Draws the strip according to the current driver/caller state.
 
-- The caller supplies a screen rectangle, not just a file pointer.
-- Rectangles are normalized and clamped to the visible screen before driver
-  dispatch.
-- `TITLE.BIT` is drawn as ten positioned one-bit blocks, not as a complete raw
-  screen.
-- `BRITISH.BIT` is drawn as one positioned one-bit bitmap and participates in
-  the title sequence alongside path-stroke animation data.
-- The same compressed `.BIT` source files are used regardless of the selected
-  display driver.
+The caller does not interpret `.BIT` as a `.16`/`.4` archive and does not
+field-walk the strip bodies itself in normal gameplay.
 
-Because the same source files are used regardless of selected display hardware,
-the decoded one-bit artwork should be considered display-independent. An
-implementation can render it to any modern surface, but it should not assume the
-decoded byte stream is already EGA planar data, CGA packed pixels, or a complete
-framebuffer.
+## 6. Validation And Error Handling
 
-`WD.BIT` is simpler: after reading its dimensions, a renderer can draw the
-post-header bits as a monochrome bitmap, left-to-right and top-to-bottom.
+A strict loader or inspection tool should:
 
-## 6. Expected Consumers
+- Require the file to contain at least the entry-count word.
+- Treat the entry count as the number of four-byte table entries.
+- Permit zero pointers as skipped entries.
+- Require nonzero strip pointers to land inside the file or inside the loaded
+  resource image prepared for driver decoding.
+- Require every decoded strip to have nonzero row count before rendering.
+- Preserve pointer-entry metadata even if the EGA renderer ignores it.
 
-Known consumers are concentrated in the introduction and title flows:
+The original driver can encounter over-allocated pointer tables where most
+entries are zero. A clean implementation should not reject a resource merely
+because the entry count is larger than the number of populated strips. When
+emulating the original heap-load path, the loaded resource image may include
+zero-filled padding beyond the byte-exact file; over-allocated table entries
+that read as zero remain skipped. Inspection tools may enforce stricter bounds
+for nonzero strip pointers, but they should not use file length alone to reject
+large entry counts in known resources.
 
-- The title-screen setup loads `TITLE.BIT` and consumes all ten decoded blocks.
-- The same title sequence loads and renders `BRITISH.BIT` before or during the
-  Lord British path animation.
-- The intro slide sequence references the "Warriors of Destiny" artwork family;
-  `WD.BIT` is the raw monochrome form identified in the asset survey.
+## 7. Implementation Notes
 
-Other overlays may use the same display-driver compressed-bitmap dispatch for
-non-`.BIT` resources. That does not make those resources `.BIT` files; this spec
-is limited to files with the `.BIT` extension.
+- Keep the `.BIT` loader separate from the paired `.16`/`.4` LZW decoder.
+- Use `systems/display-driver-abi.md` for the corrected dispatch mapping:
+  `0x3F` fills a rectangle; `0x42` decodes/draws driver bitmap resources.
+- A modern renderer can convert populated strips directly to an RGBA or indexed
+  surface, but the result must match the EGA baseline's strip order, row count,
+  clipping, and colour interpretation.
+- Replacement title/menu idle frames are not stored in `.BIT`; those are
+  driver-local animation frames described in `systems/display-driver.md`.
 
-## 7. Validation And Error Handling
+## 8. Known Uncertainties
 
-A `.BIT` loader should first classify the file by envelope:
+- **Pointer-entry metadata.** The EGA bitmap decoder does not consume the second
+  word in each pointer-table entry. Its original authoring-tool meaning remains
+  unidentified.
+- **Non-EGA driver interpretation.** CGA, Hercules, and Tandy may use the same
+  sparse resource table but convert strip pixels differently.
+- **Exact title-resource strip placement.** The driver owns the low-level strip
+  decode/draw path. The intro system owns the higher-level title flow and
+  visible sequence.
 
-- If the file starts with the compressed-resource envelope, treat it as a
-  compressed `.BIT` and require the decoded output to match the declared
-  length.
-- If it does not, attempt the raw bitmap interpretation only for files whose
-  header dimensions and payload length agree.
+## 9. Cross-References
 
-For compressed `.BIT` files:
+- EGA display-driver ABI and driver bitmap entry:
+  `systems/display-driver-abi.md`.
+- Semantic display contract and title/menu idle animation:
+  `systems/display-driver.md`.
+- Intro title, menu, and story flow: `systems/intro.md`.
+- Lord British path animation: `formats/pth.md`.
+- Paired `.16`/`.4` screen-panel graphics: `formats/tiles.md`.
+- Proportional font sibling resource: `formats/font-pcs.md`.
 
-- The declared decoded length must be plausible for the requested resource.
-- The decompressor must stop exactly at the declared decoded length.
-- `TITLE.BIT` must contain a valid block count, a complete offset table, and
-  blocks whose payload lengths equal `width * height / 8`.
-- `BRITISH.BIT` must contain the four-word raw-bitmap header and a payload
-  length equal to `width * height / 8`.
-- The renderer should clip to the caller's normalized destination rectangle.
-- A failed or short decode should prevent drawing rather than drawing partial
-  garbage.
+## 10. Sources
 
-For raw `WD.BIT`:
+Cleanroom prose derived from private analysis notes. This document does not
+include decompiled source, assembly excerpts, raw address tables, or raw bitmap
+data.
 
-- The file must be large enough to contain the four-word header.
-- The first two words should match the known single-image `.BIT` header
-  constants `1` and `4` for strict compatibility.
-- Width and height must be nonzero.
-- The payload length must equal the number of bytes needed to store
-  `width * height` one-bit pixels rounded up to a whole byte.
-- Any trailing bytes should be treated as a format error for strict
-  compatibility.
-
-A tolerant inspection tool may report nonstandard marker words without rejecting
-an otherwise exact raw bitmap, as long as the dimensions and payload budget are
-exact.
-
-## 8. Implementation Notes
-
-A cleanroom engine can use the same LZW decoder for `.16`, `.4`, `.PCS`, and
-compressed `.BIT` resources, then switch on the decoded body type:
-
-- `TITLE.BIT`: block directory of one-bit images.
-- `BRITISH.BIT`: one raw one-bit image with a four-word header.
-- `WD.BIT`: one raw one-bit image with a four-word header and no LZW envelope.
-
-Do not transpose the `.16`/`.4` post-LZW containers onto `.BIT` files.
-Compressed `.BIT` files have no colour pixel packing, no sprite mask plane, and
-no embedded palette.
-
-## 9. Known Uncertainties
-
-- **Title/menu timing.** `TITLE.BIT` block placement and the intro title tick
-  cadence are specified in `systems/intro.md`. This container format does not
-  encode waits, palette fades, or menu animation timing.
-- **Source pointer convention.** The resident image path passes a destination
-  rectangle to the driver, but the exact original runtime slot or driver-facing
-  convention used to tell the driver which loaded bitmap segment to read remains
-  an implementation-detail question.
-- **Single-image marker-word names.** `BRITISH.BIT` and `WD.BIT` both use
-  leading words `1` and `4`; the exact driver-facing names for those constants
-  are not yet proven.
-- **Per-driver rendering differences.** EGA, CGA, Hercules, and Tandy drivers
-  may convert the same decoded one-bit artwork into different native pixel
-  layouts. Those differences belong in the display-driver ABI and renderer
-  specs, not in this container spec.
-
-## 10. Cross-References
-
-- Tile, sprite, and panel graphics that use `.16`/`.4` rather than `.BIT`:
-  `formats/tiles.md`.
-- Proportional font resource sharing the compressed-resource envelope:
-  `formats/font-pcs.md`.
-- Path animation used with `BRITISH.BIT`: `formats/pth.md`.
-- Display-driver dispatch and rendering behaviour: `systems/display-driver.md`.
-
-## 11. Sources
-
-This spec is a cleanroom prose rewrite derived from the project notes below. It
-intentionally omits decompiled code, assembly, raw address tables, binary
-dumps, and private implementation identifiers.
-
-- First-pass font and bitmap survey, including compressed `.BIT` envelope,
-  shipped file sizes, declared decoded sizes, and raw `WD.BIT` dimensions:
-  `u5-decomp/formats/fonts-bitmaps.md`.
-- Tile-graphics survey, used for the shared LZW dialect and to distinguish the
-  `.BIT` post-LZW body layouts from the `.16`/`.4` archive containers:
-  `u5-decomp/formats/tile-graphics.md`.
-- Title-screen loader and runtime title-sequence use of `TITLE.BIT` and
-  `BRITISH.BIT`: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
-- Display-driver bitmap dispatch behaviour:
-  `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`.
-- Intro slide-loop context for the "Warriors of Destiny" artwork family:
+- Driver-compressed bitmap entry and sparse strip resource:
+  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
+- EGA driver ABI overview and corrected dispatch mapping:
+  `u5-decomp/formats/ega-driver.md`.
+- Intro title and story consumers:
+  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md` and
   `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
-- Fresh local loader-path verification decoded `TITLE.BIT` and `BRITISH.BIT`
-  with the shared LZW dialect and field-walked the decoded one-bit bitmap
-  containers; no disassembly or raw bitmap bytes are reproduced here.
-- Fresh local title-sequence verification identified the fixed screen
-  placements for all ten `TITLE.BIT` blocks and the decoded `BRITISH.BIT`
-  bitmap; those placements are recorded in `systems/intro.md`.
-- Fresh local header verification compared the decoded `BRITISH.BIT` body with
-  raw `WD.BIT` and confirmed both single-image bitmap headers start with the
-  marker words `1` and `4`.

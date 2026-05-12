@@ -49,6 +49,14 @@ The flag bits are independent — any combination of them may be set:
 
 The colour and flag fields apply to subsequent emissions; they are read at glyph-emit time, not at character-receive time, so changing them between calls changes the appearance of the next output.
 
+Selecting a window unpacks the descriptor's colour and flags into cached
+runtime fields used by the inner glyph loop. Extended text control bytes can
+also affect those cached fields while a string is being emitted: `0xFE`
+toggles underline, `0xFD` toggles inverse video, and `0xFF` clears the active
+text window's rectangle through the display-driver fill path. A separate
+clear/reset helper clears underline, centre, and inverse together. These
+control bytes are not rendered as glyphs.
+
 The rectangle has a hard invariant: `top_left_x ≤ bottom_right_x` and `top_left_y ≤ bottom_right_y`, both within the screen extent. Operations that mutate the rectangle (see Section 8) enforce this invariant by clamping out-of-range arguments and swapping inverted pairs. Operations that read the rectangle (wrap, scroll, conversion to pixel coordinates) assume the invariant holds.
 
 ## 4. Cell Coordinates and the Screen
@@ -68,7 +76,12 @@ The system exposes four families of operations. None of them takes a window argu
 - A byte with the high bit clear and not equal to line-feed or carriage-return is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, the window scrolls (Section 7) and the cursor is left on the now-blank bottom row.
 - A line-feed byte advances the cursor down one row without emitting a glyph and without resetting the column. If that step carries the cursor past `bottom_right_y`, the window scrolls.
 - A carriage-return byte returns the cursor to the window's left edge without changing the row and without emitting a glyph.
-- Any high-bit-set byte is silently dropped by the decoded per-cell path. There is no error.
+- Selected high-bit control bytes are handled by the adjacent extended-control
+  path. The confirmed controls are `0xFD` for inverse-video toggle and `0xFE`
+  for underline toggle; they do not emit glyph pixels and do not advance the
+  cursor. `0xFF` clears the active window's inclusive pixel rectangle using the
+  same cell-to-pixel conversion as scroll. Other high-bit bytes outside the
+  confirmed control range have no public glyph meaning.
 - A resident cursor-advance gate can suppress the cursor advance after a glyph emit. The glyph is still rendered, but the cursor stays put. This gate is shared runtime state rather than one of the descriptor style bits; the input cursor blink temporarily disables it so blink frames paint in place.
 
 **The wrap-aware string printer** takes a near pointer to a NUL-terminated byte string and emits it into the active window with word wrapping. It accumulates characters in a fixed-size internal line buffer (large enough for the widest possible window) while tracking the most recent point at which a word break could have happened. When a soft break (space, line-feed, or carriage-return) is reached and the line still fits in the window's width, the line is emitted via the per-cell emitter. When the next character would carry the line past the window's right edge, the printer backs up to the most recent soft break, emits everything up to that break, and begins a new line with the remainder. A NUL forces a final flush. Line-feed and carriage-return bytes embedded in the source string force an immediate flush at that point and pass through to the per-cell emitter so the cursor moves accordingly.
@@ -129,12 +142,10 @@ The colour and flag setters write one byte of one descriptor; their effects are 
 
 This section records places where the picture is not yet complete or where evidence is internally inconsistent.
 
-- **Style and clear writers.** The descriptor/cache carries underline,
-  centring, inverse, colour, and rectangle-clear state used by the text and
-  display paths. The decoded per-cell emitter itself only handles line-feed and
-  carriage-return, and drops high-bit bytes. The remaining writer paths for
-  toggling underline/inverse and clearing the active window are not fully
-  pinned down in public prose yet.
+- **Remaining extended text controls.** The confirmed extended controls are
+  `0xFD` inverse toggle, `0xFE` underline toggle, and `0xFF` clear-active-window.
+  The adjacent handler range also covers lower values in the `0xFB..0xFC`
+  range, but their exact public roles are not yet promoted to normative prose.
 
 - **No-advance gate writers.** The per-cell emitter consults a shared resident
   cursor-advance gate, and the input cursor blink is one confirmed writer. Any

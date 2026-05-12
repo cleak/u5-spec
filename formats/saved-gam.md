@@ -74,7 +74,7 @@ Each thirty-two-byte record is laid out as follows.
 | `0x16`       | 1 byte   | Level. `0xFF` on unset / not yet computed.                                                               |
 | `0x17`       | 1 byte   | Per-character month counter. The time system increments every roster slot at the 28-day month rollover, capped at 25. The inn uses this as a lodged guest's stay counter. |
 | `0x18`       | 1 byte   | Reserved / padding.                                                                                      |
-| `0x19`       | 6 bytes  | Equipment slot bytes — held weapon, armour, helm, ring, amulet, and one additional. Each slot byte is an index into the inventory tables (see Section 7). Zero in a slot means "nothing equipped". |
+| `0x19`       | 6 bytes  | Equipment slot bytes: helm, body armour, weapon hand, shield/off hand, ring, and amulet/neck item. Each non-empty slot byte is an equipment item id (see Section 7). The live empty-slot sentinel is `0xFF`. |
 | `0x1F`       | 1 byte   | Inn-registry marker byte when this record is viewed through the shifted inn guest table; zero for an empty/cleared guest marker. Opaque padding for ordinary active-character behaviour. |
 
 The name is NUL-padded rather than NUL-terminated. A nine-byte slot can hold a nine-character name with no terminator at all, and shorter names are padded with zero bytes. Players who entered an empty name will see all nine bytes of zero. The engine's empty-save guard (see `systems/save-load.md`) tests an interior byte of record zero's name field — not the leading byte — because a packed control field may legitimately be zero even in a populated save, while a typed name has at least one non-zero byte past its first character.
@@ -153,7 +153,7 @@ A long band of bytes after the inn-guest registry holds the party's shared inven
 | `0x0208` | 1 byte  | Torches            | Torches.                                                                                                      |
 | `0x0209` | 1 byte  | Magic powder       | Powder of magic awakening.                                                                                    |
 | `0x020A..0x0219` | 16 bytes | Special / quest items | Scroll-of-Sentry, Codex skull, Crown, Sceptre, Sandalwood box, Spyglass, magic carpet, hourglass, wooden box, and similar one-byte counters or flags. Individual meanings remain cross-system. |
-| `0x021A..0x0249` | 48 bytes | Equipment inventory | One byte per equipment item id. Arms shops use the same id to index the shop stock table, base-price table, display-name row, and this counter. The span covers ammunition and carried weapons/armour/helms/shields/rings/amulets. |
+| `0x021A..0x0249` | 48 bytes | Equipment inventory | One byte per equipment item id. Arms shops, Z-stats, and R-Ready use the same id to index the shop stock table, base-price table, display-name row, carried counter, and readied-equipment slot value. The span covers ammunition and carried weapons/armour/helms/shields/rings/amulets. |
 | `0x024A..0x0279` | 48 bytes | Spell-charge stock | One byte per pre-mixed spell charge. See Section 7.1.                                                         |
 | `0x027A..0x0289` | 16 bytes | Use-item / scroll-potion counters | Working span for carried use-items whose exact per-byte order is still being traced.                          |
 | `0x02AA` | 8 bytes | Reagents           | Black pearl, blood moss, garlic, ginseng, mandrake, nightshade, spider silk, sulfurous ash. One byte each.    |
@@ -282,8 +282,8 @@ For a questionnaire-created Avatar, chargen overwrites the entered name,
 gender, STR, DEX, INT, and MP. The class remains Avatar and the status remains
 good from the seed. Current HP remains 60, maximum HP remains 150, experience
 remains 2, and the level byte remains the unset-level sentinel. Equipment-slot
-bytes are preserved from the seed, but their exact item mapping remains an open
-compatibility detail in Section 14.
+bytes are preserved from the seed and use the helm, body armour, weapon hand,
+shield/off hand, ring, and amulet/neck order documented in Section 3.1.
 
 The second record is Shamino in slot one, regardless of recruit state. Records
 two through fifteen continue the canonical companion list at thirty-two-byte
@@ -338,7 +338,10 @@ The format is verified by direct byte inspection except where noted. The followi
 
 - **Unidentified `0x0400..0x05B3`.** Four hundred thirty-six bytes whose function is not pinned down. Possibly conversation-state flags, possibly per-quest milestone bits, possibly per-location visit history.
 
-- **Equipment slot encoding.** The six equipment slot bytes per character record are known to index into the inventory item enumerations, but the exact mapping (item IDs vs. item-class indexes vs. flagged variants) has not been verified directly against the inventory layout.
+- **Equipment class tables.** The six equipment slot bytes per character record
+  are now mapped and hold equipment item ids or the empty sentinel. Remaining
+  exactness work lives in the item metadata tables: per-class restrictions,
+  strength/capability gates, combat values, and ring/amulet special effects.
 
 - **Spell-charge slot enumeration.** The forty-eight-byte spell-charge stock is verified at the byte level, but the exact mapping between slot index and spell name has been derived from external references rather than from observation.
 
@@ -366,6 +369,9 @@ The byte-level layout described here was derived from the project's private save
 - The save handler's open-write-close sequence, byte-image flush to `SAVED.GAM`, per-plane `.OOL` staging reads, conditional `UNDER.OOL` mirror write, and canonical `SAVED.OOL` write — `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`.
 - The load handler's byte-image read of `SAVED.GAM` into the same region, the empty-save guard, the `SAVED.OOL` read, and the mirror-write of `BRIT.OOL` and `UNDER.OOL` — `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - The chargen flow's per-record write to roster slot zero (name, gender, STR, DEX, INT, and MP) and preservation of seed class/status/HP/experience fields — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+- The equipment slot order, empty sentinel, carried-equipment counter band, and
+  R-Ready stock mutations are derived from the updated ZSTATS overlay notes
+  and summarized publicly in `u5-spec/systems/inventory.md`.
 - The save and load systems' overall semantics, file roles, and mirror-write contract — `u5-spec/systems/save-load.md`.
 - The active-object record layout and the in-memory table semantics — `u5-spec/systems/active-objects.md`.
 - The calendar and clock fields' cascade rules and persistence — `u5-spec/systems/time.md`.

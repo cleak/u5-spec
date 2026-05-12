@@ -116,9 +116,10 @@ The dawn/dusk gradient levels are:
 The light-source counters themselves are advanced as part of the per-turn cleanup, with the same effective increment after the state-tag modifier described in Section 4, via the saturating-arithmetic helper. They count down toward zero; reaching zero ends the effect. An hour-rollover-only counter (used by the once-per-hour spell timer) is also incremented at the moment of hour change, before the daylight recompute runs, so that "this spell expires at the top of the hour" effects work correctly.
 
 This cleanup path is not the owner of every magical countdown. The shared
-combat active-effect counters (`P`, `Q`, `C`, and `N`) age through a resident
-combat helper, and Time Stop's decrement path is tracked with spell/combat
-state rather than with torch or light-spell duration.
+combat active-effect/runtime counter (`P`, `Q`, `C`, `N`, and Time Stop's
+`T`/10 state) ages at command/combat cleanup endpoints. The per-turn cleanup
+does not decrement that counter; it only observes the `T` tag to suppress
+minute advancement while Time Stop is active.
 
 ## 7. Per-day events
 

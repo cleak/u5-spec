@@ -18,10 +18,11 @@ The format carries no embedded palette. The sixteen-entry palette for `.16` is t
 
 Every tile-graphics file, regardless of depth or container layout, begins with a four-byte little-endian unsigned integer giving the *uncompressed* length of the body in bytes, immediately followed by the LZW-compressed body itself. There is no magic number, no version word, no flag byte, no checksum, and no envelope footer. A reader allocates a buffer of exactly the declared size and decompresses the remaining bytes into it.
 
-The same outer LZW envelope is also used by `PROPORT.PCS` and by the compressed
-`.BIT` resources. Those files have different post-LZW body layouts, specified
-in `formats/font-pcs.md` and `formats/bit.md`; this document specifies the
-post-LZW layouts for the paired graphics archive family only.
+This LZW envelope is not the format used by `PROPORT.PCS`, `TITLE.BIT`,
+`BRITISH.BIT`, or `WD.BIT` in the EGA driver path. Those files use the
+driver-compressed sparse strip resource format specified in `formats/bit.md`,
+`formats/font-pcs.md`, and `systems/display-driver-abi.md`. This document
+specifies only the paired `.16`/`.4` graphics archive family.
 
 The LZW dialect is the GIF variant, byte-for-byte identical to the dialect used by the Compuserve GIF87a image format that was contemporary with the game's release. Codes start at nine bits wide and grow by one bit each time the dictionary fills, capping at twelve bits. Bit packing is little-endian: the first emitted code occupies the low nine bits of the first compressed byte, and subsequent codes pack into adjacent bit positions, crossing byte boundaries freely. The dictionary holds up to four thousand ninety-six entries.
 

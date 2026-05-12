@@ -120,7 +120,7 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 **End-of-round exit checks.** Three flags control exit:
 
 - **Defeat flag**: the entire party is dead, asleep, or fled. Result is "defeat".
-- **Leave-combat flag**: the player has chosen to leave (via the X-it command, walking off an open edge, or a spell that ends combat). On the *first* such trigger per fight, the exit-message string is printed; subsequent reads pass through silently.
+- **Leave-combat flag**: the player has chosen to leave by walking off an open edge, a spell or tile effect has ended combat, or the combat-only X-it cleanup path has accepted after no live foes remain. On the *first* such trigger per fight, the exit-message string is printed; subsequent reads pass through silently.
 - **Exhausted slots** (loop reached slot 32): start a new round.
 
 When defeat or leave-combat fires, the round loop returns "1" (victory/escape) or "0" (defeat).
@@ -131,7 +131,7 @@ The phase-counter / base-step structure means actors act at *staggered* paces. T
 
 When the round walker dispatches a player slot, the player command handler normally reads exactly one keystroke from the input pipeline (using the same input system that drives the rest of the engine). If Quickness's shared `Q` active-effect tag is live, that handler first rolls an inclusive 0..1 random gate: a zero result consumes the ready dispatch without reading input, while a one result continues normally. When input is read, the keystroke is folded to upper case, case-checked against the combat command set, and dispatched.
 
-The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Space, digits, direction codes). Dispatcher-level coverage is complete for all twenty-six letters and the special inputs listed below. Recognition is not the same as world-mode success: several letter branches print the familiar verb label and then run the combat scene-message/abort tail, while others enter delegated follow-up helpers whose exact target rules are still open.
+The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Space, digits, direction codes). Dispatcher-level coverage is complete for all twenty-six letters and the special inputs listed below. Recognition is not the same as world-mode success: several letter branches print the familiar verb label and then run the combat scene-message/abort tail, while others enter shared command overlays through combat-specific stubs. The public map below names those overlay targets where they are resolved; object-specific success and refusal cases remain with the command-family specs.
 
 | Key   | Combat behaviour |
 |-------|------------------|
@@ -141,26 +141,26 @@ The combat command set consists of letter keys A-Z plus a small set of control c
 | **D** | Prints the combat-specific `D-What?` refusal and aborts the command. |
 | **E** | Recognised as Enter, then routed to the combat scene-message/abort tail. |
 | **F** | Recognised as Fire, then routed to the combat scene-message/abort tail. |
-| **G** | Get. Enters a follow-up command path; exact success/refusal targets are delegated to the combat sub-handler. |
+| **G** | Get. Prints `Get-`, gates on the active combat actor still being alive, then dispatches through the shared SJOG Get handler and returns to the combat parser for any follow-up input. |
 | **H** | Recognised as Hole up, then routed to the combat scene-message/abort tail. |
 | **I** | Recognised as Ignite torch, then routed to the combat scene-message/abort tail; no torch counter update is proven on this combat branch. |
-| **J** | Jimmy. Enters a follow-up command path; exact success/refusal targets are delegated to the combat sub-handler. |
-| **K** | Klimb. Dispatches through the combat sub-handler; exact ladder/edge behaviour remains arena-dependent. |
+| **J** | Jimmy. Prints `Jimmy-`, applies the same live-actor gate as Get, then dispatches through the shared SJOG Jimmy handler. |
+| **K** | Klimb. Dispatches to the SJOG combat Klimb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. |
 | **L** | Recognised as Look, then routed to the combat scene-message/abort tail; this dispatcher does not run the world/town LOOKOBJ flow. |
 | **M** | Recognised as Mix, then routed to the combat scene-message/abort tail; it does not open the reagent mixer. |
 | **N** | Recognised as New order, then routed to the combat scene-message/abort tail. |
-| **O** | Open. Enters a follow-up command path; exact success/refusal targets are delegated to the combat sub-handler. |
-| **P** | Push. Dispatches through the combat sub-handler; exact arena object effects remain unresolved. |
-| **Q** | Recognised as combat Quit through the combat command parser. This is separate from the resident Q save-game command, and the exact prompt/exit semantics remain unresolved. |
-| **R** | Ready. Enters a follow-up command path to select/equip inventory. |
-| **S** | Search. Enters a follow-up command path; exact target rules remain delegated to the combat sub-handler. |
+| **O** | Open. Prints `Open-`, applies the same live-actor gate as Get, then dispatches through the shared SJOG Open handler. |
+| **P** | Push. Prints `Push-` and dispatches through the push/refusal helper path; exact pushable-object effects are the shared P-Push command behaviour rather than a combat-only table. |
+| **Q** | Recognised as combat Quit, then routed to the combat scene-message/abort tail. It is not the resident Q save-game command and does not save. |
+| **R** | Ready. Dispatches to the ZSTATS R-Ready handler. In combat, the character picker reuses the active combat actor instead of prompting for an arbitrary party member; equipment mutation semantics are specified in `inventory.md`. |
+| **S** | Search. Prints `Search-`, applies the same live-actor gate as Get, then dispatches through the shared SJOG Search handler. |
 | **T** | Recognised as Talk, then routed to the combat scene-message/abort tail. |
-| **U** | Use item. Enters a follow-up command path through the combat sub-handler. |
+| **U** | Use item. Prints `Use item`, applies the same live-actor gate as the prompt-with-string commands, and dispatches through the sixth combat sub-verb slot. The continuation crosses into CAST-owned command/item logic, but current evidence does not yet settle the exact combat item-effect body. |
 | **V** | Recognised as View, then routed to the combat scene-message/abort tail; it is not the resident gem-view map path. |
 | **W** | Prints the combat-specific `W-What?` refusal and aborts the command. |
-| **X** | X-it - leave combat voluntarily. Sets the leave-combat flag (Section 14). |
-| **Y** | Yell. Dispatches through the combat sub-handler. |
-| **Z** | Z-stats. Shows the active character's stat panel through the combat sub-handler. |
+| **X** | X-it. Calls the combat-only CMDS escape handler. The command succeeds only when no active-not-dead foes remain; otherwise it prints a combat refusal. Fleeing while enemies remain is handled by stepping out of arena bounds, not by this branch. |
+| **Y** | Yell. Dispatches to the CMDS Yell handler, reusing the normal ship-sail, Shadowlord-name, and word-of-power logic for the current scene. |
+| **Z** | Z-stats. Dispatches to the ZSTATS display handler; in combat it selects the active combat actor's party slot instead of prompting for an arbitrary character. |
 
 Other inputs:
 
@@ -171,40 +171,48 @@ Other inputs:
 - **Digits `1`–`6`** — select party member 1 through 6 as the active player.
 - **Direction codes** (the eight movement codes the input system translates from numpad / arrow keys) — move one cell in the given direction. Movement uses the step-or-attack primitive: if the cell is occupied by a hostile, attack instead; if it is on the open edge, leave combat.
 
-Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Search, Use, Yell, and some delegated arena handlers): they print a short prompt or call a sub-handler that reads a follow-up keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' visible vocabulary so muscle memory transfers cleanly between play modes, but the combat parser owns its own branches and refusals. The most distinctive combat-only commands are A, C, and X.
+Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Search, Use, Yell, and some delegated arena handlers): they print a short prompt or call a sub-handler that reads a follow-up keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' visible vocabulary so muscle memory transfers cleanly between play modes, but the combat parser owns its own branches and refusals. The most distinctive combat-only paths are Attack, Cast, active-player selection, out-of-bounds fleeing, and the X-it cleanup exit.
 
 ## 9. Monster AI
 
 When the round walker dispatches a monster slot, the AI runs as a sequence of three passes that ultimately produce a *synthesised keystroke* — the AI generates the same bytes the player would press if they were controlling this monster, and the synthesised byte runs through the same per-letter dispatcher as a player turn. Monsters and players share the action infrastructure.
 
-**Pass 1 - Dispatch setup and intent.** The per-actor dispatcher clears the
-actor's combat-status presentation area, prepares narration scratch, and checks
-whether the current slot should run a normal turn, yield to a queued
-animation/effect, or continue into AI decision-making. For a monster that can
-act, the first AI-specific stage is an intent selector keyed by the acting
-monster's class. It can record the target slot or queue a visible/sound effect
-request before direction synthesis runs. This stage does not itself define the
-movement vector; it stages the facts that the shared combat input gate will
-later expose to the ordinary command parser.
+**Pass 1 - Dispatch setup.** The per-actor dispatcher clears the actor's
+combat-status presentation area, prepares narration scratch, and checks whether
+the current slot should run a normal turn, yield to a queued animation/effect,
+or continue into AI decision-making. Current evidence does not support a
+general per-class AI script runner. The ordinary monster path is table and
+helper driven: status/flee gates run first, then the class-flag special hook,
+target selection, movement-direction synthesis, optional step/teleport logic,
+and finally the same command parser used by player turns.
 
-**Pass 2 - Class-script dispatch and direction.** Monster decision-making enters
-a class-script dispatch boundary before the shared command parser sees a
-synthetic key. This boundary is a data selector, not the geometric target
-picker itself. It uses the acting actor's class and live/inactive state to
-choose one of two class-scoped AI resources: live actors use a mutable
-class-state record shared by all live actors of that class, while dead or
-inactive actors use the class's static script entry. Slot-local facts such as
-position, target slot, flags, and phase still live in the combat actor/effect
-tables; the AI state selected here is class-scoped rather than per combat slot.
-A shared runner consumes the selected resource and produces the AI decision
-outputs used by combat, including the unit-step `(dx, dy)` vector whose
-components are each `-1`, `0`, or `+1`.
+**Pass 2 - Per-class special ability hook and direction.** Before ordinary
+movement is synthesized, monster AI runs a small class-flag hook. It is not a
+general script runner: it reads the acting monster's class flag word and tests
+three ability bits in fixed order.
 
-The public v1 contract stops at that boundary for class-specific special
-behaviour. The storage/dispatch shape, target picker, movement vector, and
-parser reuse are specified here; the intent selector's class-specific effect
-map, class-state field layout, class-script instruction set, and runner
-effect map are still open.
+- `0x0040` is the possess/charm-on-turn ability. It chooses a random combat
+  slot, accepts only a living party member that is not dead/passive, blinking,
+  status-disabled, invisible, or already in the active command state, then runs
+  the normal resistance check. On a failed resistance roll the target is marked
+  controlled for the current combat state, the active-player sentinel is cleared
+  if needed, the stats panel is redrawn, and a short possession narration and
+  sound play. If the caster is a Daemon-class actor, the caster then clears
+  itself from combat. Once a valid target reaches the resistance path, the hook
+  returns handled whether the resistance blocks or the effect lands.
+- `0x0800` is the blink/phase ability. It has an approximately one-in-eight
+  chance per AI turn, toggles the actor's phase/hidden flag and linked visual
+  tile between visible and hidden, and narrates the disappearance or return.
+- `0x0400` is the summon-daemon ability. It has the same approximately
+  one-in-eight chance gate, requires the combat-side live-target and placement
+  helpers to accept, then attempts to place a Daemon-class actor near the
+  current AI step direction with a brief visual transition and sound.
+
+The branches are tested in the order above; a class with multiple bits would
+attempt possess first, then blink, then summon-daemon. In the analyzed v1 data
+set, only the possess bit is assigned to listed classes; the blink and summon
+branches remain variant-data behaviours until an asset table sets those bits.
+After this hook, the AI target picker and direction synthesis run as normal.
 
 **Target selection** is the heart of Pass 2. Given the acting monster's slot index, the target picker walks the actor table backwards from slot 31 to slot 0, computes the squared distance to each candidate, and picks the closest one that survives a chain of filters:
 
@@ -249,8 +257,9 @@ already aligned with it.
 
 The confirmed public writer for the fleeing flag is the Cause Fear spell: it
 sweeps eligible hostile combat actors and marks each accepted target as fleeing.
-Other possible writers, such as low-HP morale, class-script decisions, or
-monster special effects, remain unclassified.
+Other possible writers, such as low-HP morale or other class-specific
+decisions, remain unclassified. The decoded possess/blink/summon-daemon hook
+does not write the fleeing flag.
 
 **Pass 3 — Synthesise.** A combat-specific input gate reads the synthesised byte from the actor's record. The AI's chosen direction is encoded as the byte the player would press if they wanted to walk the same way (`'N'`, `'S'`, `'E'`, `'W'` direction codes), or the byte for "Attack" if the chosen direction puts the target adjacent. The byte falls into the same per-letter dispatcher as the player command handler. Before the command runs, the AI assembles a one-line narration string — for example `<monster name> attacks <target name>, armed with <weapon>!` — by stitching together a short verb composer.
 
@@ -260,7 +269,17 @@ The architectural consequence: **all damage and movement effects in combat go th
 
 Combat shares the spell engine with the rest of the game; the C (Cast) command dispatches via the same routing as the overworld C. The combat-specific path adds three things.
 
-**Prerequisite and active-effect checks.** Before queueing a spell, a short prereq cascade runs: the caster has a valid target from the combat cast target mapping, the target slot is non-empty, the target is not invisible or asleep, the current combat/state tag is not the prohibited `T` value, and the caster passes a combat-side resource/allowed check. A failed pre-gate aborts before the shared spell dispatcher prompts for a spell; not every failure has its own printed refusal. On success, the gate can run a target-reaction hook and print the combat "interferes" continuation. After those prereqs, the combat C-Cast path also checks the shared active-effect tag: when Negate Magic's `N` tag is active, the cast is absorbed/refused before the shared spell dispatcher runs, so the premixed charge and MP debit gates are not reached. Otherwise the shared spell dispatcher still performs the scene, charge, mana, and level gates described in `magic.md`.
+**Interference and active-effect checks.** Before queueing a spell, combat runs
+an interference check, not a resource gate. It reads the caster's current target
+mapping; if that target exists, is a valid live/visible/awake actor, Time Stop's
+`T` runtime tag is not active, and the target is at distance one from the caster,
+the handler prints a newline, the target's actor name, and ` interferes!`, then
+returns to combat command input before the shared spell dispatcher prompts for a
+spell. If any of those conditions fail, combat proceeds to the shared spell
+dispatcher. The charge, mana, level, and scene checks are still owned by that
+dispatcher. The combat C-Cast path also checks the shared active-effect tag:
+when Negate Magic's `N` tag is active, the cast is absorbed/refused before the
+shared spell dispatcher consumes charge or MP.
 
 **Scene gate.** Each spell carries a four-bit allow-mask for the scenes it works in: combat, dungeon, indoor/town-mode, and overworld. Scenes for which the spell has no entry print a `Not here!` refusal. Most damaging spells are gated to combat-only.
 
@@ -268,11 +287,10 @@ Combat shares the spell engine with the rest of the game; the C (Cast) command d
 
 The full spell system is described in its own spec; only the combat-side gating
 and dispatch are covered here. Monster turns use AI command synthesis before
-they enter the shared combat parser. The current public spec has bounded that
-path to a class-script dispatch and shared runner, but it does not yet map the
-script instruction set or the class-specific branch that chooses monster
-spell-like or special effects. No current trace ties those effects to party
-reagents, premixed charges, MP, or player circle gates.
+they enter the shared combat parser. The class-flag special hook is now bounded
+to possess, blink/phase, and summon-daemon branches before movement synthesis.
+Those effects do not route through the party spell prompt, party reagents,
+premixed charges, MP, or player circle gates.
 
 ## 11. Attack resolution
 
@@ -302,13 +320,20 @@ The damage-and-status handler bundles "apply damage, update status, narrate the 
 
 **Apply to HP.** For party members, damage is subtracted from the character record's HP word; on death, the status byte is set to `'D'`, the active-player byte is cleared if this character was the active one, and a death-tile is written to the dynamic-objects table. For monsters, damage is subtracted from the slot's HP byte; on death, control passes to the class-specific death paths.
 
-**Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. A traced **vanish on death** branch prints `<monster name> vanishes!`, changes the dynamic-object tile to a gravestone, clears the actor record, and plays a fade-out animation, but no class row in the analyzed `DATA.OVL` baseline currently sets the high vanish bit; treat it as a reachable code branch only if a supported asset set supplies a class flag for it. **Special tile transitions** for the Gazer (eye-burst tile + particle effect) and the Gargoyle (lava pool left under the corpse) are hand-tweaked deaths encoded as conditional branches on the class byte. **Default** kill: the death path runs two random checks against the class's drop-cap byte. If the first check accepts, the combat-instance active-object tile becomes the generic dead-monster/drop marker, and byte five of that record stores the class drop-cap value; if the second check also accepts, bit `0x80` is ORed into that same byte as a special-drop marker. If the first check rejects, the active-object tile becomes the alternate no-drop death marker and byte five is not promoted into a loot marker. The combat framer restores the world active-object table afterward, so any visible world loot handoff must be owned by a caller or cleanup path outside the framer restore.
+**Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. A traced **vanish on death** branch prints `<monster name> vanishes!`, changes the dynamic-object tile to a gravestone, clears the actor record, and plays a fade-out animation, but no class row in the analyzed `DATA.OVL` baseline currently sets the high vanish bit; treat it as a reachable code branch only if a supported asset set supplies a class flag for it. **Special tile transitions** for the Gazer (eye-burst tile + particle effect) and the Gargoyle (lava pool left under the corpse) are hand-tweaked deaths encoded as conditional branches on the class byte. **Default** kill: the death path runs two random checks against the class's drop-cap byte. If the first check accepts, the combat-instance active-object tile becomes the generic dead-monster/drop marker, and byte five of that record stores the class drop-cap value; if the second check also accepts, bit `0x80` is ORed into that same byte as a special-drop marker. If the first check rejects, the active-object tile becomes the alternate no-drop death marker and byte five is not promoted into a loot marker. These markers live in the temporary combat-instance active-object table. The enter/exit framer restores the pre-combat world active-object table after the round loop, so a compatible implementation must not treat default death markers as automatic world loot or trigger-slot removal.
 
-Each monster killed computes a small raw reward unit (roughly a quarter of max-HP plus one). The currently traced COMBAT-level callers use the helper for death finalisation and do not forward that return value through the combat framer. Spell-side callers may consume it immediately: Tremor adds the returned unit to the caster's experience word after each accepted actor, capped at 9999. Whether the ordinary encounter-victory path consumes the value as XP, gold, karma credit, loot selection, or no-op remains part of the durable reward-accounting gap.
+Each monster killed computes a small raw reward unit (roughly a quarter of max-HP plus one). The currently traced COMBAT-level callers use the helper for death finalisation and do not forward that return value through the combat framer; the framer itself restores the active-object snapshot and discards the round-loop return except for victory/defeat/escape control flow. Spell-side callers may consume the helper return immediately: Tremor adds the returned unit to the caster's experience word after each accepted actor, capped at 9999. Whether a caller-side encounter-victory path consumes the value as XP, gold, karma credit, loot selection, or no-op remains the reward-accounting gap.
 
 **Splitting / replicating monsters.** Some classes (slimes, certain gargoyles) carry a "split on damage" flag. When such a monster is *damaged but not killed*, the function looks for an empty slot in the table, copies the parent's class byte into it, and prints `<monster name> divides!`. Up to eight attempts are made to find a free slot.
 
-**Other status changes** — Sleep, Poison, Charm — are applied by separate per-effect handlers (a poison-tick handler firing once per round, a sleep-effect handler invoked when the Sleep spell hits). Those handlers update the character status byte to `'S'` (asleep) or `'P'` (poisoned) and run their own narration.
+**Other status changes** — Sleep, Poison, Charm — are applied by separate
+per-effect handlers (a poison-tick handler firing once per round, a sleep-effect
+handler invoked when the Sleep spell hits). Those handlers update the character
+status byte to `'S'` (asleep) or `'P'` (poisoned) and run their own narration.
+Inventory counters for carried equipment and use-items live in the same
+resident save image and may be decremented by equipment or combat/spell helper
+paths, but they are inventory stock, not combat effect timers. Do not
+model the carried item counter band as a sleep/charm counter table.
 
 **Active-effect display counter.** Protection, Quickness, Mass Charm, and
 Negate Magic install a single shared visible tag/counter rather than writing a
@@ -316,7 +341,10 @@ per-character status byte. A resident update helper ages this counter: zero and
 255 are inert, other values decrement when that helper runs, and expiry clears
 the visible tag and requests a redraw. This counter is not the time system's
 torch/light-spell counter; do not model it as one decrement per minute or per
-full actor-table sweep. The tag is not display-only.
+full actor-table sweep. The traced combat-side aging endpoint is the
+active-player/selection cleanup path; Time Stop's `T` tag uses the same counter
+shape, while the per-turn clock cleanup only observes `T` to skip minute
+advancement. The tag is not display-only.
 Protection's `P` tag adds 3 to party-member combat defense; Quickness's `Q` tag
 randomly gates player-side combat command dispatch with a 0..1 roll; Mass
 Charm's `C` tag lets the AI target picker roll against the acting monster's
@@ -337,8 +365,8 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 |----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | Per-arena spawn-count table      | One byte per arena. Combined with the random reroll, decides how many monsters spawn.                                                            |
 | Per-arena leader replacement     | One byte per arena. The tile assigned to the first `count/4 + 1` "leader" monsters.                                                              |
-| Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, special death checks, and several un-classified bits still under analysis. The damage handler also has a vanish-on-death branch, but the analyzed baseline has no class row with that high bit set. |
-| Per-class AI scripts and state   | Class-scoped decision data consulted by monster turns and related interaction helpers. Live actors of the same class share one mutable class-state record; dead or inactive actors use the class's static script entry. The runner consumes the selected resource and emits AI decision outputs, but its state fields, instruction set, and class-to-special-effect map remain open. |
+| Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, special death checks, and the turn special bits for possess, blink/phase, and summon-daemon. The damage handler also has a vanish-on-death branch, but the analyzed baseline has no class row with that high bit set. |
+| Ordinary AI helper state         | Not a class script table. Ordinary monster decisions use the combat actor/effect records, target-selection scratch, per-class flag/stat tables, and shared helper outputs such as the AI step vector. Slot-local position, target, phase, flee, and visibility data remain in the combat actor/effect tables. |
 | Per-class display/narration data | Pointer data used by combat narration and class labels; this is not an AI behavior table.                                                        |
 | Per-class HP/AC/damage stats     | Eight bytes per class. Includes the base value used by the reward formula, the drop-cap byte used by the default death loot gate, and the Mass Charm threshold used by target-selection remaps. Remaining bytes are only broadly classified. |
 | Per-class name pointers          | Sixteen-bit pointers per class to the printable monster name strings.                                                                            |
@@ -349,11 +377,11 @@ The class byte is set at spawn time and never changes (death may cause a tile sw
 
 Three exit conditions end combat; each sets one of the round-loop's flag bytes, and the per-round epilogue checks them.
 
-**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round-loop exits with result code "1". The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the currently traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a durable encounter reward. A spell handler can consume the helper return before the framer boundary, as Tremor does for caster experience, but that is not the ordinary victory handoff. No separate victory message prints — the death-tile transitions tell the story.
+**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round-loop exits with result code "1". The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a durable encounter reward. This settles the framer-level boundary: ordinary loot, trigger removal, XP, gold, and karma must come from a caller-side or pre-restore consumer if they occur. A spell handler can consume the helper return before the framer boundary, as Tremor does for caster experience, but that is not the ordinary victory handoff. No separate victory message prints — the death-tile transitions tell the story.
 
 **Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine sets the defeat flag and the round loop returns "0". What happens next depends on the calling mode loop — typically a game-over sequence; a few specific encounters (the Blackthorn capture path) treat defeat as a scripted plot event rather than a death.
 
-**Escape.** When the player chooses to leave (the X-it command, or walking off an open arena edge), the leave-combat flag fires. On the *first* trigger per fight, an exit message is printed; the round loop exits with code "1". Surviving party members and monsters are *not* given a chance to land final blows — escape is immediate.
+**Escape.** Walking off an open arena edge reaches the out-of-bounds combat leave helper. On the first accepted trigger per fight, an exit message is printed; the round loop exits with code "1". Surviving party members and monsters are not given a chance to land final blows once that helper accepts. The `X` command is different: its CMDS escape handler scans for active-not-dead foes and refuses while any remain, so it is a cleanup/victory exit path rather than the ordinary flee-with-enemies-live path.
 
 The framer's restore phase runs the same way for all three — the only difference is the result code returned. Combat time advances from the round loop's round-counter wrap, which fires the per-turn cleanup with a one-minute increment; a separate one-minute exit increment is not part of the currently traced framer restore.
 
@@ -371,10 +399,9 @@ Combat is built on top of several other systems and integrates cleanly with each
   described in `magic.md`. Combat-specific gates wrap the dispatcher's call
   from within the combat C-handler. Monster turns first pass through AI intent,
   target selection, direction synthesis, and the shared combat command parser.
-  The class-specific branch that may choose monster special or spell-like
-  effects is not yet mapped to public semantic depth, and no current trace ties
-  those effects to the player spell table, premixed charges, MP, reagents, or
-  circle gates.
+  The decoded class-flag special hook may possess, blink/phase, or
+  summon-daemon before ordinary movement. These branches are separate from the
+  player spell table, premixed charges, MP, reagents, and circle gates.
 
 - **Visibility.** The arena's visibility model is similar to the world model but uses the combat terrain grid rather than the world map. Each cell ends up with one of the standard visibility byte values, and the renderer composites actors over those values.
 
@@ -384,7 +411,7 @@ Combat is built on top of several other systems and integrates cleanly with each
 
 This section records places where the picture is not yet complete or where evidence is internally inconsistent.
 
-- **Per-class flag word — un-classified bits.** Several bits in the per-class table are still unnamed. Confirmed readers cover damage/status, faction override, death behaviour, and target selection, but the remaining consumers have not been decoded to public semantic depth. Candidate buckets include damage-type modifiers, movement/terrain interaction, and monster special-action selection; do not assign stable names until the resident helper bodies are mapped.
+- **Per-class flag word - un-classified bits.** Several bits in the per-class table are still unnamed. Confirmed readers cover damage/status, faction override, death behaviour, target selection, and the possess/blink/summon-daemon turn hook. Candidate buckets for the remaining bits include damage-type modifiers and movement/terrain interaction; do not assign stable names until their resident consumers are mapped.
 
 - **Vanish-on-death branch reachability.** The damage/status helper contains a vanish branch, but direct asset verification of the analyzed `DATA.OVL` class table found no row with the corresponding high bit set. Keep the branch as an implementation option for variant data, but do not assign it to Wanderer, Blackthorn, Lord British, Shadow Lords, or any other v1 baseline class without fresh table evidence.
 
@@ -392,12 +419,12 @@ This section records places where the picture is not yet complete or where evide
 
 - **Wait commands in combat.** Space is "pass". Best evidence is "advance the actor's phase counter past zero so it does not act this round but does not lose its position in the table." Implementers should treat Space as "no movement, no attack, end the actor's turn cleanly".
 
-- **Combat Q branch body.** Combat owns a separate Q/Quit branch. It is not the resident Q save-game command, but the exact prompt, cancellation, and exit behaviour behind that branch should be traced before specifying it further.
-
 - **Combat command branch bodies.** The dispatcher-level map for all twenty-six
-  letters and the special keys is complete. Several delegated branches (G, J,
-  K, O, P, R, S, U, Y, Z) still need their helper bodies traced before this
-  spec can enumerate every success/refusal case.
+  letters and the special keys is complete, and most delegated overlay targets
+  are now named. Remaining exactness work is narrower: the exact CAST
+  continuation and item effects reached by combat U-Use, any P-Push
+  scene/object edge cases, and command-family edge cases in the
+  SJOG/CMDS/ZSTATS helpers.
 
 - **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16, Fireball rolls 1..30, and Kill passes the decimal 99 instant-kill sentinel after the shared aiming/projectile path accepts a collision target. The directed target-walk family is also exact at public semantic depth for faction behavior: the shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup, reject same-faction actors, or reject the caster if the caster's cell is selected. Sleep applies sleep status, Poison Wind applies a resistance/random gate before poison status, Death Wind uses the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact is bounded to the post-step effect hook, and combat field casting reaches a shared arena-field helper before splitting placement from application. Placed fields live as active-object markers in the temporary combat table, and the contact scan matches those markers by coordinate while skipping only the current active actor slot; contact applies without consuming the marker. Poison Field skips linked active-object classes `>= 0x80`, poisons only Good party members, and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members and otherwise writes party sleep status or the non-party combat sleep/disabled bit. Fire Field contact rolls raw 1..21 before defense, Energy Field supplies raw zero to the same path, and the placement path's target-selection/coordinate-lookup/acceptance gate is bounded down to slot-order and flag eligibility. Field markers are not aged by the placement, contact, redraw, generic active-object tick, or monster death/record-clear paths; they persist until combat exit restores the pre-combat active-object table.
 
@@ -405,28 +432,35 @@ This section records places where the picture is not yet complete or where evide
 
 - **Active-effect side effects.** The shared display counter for Protection,
   Quickness, Mass Charm, and Negate Magic is now traced through cast setup and
-  the helper-invocation aging boundary. Combat distinguishes that helper path
-  from the time/render cleanup on ten-ready-action wraps; exact helper-body
-  semantics and Time Stop's separate decrement path remain in magic/spell-list
-  open work. Confirmed consumers are Protection's `P` defense bonus, Quickness's
-  `Q` player-dispatch random gate, Mass Charm's `C` class-threshold AI-target
-  remap, and Negate Magic's `N` combat-cast absorption path.
+  the counter-aging boundary. Combat distinguishes that path from the
+  time/render cleanup on ten-ready-action wraps; zero and 255 are inert, other
+  values decrement at the reached cleanup endpoints, and expiry clears the
+  shared tag and requests redraw. Time Stop's `T`/10 runtime tag uses the same
+  counter shape, but the clock cleanup only observes `T` to suppress minute
+  advancement. Confirmed consumers are Protection's `P` defense bonus,
+  Quickness's `Q` player-dispatch random gate, Mass Charm's `C`
+  class-threshold AI-target remap, and Negate Magic's `N` combat-cast
+  absorption path.
 
 - **Flee mechanics beyond Cause Fear.** The Cause Fear spell is a confirmed
   public writer of the fleeing flag, and Section 9 specifies how the flag
-  reverses movement. Other possible writers — low-HP morale, class-script
-  decisions, or monster special effects — are not yet fully traced.
+  reverses movement. Other possible writers, such as low-HP morale or helper
+  side effects, are not yet fully traced. The decoded possess/blink/summon-daemon
+  hook does not set this flag.
 
-- **Monster special-action/effect map.** The monster-turn path proves intent
-  staging, shared target selection, phase/hidden/invisibility filters,
-  no-target fallback, movement-vector synthesis, synthesized command dispatch,
-  and parser reuse. The class-script dispatch boundary is now identified,
-  including the class-wide live-state versus inactive-script split, but the
-  intent selector's class-effect map and the script runner's state fields,
-  instruction set, and effect mapping are not yet decoded to public semantic
-  depth.
-  Treat monster spell-like effects as unresolved per-class combat-AI behavior
-  until those helper bodies are mapped.
+- **Monster special-action variants.** The monster-turn path proves the
+  class-flag special hook, shared target selection, phase/hidden/invisibility
+  filters, no-target fallback, movement-vector synthesis, synthesized command
+  dispatch, and parser reuse. The v1 baseline assigns the decoded possess bit
+  to Blackthorn, Gazer, Wisp, Daemon, and Shadow Lord. The blink/phase and
+  summon-daemon branches are implemented but not assigned by the analyzed v1
+  class table, so keep them data-driven for variant assets.
+
+- **Ordinary AI helper identities.** The old "class script runner" hypothesis
+  has been removed. Remaining exactness work is narrower: helper identities for
+  some step-permission, step-validity, fallback-target, and no-target cleanup
+  calls; exact labels for a few scene/class exceptions in the target picker;
+  and any additional writers of the flee bit.
 
 - **Round counter wrap at ten.** The per-round counter wraps at ten and fires a tile-render on every wrap. Likely a "render every N actor-turns" cadence balancing CPU cost on original hardware. A modern implementation can treat it as "redraw every frame" without preserving the cadence.
 
@@ -446,6 +480,18 @@ The behaviour described here was derived from the private function and format no
   monster turns, the verb-stitching narration buffer, and the unified
   per-letter parser — derived from
   `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
+- Delegated combat command targets and edge behaviour for SJOG
+  Get/Jimmy/Open/Search/Klimb, CMDS X-it/Yell/Push, ZSTATS
+  Ready/Z-stats, and the unresolved CAST-owned combat U-Use continuation -
+  derived from the corresponding COMBAT stub table plus
+  `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
+  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`,
+  `u5-decomp/functions/CMDS_OVL/0x17EC_cmds_escape.md`,
+  `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`,
+  `u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`, and
+  `u5-decomp/functions/ZSTATS_OVL/_OVERVIEW.md`, with
+  `u5-decomp/functions/CAST_OVL/_OVERVIEW.md` and
+  `u5-decomp/functions/CAST_OVL/all_spells.md` as CAST-side cross-checks.
 - The AI target-selection helper, the backwards walk and filter chain, the Mass
   Charm active-effect tag remap with class-threshold random gate, the
   phase/hidden suppression exception, the ordinary invisibility filter, the
@@ -454,12 +500,14 @@ The behaviour described here was derived from the private function and format no
   direction output with flee inversion — derived from
   `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the sibling
   COMBAT damage/death note that identifies the same random-byte helper.
-- Protection's active-effect defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, and the active-effect counter-aging rule — derived from local ULTIMA.EXE and COMBAT helper analysis summarized without copying implementation text.
+- Protection's active-effect defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, Time Stop's `T`/10 runtime tag, and the active-effect counter-aging rule — derived from local ULTIMA.EXE, COMBAT, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
 - The damage application and status transitions, the per-monster-class flag word's effect on damage and death, the special-class death paths, and the slime-divide replication path — derived from `u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`.
 - The step-or-attack primitive — direction-to-unit-step translation, arena range check, on-success and on-failure narration, and the post-step effect gate — derived from `u5-decomp/functions/SJOG_OVL/0x1C56_actor_step_or_attack.md`.
-- The AI class-script dispatch boundary, live-state versus inactive-script split,
-  and direction-vector handoff, derived from
-  `u5-decomp/functions/COMSUBS_OVL/0x0094_ai_pick_direction.md`.
+- The monster special-ability hook, including possess, blink/phase,
+  summon-daemon, branch ordering, chance gates, and baseline class-flag
+  assignments, derived from
+  `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`
+  and the `DATA.OVL` class-flag table.
 - The combat-side spell prereq cascade — target validity, target visibility/awakeness, vehicle gate, MP/resource check — derived from `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
 - The shared spell dispatcher used by combat casts — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`.
 - The combat spell-damage wrapper used by Magic Missile, Fireball, and Kill — derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.

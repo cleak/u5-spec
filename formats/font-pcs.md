@@ -1,192 +1,146 @@
 # Proportional Font (`PROPORT.PCS`)
 
-Format specification for Ultima V's proportional character-set file,
-`PROPORT.PCS`. This file supplies the proportional font used by the intro
-narrative and character-creation text renderer. The on-disk compression and the
-decoded glyph table are specified here.
+Format and runtime-use specification for Ultima V's proportional character-set
+resource, `PROPORT.PCS`.
 
 ## 1. Overview
 
-`PROPORT.PCS` is a compressed proportional font resource. Unlike the fixed-cell
-`.CH` and `.HCS` font files, it is not directly field-walkable from disk: the
-file begins with the shared Ultima V LZW resource envelope, followed by a
-compressed payload that expands to a compact proportional glyph table.
+`PROPORT.PCS` supplies the proportional font used by the intro narrative,
+Return-to-View text, and character-creation/questionnaire text. It is not a
+raw fixed-cell font like `.CH` or `.HCS`, and the updated EGA driver pass shows
+that it does not use the paired-graphics LZW envelope. It belongs to the same
+driver-compressed sparse strip resource family as `TITLE.BIT`, `BRITISH.BIT`,
+and `WD.BIT`.
 
-The file is loaded during character creation and reused by the paragraph
-renderer. Runtime text layout uses per-character widths rather than a fixed
-cell advance. This is the key behavioural distinction between `PROPORT.PCS` and
-the raw monospace font files.
-
-The decoded table covers the printable range from space through lowercase `z`.
-Each decoded glyph carries an advance width and eleven one-bit bitmap rows.
+The paragraph renderer receives the loaded `PROPORT.PCS` segment, uses a
+resident 128-entry width table for word wrapping, and draws proportional
+glyphs through the display/font path.
 
 ## 2. File Identity
 
-There is one known `.PCS` file in the Ultima V DOS asset set:
-
 | File | Role | On-disk form |
 |---|---|---|
-| `PROPORT.PCS` | Proportional text font for narrative and character creation | LZW-compressed resource |
+| `PROPORT.PCS` | Proportional text font for narrative and character creation | Driver-compressed sparse strip resource |
 
-The resident asset-name table points at `PROPORT.PCS`, and the character
-creation overlay loads it before rendering the gypsy-wagon narrative,
-questionnaire prompts, and related prose.
+The character-creation overlay loads this file before rendering the gypsy
+arrival narrative and questionnaire prompts. The intro slide loop uses the
+same paragraph renderer for story text.
 
-## 3. Purpose
+## 3. Driver Resource Envelope
 
-The proportional font supports text that needs smoother spacing and more
-controlled layout than the normal cell printer can provide. Confirmed runtime
-uses include:
-
-- Intro-story narrative text drawn over slide artwork.
-- Character-creation narrative paragraphs.
-- Character-creation question text.
-
-These paths use a paragraph renderer that measures upcoming text with a
-per-character width table and performs word wrapping inside a pixel-space text
-rectangle. Ordinary status, prompt, and map text can still use the engine's
-fixed-cell text primitives; `PROPORT.PCS` is for the richer paragraph layout
-paths.
-
-## 4. LZW Container
-
-`PROPORT.PCS` uses the same resource-compression envelope as the paired
-graphics archives and the compressed `.BIT` files:
-
-1. A four-byte little-endian unsigned decoded length.
-2. A variable-width LZW payload.
-
-For the shipped file, the decoded length is 1,276 bytes and the compressed file
-is 802 bytes. The high word of the decoded length is zero, which is why earlier
-surveys described the header as a length word followed by a zero word.
-
-The LZW dialect is the same one specified in `formats/tiles.md`: codes start at
-nine bits, use little-endian bit packing, reserve code 256 as clear and 257 as
-end, add user dictionary entries starting at 258, grow to twelve bits, and
-handle the standard self-reference case. A decoder must expand exactly the
-declared number of bytes before the resource body is interpreted.
-
-## 5. Decoded Font Layout
-
-After LZW expansion, the body is a small indexed glyph table:
+`PROPORT.PCS` starts with the same sparse pointer-table envelope described in
+`formats/bit.md` and `systems/display-driver-abi.md`:
 
 | Field | Width | Meaning |
 |---|---:|---|
-| Glyph count | 2 bytes | Little-endian count. The shipped file contains 91 glyphs. |
-| Offset table | 2 x count bytes | Little-endian body-relative offsets, one per glyph. |
-| Glyph blocks | 12 bytes each | One width byte followed by eleven bitmap-row bytes. |
+| Entry count | 2 bytes | Number of pointer-table entries scanned by the driver/font path. |
+| Entries | `entry_count * 4` bytes | Pointer word plus metadata word per entry. |
+| Strip/glyph bodies | variable | Driver-consumed records reached through nonzero pointers. |
 
-The shipped decoded body has a 184-byte table header (`2 + 91 * 2`) followed by
-91 fixed-size glyph blocks. Every offset points to the start of one 12-byte
-block, and the blocks are contiguous.
+Zero pointer entries are skipped. Nonzero pointers are byte offsets inside the
+loaded resource. The metadata word is not consumed during pointer-table
+scanning, but should be preserved by tools that rewrite or round-trip the file.
+If a pointer targets a metadata word, the pointed bytes are interpreted as the
+start of that body record.
 
-Glyph slot zero corresponds to character code `0x20` (space). Slot `n`
-corresponds to code `0x20 + n`, so the covered range is `0x20..0x7A`
-inclusive. Codes outside that range do not have glyph records in this file.
+## 4. Runtime Font Model
 
-Each glyph block has this layout:
+The paragraph renderer is a proportional text layout engine, not a normal
+40-column cell printer. It uses:
 
-| Field | Width | Meaning |
-|---|---:|---|
-| Advance width | 1 byte | Pixel advance used by the proportional renderer for this glyph. Observed values fit in 0..7. |
-| Bitmap rows | 11 bytes | One byte per row, top to bottom. Bits are most-significant-bit first within each row; a set bit is foreground. |
+| Component | Owner | Purpose |
+|---|---|---|
+| Text buffer | Caller | NUL-terminated narrative/question/story text. |
+| Font segment | Loaded `PROPORT.PCS` resource | Glyph image source. |
+| Width table | Resident data | 128 byte widths indexed by character code. |
+| Text rectangle | Resident paragraph descriptor | Pixel-space bounds and current cursor. |
 
-The bitmap rows are one byte wide even for narrow glyphs. The width byte tells
-the renderer how far to advance and how much of the row is visually meaningful;
-unused right-side bits are padding. The space glyph is blank and has a zero
-width in the resource, so any visible word spacing beyond that is renderer text
-layout behaviour, not bitmap content.
+For each printable character, the renderer measures and advances by the
+character's width-table entry. The glyph image source comes from the loaded
+font resource. Spaces are word-wrap opportunities; newline forces a line break;
+underscore is a soft-hyphen marker; and `{` is treated as a paragraph/page
+marker by the surrounding caller flow.
 
-## 6. Rendering Behaviour
+## 5. Layout Behaviour
 
-The paragraph renderer consumes ordinary byte strings with a few text-layout
-conventions handled outside the font file:
+The renderer walks the text stream left-to-right:
 
-- Character bytes select proportional glyph slots.
-- The renderer advances by the glyph's measured width.
-- Spaces are word-wrap opportunities.
-- Newline characters force a line break.
-- Some narrative text uses marker characters for paragraph or syllable
-handling; those are text-stream semantics, not font-file metadata.
+1. Track a pixel cursor inside the active paragraph rectangle.
+2. Use the width table to measure the current character and look ahead at words
+   when handling spaces.
+3. If the next word would exceed the right edge, wrap before rendering it.
+4. Render printable glyphs from the loaded font segment.
+5. Advance the cursor by the measured character width.
+6. Move to the next line on newline or a wrap decision.
 
-The renderer measures ahead at spaces to decide whether the next word fits
-within the active text rectangle. It updates a pixel cursor and wraps to the
-next line when needed. The line stride and clipping rectangle come from runtime
-text-window state, not from `PROPORT.PCS`.
+The font file does not define the text rectangle, line stride, page waits, or
+keyboard pauses. Those are runtime behaviours in the intro and chargen flows.
 
-The font file does not define colours. The active display mode and text-render
-state choose foreground/background treatment when glyph pixels are drawn.
+## 6. Expected Consumers
 
-## 7. Expected Consumers
+Confirmed consumers:
 
-Confirmed consumers are:
+- Character creation: gypsy arrival narrative and questionnaire prompts.
+- Questionnaire iteration: one prompt per virtue-pair question.
+- Intro slide show: story text over slide artwork.
+- Return-to-View and related intro-local text paths that call the shared
+  paragraph renderer.
 
-- The character-creation entry path, which loads `PROPORT.PCS` before rendering
-  narrative and question text.
-- The proportional paragraph renderer in `FONT.OVL`, which receives a font
-  segment and uses runtime glyph widths during layout.
-- The intro slide loop, which calls the same paragraph renderer for story text
-  over slide artwork.
+The ordinary status/prompt text path uses fixed-cell fonts and the text-output
+system, not `PROPORT.PCS`.
 
-The fixed-width text printer in the resident executable is a separate path and
-should not be treated as a `PROPORT.PCS` consumer unless a future trace shows
-otherwise.
+## 7. Validation And Error Handling
 
-## 8. Validation And Error Handling
+A strict loader should:
 
-A byte-compatible loader should enforce these invariants:
+- Treat the first word as a resource entry count, not as an LZW decoded length.
+- Require pointer-table entries to fit in the loaded resource image prepared
+  for driver/font decoding.
+- Skip zero pointers.
+- Require nonzero pointers to reference complete driver/font records.
+- Preserve pointer-entry metadata even when it is not needed by the EGA
+  renderer.
+- Reject text-render requests that index outside the supported width table or
+  loaded glyph resource, unless the caller defines a substitution policy.
 
-- The four-byte decoded length must match the number of bytes produced by LZW.
-- The shipped `PROPORT.PCS` decoded length is 1,276 bytes.
-- The decoded glyph count must be nonzero and the offset table must fit inside
-  the decoded body.
-- Every glyph offset must point to a complete 12-byte glyph block.
-- The shipped file contains exactly 91 glyphs covering `0x20..0x7A`.
-- Character codes outside the covered range should be rejected, substituted, or
-  handled by caller-specific text control logic rather than indexing past the
-  table.
+As with `.BIT`, the original resource image can be larger than the byte-exact
+file view used by an inspection tool, and known sparse tables may be heavily
+over-allocated. Zero pointer entries are compatible no-ops; large entry counts
+are not errors by themselves.
 
-A strict loader should reject short LZW output, overlong output, malformed
-offsets, or a glyph block that would run past the decoded body.
+## 8. Known Uncertainties
 
-## 9. Known Uncertainties
+- **Glyph body field names.** The paragraph renderer's width table is resident
+  data, while glyph image records are reached through the loaded font segment.
+  The exact authoring-level names for each body field remain a font-renderer
+  detail.
+- **Pointer-entry metadata.** As with `.BIT`, the EGA strip decoder does not
+  consume the metadata word. Its authoring-tool meaning remains unidentified.
+- **Codes outside normal narrative text.** The renderer has a 128-entry width
+  table, but shipped prose appears to stay within ordinary ASCII plus the
+  documented control markers.
 
-- **Renderer spacing for blanks and markers.** The decoded space glyph has zero
-  width. The paragraph renderer may apply additional spacing or control-marker
-  handling outside the font file.
-- **Runtime width-table copy.** The decoded glyph width byte is the source a
-  clean implementation should use. The exact original-memory copy path into the
-  renderer's width table is an implementation detail.
-- **Codes above lowercase `z`.** The decoded table ends at `0x7A`. Any original
-  text stream use of higher printable ASCII would need a caller-side fallback.
+## 9. Cross-References
 
-## 10. Cross-References
-
-- Fixed-cell font and bitmap survey: `formats/bit.md` and the private source
-  notes listed below.
-- Narrative text files rendered with the proportional font:
+- Driver-compressed sparse strip resource family: `formats/bit.md`.
+- EGA display-driver ABI: `systems/display-driver-abi.md`.
+- Paragraph/text behaviour: `systems/text-output.md`, `systems/chargen.md`,
+  and `systems/intro.md`.
+- Narrative text resources rendered with this font:
   `formats/story-dat.md`, `formats/question-dat.md`, and `formats/end-dat.md`.
-- Intro and character-creation systems are expected to document when the
-  renderer is invoked and which text is passed to it.
+- Fixed-cell fonts: `formats/font-ch.md` and `formats/font-hcs.md`.
 
-## 11. Sources
+## 10. Sources
 
-This spec is a cleanroom prose rewrite derived from the project notes below. It
-intentionally omits decompiled code, assembly, raw address tables, binary
-dumps, and private implementation identifiers.
+Cleanroom prose derived from private analysis notes. This document intentionally
+omits decompiled source, assembly excerpts, raw address tables, and raw glyph
+data.
 
-- First-pass font and bitmap survey, including the `PROPORT.PCS` compressed
-  envelope, file size, declared decoded size, and comparison with `.BIT`:
-  `u5-decomp/formats/fonts-bitmaps.md`.
-- Tile-graphics survey, used for the shared LZW envelope and compression
-  dialect:
-  `u5-decomp/formats/tile-graphics.md`.
+- Proportional paragraph renderer and width-table use:
+  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
 - Character-creation loader and `PROPORT.PCS` consumer path:
   `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
-- Proportional paragraph renderer behaviour and runtime width-table use:
-  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
-- Intro slide-loop use of the proportional renderer:
-  `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
-- Fresh local loader-path verification decoded `PROPORT.PCS` with the shared
-  LZW dialect and field-walked the 91 decoded glyph records; no disassembly or
-  raw glyph bytes are reproduced here.
+- EGA driver sparse strip decoder shared with `.BIT` resources:
+  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
+- EGA driver ABI overview:
+  `u5-decomp/formats/ega-driver.md`.

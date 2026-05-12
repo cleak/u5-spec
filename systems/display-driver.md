@@ -9,11 +9,13 @@ driver ABI, but they do need a shared rendering contract: which coordinate
 system callers use, which draw operations exist, when frames become visible,
 and which asset formats feed those operations.
 
-This document defines that v1 contract for a cleanroom engine. It is not a
-byte-level specification of `EGA.DRV`, `CGA.DRV`, `T1K.DRV`, or `HER.DRV`, and
-it does not reproduce driver jump tables, register conventions, port writes, or
-page-flip code. A modern implementation may collapse the historical drivers
-into one renderer as long as it preserves the visible behaviour described here.
+This document defines that v1 contract for a cleanroom engine. The
+driver-facing ABI for the EGA baseline is specified separately in
+`display-driver-abi.md`; that companion document names dispatch slots and
+resource contracts without reproducing driver code. A modern implementation may
+collapse the historical drivers into one renderer as long as it preserves the
+visible behaviour described here and the asset-facing contracts in the format
+specs.
 
 ## 2. Driver Selection
 
@@ -87,11 +89,9 @@ has been decoded:
 
 - Paired `.16` and `.4` graphics use the shared LZW envelope and the graphics
   archive layout in `formats/tiles.md`.
-- `PROPORT.PCS` uses the shared LZW envelope and the proportional glyph layout
-  in `formats/font-pcs.md`.
-- `TITLE.BIT` and `BRITISH.BIT` use the shared LZW envelope and the decoded
-  one-bit layouts in `formats/bit.md`.
-- `WD.BIT` is raw one-bit artwork as described in `formats/bit.md`.
+- `PROPORT.PCS`, `TITLE.BIT`, `BRITISH.BIT`, and `WD.BIT` use the
+  driver-compressed sparse strip resource format described in
+  `formats/font-pcs.md`, `formats/bit.md`, and `display-driver-abi.md`.
 - Fixed-cell fonts use `formats/font-ch.md` and `formats/font-hcs.md`.
 
 The renderer should not infer a file format from the historical driver call
@@ -129,6 +129,12 @@ A modern engine may use double buffering, dirty rectangles, retained surfaces,
 or an immediate-mode canvas. The visible result should still reflect the same
 ordering: a frame is presented only after the relevant gameplay, animation,
 visibility, and draw steps for that tick have completed.
+
+For the EGA-compatible baseline, ordinary viewport tiles and fixed-cell text
+are drawn directly to the front buffer. The historical driver back buffer is
+reserved for full-screen bitmap staging and transition/effect paths such as
+dissolves, silhouette stamping, and title/menu animation; it is not the
+ordinary tile or glyph destination.
 
 ## 8. Intro and Cutscene Effects
 
@@ -189,6 +195,8 @@ in scope.
 ## 9. Implementation Rules
 
 - Treat EGA-compatible 320-by-200 rendering as the v1 baseline.
+- Use `display-driver-abi.md` for binary-compatible driver dispatch, including
+  the corrected `0x3F` filled-rectangle and `0x42` compressed-bitmap entries.
 - Keep text-cell behaviour in `text-output.md`; use the renderer only for
   prepared cells, clears, scrolls, and final pixel conversion.
 - Normalize and clamp pixel rectangles before drawing.
@@ -202,9 +210,9 @@ in scope.
 
 ## 10. Known Uncertainties
 
-- **Exact binary driver ABI.** The original dispatch cells and driver entry
-  offsets are not a public v1 requirement. Exact register-level compatibility
-  with `EGA.DRV` remains follow-up work.
+- **Alternate driver ABI details.** The EGA dispatch surface is specified in
+  `display-driver-abi.md`. Exact CGA, Hercules, and Tandy conversion details
+  remain follow-up work unless those historical backends become targets.
 - **Hardware page flipping and dirty rectangles.** The public contract requires
   frame presentation in the right order, but not the original EGA page layout or
   port-level flip sequence.
@@ -236,6 +244,10 @@ addresses.
 
 - Driver selection and load sequence:
   `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
+- EGA dispatch ABI, slot inventory, rectangle fill, driver-compressed bitmap
+  decode, 16-by-16 tile blit, and 8-by-8 glyph blit:
+  `u5-decomp/formats/ega-driver.md` and the `u5-decomp/functions/EGA_DRV/`
+  notes.
 - Text descriptor initialization, cell rendering, rectangle conversion, and
   scroll/clear dispatch:
   `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`,

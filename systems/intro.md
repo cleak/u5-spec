@@ -43,7 +43,12 @@ After boot setup, the intro builds the title presentation in layers:
 6. Play the signature animation over the title screen unless the player skips it.
 7. Load and draw the start/menu screen used behind the six menu options.
 
-The compressed bitmap and screen-panel assets use the shared LZW resource envelope. The intro orchestrates file selection, loading, placement, and draw calls; the data formats themselves belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
+The intro uses two different graphics-resource families. Screen-panel assets
+such as `STARTSC` and `STORY1` through `STORY6` use the paired `.16`/`.4` LZW
+archive family. `TITLE.BIT`, `BRITISH.BIT`, and `WD.BIT` use the display
+driver's compressed bitmap resource format instead. The intro orchestrates file
+selection, loading, placement, and draw calls; the data formats themselves
+belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
 
 The title phase accepts an early `J` keystroke. If the player presses `J` during the first title wait, the intro skips the remaining title flourish and commits to the Journey Onward load path. This is a convenience fast path into the same load behaviour reached by selecting `J` from the finished menu.
 
@@ -343,7 +348,10 @@ gameplay time.
 - **Story rectangle-transition helper.** The fixed story-step list, primary story-art placement, secondary draws, text source, key-advance behavior, and affected rectangle for the one local transition are known. The intro call site delegates that rectangle once to a resident/display helper; the helper's internal wipe pattern and pacing still need a focused helper trace or capture if the intro must be pixel-perfect.
 - **Acknowledgement screen content.** The acknowledgement branch is identified as a self-contained intro submenu, but its exact text and pagination are not specified here to avoid copying binary text dumps.
 - **Title tick replacement art.** The EGA baseline destination rectangle, four-frame cadence, and driver-local ownership are known. The original frame pixels live inside the historical display driver rather than an external asset; a modern cleanroom renderer needs independently authored replacement frames if exact driver binary reuse is out of scope.
-- **Display-driver binary entries.** The intro uses several display operations for bitmap drawing, rectangle transitions, display-state changes, and title ticks. Their public rendering contract is in `display-driver.md`; exact binary driver entries remain deferred.
+- **Alternate display-driver entries.** The EGA dispatch surface for rectangle
+  fill, driver-compressed bitmap resources, and title ticks is now specified in
+  `display-driver-abi.md`. Exact CGA, Hercules, and Tandy conversion details
+  remain alternate-hardware parity work.
 
 ## 16. Sources
 
@@ -354,7 +362,11 @@ The behaviour described here was derived by reading the function and format note
 - Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh local rectangle-transition helper analysis.
 - Return-to-View entry point, preview map-strip loader, script-stream start, helper schedules, and screen save/restore behaviour: `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
 - Title tick ownership, EGA destination rectangle, four-frame cadence, and the clarification that `FLAMES.OVL` is a scratch-buffer thunk, not the flame renderer: `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md` and fresh local title-animation helper analysis.
-- Compressed-bitmap rectangle dispatch and driver-side title/bitmap rendering relationship: `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`.
+- Filled-rectangle dispatch, corrected driver-compressed bitmap dispatch, and
+  driver-side title/bitmap rendering relationship:
+  `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`,
+  `u5-decomp/functions/EGA_DRV/0x1180_fill_rect_v2.md`, and
+  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
 - Journey Onward load path, empty-save guard, `SAVED.GAM` and `SAVED.OOL` reads, object-overlay mirror writes, underworld disk-swap branch, and final return to the main loop: `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - Transfer/continue roster path, transfer disk-state setup, seed loads, roster/status screen rendering, and commit/abort behaviour: `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - Outer main-loop boot context, scene dispatch after intro return, and overlay call model: `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
@@ -363,7 +375,6 @@ The behaviour described here was derived by reading the function and format note
 - `BRITISH.PTH` file structure and its confirmation as a title-screen path stream rather than an NPC schedule file: `u5-decomp/formats/npc-tlk-pth.md`.
 - Title, start-screen, and story-panel graphics container format: `u5-decomp/formats/tile-graphics.md`.
 - Story text data observations used to identify the intro slide text source: `u5-decomp/formats/data-tables.md`.
-- Fresh local title-sequence verification identified the fixed placements for
-  all ten decoded `TITLE.BIT` blocks, the decoded `BRITISH.BIT` bitmap, and the
-  four `BRITISH.PTH` pen origins; no code, disassembly, or raw data is
-  reproduced here.
+- Fresh local title-sequence verification identified the visible title
+  sequencing and the four `BRITISH.PTH` pen origins; no code, disassembly, or
+  raw data is reproduced here.
