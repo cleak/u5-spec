@@ -24,11 +24,52 @@ All 131 real `.TLK` entries are referenced by at least one occupied roster
 slot. The named roster-slot count is higher than the unique `.TLK` count because
 `CASTLE:1` uses the same Gorn dialogue record for six roster slots.
 
-The main incomplete part is the human-readable location mapping. The table's
-`Loc` column is therefore a safe data key: file family plus sub-map index. For
+The `Loc` column is a stable data key: file family plus sub-map index. For
 example, `TOWNE:7` means sub-map seven of the town-family roster and its paired
-town-family dialogue file. The exact in-game place name for every sub-map is
-deferred to the gazetteer/location-order pass.
+town-family dialogue file. Runtime scene bytes `1..32` map to these keys by
+class `(scene - 1) >> 3` and sub-map `(scene - 1) & 7`; the gazetteer owns the
+human-readable place names and overworld-entry coordinates.
+
+For convenience, the roster keys resolve to these public scene names:
+
+| Scene | Loc | Place |
+|---:|---|---|
+| 1 | `TOWNE:0` | Moonglow |
+| 2 | `TOWNE:1` | Britain |
+| 3 | `TOWNE:2` | Jhelom |
+| 4 | `TOWNE:3` | Yew |
+| 5 | `TOWNE:4` | Minoc |
+| 6 | `TOWNE:5` | Trinsic |
+| 7 | `TOWNE:6` | Skara Brae |
+| 8 | `TOWNE:7` | New Magincia |
+| 9 | `DWELLING:0` | Fogsbane |
+| 10 | `DWELLING:1` | Stormcrow |
+| 11 | `DWELLING:2` | Greyhaven |
+| 12 | `DWELLING:3` | Waveguide |
+| 13 | `DWELLING:4` | Iolo's Hut |
+| 14 | `DWELLING:5` | unnamed dwelling resident row |
+| 15 | `DWELLING:6` | unnamed dwelling resident row |
+| 16 | `DWELLING:7` | unnamed dwelling resident row |
+| 17 | `CASTLE:0` | Lord British's Castle |
+| 18 | `CASTLE:1` | Lord Blackthorn's Castle |
+| 19 | `CASTLE:2` | West Britanny |
+| 20 | `CASTLE:3` | North Britanny |
+| 21 | `CASTLE:4` | East Britanny |
+| 22 | `CASTLE:5` | Paws |
+| 23 | `CASTLE:6` | Cove |
+| 24 | `CASTLE:7` | Buccaneer's Den |
+| 25 | `KEEP:0` | Ararat |
+| 26 | `KEEP:1` | Bordermarch |
+| 27 | `KEEP:2` | Farthing |
+| 28 | `KEEP:3` | Windemere |
+| 29 | `KEEP:4` | Stonegate |
+| 30 | `KEEP:5` | The Lycaeum |
+| 31 | `KEEP:6` | Empath Abbey |
+| 32 | `KEEP:7` | Serpent's Hold |
+
+The three unnamed dwelling rows are not transcription omissions. Their
+resident name strings are blank in the analyzed data, so this catalog keeps the
+stable storage key rather than inventing a place name.
 
 ## 2. How To Read The Table
 
@@ -37,15 +78,19 @@ matching `.TLK` file. `Kw` is the number of variable keyword/response pairs
 after the five fixed leading dialogue entries; the keywords themselves are not
 listed here.
 
-`Tag` is the roster role/sprite/interaction tag shown as two hexadecimal digits.
-It is safe as an opaque identifier, but the semantic enum is not fully decoded.
-Do not read `50`, `54`, `70`, etc. as role names yet.
+`Tag` is the roster type byte shown as two hexadecimal digits. It is the
+engine's occupancy and sprite-class byte, not the schedule AI. Zero means an
+empty slot; nonzero means occupied. Ordinary visible NPCs derive their sprite
+from this value. `01` forces the default human/person sprite, and `FC` is also
+used by the runtime player mirror in town mode.
 
 The schedule column uses the roster's three-waypoint model:
 
 - `A`, `B`, and `C` are the three stored waypoints.
-- `m#` is the per-waypoint AI/mode byte. Its value-to-behaviour mapping is
-  still open.
+- `m#` is the per-waypoint AI/mode byte. The values are interpreted in
+  `systems/npc-schedules.md`: `m0` stationary, `m1` bounded wander, `m2`
+  unbounded wander, `m3` follow/shadow, `m4` approach/attack, `m5` reserved
+  engage path, `m6` guard/blocking event, and `m7` randomized chase.
 - `@(x,y,z)` is the waypoint coordinate in the location's 32 by 32 grid. `z`
   is shown as signed when the byte is the observed below-floor sentinel.
 - `A 21-09` means waypoint A applies from hour 21 through hour 8, wrapping
@@ -232,38 +277,76 @@ are `129` through `136` and `255`; they do not resolve to real `.TLK` records
 in the paired file and likely mark guards, generic role actors, hostile actors,
 or non-speaking schedule participants.
 
-The occupied roster uses 25 distinct role tags:
+Two named cases are intentionally special:
+
+- Lord British's roster slot in `CASTLE:0` has a no-dialogue id; his throne-room
+  conversation is handled by engine logic rather than by a normal `CASTLE.TLK`
+  blob.
+- Lord Blackthorn's castle reuses the same Gorn dialogue id for multiple guard
+  roster slots. Those guards are interchangeable schedule actors sharing one
+  authored dialogue record.
+- The Blackthorn capture audience and rescue/refuge scenes do not use this
+  roster as ordinary town NPC scheduling state; they are cinematic overlay
+  flows specified in `systems/blackthorn.md`.
+
+Excluding the reserved slot-zero rows, the occupied roster uses 25 distinct role
+tags:
 
 `01`, `0E`, `10`, `11`, `1B`, `1E`, `28`, `40`, `44`, `48`, `50`, `54`,
 `58`, `5C`, `68`, `6C`, `70`, `78`, `90`, `94`, `B5`, `B6`, `B8`, `D8`,
 `FC`.
 
-The most common observed tags are `50` (79 occupied slots), `70` (68), `54`
-(44), `48` (20), `40` (16), `90` (14), `68` (13), `44` (12), and `11` (12).
-Their human-readable role names are not yet safely known.
+Slot zero can also carry nonzero sentinel tags in the shipped files. Those
+sentinel rows are structural markers, not live NPCs, and the scheduler still
+starts at slot one.
 
-## 5. Gaps
+| Tag | Engine-facing role |
+|---:|---|
+| `01` | Default-person sentinel; the sprite-link helper forces the standard person tile instead of using the tag as a direct sprite class. |
+| `0E` | Rare walking actor class; eligible for the town activation mask type gate. |
+| `10`, `11` | Unmounted horse / horse-frame classes used in stable or paddock contexts. |
+| `1B` | Unmounted magic-carpet class. |
+| `1E` | Rare static/special actor class. |
+| `28` | Rare vehicle or fixture-like actor class. |
+| `40` | Noble/lady-style human class. |
+| `44` | Lord, scholar, or sage-style human class. |
+| `48` | Knight/fighter/companion-style human class. |
+| `50` | Generic adult townsperson class; the most common named-NPC sprite class. |
+| `54` | Shared shop/service actor class, paired with shop-trigger dialogue ids. |
+| `58`, `5C` | Uncommon human actor classes; keep the tag when no local name clarifies the role. |
+| `68` | Bard, jester, or performer-style human class. |
+| `6C` | Rare nobility or dignitary-style human class. |
+| `70` | Silent guard or patrol class; guard-like tags participate in alarm/guard handling. |
+| `78` | Court-jester class. |
+| `90` | Monster or non-humanoid actor class used for hostile or unusual town actors. |
+| `94` | Animal, pet, or livestock-style actor class. |
+| `B5`, `B6`, `B8` | Monster-variant actor classes. |
+| `D8` | Lich, wizard, or death-mage style actor class. |
+| `FC` | Avatar/player-mirror class. Town entry can also allocate this class dynamically for the player slot. |
 
-The following gaps are explicit and intentional.
+The tag byte is a sprite and occupancy class, not the schedule AI byte and not
+the dialogue id. A compatible engine should preserve the byte value even when a
+human-facing label is generic, because collision, sprite selection, visibility,
+guard handling, and special town setup all consume the tag semantically.
 
-1. **Sub-map-to-place names.** The catalog identifies each location as
-   `FAMILY:sub-map`. The exact place-name order is not fully cleanroomed here,
-   especially for the `DWELLING`, `CASTLE`, and `KEEP` families. The gazetteer
-   should resolve this by tying the scene byte, resident location-name table,
-   map file, NPC file, and overworld coordinates together.
-2. **Role tag semantics.** The tag byte is listed because it is the only safe
-   role field currently derivable for every roster slot. The mapping from tag
-   values to "guard", "merchant", "child", "special NPC", and hostile variants
-   remains open.
-3. **AI/mode semantics.** Schedule mode bytes are listed as `m#`; the byte
-   values are not yet mapped to walk, sit, sleep, wander, patrol, or other
-   behaviours.
-4. **Punctuation-only name.** `CASTLE:1` slot 25 resolves to a real dialogue
+## 5. Boundaries And Remaining Work
+
+The following boundaries are explicit and intentional.
+
+1. **Punctuation-only name.** `CASTLE:1` slot 25 resolves to a real dialogue
    record whose first display entry is punctuation rather than a conventional
-   personal name. It is retained as `....` instead of invented prose.
-5. **Keyword graph.** Keyword counts are included, but keyword names and
+   personal name. The catalog preserves that authored display entry as `....`;
+   this is not a missing-person-name placeholder.
+2. **Keyword graph.** Keyword counts are included, but keyword names and
    response text are deliberately omitted. That belongs in a quest-graph pass
    and must be summarized without dumping dialogue strings.
+3. **Anonymous hidden actors.** Some hidden-mask entries in
+   `systems/npc-schedules.md` point at occupied slots that do not have a
+   personal name in the public roster. Those slots should be identified by
+   their tag-derived role labels from Section 4, such as shop/service actor,
+   silent guard or patrol, animal or livestock actor, monster-variant actor,
+   or Avatar/free-slot sentinel. This is a presentation/catalog label boundary,
+   not a missing schedule behavior.
 
 ## 6. Sources
 
@@ -274,13 +357,22 @@ offsets, raw dialogue text, or private note prose.
 Private analysis sources used:
 
 - `u5-decomp/formats/npc-tlk-pth.md` - `.NPC` block structure, `.TLK`
-  leading-pair/header structure, name-entry decoding rules, and file counts.
+  leading-pair/header structure, name-entry decoding rules, AI-byte
+  enumeration, type-byte sprite-class interpretation, and file counts.
+- `u5-decomp/formats/maps.md` - scene-byte to storage-family/sub-map mapping
+  and the Lord British / Blackthorn / Gorn roster peculiarities.
+- `u5-spec/catalogs/gazetteer.md` - public scene-name bindings for the roster
+  keys, including blank resident-name boundaries.
 - `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md` - class-family roster load,
   schedule/type/dialogue array loading, and slot-zero convention.
 - `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md` - the
   three-waypoint/four-boundary schedule selection rule.
 - `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md` - schedule
   consumer, type-byte occupancy use, and per-tick movement model.
+- `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`,
+  `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`, and
+  `u5-decomp/functions/TOWN_OVL/0x0958_npc_scatter.md` - town activation,
+  guard/alarm, and death-mask type filters.
 - `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md` - dialogue id lookup
   against the `.TLK` header and blob load.
 - `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md` - text-byte

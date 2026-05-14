@@ -13,7 +13,7 @@ There is no file header, dungeon header, level header, checksum, compression, or
 - Sixty-four cell bytes per level, stored row-major.
 - Eight columns per row, with X increasing eastward and Y increasing southward.
 
-The game loads the selected 512-byte dungeon record into a resident working image on entry and then indexes the current cell by level, row, and column within that loaded record. The on-disk bytes are not rewritten during ordinary play. Temporary changes such as opened doors, cleared fields, or room-trigger state are runtime state; they are not persisted by modifying `DUNGEON.DAT`.
+The game loads the selected 512-byte dungeon record into a resident working image on entry and then indexes the current cell by level, row, and column within that loaded record. The on-disk bytes are not rewritten during ordinary play. Temporary changes such as opened doors, cleared fields, Search rewrites, fired trap markers, or room-trigger state are runtime state; they are never persisted by modifying `DUNGEON.DAT`. If the player saves while still inside that dungeon scene, the flat `SAVED.GAM` image preserves the current working-copy bytes; leaving and re-entering rebuilds from the static `DUNGEON.DAT` record plus durable overlays such as the room-clear bitmap.
 
 For on-disk indexing, a dungeon record is 512 bytes and a level record is 64 bytes:
 
@@ -61,7 +61,7 @@ Each cell byte is split into two nibbles:
 
 The upper nibble is the first branch most runtime systems take, but it is not a complete semantic type by itself. The dungeon renderer uses it to decide whether a cell blocks sight and whether to paint a wall, passage, or door. The movement handler uses it to reject blocked movement, climb ladders, trigger fields, or enter rooms. The Look handler uses it to choose the broad cell description printed to the message window.
 
-The lower nibble is deliberately class-specific and can change how a high-nibble family behaves. For fountains, it selects the drinking effect. For energy fields, it selects the field type and may also carry the visit marker bit. For ladders, it refines the Z-transition behaviour. For the `0x6?` trap family, the full byte distinguishes observed fall traps, bomb traps, and fired/hidden marker variants. For walls and doors, it carries variants that the renderer or Search/Open handlers interpret. A generic reader should preserve the lower nibble even if it does not understand it.
+The lower nibble is deliberately class-specific and can change how a high-nibble family behaves. For fountains, it selects the drinking effect. For energy fields, it selects the field type and may also carry the visit marker bit. For ladders, it refines the Z-transition behaviour. For the `0x6?` trap family, the full byte distinguishes observed fall traps, bomb traps, and fired/hidden marker variants. For wall, door, and flavour classes, it carries presentation and runtime-rewrite variants interpreted by the renderer, Search, or Open handlers. A generic reader should preserve the lower nibble even if it does not understand it.
 
 The currently documented high-nibble dispatch families are:
 
@@ -85,11 +85,19 @@ The complete low-nibble enumeration is still not fully pinned down. Treat it as 
 
 The energy-field family has one exact mapping already established. Base bytes `0x80`, `0x81`, `0x82`, and `0x83` are sleep, poison gas, wall of fire, and electric field respectively. Runtime spell placement can preserve the map's `0x08` marker bit, producing `0x88`, `0x89`, `0x8A`, and `0x8B` variants in the loaded dungeon image. These marker variants are runtime state and do not imply that the static file was rewritten.
 
+The `0x08` bit is not a file-level visibility or exploration flag. Runtime
+readers interpret it by cell class. The shared dungeon cell reader suppresses
+that bit for classes below the wall/door band before handing a cell to the
+first-person renderer, while wall/door/room-like classes can use it as an
+extra-glyph or active-object overlay marker. V-View uses its own temporary
+visited grid outside the dungeon record, so implementations must not persist
+or infer automap discovery from this bit in `DUNGEON.DAT`.
+
 ## 4. Runtime Semantics
 
 ### Rendering
 
-Dungeon mode renders `DUNGEON.DAT` as a first-person wireframe view. The renderer is table-driven rather than a raycaster. It walks a fixed number of cells forward from the party's current position, reads each cell's class nibble, and draws precomputed wall and door segments for the visible distance bands.
+Dungeon mode renders `DUNGEON.DAT` as a sparse first-person view. The renderer is table-driven rather than a raycaster or line renderer. It walks a fixed number of cells forward from the party's current position, reads each cell's class nibble, and plots precomputed wall and door cues for the visible distance bands.
 
 The renderer checks light before drawing. If neither torch light nor spell light is active, the dungeon view is black even though the geometry remains loaded and movement still reads the same cell bytes.
 
@@ -101,9 +109,14 @@ The file does not encode the party's current position, facing, active scene, or 
 
 ### Look And View
 
-The L-Look command reads the dungeon focus cell selected by the dungeon target helper and prints a class-specific description. In ordinary play this is the cell the party is inspecting in the facing direction, but the exact helper contract belongs to the dungeon-mode command spec rather than to the file format.
+The L-Look command reads the dungeon focus cell selected by the dungeon relative-focus helper and prints a class-specific description. The helper can select ahead, right, left, or the party's current cell relative to the current facing, and Space/Pass aborts before any cell byte is read. That coordinate-selection contract belongs to `systems/dungeon-mode.md`; the format layer only supplies the packed cell byte at the chosen level/X/Y.
 
 The V-View command reads the same cell bytes to flood-paint a top-down side-panel map centered on the party. It is not a separate minimap file or table; every glyph comes from the current level's packed cell bytes and runtime presentation state. Neither Look nor View changes the on-disk file.
+
+V-View's visited/unvisited bookkeeping is scratch state for one invocation of
+the overlay. It is initialized before the flood walk, prevents repeated work
+inside that one view, and is discarded when the first-person panel is restored.
+No exploration state is stored in this format.
 
 One command-specific display exception is known: dungeon L-Look treats exact byte `0x61` as `0x00` for the description path only, so that byte is described as passage. It does not apply that normalisation to `0x69`, `0x62`, or `0x6A`. Format readers and gameplay systems must still preserve the original trap byte.
 
@@ -122,15 +135,31 @@ arena_index = arena_bank * 16 + arena_slot
 
 The shipped Despise record contains no `0xF?` room-trigger cells. The other seven room-bearing dungeons use all sixteen low-nibble slots somewhere in their geometry; repeated cells with the same low nibble share the same arena.
 
-Room-trigger durability is runtime state. The original engine patches the loaded dungeon image after combat by changing a `0xF?` trigger into `0xA?`, preserving the low nibble. The source file still contains the trigger cell and is not rewritten.
+Room-trigger durability is split between a saved room-clear bitmap and runtime
+cell rewrites. The original engine patches the loaded dungeon image after
+combat by changing a `0xF?` trigger into `0xA?`, preserving the low nibble. It
+also sets a saved room-clear bit keyed by dungeon and room id. On later load or
+entry, the demotion pass uses that bitmap to rewrite matching `0xF?` cells in
+the loaded image back to `0xA?`. The source file still contains the trigger
+cell and is not rewritten.
+
+The stock Doom record uses room id fifteen as the terminal final-room trigger.
+It appears on the deepest level at local coordinate `(X=5, Y=7)`. By the
+standard room-arena arithmetic, that cell selects Doom `DUNGEON.CBT` slot
+fifteen, the final record in the arena file. That room's combat metadata is
+part of the endgame handoff contract, so format readers and compatibility
+tests should not treat the last Doom arena record as unused padding.
 
 ## 5. Loading And Persistence
 
-`DUNGEON.DAT` is static content. On dungeon entry, the game reads the selected 512-byte dungeon record into a working image and gameplay systems read from that image while dungeon mode is active. The save file persists the scene byte, level, X/Y position, light counters, and related runtime flags. It does not persist a patched copy of the dungeon geometry.
+`DUNGEON.DAT` is static content. On dungeon entry, the game reads the selected 512-byte dungeon record into a working image and gameplay systems read from that image while dungeon mode is active. The save file persists the scene byte, level, X/Y position, light counters, related runtime flags, and the current 512-byte working copy if the save is made while that dungeon scene is active. It does not patch or rewrite the source dungeon file.
 
 Consequences:
 
-- A byte-compatible loader should derive dungeon cells from `DUNGEON.DAT`, not from saved geometry.
+- A byte-compatible fresh-entry loader should derive dungeon cells from
+  `DUNGEON.DAT`, then replay durable overlays such as cleared-room demotion.
+  A byte-compatible save loader that resumes an active dungeon scene should
+  preserve the saved 512-byte working copy.
 - Temporary effects, such as opened doors or dispelled fields, should be modelled as runtime overlays over the static cell byte.
 - Saving and loading does not require writing or modifying `DUNGEON.DAT`.
 
@@ -159,20 +188,31 @@ A decoder needs only the file bytes and the record ordering from Section 2:
 3. For each cell, preserve the full byte and expose helper accessors for class nibble and variant nibble.
 4. Let gameplay systems interpret class and variant; the format layer should not collapse unknown variants.
 
-For rendering tools, it is useful to display both the class and variant. A map viewer that paints only walls versus passages can ignore most lower-nibble details, but a gameplay engine must keep them because fountains, fields, ladders, secret doors, and traps depend on them.
+For rendering tools, it is useful to display both the class and variant. A map viewer that paints only walls versus passages can ignore most lower-nibble details, but a gameplay engine must keep them because fountains, fields, ladders, Search-revealed passages, doors, room triggers, and traps depend on them.
 
 ## 8. Cross-References
 
-- The first-person dungeon runtime, including scene-byte selection, movement, lighting, Look/View, room triggers, and the wireframe renderer: `systems/dungeon-mode.md`.
+- The first-person dungeon runtime, including scene-byte selection, movement, lighting, Look/View, room triggers, and the sparse renderer: `systems/dungeon-mode.md`.
 - The combat arenas used by room triggers: `formats/cbt.md`.
 - The save-image fields that persist current scene and position: `formats/saved-gam.md`.
 - The tile and wall rendering vocabulary used by the 2D tile renderer: `formats/tiles.md`.
 
-## 9. Open Questions
+## 9. Format Boundary And Runtime Work
 
-- **Lower-nibble semantics.** The upper-nibble class split is well supported. The lower nibble's full meaning remains partially open for walls, doors, trap marker variants, and the secondary field family.
-- **Secret-door encoding.** Secret doors appear to be encoded as variants of wall or door cells and revealed by Search/Open runtime logic. The exact variant set is not yet fully enumerated in this format spec.
-- **Persistent room state.** The current evidence supports "static file plus visit-local runtime room state." Whether any save-image bits preserve room completion across save/load inside an active dungeon is not yet fully described.
+The file-format contract is complete at byte-layout depth: size, record order,
+level order, row-major cell order, and class/variant preservation are fixed.
+Remaining work belongs to runtime consumers and custom-content policy.
+
+- **Lower-nibble runtime interpretation.** The upper-nibble class split is well
+  supported. The lower nibble's full meaning remains partially open for wall
+  rendering, door rendering, trap marker variants, and the secondary field
+  family. Format readers must preserve these bits even when a runtime system
+  has not promoted a public subtype name yet.
+- **Variant room compatibility.** The stock baseline persists room completion
+  through the save-image room-clear bitmap and rebuilds cleared-room demotions
+  from static `DUNGEON.DAT` cells. Custom content with room ids outside the
+  stock room-clear writer's accepted set should define its own compatibility
+  policy rather than assuming every possible low nibble is persisted.
 
 ## 10. Sources
 
@@ -180,9 +220,10 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 
 - First-pass map and arena survey, including the dungeon file dimensions and packed-nibble cell model: `u5-decomp/formats/maps.md`.
 - Dungeon record/name/scene binding and selected-record load: derived from the MAINOUT E-Enter helper and the DATA.OVL world-location table in the private analysis workspace.
-- Internal dungeon turn-loop analysis, including the loaded dungeon image, current-level indexing, renderer relationship, and room-trigger relationship to combat arenas.
-- Internal dungeon post-action and fall-trap helper analysis, including the exact observed fall-trap and bomb-trap bytes and visit-local trap rewrites.
-- Internal dungeon Look analysis, including the high-nibble class switch and fountain/field subtype behaviour.
+- Internal dungeon turn-loop analysis, including the loaded dungeon image, current-level indexing, renderer relationship, and room-trigger relationship to combat arenas: `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- Internal dungeon post-action and fall-trap helper analysis, including the exact observed fall-trap and bomb-trap bytes and visit-local trap rewrites: `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`.
+- Internal dungeon movement destination-effect analysis: `u5-decomp/functions/DUNGEON_OVL/0x0502_dungeon_move_dispatch.md`.
+- Internal dungeon Look analysis, including the relative-focus helper handoff, high-nibble class switch, and fountain/field subtype behaviour: `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`, `u5-decomp/functions/SJOG_OVL/0x006C_sjog_dir_step.md`, and `u5-decomp/functions/SJOG_OVL/0x002A_sjog_apply_dir_step.md`.
 - Internal CAST overlay field-placement analysis, including the live-map field byte mapping and marker-bit preservation used by dungeon field spells.
 - Internal dungeon View analysis, including the top-down level view relationship to the same dungeon cell data.
 - Existing dungeon-mode system prose used for cross-checking runtime semantics: `u5-spec/systems/dungeon-mode.md`.

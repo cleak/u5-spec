@@ -104,7 +104,7 @@ of Destiny" lettering used by the story/intro presentation.
 ## 5. Rendering Behaviour
 
 The resident intro and story code load a `.BIT` file into memory and call the
-display-driver bitmap entry. The EGA driver then:
+display-driver bitmap entry. The EGA driver implements this entry and then:
 
 1. Reads the resource entry count.
 2. Iterates pointer-table entries in order.
@@ -116,6 +116,14 @@ display-driver bitmap entry. The EGA driver then:
 
 The caller does not interpret `.BIT` as a `.16`/`.4` archive and does not
 field-walk the strip bodies itself in normal gameplay.
+
+The CGA, Hercules, and Tandy driver entries for this compressed-bitmap path are
+stubs in the analyzed baseline. On those historical backends, callers can reach
+the same high-level flow but the compressed bitmap entry returns without drawing
+the title, portrait, poster, proportional-font, or end-scroll resources. A
+modern clean implementation may still render substitute assets for those modes,
+but binary-compatible driver behaviour treats the non-EGA compressed-bitmap
+entry as no-op.
 
 ## 6. Validation And Error Handling
 
@@ -149,16 +157,20 @@ large entry counts in known resources.
 - Replacement title/menu idle frames are not stored in `.BIT`; those are
   driver-local animation frames described in `systems/display-driver.md`.
 
-## 8. Known Uncertainties
+## 8. Boundaries And Residuals
 
-- **Pointer-entry metadata.** The EGA bitmap decoder does not consume the second
-  word in each pointer-table entry. Its original authoring-tool meaning remains
-  unidentified.
-- **Non-EGA driver interpretation.** CGA, Hercules, and Tandy may use the same
-  sparse resource table but convert strip pixels differently.
-- **Exact title-resource strip placement.** The driver owns the low-level strip
-  decode/draw path. The intro system owns the higher-level title flow and
-  visible sequence.
+**Pointer-entry metadata.** The EGA bitmap decoder does not consume the second
+word in each pointer-table entry. Preserve it when round-tripping resources,
+but do not give it runtime rendering semantics unless a separate authoring-tool
+spec is added.
+
+**Non-EGA substitute art.** The analyzed CGA, Hercules, and Tandy drivers stub
+the compressed-bitmap entry. Rendering substitute art for those backends is a
+modern enhancement, not a baseline driver-codec rule.
+
+**Title and story presentation.** This format owns the sparse strip container
+and strip decode contract. The intro system owns the higher-level title flow,
+story slide sequence, rectangle transitions, waits, and input handling.
 
 ## 9. Cross-References
 

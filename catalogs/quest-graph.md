@@ -36,7 +36,19 @@ The catalog uses these node classes:
 The graph is not a save-state model. It does not list every flag set by the TLK
 bytecode. It names a branch as gated when the shipped data clearly requires
 trust, payment, a password, an answer, or another conversation fact before the
-useful response is reached.
+useful response is reached. The mechanical split between durable quest flags,
+per-scene TALK branch flags, and one-conversation signal arrays belongs to
+`systems/quest-flags.md`.
+
+For compatibility, the graph gates below should be implemented as authored
+conversation branches rather than as a separate quest-log script. A trust or
+answer gate is a keyword/label path in the NPC's `.TLK` data; a payment gate is
+the three-digit gold-payment control path; an item grant is the global
+action-letter dispatch described by `systems/conversation.md`; a karma gate is
+the moral-standing threshold branch. These mechanisms can appear inside
+follow-up prompts as well as top-level keywords, so reachability depends on the
+conversation VM's label-scoped prompt rules, not just on the header-indexed
+keyword list.
 
 ## 2. Global Progression Shape
 
@@ -91,7 +103,7 @@ eight dungeons. The resident word order and the TLK clues establish this table:
 | Covetous | `AVIDUS` | Fiona |
 | Shame | `INFAMA` | Sindar |
 | Hythloth | `IGNAVUS` | Hassad |
-| Doom | `VERAMOCOR` | Resident word table; no clean TLK clue identified in this pass |
+| Doom | `VERAMOCOR` | Resident word table and Yell Word-of-Power handler; no clean TLK clue identified in this pass |
 
 The graph around these words has three layers:
 
@@ -107,16 +119,26 @@ still simple: Jhelom contains the route to Destard's word. Hassad's Hythloth
 branch is prison- and trust-shaped. Felespar's Wrong branch is explicitly
 Resistance gated.
 
+Doom's final mechanical route is split across systems rather than conversation
+alone. The same Yell Word-of-Power path that handles the seven cardinal dungeon
+words also accepts `VERAMOCOR`, but Doom's exterior entrance is not opened by
+that word. After the Shadowlords are vanquished, the party can enter Doom; once
+inside, `VERAMOCOR` opens the Doom-side chamber seal at its authored target
+cell. The party must then reach the deepest room-id-fifteen trigger and resolve
+the final-room combat absorption handoff described in `systems/endgame.md`. The
+Sandalwood Box remains a separate saved story-item flag checked by the terminal
+overlay's victory branch.
+
 ## 5. Shards And Shadowlords
 
 The three evil shards are a separate but intertwined chain. Conversation
 identifies both the shards and the Shadowlord names needed to destroy them.
 
-| Shadowlord | Name | Opposed principle | Shard clue source | Destruction target |
+| Shadowlord | Name | Name or shard clue sources | Opposed principle | Destruction target |
 |---|---|---|---|---|
-| Falsehood | `FAULINEI` | Truth | Ava, Leona, Lady Janell | Flame of Truth |
-| Hatred | `ASTAROTH` | Love | Sin'Vraal, Lord Michael | Flame of Love |
-| Cowardice | `NOSFENTOR` | Courage | Gardner, Lord Malone | Flame of Courage |
+| Falsehood | `FAULINEI` | Lord Shalineth, Ava, Leona, Lady Janell | Truth | Flame of Truth |
+| Hatred | `ASTAROTH` | Sin'Vraal, Lord Michael | Love | Flame of Love |
+| Cowardice | `NOSFENTOR` | Lord Malone, Gardner | Courage | Flame of Courage |
 
 Sutek is the key rule source: the shards must be recovered from the Underworld
 and cast into the Eternal Flame associated with the principle opposed by the
@@ -136,6 +158,43 @@ all three names, all three shard goals, and the flame pairing without external
 knowledge. Exact coordinate-like wording from the original clues is deferred to
 a future clean coordinate catalog.
 
+### Runtime Shadowlord State
+
+The quest state for the three Shadowlords is a three-slot table, one slot per
+Shadowlord in the order above:
+
+| Slot | Shadowlord | Runtime meaning |
+|---|---|---|
+| 0 | Faulinei / Falsehood | Current hideout scene while alive; sticky vanquished marker after destruction. |
+| 1 | Astaroth / Hatred | Current hideout scene while alive; sticky vanquished marker after destruction. |
+| 2 | Nosfentor / Cowardice | Current hideout scene while alive; sticky vanquished marker after destruction. |
+
+While a Shadowlord is alive, its slot holds one of eight compact hideout ids.
+These are not the dungeon-mode scene-byte values used by the dungeon loop; they
+are the values consumed by the Shadowlord view, Yell, and town-entry paths. At
+midnight, the time cleanup rerolls each living Shadowlord's hideout
+so that no living Shadowlord remains in the party's current scene and no two
+living Shadowlords are assigned the same hideout in that pass. When the player
+destroys a Shadowlord through the shard-and-flame spell path, that slot becomes
+vanquished and is no longer rerolled.
+
+Several user-visible behaviours consume the same state:
+
+- The Sextant/view path can mark or report the current hideout state for each
+  living Shadowlord.
+- Entering a town-family scene that matches a living Shadowlord's current slot
+  can install that Shadowlord into the scene.
+- Entering Stonegate reads the same three slots as presentation state: every
+  non-vanquished slot contributes that Shadowlord's "air of" atmospheric line,
+  while vanquished slots are silent.
+- Yelling a Shadowlord's name checks whether that Shadowlord is still alive
+  before creating the summoned encounter state.
+- Doom's entrance requires all three Shadowlord slots to be vanquished.
+
+This table replaces older wording that treated the midnight table as NPC
+schedule or day-rollover pointer state. NPC schedules are separate per-NPC
+records and are not advanced by this Shadowlord reroll.
+
 ## 6. Royal Artifacts
 
 Sir Simon gives the top-level artifact objective: Crown, Sceptre, and Amulet
@@ -151,7 +210,10 @@ The artifact chain overlaps with mobility. To reach Stonegate, Sir Sean points
 the player to the southern Lost Hope Bay route and the grapple. Bidney points to
 Lord Michael for the grapple, and Lord Michael grants it. To navigate
 Blackthorn's castle, Gorn and Weblock provide internal escape and route clues,
-while Toede identifies the castle's volcanic island and trap-door hazards.
+while Toede identifies the castle's volcanic island and trap-door hazards. The
+separate capture audience, challenge, and rescue/refuge cinematics are
+specified in `systems/blackthorn.md`; this catalog owns only the conversation
+and quest-dependency edges around them.
 
 ## 7. Lord British And The Sandalwood Box
 
@@ -168,8 +230,14 @@ endgame requirement described in `systems/endgame.md`.
 
 The implementation contract is not "Saduj must be helpful." It is that the
 player can discover the box's importance through the original hostile-trap
-conversation path, and that destroying or preserving the object has endgame
-consequences.
+conversation path, that obtaining the Sandalwood Box sets the story flag read
+by the endgame, and that the terminal Lord British scene gates victory on that
+flag after the endgame state has been entered. The shipped pickup is the
+non-speaking `CASTLE:0` object slot 31 at local `(18,12,2)` with object tag
+`0x0E`; `G` Get dispatches that object into the shared item-add path. No traced
+acquisition branch requires Saduj's conversation as a prerequisite, so the
+dialogue graph owns the clue and the item/container specs own the pickup
+mechanics.
 
 ## 8. Shrine, Codex, And Mantras
 
@@ -178,6 +246,13 @@ chains. Greyson explains that shrine meditation grants the sacred quest and is
 the path toward the Codex. Glinkie explains restoration of destroyed shrines:
 use the appropriate Word of Power and meditate with the proper mantra. Lady
 Janell and Kindor connect Spirituality to a midnight moongate route.
+
+At runtime, each virtue path advances through the shrine and Codex urn masks:
+correct mantra at an unstarted shrine sets the ordained bit; reading the
+corresponding Codex urn/page sets the Codex-read bit; returning to the shrine
+with both bits set completes that virtue by clearing ordained and leaving the
+Codex-read bit as the durable completed marker. The full mechanics live in
+`systems/karma.md`; this catalog tracks the quest dependency edge.
 
 Town NPCs provide individual mantra clues. The graph should preserve at least
 these confirmed conversation edges:
@@ -204,19 +279,29 @@ needed to traverse the map, survive the Underworld, or reach quest locations.
 |---|---|---|
 | Moongate stones | Zachariah -> Goeth | Search below a waned moongate to find its stone; moving the stone moves the gate. |
 | Stonegate route | Leof -> Sir Sean -> Balinor | Locate Stonegate and understand its daemon-guarded entrance. |
-| Grapple | Bidney -> Lord Michael | Obtain mountain-crossing tool. |
+| Grapple | Bidney -> Lord Michael | Obtain the mountain-crossing tool/flag consumed by outdoor K-Klimb. |
 | Magic carpet | Treanna or Loubet -> Bandaii -> Smith/Iolo route | Connect the carpet to Lord British's chamber and the talking-horse clue. |
 | Mystic arms | Telila -> Bullwier -> Ambrose | Learn the Underworld route to mystic equipment. |
 | Glass/crystal weapon | Eb -> Malik -> Buccaneer clues -> Sven | Learn the pirate and airship-loss chain for powerful crystalline weapons. |
 | Reagents | Malik -> Saul | Learn Mandrake and Nightshade gathering locations and timing. |
 | Skull keys | Kristi -> Shenstone clue | Buy keys and learn the armourer connection. |
 | Spyglass | Dufus -> Lord Seggallion | Obtain spyglass after the virtue-planets answer. |
-| Sextant | Scally -> David | Probable item grant; action side effect still needs engine confirmation. |
+| Sextant | Scally -> David | Obtain the sextant from David. |
+| Black Badge | Elistaria | Obtain the Black Badge through a conversation branch. |
 
 These edges should be modeled as discoverable knowledge even when the actual
-inventory side effect is implemented elsewhere. For example, the Talk graph can
-say that Lord Michael grants or offers the grapple, while the item system owns
-how that object is added to the party.
+inventory side effect is implemented elsewhere. For the grapple, Lord Michael's
+conversation branch sets the flag that outdoor K-Klimb tests before allowing a
+mountain climb; the command and item specs own the resulting movement and fall
+risk rules.
+
+The utility-item grants are not per-NPC engine hooks. They are authored TLK
+responses that choose one of the global action-letter effects. The public graph
+therefore records the semantic edge, such as Lord Michael leading to Grapple or
+Elistaria leading to Black Badge, while `systems/conversation.md` and
+`systems/inventory.md` own the exact fixed-slot mutation. When a grant is
+behind a password, payment, moral-standing threshold, or scoped answer, that
+gate remains part of the graph edge even though the mutation itself is shared.
 
 ## 10. Companion Edges
 
@@ -235,10 +320,11 @@ rules.
 ## 11. Validation Rules
 
 A reimplementation can validate its quest graph without matching the original
-binary layout:
+binary layout. These are regression checks for the clean data authored from
+this catalog, not additional VM features:
 
 1. Every dungeon word in Section 4 is learnable or otherwise present in the
-   shipped rule data.
+   shipped rule data and accepted by the Word-of-Power command path.
 2. `DAWN` and `IMPERA` unlock distinct social branches and are not
    interchangeable.
 3. The three Shadowlord names, three shard goals, and three flame pairings are
@@ -247,31 +333,60 @@ binary layout:
    and key reagent locations are each connected to at least one NPC route.
 5. Branches that require trust, payment, virtue, an answer, or another keyword
    remain gated in the authored data.
-6. No public data file needs to reproduce raw TLK bytecode, private offsets, or
+6. Follow-up prompts and label-scoped records are included in reachability
+   analysis; do not validate only the top-level keyword table.
+7. No public data file needs to reproduce raw TLK bytecode, private offsets, or
    full dialogue text to satisfy this graph.
 
-## 12. Open Questions
+## 12. Quest Graph Completion And QA
 
-- The TLK control VM was decoded enough to align and classify quest edges, but
-  not fully executed for every branch. Item side effects such as the sextant
-  should be confirmed against the action-letter table before they are treated
-  as hard inventory grants.
-- Doom's word is present in the resident word table, but this pass did not find
-  a clean NPC keyword branch that teaches it. If gameplay requires an in-world
-  speaker for Doom specifically, that edge needs another targeted pass.
-- Some decoded trailing records appear embedded rather than ordinary
-  header-indexed TLK entries. These should not be used as required graph nodes
-  until their reachability is confirmed.
+The public quest graph covers the major artifact, word, shard, mantra,
+shrine/Codex, social, utility-item, and endgame dependencies without
+reproducing dialogue text or TLK bytecode. The TLK control VM is now specified
+well enough for graph validation: per-scene branch flags, karma-threshold
+branches, gold-payment gates, action-letter grants, and label-scoped follow-up
+prompts all have public behavioral owners in `systems/conversation.md` and
+`systems/quest-flags.md`.
+
+- The graph is complete at main-quest dependency depth. A clean implementation
+  should preserve the edges and gates named here, while allowing dialogue text,
+  record layout, and internal bytecode representation to differ from the
+  original shipped files.
+- A future QA verifier can execute or statically interpret the shipped `.TLK`
+  records through the public VM contract and compare them against this catalog.
+  That verifier is a consistency and data-authoring aid, not a missing gameplay
+  rule.
+- Doom's word is present in the resident word table and accepted by the same
+  Word-of-Power command path as the other seven dungeon words. This pass did
+  not find a clean NPC keyword branch that teaches it, so the public graph
+  treats the Doom word as mechanically authored rule data rather than as a
+  required conversation edge.
+- Decoded trailing or embedded records are non-required unless a public
+  conversation, roster, or quest edge names them. They should not become
+  mandatory graph nodes without a clean reachability proof.
 
 ## Sources
 
 - Derived from `u5-decomp/notes/tlk-quest-graph.md`.
+- Action-letter item grants are cross-checked against
+  `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`,
+  `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`,
+  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`, and shipped `.TLK`
+  action usage.
 - TLK file structure and keyword semantics: `u5-decomp/formats/npc-tlk-pth.md`,
   `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`,
   `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`,
+  `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`,
   `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and
   `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
 - Resident word and name pools: `u5-decomp/formats/data-ovl.md`.
+- Runtime Shadowlord hideout, vanquish, Yell, Word-of-Power, and Doom-gate
+  semantics:
+  `u5-decomp/formats/data-ovl.md`,
+  `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`, and
+  `u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`; the
+  Doom-side `VERAMOCOR` route is also summarized in
+  `u5-decomp/notes/system-trace_quest-endgame.md`.
 - Public cross-references: `formats/tlk.md`, `systems/conversation.md`,
-  `systems/endgame.md`, `systems/karma.md`, `catalogs/npc-roster.md`, and
-  `catalogs/gazetteer.md`.
+  `systems/endgame.md`, `systems/karma.md`, `systems/containers.md`,
+  `catalogs/item-list.md`, `catalogs/npc-roster.md`, and `catalogs/gazetteer.md`.

@@ -134,7 +134,10 @@ For the EGA-compatible baseline, ordinary viewport tiles and fixed-cell text
 are drawn directly to the front buffer. The historical driver back buffer is
 reserved for full-screen bitmap staging and transition/effect paths such as
 dissolves, silhouette stamping, and title/menu animation; it is not the
-ordinary tile or glyph destination.
+ordinary tile or glyph destination. Mode setup selects hardware page zero as
+the visible page; later presentation effects copy or dissolve from
+driver-managed page memory into that visible page rather than flipping ordinary
+world/text frames between hardware pages.
 
 ## 8. Intro and Cutscene Effects
 
@@ -184,6 +187,14 @@ presentation. It should treat the sequence like title/story effects: no
 gameplay ticks, saved-game time, NPC schedules, or world-mode redraws run while
 the preview owns the screen.
 
+Combat can request one driver-owned tile-graphics restoration step after the
+arena loop returns but before the world view is restored. The binary driver ABI
+fixes this as dispatch offset `0x6C` with mode value `1`; that reached mode
+restores driver-saved tile bytes after earlier tile-asset mutation. The combat
+framer only samples and clears the resident restoration flag; known flag setup
+belongs to dungeon room-layout state. This is not a standalone presentation
+effect, and it does not advance gameplay time or alter combat results.
+
 The Return-to-View script-level visual schedule is owned by
 `formats/location-dat.md`: local cell effects render at tile row `y + 7`,
 temporary actor draws also use actor row `y + 7`, and the fixed wipe command
@@ -213,9 +224,11 @@ in scope.
 - **Alternate driver ABI details.** The EGA dispatch surface is specified in
   `display-driver-abi.md`. Exact CGA, Hercules, and Tandy conversion details
   remain follow-up work unless those historical backends become targets.
-- **Hardware page flipping and dirty rectangles.** The public contract requires
-  frame presentation in the right order, but not the original EGA page layout or
-  port-level flip sequence.
+- **Dirty rectangles and low-level port sequencing.** The public contract
+  requires frame presentation in the right order. The EGA baseline's visible
+  page-zero policy and back-buffer copy/dissolve boundary are specified in
+  `display-driver-abi.md`; exact port-level sequencing is only relevant for a
+  hardware-driver reproduction.
 - **Title tick replacement art.** The EGA title-tick destination rectangle,
   four-frame cadence, and driver-local ownership are specified. The historical
   source pixels live inside the original display driver; replacement frames for
@@ -259,6 +272,10 @@ addresses.
 - Redraw, animation, and frame-presentation ordering:
   `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+- Combat-exit tile-graphics restoration dispatch:
+  `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`,
+  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`, and
+  `u5-decomp/formats/ega-driver.md`.
 - Title display tick and driver-side frame-counter evidence:
   `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md` and fresh
   local title-animation helper analysis.

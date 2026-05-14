@@ -23,7 +23,7 @@ The thirty-two location IDs are partitioned by class:
 | 17–24            | Castle   | `CASTLE.DAT`   |
 | 25–32            | Keep     | `KEEP.DAT`     |
 
-Scene byte zero is reserved for *overworld* (no per-location file is loaded). Scene bytes above thirty-two are used for dungeon and combat states (other formats).
+Scene byte zero is reserved for *overworld* (no per-location file is loaded). Values outside `1..32` do not select one of these per-location files; dungeon-class maps, intro/Return-to-View maps, and combat-class state are owned by other formats.
 
 Within a class, the eight per-class blocks are addressed by `(scene − 1) & 7`. The dwelling at scene byte twelve is the fourth block of `DWELLING.DAT`; the castle at scene byte twenty is the fourth block of `CASTLE.DAT`. The engine resolves the file family by `(scene − 1) >> 3` against a four-entry pointer table; the resulting filename is opened and the per-block data is read.
 
@@ -120,32 +120,41 @@ Both slots are initialised to a sentinel "no spawn" value before the walk. The d
 
 The marker is harvested into runtime spawn coordinates. Any visual replacement is handled by the broader town load pipeline, not by the spawn-coordinate harvest itself.
 
-### Conditional dash/period markers
+### Cosmetic dash/period variation
 
-Two adjacent tile values — the ASCII bytes for the dash and the period (`0x2D` and `0x2E`) — are consumed by a second-tier pass gated on the player slot being known. This pass scans the 32×32 runtime tile buffer and tests a shared runtime predicate before rewriting either marker:
+Two adjacent tile values -- the ASCII bytes for the dash and the period
+(`0x2D` and `0x2E`) -- are consumed by a second-tier cosmetic pass gated on
+the player slot being known. This pass scans the 32-by-32 runtime tile buffer
+after load-time marker harvest. It brackets the scan with the resident
+deterministic RNG setup/restore path using the location subtype byte, so the
+variation is stable for a given location and does not perturb gameplay RNG
+state.
 
-- `0x2D` rewrites to `0x2C` when the predicate accepts it.
-- `0x2E` rewrites to `0x2B` when the predicate accepts it.
+- `0x2D` rewrites to `0x2B` on a nonzero roll from `0..6`, i.e. six times
+  out of seven.
+- `0x2E` rewrites to `0x2C` on the same six-in-seven roll.
 
-If the predicate rejects the marker, the byte is left unchanged in the runtime buffer. The current cleanroom contract is therefore "conditional tile detail marker", not "route waypoint"; no public route-hint table has been proven for these bytes.
+If the roll is zero, the byte is left unchanged in the runtime buffer. These
+bytes are visual terrain-detail seeds, not NPC route waypoints and not a public
+route-hint table.
 
-### Chair/seat markers
+### NPC floor-link markers
 
-Two paired marker values, `0xC8` and `0xC9`, participate in NPC sitting behaviour. Unlike the purely harvested placement markers above, these bytes are also consumed after map load: when a schedule waypoint asks an NPC to sit, the NPC pathfinder searches the live tile buffer for cells containing one selected marker ID and uses matching cells as goals.
+Two paired marker values, `0xC8` and `0xC9`, participate in NPC floor-transition routing. Unlike the purely harvested placement markers above, these bytes are also consumed after map load: when an NPC needs to route between floors, the NPC pathfinder can search the live tile buffer for cells containing one selected marker ID and use matching cells as goals.
 
-The pair carries an approach-direction or facing distinction, but this spec does not yet name which visual facing corresponds to which ID. A location decoder should preserve the two byte values distinctly in the working tile grid until the schedule processor has had a chance to consume them.
+The pair is distinct from the visible chair tile: town step effects use tile `0x8C` for chair interactions. Shipped location data places `0xC8` and `0xC9` as paired floor-link annotations in the location grids, and the NPC pathfinder treats them as tile-ID goals rather than ordinary passable terrain. A location decoder should preserve the two byte values distinctly in the working tile grid until the schedule processor has had a chance to consume them.
 
 ### Runtime marker handling
 
-Marker handling is in-memory only. The original on-disk file is unchanged. Implementations should treat marker bytes as authored annotations, not as ordinary tiles. The traced loader always harvests the NPC and asterisk markers into runtime coordinate slots; companion passes may then rewrite selected marker cells in the runtime buffer, while the chair/seat markers are runtime pathfinding goals. The exact visual cleanup is therefore a property of the town load and schedule pipeline rather than of the static file format alone.
+Marker handling is in-memory only. The original on-disk file is unchanged. Implementations should treat marker bytes as authored annotations, not as ordinary tiles. The traced loader always harvests the NPC and asterisk markers into runtime coordinate slots; companion passes may then rewrite selected marker cells in the runtime buffer, while the NPC floor-link markers are runtime pathfinding goals. The exact visual cleanup is therefore a property of the town load and schedule pipeline rather than of the static file format alone.
 
 ## 7. Multi-floor handling
 
-Floor changes within a location are mediated by stairway tiles — ladders, staircases, and trapdoors. A stairway tile's value identifies it as a Z-transition trigger; the renderer paints it as a normal terrain tile, but the movement handler intercepts an attempt to walk *onto* it and triggers the floor-change pass.
+Floor changes within a location are mediated by stairway tiles, ladders, and trapdoors. The facing-sensitive town stair family is `0xC4..0xC7`: the low two bits identify the stair facing in the same normalized facing space used by the town movement wrapper. The renderer paints these as ordinary terrain tiles, but the movement handler intercepts an attempt to walk onto them. Entering along the authored facing moves up, entering from the opposite facing moves down, and side crossings do not change floors.
 
 The floor-change pass updates the resident floor byte, reloads the tile buffer using the signed floor-page rule from Section 4, runs the marker harvest and dawn/dusk gate-normalization passes against the new buffer, partially resets the active-object table (NPCs not on the new floor are unlinked, NPCs on the new floor are linked), and updates the player's slot with the new Z. The schedule processor handles its own per-floor consistency through its Z-mismatch state machine described in the schedules spec.
 
-Stair tile values cluster in a small range of the tile catalogue. Different stair sub-types behave differently — descending stairs versus ascending stairs versus ladders versus trapdoors. The behaviour is encoded in the global tile catalogue's tile-class table, not in the per-location file format.
+Other floor-transition sub-types, such as K-Klimb ladders and trapdoors, are also authored as tile ids in the location grid. Their command behavior is encoded in the shared tile-class/runtime tables, not in a separate per-location record.
 
 A location with only one populated floor has stair tiles, if any, leading to its filler floor — visually the player can step onto the stair, but the destination floor is empty filler. Such cases are content errors in the source data; the engine does not detect them.
 
@@ -213,7 +222,7 @@ Town mode also runs the same XOR pass against the already-loaded buffer when the
 
 ### Cutscene maps
 
-Four small 11-tile-wide-by-11-tile-tall grids used as background frames during cutscenes. Two runtime load paths are traced at v1 depth: the Blackthorn audience loads record 0, and the endgame sequence loads record 3. The middle two records share the same verified layout, but their exact scene bindings remain unnamed in this spec.
+Four small 11-tile-wide-by-11-tile-tall grids used as background frames during cutscenes. Two runtime load paths are traced at v1 depth: the Blackthorn audience loads record 0, and the endgame sequence loads record 3. The middle two records share the same verified layout, but their exact scene bindings remain unnamed in this spec. The Blackthorn cutscene consumer is specified in `systems/blackthorn.md`.
 
 Each cell is a one-byte tile index drawn from the same global tile catalogue used by the location files. The on-disk row stride is sixteen bytes, with the trailing five bytes per row zero-padded — the data is laid out as if for a 16-tile-wide grid, but only the leftmost eleven columns carry tile data.
 
@@ -282,23 +291,49 @@ A reader that consumes only maps can still extract every tile record described a
 - The active-object table populated from harvested NPC start positions — `systems/active-objects.md`.
 - The save image layout and how a saved game preserves scene byte and floor byte for re-derivation on load — `systems/save-load.md`.
 
-## 13. Open questions
+## 13. Format Boundary And Runtime Work
 
-- **NPC marker low-bit semantics.** The loader matches `0x48` and `0x49` as one class and preserves the actual byte in the recorded start-tile array. The later semantic difference, if any, is still unclear.
+The per-class location file contract is complete at byte-layout depth: file
+partition, block stride, floor-page rule, row-major tile grids, marker harvest,
+dawn/dusk substitution, and `MISCMAPS.DAT` sectioning are fixed. Remaining
+items belong to runtime interpretation, catalog inventory, content validation,
+or visual parity.
 
-- **Filler floor convention.** Single-floor locations encode their unused upper or basement as a 1,024-byte filler grid; the convention varies between repeated walls, repeated grass, and repeated empty-floor tiles. A reader cannot distinguish filler from authored content by inspection. Reachability is determined by stairway content and by the resident base-page table.
+- **NPC marker low-bit semantics.** The loader matches `0x48` and `0x49` as one
+  class and preserves the actual byte in the recorded start-tile array. The
+  later semantic difference, if any, is still unclear. Decoders must preserve
+  the exact marker byte while treating both values as the same placement marker
+  for load-time harvest.
 
-- **Reachable floor enumeration.** The floor-page selection rule is known, but the exact set of floors reachable in shipped content is best derived by walking each location's transition tiles rather than by trusting physical block pairs.
+- **Filler floor convention.** Single-floor locations encode their unused upper
+  or basement as a 1,024-byte filler grid; the convention varies between
+  repeated walls, repeated grass, and repeated empty-floor tiles. A reader
+  cannot distinguish filler from authored content by inspection. Reachability
+  is determined by stairway content and by the resident base-page table.
 
-- **Secret-room tile encoding.** A few locations have rooms accessible only through a Push-revealed trapdoor or a quest-flag-gated stairway. The gating lives in the global tile-class table and the per-location tile data; there is no engine-level "hidden room" feature. The exact tile values that participate are not fully enumerated here.
+- **Reachable floor enumeration.** The floor-page selection rule is known, but
+  the exact set of floors reachable in shipped content is catalog work best
+  derived by walking each location's transition tiles rather than by trusting
+  physical block pairs.
 
-- **Return-to-View resident helper internals.** The command-byte table, argument shapes, actor/map side effects, local cell-effect step loops, fixed rectangle sequence, and preview tick counts are now public. The remaining low-level gap is the resident display helper implementation behind the special actor draw, local cell-effect raster, and short wait if exact scanline/pacing parity becomes required.
+- **Secret-room tile encoding.** A few locations have rooms accessible only
+  through a Push-revealed trapdoor or a quest-flag-gated stairway. The gating
+  lives in the global tile-class table and the per-location tile data; there is
+  no engine-level "hidden room" feature. The exact tile values that participate
+  belong to the tile catalog and quest/runtime specs.
 
-- **Marker-roster cross-validation.** When a location's NPC start markers and its NPC roster do not agree on count, the load pass does not detect the mismatch. A content tool that wants to audit consistency must compare the per-class NPC file's occupied-slot count against the per-class location file's marker count for each block, separately.
+- **Return-to-View resident helper internals.** The command-byte table, argument
+  shapes, actor/map side effects, local cell-effect step loops, fixed rectangle
+  sequence, and preview tick counts are now public. The remaining low-level gap
+  is the resident display helper implementation behind the special actor draw,
+  local cell-effect raster, and short wait if exact scanline/pacing parity
+  becomes required.
 
-- **Dash/period marker predicate.** The conditional pass rewrites `0x2D` and `0x2E` through a shared runtime predicate, but the predicate's higher-level gameplay meaning is not yet named.
-
-- **Chair/seat marker facing.** The two chair-search marker IDs are fixed as `0xC8` and `0xC9`, but their exact visual-facing or underlying-furniture correspondence remains open.
+- **Marker-roster cross-validation.** When a location's NPC start markers and
+  its NPC roster do not agree on count, the load pass does not detect the
+  mismatch. A content tool that wants to audit consistency must compare the
+  per-class NPC file's occupied-slot count against the per-class location
+  file's marker count for each block, separately.
 
 ## 14. Sources
 
@@ -310,8 +345,13 @@ The format described above was derived from the analysis notes listed below. Non
 - The FONT overlay overview and Return-to-View trace that bind the four 19-by-4 maps plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
+- The town-mode cosmetic terrain-variation pass for dash/period bytes -
+  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md`.
 - The town-mode entry orchestrator that calls the loader once per location entry and re-entry — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
 - The world-mutation primitive that links logical NPC state to active-object slots, consuming the harvested NPC start positions — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
-- The NPC pathfinder notes that identify `0xC8` and `0xC9` as chair-search tile-ID goals in the live tile buffer — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md` and `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
+- The facing-sensitive town stair family and floor-change reload path -
+  `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, cross-checked
+  against `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
+- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, combined with shipped map-data cross-checks and the town step handler's separate `0x8C` chair trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`, and `u5-decomp/formats/maps.md`.
 - The overworld main loop providing the cross-mode contract under which the location loader is invoked, including the scene-byte-driven mode switch — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
 - The overworld chunk loader establishing the convention that per-class files are addressed by filename pointer through a small resident table — `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`.

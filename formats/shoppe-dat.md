@@ -84,7 +84,7 @@ Known shipped record clusters are:
 | 8-48 | Weapon and armour item descriptions |
 | 49-56 | Arms `S`-menu haggle, confirmation, and refusal lines |
 | 57-88 | Tavern, meal-counter, and related interactive prompts and menus |
-| 84-91 | Sage rumour records, overlapping the tavern/food cluster |
+| 84-91 | Sage rumour records, overlapping the tavern/interactive record cluster |
 | 92-104 | Horse-trader barks |
 | 105-126 | Ship-broker barks |
 | 127-146 | Reagent vendor records |
@@ -130,14 +130,17 @@ For byte-compatible tooling, preserve unknown high-byte tokens rather than
 guessing English text. For a modern runtime, a missing record should produce a
 clear asset error rather than a partial shop menu.
 
-## 9. Known Uncertainties
+## 9. Boundaries And Caller Ownership
 
-- The Talk-entry shop dispatcher, shipped shop-trigger values, stock tables,
-  pricing, and side effects are documented in `formats/npc.md`,
-  `formats/data-ovl.md`, and `systems/shops.md`; this file only owns the
-  text-record container.
-- Some record ids in the shipped range are unused or overlap between shop
-  families; the exact caller for every id is not fully catalogued.
+The Talk-entry shop dispatcher, shipped shop-trigger values, stock tables,
+pricing, and side effects are documented in `formats/npc.md`,
+`formats/data-ovl.md`, and `systems/shops.md`; this file only owns the
+text-record container.
+
+Some record ids in the shipped range are unused or overlap between shop
+families. That is a caller inventory question, not an on-disk format rule:
+records remain sequential NUL-terminated text slots addressed by id regardless
+of which shop flow, if any, selects a given id.
 
 ## 10. Sources
 

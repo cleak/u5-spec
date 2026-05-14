@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Ultima V draws all of its game text — narration, names, prompts, conversation lines, and status panels — through a single small subsystem. It maintains four independent text windows on a fixed 40-column by 25-row character grid, exposes a small set of primitive operations (emit one character, emit a word-wrapped string, emit a padded number, read or write the cursor), and hands the pixels of each character off to a separately loaded display driver.
+Ultima V draws all of its game text — narration, names, prompts, conversation lines, and status panels — through a single small subsystem. It maintains four independent text windows on a fixed 40-column by 25-row character grid, exposes a small set of primitive operations (emit one character, emit a word-wrapped string, emit a padded number, erase or pad typed input, read or write the cursor), and hands the pixels of each character off to a separately loaded display driver.
 
 At any moment, exactly one of the four windows is the *active* window and is the destination of every text-emitting call. Each window owns its own rectangle on the grid, its own cursor, its own colour, and its own small set of style flags. The primitives consult the active window, advance its cursor, and wrap and scroll within its bounds; they never touch any other window. Switching the active window takes effect immediately, and the new window's cursor is wherever it was last left, so a UI can move focus between (for example) a dialogue window and a status window without losing position in either.
 
@@ -51,11 +51,11 @@ The colour and flag fields apply to subsequent emissions; they are read at glyph
 
 Selecting a window unpacks the descriptor's colour and flags into cached
 runtime fields used by the inner glyph loop. Extended text control bytes can
-also affect those cached fields while a string is being emitted: `0xFE`
-toggles underline, `0xFD` toggles inverse video, and `0xFF` clears the active
-text window's rectangle through the display-driver fill path. A separate
-clear/reset helper clears underline, centre, and inverse together. These
-control bytes are not rendered as glyphs.
+also affect those cached fields: `0xFB` clears centre-output, `0xFC` sets
+centre-output, `0xFD` toggles inverse video, `0xFE` toggles underline, and
+`0xFF` clears the active text window's rectangle through the display-driver
+fill path. A separate clear/reset helper clears underline, centre, and inverse
+together. These control bytes are not rendered as glyphs.
 
 The rectangle has a hard invariant: `top_left_x ≤ bottom_right_x` and `top_left_y ≤ bottom_right_y`, both within the screen extent. Operations that mutate the rectangle (see Section 8) enforce this invariant by clamping out-of-range arguments and swapping inverted pairs. Operations that read the rectangle (wrap, scroll, conversion to pixel coordinates) assume the invariant holds.
 
@@ -69,7 +69,7 @@ Window rectangles use absolute cell coordinates. Cursor positions and width argu
 
 ## 5. Output Primitives
 
-The system exposes four families of operations. None of them takes a window argument — they all operate on whichever window is currently active.
+The system exposes five families of operations. None of them takes a window argument — they all operate on whichever window is currently active.
 
 **The per-cell emitter** takes one byte and either renders one glyph at the active window's cursor or interprets newline/carriage-return as cursor movement. It is the foundation of the system; both the wrap-aware printer and the numeric printer go through it. Its behaviour:
 
@@ -77,20 +77,44 @@ The system exposes four families of operations. None of them takes a window argu
 - A line-feed byte advances the cursor down one row without emitting a glyph and without resetting the column. If that step carries the cursor past `bottom_right_y`, the window scrolls.
 - A carriage-return byte returns the cursor to the window's left edge without changing the row and without emitting a glyph.
 - Selected high-bit control bytes are handled by the adjacent extended-control
-  path. The confirmed controls are `0xFD` for inverse-video toggle and `0xFE`
-  for underline toggle; they do not emit glyph pixels and do not advance the
-  cursor. `0xFF` clears the active window's inclusive pixel rectangle using the
-  same cell-to-pixel conversion as scroll. Other high-bit bytes outside the
+  path. The confirmed controls are `0xFB` for centre-output off, `0xFC` for
+  centre-output on, `0xFD` for inverse-video toggle, and `0xFE` for underline
+  toggle; they do not emit glyph pixels and do not advance the cursor. `0xFF`
+  clears the active window's inclusive pixel rectangle using the same
+  cell-to-pixel conversion as scroll. Other high-bit bytes outside the
   confirmed control range have no public glyph meaning.
 - A resident cursor-advance gate can suppress the cursor advance after a glyph emit. The glyph is still rendered, but the cursor stays put. This gate is shared runtime state rather than one of the descriptor style bits; the input cursor blink temporarily disables it so blink frames paint in place.
 
-**The wrap-aware string printer** takes a near pointer to a NUL-terminated byte string and emits it into the active window with word wrapping. It accumulates characters in a fixed-size internal line buffer (large enough for the widest possible window) while tracking the most recent point at which a word break could have happened. When a soft break (space, line-feed, or carriage-return) is reached and the line still fits in the window's width, the line is emitted via the per-cell emitter. When the next character would carry the line past the window's right edge, the printer backs up to the most recent soft break, emits everything up to that break, and begins a new line with the remainder. A NUL forces a final flush. Line-feed and carriage-return bytes embedded in the source string force an immediate flush at that point and pass through to the per-cell emitter so the cursor moves accordingly.
+**The wrap-aware string printer** is the resident text primitive used throughout
+the overlays; there is no per-overlay formatted-output thunk layer. It takes a
+near pointer to a NUL-terminated byte string and emits it into the active window
+with word wrapping. It accumulates characters in a fixed-size internal line
+buffer (large enough for the widest possible window) while tracking the most
+recent point at which a word break could have happened. When a soft break
+(space, line-feed, or carriage-return) is reached and the line still fits in the
+window's width, the line is emitted via the per-cell emitter. When the next
+character would carry the line past the window's right edge, the printer backs
+up to the most recent soft break, emits everything up to that break, and begins
+a new line with the remainder. A NUL forces a final flush. Line-feed and
+carriage-return bytes embedded in the source string force an immediate flush at
+that point and pass through to the per-cell emitter so the cursor moves
+accordingly.
 
 If the active window's centre flag is set, the printer computes the centred starting column for the line (`(width − characters_in_line) / 2`) and repositions the cursor horizontally to that column before emitting; the cursor's row is left alone, so centring affects only horizontal placement. The centre flag applies once per line of output produced by this printer, and only by this printer — the per-cell emitter does not centre.
 
 An empty string is a no-op.
 
 **The padded numeric printer** takes a signed 16-bit integer, a field width, and a single-byte pad character. It formats the value into a small internal buffer with leading copies of the pad character, an optional minus sign, and the decimal digits of the absolute value, producing a NUL-terminated string of exactly the requested width (or wider, if the value's natural width exceeds the field). It then hands the buffer to the wrap-aware string printer. The field width is clamped at 39, matching the maximum window width. The integer is treated as signed: values from −32768 through 32767 print correctly; values above 32767 (if interpreted as unsigned) render as their two's-complement signed equivalent. To zero-pad, the caller passes the digit-zero character as the pad; to space-pad, the caller passes a space. Because the numeric printer routes through the wrap-aware string printer, numeric output respects the active window's width, centre flag, and wrap behaviour.
+
+**The typed-input space eraser** emits a caller-supplied number of spaces while
+temporarily suppressing normal cursor advance, then explicitly repositions the
+cursor. Free-text prompts use it for destructive backspace and Escape-clears:
+one erased character repaints the editable tail with a space and leaves the
+cursor at the next replacement position; clearing a whole typed buffer repeats
+the same operation for the accumulated length. This helper is a presentation
+companion to the input line editor, not a general string printer. It must
+preserve and restore the prior cursor-advance gate so nested prompt or blink
+rendering keeps its own advance policy.
 
 **The cursor accessors** read or write the active window's cursor in window-local coordinates. The two readers return `cursor_x` and `cursor_y` respectively; both are zero-based and unsigned. The writer takes a `(column, row)` pair in window-local coordinates and updates the cursor only after checking that the resulting *absolute* screen position lies within the 40×25 grid. If the check fails — that is, if the window has been positioned such that the requested local position falls off the screen — the writer silently leaves the cursor unchanged. There is no error return and no clamp; callers are expected to compute valid coordinates.
 
@@ -124,7 +148,41 @@ When the per-cell emitter decides to render a glyph, it does so in three concept
 
 The text system's contract with the driver is "render this prepared cell at this position in this colour". Anything beyond that — scrolling a rectangle, clearing a rectangle, setting an attribute on a rectangle — is also a driver call, but invoked from elsewhere in the text system, such as auto-scroll on overflow or a higher-level clear-window helper, and is described in the driver ABI document rather than here.
 
-## 8. Boot-Time Setup and Window Configuration
+## 8. Proportional Paragraph Renderer
+
+The intro slides, chargen gypsy paragraphs, and chargen question prompts use a
+separate proportional-font paragraph renderer from the FONT overlay. It is not
+the same path as the fixed 40-by-25 text-window printer above. Its coordinates
+are pixel-oriented, its glyph advances come from the proportional font's width
+table, and it is called with a loaded NUL-terminated text buffer plus the active
+proportional-font resource segment.
+
+The proportional renderer owns layout and glyph emission only. The caller owns
+which text record is loaded, where the paragraph rectangle begins, and whether
+the player must press a key before the next record is drawn.
+
+Its public contract:
+
+- Text is consumed byte-by-byte until NUL.
+- Ordinary visible bytes draw one proportional glyph at the current pixel
+  cursor and advance by that glyph's width.
+- Space is a legal word-break candidate. The renderer looks ahead far enough to
+  decide whether the next word fits before the right edge; if not, it breaks at
+  the space rather than drawing it past the edge.
+- Line-feed is a hard newline.
+- Underscore is a soft hyphen / syllable marker. It produces no glyph but gives
+  the layout another place where a word may be split cleanly.
+- Left brace is a paragraph-start/page marker. It produces no glyph and does
+  not itself wait for input; the caller's record loop supplies any pause.
+- The renderer updates its pixel cursor as it goes so a caller can chain
+  another paragraph into the next position.
+
+`QUESTION.DAT` and the intro story records both rely on the brace and
+underscore conventions. A compatible implementation should therefore treat
+those bytes as lightweight markup in this proportional-font path only; they are
+not global control bytes for the fixed-cell resident printer.
+
+## 9. Boot-Time Setup and Window Configuration
 
 At program startup, the text system is initialised in three steps:
 
@@ -138,38 +196,74 @@ The rectangle setter takes a window index (0–3) and four cell coordinates, and
 
 The colour and flag setters write one byte of one descriptor; their effects are as described where the colour and flag fields are introduced.
 
-## 9. Open Questions and Variations
+## 10. Boundaries And Parity Work
 
-This section records places where the picture is not yet complete or where evidence is internally inconsistent.
+This section separates text-output compatibility boundaries from remaining
+pixel-parity work.
 
-- **Remaining extended text controls.** The confirmed extended controls are
-  `0xFD` inverse toggle, `0xFE` underline toggle, and `0xFF` clear-active-window.
-  The adjacent handler range also covers lower values in the `0xFB..0xFC`
-  range, but their exact public roles are not yet promoted to normative prose.
+- **Cursor-advance gate ownership.** The per-cell emitter consumes a shared
+  cursor-advance gate. Confirmed callers use it for cursor blink painting,
+  typed-input erase/padding, and intro-frame cell decoration. The clean
+  contract is the visible result: emit a glyph with normal advance, or emit a
+  glyph in place while the caller restores or repositions the cursor. The gate
+  itself is resident presentation state, not save state or gameplay state.
 
-- **No-advance gate writers.** The per-cell emitter consults a shared resident
-  cursor-advance gate, and the input cursor blink is one confirmed writer. Any
-  additional gameplay/UI writers outside the blink path still need call-site
-  enumeration.
+- **Screen size constants under non-EGA drivers.** The cursor-write bounds
+  check, rectangle clamps, and descriptor defaults all assume a 40-column by
+  25-row cell grid. Hardware drivers may vary the pixel stride or pixel
+  encoding behind each cell, but the fixed-cell text-system contract remains
+  40 by 25.
 
-- **Screen size constants under non-EGA drivers.** The cursor-write bounds check, the rectangle clamps, and the descriptor defaults all assume a 40-column by 25-row grid. The original game ships drivers for four hardware targets, and at least one (Hercules) triples the per-cell pixel stride. Whether the *cell* dimensions ever change — whether 40×25 is the same on all drivers — has not been verified. The conservative reading: 40×25 is a system-wide constant, and drivers vary only in pixel size per cell. A modern backend can treat 40×25 as fixed.
+- **NUL inside the per-cell emitter.** The wrap-aware string printer treats NUL
+  as terminator and never forwards it. Directly sending NUL to the per-cell
+  emitter is outside the public text contract; compatible callers should use
+  NUL only as string termination.
 
-- **NUL inside the per-cell emitter.** The emitter does not special-case NUL; in isolation it would render the glyph for code zero. In practice the wrap-aware printer flushes on NUL and never forwards one, so this corner is hard to observe. Treat NUL-to-emitter as undefined.
+- **Live-snapshot anomaly for descriptor 0.** A title-screen snapshot showed one
+  descriptor with inverted rectangle corners. The public writer API clamps and
+  orders rectangle corners, so normal gameplay cannot produce that state. Treat
+  the snapshot as title/overlay scratch reuse unless a future caller-level
+  trace proves otherwise.
 
-- **Live-snapshot anomaly for descriptor 0.** A memory snapshot taken at the title screen shows record 0 with a rectangle that violates the invariant (right < left). The most likely explanation is that the title-screen overlay reuses the descriptor table memory as scratch; under normal gameplay, the API never produces an inverted rectangle. Implementations following the API described here cannot reach that state and need not handle it.
+- **Scroll-by-N semantics.** Auto-scroll after bottom overflow moves the active
+  text-window rectangle up by exactly one cell and leaves the bottom row blank
+  in the current background colour. The lower-level driver operation also
+  supports a pixel-distance argument; that is display-driver ABI detail, not a
+  separate text-output rule.
 
-- **Scroll-by-N semantics.** The auto-scroll path that runs when the cursor steps off the bottom invokes a driver operation with what appears to be a one-cell pixel argument. Whether this is generic "scroll by N pixels" or specifically "scroll by one cell" is a driver-ABI question. The text system's contract is "scroll up by exactly one cell, leaving the bottom row blank in the current background colour."
+- **Proportional right-edge exactness.** The proportional paragraph renderer is
+  now specified at semantic depth, including caller-owned pauses and the
+  brace/underscore markup bytes. Exact pixel parity depends on preserving the
+  resident width-table advances and decoding the `PROPORT.PCS` sparse-strip
+  glyph artwork through the driver-resource rules in `formats/font-pcs.md`.
 
-- **Single-driver collapse.** A modern implementation almost certainly does not need four parallel hardware drivers. The text-system behaviour described here is independent of which driver is loaded; treating the system as if exactly one (EGA-equivalent) driver is always present is a sound simplification.
+- **Single-driver collapse.** A modern implementation does not need four
+  parallel hardware drivers unless it is explicitly emulating original hardware
+  targets. The text-system behaviour described here is independent of which
+  driver is loaded; treating the system as if exactly one EGA-equivalent driver
+  is always present is a sound engine simplification.
 
-## 10. Sources
+## 11. Sources
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The per-cell emitter and its glyph and scroll helpers — derived from `u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`, `u5-decomp/functions/ULTIMA_EXE/0x17F4_glyph_to_cell_buffer.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1F77_descriptor_to_pixel_rect.md`.
+- The per-cell emitter, its extended controls, and its glyph and scroll helpers — derived from `u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`, `u5-decomp/functions/ULTIMA_EXE/0x17F4_glyph_to_cell_buffer.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1F77_descriptor_to_pixel_rect.md`.
 - The wrap-aware string printer and its centring branch — derived from `u5-decomp/functions/ULTIMA_EXE/0x1850_print_string.md`.
 - The padded numeric printer — derived from `u5-decomp/functions/ULTIMA_EXE/0x1A3E_print_number.md`.
 - The cursor accessors — derived from `u5-decomp/functions/ULTIMA_EXE/0x1F12_get_cursor_x.md`, `u5-decomp/functions/ULTIMA_EXE/0x1CEE_get_cursor_y.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1BF2_set_cursor_pos.md`.
 - The window-descriptor initialisation, rectangle configuration, and active-window selection — derived from `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`, `u5-decomp/functions/ULTIMA_EXE/0x1C22_set_text_descriptor_rect.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1B94_set_display_mode.md` (the latter, despite its filename, is the active-window selector).
 - The driver-load step in boot-time setup — derived from `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
 - The C-runtime string-length utility used at some call sites for label width — derived from `u5-decomp/functions/ULTIMA_EXE/0x216C_string_length.md`. This utility is the standard NUL-terminated string length function and does not warrant a dedicated spec section.
+- Cross-overlay call-frequency and no-thunk text-output architecture — derived
+  from `u5-decomp/notes/hot_path_analysis.md` and
+  `u5-decomp/notes/engine_idioms.md`.
+- The proportional-font paragraph renderer used by intro, chargen, and
+  Return-to-View text -- derived from
+  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
+- The typed-input space eraser and cursor-advance gate preservation -- derived
+  from `u5-decomp/functions/ULTIMA_EXE/0x1FA0_print_n_spaces.md` and
+  cross-checked against
+  `u5-decomp/functions/ULTIMA_EXE/0x1E38_read_text_input.md`.
+- Intro-frame decoration as another cursor-advance gate writer -- derived from
+  `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md` and
+  `u5-decomp/functions/INTRO_OVL/0x1E62_clear_continue_window.md`.

@@ -5,7 +5,7 @@
 Ultima V has two animation layers that run during normal play:
 
 - **Active-object animation**, which advances the per-slot phase for visible
-  actors, vehicles, monsters, projectiles, and other dynamic entities.
+  actors, vehicles, monsters, and other slot-backed dynamic entities.
 - **Global tile animation**, which advances shared frame selectors for terrain
   and effect tiles such as water, lava, torches, moongates, and other repeating
   map artwork.
@@ -157,6 +157,13 @@ Known animated families include:
 | Special effect tiles | Repeat or toggle based on the shared frame counter. |
 | Alternate decorative tiles | Toggle between paired frames on selected counter bits. |
 
+The traced resident selector pass updates the displayed state for several
+contiguous tile-id families: two four-frame terrain families in the `0xD4..0xDB`
+range, a two-frame effect family in `0x80..0x83` gated by the low bit of the
+shared phase counter, a four-frame family in `0xEC..0xEF`, and a two-frame
+family in `0xFA..0xFD` gated by the next phase bit. These are render selectors,
+not map edits; the authored map byte remains the phase-zero tile id.
+
 The tile grid itself does not need to be rewritten for every animated water
 cell. A map cell continues to mean "water"; the renderer resolves that semantic
 tile through the current water-frame selector at draw time. This keeps the map
@@ -275,19 +282,35 @@ An implementation should follow these rules:
 - Present the frame only after both the per-slot pass and the global tile
   selector pass have completed.
 
-## 11. Open Questions
+## 11. Animation Boundary And Remaining Catalog Work
 
-- The exact public enumeration of every class attribute is not complete. The
-  private notes identify the existence of the class-behaviour table, but the
-  semantic names for all entries are still being correlated against monster,
-  vehicle, and effect families.
-- A few special classes bypass the ordinary random movement gate. Their visual
-  identities are not all confirmed in public prose.
-- Projectile and spell-effect lifetime is not fully separated from spawning
-  handlers. The animator advances phases but does not appear to be the owner of
-  slot deallocation for every transient effect.
-- Dungeon-mode use of active-object animation outside combat remains less
-  certain than overworld and town use.
+The general animation contract is complete at system depth: world ticks advance
+slot-backed phase counters, selected phase-zero classes may attempt autonomous
+movement through the normal terrain/collision gates, shared tile-family
+selectors advance once per tick, and presentation is flushed after both layers
+observe the same tick.
+
+The following details belong to narrower catalogs or caller specs rather than
+to this general animation layer:
+
+- **Class-attribute catalog.** The exact public enumeration of every
+  class-attribute entry belongs with active-object, monster, vehicle, and tile
+  catalogs. This document only requires the semantic classes needed by the
+  tick contract: steady slots, countdown slots, random-gated movers, and
+  special classes that bypass the ordinary random movement gate.
+- **Visual identity names.** A few special classes bypass the ordinary random
+  movement gate. Their final art or entity names should be promoted in the
+  owning catalog once confirmed, but the animation rule is already known:
+  when their phase reaches zero, they are considered without the ordinary
+  movement skip roll.
+- **Projectile and impact effects.** Combat and spell projectile visuals are
+  not persistent active-object lifecycles. They are direct scratch-buffer and
+  renderer effects owned by combat, spell, ship-fire, and display callers.
+- **Dungeon exploration.** First-person dungeon play does not use the
+  active-object table as its actor list. Dungeon exploration uses dungeon
+  position and cell data until a room, trap, ambush, or attack hands off to
+  combat; combat then owns actor timing through its separate phase-counter
+  model.
 
 ## 12. Sources
 
@@ -300,7 +323,8 @@ decompiler output, implementation listings, and raw private tables.
 - Input idle-loop relationship to world ticks - `systems/input.md`.
 - Time-system separation and per-turn cleanup cadence - `systems/time.md`.
 - Per-slot animator, global tile selector update, and display-driver flush -
-  `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+  `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x44B8_animate_tiles.md`.
 - Caller relationship from the resident world-tick path -
   `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
 - NPC scheduler separation -

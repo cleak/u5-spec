@@ -63,9 +63,10 @@ The printable ASCII region maps directly to matching glyph positions. The
 normal and rune variants use the same indexing; selecting runes is a matter of
 loading the rune font rather than remapping character codes.
 
-The format has no storage for high-bit character codes. Values above one
-hundred twenty-seven are outside the file-defined range and should be handled by
-caller policy.
+The format has no storage for high-bit character codes. The resident text
+emitter owns that caller-side policy: ordinary cell output ignores high-bit
+bytes unless an adjacent extended-control path has already consumed them. The
+file itself defines only the lower seven-bit range.
 
 ## 5. Byte and Bit Interpretation
 
@@ -143,7 +144,7 @@ positioning, window state, wrapping, and style flags. A backend that uses
 `.HCS` must adapt those higher-level cell concepts to a sixteen-by-twelve
 glyph, but no such policy is stored in the font file.
 
-## 9. Open Questions
+## 9. Runtime Boundaries And Naming
 
 - The full historical meaning of the `.HCS` extension is not confirmed.
   "High-resolution character set" is a format-level interpretation, not a
@@ -153,13 +154,12 @@ glyph, but no such policy is stored in the font file.
 - It is not yet confirmed whether any specific historical hardware driver
   requires `.HCS`, or whether the files are used by higher-resolution UI
   screens independent of hardware.
-- The original handling of character codes above one hundred twenty-seven has
-  not been pinned down in this spec.
 
 ## 10. Sources
 
 This is a cleanroom prose rewrite derived from
 `u5-decomp/formats/fonts-bitmaps.md`, cross-checked against
-`u5-spec/systems/text-output.md` and `u5-spec/formats/tiles.md`. It omits
-decompiled code, assembly, private offsets, raw address tables, and copied
-binary dumps.
+`u5-spec/systems/text-output.md` and `u5-spec/formats/tiles.md`. High-bit
+caller handling is cross-checked against
+`u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`. It omits decompiled code,
+assembly, private offsets, raw address tables, and copied binary dumps.

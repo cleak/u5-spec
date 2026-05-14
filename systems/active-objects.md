@@ -2,9 +2,19 @@
 
 ## 1. Overview
 
-Ultima V's runtime stage — the place where everything visible and not painted-on-the-floor lives — is a single fixed-size array called the *active-object table*. Thirty-two slots of eight bytes each: two hundred fifty-six bytes total in the resident data segment. One slot is the player; the rest are NPCs, monsters, projectiles, vehicles, animated tiles, scripted props, and any other moving or otherwise non-static entity on the player's current view of the world.
+Ultima V's runtime stage - the place where persistent top-down actors live - is
+a single fixed-size array called the *active-object table*. Thirty-two slots of
+eight bytes each: two hundred fifty-six bytes total in the resident data
+segment. One slot is the player; the rest are NPCs, monsters, vehicles, combat
+field markers, dropped or scripted props, and other traced entities that need
+table-backed position and animation state.
 
-The top-down world modes and combat read and write this same table. The renderer composites it into the top-down viewport. The visibility producer consults it for line-of-sight blockers. The NPC scheduler links into it when its NPCs cross onto the player's floor. Dungeon exploration is the main exception: its first-person view is rendered from dungeon coordinate globals and the loaded dungeon grid, not from active-object slots. When a dungeon room or ambush enters combat, the normal combat framer swaps the table for an isolated combat instance and swaps it back when the fight ends. The save image preserves the table byte-for-byte.
+Not every visible effect uses this table. Projectile and impact visuals,
+moongate frame stamps, and ordinary terrain-animation frames are direct
+scratch-buffer or renderer effects unless a specific owning system writes an
+active-object record for them.
+
+The top-down world modes and combat read and write this same table. The renderer composites it into the top-down viewport. The visibility pipeline uses the table during compositing to decide which active sprites survive the current visibility grid. The NPC scheduler links into it when its NPCs cross onto the player's floor. Dungeon exploration is the main exception: its first-person view is rendered from dungeon coordinate globals and the loaded dungeon grid, not from active-object slots. When a dungeon room or ambush enters combat, the normal combat framer swaps the table for an isolated combat instance and swaps it back when the fight ends. The save image preserves the table byte-for-byte.
 
 The design is "simple, fixed, and shared." There is no spatial index, no linked list, no per-mode subclass. In top-down world scenes and combat, dynamic on-screen content goes through these thirty-two slots, and every slot is a flat eight-byte record interpreted differently by different systems. This shared, untyped, fixed-size table is what lets the engine's sub-modes hand the world cleanly back and forth while still allowing dungeon exploration to use its separate first-person renderer.
 
@@ -27,9 +37,9 @@ Each record's eight bytes are interpreted as follows. Different systems read dif
 |   2  | `x`          | World (or arena) X coordinate, in cells.                                                                          |
 |   3  | `y`          | World (or arena) Y coordinate, in cells.                                                                          |
 |   4  | `z`          | World floor (or vertical layer). For the overworld, this is the surface/underworld marker.                        |
-|   5  | `dep1`       | Auxiliary state byte. Used variously: vehicle-passenger flag, projectile-velocity, animation extra.               |
+|   5  | `dep1`       | Auxiliary state byte. For ship/frigate objects this is hull condition; otherwise class-specific.                  |
 |   6  | `phase`      | Packed animation phase (low nibble) and direction-step counter (high nibble). Advanced by the animator.           |
-|   7  | `dep3`       | Auxiliary flag/aux byte. Carries class-specific state — monster HP for combat-instance records, etc.              |
+|   7  | `dep3`       | Auxiliary flag/aux byte. For ship/frigate objects this is skiffs aboard; otherwise class-specific.                |
 
 A few observations on the field encoding:
 
@@ -37,7 +47,26 @@ A few observations on the field encoding:
 
 **The phase byte.** Byte 6 packs two pieces of state into one byte: the low nibble counts down through animation frames (with the all-ones value meaning "rest at steady frame, do not animate"), and the high nibble holds a direction-step counter that AI movement uses. The animator's per-tick rule is: if the low nibble is at the steady-state marker, leave the slot alone; if non-zero, decrement; if zero, the slot is eligible for an AI tick that may pick a new direction or move the slot one cell.
 
-**Auxiliary bytes 5 and 7.** Different systems use these slots differently. The renderer reads them only for specific tile families (vehicles, water creatures, projectiles), where they hold rider type or next-tile-overlay data. Combat-instance active-object records are still the renderer-facing table: arena coordinates are in bytes 2 and 3, while byte 5 can be overwritten by the default monster-death path with a raw drop marker. The round-loop fields named in the combat spec — base-step, phase counter, target slot, flags, and duplicate arena coordinates — live in the parallel combat-effect descriptor table, not in these active-object auxiliary bytes. Byte interpretation is therefore not type-uniform across world and combat instances; readers must know which mode is active.
+**Auxiliary bytes 5 and 7.** Different systems use these slots differently. For
+ship/frigate objects, byte 5 is hull condition and byte 7 is the carried-skiff
+count; boarding copies both into the active vehicle state, X-it writes them
+back to the parked ship object, and broadsides decrement byte 5 on hit. The
+F-Fire broadside path also treats byte 5 as an unsigned depletion counter for
+any struck active object: a hit subtracts `1..20`, and if the subtraction wraps
+into the high-bit range the command clears the hit slot. This hit-resolution
+meaning is layered on top of, and does not replace, the byte's ordinary
+family-specific meaning between hits. The renderer reads bytes 5 and 7 only
+for specific tile families such as vehicles and water creatures, where they can
+hold rider type or next-tile-overlay data. Projectile flight visuals do not use
+active-object auxiliary bytes; they are drawn by direct visual-effect helpers
+described below. Combat-instance active-object records are still the renderer-facing
+table: arena coordinates are in bytes 2 and 3, while byte 5 can be overwritten
+by the default monster-death path with a temporary drop marker. The round-loop
+fields named in the combat spec -- base-step, phase counter, target slot,
+flags, and duplicate arena coordinates -- live in the parallel combat-effect
+descriptor table, not in these active-object auxiliary bytes. Byte
+interpretation is therefore not type-uniform across world and combat
+instances; readers must know which mode is active.
 
 **Coordinate axes.** Bytes 2 and 3 hold cell coordinates. In overworld and town/dwelling/castle/keep modes, they are world coordinates. In combat-instance use, they are arena coordinates on the eleven-by-eleven arena. The renderer's projection step subtracts the player's position to find each slot's offset in the on-screen viewport.
 
@@ -45,13 +74,53 @@ The eight-byte record fits a power-of-two stride. Implementations that prefer pa
 
 ## 4. Slot allocation and freeing
 
-Slot allocation is centralised in a single resident helper. When a system needs a new active-object slot — an NPC arriving on the player's floor, a monster being placed by combat setup, a projectile spawning — it calls the allocator and receives a slot index. The allocator walks the table for the first slot with a zero type byte and returns its index. The engine never tries to allocate more than thirty-two slots; spawn-count caps and mode-entry initialisation that clears the table together guarantee this.
+The ordinary world/town acquisition path searches only slots one through
+twenty-three. Slot zero is the canonical player slot, and slots twenty-four
+through thirty-one are reserved for setup paths outside this allocator. Its
+first phase is to take an empty ordinary slot, but that is not the whole
+contract: if the ordinary range is full, acquisition can evict a lower-priority
+object.
 
-Slot freeing is a one-byte write: zero to byte 0. There is no separate free-list, no compaction pass, no garbage collector. The next allocation walks from low index upward and finds the freed slot.
+The eviction cascade is deterministic:
+
+| Phase | Accepted byte-0 range | Screen test | Meaning |
+|---:|---|---|---|
+| 1 | `0x00` | none | Empty slot. |
+| 2 | `0x01..0x0F` | off-screen | Low-priority scenery/decorations. |
+| 3 | `0x80..0xFF`, except `0xB5` | off-screen | Monsters, dynamic actors, or effects. |
+| 4 | `0x10..0x11` | off-screen | Door/fixture-like low classes. |
+| 5 | `0x30..0x7F` | off-screen | Items, chests, pickups, and midrange objects. |
+| 6 | `0x01..0x0F` | any | Same class as phase 2, now visible allowed. |
+| 7 | `0x80..0xFF`, except `0xB5` | any | Same class as phase 3, now visible allowed. |
+| 8 | `0x10..0x11` | any | Same class as phase 4, now visible allowed. |
+| 9 | `0x30..0x7F` | any | Same class as phase 5, now visible allowed. |
+| 10 | `0x00..0xFF`, except `0xB5` | any | Last-resort eviction. |
+
+The off-screen test is viewport-sized rather than global-map-sized: a candidate
+more than roughly five cells from the player in either axis is considered
+eligible for the off-screen phases. The omitted ranges `0x12..0x1F` and
+`0x20..0x2F` protect NPC/person-like entries and vehicle-like entries from the
+priority phases. The last-resort phase can still take any byte except `0xB5`,
+so `0xB5` is the only universally protected byte-0 value in this allocator.
+The decoded NPC roster uses `0xB5` as a monster-variant actor class, including
+the Grendel row; it is not the natural-moongate renderer. Natural moongate
+frames are drawn through the separate scratch-buffer animator described in
+`systems/overworld.md`.
+
+Slot allocation is centralised in a single resident helper. When a system needs
+a new active-object slot -- an NPC arriving on the player's floor, a monster
+being placed by combat setup, a summoned creature, or a dynamic world object --
+it calls the allocator and receives a slot index. The allocator's first phase
+walks the ordinary range for a slot with a zero type byte; if none is
+available, the priority cascade above chooses a victim. Spawn-count caps and
+mode-entry initialisation usually keep this pressure case rare, but it is part
+of the compatibility contract.
+
+Slot freeing is a one-byte write: zero to byte 0. There is no separate free-list, no compaction pass, no garbage collector. Freed slots become candidates for the next acquisition pass, but occupied slots keep their index until freed or explicitly evicted.
 
 A few call sites use a *highest-empty-slot-down* discipline rather than the allocator's lowest-up scan. The player-as-NPC attachment helper, for example, walks the parallel NPC type array from index thirty-one down looking for an empty NPC slot. The intent is to keep low NPC indices reserved for schedule-driven NPCs from the location's roster while the player's "NPC mirror" lives in a high index that won't collide. The discipline lives at the call site, not in the allocator.
 
-A second-level helper sits behind the allocator: the *initialiser*. After a slot is allocated, the initialiser takes the slot index plus the tile byte, type byte, target coordinates, and floor, and writes them into the record in one pass. The split (allocator finds slot, initialiser fills it) lets call sites that already know the slot index — combat setup, the player attachment helper — bypass the search.
+A second-level helper sits behind the allocator: the *initialiser*. After a slot is allocated, the initialiser takes the slot index plus the tile byte, type byte, target coordinates, and floor, and writes them into the first six bytes of the record in one pass, leaving the animation and auxiliary bytes to the caller or later animator. The split (allocator finds slot, initialiser fills it) lets call sites that already know the slot index -- combat setup, the player attachment helper -- bypass the search.
 
 The table is never compacted or defragmented. Repeated allocate-and-free fragments empty slots between occupied ones; that is the steady-state condition and costs nothing measurable at thirty-two slots.
 
@@ -63,7 +132,18 @@ The world-state globals are the *authoritative* source for player position; slot
 
 A second representation of the player exists in town / dwelling / castle / keep modes: the *player-as-NPC* slot. On entry, the engine allocates a high-indexed NPC slot and stamps a sentinel value into its type byte and the player's spawn coordinates into the coordinate fields. The runtime descriptor is populated with a stationary three-waypoint schedule pinning the player to the spawn cell. The NPC scheduler then treats the player as a static NPC; the "already-on-waypoint" check passes every tick; the player never actually moves through the scheduler. The active-object slot is still slot zero — the player has two representations, in two different tables, referring to the same conceptual entity.
 
-The pattern exists because town-mode helpers walking the NPC table for collision checks, spell targeting, and "talk to whoever is in this cell" need to find the player there. Without the second representation, the player would be invisible to those helpers. With it, uniform code handles both NPC-NPC and player-NPC interactions.
+The pattern exists because some town-mode helpers walking the NPC table need to
+find the player there. Without the second representation, those helpers would
+be blind to the player. NPC pathfinding collision does not depend on treating
+the phantom as an ordinary walking NPC: its workspace builder stamps nearby
+occupied active-object cells as dynamic obstacles and then stamps the player's
+current cell separately. The result is that NPCs cannot route through the
+player's live position even when the phantom NPC entry remains pinned to the
+entry coordinate.
+
+For compatibility, collision uses the current player coordinate, not the
+player-as-NPC mirror's stationary schedule coordinate. The mirror exists for
+NPC-table consumers; the live player cell is the blocker used by pathfinding.
 
 The player-as-NPC slot is allocated on town entry and preserved across re-entries to the same town (the setup helper checks for an existing slot with the player sentinel byte and returns early if found). Cross-location re-entries clear all NPC slots; the new town creates a fresh one.
 
@@ -97,7 +177,19 @@ Within combat, slot zero is still the player. Slots one through twenty-five (cap
 
 A *parallel* combat-effect descriptor table holds the additional per-actor state combat needs — base-step, phase counter, target index, flag bits — at a different data-segment location, indexed by the same slot index. The two tables are kept in sync by the per-action primitive: when an actor moves, its coordinates are written into both.
 
+The combat-effect descriptor table owns combat-only fields that earlier notes sometimes attributed to the active-object record. Its first byte is the current monster HP or wound counter for non-party actors, it contains the friend/foe faction tag used by target selection, and one byte is a back-reference to the linked active-object slot. The active-object table remains the renderer-facing table during combat; it is not the source of the combat faction byte.
+
 Placed combat fields also live in this temporary active-object table. Their marker records use arena coordinates and are matched by the combat post-action hook when an actor finishes a successful step on the same cell. Marker creation is gated by the arena field helper: target selection and coordinate lookup must succeed, then the COMBAT acceptance callback must accept before the marker/application callbacks run. The coordinate lookup scans combat slots in ascending order and accepts the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Contact is non-consuming: the post-action hook applies the field result without clearing, aging, or rewriting the matched marker record. Field markers are active-object-only records rather than paired combat-effect descriptors, so the monster death/record-clear path cannot age or remove them. The accepted-placement resident redraw helper and the generic active-object tick do not allocate, remove, or decrement field marker records. Their presence is combat-local: they persist until the framer restores the pre-combat active-object table on exit.
+
+Projectile and impact visuals are not active-object records. The combat and
+spell projectile path builds a temporary line in scratch path buffers, steps
+that line, plays per-cell sound/visual effects, flushes the affected screen
+area, and stops on collision or at the endpoint. It does not allocate a slot,
+write an active-object record, or leave a record to be freed later. Ship and
+cannon fire follows the same ownership boundary: the command traces a short
+line, renders the shot or impact directly, and then mutates the hit terrain or
+hit active-object slot only if the trace finds one. The projectile visual
+itself has no persistent table lifetime.
 
 The split keeps combat-only state out of the world-mode table. When combat exits, the framer restores the live active-object table from its pre-combat backup, so combat movement, deaths, and loot-marker writes in the temporary table do not directly merge back into world objects. Durable combat outcomes travel through character records, clock/status globals, resources consumed by combat actions, and any encounter-side reconciliation traced outside the table restore. The combat round walker, described in the combat spec, iterates the combat-effect descriptor table for action selection and reads the active-object table for sprite rendering.
 
@@ -117,7 +209,113 @@ Animated tile classes include water (a four-frame cycle), lava, torches, and a s
 
 Two responsibilities sit slightly outside the per-slot loop. A *frame-counter advance* runs at the end of the pass, incrementing a shared frame counter and toggling a few alternate-frame tile classes. A *video-driver flush* runs immediately after, sending the post-tick frame to the display driver. Both are part of the "advance one tick of on-screen state and present it" contract.
 
-Some slots also receive AI ticks during the same pass: hostile creature classes that wander on the overworld (or in towns past their schedule) get an RNG roll on their phase-zero tick that may turn or step them one cell. Probability is gated by tile class — different monsters wander with different rates — and the eight-way direction decision is dispatched through a small jump table indexed by the current direction nibble.
+Some slots also receive AI ticks during the same pass: hostile creature classes
+that wander on the overworld (or in towns past their schedule) get an RNG roll
+on their phase-zero tick that may turn or step them one cell. Probability is
+gated by tile class, and the resident animation pass owns the simple frame and
+direction updates for environment-like animated classes.
+
+The outdoor per-turn walker is separate from that resident frame animator. It
+walks overworld slots from high to low, skips slot zero, and applies only to the
+outdoor animated/monster predicate: ship-like water-creature frames plus most
+monster-range tiles, excluding the small environment-animation ranges handled by
+the resident frame animator. Its first phase handles immediate hostile
+reactions:
+
+- Orthogonally adjacent hostile slots engage the player immediately.
+- Sea Serpent and Dragon first-frame hostile classes near the player roll a
+  one-in-seven trigger and, on a clear directed probe, run the same per-turn
+  finishers as other outdoor encounter effects.
+- Adjacent whirlpool engagement is a plane-transition effect when the party is
+  not on foot: it announces the whirlpool, runs the swallow presentation, moves
+  the party to underworld coordinate `(34, 18)`, and re-enters overworld setup
+  for the new plane. The same branch is a no-op if reached while the party
+  marker is the ordinary on-foot avatar.
+- Ship-like water-creature and pirate frames aligned with the player within
+  three cells print the attack message and run the water-creature step path.
+
+If none of those immediate reactions fires, the cleanup phase decides ordinary
+movement. Whirlpool-class slots toggle a two-frame swirl and occasionally take
+a random cardinal wander. Ship-like water-creature and pirate frames first pass
+through the wind cadence table owned by `weather.md`; once that cadence permits
+movement, they use the same directed step planner as land monsters.
+
+A special `0xFC` sprite class has an additional proximity-mask branch. The
+ordinary per-turn walk skips slot zero, so this is not normally the player's
+slot despite sharing the avatar marker value. The branch first computes wrapped
+absolute distance to the player and consults a fixed mask:
+
+| Wrapped `dy` | Wrapped `dx` values that enter the special branch |
+|---:|---|
+| 0 | 2, 3, 4 |
+| 1 | 3, 4 |
+| 2 | 2, 3 |
+| 3 | 0, 1, 2, 3 |
+| 4 | 0, 1 |
+| 5 | none |
+
+Cells outside the six-by-six half-window, and cells not listed above, fall
+through to ordinary directed movement. Listed cells increment the slot's first
+auxiliary byte as an age counter; while that counter remains below twenty, the
+slot requests a directed step toward the player through the same step planner.
+
+The directed step planner is deliberately small. It computes the one-cell X
+and Y steps that would reduce wrapped distance to the player, then rolls a
+one-bit random value to choose which axis to try first. If that candidate is
+blocked, it tries the other axis. A candidate must pass the outdoor
+tile-walkability check and the target-cell check before the step committer is
+called. If neither directed axis can be accepted, the slot falls back to the
+random four-direction walker.
+
+The outdoor tile-walkability check reads the candidate world tile, passes that
+tile plus the moving slot's type byte through the shared tile-class dispatcher,
+and then runs the reverse active-object lookup on the candidate coordinate and
+current world layer. Any occupant found by that lookup blocks the active-object
+step. The target-cell check adds one more per-pass guard: after any outdoor
+active object commits a step, the engine records the cell it just vacated; the
+next directed step in the same pass cannot target that recorded cell. This
+prevents a later slot in the high-to-low walk from immediately following into
+the most recently vacated coordinate.
+
+The step committer can still refuse a validated candidate through
+destination-tile chance gates. For ordinary outdoor movers:
+
+| Destination tile ids | Post-validation movement gate |
+|---|---|
+| `0x04`, `0x06..0x08`, `0x1E..0x1F` | Move only on a one-in-two roll. |
+| `0x09..0x0F` | Move only on a one-in-three roll. |
+| `0x05`, `0x10..0x1D`, and ids outside `0x04..0x1F` | Move immediately once validation accepts the candidate. |
+
+These gates are movement cadence rules layered after terrain/occupancy
+acceptance; they are not the primary passability predicate. A refused chance
+gate ends that slot's cleanup attempt rather than falling back to another axis.
+
+Ship-like water-creature frames `0x2C..0x2F` bypass these low-terrain chance
+gates. Four monster first-frame values also bypass them exactly: Bat `0x94`,
+Daemon `0xD8`, Dragon `0xDC`, and Mongbat `0xF0`. Sibling animation frames in
+those monster classes are not part of this bypass test.
+
+The `0xDC` comparison above is made against the moving active-object's type
+byte, where it is the first Dragon frame. This is a different storage domain
+from a live terrain byte with the same numeric value. Movement and visibility
+queries may treat terrain byte `0xDC` as a moon-gate / local-light source, but
+the active-object step planner must not rename every `0xDC` byte globally.
+
+When the move commits, the old coordinate is stored for the per-pass guard, the
+new coordinate is written into the active-object slot, and world redraw state is
+dirtied. Ship-like water-creature movers also rewrite their type/frame byte to
+the facing frame implied by the cardinal delta before the coordinate update. If
+a committed step lands on destination tile id `0xDC`, the moving slot is
+cleared. That destination test is against the live terrain byte, not the moving
+slot's type byte; in the public terrain catalog this value belongs to the
+moon-gate / local-light family. The rule does not specify the natural-gate
+placement schedule or live entry hook, which are owned by the overworld
+contract.
+
+This is not the town NPC pathfinder. Outdoor monsters have no schedules,
+waypoints, flood-fill queue, or AI byte. Their chasing behavior is the result
+of repeated one-cell cardinal attempts toward the player plus the random wander
+fallback when blocked.
 
 The animator does not move the player. Player movement is owned by the input system and per-mode command handlers. Slot zero is refreshed from world-state globals by the renderer/compositor path before objects are stamped into the viewport, not by the animator itself.
 
@@ -132,6 +330,20 @@ Combat suspends the world by swapping the active-object table to a backup region
 The backup region is dedicated to this purpose, not preserved across saves, a transient buffer used only inside the framer's call. The framer also saves and restores the player's world coordinates (combat overwrites slot zero's coords with arena coords), the active-player byte, and a scene-byte sentinel that signals "combat is in progress." The calling mode loop sees combat as a function call that returns with the table and globals exactly as they were, plus side effects (damage, death, time advance) baked into separate persistent state.
 
 The copy is byte-for-byte; slot indices are stable across the round-trip. An NPC in slot fifteen before combat is in slot fifteen after, with the same tile and coordinates. The NPC scheduler resumes per-tick walking without re-allocation.
+
+Some callers intentionally run a second reconciliation helper after the framer
+has restored the backup. The ordinary resident terrain-target wrapper does
+this for the original active-object slot that triggered combat: it first
+restores the saved world table again, then mutates only the caller-supplied
+slot. In the ordinary terrain path, if the slot is not preserved as a
+body/retrieval object, bytes 0 through 4 of that slot are cleared, which frees
+the trigger from future object scans while leaving caller-owned auxiliary bytes
+outside that clear range untouched. If the restored trigger is in the
+`0x2C..0x2F` water-creature/body family and combat has set the exit-message
+state, the helper instead rewrites the slot into the persistent body/retrieval
+state by lowering both sprite bytes by eight and stamping the auxiliary body
+state (`dep1 = 0x63`, `dep3 = 0x02`). This is caller-side world reconciliation,
+not a merge of temporary combat death markers.
 
 ## 10. Mode-entry initialisation
 
@@ -159,9 +371,13 @@ The on-disk overworld object overlay (per-map static object list) is a *seed* fi
 
 **NPC scheduler.** Reads the table for the player's position (slot zero) and writes it indirectly through the world-mutation helper on every NPC step that crosses the player's floor or moves within it. The scheduler's runtime descriptor holds the linked-slot index that ties one logical NPC to one active-object slot.
 
-**Renderer.** Walks the table from slot thirty-one down, projects each slot's world coordinates into the on-screen viewport, and stamps the slot's tile into the viewport scratch grid (skipping cells already obscured by fog or already containing a higher-priority sprite). Slot zero (the player) draws last. Special tile classes — boats, water creatures, projectiles — get class-specific compositor branches that consult byte 5 or byte 7.
+**Renderer.** Walks the table from slot thirty-one down, projects each slot's world coordinates into the on-screen viewport, and stamps the slot's tile into the viewport scratch grid (skipping cells already obscured by fog or already containing a higher-priority sprite). Slot zero (the player) draws last. Special tile classes get class-specific compositor branches that consult the auxiliary bytes: the water-bound `0xE8..0xEB` class and exact `0x1E` / `0x1F` type bytes stamp through the companion terrain band and leave the visibility grid with the use-companion marker; water-creature frame bytes `0x1D` and `0x1E` use the same companion-band path; the `0x5C` vehicle/avatar-family branch takes the special vehicle stamp only when the underlying grid cell holds marker `0x92`, otherwise it falls through to the default compositor.
 
-**Visibility producer.** Active-object slots that block sight (boats, creatures, NPCs) act as dynamic occluders during the line-of-sight pass. The producer reads the table once per frame and treats blocking slots as opaque cells when computing the visibility grid.
+**Visibility compositor.** Active-object slots are projected into the viewport
+after the terrain visibility carve has produced the grid. Slots hidden by the
+grid's obscured marker are skipped; visible slots stamp their tile bytes or
+companion-buffer markers according to vehicle/creature class. The currently
+traced carve helper does not directly scan the active-object table.
 
 **Combat.** The framer swaps the table to a backup, runs combat with combatant records in place, and restores. The round walker reads slot zero for the player and slots one and up for monsters; the parallel combat-effect descriptor table holds round-only state.
 
@@ -171,19 +387,18 @@ The on-disk overworld object overlay (per-map static object list) is a *seed* fi
 
 **Time.** No direct hook. Animation is per-tick, not per-hour; the animator does not consult the time system.
 
-## 13. Open questions
+## 13. Active-object boundaries and remaining dynamic users
 
-- **Combat-instance byte interpretation.** World preservation is now pinned: the framer snapshots and restores the full two hundred fifty-six-byte active-object table, so combat-internal active-object mutations do not merge back directly. The remaining open part is the exact meaning of the combat-instance auxiliary bytes while the temporary table is live.
+The core active-object contract is complete for known traced users at
+table-lifecycle depth: record shape, slot allocation/freeing, player slot
+ownership, NPC linkage, player-as-NPC mirror separation, renderer/visibility
+compositor ownership, combat backup/restore, field-marker lifetime,
+projectile/impact non-ownership, mode-entry initialization, persistence, and
+outdoor hostile-slot movement are public.
 
-- **The allocator's full algorithm.** First-empty-slot is the established behaviour, but the table-full edge case (sentinel? wrap?) is not fully traced. Call-site discipline keeps the table from filling in practice; the allocator may simply trust this.
-
-- **Projectile and animated-effect lifecycle.** Spell projectiles and similar transient entities live in the table for a few ticks then disappear. Whether they auto-free via a counter in the auxiliary bytes or are removed by the spawning system is open; the animator does not free slots itself.
-
-- **The full enumeration of byte-0 sentinel values.** The player-as-NPC sentinel is documented; possible vehicle, moongate, and boat sentinels are read by the compositor but not catalogued.
-
-- **The boat-and-water-creature compositor branches.** The renderer dispatches on type-byte family for water-bound objects and water-creature monsters. The full set of triggering values has not been integrated here.
-
-- **Cell-collision rules for the player-as-NPC slot.** Town-mode helpers walking the NPC table for collision detection must recognise the player sentinel and skip it. The exact tests are not yet documented.
+Remaining dynamic-object work, if a new non-projectile user is found, belongs
+to that caller's system contract. It should not change the shared table
+lifecycle or reclassify projectile and impact visuals as active-object records.
 
 ## 14. Sources
 
@@ -192,11 +407,50 @@ The behaviour described above was derived by reading the function and format not
 - The dungeon loop's first-person rendering path and its absence of NPC/active-object population during exploration — `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 
 - The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+- The resident active-object acquisition cascade and slot initialiser -
+  `u5-decomp/functions/ULTIMA_EXE/0xB714_acquire_object_slot.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
+- The `0xB5` actor-class interpretation is cross-checked against the shipped
+  NPC roster analysis in `u5-decomp/formats/npc-tlk-pth.md`.
+- The overworld per-turn slot walker, outdoor animated/monster predicate,
+  hostile reaction dispatch, water-creature step path, post-animate cleanup,
+  directed step planner, and proximity helper -
+  `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x105C_mainout_tile_classifier.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x131A_active_object_animate.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x1248_active_object_engage.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x1168_active_object_step.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x198C_post_animate.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x17D4_slot_advance.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x1482_tile_walkable_check.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x14C8_target_cell_check.md`,
+  `u5-decomp/functions/MAINOUT_OVL/0x1578_apply_step.md`, and
+  `u5-decomp/functions/MAINOUT_OVL/0x14EA_range_check_5x6.md`.
+- The resident tile-class dispatcher and reverse active-object lookup used by
+  outdoor step validation -
+  `u5-decomp/functions/ULTIMA_EXE/0x2C4C_tile_class_dispatch.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
 - The compositor that walks the table backwards to stamp on-screen sprites into the viewport, plus the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
 - The world-mutation helper that links logical NPC state to a slot in the table when an NPC arrives on or leaves the player's floor — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
 - The player-as-NPC attachment helper that allocates a slot and a parallel high-indexed NPC slot for the avatar on town entry — `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`.
-- The overworld per-turn walker that animates and prunes off-screen entries — `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
+- The NPC pathfinding workspace builder that overlays active-object obstacles
+  and the current player cell for collision avoidance -
+  `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
 - The combat round loop that operates on the table during combat — `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
 - The combat enter/exit framer that backs up and restores the table — `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+- The resident terrain-target wrapper and SJOG post-combat object reconciler
+  that clear or rewrite the original trigger slot after combat --
+  `u5-decomp/functions/ULTIMA_EXE/0x6150_combat_target_describe.md` and
+  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
 - The NPC per-tick walker that drives schedule-based NPC movement and feeds the world-mutation helper — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
 - The save image's region holding the table and the on-disk overlay files — `u5-decomp/formats/saves.md`.
+- The combat/spell projectile visual path and per-cell effect renderer -
+  `u5-decomp/functions/COMSUBS_OVL/0x12DE_projectile_animate.md` and
+  `u5-decomp/functions/COMSUBS_OVL/0x0F4A_tile_effect_render.md`.
+- The F-Fire and ship-broadside projectile traces -
+  `u5-decomp/functions/CMDS_OVL/0x0AEA_cmds_fire.md` and
+  `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.
+- Vehicle byte interpretation for ship boarding, X-it parking, and broadside
+  damage -- `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`,
+  `u5-decomp/functions/CMDS_OVL/0x0EB4_cmds_xit_vehicle.md`, and
+  `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.

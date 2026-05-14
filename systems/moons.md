@@ -1,0 +1,89 @@
+# Moons
+
+## 1. Scope
+
+This document covers the lower status-strip sky display for the fixed hour
+marker and the two moons, Trammel and Felucca. Natural moongate placement,
+entry, and teleport destinations are mode-level behaviour owned by
+`overworld.md`; this file only specifies the display values exposed to the
+status panel.
+
+## 2. Sky Strip Renderer
+
+The status panel renders a twelve-cell strip for outdoor/town-family scenes.
+Each refresh starts from a blank strip, then attempts to plot up to three
+markers:
+
+- A fixed marker derived directly from the current hour.
+- Trammel's glyph, read from the first resident moon table for the current
+  calendar day.
+- Felucca's glyph, read from the second resident moon table for the current
+  calendar day.
+
+The hour determines whether a marker is visible in the twelve-cell horizon and,
+if so, which cell receives it. The fixed marker uses an hour-derived position
+directly. The two moon markers use separate hour offsets, so Trammel and
+Felucca can be above the visible horizon at different times of day. If a
+computed position falls outside the visible twelve-cell range, that marker is
+not printed for this refresh.
+
+Cells are numbered left to right from `0` through `11`. The renderer plots in
+fixed order: hour marker first, then Trammel, then Felucca. If two markers
+select the same cell, the later marker replaces the earlier one for that
+refresh.
+
+| Marker | Visible hours | Cell position |
+|--------|---------------|---------------|
+| Fixed hour marker | `06:00..17:59` | `17 - hour` |
+| Trammel | `00:00..08:59` | `8 - hour` |
+| Trammel | `21:00..23:59` | `32 - hour` |
+| Felucca | `00:00..02:59` | `2 - hour` |
+| Felucca | `15:00..23:59` | `26 - hour` |
+
+At all other hours, the corresponding marker is below the strip's visible
+horizon and leaves the blank cell contents unchanged.
+
+The glyph identity for each moon is table-driven by the current calendar day,
+not by deriving one moon from the other or by drawing geometric phases at
+runtime. The public spec does not reproduce the resident glyph-table contents.
+A clean implementation that renders original-style text should preserve two
+independent day-indexed phase tables and should not derive Felucca by offsetting
+Trammel.
+
+The strip is presentation only. It caches the selected moon glyph bytes for the
+current render pass, but those cached bytes are not gameplay state and are not
+the saved-slot natural-moongate live-terrain schedule.
+
+The overworld moongate entry hook reads the same cached glyph bytes after it
+has confirmed the party is standing on live moongate terrain. Before noon it
+uses the first cached glyph, and from noon onward it uses the second, to select
+the saved Moonstone slot for ordinary natural-gate travel. Do not use the
+status-strip cache by itself to derive natural moongate placement; placement
+and entry are specified in `overworld.md`.
+
+## 3. Integration
+
+The moon glyphs and fixed hour marker are display state. They do not, by
+themselves, advance time, place moongates, or mutate save data. They should be
+refreshed whenever the stats panel is redrawn and whenever the per-turn cleanup
+observes an hour change in a scene that shows the surface/town status strip.
+
+Natural moongates remain separate from the sky/status renderer: the overworld
+moongate animator paints any currently active gate, the saved Moonstone slots
+drive live-terrain placement/waning, and the overworld loop has a separate live
+entry hook plus the fixed narrative gate branch. Do not treat the hourly
+sky/status refresh by itself as evidence for natural-moongate placement or
+entry behavior.
+
+The renderer is suppressed for dungeon-class views and the underworld status
+presentation. Those scenes use their own lower-row presentation instead of the
+surface sky strip, even though the same saved clock continues to advance.
+
+## 4. Sources
+
+This public description is a cleanroom prose rewrite from private status-panel
+analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
+glyph dumps, or private address tables.
+
+- Status-panel moon glyph lookup and phase cadence --
+  `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`.

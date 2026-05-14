@@ -16,7 +16,13 @@ The format carries no embedded palette. The sixteen-entry palette for `.16` is t
 
 ## 2. The LZW envelope
 
-Every tile-graphics file, regardless of depth or container layout, begins with a four-byte little-endian unsigned integer giving the *uncompressed* length of the body in bytes, immediately followed by the LZW-compressed body itself. There is no magic number, no version word, no flag byte, no checksum, and no envelope footer. A reader allocates a buffer of exactly the declared size and decompresses the remaining bytes into it.
+Every tile-graphics file, regardless of depth or container layout, begins with
+the shared LZW envelope specified in `formats/lzw.md`: a four-byte
+little-endian unsigned integer giving the *uncompressed* length of the body in
+bytes, immediately followed by the LZW-compressed body itself. There is no
+magic number, no version word, no flag byte, no checksum, and no envelope
+footer. A reader allocates a buffer of exactly the declared size and
+decompresses the remaining bytes into it.
 
 This LZW envelope is not the format used by `PROPORT.PCS`, `TITLE.BIT`,
 `BRITISH.BIT`, or `WD.BIT` in the EGA driver path. Those files use the
@@ -63,6 +69,19 @@ The flat atlas is the simplest layout: the body is exactly five hundred twelve b
 A decoder enumerates tiles by index by simply multiplying the index by the tile stride. There is no per-tile metadata — no width, no height, no animation flag, no class hint. The renderer applies its own tile-class table (held in the resident data slab) when it needs to know whether a given tile index represents a wall, a floor, an animated water surface, or a pickup item.
 
 This layout is used by the world tile atlas only. Every other file uses one of the variable-shape directory layouts.
+
+### 5.1.1 Resident miniature tile glyphs
+
+The main tile atlas is not the only tile-shaped rendering source. The resident
+engine also carries a compact per-tile miniature encoding used for the small
+tile glyph shown in the stats panel and some inventory-style contexts. Each
+miniature record describes sixteen rows with two offset bytes per row, for
+thirty-two bytes per tile. The renderer expands that row/offset encoding into a
+small display glyph through a dedicated resident helper.
+
+This path is distinct from the main sixteen-by-sixteen EGA tile blit. Do not
+try to extract these miniature glyphs from `TILES.16` by cropping the atlas; they
+are a separate resident representation intended for compact UI display.
 
 ### 5.2 Directory of variable-shape images, thirty-two-bit offsets
 
@@ -139,7 +158,7 @@ The full set of tile-graphics files, with their container layouts, sub-image cou
 
 Several roles deserve dedicated commentary.
 
-The **tile atlas** is the heart of the two-dimensional rendering pipeline. Every overworld cell, town/interior cell, combat-arena terrain cell, and active-object sprite resolves to one of these five hundred twelve tiles. First-person dungeon floors are the exception: `DUNGEON.DAT` uses its own packed-nibble cell encoding and the dungeon renderer draws wireframe wall art rather than indexing the world tile atlas for each floor cell. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, combat arenas, and active-object tile bytes.
+The **tile atlas** is the heart of the two-dimensional rendering pipeline. Every overworld cell, town/interior cell, combat-arena terrain cell, and active-object sprite resolves to one of these five hundred twelve tiles. First-person dungeon floors are the exception: `DUNGEON.DAT` uses its own packed-nibble cell encoding and the dungeon renderer plots sparse first-person wall and feature cues rather than indexing the world tile atlas for each floor cell. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, combat arenas, and active-object tile bytes.
 
 The **inventory sprites** in `ITEMS` are larger-than-tile artwork shown on the inventory and trade screens. The ten sprites are paired into the standard image-and-mask layout. Sprite dimensions vary — the larger ones are around forty by eighty pixels — and the iconography is rendered at a higher resolution than world tiles to fill the inventory panel.
 
@@ -193,9 +212,16 @@ For `TILES.4`, the procedure is identical except the declared length is thirty-t
 - The chargen sequence that displays the panels in `CREATE` — `systems/chargen.md`.
 - The intro and end-game sequences that display panels from `STARTSC`, `ENDSC`, `END1`, `END2`, `STORY1`–`STORY6`, `ULTIMA` — `systems/intro.md` and `systems/endgame.md`.
 
-## 10. Open questions
+## 10. Format Boundaries And Remaining Catalog Work
 
-The format is verified at the structural level (LZW envelope, directory layouts, image and mask sub-block headers, depth-dependent row strides) and at the byte-budget level (every container's expected size matches the declared LZW length exactly, including the sprite-and-mask family's deviation from the 2:1 inter-depth ratio). The following points remain open.
+The file-format contract is complete at structural depth: LZW envelope,
+directory layouts, image and mask sub-block headers, depth-dependent row
+strides, sprite-mask polarity, and byte-budget checks are verified. Every
+container's expected size matches the declared LZW length exactly, including
+the sprite-and-mask family's deviation from the 2:1 inter-depth ratio.
+
+Remaining work is catalog, renderer, or historical-hardware parity rather than
+archive decoding:
 
 - **Per-screen palette overrides.** The CGA palette is set by driver state at mode-switch time and may differ between scenes. Whether any specific scene transition triggers a palette change — and which scenes carry which palette — is a property of the CGA driver and the scene-mode initialisers, not of the file format. A reader that wants to faithfully render the CGA artwork must either source the active palette from the running engine or assume one of the standard CGA mode-four palettes per scene.
 
@@ -216,11 +242,16 @@ The format is verified at the structural level (LZW envelope, directory layouts,
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
 - The first-pass survey of every tile, sprite, font, and screen-panel file in both depths, the LZW envelope identification and verification, the three container layouts, the sprite-and-mask budget arithmetic, and the cross-file size and ratio audits — `u5-decomp/formats/tile-graphics.md`.
+- The resident LZW bit-reader and loader wrapper notes that confirm the
+  variable-width code stream contract -
+  `u5-decomp/functions/ULTIMA_EXE/0x135A_buffered_stream_read.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x82DE_load_lzw_image.md`.
 - Fresh local sprite-mask verification over `ITEMS` and `MON0` through `MON7`
   in both `.16` and `.4` forms confirmed matching image/mask dimensions and
   the "set bit = transparent" polarity.
 - The display drivers' byte-by-byte unpacking of the chunky packed (EGA) and packed two-bit (CGA) row data into hardware framebuffer form — `u5-decomp/code-inventory.md` (the `EGA.DRV`, `CGA.DRV`, `HERC.DRV`, and `TANDY.DRV` driver entries).
 - The text-output overlay's slicing of the `TEXT` strips into per-character glyphs — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and the text-output overlay's per-character draw function.
 - The world tile attribute table held in the resident data slab — referenced by the location tile grids' decoded tile indices — `u5-decomp/formats/data-ovl.md`.
+- The resident miniature tile-glyph rendering path — `u5-decomp/functions/ULTIMA_EXE/0x7040_render_2x16_sprite.md`.
 - The active-object table whose per-slot tile byte indexes the world tile atlas — `u5-spec/systems/active-objects.md`.
 - The location tile grids' per-cell tile byte that indexes the world tile atlas — `u5-spec/formats/location-dat.md`.

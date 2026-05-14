@@ -8,7 +8,7 @@ Format specification for `BRIT.DAT`, the static Britannia surface map. Runtime m
 
 The file does not store all 256 logical chunks. Pure open-ocean chunks are omitted and synthesized by the loader. The missing chunks are identified by a 256-entry chunk-index table in resident data: each logical chunk slot either names a stored 256-byte block in `BRIT.DAT` or carries the all-water sentinel. The sentinel is the all-ones byte, decimal `255`; valid stored-block entries are therefore `0..204`. A reader needs both `BRIT.DAT` and the decoded chunk-index table to reconstruct the full 256-by-256 surface grid.
 
-`BRIT.DAT` is static terrain. It does not contain active monsters, vehicles, dropped items, moongate state, party position, visibility state, or location-entry metadata. Those are supplied by runtime state, companion object files, or resident tables.
+`BRIT.DAT` is static terrain. It does not contain active monsters, vehicles, dropped items, moongate schedule or animation state, party position, visibility state, or location-entry metadata. Those are supplied by runtime state, companion object files, or resident tables.
 
 ## 2. File Shape
 
@@ -95,7 +95,13 @@ Named locations on Britannia are not embedded as submaps inside `BRIT.DAT`. The 
 
 The location files use a different format: fixed 32-by-32 floor grids, grouped by location class. `BRIT.DAT` never stores those interior grids. It only provides the surface cell from which the transition is recognized.
 
-Dungeon entrances, shrines, moongates, chasms, wells, and other special surface behavior follow the same split: the map supplies a tile and coordinate; the runtime tables and system logic decide whether that cell triggers a mode change, prompt, teleport, or other effect.
+Dungeon entrances, shrines, chasms, wells, and other static surface behavior follow the same split: the map supplies a terrain tile and coordinate; the runtime tables and system logic decide whether that cell triggers a mode change, prompt, teleport, or other effect.
+
+Natural moongate frames are different. Current shipped-map scans find no static
+moongate tile cells in `BRIT.DAT`, so the traced moongate presentation and
+saved-slot live-terrain refresh are supplied by runtime state rather than by
+source terrain cells. The live-terrain landing and entry hook is specified in
+`systems/overworld.md`.
 
 ## 7. Relationship To Visibility And Rendering
 
@@ -116,6 +122,13 @@ When combat starts from a surface active object, the tactical arena is loaded fr
 `BRIT.DAT` is read-only static content during play. Saves persist the party's coordinates, current plane, vehicle state, active-object table, and other runtime state. The mutable surface-object layer is mirrored through the surface object data rather than by rewriting `BRIT.DAT`.
 
 Runtime tile substitutions, animation-frame changes, moongate stamps, open-object overlays, and encounter spawns operate on live buffers or active-object records. They should not be written back into `BRIT.DAT`.
+
+The chunk loader's fixed live-buffer substitution pass is part of that runtime
+layer. After a stored or all-water chunk is copied into memory, tile ids
+`0x16..0x18` cause the loader to write tile `0xDF` through the live world-tile
+accessor, while tile id `0x19` writes tile `0x1A` only when the current chunk
+descriptor passes the chunk high-byte classifier. These rewrites are not file
+contents and do not change the sparse chunk-index mapping.
 
 ## 10. Validation
 
@@ -151,12 +164,21 @@ The simplest complete decoder materializes a 256-by-256 grid:
 
 An engine does not need to materialize the whole grid. It can follow the original streaming model: keep a 2-by-2 chunk window around the player, update it when the scroll base crosses a chunk boundary, and synthesize all-water chunks on demand.
 
-## 12. Gaps
+## 12. Format Boundary And Runtime Work
+
+The sparse `BRIT.DAT` map-file contract is complete at byte-layout depth:
+stored block count and size, chunk-index table use, all-water synthesis,
+coordinate wrapping, tile-byte preservation, static terrain ownership, and the
+chunk-loader live-buffer substitution boundary are fixed. Remaining items
+belong to resident-data sourcing, runtime transitions, tile cataloguing,
+encounter behavior, or mutation-audit work rather than the base file layout.
 
 - The exact resident location of the Britannia chunk-index table is intentionally out of scope for this cleanroom format spec. A complete implementation still needs that table from the resident-data spec or an equivalent clean source.
-- The full list of entrance, shrine, moongate, falls, and scripted-transition coordinates belongs in system or gazetteer specs, not in this file-format spec.
+- The full list of entrance, shrine, falls, scripted-transition coordinates, and saved Moonstone gate anchors belongs in system or gazetteer specs, not in this file-format spec.
 - The precise tile-attribute tables for passability, sight blocking, special triggers, and animation are not fully enumerated in the tile specs yet.
-- The chunk-loader's full substitution table for animated or alternate terrain is not yet specified.
+- The semantic names for the chunk-loader substitution tile ids, and the
+  classifier flags that gate the `0x19` case, remain tile-catalog and
+  helper-level work.
 - The random-encounter probability formula and terrain-to-monster mapping remain partially open in the encounter system spec.
 - It is not yet fully audited whether any long-lived world mutation can patch the live terrain layer across saves. Current evidence points to static `BRIT.DAT` plus mutable active-object/object-layer state.
 
@@ -171,3 +193,5 @@ This spec is a cleanroom prose rewrite derived from the project notes and existi
 - `u5-spec/systems/encounters.md`
 - `u5-spec/formats/tiles.md`
 - `u5-spec/catalogs/tile-catalog.md`
+- `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`
+- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md`

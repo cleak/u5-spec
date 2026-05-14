@@ -61,10 +61,10 @@ thirty-three, and the glyph for uppercase A is stored in the slot for code
 sixty-five. Control-code slots at the start of the file are mostly blank or
 non-printing in the shipped data.
 
-The format has no storage for high-bit character codes. If a caller supplies a
-value above one hundred twenty-seven, a compatible implementation should either
-mask or reject it according to the surrounding text system's policy. The file
-itself defines only the lower seven-bit range.
+The format has no storage for high-bit character codes. The resident text
+emitter owns that caller-side policy: ordinary cell output ignores high-bit
+bytes unless an adjacent extended-control path has already consumed them. The
+file itself defines only the lower seven-bit range.
 
 ## 5. Byte and Bit Interpretation
 
@@ -147,13 +147,10 @@ window rectangles, style flags, and driver dispatch. This format spec only
 defines how to fetch and decode the glyph bitmap once a character code has been
 chosen.
 
-## 9. Open Questions
+## 9. Runtime Boundaries
 
 - The exact runtime rule for selecting `IBM.CH` versus `RUNES.CH` belongs to
   the text or magic/rune display path and is not encoded in the file.
-- The original handling of character codes above one hundred twenty-seven has
-  not been pinned down in this spec. Implementations should avoid emitting such
-  codes into this font unless a caller-level mapping is defined.
 - The relationship between these standalone fonts and any driver-embedded font
   cache is a runtime-loading question, not an on-disk-format question.
 
@@ -161,6 +158,7 @@ chosen.
 
 This is a cleanroom prose rewrite derived from
 `u5-decomp/formats/fonts-bitmaps.md`, cross-checked against
-`u5-spec/systems/text-output.md` and `u5-spec/formats/tiles.md`. It omits
-decompiled code, assembly, private offsets, raw address tables, and copied
-binary dumps.
+`u5-spec/systems/text-output.md` and `u5-spec/formats/tiles.md`. High-bit
+caller handling is cross-checked against
+`u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`. It omits decompiled code,
+assembly, private offsets, raw address tables, and copied binary dumps.

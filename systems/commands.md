@@ -28,7 +28,7 @@ The dispatcher expects one byte from the input pipeline:
   system.
 - Direction codes should normally have been consumed by the active mode loop.
   The one confirmed dispatcher-visible direction/control code is the cursor-east
-  typeahead toggle described in Section 7.
+  typeahead toggle described in Section 9.
 - Function-key remap codes are not part of the resident A-Z command table.
   Mode loops or menu-specific prompts should consume or ignore them before
   falling through to letter dispatch.
@@ -40,7 +40,7 @@ Scene routing uses the resident scene byte:
 | `0` | Overworld branch. |
 | `1..32` | Town/dwelling/castle/keep branch. |
 | `33..127` | Dungeon branch when the dungeon mode loop forwards a letter. |
-| `128..255` | Combat range; not a normal caller of this dispatcher. |
+| `0xFF` | Combat-class marker; not a normal caller of this dispatcher. |
 
 Mode loops may intercept a key before it reaches this dispatcher. For example,
 dungeon mode handles its own explicit "Exit to DOS?" prompt before forwarding
@@ -81,24 +81,24 @@ handoffs.
 | `E` | Enter. | Overworld routes to the location/dungeon entry helper. Non-overworld scenes use the resident refusal prompt path. |
 | `F` | Fire. | Routes to the fire/cannon handler family. Overworld ship broadsides use a sub-handler; dungeon mode refuses. Door-destruction messages belong to this family, not to Open or Jimmy. See `vehicles.md`. |
 | `G` | Get. | Routes to the Search/Jimmy/Open/Get overlay's Get handler. Dungeon mode skips the surface/town Get prefix and falls into the underfoot chest path. |
-| `H` | Hole up / rest. | Overworld and dungeon use the rest-with-watch path. Town mode uses the inn/bed-hours path and refuses off bed tiles. |
+| `H` | Hole up / rest. | Overworld and dungeon use the rest-with-watch path. Town mode uses the inn/bed-hours path and refuses off bed tiles. The shared rest handler owns the hours prompt, sleep cleanup, HP recovery, rest-interruption checks, and the rare outdoor Lord British camp event; see `rest-and-camp.md`. |
 | `I` | Ignite. | Routes to the torch-lighting handler. It consumes one torch if available and then sets or extends the torch duration as described in `lighting.md`. |
 | `J` | Jimmy. | Routes to the lockpick handler for doors, chests, and pickpocket-like cases. |
 | `K` | Klimb. | Mode-aware: overworld, town-family locations, and dungeons each have their own climb/Z-transition handler; the gear gate, on-foot check, ladder cases, and dungeon level rules are specified in `doors-and-z-transitions.md`. |
-| `L` | Look. | Dungeon scenes route to DNGLOOK. Overworld and town-family scenes route to LOOKOBJ and `LOOK2.DAT`. |
-| `M` | Mix / shrine-command family. | Routes into the reagent-mixing command family; shrine meditation is a special handler reached from this command family when the party is at a valid shrine. |
-| `N` | New order. | Routes to the party-order swap handler. |
+| `L` | Look. | Dungeon scenes route to DNGLOOK. Overworld and town-family scenes route to LOOKOBJ and `LOOK2.DAT`; see `view.md`. |
+| `M` | Mix / shrine-command family. | Ordinary field use routes to CMDS reagent mixing. Shrine-family special tiles route through CAST2's shrine/urn entry handler, which then dispatches internally to virtue meditation or Codex urn reading. |
+| `N` | New order. | Routes to the party-order swap handler described in Section 6. |
 | `O` | Open. | Routes to the Open handler for doors, chests, and dungeon underfoot cases. |
-| `P` | Push. | Refuses in dungeons; otherwise routes to the push/movable-tile handler. |
+| `P` | Push. | Refuses in dungeons; otherwise routes to the push/movable-tile handler described in Section 8. |
 | `Q` | Save game. | Routes to the save-game handler, which prompts whether to save. On `N`, it returns without writing. On `Y`, it writes the save files, acknowledges completion, and returns to the caller. This letter is not the DOS-terminate path by itself. |
 | `R` | Ready. | Routes to the equipment-ready handler in the status/equipment overlay. The picker, slot mapping, stock-counter mutations, and hand-occupancy gates are specified in `inventory.md`. |
 | `S` | Search. | Routes to the Search handler, including secret-door and searchable-object paths. |
 | `T` | Talk. | Town-family scenes route to the conversation engine. Overworld and dungeon scenes refuse; the overworld path may still prompt for a direction before printing its refusal. |
-| `U` | Use. | Routes to the item-use handler. The implementation lives with the spell/item overlays rather than in the command dispatcher. |
-| `V` | View / gem. | The dispatcher checks gem count first. If none remain, it prints the no-gem refusal. Otherwise it decrements the count and routes to LOOKOBJ for overworld/town view or DNGLOOK for dungeon view. |
+| `U` | Use. | Routes to the non-combat item-use handler. The implementation lives with the spell/item overlays rather than in the command dispatcher; usable-item families are specified in `inventory.md` and `catalogs/item-list.md`. |
+| `V` | View / gem. | The dispatcher checks gem count first. If none remain, it prints the no-gem refusal. Otherwise it decrements the count and routes to LOOKOBJ for overworld/town view or DNGLOOK for dungeon view. Combat `V` is label-only and does not consume a gem; see `view.md`. |
 | `W` | Default refusal. | No resident world-command handler is currently confirmed; it falls through to the stock "What?" response when it reaches this dispatcher. |
-| `X` | X-it. | Routes to the vehicle-exit/dismount handler. Ordinary dungeon `X` is a refusal/no-op; spell contexts may call a separate dungeon-escape helper that shares the escape wording. |
-| `Y` | Yell. | Routes to the Yell handler. Shipboard Y toggles sails as specified in `vehicles.md` and `weather.md`; non-ship branches handle words of power and Shadowlord-name effects. |
+| `X` | X-it. | Routes to the vehicle-exit/dismount handler outside combat. Ordinary dungeon `X` is a refusal/no-op; combat `X` uses the combat-only escape handler specified in `combat.md`. |
+| `Y` | Yell. | Routes to the Yell handler described in Section 11. Shipboard Y toggles sails as specified in `vehicles.md` and `weather.md`; non-ship branches handle words of power and Shadowlord-name effects. |
 | `Z` | Z-stats. | Routes to the character/status display overlay. Character stat pages, equipment display, and shared-inventory browsing are specified in `inventory.md` and `text-output.md`. |
 
 ## 5. Verb Prefixes And Prompts
@@ -115,7 +115,33 @@ The command spec's contract is simply that prompts are synchronous: a handler
 does not return to the mode loop until its prompt sequence has completed or been
 cancelled.
 
-## 6. Search/Jimmy/Open/Get Tile Commands
+## 6. N-New Order Party Command
+
+N-New Order is a party-roster command for changing the travelling order. It is
+available from the resident world-command dispatcher; combat has its own `N`
+label and does not inherit this party-order effect.
+
+The command prompts for two party members through the shared party-member
+selector. Cancelling either prompt prints the no-selection result and returns
+without consuming a turn. If either selected slot is slot zero, the command
+refuses because the leader must remain first, and it returns without consuming
+a turn.
+
+On a successful non-leader selection pair, the command exchanges the two
+selected roster records as whole thirty-two-byte character records. Name,
+status, stats, class letter, equipment, and per-record counters all move
+together. The party-size field is not changed, no world object or tile state is
+touched, and the command marks the turn as consumed after the exchange. Picking
+the same nonzero slot twice is accepted: the whole-record exchange is a
+behavioural no-op, but the turn is still consumed.
+
+The selector owns membership and cancellation validation; the New Order handler
+trusts the non-cancel slot indices it receives except for its explicit slot-zero
+leader check. Compatible implementations should therefore model New Order as a
+swap of the current active party records, not as a rewrite of a separate
+canonical companion-order table.
+
+## 7. Search/Jimmy/Open/Get Tile Commands
 
 The `S`, `J`, `O`, and `G` letters share one tile-interaction overlay. They are
 mode-aware command handlers, not simple dispatcher stubs:
@@ -143,18 +169,18 @@ rock", the pickup grants the Moonstone and invalidates the associated Gate
 Travel slot. If no accepted object slot matches, Get falls back to tile-specific
 cases such as borrowing a table item, picking crops, or eating from a reachable
 plate; otherwise it prints the nothing-to-get refusal. In dungeons, Get reads
-the underfoot cell: unopened doors refuse, chest cells roll contents across the
-chest-content categories, and unrelated cells refuse.
+the underfoot cell: closed chest cells refuse until opened, open chest cells are
+consumed in the loaded dungeon image and roll the seven-row reward generator
+described in `containers.md`, and unrelated cells refuse.
 
-`J` Jimmy is the key-and-lock handler. It refuses immediately when the key stock
-is empty. Non-dungeon Jimmy handles locked doors, floor chests, and NPC pocket
-cases from the target cell: success rewrites the lock/container state or grants
-the pickpocket reward, while door and chest failures can break a key. The NPC
-pocket failure path shares the broken-key narration, but the traced public
-contract is only that no reward is granted and the pocket-completion state is
-not advanced. Dungeon Jimmy uses the dungeon grid variant and shorter
-dungeon-specific door/chest outcomes. Detailed lock-state rules live in
-`doors-and-z-transitions.md`.
+`J` Jimmy is the key-and-lock handler. Non-dungeon Jimmy checks key stock before
+ordinary door, visible-chest, and NPC pocket rolls. Those rolls use the
+selected member's lock-pick class byte against a `1..29` die; a failed roll
+breaks one key. Success rewrites the lock/container state or grants the
+pickpocket reward. A failed NPC pocket roll grants no reward and does not mark
+the NPC picked/thanked; a target cell with no active NPC refuses without a key
+loss. Per-map object chests and dungeon chests use separate formulas and key
+side effects. Detailed lock-state rules live in `doors-and-z-transitions.md`.
 
 `O` Open is the no-key counterpart. Non-dungeon Open runs the door auto-close
 tracker before probing the target tile. Already-open targets acknowledge that
@@ -174,25 +200,112 @@ to belong to the active floor/chunk. A matching hidden object prints the found
 result and dispatches the object through the same inventory-add path used by
 pickup/container commands.
 
-If no hidden object is found, surface/town Search checks the saved Moonstone
-slots for a valid buried slot at the target coordinate. A matching Moonstone
-slot creates a visible "strange rock" pickup tagged with that slot; if several
-slots share the same coordinate, the highest-numbered matching slot is
-considered first, and Search does not duplicate a rock for a slot that is
-already surfaced. After object and Moonstone misses, the handler falls back to
-resident trap and tile classification: treasure-like, door/wall/feature,
-field, pit, fountain, bomb-trap, poison-gas, sleep-field, and empty searches
-produce their feature-specific results. Object-table and treasure results feed
-the inventory-add path; ordinary feature descriptions are narration only; and
-the mutating fallback cases are live-tile effects such as hidden-door reveal,
-bomb-trap clearing, and chest-related helper outcomes. Dungeon Search does not
-use the surface object-table scan; it routes to the dungeon inner handler, which
-reads the packed dungeon cell class/subtype and prints the corresponding
-feature-specific search result. The secret-door reveal contract belongs to
-`doors-and-z-transitions.md`; inventory grants and chest contents belong to
+If no hidden object is found, surface/town Search checks for a slot-indexed
+treasure marker at the target coordinate. That coordinate lookup scans the
+active-object table in reverse priority order and only the treasure marker
+short-circuits into an immediate found-object grant. Other active-object
+classes do not drive the fallback narration; Search uses the live tile byte
+read before the coordinate lookup.
+
+The live-tile fallback table supplies fixed furniture/location prefixes such
+as stump, shelf, bookshelf, wall, desk, barrel, vanity, bed, dresser, trunk,
+brazier, and fireplace. The hidden-door marker is the mutating case: it prints
+the hidden-door result, rewrites the live tile to the revealed variant, marks
+the map dirty, and stops. Otherwise, Search continues through the saved
+Moonstone table, rare-reagent harvest table, and fixed hidden-treasure table
+in that order; one live-tile marker skips only the Moonstone table before
+continuing. Object-table, slot-indexed treasure, Moonstone, reagent, and fixed
+hidden-treasure results feed their owning inventory or pickup-staging paths.
+Ordinary feature descriptions are narration only. Per-map object slots that
+carry trap-class metadata use a member-stat threshold roll only to choose the
+visible no-trap/simple/complex/generic-trap narration, including possible
+missed traps and false positives. Actual trap effects are owned by the later
+trap resolver when a caller selects one.
+
+Dungeon Search does not use the surface object-table scan. It routes to the
+dungeon inner handler, which first enforces the dungeon light gate: with no
+torch light and no light-spell radius, Search reports that it is too dark and
+does not inspect the cell. In light, it reads the packed dungeon cell ahead of
+the party and classifies by high nibble. Ordinary ladders, doors, walls, pits,
+fountains, open chests, fields, and flavour objects print feature-specific
+search descriptions. Chest cells use the dungeon chest trap/detail branch.
+Exact pit-family Search bytes cover ordinary pit, secret-passage reveal, and
+bomb detection/springing, while flavour/wall classes can rewrite only the
+visit-local loaded dungeon image. Those dungeon Search rewrites are specified
+in `dungeon-mode.md`. Inventory grants and chest contents belong to
 `containers.md` and `catalogs/item-list.md`.
 
-## 7. Special Non-Letter Dispatcher Input
+When a Search, Open, Jimmy, or container outcome selects the shared resident
+trap-effect resolver, the common party damage/revive effects are specified in
+`systems/traps.md`. The command layer owns routing and prompt/refusal text; the
+trap spec owns the selected effect once the routing layer has chosen it.
+
+## 8. P-Push Movable-Tile Command
+
+P-Push is a direction-prompt command for movable map furniture and similar
+objects. Escape at the direction prompt cancels silently. Before resolving the
+push, the handler runs the same last-opened-door cleanup used by other
+directional CMDS commands, so a previously opened door may close before the
+object interaction is tested.
+
+The command samples the adjacent source cell in the chosen direction. In
+town-family and interior scenes this coordinate is relative to the avatar. In
+overworld scenes the command temporarily works in the active camera-anchor
+coordinate frame, then restores the party coordinate after a successful
+resolution and requests a full redraw.
+
+A source cell is pushable when either a dynamic object occupies that coordinate
+or the static tile is in the known pushable set:
+
+| Pushable tile family | Behaviour |
+|---|---|
+| `0x5B` | Single non-rotating pushable class. |
+| `0x90..0x93` | Four-facing chair family; successful movement rewrites the facing bits. |
+| `0xA5`, `0xA6`, `0xA8`, `0xA9` | Non-rotating pushable classes. |
+| `0xAD..0xAF` | Non-rotating pushable run. |
+| `0xB4..0xB7` | Four-facing cannon family; successful movement rewrites the facing bits. |
+
+If neither dynamic-object presence nor the pushable static tile test accepts,
+the command prints the emphatic "won't budge" refusal and exits.
+
+The cell one tile farther in the same direction decides whether the command is
+a push or a pull:
+
+- **Push.** If the far cell has no dynamic object and its static tile is the
+  expected floor/occupancy stamp for the source object family, the source object
+  moves into the far cell and the source cell receives that stamp. Directional
+  families are rotated to face the movement direction.
+- **Pull.** If the push path is blocked but the avatar's current cell already
+  carries the matching stamp, the object is dragged into the avatar's old cell
+  and the source cell receives the old player-cell stamp. Directional families
+  are rotated with the opposite-facing rule used for pulling.
+- **Final refusal.** If neither path is legal, the command prints the shorter
+  "won't budge" refusal and exits.
+
+On any successful push or pull, the avatar advances one tile in the prompted
+direction and the map is marked dirty. The command mutates the live tile buffer;
+implementations should not model it as an overlay-only animation. The written
+floor/occupancy stamps are visit-local for top-down location scenes: they live
+in the runtime tile buffer, not in the saved top-down location files, and
+ordinary location entry reloads that buffer from the static scene data. A
+byte-compatible implementation should preserve the mutated live cells until the
+owning map or floor is reloaded, another traced command rewrites the cells, or
+temporary combat arena state is torn down. A save/load round trip does not
+create a durable P-Push furniture trail for towns, castles, keeps, dwellings,
+or overworld chunk windows. The generic stamp `0x44` and the cannon-family
+stamp `0x45` both resolve to the same cobble description in the
+LOOK2-backed tile catalog. The separate stamp byte is still load-bearing for
+P-Push's family-matching rule, but it does not require a distinct public
+visual label.
+
+Combat is a supported caller of this same handler. The combat command parser
+prints the `Push-` label and enters P-Push directly, without the live-actor gate
+used by the combat Get/Jimmy/Open/Search prompt helper. Because combat runs with
+an actor-anchor scene frame, a successful push/pull advances the currently
+acting combat actor in the arena and mutates only the temporary combat tile and
+object state that the combat framer later tears down.
+
+## 9. Special Non-Letter Dispatcher Input
 
 One translated control code that normally represents an eastward cursor/numpad
 direction can reach the dispatcher in at least one path. When it does, the
@@ -203,7 +316,83 @@ Other direction/control codes are normally consumed by the active mode loop
 before letter dispatch. Their exact mode-by-mode pre-routing belongs to
 `input.md`, `overworld.md`, `town-mode.md`, and `dungeon-mode.md`.
 
-## 8. Cross-References
+## 10. H-Hole-Up Rest Contract
+
+H-Hole-Up is routed by scene before the detailed rest handler runs:
+
+- **Overworld and dungeon.** The dispatcher calls the resident rest-with-watch
+  wrapper. That wrapper performs the wilderness/dungeon rest flow and can turn a
+  rest interruption into an ambush-style combat.
+- **Town-family locations.** The dispatcher first requires the party to be on a
+  bed/inn-style tile. If the tile gate fails, the command is refused. If it
+  succeeds, control enters the hours-prompt rest path.
+- **Combat.** Combat has its own H label and refuses the action; world-mode rest
+  is not available inside an arena.
+
+The rest handler saves the current input mode, probes whether the current tile
+allows rest, walks the party slots, prints the sleep narration, and prompts for
+the number of hours when the path requires an explicit duration. Poisoned and
+dead members are not treated like healthy sleepers. Sleeping party members are
+restored to good status during cleanup. Eligible living members can receive a
+small random HP gain capped at their maximum HP; the traced regeneration gate is
+class-aware and does not imply a blanket full-party heal.
+
+The town hours path advances elapsed rest with a caller-owned loop rather than
+by handing the clock one large "N hours" value. It accepts one nonzero digit,
+runs one bounded burst of up to sixteen schedule/world-tick passes, then
+advances elapsed rest in repeated ten-minute cleanup calls until the target hour
+is reached or the rest surface rejects the party. If an interruption or refusal
+fires, the command stops early and hands control to the ambush/refusal path;
+elapsed time already applied is not rolled back. If the duration completes, the
+command prints the normal rested result and stamps the current camp/rest marker.
+
+## 11. Y-Yell Command
+
+Y-Yell is a mode-sensitive command with three visible families.
+
+When the party is aboard a ship in a normal gameplay scene, Yell is a no-input
+sail command. It toggles the ship between hoisted and furled sail states while
+preserving heading, prints the corresponding short sail command, and does not
+move the ship immediately. Wind-driven movement and X-it's under-sail refusal
+remain vehicle-system behaviour; this command only changes the sail state.
+
+When the party is not in the ship-sail branch, Yell prompts for a free-text
+word of up to thirty characters using the same style of line input as the
+conversation keyword path. Empty input prints the nothing-said result and
+returns without a world change. Nonempty input is routed by scene context:
+
+- **Shadowlord-name contexts.** In the Shadowlord arena scene family, the typed
+  word is compared with the three Shadowlord names. A matching name can create
+  the active Shadowlord encounter state only when the corresponding Shadowlord
+  is still eligible for that scene and a monster slot is free. The success path
+  records which Shadowlord is active, places the encounter state near the
+  player, and plays the visible/sound appearance effect. Wrong names, wrong
+  scene, unavailable Shadowlords, or full monster slots produce no effect.
+- **Word-of-Power contexts.** The command scans the eight dungeon Words of
+  Power in their fixed order. A matching word prints the uttered-word result.
+  The match also plays the shared low-rumble / full-viewport flash
+  presentation effect before the location-specific door test. The word
+  transmutes the live dungeon exit/door tile only when the current room's exit
+  metadata and that word's target location agree; speaking a valid word in the
+  wrong place still produces the utterance feedback and presentation effect but
+  no door change. A successful transmutation dirties visibility so the changed
+  tile is redrawn. A nonmatching word produces no effect.
+- **Other contexts.** Non-ship scenes that are not accepted by either
+  Shadowlord-name or Word-of-Power routing produce no effect after the prompt.
+
+The traced Word-of-Power transmutation path also flips a per-word scratch
+marker, but no live reader has been identified. Treat that marker as
+non-contractual bookkeeping: it is not a save-backed quest flag, it does not
+gate repeated utterances, and clean implementations should derive
+player-visible state from the live tile change plus the normal visibility-dirty
+path.
+
+The abandoned mantra-style branch present in the private command note is not
+reachable from the shipped Word-of-Power table and is not part of the v1 public
+Yell contract. Shrine meditation is specified under the `M` command and
+`systems/karma.md`.
+
+## 12. Cross-References
 
 - `input.md` describes keyboard polling, uppercase folding, direction-code
   translation, prompt reentrancy, and the handoff to this dispatcher.
@@ -212,11 +401,18 @@ before letter dispatch. Their exact mode-by-mode pre-routing belongs to
 - `overworld.md`, `town-mode.md`, and `dungeon-mode.md` document the mode-local
   pre-routing that happens before printable letters are forwarded.
 - `combat.md` documents the separate combat command dispatcher.
-- `vehicles.md`, `magic.md`, `doors-and-z-transitions.md`,
+- `vehicles.md`, `weather.md`, `magic.md`, `doors-and-z-transitions.md`,
   `conversation.md`, `shops.md`, `save-load.md`, `lighting.md`, and
-  `weather.md` document major command families after dispatch.
+  `catalogs/quest-graph.md` document major command families after dispatch.
 
-## 9. Open Questions
+## 13. Dispatcher Boundaries And Remaining Work
+
+The resident command-dispatch contract is complete at A-Z routing depth: mode
+pre-routing, scene-aware letter families, no-action fallthroughs, command
+prompt ownership, typeahead toggle, save route, major CMDS/SJOG/CAST/ZSTATS
+delegates, and command-family cross-references are fixed. Remaining work belongs
+to per-handler return compatibility, mode-local control-code tables, and
+P-Push stamp rendering, not to the resident dispatch table itself.
 
 - **Per-handler return values.** The dispatcher-level status values are known
   well enough for loop routing, but several overlay handlers forward their own
@@ -225,15 +421,14 @@ before letter dispatch. Their exact mode-by-mode pre-routing belongs to
   identified, but each mode loop has its own control-code table. These tables
   should be documented in the mode specs rather than collapsed into the
   resident command table.
-- **M command shrine split.** Public behaviour supports both reagent mixing and
-  shrine meditation through the command family, but the precise branch point
-  between CMDS and CAST2 should be traced further.
-- **Search trap classification.** Search's surface/town fallback distinguishes
-  several trap and feature classes, including bomb-trap tile replacement, but
-  the exact trap-kind table and difficulty formulas remain with the container
-  trap work.
+- **P-Push stamp rendering.** The command writes floor/occupancy stamp tiles
+  into the live map buffer. Save/load durability is bounded negatively for
+  top-down location and overworld buffers. The generic `0x44` stamp and the
+  cannon-family `0x45` stamp both resolve to cobble through LOOK2; the byte
+  distinction remains part of P-Push's family-matching rule rather than a
+  separate visual-label gap.
 
-## 10. Sources
+## 14. Sources
 
 This cleanroom spec was derived from the private analysis notes listed below.
 No decompiled code, assembly, raw address tables, or copied data strings are
@@ -255,9 +450,41 @@ reproduced here.
   `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`,
   `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`, and
   `u5-decomp/functions/CMDS_OVL/0x0AEA_cmds_fire.md`.
+- The M-family split between CMDS reagent mixing and CAST2 shrine/urn entry:
+  `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md` and
+  `u5-decomp/functions/CAST2_OVL/_INDEX_2026-05-08.md`.
+- The New Order active-party record exchange, leader refusal, cancel paths, and
+  same-slot self-swap behaviour:
+  `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`.
+- The Y-Yell sail toggle, free-text prompt, Shadowlord-name branch,
+  Word-of-Power branch, per-word scratch-marker boundary, and unreachable
+  mantra-style leftover branch:
+  `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`,
+  `u5-decomp/functions/CMDS_OVL/0x70F2_shrine_effect.md`, and
+  `u5-decomp/functions/CMDS_OVL/0x1202_cmds_meditate.md`.
+- The P-Push direction prompt, pushable tile families, push/pull branch
+  conditions, facing rewrite, overworld coordinate-frame side effects, and
+  live-tile mutations:
+  `u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`. The non-durable
+  save/load boundary for top-down live buffers also uses
+  `u5-decomp/notes/system-trace_save-load.md` and
+  `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
 - The Search/Jimmy/Open/Get overlay overview and public command handlers:
   `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
   `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`,
+  `u5-decomp/functions/SJOG_OVL/0x0646_sjog_search_inner.md`,
+  `u5-decomp/functions/SJOG_OVL/0x02EA_sjog_search_object_handler.md`,
   `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`,
+  `u5-decomp/functions/SJOG_OVL/0x0C3E_sjog_jimmy_inner.md`,
+  `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`,
   `u5-decomp/functions/SJOG_OVL/0x1374_sjog_open.md`, and
   `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`.
+- The Search coordinate-object fallback:
+  `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
+- Corrected entry notes for the shared Look/View and Ready/Z-stats command
+  families: `u5-decomp/functions/LOOKOBJ_OVL/0x099C_lookobj_master.md`,
+  `u5-decomp/functions/LOOKOBJ_OVL/0x10FC_local_view_render.md`,
+  `u5-decomp/functions/ZSTATS_OVL/0x1296_ready_main.md`, and
+  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
+- The CAST-owned U-Use item route:
+  `u5-decomp/functions/CAST_OVL/0x1792_use_item.md`.

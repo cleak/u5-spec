@@ -11,7 +11,9 @@ they are not part of the original engine's startup logic.
 This spec defines the public startup contract an implementation should expose:
 what program is launched, which command-line display selector is recognized,
 what files must be available before startup can continue, how control reaches
-the intro menu, and what belongs outside the engine boundary.
+the intro menu, and what belongs outside the engine boundary. The lower-level
+machine probe, runtime startup stub, and boot initialization sequence are
+specified in `boot.md`.
 
 ## 2. Executable Boundary
 
@@ -58,7 +60,8 @@ and should be ignored unless future startup tracing proves otherwise.
 Startup proceeds in layers:
 
 1. DOS loads `ULTIMA.EXE` as an MZ program and transfers control to the
-   executable's runtime startup layer.
+   executable's runtime startup layer. See `boot.md` for the low-level entry
+   and machine-probe contract.
 2. The runtime startup layer establishes the process state and transfers
    control to the resident main function.
 3. The resident main function parses the optional display selector, initializes
@@ -164,15 +167,16 @@ baseline" as an invariant. A later release or another platform may have a
 different wrapper, but that would be a version-specific packaging difference,
 not part of this IBM PC engine baseline.
 
-## 10. Open Questions
+## 10. Boundaries and Variations
 
-- The exact default display-mode choice when no command-line selector is
-  supplied should be verified against the startup detection path and hardware
-  assumptions. The driver loader's four explicit selector flags are known; the
-  no-selector fallback is a startup policy detail.
-- Driver initialization has a second dispatch cell whose complete binary ABI
-  remains deferred in `display-driver.md`; this launcher spec owns only the
-  selection and startup contract.
+- No-selector display fallback is not launcher-owned. The launcher contract
+  ends at "no explicit selector was supplied"; `boot.md` owns machine/display
+  detection, selector reconciliation, and the remaining EGA sentinel policy.
+- There is one resident display-driver dispatch cell. The separate resident
+  screen-mode dispatch cell is a resident executable controller, not a second
+  driver ABI. Its contract is specified in `screen-mode-dispatch.md` and its
+  separation from the loaded driver ABI is specified in
+  `display-driver-abi.md`.
 - This document covers the analyzed DOS/GOG file set. Other historical PC
   distributions should be compared before making cross-version claims.
 
@@ -184,11 +188,14 @@ raw executable bytes.
 
 - Code-file inventory and absence of a separate `ULTIMA5.COM` code file in the
   analyzed baseline - `u5-decomp/code-inventory.md`.
-- DOS entry into the executable and runtime transfer to the resident main
-  function - `u5-decomp/functions/ULTIMA_EXE/0x81D0_boot_entry.md`.
+- DOS entry into the executable, runtime transfer to the resident main
+  function, and machine/display detection - `systems/boot.md`.
 - Command-line display selector parsing, intro-overlay call, and resident
   mode-dispatch loop - `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
 - Display-driver loading from startup flags -
   `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
 - Intro overlay's boot initialization, title/menu loop, and handoff into
   normal play - `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+- Resident screen-mode dispatch ownership and its separation from the loaded
+  display driver ABI - `systems/screen-mode-dispatch.md` and
+  `systems/display-driver-abi.md`.

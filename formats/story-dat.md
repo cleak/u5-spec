@@ -24,7 +24,8 @@ Records are stored sequentially, with no header and no offset table.
 | Record order | Intro story order, selected by the intro slide loop |
 
 The file does not carry per-slide filenames, art ids, rectangles, colours, or
-wait durations. The intro system supplies those from code and resident tables.
+wait durations. The intro system supplies those from its fixed story-step
+contract.
 
 ## 3. Text Markers
 
@@ -55,6 +56,10 @@ twenty steps consume the twenty non-empty `STORY.DAT` records in order. Step 0
 consumes the first record but advances automatically; the later text-consuming
 steps wait for a key in the intro system before advancing.
 
+The complete step-to-art mapping, secondary art draws, and transition effects
+belong to `systems/intro.md`. This file's contract is only that the twenty
+records are consumed sequentially by the twenty text-consuming story steps.
+
 `STORY.DAT` does not mutate game state. Playing the sequence returns to the
 intro menu afterward. No save file is created or modified.
 
@@ -71,12 +76,18 @@ renderer. Unknown control bytes should be rejected by tooling or displayed by
 the renderer's normal fallback policy; the shipped content is plain text plus
 the markers listed above.
 
-## 6. Known Uncertainties
+## 6. System Boundaries
 
-- The exact transition timing, waits, and special secondary draws are
-  intro-system concerns and are not specified by this file.
-- The empty final trailer is best treated as a sentinel or padding; no
-  gameplay meaning is known.
+No file-layout work remains for the shipped DOS data set. The twenty-record
+sequential layout, supported text markers, non-consuming doorway step, and
+record order are public.
+
+The story sequence has one remaining exact-visual parity issue in the intro
+system: the internal wipe pattern and pacing of the step-1 rectangle
+transition helper. It does not affect `STORY.DAT` parsing or record order.
+
+The empty final trailer is padding or a sentinel. It has no known gameplay
+meaning and should not be exposed as a twenty-first story page.
 
 ## 7. Sources
 

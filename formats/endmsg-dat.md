@@ -62,14 +62,23 @@ The file is expected to fit in the endgame text buffer. A modern
 implementation should still bound reads by actual file length and reject
 unterminated records.
 
-## 6. Known Uncertainties
+## 6. System Boundaries
 
-- The exact external caller that transfers control into the endgame overlay is
-  unresolved, but it does not affect this file's layout.
-- The exact pause and animation timing between records belongs to the endgame
-  system, not this file.
-- The first confirmation answer is visible to the player, but the final branch
-  appears to depend on the second answer plus the saved box flag.
+No file-layout work remains for the shipped DOS data set. The eleven-record
+sequential text layout, prompt-record order, victory records, and refusal
+record are public.
+
+The external gameplay handoff is owned by `systems/endgame.md`: static caller
+coverage reaches the overlay from dungeon-room/post-combat cleanup paths, and
+the stock Doom final-room route is specified by `systems/endgame.md`,
+`systems/dungeon-mode.md`, and the dungeon/arena format specs. This file's
+layout and record order do not encode that route.
+
+Pause cadence, animation timing, palette effects, and terminal branch behavior
+belong to `systems/endgame.md`, not to this message table. The first
+confirmation answer is displayed and echoed, but the endgame system branches
+on the second confirmation plus the saved sandalwood-box flag. `ENDMSG.DAT`
+supplies the dialogue records only; it does not encode that branch rule.
 
 ## 7. Sources
 

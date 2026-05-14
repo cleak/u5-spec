@@ -65,13 +65,21 @@ Remaining byte values are unused; the engine treats them as "no key" and continu
 
 ## 5. Scancode Translation: Numpad, Arrows, and Diagonals
 
-Movement in Ultima V is eight-way. The player can request any of the four cardinal directions or any of the four diagonals. The input layer accepts several physical ways of asking for movement and translates them into one internal direction-code set:
+The input layer can represent eight direction requests: four cardinal
+directions and four diagonals. This is an input vocabulary, not a guarantee
+that every mode moves in eight directions. World, town, dungeon, and combat
+movement consumers accept only the cardinal subset; diagonals are available to
+special prompts or handlers that explicitly want them, and otherwise fall
+through as non-movement input.
+
+The keyboard layer accepts several physical ways of asking for a direction and
+translates them into one internal direction-code set:
 
 | Source | What the player presses | Translated to |
 |---|---|---|
 | Numpad cardinals | numpad 4 / numpad 6 / numpad 8 / numpad 2 | west / east / north / south |
 | Numpad diagonals | numpad 7 / numpad 9 / numpad 1 / numpad 3 | northwest / northeast / southwest / southeast |
-| Extended arrow keys | up / down | north / south |
+| Extended arrow keys | left / right / up / down | west / east / north / south |
 | Home / End / PgUp / PgDn | Home / End / PgUp / PgDn | northwest / southwest / northeast / southeast |
 | Top-row digits with a modifier | digit `1` through `9` while Shift or NumLock is held | same as the numpad layout above |
 
@@ -97,17 +105,19 @@ already in their final high-byte range when they leave the keyboard peek.
 
 Function keys F1 through F10 are also remapped into a different contiguous
 block, returned directly without passing through the numpad/direction-code
-path. The resident A-Z command dispatcher does not own this block. Mode loops
-or menu-specific input handlers must either consume these codes before letter
-dispatch or ignore them; exact per-key destinations are not yet public.
+path. The resident A-Z command dispatcher does not own this block, and the
+traced gameplay mode loops and free-text prompts do not assign it a command
+meaning. A compatible implementation should still preserve the remapped range
+at the keyboard boundary so any menu-specific or untraced consumer can see the
+same values; otherwise these keys are safely ignored by ordinary gameplay
+command dispatch.
 
 The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger.
 
-The extended-key translation has a notable gap: up, down, Home, End, PgUp, and
-PgDn are accepted, but left and right arrow scancodes are not in the traced DOS
-table. A compatibility-focused implementation should preserve that behaviour;
-a modern convenience layer may additionally map left/right arrows to west/east
-before handing input to the game core.
+The extended-key translation table accepts all four arrow keys plus Home, End,
+PgUp, and PgDn. Left and right arrows reach the same West/East cardinal path as
+numpad 4 and numpad 6; up and down reach the same North/South path as numpad 8
+and numpad 2.
 
 ## 6. Case Folding and One-Keystroke-per-Turn
 
@@ -152,11 +162,123 @@ Some prompts need more than one keystroke: NPC conversations accept a four- to s
 
 The line buffer is small (the longest string the game ever asks for is on the order of a dozen characters). There is no input history, no cursor movement within the buffer, and no insertion mode — backspace destructively removes the last character, and that is the only editing operation.
 
+The free-text reader accepts printable ASCII bytes up to the caller-supplied
+maximum length, echoes each accepted byte, and NUL-terminates the caller's
+buffer when Enter is pressed. Backspace erases one accepted character by
+printing a replacement space through the text eraser. Escape clears the whole
+line and terminates with an empty buffer. These prompts may disable the normal
+type-ahead flush while active so a typed word can be drained across repeated
+single-key reads.
+
 Single-character prompts (Y/N, a digit, a target-slot letter) run the loop exactly once. The prompt is responsible for validating the returned byte and looping if it is unacceptable; the wait-for-input routine itself does no validation. Numeric prompts accumulate digits into an integer (multiply by ten, add the digit) and treat backspace as integer division by ten.
 
 While any free-text prompt is active, the cursor blink continues — the player sees the same blinking cursor described in Section 3 at the end of what they have typed.
 
-## 9. World Tick During Idle
+## 9. Party-Member Selection Prompts
+
+Several command and spell paths ask the player to choose a travelling party
+member. The shared selector is slot-based, not name-based: digits and navigation
+keys choose among the currently active party slots, capped by the live
+party-size field. Slots are zero-based internally even though the visible
+choices are presented to the player as party positions.
+
+The standard party-target wrapper prints a short "on whom" prompt, invokes the
+resident slot selector, then echoes either the selected character's displayed
+name or the none/cancel result. If a selected name did not already wrap output
+to the next line, the wrapper appends a newline so the following prompt starts
+cleanly.
+
+The selector itself accepts visible digits `1` through `6` for direct slot
+choice, caps navigation to the live party size, lets direction/navigation keys
+cycle the highlighted slot, treats Space, Enter, and `0` as confirmation, and
+treats Escape as cancellation. Combat contexts can add the current arena tile's
+short label to the prompt when the selected actor is standing on a labelled
+combat tile; that label is presentation only and does not change the returned
+slot family.
+
+Selector returns have three semantic families:
+
+- **Selected slot.** A nonnegative result is the zero-based active-party slot
+  chosen by the player.
+- **Cancel.** Escape or the cancel key returns a negative result.
+- **Explicit none.** The zero key returns a distinct negative result. Most
+  callers treat all negative results as the same no-target branch, but
+  compatibility code should preserve the distinction where a caller does
+  inspect it.
+
+Callers own the prompt wording and no-target consequence. Party-target spells
+usually print the none result and abort before mutating a character record.
+N-New Order asks for two selected slots and refuses or cancels without spending
+a turn when either selection is negative or targets the leader slot. Combat
+commands often bypass the arbitrary selector and use the current active combat
+actor instead.
+
+## 10. Adjacent-Tile Command Direction Prompt
+
+World command handlers that act on one neighboring map cell share a resident
+direction prompt after the dispatcher has printed the verb prefix. This prompt
+does not print a generic `Direction-` label itself; the visible lead-in is the
+calling command's prefix, such as `Search-`, `Jimmy-`, `Open-`, `Get-`,
+`Push-`, `Talk-`, or a ship-fire prompt.
+
+The prompt clears a shared command-direction vector, then blocks on the normal
+single-keystroke input routine until it receives a cardinal direction or a
+pass/cancel choice. Cardinal choices are the same pre-routed direction values
+used by world movement:
+
+| Player choice | Command vector adjustment | Echoed label |
+|---|---|---|
+| West | X minus one | `West` |
+| East | X plus one | `East` |
+| North | Y minus one | `North` |
+| South | Y plus one | `South` |
+
+After a cardinal choice, the prompt returns a positive direction result and the
+caller reads the cached vector to choose its target tile. Diagonals, ordinary
+letters, function keys, and unshifted top-row digits are ignored and cause the
+prompt to read again. Space prints `Pass` and returns the no-direction result;
+callers normally treat that as a silent cancellation with no tile mutation. A
+compatibility implementation should preserve the cardinal-only filter rather
+than treating diagonals as valid adjacent targets.
+
+This adjacent-tile prompt is distinct from the spell direction prompt below.
+The spell prompt owns a target coordinate chosen from party or combat-actor
+origin state, while command handlers usually interpret the cached vector
+relative to their own map/object context.
+
+## 11. Spell Direction Prompts
+
+Spell and spell-like helpers that target one adjacent cardinal cell use a
+shared direction prompt. The prompt prints `Direction-`, blocks for one
+keystroke through the normal command-input routine, and owns both a returned
+direction result and a cached target coordinate pair for the caller.
+
+The origin depends on mode. Outside combat, the cached target starts at the
+party's current map position. In combat-class scenes, it starts from the active
+combat actor's current targeting coordinate. A recognized cardinal key then
+moves the cached target by one cell:
+
+| Player choice | Cached target adjustment | Echoed label |
+|---|---|---|
+| North | Y minus one | `North` |
+| East | X plus one | `East` |
+| South | Y plus one | `South` |
+| West | X minus one | `West` |
+
+Space is accepted as `Pass`: it echoes `Pass`, leaves the cached coordinate at
+the origin, and returns the no-direction result. Other keys are ignored and the
+prompt reads again rather than returning to the caller. Callers that treat the
+returned no-direction result as cancellation therefore make Space the
+player-visible no-effect choice for this prompt family; Escape is not the
+confirmed cancellation key for this shared spell prompt.
+
+Callers read the cached coordinate pair rather than receiving coordinates in
+the return value. This is why direction-target spells can share the same prompt
+while doing different work afterward: Open, Dispel Field, Wind Change, field
+placement, and directional attack helpers all interpret the same chosen target
+or no-direction result in their own effect layer.
+
+## 12. World Tick During Idle
 
 When the wait-for-input routine has no key to consume and the prompt-character byte is outside the printable range, it calls the *world tick*. This is the resident redraw orchestrator that keeps the visible scene alive while the game waits for a command. It runs once per failed peek — typically many times per second — but those calls do not spend game-clock minutes or move scheduled NPCs.
 
@@ -171,38 +293,40 @@ The internals of the tick belong in a separate spec. From the input system's per
 
 A modern implementation can time-slice (cap the tick to one per render frame, or once every fixed number of milliseconds) without losing fidelity — the game does not depend on precise wall-clock pacing of the idle redraw ticks, and the game clock is advanced only by committed-turn cleanup.
 
-## 10. Open Questions and Variations
+## 13. Input Boundaries, Variations, And Remaining Entry-Stamp Work
 
-This section records places where the picture is not yet complete or where evidence is internally inconsistent.
+This section separates input-backend variation from the remaining input-facing
+runtime gap: the full recognised set for the game-mode-specific entry stamp.
 
-- **Left and right arrow keys missing from the scancode translation.** The
-  traced extended-key table translates up, down, Home, End, PgUp, and PgDn,
-  but not left or right. Corrected DATA.OVL address handling shows this is not
-  an off-by-two table read; whether the omission is deliberate or a historical
-  oversight still needs live DOS confirmation.
-
-- **Direction-code consumers.** The input layer's numpad and navigation-key
-  mappings are pinned down. Each mode's movement handler should still be
-  checked as it is promoted to verify that all consumers interpret the final
-  direction-code set identically.
-
-- **NumLock as a numpad-promotion modifier.** The shift-state mask treats NumLock-on as equivalent to Shift-held for promoting top-row digits to numpad-equivalent. This is unusual — most software uses NumLock to enable the numpad, not to promote top-row digits — and may have been a heuristic for the era's laptop keyboards. An implementation that does not surface NumLock state can omit it without affecting playability.
-
-- **Cursor-east direction code reaching the dispatcher.** Of the eight direction codes, exactly one — cursor-east — reaches the central command dispatcher in at least one mode, where it toggles a typeahead-buffer flag. Whether other direction codes are dispatcher-bound in modes not yet examined (combat in particular) is unverified.
+- **NumLock as a numpad-promotion modifier.** The keyboard abstraction treats
+  NumLock-on as a compatibility modifier for promoting top-row digits to
+  numpad-equivalent direction codes. This belongs to the IBM PC keyboard
+  backend, not to gameplay command semantics. An implementation that does not
+  surface NumLock state can omit this modifier without changing the accepted
+  command vocabulary.
 
 - **Function-key destinations.** The remapped F1..F10 codes are produced by the
-  keyboard layer, and the resident A-Z dispatcher does not consume them as
-  command letters. Where each one is consumed, if anywhere, still needs
-  mode-loop or menu-specific tracing. The remapped block is contiguous and
-  disjoint from the letter and direction blocks.
+  keyboard layer, but no traced gameplay command dispatcher, direction prompt,
+  or free-text prompt consumes them. The remapped block is contiguous and
+  disjoint from the letter and direction blocks, so preserving it at the
+  keyboard boundary is sufficient for compatibility while ordinary gameplay
+  ignores it.
 
-- **Prompt-character byte writers.** The byte that toggles between idle and prompt mode is written by various places (the verb-prefix printer, the Y/N prompt, the numeric prompt, the text-input prompt) with no single owner. A modern implementation should consolidate these into an explicit "input mode" enum.
+- **Prompt-character byte writers.** Several prompt families select the
+  visible prompt/idle cursor byte before entering the shared input wait. The
+  clean contract is the semantic input mode and cursor presentation state, not
+  the original split of writer sites. A modern implementation should consolidate
+  these into an explicit input-mode enum.
 
-- **Reentrancy and the blink counter.** The cursor-advance gate is saved and restored on the local stack across reentrant calls, but the global blink counter is not — a recursive call shares the parent's blink phase. This is benign (the blink is purely visual) but worth flagging if an implementation introduces per-window blink counters.
+- **Reentrancy and the blink counter.** The cursor-advance gate is local to a
+  wait call, while the blink phase is shared process state. This is a visual
+  compatibility boundary rather than a gameplay rule; implementations with
+  per-window blink counters only need to preserve prompt acceptance and cursor
+  erase/restore behavior.
 
 - **Game-mode-specific entry stamps.** On entry, the wait-for-input routine checks a "game mode" tag and stamps a hint byte when the tag indicates town. The full set of recognised values has not been enumerated; town is the one observed case.
 
-## 11. Sources
+## 14. Sources
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
@@ -211,5 +335,23 @@ The behaviour described here was derived from the private function notes listed 
 - The keyboard hardware abstraction, the three input classes (regular ASCII, function-key remap, extended-scancode translation), the scancode-to-direction tables, the function-key block, the numpad-equivalent flag, and the buffer-flush gate — derived from `u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md`.
 - The ASCII-only case-fold helper used between the keyboard peek and the caller — derived from `u5-decomp/functions/ULTIMA_EXE/0x2032_to_upper.md`.
 - The central per-letter command dispatcher, the mode-aware routing, the verb-prefix printing, and the cross-overlay call model — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`. Per-letter handler behaviour is covered by `systems/commands.md`; only the input-side interface appears here.
+- The resident adjacent-tile command direction prompt, including cardinal-only
+  filtering, shared vector output, direction echo labels, and Space/Pass
+  cancellation -- derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x35EC_direction_prompt.md`.
+- Direction-code consumer boundaries, including cardinal-only world, town,
+  dungeon, and combat movement plus diagonal fallthrough behavior -- derived from
+  `u5-decomp/notes/system-trace_movement.md` and
+  `u5-decomp/notes/cross_mode_behavior_matrix.md`.
+- The standard party-member target wrapper and selector return families --
+  selected active slot, cancel, and explicit none -- derived from
+  `u5-decomp/functions/CAST2_OVL/0x009E_prompt_party_member.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x2D7A_input_party_select.md`.
+- The shared spell direction prompt -- origin selection, cardinal target
+  adjustment, Space/Pass no-direction result, and re-prompt on other keys --
+  derived from `u5-decomp/functions/CAST2_OVL/0x0306_prompt_direction.md`.
 - An example per-command handler (Hole up) showing how a handler reads further input, calls back into prompts, and returns a status word — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
 - The world-tick orchestrator that runs during idle iterations — derived from `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`. Only the input-facing contract (the suppression gate and the per-iteration trigger) is described here; the tick's internal subsystems are properly the subject of separate specs.
+- The free-text reader's printable-byte, Backspace, Enter, Escape, echo, and
+  NUL-termination behavior -- derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x1E38_read_text_input.md`.

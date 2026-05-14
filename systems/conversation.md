@@ -2,11 +2,11 @@
 
 ## 1. Overview
 
-Ultima V's NPC conversations are driven by a small interpreter that runs a per-NPC byte-code stream. Each NPC carries a "blob" of interleaved obfuscated text and one-byte control codes; the engine prints the text with substitutions for common words and the player's name, prompts the user for a keyword, walks an in-memory pointer table to find the matching keyword, and runs that keyword's response through the same interpreter. The interpreter also handles flag-driven branches, party-recruitment prompts, gold transactions, NPC-curse checks, GOTO labels, and two ways of asking the player a name.
+Ultima V's NPC conversations are driven by a small interpreter that runs a per-NPC byte-code stream. Each NPC carries a "blob" of interleaved obfuscated text and one-byte control codes; the engine prints the text with substitutions for common words and the player's name, prompts the user for a keyword, checks a fixed engine keyword table, then scans the NPC blob's ordinary keyword pairs and runs the selected response through the same interpreter. The interpreter also handles flag-driven branches, party-recruitment prompts, gold transactions, NPC-curse checks, GOTO labels, and two ways of asking the player a name.
 
 Almost all observable conversation behaviour — the questions an NPC will ask, the gold they want, who joins the party, which quest flags get set — is encoded in the blob, not the engine. The engine itself is small and re-entrant: a single byte runner, a single keyword loop, a single loader. Anything richer than "speak text and accept keywords" is built up by combining the dozen or so control codes the runner recognises.
 
-This spec describes the Talk command's entry path, the on-disk `.TLK` file structure, the in-memory keyword tree, the byte runner's complete dispatch table, the conversation flow including BYE handling and party-name prompts, and the hooks into the rest of the engine (text output, free-text input, the party module, the quest-flag store).
+This spec describes the Talk command's entry path, the on-disk `.TLK` file structure, the in-memory keyword tree, the byte runner's complete dispatch table, the conversation flow including BYE handling and party-name prompts, and the hooks into the rest of the engine (text output, free-text input, the party module, and the quest/conversation flag stores).
 
 ## 2. The Talk command
 
@@ -22,7 +22,7 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
 5. **Dialog-index dispatch.** Each live NPC carries a one-byte *dialog index* loaded into RAM from the location's `.NPC` file when the scene was entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
 
-The dialog index is a 1-based identifier shared between the `.NPC` and `.TLK` files of the same location class. Index 0 means "no dialogue at all" (the NPC is a non-speaker — a guard, a child too young to talk to, an animal). Index 1 is the universal *sentinel* — the first slot in every `.TLK` file is reserved as a placeholder and is never resolved as real dialogue.
+The dialog index is a 1-based identifier shared between the `.NPC` and `.TLK` files of the same location class. Index 0 means "no dialogue at all" (the NPC is a non-speaker — a guard, a child too young to talk to, an animal). Index 1 is the universal *sentinel* in shipped data: no live NPC uses it, and the first slot in every `.TLK` file is reserved as a placeholder.
 
 ## 3. The four `.TLK` files
 
@@ -46,11 +46,24 @@ Each real NPC entry is four bytes:
 
 The first four bytes of every file are read as the special pair `(npc_count, 0x0001)` — that is, the count occupies the slot a regular entry would use for `blob_offset`, and the sentinel `1` occupies the slot a regular entry would use for `npc_id`. After this leading pair, the remaining `npc_count − 1` entries describe real NPCs, sorted by ascending `npc_id`. The shipped files contain 48 (TOWNE), 15 (DWELLING), 40 (CASTLE), and 32 (KEEP) entries respectively.
 
-The leading sentinel exists because dialog index `1` is never a real NPC; the slot is structural. Any NPC carrying dialog index `1` would silently fail to find a real blob and produce empty conversation. Live NPCs use indices `2..npc_count`.
+The leading sentinel exists because dialog index `1` is never a real NPC in
+the shipped rosters; the slot is structural. The runtime dispatcher does not
+special-case index `1`, however. If corrupted or custom roster data assigns
+dialog index `1` to a talkable NPC, the normal loader path matches the leading
+sentinel id and reads the following entry's blob offset, effectively aliasing
+index `1` to the first real NPC blob in that `.TLK` file. Binary-compatible
+implementations should preserve that edge rather than treating index `1` like
+index `0`. Live shipped NPCs use indices `2..npc_count`.
 
-When the engine asks to talk to dialog index `D`, the loader reads the first 512 bytes of the file (enough to cover any class's header) into a working buffer, walks the entries linearly, and finds the entry whose `npc_id == D`. The matched entry's `blob_offset` field is then the file offset of the NPC's blob. The loader issues a second read of up to 1024 bytes at that offset into the same buffer, overwriting the header with the blob. From the engine's perspective, the buffer now begins with the NPC's keyword tree.
+When the engine asks to talk to dialog index `D`, the loader reads the first 512 bytes of the file (enough to cover any class's header) into a working buffer, walks the entries linearly, and finds the entry whose `npc_id == D`. The matched entry's `blob_offset` field is then the file offset of the NPC's blob. The loader issues a second fixed-window read of 1024 bytes at that offset into the same buffer, overwriting the header with the blob. From the engine's perspective, the buffer now begins with the NPC's keyword tree.
 
-The 1024-byte cap is comfortable for shipped data — the longest known blob is a few hundred bytes — but is a hard ceiling. A blob longer than 1024 bytes would silently truncate. Implementations targeting a modern engine should size the read for the largest blob in the data set or do a length-aware read.
+The loader does not compute a runtime blob length from the next header entry.
+For most shipped entries the fixed window contains the whole nominal blob span
+plus some following file data that is never reached because the current blob's
+own terminators stop the scans. The final `DWELLING.TLK` entry is the important
+edge case: its nominal span to end-of-file is 1139 bytes, so the original engine
+can only see the first 1024 bytes. A binary-compatible implementation should
+preserve that fixed-window behavior rather than reading the full header span.
 
 ## 4. NPC blob structure
 
@@ -70,15 +83,19 @@ Both keywords and response text use a single obfuscation scheme: every printable
 
 Control codes (Section 7) appear inline in any text stream. They are *not* required to live at the start of an entry — they can punctuate text mid-line. A response stream is therefore a possibly long mix of obfuscated text bytes, common-word indices, and control codes, terminated by an end-of-response sentinel.
 
-## 5. The keyword pointer table
+## 5. Keyword scan model
 
-When a blob is loaded, the engine uses an in-memory pointer table so that keyword matching does not have to re-scan from the blob start every time. The table has thirty-four near-pointer slots, scanned in ascending slot order by the keyword input loop. Current notes confirm the table's width and scan behaviour; the exact builder that fills the slots from the just-loaded blob is still open.
+Keyword input uses two distinct scans, and they should not be collapsed into one data structure.
 
-The blob still has five mandatory leading entries (Name, Description, Greeting, Job, Bye), and those entries are reached by fixed ordinal paths when the conversation envelope needs them. The keyword scan itself walks the thirty-four table slots and treats each populated slot as a candidate keyword pointer. The selected slot index is meaningful: special party-join handling sees it before the normal response runner, and the normal response path uses the selected index to seek to the corresponding response stream.
+First, the engine checks a fixed reserved-keyword table that lives outside the `.TLK` files. That table has thirty-four entries. Five are functional conversation words: `NAME`, `JOB`, `WORK`, `BYE`, and `THANK`. The remaining entries are profanity/default rebuke words that route to a chastisement and bounded pause loop. This table is engine-owned vocabulary, not a per-NPC pointer table.
+
+Second, if the fixed table does not handle the input, the engine scans the ordinary keyword/response pairs in the loaded NPC blob. The blob still has five mandatory leading entries (Name, Description, Greeting, Job, Bye), and those entries are reached by fixed ordinal paths when the conversation envelope needs them. Ordinary player keywords begin after those five entries. On match, the engine keeps the matched ordinary keyword index and seeks to that keyword's paired response stream.
+
+`JOIN` and `WHO ART THOU` are not engine-reserved keywords. If an NPC supports a visible `JOIN` topic, it is an ordinary keyword in that NPC's blob. The recruitment and "ask who" mechanics are then driven by control bytes embedded in the response stream.
 
 ## 6. The keyword input loop
 
-After the loader has populated the keyword pointer table and the greeting has been emitted, control passes to the keyword input loop. Each iteration:
+After the loader has read the NPC blob and the greeting has been emitted, control passes to the keyword input loop. Each iteration:
 
 1. **Print the prompt.** The string `Your interest?\n:` is printed into the active text window, leaving the cursor on the next line ready to accept input.
 
@@ -86,15 +103,25 @@ After the loader has populated the keyword pointer table and the greeting has be
 
 3. **Empty-input shortcut.** If the player pressed Enter on an empty line, the engine prints `BYE\n\n`, runs the NPC's `Bye` entry through the byte runner, and returns to the caller. This is the most common way conversations end.
 
-4. **Keyword scan.** The engine walks all thirty-four keyword pointer slots in order. For each populated slot, it compares the slot's keyword string against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
+4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. `NAME` runs the Name entry with the engine's prefix, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below.
 
-5. **Match found.** When a keyword matches, the engine first checks for special early-handled cases (the JOIN-related keywords listed below), then runs the keyword's response stream through the byte runner. After the response finishes, the loop returns to step 1 to prompt for the next keyword.
+5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword is compared against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
 
-6. **No match.** When the loop completes without a match, the engine prints `I cannot help thee with that.\n\n` and returns to step 1.
+6. **Match found.** When an ordinary keyword matches, the engine runs the selected response stream through the byte runner. After the response finishes, the loop returns to step 1 to prompt for the next keyword.
+
+7. **No match.** When both scans complete without a match, the engine prints `I cannot help thee with that.\n\n` and returns to step 1.
 
 The match is space-boundary prefix matching, not arbitrary prefix matching. An NPC with separate `gran` and `grandpa` keywords resolves them independently: `grandpa` does not match `gran` because there is no boundary after `gran`, while `gran something` may match `gran` and leave the remaining words available to the surrounding handler. The keyword's actual length is whatever the NUL terminator says it is; the four-character "U4 convention" is a player-side discipline, not an engine constraint. The fifteen-character input limit on the typed side caps the longest entered phrase.
 
-The special early-handled keywords are the ones that drive party recruitment. When the keyword index is one of a small reserved range (corresponding to `NAME`, `JOIN`, and `WHO ART THOU`), the response is intercepted by the party-join handler before the byte runner sees it; the handler may run the response itself with extra side effects (asking the player which slot the NPC should join, decrementing gold, validating party size). After the join handler returns, the keyword loop either continues normally or terminates the conversation depending on whether a join completed.
+The fixed-table profanity/default branch is presentation-confirmed but no
+longer public as a confirmed karma mutator. Matching one of those fixed words
+prints the chastisement, emits the same quote/newline framing used by other
+reserved responses, then runs a bounded pause loop that redraws the world,
+allows an early key-abort path, and calls the same resident timing/presentation
+helper used by ordinary dialogue pause handling after each non-aborted pass.
+The wrapped near-call is not a stats-panel or virtue-standing writer. If
+profanity changes karma in another cleanup path, that producer remains
+untraced.
 
 ## 7. The byte runner
 
@@ -102,9 +129,9 @@ Every byte of every text stream — the five mandatory leading entries, every ke
 
 The dispatcher's classification, in order:
 
-- **Bytes `0x01..0x9D` (high bit clear).** These are *common-word dictionary indices*. The byte is used as an index into a 256-entry pointer table; the pointer targets a NUL-terminated word in the engine's common-word vocabulary, which is expanded inline into the output. See Section 8.
+- **Nonzero high-bit-clear dictionary tokens.** These are *common-word dictionary tokens*. The byte is normalized into an index into the shared 128-entry common-word pointer table; the pointer targets a NUL-terminated word in the engine's common-word vocabulary, which is expanded inline into the output. See Section 8.
 - **Bytes `0x9E..0x9F`.** These are GOTO-LABEL codes; their high bit is set and they participate in label dispatch. See Section 7.7.
-- **Bytes `0xA0..0xFD` (high bit set, in the printable range).** The high bit is stripped and the resulting low-ASCII byte is emitted as a glyph through the text-output system. See Section 7.1.
+- **Bytes `0xA0..0xFD` (high bit set, in the printable range).** These bytes enter the printable text path. The word-buffer flush strips the high bit before glyph output, with the `0x8E` print-mask toggle controlling whether the queued byte keeps that high bit long enough to act as a soft-break marker. See Section 7.1.
 - **Bytes `0x80..0x9F` (with the exception of the GOTO range above).** Engine control codes. The dispatch table is in Sections 7.2–7.6.
 - **Byte `0xFE`.** A multi-byte command introducer that behaves as an alias for `0x8C` (IF/ELSE).
 - **Byte `0xFF`.** End-of-response. The byte runner flushes any pending word buffer and signals the keyword input loop to start a new iteration.
@@ -119,7 +146,16 @@ The intermediate buffer exists for two reasons. First, the output respects the a
 
 A leading-space flag may be set when an empty dictionary entry was encountered; the flag forces a single space to precede the next emitted character. This is how the dictionary handles word boundaries when the dictionary itself supplies a multi-word phrase.
 
-The print mask — stored in a single byte that the `0x8E` toggle XORs against `0x80` — modulates how printable bytes flow through the runner. With the mask in its default state, printable bytes go to the buffer and are eventually emitted. With the mask flipped, printable bytes are gated differently (the most likely interpretation is "switch to a literal-vs-substitute mode" but the exact effect is flagged in Section 11).
+The print mask is a one-byte output-mode flag. In its default state it preserves
+the high bit on queued printable bytes until the word buffer flushes; this lets
+encoded spaces and literal-newline bytes act as the buffer's soft-break and
+forced-break sentinels. The `0x8E` toggle flips the mask's high bit. While the
+mask is flipped, printable bytes are queued without the high bit, so they render
+the same after flush but spaces and literal-newline characters inside the run do
+not trigger the normal immediate flush. Shipped dialogue uses matched `0x8E`
+pairs around short protected uppercase strings such as mantras, spell syllables,
+Words of Power, passwords, and coordinate-letter notations so those runs are not
+split by ordinary word-boundary handling.
 
 ### 7.2. Player-name and stream-control codes
 
@@ -151,9 +187,9 @@ Both codes are used to chunk long responses into reader-friendly pages. The conv
 | Code  | Mnemonic        | Effect                                                                                                                          |
 |-------|-----------------|---------------------------------------------------------------------------------------------------------------------------------|
 | 0x8B  | CURSE-CHECK     | Run the resident curse-check routine. Used in dialog with cursed-item NPCs (e.g. the snake in Despise) to tick the curse state. |
-| 0x8E  | TOGGLE-MASK     | XOR the print-mask byte with `0x80`. Toggles between the two output modes described in Section 7.1. |
+| 0x8E  | PROTECT-RUN     | Toggle the print mask's high bit. Used in matched pairs around short literal runs whose spaces should not act as ordinary word-buffer breakpoints. |
 
-`0x8B` does not directly affect the stream; it is a side-effect-only code that ensures the player's curse state is updated at a specific narrative beat. `0x8E` is the only code that mutates the byte runner's print-mask state, and is typically used in matched pairs (one to switch mode, one to switch back).
+`0x8B` does not directly affect the stream; it is a side-effect-only code that ensures the player's curse state is updated at a specific narrative beat. `0x8E` is the only code that mutates the byte runner's print-mask state, and is typically used in matched pairs (one to enter protected-run mode, one to leave it).
 
 ### 7.6. Branching, recruitment, and transactional codes
 
@@ -162,16 +198,35 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 | Code  | Mnemonic        | Argument bytes following | Effect                                                                                                                          |
 |-------|-----------------|-------------------------|---------------------------------------------------------------------------------------------------------------------------------|
 | 0x84  | ASK-PARTY-NAME  | none                    | Prompt the player to type a party member's name. The typed name is matched against each live member with a case-insensitive, bit-7-stripping compare; the match index (0 if no match) is available to the surrounding response. Used by the JOIN sequence and any "name a companion" prompt. |
-| 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes encoding a gold amount and associated flags, then run the gold-payment routine: prompt the player, validate against current party gold, deduct on success. Used for tolls, bribes, and donations. |
-| 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte (a letter `A..K`) and dispatch to a per-letter action handler. Side effects include mood adjustments, score increments, granting items, and marking a per-NPC flag. The letter-to-effect mapping is per-NPC. |
+| 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes, mask each to seven bits, interpret them as ASCII decimal digits, and run the gold-payment routine against that three-digit amount. Used for tolls, bribes, and donations. |
+| 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
 | 0x87  | SET-FLAG        | none (consumes follow-up) | Save the current stream pointer, walk the same keyword scan the input loop would walk against the next stream segment, run any matched response, and on no-match restore the saved pointer and continue. This is how an NPC inserts a conditional side-clause that recurses into another keyword's response. |
 | 0x88  | ASK-WHO         | none                    | Variant of `0x84` used for "who is the X?" replies that produce a name. |
-| 0x8C  | IF-ELSE         | one                     | Collect one argument byte (a flag identifier) and test the corresponding NPC quest flag. If set, branch into the *else* arm; if clear, fall through to the *then* arm. Arms are delimited by label codes (Section 7.7) so the runner skips the not-taken arm. |
-| 0xFE  | IF-ELSE-ALT     | two                     | Multi-byte alternative to `0x8C`. Collects two argument bytes indexing into a wider external state cluster (cross-NPC quest progress, scene-level flags). Branch logic is otherwise identical to `0x8C`. |
+| 0x8C  | IF-ELSE         | one                     | Collect one argument byte (a flag identifier) and test the active scene's TALK branch flag for that bit. If set, branch into the *else* arm; if clear, fall through to the *then* arm. Arms are delimited by label codes (Section 7.7) so the runner skips the not-taken arm. |
+| 0xFE  | IF-ELSE-ALT     | two                     | Multi-byte alternative branch form. Collects a moral-standing threshold byte and a target-label byte; if the shared moral-standing selector is at or above the threshold, the runner branches to the target label. |
 
 The gold-payment introducer (`0x85`) interacts with conversation flow, not just emission: depending on whether the player can pay, the surrounding response may take different paths, so implementations need to model it as a re-entrant prompt that returns a result code.
 
-The action-dispatch handler (`0x86`) is the engine's main extension point. The per-letter verbs cover joining the party, refusing to talk, granting items, and adjusting mood; new verbs are added by extending the per-letter dispatch.
+The action-dispatch handler (`0x86`) is the engine's main extension point. The
+letter verbs cover joining the party, refusing to talk, granting items, and
+adjusting mood. The dispatch table is global; per-NPC variation comes from the
+argument byte emitted by the NPC's response stream.
+
+Known public letter effects are:
+
+| Argument | Public effect |
+|----------|---------------|
+| `A` | Raise the shared food counter through the normal capped counter writer and refresh the food/gold presentation. |
+| `B` | Raise the shared gold counter through the normal capped counter writer. |
+| `C` | Raise the ordinary key counter through the normal capped byte writer. |
+| `D` | Raise the gem counter through the normal capped byte writer. |
+| `E` | Raise the torch counter through the normal capped byte writer. |
+| `F` | Set the outdoor Klimb gear byte used as the Grapple gate. This is the gameplay role of the save byte that older notes labelled magic powder. |
+| `G` | Raise the magic-carpet carried counter through the normal capped byte writer. |
+| `H` | Set the Sextant carried-item flag. |
+| `I` | Set the Spyglass carried-item flag. |
+| `J` | Set the Black Badge carried-item flag. |
+| `K` | Raise the skull/special-key counter through the normal capped byte writer. |
 
 Shop entry sits beside this byte-runner path rather than inside it. When Talk
 resolves a shop-capable resident, resident shop metadata can route directly to
@@ -183,21 +238,65 @@ mode after purchase, refusal, or exit. The shipped shop-trigger byte inventory
 is owned by `formats/npc.md` and `systems/shops.md`; conversation owns the
 handoff boundary and shared caller context.
 
-### 7.7. Labels and GOTO
+### 7.7. Labels, GOTO, and scoped prompts
 
-The byte runner supports up to fifteen named labels per blob, identified by the byte values `0x91..0x9F`. A label byte appearing directly in the stream is *not* a control action — it is a *target*, treated as a soft no-op so subsequent bytes continue to interpret normally.
+The byte runner supports up to fifteen label bytes per blob, identified by the
+values `0x91..0x9F`. Encountering one of these bytes is an active control path:
+the runner records the label byte, rewinds the stream pointer to the start of
+the loaded NPC blob, and enters the label handler.
 
-A GOTO is encoded by storing the desired label in a pending-GOTO slot and calling the label-search routine. The routine rewinds the stream pointer to the *start of the current NPC's blob* and scans forward for a matching label byte; when found, the runner resumes from the byte immediately after the match.
+The label handler searches byte-for-byte for records associated with the active
+label. It does not compare text, fold case, or normalize label ids. Labelled
+records are part of the blob data, and shipped blobs commonly reuse the same
+label byte multiple times: once as the control transfer and again as one or more
+records inside the labelled block. Implementations must therefore preserve the
+engine's scan discipline rather than treating label values as unique symbols in
+a map.
 
-IF/ELSE branches use this to skip the not-taken arm. The IF-ELSE introducer chooses, based on the flag test, whether to fall through (the *then* arm) or GOTO a label that opens the *else* arm. The *then* arm ends with its own GOTO past the *else* arm so that the runner does not also execute it. The fifteen-label limit is per blob; the same number may be reused across non-overlapping branches, but the rewind-and-scan rule means the *first* occurrence after the blob start always wins.
+Labelled blocks can do more than skip an IF/ELSE arm. They may open a scoped
+sub-prompt, print a prompt such as "Your interest?", read another free-text
+answer, scan the fixed reserved-word table, and then match label-scoped
+keywords inside the labelled block. Within these blocks, a separator byte marks
+labelled records, and the final label value also participates as an internal
+sub-record separator. This is how an NPC can ask a follow-up question and route
+the answer without returning to the top-level keyword list.
+
+The scoped prompt is not a second copy of the top-level conversation loop.
+Before reading its inner answer, it marks the reserved-word handler as already
+inside a BYE-like prompt state. As a result, top-level reserved words such as
+`NAME`, `JOB`, `WORK`, `BYE`, and `THANK` do not run their ordinary global
+responses from inside the scoped prompt. Empty input is also local to the
+scoped prompt: it prints the prompt's BYE line and reissues the scoped prompt
+rather than ending the NPC conversation. After reserved-word handling is
+suppressed or missed, matching continues against the label-scoped keyword
+records. If no scoped keyword response can be run, control falls back through
+the ordinary top-level keyword loop before the label handler returns to the
+byte runner.
+
+The label-response helpers use the same stream-driver result as ordinary
+responses. A nested response that reaches a byte-runner stop condition reports
+stop to the label handler; a response that simply reaches its NUL terminator
+reports no-stop. After an unmatched scoped keyword or a NUL-ended nested
+response, the handler opens the ordinary top-level keyword loop as the fallback
+path rather than treating the scoped prompt as a permanent terminal state.
+
+IF/ELSE branches use the same machinery for ordinary branch skips. The
+IF-ELSE introducer chooses, based on the flag test, whether to fall through (the
+*then* arm) or enter a labelled block that opens the *else* arm. The *then* arm
+can end with its own label transfer past the else arm so that the runner does
+not also execute it. The fifteen-label range is per blob, but labels are
+byte-level flow markers, not globally unique names.
 
 ## 8. The common-word dictionary
 
-A 256-entry pointer table targets a vocabulary of common English words shared across all `.TLK` files. Bytes `0x01..0x9D` in any text stream are replaced *inline* by the corresponding word during emission.
+A 128-entry pointer table targets a vocabulary of common English words shared across `.TLK` dialogue and the shop renderer. Dialogue dictionary tokens and shop phrase tokens apply different byte-range biases to the same logical table; the first dialogue token and shop token `0x80` both resolve to the first entry. Matching tokens are replaced *inline* by the corresponding word during emission.
 
 The vocabulary is fixed and shipped with the engine (in the resident data segment, not the `.TLK` files). It contains common articles, pronouns, and connectives — `the`, `thou`, `of`, `and`, `you`, etc. — plus Britannian proper nouns such as `Blackthorn`, `Britannia`, `Lord British`, and the major-city names. Proper nouns in the table let many NPCs share canonical references without restating the full string in each blob.
 
-Only roughly the first hundred and fifty of the 256 slots are populated; an index pointing at a NULL slot does not expand, but instead sets a "leading space needed" flag for the next emission — the encoder's way of hinting at a word boundary without an explicit space byte.
+Some dictionary entries are intentionally empty. An empty entry does not expand
+to visible text; instead, it sets a "leading space needed" flag for the next
+emission, which is the encoder's way of hinting at a word boundary without an
+explicit space byte.
 
 The exact word at each index belongs in a data spec, not here.
 
@@ -205,17 +304,26 @@ The exact word at each index belongs in a data spec, not here.
 
 Putting the pieces together, a single conversation runs through a fixed envelope:
 
-1. **Entry.** The Talk command resolves an NPC and a dialog index. The conversation overlay loads the matching `.TLK` file's header, finds the right entry, reads the blob, and populates the keyword pointer table.
+1. **Entry.** The Talk command resolves an NPC and a dialog index. The conversation overlay loads the matching `.TLK` file's header, finds the right entry, and reads the blob.
 
-2. **Steal/give-gold check.** Before any text is emitted, the engine checks a one-shot flag set by the previous turn's actions. If the flag indicates the NPC has just witnessed the player committing a transgression (stealing from a chest, drawing a weapon in town, attacking another NPC), the engine prepends an admonition message before falling through to the greeting.
+2. **Opening preamble.** The entry preamble prints the fixed "Thou seest"
+   lead-in, runs the Description entry (entry 2 of the five mandatory leading
+   entries), and emits the blank-line spacing before the NPC greeting.
 
-3. **Greeting.** The Greeting entry (entry 3 of the five mandatory leading entries) is run through the byte runner. Most greetings end with `0x82` (END-STREAM) so the runner returns control without proceeding into the Job entry.
+3. **Opening theft check and greeting.** After the description, the engine
+   checks the active scene's TALK branch flag for this NPC and the shared
+   stolen-action status/target helpers. If both indicate that the just-addressed
+   NPC should react, it prints the stolen-action warning before continuing.
+   Otherwise it opens the normal quote wrapper. The Greeting entry (entry 3 of
+   the five mandatory leading entries) is then run through the byte runner. Most
+   greetings end with `0x82` (END-STREAM) so the runner returns control without
+   proceeding into the Job entry.
 
 4. **Keyword loop.** Section 6's loop runs until the player exits.
 
 5. **Bye sequence.** When the player exits (typed empty input, or a keyword response that ends the stream), the engine emits `BYE\n\n` and runs the Bye entry (entry 5 of the five mandatory leading entries).
 
-6. **Cleanup.** A final per-conversation cleanup pass settles party-state side effects (gold transactions, quest-flag updates, recently-joined party members, mood adjustments), flushes any pending output, and returns to the caller.
+6. **Cleanup.** A final per-conversation cleanup pass settles party-state side effects (gold transactions, transient conversation signals, recently-joined party members, mood adjustments), flushes any pending output, and returns to the caller.
 
 The conversation engine itself is therefore single-shot — one Talk command produces one full envelope. The per-conversation state cluster (active multi-byte command, argument buffer, print mask, etc.) is reset at entry, so a previous conversation cannot bleed into a later one.
 
@@ -229,33 +337,53 @@ The conversation engine touches several other systems through narrow, well-defin
 
 **Single-keystroke input.** The PAUSE and WAIT-KEY codes use the single-keystroke "wait for the next command" routine — the same one that drives the per-mode loops — but in *prompt mode*, with the prompt-character byte set so that the world tick is suppressed. Time does not pass while the player is reading.
 
-**Party state.** The JOIN sequence (triggered by the reserved keyword indices and routed through the party-join handler), the gold-payment routine (triggered by `0x85`), and the action-dispatch handler (triggered by `0x86`) all mutate party state — adding or removing members, deducting gold, granting items, adjusting mood. These operations update the party state described by the save-image, roster, item, and chargen specs. The conversation engine itself does not manage the party roster; it only invokes those party operations.
+**Party state.** The JOIN sequence is scripted by NPC responses that ask for a
+party member name and then run action-dispatch side effects. The gold-payment
+routine (triggered by `0x85`) and the action-dispatch handler (triggered by
+`0x86`) also mutate party state. The gold-payment path decodes a three-digit
+demand, debits party gold when affordable, and can run toll-style side effects
+including a capped shared moral-standing selector increase when the
+toll-progress counter reaches its milestone; it is not a confirmed per-virtue
+standing writer. The action-dispatch path owns item grants, member changes,
+generic signals, and mood-style side effects. These operations update the
+party state described by the save-image, roster, item, karma, and chargen
+specs. The conversation engine itself does not manage the party roster; it
+only invokes those party operations.
 
-**Quest flags.** The IF-ELSE branches (`0x8C` and `0xFE`) test bits in two flag clusters: a per-NPC table tracking small progressions, and a wider external table tracking game-wide quest progress. The SET-FLAG and multi-byte-argument forms write to the same clusters. Both clusters are part of the saved game and are persisted across save/load. Implementations should model them as bit arrays addressable by the argument byte the multi-byte introducer collects.
+**Quest flags and karma branches.** The `0x8C` IF-ELSE branch tests a bit in
+the active scene's TALK branch-flag slot. The `0xFE` branch is different: it
+consumes a moral-standing threshold and a target label, then branches when the
+shared moral-standing selector is at or above that threshold. The
+action-dispatch path can also set generic one-conversation signal flags or
+fixed durable resource/item fields. Implementations should keep the per-scene
+TALK branch bank, generic transient signals, durable save-backed flags, and
+karma-threshold branch semantics separate. Branch bit indices `32` and above
+build a zero mask rather than wrapping, so such tests read as clear and such
+setters are no-ops. `quest-flags.md` owns the non-karma branch flag boundary,
+while `karma.md` owns the moral-standing selector.
+
+**Conversation cleanup sentinel.** Final conversation cleanup also consults a
+shared town/conversation sentinel before running its stolen-action cleanup
+envelope. Nonzero suppresses the cleanup pass entirely; zero can run the
+stolen-action warning, play a fixed descending PC-speaker glissando, decrement
+at most one pending conversation signal with a zero floor, or fall through to a
+random gold adjustment and panel redraw. The visible warning and sound are not
+themselves a confirmed virtue-standing write. The byte is produced by town
+active-slot setup as a no-slot marker or one of three tracked town/Shadowlord
+slot indices; this cleanup reader only performs a zero-versus-nonzero test, and
+the current writer audit found no non-town writer. The same sentinel is visible
+to the shop surcharge helper, so implementations should keep it as shared
+mode/conversation state rather than creating a shop-only gate. `quest-flags.md`
+owns the cleanup ordering and producer summary.
 
 **Curse state.** The CURSE-CHECK code (`0x8B`) ticks the resident curse logic. The conversation engine simply prods the routine; the curse logic itself owns the per-character byte counters.
 
-## 11. Open questions and variations
+## 11. Boundaries and variations
 
-This section records places where the picture is not yet complete or where evidence is internally inconsistent.
-
-- **Print-mask semantics.** The `0x8E` toggle flips a single bit in the print mask, and the printable-byte path consults that mask. Two readings are consistent with observed behaviour: (a) it switches between dictionary-expansion and literal-pass-through, so `0x8E` lets a stream embed a verbatim byte that would otherwise be a dictionary index; (b) it switches case folding, so subsequent text is rendered as-typed rather than uppercased. Implementations should pick the conservative reading and verify against in-game playthroughs.
-
-- **The `0xA2` double-quote sentinel.** The byte runner suppresses a `0xA2` (which decodes to `"`) that follows another `0xA2`. The most likely interpretation is suppression of paired-quote artefacts arising from a close-stream code immediately following a quoted phrase, but the exact trigger is uncertain. The mis-fire is cosmetic if not handled.
-
-- **Reserved keyword indices.** The keyword loop passes the matched table-slot index to the JOIN handler before the byte runner sees the normal response. NAME, JOIN, and WHO ART THOU are confirmed as conceptually reserved; the exact slot-index set and all side effects are not yet traced.
-
-- **`0x86` action-letter table.** The letter `A..K` argument is dispatched to a per-NPC action handler. The mapping is partially uniform across NPCs (e.g. `'J'` for "join the party") but not globally; a full enumeration remains a deferred parity task.
-
-- **Multi-byte-argument layouts for `0x85`.** The three argument bytes encode the gold amount and flags, but the exact field split is not yet settled. Analyze the gold-payment routine during parity work.
-
-- **Nested IF/ELSE.** The label-search routine rewinds to the blob start and takes the first match, so nested branches need label allocations that avoid collisions. Whether the shipped data uses nesting at all is unknown.
-
-- **NPC 1 sentinel.** Dialog index 1 is reserved and is never resolved as real dialogue. Whether the engine refuses entry or walks an empty blob is not pinned down; implementations can safely treat indices 0 *and* 1 as "no dialogue".
-
-- **Keyword pointer table population.** The thirty-four-slot table is populated between blob load and conversation entry; the exact populator is unconfirmed. The scan order and space-boundary comparison are verified, but the slot-fill routine itself remains a parity target.
-
-- **Maximum blob size.** The loader caps the blob at 1024 bytes. Whether any shipped NPC hits this cap is unverified. A length-aware load belongs in any robust implementation.
+The conversation runtime contract in this document is complete at byte-runner
+depth. Remaining conversation-adjacent data packing questions, such as
+persistent NPC interaction flag layout, are tracked by the owning format or
+quest-state specs.
 
 ## 12. Sources
 
@@ -263,9 +391,26 @@ The behaviour described here was derived from the private function and format no
 
 - The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, sleeping/no-response stubs, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
 - The byte runner's full dispatch table, the multi-byte-command machinery, the GOTO-label semantics, the printable-text path, and the per-conversation state cluster — derived from `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.
+- The gold-payment, action-dispatch, and karma-threshold branch handlers -- derived from `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`, `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`, and `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
+- The Spyglass, Sextant, and Black Badge action-letter identities --
+  cross-checked against the Z-stats special-item display path in
+  `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`,
+  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`, and shipped `.TLK`
+  action usage.
 - The Talk-entry shop dispatch and shared shop caller context -- cross-checked
   against `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
 - The `.TLK` file loader, the four-class dispatch by scene byte, the header walk, the leading-pair-as-count encoding, and the 1024-byte blob read — derived from `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
-- The keyword input loop, the empty-input-as-BYE shortcut, the keyword pointer table layout, the early party-join interception, and the no-match diagnostic — derived from `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`.
+- The keyword input loop, the empty-input-as-BYE shortcut, the fixed reserved-keyword table, the ordinary per-NPC keyword scan, the profanity rebuke/pause branch, and the no-match diagnostic -- derived from `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`, `u5-decomp/functions/TALK_OVL/0x09D8_tlk_find_keyword_match.md`, `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, and `u5-decomp/functions/ULTIMA_EXE/0x20FA_delay_with_int1c.md`, cross-checked against `u5-decomp/CORRECTIONS.md`.
+- The labelled-block and scoped-prompt mechanics -- derived from
+  `u5-decomp/functions/TALK_OVL/0x0C5C_tlk_seek_to_label_then_run.md`,
+  `u5-decomp/functions/TALK_OVL/0x0BD4_ask_npc_name_loop.md`, and
+  `u5-decomp/functions/TALK_OVL/0x0728_scan_to_byte.md`, cross-checked
+  against `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`.
+- The final cleanup pass, transient signal reconciliation, theft/covert-action
+  hook, warning glissando, and shared sentinel cross-use -- derived from
+  `u5-decomp/functions/TALK_OVL/0x111C_init_check_for_steal.md`,
+  `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/0x43AE_pc_speaker_glissando.md`.
 - The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
 - The on-disk `.TLK` file structure — header layout, blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`.
+- The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`.

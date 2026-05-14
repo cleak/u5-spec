@@ -18,13 +18,17 @@ minimum caster level:
 The spell-name parser uses the compact token column, not the full runic
 incantation. The parser sorts the typed selector letters before table lookup,
 so token order is canonical here but player input order is not significant.
-The token table, display-string order, recipe masks, and scene allow masks are
-resident data. Player-facing labels and short effect summaries are aligned with
-the published spellbook/manual names.
+The compact token table, recipe masks, and scene allow masks are resident data.
+Player-facing labels and short effect summaries are aligned with the published
+spellbook/manual names and the decoded handler behaviour.
 
-The string `Frotz` appears immediately after the forty-eight resident spell
-display strings, but no parser token addresses it as one of the spell ids. Do
-not treat `Frotz` as spell 46; spell 46 is `Vas Rel Por` / Gate Travel.
+The resident long-incantation display phrase table is not a reliable one-to-one
+map for the last few spell ids: it has forty-seven entries for forty-eight
+parser ids, includes `Frotz` in the high-circle area, and leaves the final
+Time/Negate-Time handler without a matching phrase in that table. Treat the
+compact token table plus handler behaviour as authoritative for ids 44 through
+47. In particular, id 46 is `PRV` / `Vas Rel Por` / Gate Travel, not Codex
+Vision or a spell named `Frotz`.
 
 ## 2. Rune Syllables
 
@@ -88,8 +92,8 @@ in the spell's mask.
 
 | Bit | Short | Scene class |
 |---:|:---:|---|
-| `0x01` | C | Combat |
-| `0x02` | D | Dungeon scenes |
+| `0x01` | D | Dungeon scenes |
+| `0x02` | C | Combat |
 | `0x04` | I | Indoor/town-mode scenes, including towns, dwellings, castles, keeps, and special indoor states |
 | `0x08` | O | Overworld |
 
@@ -103,11 +107,18 @@ The active scene byte maps to those bits as follows:
 - `1..32`: indoor/town-mode (`I`), covering towns, dwellings, castles, and
   keeps.
 - `33..127`: dungeon (`D`).
-- `128..255`: combat (`C`).
+- `0xFF`: combat-class (`C`). Several readers treat any value at or above
+  `0x80` as combat-class, but the traced gameplay writers use `0xFF` for
+  combat and combat-like freezes.
 
-Two indoor scene states short-circuit before the mask comparison: scene byte
-`18` while the casting gate byte is clear, and scene byte `29`. In those states
-the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
+Two indoor scene states short-circuit before the mask comparison:
+
+- Lord Blackthorn's Castle absorbs casts while the Crown of Lord British
+  ownership flag is clear.
+- Stonegate absorbs casts unconditionally.
+
+In those states the dispatcher prints `Absorbed!` and aborts before consuming a
+charge or mana.
 
 ## 5. Spell Table
 
@@ -115,15 +126,15 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
 |---:|:---:|---|---|:-:|---|:---:|---|
 | 0 | `IL` | In Lor | Light | 1 | Sulfur Ash | D/I/O | utility |
 | 1 | `GP` | Grav Por | Magic Missile | 1 | Sulfur Ash + Black Pearl | C | damage; single target, raw roll 1..16 before target defense |
-| 2 | `AZ` | An Zu | Awaken | 1 | Ginseng + Garlic | C/D/I/O | healing |
-| 3 | `AN` | An Nox | Cure | 1 | Ginseng + Garlic | C/D/I/O | healing |
-| 4 | `M` | Mani | Heal | 1 | Ginseng + Spider Silk | C/D/I/O | healing |
+| 2 | `AZ` | An Zu | Awaken | 1 | Ginseng + Garlic | C/D/I/O | healing; wakes the first Sleeping party member found in roster order |
+| 3 | `AN` | An Nox | Cure | 1 | Ginseng + Garlic | C/D/I/O | healing; selected-member Poisoned-to-Good status gate |
+| 4 | `M` | Mani | Heal | 1 | Ginseng + Spider Silk | C/D/I/O | healing; selected-member HP add from halved 0..60 roll with minimum 1, skips only Dead targets, clamps at maximum HP |
 | 5 | `AY` | An Ylem | Vanish | 1 | Garlic + Blood Moss | C/I | utility |
 | 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility |
 | 7 | `ACX` | An Xen Corp | Repel Undead | 2 | Sulfur Ash + Garlic | C | buff/debuff |
 | 8 | `HR` | Rel Hur | Wind Change | 2 | Sulfur Ash + Blood Moss | O | utility |
-| 9 | `IW` | In Wis | Locate | 2 | Nightshade | O | utility |
-| 10 | `KX` | Kal Xen | Conjure | 2 | Spider Silk + Mandrake | C | summon |
+| 9 | `IW` | In Wis | Locate | 2 | Nightshade | O | utility; prints the shared sextant-style Y-then-X coordinate line |
+| 10 | `KX` | Kal Xen | Conjure | 2 | Spider Silk + Mandrake | C | summon; weighted Giant Rat/Giant Spider/Bat/Python placement |
 | 11 | `IMX` | In Xen Mani | Create Food | 2 | Ginseng + Garlic + Mandrake | C/D/I/O | utility |
 | 12 | `LV` | Vas Lor | Great Light | 3 | Sulfur Ash + Mandrake | D/I/O | utility |
 | 13 | `FV` | Vas Flam | Fireball | 3 | Sulfur Ash + Black Pearl | C | damage; single target, raw roll 1..30 before target defense |
@@ -137,10 +148,10 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
 | 21 | `PU` | Uus Por | Up | 4 | Spider Silk + Blood Moss | D | utility |
 | 22 | `DP` | Des Por | Down | 4 | Spider Silk + Blood Moss | D | utility |
 | 23 | `QW` | Wis Quas | Reveal | 4 | Spider Silk + Nightshade | C | utility |
-| 24 | `BIX` | In Bet Xen | Swarm | 5 | Sulfur Ash + Spider Silk + Blood Moss | C | summon |
+| 24 | `BIX` | In Bet Xen | Swarm | 5 | Sulfur Ash + Spider Silk + Blood Moss | C | summon; eight random target cells with short placement retries |
 | 25 | `AEP` | An Ex Por | Magic Lock | 5 | Sulfur Ash + Garlic + Blood Moss | C/I | utility |
 | 26 | `EIP` | In Ex Por | Unlock Magic | 5 | Sulfur Ash + Blood Moss | C/I | utility |
-| 27 | `MV` | Vas Mani | Great Heal | 5 | Ginseng + Spider Silk + Mandrake | C/D/I/O | healing |
+| 27 | `MV` | Vas Mani | Great Heal | 5 | Ginseng + Spider Silk + Mandrake | C/D/I/O | healing; selected-member current HP restore to maximum, refuses Dead targets and the dungeon combat-active substate |
 | 28 | `IZ` | In Zu | Sleep | 5 | Ginseng + Spider Silk + Nightshade | C | buff/debuff |
 | 29 | `RT` | Rel Tym | Quickness | 5 | Sulfur Ash + Blood Moss + Mandrake | C/D/I/O | buff/debuff; player-dispatch gate |
 | 30 | `IPVY` | In Vas Por Ylem | Tremor | 6 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
@@ -160,12 +171,16 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
 | 44 | `CGIV` | In Vas Grav Corp | Death Wind | 8 | Sulfur Ash + Nightshade + Mandrake | C | damage |
 | 45 | `FHI` | In Flam Hur | Flame Wind | 8 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
 | 46 | `PRV` | Vas Rel Por | Gate Travel | 8 | Sulfur Ash + Black Pearl + Mandrake | D/I/O | marquee |
-| 47 | `AT` | An Tym | Time Stop | 8 | Garlic + Blood Moss + Mandrake | C/D/I/O | marquee |
+| 47 | `AT` | An Tym | Negate Time | 8 | Garlic + Blood Moss + Mandrake | C/D/I/O | marquee |
 
 ## 6. Notes for Implementers
 
 - The table is ordered by engine spell id, not alphabetically and not by the
   manual's display grouping.
+- The long rune-name strings in this catalog are canonical public spell names
+  aligned from parser tokens, manual spell names, and handler behaviour. They
+  are not a dump of a dense resident phrase table; the resident long-phrase
+  table is sparse at the final spell id.
 - The compact code is the exact token used by both C-Cast and M-Mix. Examples:
   `IL` is `In Lor`, `GP` is `Grav Por`, `IPVY` is `In Vas Por Ylem`,
   `PRV` is `Vas Rel Por`, and `AT` is `An Tym`.
@@ -174,10 +189,11 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
 - M-Mix succeeds only when the selected reagent mask exactly equals the recipe
   mask for the chosen spell id. A superset is not accepted.
 - M-Mix debits the selected reagents before checking whether the selected mask
-  matches the recipe. A wrong mix consumes reagents and adds no spell charges.
+  matches the recipe. A wrong mix consumes reagents, adds no spell charges,
+  and invokes the shared trap-effect resolver described in `systems/traps.md`.
 - In M-Mix, a nonblank selector that matches no spell can still proceed into
   reagent selection; if the player completes a nonzero mix, it behaves as a
-  wrong recipe and consumes reagents without adding charges.
+  wrong recipe and follows the same reagent-loss and trap-effect path.
 - Successful mixing increments the chosen spell's premixed charge counter by
   the selected quantity and caps the result at 99.
 - C-Cast consumes one premixed charge before the mana and level checks. A
@@ -227,14 +243,32 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
   into paired free combat/dynamic-object slots and places the copy at a random
   legal arena coordinate. Clone writes no partial record if either table is
   full; the original capacity-failure result word is undefined, so exact bug
-  compatibility may expose unpredictable success/failure narration. `CIQ`
-  sweeps hostile combat actors and marks each accepted target as fleeing.
+  compatibility may expose unpredictable success/failure narration. No traced
+  Clone helper installs a separate per-spell duration counter; combat-exit
+  lifetime is bounded by the combat framer's table restore. `CIQ`
+  sweeps hostile combat actors and forces each accepted target into the
+  critical-HP flee setup; the combat wound-score morale classifier performs the
+  actual fleeing-flag write from that state. A separate lower-tier
+  summon/tame-style helper can set the same combat actor-state flag while
+  repurposing eligible live non-party, non-humanoid actors, but that is a
+  summon activation side effect rather than the `CIQ` fear path.
+  Conjure selects Giant Rat, Giant Spider, Bat, or Python from a fixed weighted
+  animal selector before random legal-cell placement. Swarm tries eight random
+  target cells and uses short placement retries for accepted cells. Clone
+  duplicates an accepted creature into paired free combat actor and
+  dynamic-object slots, and Summon uses the
+  self-checking per-tile placement helper to create a Daemon-class combat actor
+  at an accepted target cell. A previously suspected CAST2 placement helper is
+  now attributed to shrine/urn kneel presentation. It prepares temporary
+  active-object records from a private visual pattern and is not a traced party
+  C-Cast row for Conjure, Swarm, or Summon. Do not publish or reuse that
+  private pattern as spell placement data.
   `PRV` prompts `To phase:` and accepts digits `1`..`8`,
   mapping the digit to the matching persisted moonstone slot before teleporting
   to that slot's saved scene/X/Y/Z destination. Moonstone burying writes those
   slots only outside dungeon/combat scenes and only from underfoot tile ids
   `4..10`, `44`, or `45`; Search/Get recovery invalidates the matching slot.
-  `AT` starts Time Stop with shared runtime tag `T` and a 10-count countdown
+  `AT` starts Negate Time with shared runtime tag `T` and a 10-count countdown
   unless blocked by magic absorption. Command-dispatch cleanup and the combat
   active-player/selection cleanup path age nonzero/non-255 countdowns and clear
   the tag on expiry; ordinary clock cleanup only observes `T` to skip minute
@@ -277,26 +311,29 @@ the dispatcher prints `Absorbed!` and aborts before consuming a charge or mana.
 
 High-confidence engine-derived data:
 
-- Forty-eight spell tokens, display-string order, recipe masks, scene masks,
+- Forty-eight spell tokens, forty-eight recipe masks, forty-eight scene masks,
   circle formula, charge counter semantics, parser acceptance rules, and
-  mix/cast gate order.
+  mix/cast gate order. The resident long-incantation phrase table is a separate
+  forty-seven-entry display aid, not the authoritative spell-id table.
 - Reagent bit order and charge cap.
+- Scene mask bit order and scene-byte classification, including the `0xFF`
+  combat marker.
 
 Manual/player-facing data:
 
 - Common labels and broad effect summaries.
 
-Remaining open work:
+Boundary notes:
 
 1. Keep monster special abilities separate from this player spell table.
    Possess, blink/phase, and summon-daemon are class-flag combat-AI branches,
    not forty-eight-entry spell handlers; the v1 baseline class assignments are
    tracked in `catalogs/monster-bestiary.md`.
-2. Remaining exact-parity work is outside the player spell table: non-hook
-   combat AI state details and item/equipment consumption edges tracked in the
-   item and combat docs. The shared P/Q/C/N active-effect counter shape, Time
-   Stop's `T`/10 decrement/expiry path, and combat C-Cast adjacent-target
-   interference gate are now specified at public semantic depth.
+2. Exact-parity work outside the player spell table is delegated to the owning
+   specs: item/equipment consumption to inventory, combat AI state to combat,
+   and visual tile labels to the tile catalog. The shared P/Q/C/N active-effect
+   counter shape, Negate Time's `T`/10 decrement/expiry path, and combat C-Cast
+   adjacent-target interference gate are specified at public semantic depth.
 
 ## 8. Cross-References
 

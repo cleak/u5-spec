@@ -97,7 +97,7 @@ The differences after loading are mostly system behavior, not file structure. Th
 
 ## 7. Relationship To Location Entry And Plane Transitions
 
-The party's current plane selects whether the overworld loader samples `BRIT.DAT` or `UNDER.DAT`. Britannia uses the surface plane value; the Underworld uses the underworld plane value. Falling, ascending, and some moongate outcomes change that plane state and reinitialize the active-object layer for the destination plane.
+The party's current plane selects whether the overworld loader samples `BRIT.DAT` or `UNDER.DAT`. Britannia uses the surface plane value; the Underworld uses the underworld plane value. Traced plane transitions such as the surface falls path, whirlpool forced-underworld path, and interior exits change that plane state and reinitialize the active-object layer for the destination plane. Ordinary natural-moongate placement and any general natural-gate destination handler remain owned by `systems/overworld.md` until traced.
 
 `UNDER.DAT` itself does not name transition coordinates, destination points, or scene identities. It stores only the terrain bytes at those cells. The overworld system and resident coordinate tables decide which underworld cells lift the party back to the surface, which cells lead to dungeon or special scenes, and how the active-object table is reseeded.
 
@@ -107,7 +107,7 @@ Unlike the surface, the Underworld does not dispatch into the town, dwelling, ca
 
 The Underworld uses the same 2-by-2 live chunk window and 11-by-11 viewport model as Britannia. The renderer receives tile indices from the live chunk buffer, not directly from disk on every frame.
 
-Visibility is not stored in `UNDER.DAT`. The visibility producer reads terrain tiles from the chunk buffer, applies line-of-sight and light-radius rules, and writes a separate viewport grid for the renderer. The Underworld differs from Britannia because its ambient light is forced to the dark model. Torches, spells, and special light sources can affect the visible region, but the map bytes remain unchanged.
+Visibility is not stored in `UNDER.DAT`. The visibility producer reads terrain tiles from the chunk buffer, applies the centre-out visibility carve, light-radius rules, and local-light mask state, and writes a separate viewport grid for the renderer. The Underworld differs from Britannia because its ambient light is forced to the dark model. Torches, spells, and special light sources can affect the visible region, but the map bytes remain unchanged.
 
 Active objects are composited after terrain visibility. Monsters, vehicles, items, effects, and the party do not live in `UNDER.DAT`.
 
@@ -129,6 +129,13 @@ Runtime changes should be modeled as overlays or live-buffer mutations:
 - combat setup uses separate arena files.
 
 No save/load path should rewrite `UNDER.DAT`.
+
+The shared overworld chunk loader applies the same fixed live-buffer
+substitution pass after an Underworld chunk is copied into memory. Tile ids
+`0x16..0x18` cause a write of tile `0xDF` through the live world-tile accessor;
+tile id `0x19` writes tile `0x1A` only when the current chunk descriptor passes
+the chunk high-byte classifier. The file remains a dense, direct map source;
+these substitutions belong to the runtime window.
 
 ## 11. Validation
 
@@ -160,11 +167,20 @@ A complete materializing decoder is straightforward:
 
 An engine can instead stream four chunks at a time, exactly as for Britannia, with the simplification that every requested chunk maps directly to a stored file block.
 
-## 13. Gaps
+## 13. Format Boundary And Runtime Work
+
+The dense `UNDER.DAT` map-file contract is complete at byte-layout depth:
+direct 256-chunk ordering, fixed file size, coordinate wrapping, tile-byte
+preservation, static terrain ownership, and the shared chunk-loader
+live-buffer substitution boundary are fixed. Remaining items belong to runtime
+transitions, tile cataloguing, encounter behavior, or mutation-audit work rather
+than the base file layout.
 
 - The exact set of ascent, dungeon, and scripted-transition coordinates in the Underworld belongs in system or gazetteer specs and is not enumerated here.
 - The full tile-attribute tables for underworld passability, sight blocking, damage, and special triggers are not fully enumerated in the tile specs yet.
-- The chunk-loader's substitution behavior for animated or alternate terrain is not fully specified.
+- The semantic names for the chunk-loader substitution tile ids, and the
+  classifier flags that gate the `0x19` case, remain tile-catalog and
+  helper-level work.
 - Underworld-specific encounter probabilities, monster selection, and arena variant behavior remain partially open in the encounter system spec.
 - It is not yet fully audited whether any long-lived world mutation can patch the live terrain layer across saves. Current evidence points to static `UNDER.DAT` plus mutable active-object/object-layer state.
 - The exact relationship between every underworld special tile and first-person dungeon entry remains to be tied to the dungeon-mode and gazetteer specs.
@@ -180,3 +196,5 @@ This spec is a cleanroom prose rewrite derived from the project notes and existi
 - `u5-spec/systems/encounters.md`
 - `u5-spec/formats/tiles.md`
 - `u5-spec/catalogs/tile-catalog.md`
+- `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`
+- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md`

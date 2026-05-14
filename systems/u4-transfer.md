@@ -11,14 +11,14 @@ The transfer is not a normal saved-game load. A Journey Onward load reads the
 current Ultima V `SAVED.GAM` and resumes play from that state. The transfer
 instead creates a new Ultima V save by cloning an Ultima V seed state,
 patching the Avatar record from Ultima IV-derived data, writing the result to
-the normal save files, and returning control to the intro flow. Once the save
-has been written, every later load and save uses the standard `SAVED.GAM` /
+the normal save files, and returning to the intro menu. Once the save has been
+written, every later load and save uses the standard `SAVED.GAM` /
 `SAVED.OOL` path; the rest of the engine does not care that the first save was
 created by transfer rather than by the questionnaire.
 
-This spec covers the intro entry, media handling, seed loading, roster/status
-preview, commit and abort behavior, save-state effects, relationship to
-chargen, and the unresolved stat-mapping details.
+This spec covers the intro entry, media handling, seed loading, source-save
+validation, roster/status preview, character mapping, commit and abort
+behavior, save-state effects, and relationship to chargen.
 
 ## 2. Entry From The Intro Menu
 
@@ -38,10 +38,11 @@ At entry, the transfer handler:
 
 The observed transfer path behaves like a fresh-save producer. After the
 transfer writes its save files, control returns through the intro/menu redraw
-path. Gameplay then proceeds through the normal Journey Onward load of the
-newly-written save. This matches the character-creation path's external
-contract more closely than the Journey Onward path: both `C` and `T` create a
-save, while `J` is the path that actually loads one into gameplay.
+path and resumes menu polling. Gameplay proceeds only after the player chooses
+Journey Onward, which loads the newly-written save. This matches the
+character-creation path's external contract more closely than the Journey
+Onward path: both `C` and `T` create a save, while `J` is the path that
+actually loads one into gameplay.
 
 ## 3. Media And Disk Handling
 
@@ -82,38 +83,68 @@ records, and the general starting state for the new campaign. The object seed
 supplies the starting surface object table used when composing the companion
 save file.
 
+As with questionnaire chargen, transfer does not generate separate starting
+item, spell, or quest stock. The `BRIT.GAM` seed's flat save image supplies the
+shared inventory bands, spell-charge counters, scroll and potion counters,
+Moonstone gate slots, reagents, shrine masks, and mixed quest/mode state. The
+transfer path patches only the imported Avatar-facing fields and preserves
+those seed-stock bytes.
+
 Existing `SAVED.GAM` and `SAVED.OOL` are not read as inputs to transfer. If
 the player already has an Ultima V save, that save is preserved only until the
 transfer commit step. A committed transfer overwrites the working save slot.
 
 ## 5. Transfer Source
 
-The transfer reads the Ultima IV player disk's `PARTY.SAV` file. The filename
-is now pinned for the analyzed DOS transfer path; the record-level parse is
-not. The reader treats the source as a predecessor party save, extracts only
-Avatar-facing fields, and leaves the field-by-field layout and conversion
-formulas for a deeper transfer pass.
+The transfer reads the Ultima IV player disk's `PARTY.SAV` file. The analyzed
+DOS path validates the leading transferable character record before committing
+anything to the U5 seed image. Malformed counter ranges, an unsupported class
+index, or invalid name bytes reject the transfer attempt before the destination
+save is written.
 
-The source data is used only for the Avatar-facing portion of the Ultima V
-save:
+The leading-record validation accepts only these source-side shapes:
 
-- name, subject to player confirmation or replacement;
-- gender, subject to player confirmation or flip;
-- primary stats and related derived character fields;
-- progress fields such as hit points, level, or experience, pending exact
-  mapping.
+| Source-side value | Accepted range |
+|---|---:|
+| Gold, gems, and food counters | `0..9999` |
+| Move, moon, and dungeon counters | `0..70` |
+| Class index | `0..7` |
+| Name bytes copied into the U5 Avatar field | NUL or printable bytes; any other control byte rejects the transfer |
 
-Ultima IV location, quest flags, inventory, world map state, companions, and
-object positions are not imported. Those come from the Ultima V seed.
+The path also performs a broader "no transferable data" check over a later
+source-save block. Within that later block, the transfer skips the predecessor
+party-wide food and gold fields, then tests the eight consecutive virtue or
+karma standing words for Honesty, Compassion, Valor, Justice, Sacrifice,
+Honor, Spirituality, and Humility. If all eight words are zero, the intro
+presents the no-transferable-data branch instead of producing a normal
+preview. Any nonzero virtue-standing word allows the normal transfer preview
+to proceed.
+
+The source data is used only for the first Ultima V roster slot, the
+Avatar-facing slot. The transfer does not import the Ultima IV location, quest
+flags, inventory, world map state, companion roster, or object positions. Those
+come from the Ultima V seed.
 
 ## 6. Roster And Status Preview
 
 After the seed and transfer source are available, the intro renders a
 party/status preview screen. The preview is party-facing rather than a raw
-dump of the entire save file. It shows the travelling roster slots and the
-Avatar fields that are about to be committed, including name, gender or
-pronoun state, class/status presentation, primary stats, hit points, magic
-points, experience/level, and equipment or status labels.
+dump of the entire save file. It uses an eight-column character-slot heading
+strip for the preview roster and shows the Avatar fields that are about to be
+committed, including name, gender or pronoun state, class/status presentation,
+primary stats, hit points, magic points, experience/level, and equipment or
+status labels.
+
+The preview surface is a fixed intro screen, not a scrolling text report. The
+slot-heading strip is drawn once for each of the eight visible roster columns
+and is written to both display pages so page swaps preserve the headings. The
+lower continue/transfer window is a full-width boxed region with a three-row
+interior; it is the prompt/status area used while the path waits for
+confirmation, name replacement, gender correction, or abort input. Above that
+prompt window, the intro paints two side-by-side character-information panels:
+one at the left edge of the screen and one beginning 168 pixels from the left
+edge. These panels carry the compared character-info/stat presentation while
+the lower window remains available for transfer prompts.
 
 The screen is also the transfer confirmation surface. The transfer path polls
 single keystrokes and updates the in-memory Avatar record before the final
@@ -132,34 +163,46 @@ clear commit action before overwriting the save slot.
 
 ## 7. Character Mapping
 
-The destination is the Avatar record in the Ultima V save image. Companion
-records remain the companion records from the Ultima V seed. The transfer does
-not add Ultima IV party members to the Ultima V roster and does not reorder
-Ultima V companions.
+The destination is roster slot 0 in the Ultima V save image. Companion records
+remain the companion records from the Ultima V seed. The transfer does not add
+Ultima IV party members to the Ultima V roster and does not reorder Ultima V
+companions.
 
-The observed transfer flow touches or recalculates the Avatar's core
-character fields:
+The imported identity fields are:
 
-- name;
-- gender;
-- strength;
-- dexterity;
-- intelligence;
-- magic points;
-- current and maximum hit points;
-- experience and level-related presentation.
+| U5 field | Transfer behavior |
+|---|---|
+| Name | Copy up to eight characters from the source record, then terminate or pad the fixed U5 name field. The preview can still reject and replace the imported name before commit. |
+| Gender | Preserve the source male marker as U5 male; any other source value becomes U5 female. The preview can still flip the displayed gender before commit. |
+| Status | Set to Good. |
+| Class | Translate the U4 class index directly into the corresponding U5 class letter: Mage, Bard, Fighter, Druid, Tinker, Paladin, Ranger, or Shepherd. Transfer therefore can leave roster slot 0 with a non-Avatar class. |
 
-Initial magic points are tied to the transferred intelligence value, matching
-the general fresh-character convention used by the questionnaire path. Strength
-is normalized with a lower bound before commit. The precise scale factors,
-caps, and formulas for converting Ultima IV values into Ultima V values remain
-open.
+Primary attributes use the same three-region translator for Strength,
+Dexterity, and Intelligence:
 
-Class handling is also unresolved. Character creation leaves the Avatar class
-as the seed's Avatar class. The transfer path contains evidence of class or
-class-display normalization, but the current notes do not yet prove whether
-Ultima IV class is ever preserved, translated, or always forced back to
-Avatar.
+| Source attribute `n` | U5 attribute before any field-specific floor |
+|---:|---:|
+| `0..9` | `n` |
+| `10..29` | `floor((n - 9) / 2) + 10` |
+| `30+` | `floor((n - 30) / 4) + 20` |
+
+After translation, Strength alone is floored to 20. Dexterity and Intelligence
+are not floored. The converted Intelligence value is also copied into current
+magic points, so transferred current MP starts equal to transferred INT.
+
+Progress fields are recalculated rather than copied through verbatim:
+
+| U5 field | Transfer behavior |
+|---|---|
+| Experience | Source experience divided by 10, truncating toward zero. |
+| Level | Start at level 1, divide the scaled U5 experience by 100, then increment level once for each halving step while that quotient remains nonzero. This yields level 1 below 100 scaled XP, level 2 for 100..199, level 3 for 200..399, and so on. |
+| Current HP | `30 * level`. |
+| Maximum HP | `30 * level`. |
+
+Fields not owned by the transfer remain whatever the `BRIT.GAM` / `BRIT.OOL`
+seed supplied. This includes the wider campaign state, inventory, equipment
+outside the transferred slot fields, quest state, time, location, party size,
+and companion records.
 
 ## 8. Commit And Abort
 
@@ -170,11 +213,21 @@ next Journey Onward or creation attempt reads from disk again.
 
 On commit, the transfer writes the normal Ultima V save files:
 
-1. Compose the object-overlay companion from the loaded object seed and a blank
-   counterpart plane.
+1. Compose the object-overlay companion by zeroing the first 256-byte half and
+   leaving the loaded `BRIT.OOL` seed in the second 256-byte half.
 2. Write `SAVED.OOL`.
 3. Write the full save image to `SAVED.GAM`.
-4. Return to intro/menu state.
+4. Return to intro/menu state and redraw the start/menu screen.
+
+The traced transfer writer therefore emits `SAVED.OOL` as a blank half followed
+by the 256 bytes from `BRIT.OOL`. As with the questionnaire chargen writer in
+`systems/chargen.md`, this is opposite the normal surface-first interpretation
+specified in `formats/ool.md`. A byte-compatible transfer implementation should
+preserve the emitted order, while Journey Onward and normal saves should still
+follow the canonical surface-first load/save contract. The later Journey
+Onward load does not repair or rotate the emitted halves; it reads the blank
+first half as the surface table, reads the seed half as the underworld table,
+and mirrors those interpreted halves to `BRIT.OOL` and `UNDER.OOL`.
 
 The commit is destructive to the existing working save slot. There is no
 separate confirmation that the previous Ultima V save should be replaced, no
@@ -184,10 +237,11 @@ single canonical working save.
 
 The transfer path does not write `INIT.GAM` or `INIT.OOL`. It also does not
 itself perform the Journey Onward mirror writes to `BRIT.OOL` and `UNDER.OOL`;
-those belong to the standard load path. After transfer, Journey Onward will
-read the newly-written `SAVED.GAM`, read `SAVED.OOL`, and refresh the per-plane
-mirrors as ordinary load housekeeping. The separate Q-save staging and
-conditional underworld mirror update are owned by `systems/save-load.md`.
+those belong to the standard load path. After transfer returns to the menu,
+Journey Onward will read the newly-written `SAVED.GAM`, read `SAVED.OOL`, and
+refresh the per-plane mirrors as ordinary load housekeeping. The separate
+Q-save staging and conditional underworld mirror update are owned by
+`systems/save-load.md`.
 
 ## 9. Save-State Effects
 
@@ -242,47 +296,42 @@ A compatible implementation should model transfer as:
 6. Render a roster/status preview and allow name/gender correction.
 7. Abort without disk writes if the player cancels before commit.
 8. On commit, write `SAVED.OOL` and `SAVED.GAM`.
-9. Return to the intro/menu flow and let Journey Onward load the save.
+9. Return through the intro/menu redraw path and let a later Journey Onward
+   load enter gameplay from the save.
 
 An implementation may skip floppy-style prompt rendering when all files live
 in one directory, but it should keep the same commit boundary: media failure
 or malformed transfer data must not overwrite the existing Ultima V save.
 
-## 12. Open Questions
+## 12. Transfer Boundaries And Remaining Parity Work
 
-- **Ultima IV source parse.** The source filename is pinned to `PARTY.SAV`.
-  The record layout, completion checks, and malformed-save behavior remain
-  unresolved.
+The transfer contract is complete at fresh-save producer depth: entry point,
+source filename, destination seed files, validation gate, imported Avatar
+fields, preview/confirmation boundary, abort-before-write behavior, commit file
+set, object-companion emission order, return-through-menu behavior, later
+Journey Onward handoff, first-load mirror behavior, and major preview surface
+regions are fixed. Remaining work is exhaustive preview text-field cursor,
+attribute, and redraw-timing parity.
 
-- **Primary stat mapping.** The transfer definitely normalizes primary stats
-  into Ultima V fields, but the exact scale factors, caps, and lower bounds
-  for strength, dexterity, and intelligence need a deeper transfer pass.
+- **Ultima IV no-data gate.** The transfer source filename is pinned to
+  `PARTY.SAV`, and the imported identity/stat/progress behavior is now mapped.
+  The later no-transferable-data gate is fixed as the eight predecessor
+  virtue/karma standing words; any nonzero word permits the normal preview,
+  while all eight zero words produce the no-transferable-data branch.
 
-- **Magic points.** Initial MP follows the imported intelligence value in the
-  observed write path, but whether any U4-specific class or level bonus can
-  alter it is not yet proven.
+- **First-load handling after transfer.** The traced writer order is fixed:
+  `SAVED.OOL` is emitted as a blank half followed by `BRIT.OOL`, while normal
+  save/load treats `SAVED.OOL` as surface-first. Journey Onward performs no
+  special-case normalization; it mirrors the blank first half to `BRIT.OOL` and
+  the seed half to `UNDER.OOL`.
 
-- **Hit points, level, and experience.** The preview and write path touch
-  these fields. The formulas that relate Ultima IV progress to Ultima V
-  current HP, maximum HP, level, and experience are still open.
-
-- **Class mapping.** It is not yet clear whether transfer can preserve or
-  translate a U4 class, or whether the Avatar class is always restored from
-  the Ultima V seed.
-
-- **Object companion half order.** Transfer composes a two-plane
-  `SAVED.OOL` from one loaded object seed and one blank plane. The precise
-  half ordering should be verified alongside the existing chargen
-  `SAVED.OOL` ordering question.
-
-- **Preview coverage.** The transfer screen clearly shows the travelling
-  party/status presentation, but the exact slot count and screen layout should
-  be verified against a captured run if pixel-accurate reproduction is needed.
-
-- **Post-commit UI.** Static analysis indicates transfer returns through the
-  intro/menu redraw path after writing. A DOSBox capture should confirm the
-  exact visible sequence, especially because older high-level summaries
-  describe the path as play-producing.
+- **Preview presentation parity.** The transfer screen's eight-column heading
+  strip, lower prompt/status window, and paired character-info panels are fixed
+  at region level. Exact cursor positions for every field, text attributes,
+  and redraw timing should be verified against a captured run or a deeper
+  text-call inventory if pixel-accurate reproduction is needed. Static
+  control-flow analysis fixes the post-commit path as menu redraw rather than
+  direct gameplay entry.
 
 ## 13. Sources
 
@@ -291,9 +340,19 @@ existing cleanroom specs listed below. No assembly excerpts, decompiled code,
 private offsets, or binary text dumps are reproduced.
 
 - Transfer seed reads, `PARTY.SAV` source-save filename, disk-state setup,
-  roster/status preview, confirmation loop, field writes, and final
-  `SAVED.GAM` / `SAVED.OOL` commit:
+  roster/status preview, confirmation loop, XP/level/HP recalculation, field
+  writes, and final `SAVED.GAM` / `SAVED.OOL` commit:
   `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- Transfer preview slot-heading count and column-label helper behavior:
+  `u5-decomp/functions/INTRO_OVL/0x1E22_print_slot_label.md`.
+- Transfer preview lower prompt window and paired character-info panels:
+  `u5-decomp/functions/INTRO_OVL/0x1E62_clear_continue_window.md` and
+  `u5-decomp/functions/INTRO_OVL/0x1F26_render_charinfo_window.md`.
+- `PARTY.SAV` validation, slot-0 transfer target, name/gender/status/class
+  import, and first-pass source-field copy:
+  `u5-decomp/functions/INTRO_OVL/0x1016_transfer_u4_disk.md`.
+- U4-to-U5 primary-attribute translator:
+  `u5-decomp/functions/INTRO_OVL/0x12EA_u4_attr_to_u5.md`.
 - Intro menu entry and return-to-menu context:
   `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - Standard Journey Onward load, empty-save guard, object-overlay mirror
@@ -303,6 +362,9 @@ private offsets, or binary text dumps are reproduced.
   `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 - Save-image and object-overlay file roles:
   `u5-decomp/formats/saves.md`.
+- Public Ultima IV `PARTY.SAV` semantic layout for the eight virtue/karma
+  standing words, cross-checked only as source-format labels:
+  <https://wiki.ultimacodex.com/wiki/Ultima_IV_internal_formats>.
 - Existing cleanroom cross-checks:
   `u5-spec/systems/intro.md`, `u5-spec/systems/chargen.md`,
   `u5-spec/systems/save-load.md`, `u5-spec/formats/saved-gam.md`, and

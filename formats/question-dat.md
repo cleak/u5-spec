@@ -59,7 +59,9 @@ renderer. NUL terminates the current record and is not rendered.
 
 The file is not XOR-obfuscated and does not use the common-word dictionary used
 by conversation and shop text. Bytes are read as authored text plus the markup
-above.
+above. The shipped IBM PC file contains no high-bit bytes and no control bytes
+other than NUL and line-feed. A byte-compatible content set should preserve
+that plain-text profile.
 
 ## 4. Dilemma Indexing
 
@@ -161,6 +163,10 @@ The renderer is responsible for:
 The file itself does not specify screen coordinates, font metrics, colours,
 card art, virtue option positions, random order, or persistence. Those belong
 to `systems/chargen.md` and the graphics assets used by character creation.
+It also does not encode pacing or cancellation rules. The two introductory
+records advance on any key after rendering, and A/B question records wait for
+the questionnaire driver's accepted answer keys; those behaviours are runtime
+flow rules, not file-format fields.
 
 ## 7. Validation and Error Handling
 
@@ -192,15 +198,12 @@ For runtime robustness:
   useful context, but `QUESTION.DAT` uses the chargen paragraph renderer rather
   than the ordinary in-game text windows.
 
-## 9. Open Questions
+## 9. Variant Boundary
 
-- **Pacing details.** The broad paragraph-pacing model is known, but the exact
-  low-level key-polling helper for the introductory records is not specified
-  here. At the format level, the two introductory records advance on any key
-  after rendering; cancellation is not encoded in `QUESTION.DAT`.
-- **Markup edge cases.** The `{` and `_` conventions are understood for shipped
-  content. Behaviour for repeated markers, markers at end of record, or unknown
-  high-bit bytes is not yet specified.
+The shipped file uses only the markup conventions described above. Repeated
+markers, markers at end of record, and high-bit bytes do not occur in the
+shipped file. Tooling should reject or explicitly flag those bytes in strict
+compatibility mode rather than assigning them new runtime meaning.
 
 ## 10. Sources
 

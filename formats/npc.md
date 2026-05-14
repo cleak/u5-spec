@@ -23,9 +23,15 @@ The class-to-file mapping mirrors the `.DAT` and `.TLK` partition exactly:
 | 17–24            | Castle   | `CASTLE.NPC`   |
 | 25–32            | Keep     | `KEEP.NPC`     |
 
-Scene byte zero is overworld; no `.NPC` file is loaded outdoors, because outdoor NPCs are not schedule-driven in the same way. Scene bytes above thirty-two are dungeon and combat states, where no town-style NPC roster exists.
+Scene byte zero is overworld; no `.NPC` file is loaded outdoors, because outdoor NPCs are not schedule-driven in the same way. Values outside `1..32` do not select one of the four town-style NPC roster files.
 
 Within a class, the eight per-class sub-maps are addressed by `(scene − 1) & 7`. The runtime resolves the file family by `(scene − 1) >> 3` against a four-entry pointer table; the resulting filename is opened and the per-sub-map data is read into the resident schedule buffer.
+
+The public scene byte remains one-based throughout gameplay. The roster loader
+temporarily converts that byte to a zero-based index while selecting the file
+family and sub-map block, then restores the global scene value before returning.
+That scoped conversion is a loader detail, not a mode transition and not a
+second persistent scene numbering scheme.
 
 The four-way file split is engine-side bookkeeping; the four files exist because the engine groups its disk I/O and its NPC loading code by class.
 
@@ -107,7 +113,23 @@ Shipped content uses only small unsigned floor values in the range `0x00..0x07`.
 
 Each waypoint has its own `AI[i]` byte. The byte is a per-waypoint behaviour selector: it belongs to the same waypoint tuple as `X[i]`, `Y[i]`, and `Z[i]`, and it affects what the NPC does after the time system has selected that waypoint. It does not affect which waypoint is active; the active waypoint is selected solely from `time[4]` and the current hour.
 
-For v1, treat this byte as opaque unless you are implementing the original NPC behaviour dispatcher. The shipped value range is small and includes common low values plus an occasional `0x0F`, but the exact byte-to-behaviour map is not pinned down. The schedules systems spec names the observed behaviour families; this format spec only fixes the byte's location, width, and per-waypoint association.
+The shipped behaviour dispatcher accepts values `0..7`. Values above `7` fall
+through to the no-action/default case. The public behaviour names are:
+
+| Value | Behaviour family |
+|---:|---|
+| `0` | Stationary at the selected waypoint. |
+| `1` | Random wander, bounded to a small radius around the waypoint. |
+| `2` | Random wander without the radius bound. |
+| `3` | Follow or shadow the player while maintaining distance. |
+| `4` | Approach and attack when close enough. |
+| `5` | Reserved engage/chase path; present in the dispatcher but not used by shipped roster data. |
+| `6` | Guard or blocking event path. |
+| `7` | Randomized chase/engage path. |
+
+The schedule system spec describes the runtime consequences of these values.
+This format spec fixes only that the byte is per-waypoint, one byte wide, and
+interpreted through this `0..7` behaviour selector.
 
 ### 5.4 The time array
 
@@ -117,16 +139,38 @@ The time array's semantics — three waypoints, four boundaries, with wraparound
 
 ## 6. The type byte
 
-Each NPC slot has a one-byte type tag at offset `+0x200..+0x21F` of the sub-map (one byte per slot). The type byte serves two purposes: it acts as the slot's occupancy flag (zero = empty, non-zero = populated), and it tags the NPC's role for the engine's tile selection, look-text generation, and combat-AI dispatch.
+Each NPC slot has a one-byte type tag at offset `+0x200..+0x21F` of the sub-map (one byte per slot). The type byte serves two purposes: it acts as the slot's occupancy flag (zero = empty, non-zero = populated), and it supplies the NPC's sprite/tile classifier.
 
-The full enumeration of type values is not yet finalised. Shipped sub-maps show repeated values — `0x1C`, `0x50`, `0x54`, `0x70`, `0x82`, `0x86` are common — strongly suggesting an enum plus per-bit flags. The working hypothesis is that the byte encodes:
+The type byte is not a packed AI or role bitfield. For ordinary visible NPCs,
+the runtime sprite tile is derived by adding the byte to the NPC sprite page.
+Most shipped values are multiples of four because sprite classes occupy small
+runs of adjacent animation/facing frames in the tile atlas; the low bits are a
+tile-frame consequence, not independent behavioural flags.
 
-| Conceptual field    | Likely encoding                                                                  |
-|---------------------|----------------------------------------------------------------------------------|
-| Role / sprite class | High nibble or upper bits select between merchant, guard, child, common, special. |
-| Per-role flag bits  | Low bits select per-role variants — armed/unarmed, male/female, etc.             |
+Three special values matter to the engine contract:
 
-A reader can treat the type byte as opaque if it only needs to copy the field through. An implementation that wants to render NPCs with the correct sprite or run the correct AI must interpret the byte; the interpretation is engine-side and belongs in the schedules systems spec.
+| Value | Meaning |
+|---:|---|
+| `0` | Empty slot. The scheduler skips the slot. |
+| `1` | Occupied slot that uses the default human/person sprite instead of the ordinary derived sprite. |
+| `0xFC` | Runtime player-mirror marker written when the town-mode player is attached to an NPC slot. |
+
+Values such as `0x50`, `0x54`, `0x70`, `0x90`, and `0xD8` are stable sprite
+classes used by shipped roster slots. The roster catalog keeps them as tags and
+adds role hints where supported by multiple NPC examples. They do not drive the
+NPC schedule AI; movement behaviour comes from `AI[3]`.
+
+Town-mode helpers do apply a few broad type-byte filters outside scheduling:
+the scene activation mask considers the default special walker class and high
+sprite classes, while alarm/death helpers recognise guard-like and hostile or
+corpse-state bands. Those filters are behavioural gates, not a full
+human-readable role table. A compatible implementation should preserve the tag
+byte and apply the documented scheduler/town filters directly instead of
+renaming every class into an inferred profession.
+
+Earlier notes that treated `0x82` and `0x86` as type-byte values were reading
+the dialog-index array, not the type array. Those two values are Talk-entry shop
+triggers in `dialog[n]`, not NPC sprite classifiers.
 
 The "occupancy" use of the type byte is unconditional: any slot whose `type[n]` is zero is treated as empty and skipped by the schedule processor. The corresponding schedule record may still hold non-zero bytes (residue from authoring or from save-game state), but the engine does not read them.
 
@@ -136,7 +180,7 @@ Each NPC slot has a one-byte dialog index at offset `+0x220..+0x23F` of the sub-
 
 The matching is by file class: a town NPC's dialog index points into `TOWNE.TLK`, a castle NPC's into `CASTLE.TLK`, and so on. Within the matched `.TLK` file, the dialog index is compared against the `npc_id` field of each header entry; the first match identifies the NPC's blob. See the TLK format spec for the header layout.
 
-Dialog index zero on a populated slot is a valid value: it means "this NPC has no dialogue." The engine dispatches the Talk command against an NPC whose dialog index is zero by emitting a "funny look" or equivalent stub message; no `.TLK` lookup happens. The format reserves `npc_id == 1` in `.TLK` files as a sentinel that no live NPC carries (because dialog index `1` is unused — every speaking NPC has dialog index `2` or above). The result is that `.TLK` files always start with a `(npc_count, 1)` leading pair, with the count word occupying the slot a regular header entry would use for its blob offset; see the TLK format spec for that mechanism.
+Dialog index zero on a populated slot is a valid value: it means "this NPC has no dialogue." The engine dispatches the Talk command against an NPC whose dialog index is zero by emitting a "funny look" or equivalent stub message; no `.TLK` lookup happens. The format reserves `npc_id == 1` in `.TLK` files as a sentinel that no live NPC carries (because dialog index `1` is unused — every speaking NPC has dialog index `2` or above). The result is that `.TLK` files always start with a `(npc_count, 1)` leading pair, with the count word occupying the slot a regular header entry would use for its blob offset. This is a shipped-data convention rather than a runtime rejection: if corrupted roster data uses dialog index `1`, the TALK loader aliases it to the first real blob in the matching `.TLK` file. See the TLK format spec for that mechanism.
 
 High dialog-index values are not `.TLK` ids. In the shipped rosters, the
 values `0x81` through `0x88` are Talk-entry shop triggers:
@@ -241,7 +285,10 @@ In game terms, a typical record uses waypoint zero for a night/rest location,
 waypoint one for the main daytime location, waypoint two for a short alternate
 location, then waypoint one again for the evening wraparound segment.
 
-The matching type byte and dialog index — at sub-map offset five hundred thirteen and five hundred forty-five — identify the NPC's role and dialogue. A type byte of `0x50` would indicate one role class (e.g., "common townsfolk"); a dialog index of `0x02` would point into `TOWNE.TLK`'s header entries to locate the NPC's blob.
+The matching type byte and dialog index identify the NPC's sprite class and
+dialogue. A nonzero type byte indicates an occupied role class whose exact
+display tile and town filters are interpreted by the runtime; a dialog index of
+`0x02` would point into `TOWNE.TLK`'s header entries to locate the NPC's blob.
 
 A reader can sanity-check a `.NPC` decoder by:
 
@@ -249,26 +296,36 @@ A reader can sanity-check a `.NPC` decoder by:
 2. Confirming bytes zero through fifteen are all zero (slot zero's schedule), and that bytes five hundred twelve and five hundred forty-four are zero (slot zero's type and dialog index).
 3. Picking any populated slot (`type[n] != 0`), decoding its sixteen-byte schedule against the waypoint selection rule, and confirming the resulting waypoint coordinates fall within the location's thirty-two-by-thirty-two grid.
 
-## 11. Open questions
+## 11. Format Boundary And Catalog Work
 
-The format is verified by direct byte inspection at the file-structure level (file size, sub-map stride, schedule record stride, slot-zero sentinel) and by behavioural inspection at the schedule-processor level (waypoint selection rule, AI byte dispatch outline, type byte occupancy use, dialog index use). The following points remain open.
+The `.NPC` format contract is complete at file-structure and schedule-consumer
+depth. It is verified by direct byte inspection at the file-structure level
+(file size, sub-map stride, schedule record stride, slot-zero sentinel) and by
+behavioural inspection at the schedule-processor level (waypoint selection
+rule, AI byte dispatch outline, type byte occupancy use, dialog index use).
+Remaining work belongs to catalog naming rather than to this file format.
 
-- **Blank resident location-name rows.** Scenes 14 through 18 have blank resident location-name strings in the world-location table. Two of them are semantically identified by roster and special-behaviour evidence (`CASTLE:0` = Lord British's Castle, `CASTLE:1` = Lord Blackthorn's Castle); the three blank dwelling-family rows should keep their stable `DWELLING:n` keys until another clean source names them.
+- **Blank resident location-name rows.** Scenes 14 through 18 have blank
+  resident location-name strings in the world-location table. Two of them are
+  semantically identified by roster and special-behaviour evidence
+  (`CASTLE:0` = Lord British's Castle, `CASTLE:1` = Lord Blackthorn's Castle);
+  the three blank dwelling-family rows should keep their stable `DWELLING:n`
+  keys until another clean source names them. This is a catalog naming
+  boundary, not a `.NPC` file-layout gap.
 
-- **AI byte enumeration.** The byte's location and role as a per-waypoint behaviour selector are fixed, but the individual value-to-behaviour mapping and the `0x0F` value's exact role remain open. Treat values as opaque for format reading. The sit/chair-search marker IDs are fixed in the schedules systems spec; the remaining format gap is the byte-value-to-behaviour map.
-
-- **Type byte enumeration.** Shipped values cluster around `0x1C`, `0x50`, `0x54`, `0x70`, `0x82`, `0x86`, suggesting an enum plus per-bit flags. The split between role bits and flag bits has not been pinned down. A full enumeration belongs in the schedules systems spec.
-
-- **Dialog index zero on populated slots.** A populated slot (`type[n] != 0`) with `dialog[n] == 0` is a valid "NPC has no dialogue" configuration. Whether the engine routes such an NPC to a generic fallback or emits a "funny look" stub is engine-side.
-
-- **Slot-zero contents on save-load.** The `.NPC` files are read-only at runtime. From a format perspective, on-disk slot zero is always all zeros.
+- **Sprite-class role names.** The AI-byte values and the type byte's engine
+  role are fixed. Human-readable role labels for every shipped sprite class are
+  still partly interpretive and belong in `catalogs/npc-roster.md`, not this
+  format layer.
 
 ## 12. Cross-references
 
 - The per-tick schedule processor that consumes this format — the eight-state per-NPC state machine, the time-of-day waypoint dispatch, the per-cardinal-direction probe, the floodfill pathfinder, the path queue, the stuck counter — `systems/npc-schedules.md`.
+- The town-mode activation, alarm, and death-mask type filters that consume
+  the same type byte — `systems/town-mode.md`.
 - The per-class location data file format whose tile grids host the live NPCs — `formats/location-dat.md`.
 - The per-class dialogue file format whose NPC blobs are looked up by `dialog_index` — `formats/tlk.md`.
-- The save image layout that persists the per-NPC quest flags toggled by dialogue — `formats/saved-gam.md`.
+- Dialogue runtime flag stores and save-backed NPC interaction flags — `systems/quest-flags.md` and `formats/saved-gam.md`.
 - The text-output pipeline that ultimately renders an NPC's name and description — `systems/text-output.md`.
 - The combat AI dispatch keyed off the type byte for hostile encounters — described under `systems/combat.md`.
 - The active-object table that links a live NPC to its on-screen sprite — `formats/saved-gam.md` (Section 8).
@@ -287,6 +344,9 @@ The format described above was derived from the analysis notes listed below. Non
   32 to storage-family sub-map keys and resident location-name strings:
   `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md` and
   `u5-decomp/formats/data-ovl.md`.
+- Scene-byte lifecycle audit confirming that the NPC loader's arithmetic
+  scene-byte write is only a temporary one-based-to-zero-based conversion:
+  `u5-decomp/notes/critical_state_lifecycles.md`.
 - The per-tick walker — per-NPC state machine, AI-byte dispatch, type-byte occupancy use, pathfinding, and cross-overlay sprite-position writeback — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
 - The waypoint selection routine — four-boundary, three-waypoint, wraparound-through-waypoint-one rule — `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
 - Runtime schedule field semantics confirmed against the schedule processor's read sites — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.

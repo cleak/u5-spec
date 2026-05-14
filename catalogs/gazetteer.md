@@ -14,9 +14,11 @@ to it?" It sits between the world map formats and the runtime mode specs:
 
 - `BRIT.DAT` and `UNDER.DAT` store static terrain.
 - Resident location metadata supplies fixed entrance and shrine coordinates,
-  scene-byte identities, location names, moongate state, and transition tables.
-- Town mode, dungeon mode, shrine meditation, moongate travel, and other
-  handlers consume those semantic records.
+  scene-byte identities, location names, and transition tables. The saved-slot
+  natural-moongate live-terrain schedule and live entry hook are owned by
+  `systems/overworld.md`, not by this catalog.
+- Town mode, dungeon mode, shrine meditation, the traced moongate animator
+  boundary, and other handlers consume those semantic records.
 
 The catalog is implementation-neutral. A modern engine may store it as JSON,
 database rows, hardcoded constants, or authored resources. The required
@@ -42,8 +44,8 @@ The engine should distinguish at least these classes:
 | Keep | Britannia | Town mode | `KEEP.DAT`, `KEEP.NPC`, `KEEP.TLK` |
 | Dungeon | Britannia or scripted underworld entry | Dungeon mode | `DUNGEON.DAT`, `DUNGEON.CBT` |
 | Shrine | Britannia | Shrine meditation handler | Resident shrine table and virtue/mantra data |
-| Moongate | Britannia, with some underworld outcomes | Moongate travel handler | Resident moongate state and time system |
-| Plane transition | Britannia or Underworld | Overworld plane swap | Resident transition table and overworld loop |
+| Moongate | Britannia | Saved-slot live-terrain refresh and live `0xDC` entry hook | Overworld moongate animation, Moonstone slot state, and entry contract |
+| Plane transition | Britannia or Underworld | Overworld plane swap | Confirmed overworld loop branches plus unresolved transition metadata |
 | Minor landmark | Usually Britannia | Local prompt or effect handler | Tile class plus fixed runtime handler |
 
 Town, dwelling, castle, and keep are one runtime family. They all enter town
@@ -83,9 +85,11 @@ For the thirty-two town-mode locations, the scene byte is authoritative:
 | `17..24` | Castle | `CASTLE:(scene - 1) & 7` |
 | `25..32` | Keep | `KEEP:(scene - 1) & 7` |
 
-Scene byte zero is the overworld. Scene bytes above thirty-two belong to
-dungeon and combat states. A gazetteer row for a town-mode location should
-therefore carry both its semantic class and its scene byte or class/sub-map key.
+Scene byte zero is the overworld. Values outside `1..32` do not name a
+town-mode location: stock dungeon entries use their own range, intro and
+Return-to-View use transient scene ids, and combat-like freezes use the
+combat-class marker. A gazetteer row for a town-mode location should therefore
+carry both its semantic class and its scene byte or class/sub-map key.
 
 ## 4. How To Use This Catalog
 
@@ -267,9 +271,9 @@ do not have town/dungeon scene rows.
 
 | Landmark class | Engine contract |
 |---|---|
-| Moongates | Time-driven surface gates with origin, destination, and animation state. Landing prompts may teleport within Britannia or, for certain phase combinations, to the Underworld. |
-| Falls / chasms | Fixed Britannia cells that damage the party, swap the plane to the Underworld, and reseed active objects. |
-| Underworld ascents | Fixed Underworld cells that return the party to Britannia at a matching surface location. |
+| Moongates | Saved-slot-driven surface gates whose live-terrain refresh and live `0xDC` entry handling are specified in `systems/overworld.md`. The renderer's animation phase is transient runtime scratch, not gazetteer content. |
+| Falls / chasms | The confirmed surface chasm at Britannia `(54, 138)` damages the party, swaps the plane to the Underworld, and reseeds active objects. |
+| Underworld ascents | Potential plane-transition landmarks. No clean spec currently publishes a byte-compatible general outdoor underworld-to-surface ascent set. |
 | Wishing wells | Tile-triggered or command-triggered prompt/effect landmarks; no scene byte. |
 | Springs | Minor restorative landmarks; no scene byte. |
 | Caves and special holes | Local handlers that may give treasure, trigger descent, or route to another mode depending on tile and coordinate. |
@@ -331,10 +335,13 @@ The following gaps are intentional in this first catalog:
 4. **Dungeon return and special-transition coordinates.** The dungeon
    scene/name/data-record order is public, but exact entrance and return
    coordinates are still omitted from this cleanroom catalog.
-5. **Moongate schedule.** The overworld spec describes the state machine, but
-   the full per-day, per-hour origin/destination table remains open.
-6. **Plane-transition pairs.** Falls and Underworld ascents are known system
-   features, but the complete paired coordinate set is not public yet.
+5. **Moongate coordinates.** The overworld spec describes the traced animator,
+   saved-slot live-terrain refresh, live entry hook, and fixed narrative-gate
+   boundary. Exact public coordinate tables for authored landmarks remain
+   omitted from this catalog.
+6. **Plane-transition pairs.** The traced surface falls coordinate is public,
+   but Underworld ascents and any additional non-chasm plane-transition pairs
+   are not public yet.
 7. **Minor landmark names.** Wishing wells, springs, caves, signs, and special
    holes need a later pass that joins tile data, sign data, and coordinate
    triggers.
@@ -366,8 +373,8 @@ Public specs used:
   order, and blank resident-name rows.
 - `u5-spec/catalogs/npc-roster.md` - current named NPC rows and roster-based
   identification of special blank-name locations.
-- `u5-engine/reports/lb-throne-room-slice.txt` - first verification slice
-  binding Lord British's castle evidence to `CASTLE:0`.
+- `u5-spec/NEXT-STEPS.md` - clean summary of the earlier external verification
+  slice binding Lord British's castle evidence to `CASTLE:0`.
 - `u5-spec/systems/karma.md` - virtue order and shrine mantras.
 - `u5-spec/catalogs/tile-catalog.md` - shrine, moongate, entrance, ladder,
   sign, well, spring, cave, and other tile-trigger classes.
@@ -382,6 +389,8 @@ Private analysis provenance:
 - `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md` -
   confirms that overworld location-table index plus one becomes the town-mode
   scene byte for entries one through thirty-two.
+- `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md` -
+  confirms the traced surface falls coordinate and underworld plane swap.
 - MAINOUT E-Enter helper analysis in `u5-decomp` - confirms that rows
   thirty-two through thirty-nine use the same row-plus-one scene rule for
   dungeons, load the matching `DUNGEON.DAT` record, and seed the dungeon entry

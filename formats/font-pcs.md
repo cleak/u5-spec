@@ -14,7 +14,8 @@ and `WD.BIT`.
 
 The paragraph renderer receives the loaded `PROPORT.PCS` segment, uses a
 resident 128-entry width table for word wrapping, and draws proportional
-glyphs through the display/font path.
+glyphs through the display/font path. The width table is runtime data, not a
+second table embedded in `PROPORT.PCS`.
 
 ## 2. File Identity
 
@@ -60,6 +61,12 @@ character's width-table entry. The glyph image source comes from the loaded
 font resource. Spaces are word-wrap opportunities; newline forces a line break;
 underscore is a soft-hyphen marker; and `{` is treated as a paragraph/page
 marker by the surrounding caller flow.
+
+This separation is load-bearing for tools: the file supplies sparse strip
+glyph artwork to the driver path, while glyph advances come from the resident
+width table read by the FONT overlay. Do not try to split `PROPORT.PCS` into a
+standalone width table followed by per-character glyph records; that was an
+early hypothesis superseded by the traced display-driver codec.
 
 ## 5. Layout Behaviour
 
@@ -108,17 +115,24 @@ file view used by an inspection tool, and known sparse tables may be heavily
 over-allocated. Zero pointer entries are compatible no-ops; large entry counts
 are not errors by themselves.
 
-## 8. Known Uncertainties
+## 8. Format Boundary And Remaining Parity Work
 
-- **Glyph body field names.** The paragraph renderer's width table is resident
-  data, while glyph image records are reached through the loaded font segment.
-  The exact authoring-level names for each body field remain a font-renderer
-  detail.
+The `PROPORT.PCS` resource contract is complete at runtime format depth:
+pointer-table scan, strip-body shape, driver ownership, and the separation
+between resident glyph widths and file-backed glyph artwork are fixed.
+Remaining work is authoring metadata or content parity, not file decoding.
+
 - **Pointer-entry metadata.** As with `.BIT`, the EGA strip decoder does not
-  consume the metadata word. Its authoring-tool meaning remains unidentified.
+  consume the metadata word. Its authoring-tool meaning remains unidentified,
+  so tools should preserve it when round-tripping.
 - **Codes outside normal narrative text.** The renderer has a 128-entry width
   table, but shipped prose appears to stay within ordinary ASCII plus the
   documented control markers.
+- **Pixel-perfect replacement fonts.** A clean implementation that wants
+  byte-identical original visuals should decode the sparse strips through the
+  same driver-resource rules. Independently authored replacement fonts only
+  need to preserve the public width-table advances and paragraph layout
+  behaviour.
 
 ## 9. Cross-References
 
