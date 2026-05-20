@@ -60,16 +60,18 @@ The selected window is chosen by the current final-presentation control record.
 not a driver-compressed bitmap resource. The consumer combines the loaded text
 window with the proportional font, endgame graphics panels, and blocking waits.
 
-The six fixed windows have the following clean semantic roles:
+The six fixed windows have the following clean semantic roles, with their byte-traced offsets in the shipped `END.DAT`:
 
-| Window | Role |
-|---|---|
-| 1 | Return-home opening at the circle of stones. |
-| 2 | The Avatar's homecoming and laying down the long quest. |
-| 3 | The restless night after returning home. |
-| 4 | Blackthorn's closing judgment scene opens. |
-| 5 | Blackthorn's sentence and choice continues. |
-| 6 | Orb/Gate exile resolution and final Blackthorn departure. |
+| Window | Bytes | Length | Role |
+|---|---|---:|---|
+| 1 | `0..423` | 423 | Return-home opening at the circle of stones. |
+| 2 | `424..955` | 531 | The Avatar's homecoming and laying down the long quest. |
+| 3 | `956..1529` | 573 | The restless night after returning home. |
+| 4 | `1530..2279` | 749 | Blackthorn's closing judgment scene opens. |
+| 5 | `2280..2931` | 651 | Blackthorn's sentence and choice continues. |
+| 6 | `2932..3696` | 764 | Orb/Gate exile resolution and final Blackthorn departure. |
+
+Each window is a contiguous NUL-terminated ASCII text page. Brace markers (`{` and `}`) inside each page are layout hints for the proportional text renderer (line-break helpers), not page boundaries. A clean reader can either consume the table above as the canonical seek windows or walk the file by NUL boundaries (each non-trivial text segment longer than ten bytes is one window, in order). Both approaches produce identical results for the shipped asset.
 
 The file does not contain the Lord British yes/no dialogue; that text is in
 `ENDMSG.DAT`. It also does not contain the final certificate template that uses

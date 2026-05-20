@@ -394,6 +394,98 @@ The one exception to the read-only model is the **inn registry**, which *is* per
 
 Each Talk-driven shop kind follows a common shape: a randomised greeting, a Y/N or letter-driven menu, a per-action sub-loop, an "anything else?" re-prompt for shops that allow multiple sub-actions, and a randomised farewell. The kinds vary in their inner steps.
 
+### 8.0 Scene-byte to shop-instance row mapping
+
+Every Talk-triggered shop kind resolves its per-location row through the active scene byte (`SAVED.GAM 0x02ED`) by indexing a per-kind scene-byte lookup table in the resident shop-data region. The eight per-kind tables, in their full byte-traced form, are:
+
+**Arms shops** (9 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `2` | Britain | `Iolo's Bows` |
+| `3` | Jhelom | `Naughty Nomaan's` |
+| `4` | Yew | `Arms of Justice` |
+| `5` | Minoc | `Darkwatch Armoury` |
+| `6` | Trinsic | `The Paladin's Protectorate!` |
+| `17` | Lord British's Castle | `North Star Armoury` |
+| `24` | Buccaneer's Den | `Buccaneers Booty` |
+| `26` | Bordermarch | `The Shattered Shield` |
+| `32` | Serpent's Hold | `Siege Crafters` |
+
+**Taverns / meal counters** (9 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `1` | Moonglow | `The Honest Meal` |
+| `2` | Britain | `The Wayfarer Tavern` |
+| `3` | Jhelom | `The Sword and Keg` |
+| `4` | Yew | `The Slaughtered Lamb` |
+| `8` | New Magincia | `The Humble Palate` |
+| `19` | West Britanny | `The Blue Boar Tavern` |
+| `22` | Paws | `The Cat's Lair` |
+| `24` | Buccaneer's Den | `The Fallen Virgin` |
+| `30` | The Lycaeum | `The Folley Tap` |
+
+**Horse traders** (3 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `6` | Trinsic | `Horse & Rider` |
+| `20` | North Britanny | `The Stablehouse` |
+| `22` | Paws | `Wishing Well Horses` |
+
+**Shipwrights** (4 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `3` | Jhelom | `Island Shipwrights` |
+| `5` | Minoc | `The Crow's Nest` |
+| `21` | East Britanny | `The Oaken Oar` |
+| `24` | Buccaneer's Den | `The Rusty Bucket` |
+
+**Reagent vendors** (5 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `1` | Moonglow | `The Herbalist` |
+| `4` | Yew | `Healers Herbs` |
+| `7` | Skara Brae | `The Alchemist` |
+| `23` | Cove | `Mysticism` |
+| `30` | The Lycaeum | `The Sharper Mage` |
+
+**Guildmasters** (3 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `8` | New Magincia | `The Den` |
+| `22` | Paws | `The Guild` |
+| `24` | Buccaneer's Den | `The Nemesis` |
+
+**Healers / sanctums** (7 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `5` | Minoc | `The Healers Mission` |
+| `6` | Trinsic | `Wounds of Honour` |
+| `7` | Skara Brae | `The Spirit Healers` |
+| `21` | East Britanny | `Healers' Sanctum` |
+| `23` | Cove | `Sanctuary` |
+| `30` | The Lycaeum | `The Shield of Truth` |
+| `31` | Empath Abbey | `The Empath` |
+
+**Inns** (6 rows):
+
+| Scene | Location | Row |
+|---:|---|---|
+| `2` | Britain | `The Wayfarer Inn` |
+| `3` | Jhelom | `The Warrior's Stead` |
+| `7` | Skara Brae | `The Haunting Inn` |
+| `20` | North Britanny | `Hotel Brittany` |
+| `22` | Paws | `The Smugglers' Inn` |
+| `24` | Buccaneer's Den | `The King's Ransom Inn` |
+
+Each scene-byte appears in exactly one shop kind's table — there is no scene that hosts two shops of the same kind. When the Talk shop trigger fires for a kind whose table does not include the active scene, the shop overlay falls through to the standard "no shop here" feedback rather than defaulting to row zero.
+
 ### 8.1 Weaponsmith and armourer
 
 After a randomised greeting ("Hail, friend! Wouldst thou Buy or Sell?"), the player presses one of three keys:

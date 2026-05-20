@@ -212,6 +212,57 @@ stairs, possible hostility, and quest-specific scripts. Their resident order is:
 | 31 | `KEEP:6` | Empath Abbey |
 | 32 | `KEEP:7` | Serpent's Hold |
 
+### 5.1 Overworld entry / return coordinates
+
+Resident metadata at `DATA.OVL +0x1E9A` (X) and `+0x1EC2` (Y) carries one byte each for every scene's overworld entry / return coordinate. The full forty-entry table, indexed by `(scene - 1)`:
+
+| Scene | Name | X | Y |
+|---:|---|---:|---:|
+| 1 | Moonglow | 232 | 135 |
+| 2 | Britain | 81 | 106 |
+| 3 | Jhelom | 36 | 222 |
+| 4 | Yew | 58 | 43 |
+| 5 | Minoc | 159 | 20 |
+| 6 | Trinsic | 106 | 184 |
+| 7 | Skara Brae | 22 | 128 |
+| 8 | New Magincia | 187 | 169 |
+| 9 | Fogsbane | 88 | 120 |
+| 10 | Stormcrow | 152 | 24 |
+| 11 | Greyhaven | 104 | 216 |
+| 12 | Waveguide | 216 | 120 |
+| 13 | Iolo's Hut | 45 | 62 |
+| 14 | (dwelling 14) | 176 | 208 |
+| 15 | (dwelling 15) | 201 | 59 |
+| 16 | (dwelling 16) | 153 | 91 |
+| 17 | Lord British's Castle | 86 | 107 |
+| 18 | Lord Blackthorn's Castle | 196 | 245 |
+| 19 | West Britanny | 84 | 106 |
+| 20 | North Britanny | 86 | 105 |
+| 21 | East Britanny | 88 | 106 |
+| 22 | Paws | 98 | 145 |
+| 23 | Cove | 136 | 90 |
+| 24 | Buccaneer's Den | 136 | 158 |
+| 25 | Ararat | 49 | 58 |
+| 26 | Bordermarch | 15 | 160 |
+| 27 | Farthing | 64 | 240 |
+| 28 | Windemere | 248 | 8 |
+| 29 | Stonegate | 148 | 74 |
+| 30 | The Lycaeum | 218 | 107 |
+| 31 | Empath Abbey | 28 | 50 |
+| 32 | Serpent's Hold | 146 | 241 |
+| 33 | Deceit | 240 | 73 |
+| 34 | Despise | 91 | 67 |
+| 35 | Destard | 72 | 168 |
+| 36 | Wrong | 126 | 20 |
+| 37 | Covetous | 156 | 27 |
+| 38 | Shame | 58 | 102 |
+| 39 | Hythloth | 239 | 240 |
+| 40 | Doom | 128 | 128 |
+
+The last eight entries (scenes 33..40, the dungeons) double as the Word-of-Power seal-coordinate table — speaking a Word of Power succeeds only when the party stands at the corresponding dungeon's overworld entry coordinate. Doom's `(128, 128)` is an underworld coordinate (the Codex chamber wall) rather than a surface coordinate.
+
+The four "Britain" castles cluster around `(80..90, 105..107)` plus Lord Blackthorn's Castle at the far southeast outlier `(196, 245)`. Buccaneer's Den at the map center `(136, 158)` sits on its eponymous central island. Doom at `(128, 128)` is on the underworld plane.
+
 ## 6. Dungeons
 
 There are eight named dungeons. Dungeon mode, `DUNGEON.DAT`, and the DATA.OVL
