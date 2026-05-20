@@ -214,19 +214,23 @@ argument byte emitted by the NPC's response stream.
 
 Known public letter effects are:
 
-| Argument | Public effect |
-|----------|---------------|
-| `A` | Raise the shared food counter through the normal capped counter writer and refresh the food/gold presentation. |
-| `B` | Raise the shared gold counter through the normal capped counter writer. |
-| `C` | Raise the ordinary key counter through the normal capped byte writer. |
-| `D` | Raise the gem counter through the normal capped byte writer. |
-| `E` | Raise the torch counter through the normal capped byte writer. |
-| `F` | Set the outdoor Klimb gear byte used as the Grapple gate. This is the gameplay role of the save byte that older notes labelled magic powder. |
-| `G` | Raise the magic-carpet carried counter through the normal capped byte writer. |
-| `H` | Set the Sextant carried-item flag. |
-| `I` | Set the Spyglass carried-item flag. |
-| `J` | Set the Black Badge carried-item flag. |
-| `K` | Raise the skull/special-key counter through the normal capped byte writer. |
+| Argument | Public effect | Grant per call |
+|----------|---------------|----------------|
+| `A` | Raise the shared food counter through the normal capped counter writer and refresh the food/gold presentation. | `+1` (cap `9999`) |
+| `B` | Raise the shared gold counter through the normal capped counter writer. | `+1` (cap `9999`) |
+| `C` | Raise the ordinary key counter through the normal capped byte writer. | `+1` (cap `99`) |
+| `D` | Raise the gem counter through the normal capped byte writer. | `+1` (cap `99`) |
+| `E` | Raise the torch counter through the normal capped byte writer. | `+1` (cap `99`) |
+| `F` | Set the outdoor Klimb gear byte used as the Grapple gate. This is the gameplay role of the save byte that older notes labelled magic powder. | `+1` (cap `99`) |
+| `G` | Raise the magic-carpet carried counter through the normal capped byte writer. | `+1` (cap `99`) |
+| `H` | Set the Sextant carried-item flag. | Direct write `0xFF` |
+| `I` | Set the Spyglass carried-item flag. | Direct write `0xFF` |
+| `J` | Set the Black Badge carried-item flag. | Direct write `0xFF` |
+| `K` | Raise the skull/special-key counter through the normal capped byte writer. | `+1` (cap `99`) |
+
+Every counter-style letter (`A..G`, `K`) adds exactly **one** to its target slot per `0x86 X` invocation, using the shared capped-add helper (see `systems/stat-arithmetic.md`). A TLK script that wants to grant a larger amount embeds the same `0x86 X` sequence multiple times. Counter letters never assign a fixed final value; they always perform a saturating add by one. The three carried-item letters (`H`, `I`, `J`) instead write the sentinel `0xFF` directly into the carried-item flag byte, since the Sextant, Spyglass, and Black Badge are owned or not-owned rather than stocked.
+
+Small numeric argument bytes below the letter range (values `< 0x40`) take a separate path: they target the generic per-conversation signal-flag bank — a sixty-four-byte array used by quest scripts that need "the player has done X" booleans without consuming a fixed slot — and also perform a saturating add of one (cap `99`) at index `N` of the bank. The bank is shared per conversation rather than per NPC; readers test the same bank by index later in the same blob.
 
 Shop entry sits beside this byte-runner path rather than inside it. When Talk
 resolves a shop-capable resident, resident shop metadata can route directly to

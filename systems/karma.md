@@ -89,6 +89,12 @@ Confirmed non-shrine scalar changes:
 | Helped/pickpocket-style NPC thank-you path | Jimmy/NPC path that reaches the thankful response | Shared moral-standing selector +2, capped at ninety-nine |
 | Toll-style gold-payment milestone | Three-digit conversation gold payment when the toll-progress counter has reached its milestone | Shared moral-standing selector +1, capped at ninety-nine; if the payment leaves the party with zero gold, add another +2 under the same cap |
 
+The toll-progress counter is a single saved byte adjacent to the shared moral-standing selector (`SAVED.GAM 0x02E5`, in the same per-turn cluster as the selector at `0x02E2`). Every successful three-digit `0x85` gold payment increments this counter by one. When the counter reaches `100`, the gold-payment helper resets it to zero and applies the standing bump above. This means the milestone fires once per hundred successful payments rather than once per payment.
+
+The counter is not specific to "tolls" versus "bribes" or "donations": the public TLK control byte family does not distinguish payment intent, and every accepted three-digit `0x85` payment routes through the same helper and the same counter. The semantic naming as "toll" reflects the most common shipped use of the byte; bribes and donations also count toward the milestone. The reset/bump path is the only traced writer for the counter. New games seed the counter at zero from the factory save image; nothing else writes it.
+
+The "if the payment leaves the party with zero gold, add another +2" leg is a separate post-debit test inside the same helper. It fires on every paid `0x85` whose debit clears party gold to zero, regardless of whether the milestone reset also fired on the same call. Both clamps share the same ninety-nine cap on the shared selector.
+
 Negative boundaries for unpromoted action families:
 
 | Action family | Likely trigger | Public status |
