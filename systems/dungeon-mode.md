@@ -59,7 +59,7 @@ Each cell byte packs two four-bit fields. The high nibble selects the tile class
 | `0x9`       | Energy field (secondary)       | Generic energy field. |
 | `0xA`       | Room-helper state              | Routed through the same underfoot helper as room triggers (§ 5). |
 | `0xB`–`0xD` | Wall variants                  | Solid blockers (with one debug "SPEC WALL ERR" sentinel at `0xD`). |
-| `0xE`       | Heavy door / wall variant      | Solid blocker; openable via Open / Jimmy. Low nibble is the door-variant byte (open/closed/locked/magic-locked). |
+| `0xE`       | Heavy door (decorative)        | Solid blocker rendered as a door silhouette; NOT openable from any traced command path. Cells become `0xE?` from the save-image room-clear demotion (§5). |
 | `0xF`       | Room trigger                   | Walkable; low nibble is the room id `0..15` selecting the `DUNGEON.CBT` arena. Stepping onto a `0xF?` cell fires the room-entry helper and rewrites the cell in the loaded image to `0xA?` (room-helper state, same low nibble) for the rest of the visit. |
 
 The high nibble drives wall checks in the renderer and the cell-description string in L-Look. The low nibble varies per class — for fountains it picks cure/heal/poison/bad-taste; for energy fields it picks the four sub-types; for ladders and walls it carries decorative or direction flags. For L-Look only, exact byte `0x61` is normalised to `0x00` before description, so it reports as passage even though the underlying cell byte remains a pit-family variant. Other observed `0x6?` trap bytes, including `0x69`, `0x62`, and `0x6A`, keep their `0x6` class description.
@@ -434,7 +434,11 @@ a deepest-level underworld handoff. The only traced K-command dungeon exit
 outside ordinary ladders is exact pit byte `0x60`, which invokes the
 surface-reset helper.
 
-**Heavy doors.** A door cell (high nibble `0xE`) blocks movement until opened. The Open command (or a Jimmy attempt) toggles the door state for the rest of the visit. Walls are not openable; only door cells respond to Open. The earlier spec wording that placed heavy doors at high nibble `0xF` was imprecise — `0xF?` is the room-trigger / heavy-room family (low nibble is the room id `0..15` indexing `DUNGEON.CBT`), and the heavy door family is `0xE?` (the wall-variant band whose high nibble is `0xE`). The dungeon move dispatcher's block-test rejects forward steps onto classes `0xA..0xE` (heavy doors, ordinary walls, flavour walls, room-helper state) and lets `0xF?` cells be stepped onto so the room trigger can fire. There is no per-cell sidecar metadata for door open/closed state; the cell byte itself carries the variant.
+**Heavy doors.** Cells of high nibble `0xE` render with a door silhouette but in the original engine they are **decorative wall variants** rather than interactable doors. The dungeon move dispatcher rejects any forward step onto classes `0xA..0xE`, so the player cannot stand on a `0xE?` cell. The dungeon Open command operates on the **underfoot tile** (not the cell in front), so it can never target a `0xE?` cell — the underfoot must already be `0x4?` (wooden chest, which Open opens) or `0x7?` (passage variant carrying a chest-style flag). There is no traced Open or Jimmy mechanism that mutates `0xE?` cells.
+
+The `0xE?` cells reach the playable cell set only through the cleared-room demotion at load: the save-image room-clear bitmap (§5) rewrites cleared `0xF?` cells to `0xE?` on level reload, preserving the room id low nibble. A side effect is that a room cleared and reloaded becomes a non-walkable wall on the next visit; modern engines may either match this behavior (full original parity) or preserve walkability for cleared rooms (a quality-of-life departure).
+
+The earlier wording that placed heavy doors at high nibble `0xF` was imprecise — `0xF?` is the **walkable** room-trigger family (low nibble is the room id `0..15` indexing `DUNGEON.CBT`), while `0xE?` is the non-walkable wall variant rendered as a door. There is no per-cell sidecar metadata for door open/closed state; the cell byte itself carries the variant, and no interactive open/close mechanism exists in dungeon mode.
 
 **Special walls / secret doors.** Some wall-style and flavour cells can be
 rewritten by Search for the current dungeon visit. For flavour class `0xC?`,
