@@ -58,8 +58,9 @@ Each cell byte packs two four-bit fields. The high nibble selects the tile class
 | `0x8`       | Energy field                   | Sub-types: sleep, poison gas, fire, electric (§ 8). |
 | `0x9`       | Energy field (secondary)       | Generic energy field. |
 | `0xA`       | Room-helper state              | Routed through the same underfoot helper as room triggers (§ 5). |
-| `0xB`–`0xE` | Wall variants                  | Solid blockers (with one debug "SPEC WALL ERR" sentinel at `0xD`). |
-| `0xF`       | Heavy door / room trigger      | Sub-types: door, trigger. |
+| `0xB`–`0xD` | Wall variants                  | Solid blockers (with one debug "SPEC WALL ERR" sentinel at `0xD`). |
+| `0xE`       | Heavy door / wall variant      | Solid blocker; openable via Open / Jimmy. Low nibble is the door-variant byte (open/closed/locked/magic-locked). |
+| `0xF`       | Room trigger                   | Walkable; low nibble is the room id `0..15` selecting the `DUNGEON.CBT` arena. Stepping onto a `0xF?` cell fires the room-entry helper and rewrites the cell in the loaded image to `0xA?` (room-helper state, same low nibble) for the rest of the visit. |
 
 The high nibble drives wall checks in the renderer and the cell-description string in L-Look. The low nibble varies per class — for fountains it picks cure/heal/poison/bad-taste; for energy fields it picks the four sub-types; for ladders and walls it carries decorative or direction flags. For L-Look only, exact byte `0x61` is normalised to `0x00` before description, so it reports as passage even though the underlying cell byte remains a pit-family variant. Other observed `0x6?` trap bytes, including `0x69`, `0x62`, and `0x6A`, keep their `0x6` class description.
 
@@ -433,7 +434,7 @@ a deepest-level underworld handoff. The only traced K-command dungeon exit
 outside ordinary ladders is exact pit byte `0x60`, which invokes the
 surface-reset helper.
 
-**Heavy doors.** A door cell (high nibble `0xF` sub-type matching door) blocks movement until opened. The Open command (or a Jimmy attempt) toggles the door state for the rest of the visit. Walls are not openable; only door cells respond to Open.
+**Heavy doors.** A door cell (high nibble `0xE`) blocks movement until opened. The Open command (or a Jimmy attempt) toggles the door state for the rest of the visit. Walls are not openable; only door cells respond to Open. The earlier spec wording that placed heavy doors at high nibble `0xF` was imprecise — `0xF?` is the room-trigger / heavy-room family (low nibble is the room id `0..15` indexing `DUNGEON.CBT`), and the heavy door family is `0xE?` (the wall-variant band whose high nibble is `0xE`). The dungeon move dispatcher's block-test rejects forward steps onto classes `0xA..0xE` (heavy doors, ordinary walls, flavour walls, room-helper state) and lets `0xF?` cells be stepped onto so the room trigger can fire. There is no per-cell sidecar metadata for door open/closed state; the cell byte itself carries the variant.
 
 **Special walls / secret doors.** Some wall-style and flavour cells can be
 rewritten by Search for the current dungeon visit. For flavour class `0xC?`,

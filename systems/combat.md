@@ -148,6 +148,56 @@ arena Y. The owner/target/class field is deliberately overloaded by caller: it
 links party slots to character records, supports monster target selection, and
 selects class-table rows for monster/object slots.
 
+### 6.1 Flags/faction byte bit layout
+
+The flags/faction byte (byte 2 of the eight-byte descriptor) carries the
+per-slot per-round state used by every consumer:
+
+| Bit  | Meaning                                                                              |
+|-----:|--------------------------------------------------------------------------------------|
+| `0x80` | Slot is active / self-acting (set for live party slots and for live monsters).    |
+| `0x40` | Recently-acted / animation pending.                                               |
+| `0x20` | Marked dead.                                                                      |
+| `0x10` | Phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). |
+| `0x04` | Hidden / not-yet-revealed (invisible).                                            |
+| `0x02` | Fleeing. Set by the no-target centre fallback and by the wound-morale writer; consumed by the step-vector synthesizer. |
+| `0x01` | Controlled / casting / active-player gate. The combat round walker dispatches a slot with bit `0x01` set through the player command parser; possession/charm also uses this bit so the controlled non-party slot takes turns through the player path. Daemon-class casters that successfully possess a target self-clear through the slot-clear helper. |
+
+### 6.2 Status sub-flags (byte 4)
+
+Byte 4 of the descriptor carries the status sub-flags used by AI dispatch and
+spell aftereffects:
+
+| Bit  | Meaning                                                                              |
+|-----:|--------------------------------------------------------------------------------------|
+| `0x01` | Already-casting / per-turn casting gate set on entry to the player command path. |
+| `0x04` | Sound / animation effect pending.                                                 |
+| `0x08` | Asleep / charmed / disabled — RNG-gated action skip on the actor's turn. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. |
+
+A paired per-slot duration counter at `DS:0x57C0 + slot` (sixty-four bytes
+total) ticks once per combat round; on reaching zero the per-round cleanup
+clears bit `0x08` so the actor wakes.
+
+### 6.3 Death-marker tile bytes
+
+When a slot dies, the death path writes a tile byte into the combat-instance
+active-object record at the slot linked from descriptor byte 4. The values are:
+
+| Death branch                                  | Tile byte         | Notes                                                                                                 |
+|-----------------------------------------------|-------------------|-------------------------------------------------------------------------------------------------------|
+| Party member death                            | `0x1E` (corpse)   | Sets the active-player sentinel to `0xFF` if the dead character was active.                          |
+| Vanish-on-death class (Wanderer, Blackthorn, Lord British, Shadowlord) | `0x16` (gravestone marker) | Plays the fade animation; clears the entire combat descriptor and active-object record; sets per-combat status byte to `2`. |
+| Gazer (type `0x1C`) death                     | `0x1F` (eye-burst special) | Calls the tile-effect spawn helper, then screen redraw.                                         |
+| Gargoyle (type `0x1E`) death                  | `0x4C` then default | First writes `0x4C` (`'L'` lava-pool tile) to the underlying combat-arena terrain at the death `(X, Y)`; then falls through to the default monster-killed path. |
+| Default monster killed, drop-roll accepted    | `0x01` (generic dead-monster / drop marker) | Writes a random `[0, max_HP]` into the active-object record's byte 5 (loot quantity); on a second random-byte acceptance, ORs bit `0x80` into byte 5 as a special-drop marker. |
+| Default monster killed, drop-roll rejected    | `0x01`            | Same tile but byte 5 is not promoted to a loot value; the slot is released through the slot-clear helper.                  |
+
+All death markers live in the **temporary** combat-instance active-object
+table. The combat framer (`combat_enter_exit`) snapshots the world active-object
+table to a backup before combat and restores it on exit, so default-kill markers
+do not leak as world loot. A compatible implementation must not promote
+combat-instance drop markers into automatic world loot.
+
 When an actor dies, the "marked dead" bit is set; when a slot is freed completely (a vanishing monster or a fled character), the record is cleared to all zeros and the slot becomes available for re-allocation.
 
 A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the step-or-attack primitive (Section 11): when an actor moves, its (X, Y) is written into both.
