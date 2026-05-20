@@ -43,12 +43,40 @@ refresh.
 At all other hours, the corresponding marker is below the strip's visible
 horizon and leaves the blank cell contents unchanged.
 
-The glyph identity for each moon is table-driven by the current calendar day,
-not by deriving one moon from the other or by drawing geometric phases at
-runtime. The public spec does not reproduce the resident glyph-table contents.
-A clean implementation that renders original-style text should preserve two
-independent day-indexed phase tables and should not derive Felucca by offsetting
-Trammel.
+The glyph identity for each moon is table-driven, **indexed by the current hour of day** (not by the calendar day as earlier wording suggested). The renderer reads the two parallel byte tables and writes the resulting ASCII glyph digit to the corresponding cell.
+
+**Table contents** (extracted from shipped `DATA.OVL` resident bytes, 24 entries each, indexed by `hour ∈ 0..23`):
+
+| Hour | Trammel | Felucca |
+|---:|:---:|:---:|
+| 0 | `0xF0` (off-horizon) | `0x80` (off-horizon) |
+| 1 | `'0'` | `'0'` |
+| 2 | `'1'` | `'0'` |
+| 3 | `'1'` | `'1'` |
+| 4 | `'2'` | `'2'` |
+| 5 | `'2'` | `'3'` |
+| 6 | `'3'` | `'4'` |
+| 7 | `'3'` | `'5'` |
+| 8 | `'4'` | `'6'` |
+| 9 | `'5'` | `'7'` |
+| 10 | `'5'` | `'0'` (off-horizon) |
+| 11 | `'6'` | `'0'` (off-horizon) |
+| 12 | `'6'` | `'1'` |
+| 13 | `'7'` | `'2'` |
+| 14 | `'7'` | `'3'` |
+| 15 | `'0'` | `'4'` |
+| 16 | `'1'` | `'5'` |
+| 17 | `'1'` | `'6'` |
+| 18 | `'2'` | `'7'` |
+| 19 | `'2'` | `'0'` (off-horizon) |
+| 20 | `'3'` | `'0'` (off-horizon) |
+| 21 | `'3'` | `'1'` |
+| 22 | `'4'` | `'2'` |
+| 23 | `'5'` | `'3'` |
+
+Each phase digit `'0'..'7'` corresponds to a Moonstone slot index `0..7`, which the natural-moongate entry hook uses (after stripping `'0'`) to look up the saved Moonstone destination. High-bit sentinels (`0xF0`, `0x80`) mean the moon is below the horizon for that hour; the entry hook treats high-bit cached glyphs as "no gate for this slot".
+
+Trammel cycles through all eight phases roughly twice per day (the larger, slower moon); Felucca cycles once per day with off-horizon gaps near hours 10-11 and 19-20.
 
 The strip is presentation only. It caches the selected moon glyph bytes for the
 current render pass, but those cached bytes are not gameplay state and are not
