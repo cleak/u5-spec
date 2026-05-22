@@ -310,7 +310,7 @@ After the acknowledgement screen finishes, the intro returns to its menu loop wi
 
 `R` is a visual preview path for the intro view. It invokes a renderer in the font/display overlay family to run the non-interactive Return-to-View scene, then returns to the intro menu. It is not a saved-game resume command; saved-game resume is `J`.
 
-When entered from the normal intro menu, the path preserves the underlying title/menu surface, runs the preview until its local script or input wait completes, then restores the preserved surface before menu polling resumes. The renderer loads `MISCMAPS.DAT` from the Return-to-View section: the first four records are 19-by-4 map strips, and the following 655-byte stream drives preview actors, map-strip switches, movement, waits, and repeated animation beats. The file layout is specified in `formats/location-dat.md`.
+When entered from the normal intro menu, the path preserves the underlying title/menu surface, runs the preview until its local script or input wait completes, then restores the preserved surface before menu polling resumes. The renderer loads `MISCMAPS.DAT` from the Return-to-View section: the first four records are 4-column by 19-row map strips, and the following 655-byte stream drives preview actors, map-strip switches, movement, waits, and repeated animation beats. The file layout is specified in `formats/location-dat.md`.
 
 The preview renderer uses the proportional-font overlay as a small intro-local
 cinematic runtime. It switches to a Return-to-View display state, configures the
@@ -323,23 +323,27 @@ the preview is drawn over it, and the mirror is restored before menu polling
 continues. This snapshot is presentation-only; no save state or gameplay mode
 is entered.
 
-Each map-strip transition selects one of four 19-row by 4-column preview
-sections and renders a centered chapter caption above it. The strip starts from
-its middle row and expands outward over subsequent animation ticks. Static
-terrain cells are copied into the active 32-by-32 preview tile planes, while
-moving preview actors use the shared active-object table and are scattered into
-the overlay plane each frame. The per-frame tick also runs the ordinary
+Each map-strip transition selects one of four 4-column by 19-row preview
+sections and renders a centered chapter caption above it. Captions are derived
+from the strip index: strip 0 is The Summoning, strip 1 is The Journey, strip 2
+is The Arrival, and strip 3 is The Welcoming. The command stream does not carry
+a separate caption opcode or inline caption text. The strip starts from its
+middle row and expands outward over subsequent animation ticks. Static terrain
+cells are copied into the active 32-by-32 preview tile planes, while moving
+preview actors use the shared active-object table and are scattered into the
+overlay plane each frame. The per-frame tick also runs the ordinary
 active-object animation step and the intro title tick before drawing the
 preview cells, so actor animation and the title/menu visual cadence stay in the
 same timing family even though gameplay time is not advancing.
 
 The loaded command stream is interpreted as a compact sixteen-command bytecode
 for this cinematic only. Its commands create, delete, move, teleport, and clear
-preview actors; switch to a new strip section; run short sprite-walk and
-cell-effect loops; scroll the chapter text region; wait for keypress; and
-repeat blocks of commands. Any keypress observed by the wait/tick path exits
-the preview and restores the title/menu surface. A command-stream end or
-restart command remains local to the preview and never resumes a saved game.
+preview actors; switch to a new strip section and its fixed caption; run short
+sprite-walk and cell-effect loops; run a fixed wipe/actor-draw beat; wait for
+keypress; and repeat blocks of commands. Any keypress observed by the wait/tick
+path exits the preview and restores the title/menu surface. A command-stream
+end or restart command remains local to the preview and never resumes a saved
+game.
 
 The control-flow contract is clear: run the preview as an intro-local screen, keep the intro scene active, do not load or resume a save, and continue polling the six-option menu afterward. The preview command-byte table, argument shapes, loop rule, actor/map side effects, and fixed script-level helper schedules are specified in `formats/location-dat.md`. Asset-compatible tooling that does not implement the preview interpreter should still preserve the command stream unchanged.
 

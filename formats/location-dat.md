@@ -217,7 +217,7 @@ Town mode also runs the same XOR pass against the already-loaded buffer when the
 | Section offset | Length (bytes) | Content                                               |
 |---------------:|---------------:|-------------------------------------------------------|
 |              0 |            704 | Four cutscene maps, each 11x11, padded to 16-byte rows |
-|            704 |            512 | Four Return-to-View maps, each 19x4, padded to 32-byte rows |
+|            704 |            512 | Four Return-to-View maps, each 4 columns by 19 rows, padded to 32-byte columns |
 |          1,216 |            655 | Return-to-View command stream                          |
 
 ### Cutscene maps
@@ -230,9 +230,9 @@ The four cutscene maps are stored back-to-back in this section: each map occupie
 
 ### Return-to-View maps
 
-Four wider and shorter grids - 19 tiles wide by 4 tiles tall - are used by the intro menu's Return-to-View preview. The Return-to-View path loads `MISCMAPS.DAT` starting at this section and treats the first 512 bytes of the loaded buffer as four padded map strips. A helper selects one of the four records and copies the leftmost nineteen cells from each of its four rows into the preview's working tile buffers. The on-disk row stride is thirty-two bytes, with the trailing thirteen bytes per row zero-padded; the data is laid out as if for a 32-tile-wide grid.
+Four tall, narrow grids - 4 columns by 19 rows - are used by the intro menu's Return-to-View preview. The Return-to-View path loads `MISCMAPS.DAT` starting at this section and treats the first 512 bytes of the loaded buffer as four padded map strips. A helper selects one of the four records and copies the first nineteen row cells from each of its four columns into the preview's working tile buffers. The on-disk column stride is thirty-two bytes, with the trailing thirteen bytes per column unused padding; the data is laid out as four 32-byte columns per record.
 
-Each Return-to-View map occupies `32 × 4 = 128` bytes, totalling 512 bytes for the four. Extraction follows the same skip-and-read pattern as the cutscene section.
+Each Return-to-View map occupies `32 x 4 = 128` bytes, totalling 512 bytes for the four. Extraction skips `record_index x 128`, then for columns `0..3` reads a 32-byte column and uses only rows `0..18`.
 
 ### Return-to-View command stream
 
@@ -256,7 +256,7 @@ Preview coordinates use the same tile coordinate convention as other 2D maps: X 
 | `0x03` | `ticks` | Run preview tick | Run the Return-to-View animation/input tick with the supplied timing value. If the tick reports a keypress or abort condition, the preview exits. |
 | `0x04` | `x, y` | Open cell effect | Cache the cell coordinate, temporarily hide that cell in both buffers, run a forward 15-step local cell effect, then leave a fixed effect tile in both buffers and run a short preview tick. |
 | `0x05` | none | Close cell effect | Reuse the coordinate cached by `0x04`, run the same local cell effect in reverse, then leave the cell as the fixed post-effect floor/detail tile. |
-| `0x06` | `strip` | Load map strip | Copy one of the four 19-by-4 Return-to-View maps into the preview tile buffers and remember that strip index as current. |
+| `0x06` | `strip` | Load map strip and caption | Copy one of the four 4-column by 19-row Return-to-View maps into the preview tile buffers, remember that strip index as current, and render that strip's fixed chapter caption. |
 | `0x07` | `slot` | Temporary actor draw | Temporarily draw the actor slot through the preview actor renderer using an alternate marker tile, then restore the actor's original tile byte. |
 | `0x08` | `slot` | Temporary actor draw over backing | Variant of `0x07` that draws the temporary actor over the backing-map tile at its current cell, then restores the actor's original tile byte. |
 | `0x09` | none | Restart stream | Reset the command pointer to the first byte of the command stream. The shipped stream ends with this command, so the Return-to-View scene loops until interrupted. |
@@ -269,16 +269,27 @@ Preview coordinates use the same tile coordinate convention as other 2D maps: X 
 
 Several visually complex commands have fixed script-level schedules:
 
+- `0x06` is the only chapter-caption trigger. The command has no text payload:
+  the one-byte strip argument selects both the map strip and a fixed caption
+  string from the intro text table.
+
+| Strip argument | Caption |
+|---:|---|
+| `0` | The Summoning |
+| `1` | The Journey |
+| `2` | The Arrival |
+| `3` | The Welcoming |
+
 - `0x04` writes the sentinel tile `0xFE` to the target cell in both tile buffers, then runs the local cell-effect renderer at screen tile `(x, y + 7)` for steps 1 through 15. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0xDC` to the cell in both buffers and runs a two-tick preview update.
 - `0x05` reuses the coordinate cached by `0x04`, writes `0xFE` to the cell in both buffers, and runs the same local cell-effect renderer at `(x, y + 7)` for steps 15 down through 1. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0x05` to the cell in both buffers and runs a two-tick preview update.
 - `0x07` and `0x08` temporarily replace the actor slot's two tile bytes with `0x16`, draw the actor through the special preview draw helper at screen tile `(actor.x, actor.y + 7)`, then restore the original actor tile bytes. `0x07` supplies the actor's original tile as the draw helper's underlay/control value; `0x08` supplies the backing-map tile at the actor's current cell instead. Either helper call may abort the preview.
 - `0x0B` runs five rectangle-effect steps. Step `n` from 0 through 4 begins with a one-tick preview update, then emits two inclusive pixel-rectangle operations: `(128 + 9n, 152 + 3n)` to `(137 + 9n, 155 + 3n)`, followed by `(128 + 9n, 153 + 3n)` to `(137 + 9n, 156 + 3n)`. After the five steps, the command skips two reserved argument bytes, reads the actor slot byte, draws that actor directly at screen tile `(actor.x, actor.y + 7)` with tile/control value zero, runs a short fixed resident wait, and then runs a three-tick preview update.
 
-Command bytes above `0x0F` are treated as one-byte no-ops by the traced interpreter: they are skipped after the normal input poll. The shipped DOS data does not need them for the visible Return-to-View sequence.
+Command bytes above `0x0F` are treated as one-byte no-ops by the traced interpreter: they are skipped after the normal input poll. There is no separate caption opcode and no length-prefixed caption payload in the shipped stream.
 
 A reader that consumes only maps can still extract every tile record described above, but an asset-compatible intro preview needs both the four map strips and this command stream. Tools that do not implement the preview script should preserve the entire stream byte-for-byte when unpacking or repacking `MISCMAPS.DAT`.
 
-`MISCMAPS.DAT` is structurally unrelated to the four per-class location files despite carrying small tile grids — its frame sizes are different (11x11 and 19x4 versus 32x32), its row strides include padding, and it has no per-frame two-floor pairing. The shared element is only the global tile catalogue.
+`MISCMAPS.DAT` is structurally unrelated to the four per-class location files despite carrying small tile grids — its frame sizes are different (11x11 and 4-by-19 versus 32x32), its strides include padding, and it has no per-frame two-floor pairing. The shared element is only the global tile catalogue.
 
 ## 12. Cross-references
 
@@ -342,7 +353,7 @@ The format described above was derived from the analysis notes listed below. Non
 - The first-pass survey of every map and arena file shipped with the game, including per-file size verification, the four-class location partition, the two-floor-per-block reading, the verified `MISCMAPS.DAT` section sizes, and cross-file consistency checks — `u5-decomp/formats/maps.md`.
 - The Blackthorn audience cutscene note that verifies the first cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/BLCKTHRN_OVL/0x060E_blackthorn_audience.md`.
 - The endgame entry note that verifies a later cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`.
-- The FONT overlay overview and Return-to-View trace that bind the four 19-by-4 maps plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
+- The FONT overlay overview and Return-to-View trace that bind the four 4-column by 19-row maps plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
 - The town-mode cosmetic terrain-variation pass for dash/period bytes -
