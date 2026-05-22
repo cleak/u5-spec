@@ -95,7 +95,20 @@ loot sweep and it does not consume the temporary combat death/drop markers.
 
 Once the framer has decided which arena to load, the setup helper picks a monster count, picks a tile per monster, and writes one record per spawned monster into the actor table. The ordinary terrain setup helper also contains an optional placement-shuffle branch, but the only traced terrain caller passes flags that leave that branch inactive. Live ambush and rest/camp alternate setup use separate entry-mode helpers, so do not model those paths as the dormant terrain-helper shuffle unless a caller is found.
 
-**Counting monsters.** The engine consults a per-arena spawn-count byte from a small data-segment table. Three values are treated as exact counts and used unchanged: one, eight, and sixteen. Any other value is treated as a maximum: the actual count is rolled to a uniform integer in `[1, max]`. A "double-encounter" runtime flag, when set, re-rolls the count once more and takes the second roll. The effect is not a guaranteed size increase; it changes the encounter's random count by replacing the first roll. The flag is save-backed resident state and is cleared by the 28-day month-boundary bundle. Current static sweeps found no gameplay setter. The final count is capped at twenty-six.
+**Counting monsters.** The engine consults the default spawn-count byte in the
+combat-class stat row for the encounter's base class. In ordinary terrain
+combat, the outdoor arena index also names the base combat class for the first
+spawn, so older notes may describe this as a per-arena count table. It is not a
+separate eight-byte arena row: the surrounding seven bytes are the class stat
+fields specified in `formats/data-ovl.md`, not terrain-combat weights. Three
+count values are treated as exact counts and used unchanged: one, eight, and
+sixteen. Any other value is treated as a maximum: the actual count is rolled to
+a uniform integer in `[1, max]`. A "double-encounter" runtime flag, when set,
+re-rolls the count once more and takes the second roll. The effect is not a
+guaranteed size increase; it changes the encounter's random count by replacing
+the first roll. The flag is save-backed resident state and is cleared by the
+28-day month-boundary bundle. Current static sweeps found no gameplay setter.
+The final count is capped at twenty-six.
 
 A "town-style override" applies before the lookup inside the terrain setup
 helper: if that helper is reached while the saved scene is a
@@ -106,7 +119,19 @@ hostility uses arena combat.
 
 A short combat banner ("CONFLICT") is printed at the start of setup, before any monsters are placed.
 
-**Picking arrival positions.** Each monster gets one of sixteen pre-defined arena cells, indexed by a placement slot. For ordinary terrain combat, slots are walked in identity order so placements are deterministic per arena. The terrain helper has a dormant Fisher-Yates branch behind a flag bit, but no traced live caller reaches it. The selected `BRIT.CBT` arena supplies the sixteen slots' `(x, y)` coordinates from its metadata band; setup copies them into two flat resident tables before placing actors. The same arena-load step also copies two six-byte setup tables used by combat-local resident state; their per-entry meanings remain format-level open work.
+**Picking arrival positions.** Each monster gets one of sixteen arena cells,
+indexed by a placement slot. For ordinary terrain combat, slots are walked in
+identity order so placements are deterministic for the selected arena record.
+The terrain helper has a dormant Fisher-Yates branch behind a flag bit, but no
+traced live caller reaches it. The selected `BRIT.CBT` arena is authoritative
+for the sixteen slots' `(x, y)` coordinates: the arena loader copies those
+coordinates from the record metadata band into two resident scratch tables, and
+the placement helper then reads the resident copies. A clean engine should
+therefore treat a hard-coded resident coordinate list as only the values from
+whatever record was most recently loaded, not as global fixed placement data.
+The same arena-load step also copies two six-byte setup tables used by
+combat-local resident state; their per-entry meanings remain format-level open
+work.
 
 **Ambush and camp reveal slots.** Ambush-style and camp-attack combats can
 carry a small reveal table for hidden arena features. The reveal helper is
@@ -687,7 +712,7 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 
 | Table                            | Purpose                                                                                                                                          |
 |----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
-| Per-arena spawn-count table      | One byte per arena. Combined with the random reroll, decides how many monsters spawn.                                                            |
+| Combat-class spawn-count byte    | Field `+6` of the eight-byte class stat row. Ordinary terrain combat indexes it with the arena/base-class id, so it behaves like a per-arena count for stock outdoor arena ids but is stored with class stats. Combined with the random reroll, it decides how many monsters spawn. |
 | Per-arena replacement tile       | One byte per arena. Early spawned monsters roll a one-in-nine chance to use this tile instead of the base arena tile.                              |
 | Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, vanish-on-death, special death checks, the turnable-attack flag consumed by Amulet/Turning, ranged/effect branch selection, the magic-immune ranged/effect gate, teleport-capable movement, and the turn special bits for possess, blink/phase, and summon-daemon. |
 | Ordinary AI helper state         | Not a class script table. Ordinary monster decisions use the combat actor/effect records, target-selection scratch, per-class flag/stat tables, and shared helper outputs such as the AI step vector. Slot-local position, target, phase, flee, and visibility data remain in the combat actor/effect tables. |
@@ -858,7 +883,7 @@ The behaviour described here was derived from the private function and format no
 - The combat-exit tile-graphics restoration dispatch reached from the framer's
   sampled restoration flag -- derived from
   `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
-- The terrain-combat setup, the per-arena spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn replacement-tile roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+- The terrain-combat setup, the class-row spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn replacement-tile roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
 - The combat monster-placement writer that initializes renderer-facing and combat descriptor records -- derived from `u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
 - The ambush/camp-attack reveal-slot helper, including mode gating, one-shot
   reveal-coordinate consumption, arena terrain stamping, and redraw ordering --

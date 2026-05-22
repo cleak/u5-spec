@@ -87,7 +87,14 @@ The twenty-one metadata bytes after each terrain row are combat-specific annotat
 
 Rows and columns in this table are zero-based within the arena record. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a placement-slot shuffle branch, but the traced ordinary terrain caller does not set it; live ambush and rest/camp setup must be specified from their own helpers rather than inferred from this dormant branch. The two six-byte slices are copied beside the placement coordinates as per-arena runtime setup data. Current resident consumers prove they are combat-local tables, but their per-entry meanings are not yet public-spec-ready.
 
-Do not treat the metadata band as the complete actor-placement model. Terrain combat also consults resident per-arena tables outside the `.CBT` file for spawn counts and leader monster replacement. Placement-slot coordinates are arena-local metadata copied from the selected record into resident tables before placement. That means not every placement detail is encoded in `.CBT`; the file provides arena-local terrain and placement geometry, while resident tables provide global per-arena spawning parameters.
+The resident placement-coordinate tables are load-time scratch. A selected
+`BRIT.CBT` record overwrites them before ordinary terrain setup places actors,
+and the setup helper then reads those resident copies. Therefore the selected
+arena record is the authoritative placement source; a fixed resident coordinate
+array is only a cached copy of the last loaded arena record, not independent
+global placement data.
+
+Do not treat the metadata band as the complete actor-placement model. Terrain combat also consults resident class/encounter tables outside the `.CBT` file for spawn counts and leader monster replacement. Placement-slot coordinates are arena-local metadata copied from the selected record into resident tables before placement. That means not every placement detail is encoded in `.CBT`; the file provides arena-local terrain and placement geometry, while resident tables provide global class and spawning parameters.
 
 The `DUNGEON.CBT` room loader is confirmed to load the same complete record
 shape into the combat terrain buffer. Dungeon-room setup then performs its own
@@ -125,7 +132,7 @@ Outdoor combat enters through the terrain-combat setup path. The triggering acti
 The selected arena record also supplies the sixteen placement-slot coordinates
 from its metadata band, as described above.
 
-The arena record and those resident tables are therefore a pair. `BRIT.CBT` answers "what does the battlefield look like, and where are this arena's placement slots?" The resident tables answer "how many things appear, and which tile class should represent them?"
+The arena record and those resident tables are therefore a pair. `BRIT.CBT` answers "what does the battlefield look like, and where are this arena's placement slots?" The resident class and encounter tables answer "how many things appear, and which tile class should represent them?"
 
 ## 7. Dungeon Arena Selection
 

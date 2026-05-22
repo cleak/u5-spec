@@ -349,13 +349,16 @@ combat actors.
 
 For a terrain fight:
 
-- A resident per-arena table supplies the base monster count. Counts of 1, 8,
-  and 16 are exact; other counts are rolled into a 1-to-max range.
+- The base monster count comes from the encounter base class's stat row. For
+  stock ordinary terrain combat the outdoor arena id and base class id are the
+  same value, so this can be described as a per-arena count at encounter level;
+  the surrounding bytes are still class stats, not terrain weights. Counts of
+  1, 8, and 16 are exact; other counts are rolled into a 1-to-max range.
 - A "fortunes of war" flag can cause the count roll to be repeated.
 - Town-style hostility overrides the count to one attacker.
-- Placement uses sixteen fixed arena slots supplied by the selected arena's
-  metadata. Terrain fights use deterministic slot order; ambushes can shuffle
-  the slots.
+- Placement uses sixteen arena slots supplied by the selected arena's metadata
+  and cached in resident scratch before placement. Terrain fights use
+  deterministic slot order; ambushes can shuffle the slots.
 - The first placed monster uses the triggering arena class. For later placements,
   actors whose placement index is below `(count / 4) + 1` may use a per-arena
   replacement class when the replacement predicate permits it; later actors reuse

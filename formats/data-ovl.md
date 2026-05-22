@@ -296,6 +296,11 @@ global combat metadata that is not stored in arena files:
   the raw reward-unit input. A separate per-class flag table immediately
   follows the class records and should be modeled as class traits, not as
   executable scripts.
+  Terrain-combat setup indexes the default spawn-count field with the outdoor
+  arena/base-class id, which can make the field look like byte zero of a
+  per-arena row when viewed from that helper alone. The row owner remains this
+  combat-class stat table; the other seven bytes are class stats, not
+  terrain-combat monster-type weights.
 - Class-name pointers for the same actor-class namespace.
 - Decoded damage/death flags. The analyzed baseline's class-flag table confirms
   split-on-damage, halve-physical-damage, physical immunity, faction override,
@@ -328,7 +333,9 @@ global combat metadata that is not stored in arena files:
   default/aquatic, surface land, and underworld land. `systems/encounters.md`
   owns the public row weights and active-object payload families; this spec
   records DATA.OVL as the resident owner of the tables.
-- Per-arena or per-terrain spawn-count and leader-replacement data.
+- Terrain encounter spawn-count and leader-replacement data. The count seed is
+  the combat-class stat row's default spawn-count field for the selected base
+  class; the leader/follower replacement tile is a separate encounter table.
 - Combat placement coordinate tables populated from the selected arena record's
   metadata, plus placement-shuffle support state.
 - Ambush/camp reveal records. This resident table has eight logical records

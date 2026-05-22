@@ -332,7 +332,9 @@ Cross-reference: `catalogs/monster-bestiary.md` for per-monster stats, AI archet
 Monsters appear in two contexts:
 
 - **Wandering encounters.** The encounter spawner picks a monster class based on the current world-tile class and party state, and writes a fresh active-object slot.
-- **Combat arenas.** When combat starts, the per-arena monster table fixes the starting tile ids; the combat actor table tracks frame state per actor.
+- **Combat arenas.** When combat starts, the encounter base class and the
+  separate replacement-tile table choose starting tile ids; the combat actor
+  table tracks frame state per actor.
 
 Hostile humans (brigands, pirates, hostile guards) sit in the *NPC* range, not the monster range. The combat system distinguishes them for damage and loot, but the tile space treats them as NPC-class.
 

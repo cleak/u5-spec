@@ -10,7 +10,7 @@ There are three arena-encounter trigger families in the running game:
 - **Scripted encounters.** A small, hand-authored set of locations and events force a specific encounter when reached: ambush tiles in story-driven keeps, the duel with Lord Blackthorn, a few unique boss meetings. Blackthorn's follow-on capture and rescue scenes are specified in `systems/blackthorn.md`.
 - **Dungeon room encounters.** Stepping onto certain dungeon-room cells loads a fixed dungeon arena from a separate on-disk bank.
 
-Once any arena trigger fires, the same combat-enter framing function runs - combat is a function call from the world or dungeon mode loop perspective (see `combat.md`). The encounter system's job ends when that call begins; everything after the framer's save phase belongs to combat. This spec covers the trigger-side mechanics, the arena-selection logic, the per-arena spawn-count and tile pipeline, and the small set of side mechanics - sleep ambushes and "fortunes-of-war" doublings - that change encounter pacing.
+Once any arena trigger fires, the same combat-enter framing function runs - combat is a function call from the world or dungeon mode loop perspective (see `combat.md`). The encounter system's job ends when that call begins; everything after the framer's save phase belongs to combat. This spec covers the trigger-side mechanics, the arena-selection logic, the class-row spawn-count and replacement-tile pipeline, and the small set of side mechanics - sleep ambushes and "fortunes-of-war" doublings - that change encounter pacing.
 
 ## 2. The three triggers
 
@@ -252,9 +252,31 @@ tile/monster catalogs.
 
 **Underworld variant.** If the active-object's stored Z byte indicates the underworld (the high bit of the Z byte is set), a flag is raised that biases later table reads toward underworld variants of the same arena. The arena bank itself is shared between surface and underworld; only the player-Z value the placer writes into each placed monster's record differs.
 
-**Spawn count.** The selected arena's record in a per-arena data-segment table provides the *base monster count*. Three values are sentinels and used unchanged: `1` (single-attacker terrain-helper cases), `8`, and `16` (fixed-size encounters typically used by dungeon arenas with hand-authored counts). All other values are treated as a *maximum* and re-rolled to a uniform integer in `[1, max]`. If the "fortunes of war" flag is set, the count is re-rolled a second time, taking the second roll. The final count is capped at twenty-six.
+**Spawn count.** The encounter's base class supplies the base monster count
+from its combat-class stat row. In ordinary terrain combat the selected arena
+index and the base class id are the same value, so this behaves like a
+per-arena count for the stock outdoor arena ids; it is stored with class stats,
+not as byte zero of a separate arena metadata row. Three values are sentinels
+and used unchanged: `1` (single-attacker terrain-helper cases), `8`, and `16`
+(fixed-size encounters typically used by dungeon arenas with hand-authored
+counts). All other values are treated as a *maximum* and re-rolled to a uniform
+integer in `[1, max]`. If the "fortunes of war" flag is set, the count is
+re-rolled a second time, taking the second roll. The final count is capped at
+twenty-six.
 
-**Placement and tile assignment.** Each placed monster occupies one of sixteen pre-defined arena cells, indexed by a *placement slot*. Slots 0-15 are walked in identity order for ordinary terrain encounters. The terrain setup helper contains a dormant Fisher-Yates branch, but the only traced live terrain caller leaves it inactive; ambush and rest/camp alternate setup should be specified from their own helpers rather than from that branch. The first monster uses the arena's base tile class, derived from the triggering creature. Later monsters normally use that same base tile. For spawn indexes below the `count / 4 + 1` threshold, each monster rolls a one-in-nine replacement check; only a zero result uses the separate per-arena replacement tile. Later spawn indexes never roll for the replacement tile.
+**Placement and tile assignment.** Each placed monster occupies one of sixteen
+arena cells, indexed by a *placement slot*. The selected `BRIT.CBT` arena
+record supplies the slot coordinates; the loader copies them into resident
+scratch tables before the setup helper reads them. Slots 0-15 are walked in
+identity order for ordinary terrain encounters. The terrain setup helper
+contains a dormant Fisher-Yates branch, but the only traced live terrain caller
+leaves it inactive; ambush and rest/camp alternate setup should be specified
+from their own helpers rather than from that branch. The first monster uses the
+arena's base tile class, derived from the triggering creature. Later monsters
+normally use that same base tile. For spawn indexes below the `count / 4 + 1`
+threshold, each monster rolls a one-in-nine replacement check; only a zero
+result uses the separate per-arena replacement tile. Later spawn indexes never
+roll for the replacement tile.
 
 After the pipeline writes all `count` records to the active-object table, the framer enters the round loop and combat plays out as described in `combat.md`.
 
@@ -360,7 +382,7 @@ SJOG command helpers described in `systems/containers.md` and
 combat route, it should be added as a separate caller rather than inferred from
 the room-entry lookup.
 
-Dungeon arenas are typically smaller and tighter than outdoor arenas, with fewer entry edges. The placement pipeline runs the same way as for terrain encounters: the per-arena spawn-count, the leader/follower split, and the per-arena leader-replacement tile all live in the same data-segment tables.
+Dungeon arenas are typically smaller and tighter than outdoor arenas, with fewer entry edges. The placement pipeline uses the same count/replacement model as terrain encounters: the count seed is a class stat field, while the leader/follower replacement tile lives in a separate encounter table.
 
 ## 9. The encounter probe and active-object overlap
 
@@ -524,5 +546,5 @@ The behaviour described here was derived from the private function and format no
   reveal-coordinate consumption, terrain stamping, and redraw ordering --
   derived from
   `u5-decomp/functions/COMBAT_OVL/0x111A_reveal_ambush_at_coord.md`.
-- The terrain-combat setup pipeline, the per-arena spawn-count and replacement-tile tables, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn replacement roll, the town-style single-attacker override, and the "fortunes of war" double-roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+- The terrain-combat setup pipeline, the class-row spawn-count field and replacement-tile table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn replacement roll, the town-style single-attacker override, and the "fortunes of war" double-roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
 - The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the surface/underworld variant model — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
