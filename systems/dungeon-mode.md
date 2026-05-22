@@ -57,9 +57,9 @@ Each cell byte packs two four-bit fields. The high nibble selects the tile class
 | `0x7`       | Passage / corridor variant     | Renders as passage. |
 | `0x8`       | Energy field                   | Sub-types: sleep, poison gas, fire, electric (§ 8). |
 | `0x9`       | Energy field (secondary)       | Generic energy field. |
-| `0xA`       | Room-helper state              | Routed through the same underfoot helper as room triggers (§ 5). |
-| `0xB`–`0xD` | Wall variants                  | Solid blockers (with one debug "SPEC WALL ERR" sentinel at `0xD`). |
-| `0xE`       | Heavy door (decorative)        | Solid blocker rendered as a door silhouette; NOT openable from any traced command path. Cells become `0xE?` from the save-image room-clear demotion (§5). |
+| `0xA`       | Room-helper / cleared-room state | Routed through the same underfoot helper as room triggers (§ 5). Reloaded cleared rooms use this high nibble. |
+| `0xB`–`0xD` | Wall variants                  | Solid movement blockers (with one debug "SPEC WALL ERR" sentinel at `0xD`). |
+| `0xE`       | Door presentation variant      | Door-like rendering/search variant. It is not the room-clear reload state and is not produced by the room-clear demotion pass. |
 | `0xF`       | Room trigger                   | Walkable; low nibble is the room id `0..15` selecting the `DUNGEON.CBT` arena. Stepping onto a `0xF?` cell fires the room-entry helper and rewrites the cell in the loaded image to `0xA?` (room-helper state, same low nibble) for the rest of the visit. |
 
 The high nibble drives wall checks in the renderer and the cell-description string in L-Look. The low nibble varies per class — for fountains it picks cure/heal/poison/bad-taste; for energy fields it picks the four sub-types; for ladders and walls it carries decorative or direction flags. For L-Look only, exact byte `0x61` is normalised to `0x00` before description, so it reports as passage even though the underlying cell byte remains a pit-family variant. Other observed `0x6?` trap bytes, including `0x69`, `0x62`, and `0x6A`, keep their `0x6` class description.
@@ -153,9 +153,10 @@ Two underfoot tile classes have *immediate* effects that fire before the player 
 
 Cleared room state also has an overlay-side bitmap keyed by dungeon and room
 id. This bitmap is part of the save image. When a level is loaded or reloaded,
-room-marker cells whose clear bit is set are demoted from the room-trigger
-family into the heavy-door family while preserving the room id low nibble. This
-makes cleared rooms navigable across save/load without changing `DUNGEON.DAT`.
+room-marker cells whose clear bit is set are demoted from `0xF?` to `0xA?`,
+preserving the room id low nibble. They are not demoted to `0xE?`. This keeps
+the cleared-room runtime state consistent across save/load without changing
+`DUNGEON.DAT`.
 
 A third class of effect — **energy fields** (high nibble `0x8` or `0x9`) — fires not from the underfoot reaction but as part of *moving into* the cell. Stepping into a field-bearing cell triggers the effect *before* the move completes, applying status or damage to the moving party member or the whole party. The four sub-types are sleep, poison gas, wall of fire, and electric.
 
@@ -236,15 +237,17 @@ The wall-coordinate tables are effectively authored for the visible near and
 middle bands; implementations should preserve the table-driven behavior rather
 than invent a fourth projected wall band.
 
-**Blocker and side-wall classification.** The centered blocker helper treats
-classes below `0xA?` as pass-through. Classes `0xA?` and above are blockers for
-the forward sweep, except that a point-blank heavy door can set a renderer
-busy/pass-through state so its frame is painted while the sweep continues far
-enough to draw the door context. Class `0xB?` wall decoration at the observed
-near depth may print per-dungeon scenery text from resident tables. Class
-`0xC?` flavour walls can draw an extra decoration glyph in the normal-flavour
-case. Doom-flavour class-`0xC?` near walls also have a rare decorative
-skeleton-chamber presentation; this is visual only.
+**Blocker and side-wall classification.** The centered renderer blocker and
+the movement gate are related but not identical. For movement, the solid
+wall/flavour classes are `0xB?`, `0xC?`, and `0xD?`; door-like `0xA?`,
+`0xE?`, and room-trigger `0xF?` cells use pass-through or special underfoot
+paths. The first-person renderer can still paint `0xA?`, `0xE?`, and `0xF?`
+with door-like frames so the player sees the room doorway context. Class
+`0xB?` wall decoration at the observed near depth may print per-dungeon
+scenery text from resident tables. Class `0xC?` flavour walls can draw an
+extra decoration glyph in the normal-flavour case. Doom-flavour class-`0xC?`
+near walls also have a rare decorative skeleton-chamber presentation; this is
+visual only.
 
 Side-wall classification uses the side cell at the same depth. Passages paint
 the side-flat marker, heavy-door and room-trigger families paint the door
@@ -434,11 +437,9 @@ a deepest-level underworld handoff. The only traced K-command dungeon exit
 outside ordinary ladders is exact pit byte `0x60`, which invokes the
 surface-reset helper.
 
-**Heavy doors.** Cells of high nibble `0xE` render with a door silhouette but in the original engine they are **decorative wall variants** rather than interactable doors. The dungeon move dispatcher rejects any forward step onto classes `0xA..0xE`, so the player cannot stand on a `0xE?` cell. The dungeon Open command operates on the **underfoot tile** (not the cell in front), so it can never target a `0xE?` cell — the underfoot must already be `0x4?` (wooden chest, which Open opens) or `0x7?` (passage variant carrying a chest-style flag). There is no traced Open or Jimmy mechanism that mutates `0xE?` cells.
+**Door-like dungeon classes.** High nibbles `0xA`, `0xE`, and `0xF` all have door-like presentation in parts of the dungeon renderer and minimap, but they are not interchangeable storage states. `0xF?` is the stock room-trigger family, with the low nibble selecting the `DUNGEON.CBT` room id. `0xA?` is the runtime room-helper / cleared-room state produced both after room combat and by the save-image room-clear demotion pass on reload. `0xE?` is a separate door-presentation variant used by other runtime wall/search paths; it is not produced by cleared-room replay.
 
-The `0xE?` cells reach the playable cell set only through the cleared-room demotion at load: the save-image room-clear bitmap (§5) rewrites cleared `0xF?` cells to `0xE?` on level reload, preserving the room id low nibble. A side effect is that a room cleared and reloaded becomes a non-walkable wall on the next visit; modern engines may either match this behavior (full original parity) or preserve walkability for cleared rooms (a quality-of-life departure).
-
-The earlier wording that placed heavy doors at high nibble `0xF` was imprecise — `0xF?` is the **walkable** room-trigger family (low nibble is the room id `0..15` indexing `DUNGEON.CBT`), while `0xE?` is the non-walkable wall variant rendered as a door. There is no per-cell sidecar metadata for door open/closed state; the cell byte itself carries the variant, and no interactive open/close mechanism exists in dungeon mode.
+The dungeon Open command operates on the **underfoot tile** (not the cell in front). It can affect `0x4?` wooden chest cells and `0x7?` passage/chest-style variants, but no traced Open or Jimmy mechanism mutates `0xA?`, `0xE?`, or `0xF?` dungeon door/room presentation cells. Room-trigger durability is handled by the room helper and the room-clear bitmap instead.
 
 **Special walls / secret doors.** Some wall-style and flavour cells can be
 rewritten by Search for the current dungeon visit. For flavour class `0xC?`,
@@ -460,8 +461,8 @@ light-spell counters.
 
 Dungeon mode's movement set is small and uses the numpad / arrow keys, *not* letter commands:
 
-- **Forward.** Step one cell in the facing direction. The engine consults the cell at `(player_X + facing_dx, player_Y + facing_dy)`. If that cell's high nibble is a wall class, the move is rejected and "Blocked!" is printed. Otherwise the party advances one cell, the energy-field check fires (§ 8) if the destination is a field, and the turn ends. Forward through a closed door fails; through an open door succeeds.
-- **Back.** Step one cell in the opposite direction. Same wall and field checks.
+- **Forward.** Step one cell in the facing direction. The engine consults the cell at `(player_X + facing_dx, player_Y + facing_dy)`. If that cell's high nibble is one of the wall/flavour classes `0xB?`, `0xC?`, or `0xD?`, the move is rejected and "Blocked!" is printed. Otherwise the party advances one cell, the energy-field check fires (§ 8) if the destination is a field, and the turn ends. Door-like `0xA?`, `0xE?`, and `0xF?` cells are not rejected by the ordinary forward movement gate; their room/door semantics are handled by underfoot and presentation paths.
+- **Back.** Step one cell in the opposite direction. It uses the same destination calculation, with a small room-trigger exception: back-stepping into `0xA?` or `0xF?` is rejected, while ordinary wall/flavour classes remain blocked and `0xE?` uses the pass-through branch.
 - **Turn left.** Decrement the facing byte by one (modulo four). Status row updates; the first-person view is repainted on the next loop iteration.
 - **Turn right.** Increment the facing byte by one (modulo four).
 

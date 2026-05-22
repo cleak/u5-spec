@@ -77,9 +77,10 @@ The currently documented high-nibble dispatch families are:
 | `0x7` | Passage variant | Treated as passage by Look and rendering paths. |
 | `0x8` | Energy field | Low nibble distinguishes sleep, poison gas, fire, and electric field variants. |
 | `0x9` | Secondary field family | Generic energy-field handling in current notes. |
-| `0xA` | Room-helper state | Routed through the same underfoot helper as room triggers; not authored in the shipped records. |
-| `0xB`-`0xE` | Wall families | Solid blockers with variant-specific presentation. |
-| `0xF` | Heavy door or room trigger | Blocks movement unless opened, or hands off to dungeon-room combat for trigger variants. |
+| `0xA` | Room-helper / cleared-room state | Routed through the same underfoot helper as room triggers; not authored in the shipped records. |
+| `0xB`-`0xD` | Wall families | Solid blockers with variant-specific presentation. |
+| `0xE` | Door presentation variant | Door-like presentation class used by runtime wall/search variants; not the cleared-room reload state. |
+| `0xF` | Room trigger | Low nibble selects the room arena; combat and reload paths demote cleared triggers to `0xA?`, not `0xE?`. |
 
 The complete low-nibble enumeration is still not fully pinned down. Treat it as opaque variant data unless a system spec names a specific subtype, and do not infer full behaviour from the upper nibble alone.
 
@@ -140,8 +141,8 @@ cell rewrites. The original engine patches the loaded dungeon image after
 combat by changing a `0xF?` trigger into `0xA?`, preserving the low nibble. It
 also sets a saved room-clear bit keyed by dungeon and room id. On later load or
 entry, the demotion pass uses that bitmap to rewrite matching `0xF?` cells in
-the loaded image back to `0xA?`. The source file still contains the trigger
-cell and is not rewritten.
+the loaded image back to `0xA?`. It does not rewrite them to `0xE?`. The source
+file still contains the trigger cell and is not rewritten.
 
 The stock Doom record uses room id fifteen as the terminal final-room trigger.
 It appears on the deepest level at local coordinate `(X=5, Y=7)`. By the
