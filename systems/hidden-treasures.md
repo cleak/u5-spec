@@ -23,9 +23,9 @@ Three records have special gates:
 
 | Record | Rule |
 |---:|---|
-| 13 | Requires the party to own at least one key and the searched tile not to be occupied by an NPC. |
+| 13 | Requires the party to own no keys and the searched tile not to be occupied by an NPC. |
 | 14 | Can stage once per in-game day; success stores the current day as the cooldown cookie. |
-| 15 | Requires its single-use flag to be clear and the searched tile not to be occupied by an NPC. |
+| 15 | Requires its single-use cookie to be clear and the searched tile not to be occupied by an NPC; the scan does not set that cookie on grant. |
 
 `Z/floor` is the active floor/depth byte. For overworld entries, `0` is
 Britannia and `255` is the Underworld plane. For town-style interiors it is the
