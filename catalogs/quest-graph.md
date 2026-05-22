@@ -146,6 +146,22 @@ matching Shadowlord, while that Shadowlord is nearby. The names matter because
 yelling a name can summon or draw the associated Shadowlord, but NPCs also warn
 that speaking those names carelessly is dangerous.
 
+At runtime, using a shard is not enough by itself. The party must be standing at
+the matching interior destruction position, and the matching Shadowlord must be
+the active named encounter. The Yell/name path supplies that active encounter;
+the shard handler then checks that the Shadowlord marker is immediately north
+of the party and that the active Shadowlord index matches the shard.
+
+| Shard / Shadowlord | Destruction scene | Party floor | Party X | Party Y | Additional gate |
+|---|---|---:|---:|---:|---|
+| Falsehood / Faulinei | The Lycaeum | 2 | 15 | 9 | Active Faulinei encounter immediately north |
+| Hatred / Astaroth | Empath Abbey | 1 | 15 | 3 | Active Astaroth encounter immediately north |
+| Cowardice / Nosfentor | Serpent's Hold | basement marker | 15 | 16 | Active Nosfentor encounter immediately north |
+
+Therefore a compatible implementation should not allow shard use at the flame
+coordinate alone to retire a Shadowlord slot. The matching Shadowlord must have
+been made active through the name/encounter path first.
+
 The three shard-location branches are intentionally different:
 
 - Falsehood is tied to Deceit and to visions from Cove's hidden sisters.
