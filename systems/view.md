@@ -56,32 +56,39 @@ Special LOOKOBJ look cases include:
   line-spacing cleanup as terrain descriptions so object and terrain look text
   remain visually consistent.
 - **Signs and wanted posters.** Prints the sign/poster heading, then renders
-  the sign or poster text through the sign/poster helper. One castle-board
-  location uses a fixed wanted-poster presentation that inserts the current
-  party names; other sign/poster tiles load a scene-indexed `SIGNS.DAT` record
-  by current scene and target coordinate. If no record matches, the sign path
-  prints the blank-sign fallback.
+  the sign or poster text through the sign/poster helper. One fixed exception
+  in Yew, floor `0`, at local coordinate `(x=17, y=21)` renders the
+  resident wanted-poster presentation and inserts the current party names;
+  that poster is not read from `SIGNS.DAT`. Other sign/poster tiles load a
+  scene-indexed `SIGNS.DAT` record by current scene and target coordinate. If
+  no record matches, the sign path prints the blank-sign fallback.
 - **Clock tiles.** Prints the tile description and appends the current game
   time using the normal twelve-hour AM/PM presentation.
 - **Shrine and dungeon-entrance tiles.** Prints the generic tile description
   and appends the shrine or dungeon name selected by scene/tile context.
-- **Fountains.** Prompt for the drinking party member; dead or asleep members
-  refuse as incapacitated, while eligible members receive the fountain result.
-  The overworld/town fountain result is presentation-only: eligible drinkers
-  get the refresh message, but this LOOKOBJ path does not restore HP or change
-  status. Dungeon fountains are the state-changing fountain family and are
-  specified in `dungeon-mode.md`.
+- **Fountains.** Prompt for the drinking party member; cancelling prints the
+  no-one result. Dead or asleep members refuse as incapacitated. Any other
+  selected member receives the refresh message. The overworld/town fountain
+  result is presentation-only: this LOOKOBJ path does not restore HP, cure
+  status, wake sleepers, or otherwise write party state. Dungeon fountains are
+  the state-changing fountain family and are specified in `dungeon-mode.md`.
 - **Wishing wells.** Prompt for a coin and a wish, then run the well-specific
-  object-spawn branch when the wish matches one of the accepted names in the
-  accepted scene contexts. The accepted wish keywords are the six vehicle/joke
-  names recognized by the original well path: Corvette, Ferrari, Lamborghini,
-  Lotus, Porsche, and Horse. The handler consumes a coin only after the player
-  accepts the coin prompt; empty, mismatched, ungated, or coinless paths print
-  the no-effect result without spawning anything.
-- **Death-vision tile.** Prompts for a party member and rolls that member's
-  relevant mental stat against a `1..30` check. One branch reports the distant
-  vision result; the other reports a strange vision and paints the local
-  thirty-two-by-thirty-two view overlay.
+  object-spawn branch when the wish matches one of the accepted names in an
+  accepted scene. The accepted wish keywords are Corvette, Ferrari,
+  Lamborghini, Lotus, Porsche, and Horse. A coin is consumed only after the
+  player accepts the coin prompt and before wish matching; coinless, empty,
+  mismatched, and ungated paths spawn nothing. The only granting scenes are
+  Paws (`22`) and Empath Abbey (`31`). All accepted words map to the same
+  created object: a horse-family active-object record with type/frame `0x10`,
+  placed one cell east of the well caller's X coordinate at the caller's Y and
+  floor, with the first auxiliary field cleared. There is no per-word vehicle
+  mapping.
+- **Death-vision tile.** Prompts for a party member and rolls `1..30` against
+  that member's Intelligence. If Intelligence is greater than the roll, the
+  command reports a strange vision and paints the local thirty-two-by-thirty-
+  two view overlay. If the roll is greater than or equal to Intelligence, it
+  reports the death-vision line and prints the selected member number; it does
+  not paint the overlay or change party state.
 
 Looking at an NPC or transient active object can resolve through the active
 object table to the terrain underneath. Creature-specific conversation and
@@ -260,9 +267,6 @@ state or persistence behavior.
 - **Tile special cases.** Tile id `0x59` is the traced ordinary-Look trigger
   for the full Britannia map renderer. Its final in-world catalog label still
   needs reconciliation with the tile catalog and `LOOK2.DAT` description.
-- **Wishing-well spawn helper.** The well's accepted wish strings and spawn
-  handoff are identified, but the low-level object materialization helper is
-  owned by active-object work.
 
 ## 9. Sources
 

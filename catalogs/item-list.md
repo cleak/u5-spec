@@ -472,7 +472,7 @@ Vehicles straddle inventory and world state. A vehicle can be a map object, a sh
 | Skiff | Active-object vehicle; also ship-carried | Boardable; water transport; time system halves movement time for the skiff/raft timing state. Facing-sensitive skiff terrain predicates are owned by `systems/movement.md`. | Ship-carried object variants outside the normal skiff transport-marker range. |
 | Magic Carpet | Inventory item and active vehicle | Boardable as a carpet. The current timing-tag cleanup no longer treats the `T` tag as proof of carpet identity; outdoor Klimb is gated by the Grapple flag instead of by carpet ownership. Normal carpet terrain predicates are owned by `systems/movement.md`. | Inventory flag and edge variants outside the normal carpet transport-marker range. |
 | Balloon | Vehicle art family | Balloon sprites are catalog assets, but the traced B-Board, X-Xit, U-Use, shipwright, and movement contracts do not provide a live balloon transport path in the analyzed baseline. | Do not infer boarding, purchase, transport markers, or movement rules from art alone. |
-| Corvette, Ferrari, Lamborghini, Lotus, Porsche | Wishing-well vehicle names | Easter-egg vehicle names in wishing-well strings. | Whether any creates durable transport or only maps to a horse/carpet branch. |
+| Corvette, Ferrari, Lamborghini, Lotus, Porsche | Wishing-well vehicle names | Easter-egg vehicle names in wishing-well strings. | In the granting scenes, every accepted name maps to the same horse-family active-object spawn; no distinct car or carpet object is selected by the typed word. |
 
 Vehicles are persisted through the active-object and save/load systems.
 Dismounting leaves a vehicle object on the map; loading restores the per-plane

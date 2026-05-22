@@ -302,7 +302,7 @@ quest bit for an ordained virtue.
 
 **NPC floor-link markers.** Two marker bytes - `0xC8` and `0xC9` - appear in town tile grids and are consumed by the NPC scheduler's tile-ID pathfinder variant. When schedule movement needs to bridge floors, the pathfinder searches the live tile buffer for cells containing one selected marker ID and uses those cells as goals. Shipped location data places these values as authored floor-link annotations rather than ordinary furniture. Do not treat these IDs as ordinary passable terrain, and do not assume they are unavailable to runtime consumers.
 
-**Wishing-wells, springs, caves.** Wishing-wells run the wish-for-a-vehicle handler (the easter-egg "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse" dialogue); springs restore MP; caves drop a chest.
+**Wishing-wells, springs, caves.** Wishing-wells run the wish-for-a-vehicle handler (the Easter-egg "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse" dialogue); in the granting scenes, all accepted well words create the same horse-family active object. Springs restore MP; caves drop a chest.
 
 **Camp / fire.** Camp tiles and brazier tiles trigger the camp-and-rest handler when H-Hole-up is invoked on them. Outdoor rest and the rare camp-event level-up live in `systems/rest-and-camp.md`.
 

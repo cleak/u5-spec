@@ -11,7 +11,7 @@ byte-stream formatter.
 `SIGNS.DAT` stores sign and poster text for sign-like map tiles. A sign lookup
 starts from the active scene and the looked-at tile coordinate. The file first
 selects a scene block, then scans that block for one or more records whose
-header matches the looked-at `(z, y, x)` coordinate. Matching records are sent
+header matches the looked-at `(z, x, y)` coordinate. Matching records are sent
 to the sign formatter.
 
 This is different from `LOOK2.DAT` and `QUESTION.DAT`:
@@ -61,8 +61,8 @@ A sign record begins with a four-byte header:
 |---:|---|
 | 0 | Scene id. |
 | 1 | Z or floor discriminator. |
-| 2 | Y coordinate. |
-| 3 | X coordinate. |
+| 2 | X coordinate. |
+| 3 | Y coordinate. |
 
 The scene id is selected primarily through the scene directory: each nonempty
 directory entry points to the first record for that scene. After loading that
@@ -143,8 +143,8 @@ The display target is a gameplay UI concern. A modern implementation can draw
 the sign into a modal panel, text-grid layer, or equivalent surface as long as
 the byte-stream semantics and output ordering are preserved.
 
-The hard-coded wanted-poster path is separate from `SIGNS.DAT`: one specific
-scene/coordinate combination renders a fixed poster from resident text and
+The hard-coded wanted-poster path is separate from `SIGNS.DAT`: Yew, floor `0`,
+local coordinate `(x=17, y=21)` renders a fixed poster from resident text and
 party names without consulting the file's scene blocks. That exception belongs
 to the Look command behavior, but implementers should not try to find that
 poster in `SIGNS.DAT`.
