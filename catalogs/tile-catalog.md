@@ -251,6 +251,21 @@ gates.
 
 A small set of world tiles drives scripted handlers. These tiles do not look or animate any differently from their inert counterparts, but the per-turn walk loop's post-action tile probe matches them and dispatches to a special handler.
 
+**Town poison-gas terrain.** In town-family scenes, live map tile `0x04`
+has an additional underfoot effect when the party is on foot. The clean
+semantic key for the effect is:
+
+| Live town tile id | Town underfoot class | Required party transport marker | Effect owner |
+|---|---:|---:|---|
+| `0x04` | `4` | `0x1C` | `systems/town-mode.md` poison-gas / swamp save |
+
+The transport marker is party state, not data stored on the tile itself. A
+clean implementation that stores tile attributes as `(tile_class,
+required_transport)` can use the row above for the poison-gas doorway check and
+does not need a coordinate fallback for this effect. The same tile id remains
+ordinary static terrain for systems that do not run the town underfoot-effect
+handler.
+
 **Falls.** The traced surface chasm trigger is the fixed Britannia coordinate
 `(54, 138)`. Stepping onto that falls cell triggers the
 fall-into-the-underworld handler — print a banner, apply random fall damage,

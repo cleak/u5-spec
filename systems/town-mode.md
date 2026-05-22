@@ -208,7 +208,9 @@ use into this command; those are separate letter commands.
 
 All these interactions except Look and inspect-style actions consume a turn and run the per-turn epilogue.
 
-Several underfoot effects also belong to town mode. Sleeping party members can recover from sleep as turns pass. Chair tiles normally act like a downward floor transition, but Stonegate's chair scene is a special imprisonment sequence that clears the town presentation, marks the party into the long-term consequence state, and returns after a fade. Rune/lever-style tiles print their local effect text and redraw. A narrow poison-gas doorway case can roll poison against eligible party members.
+Several underfoot effects also belong to town mode. Sleeping party members can recover from sleep as turns pass. Chair tiles normally act like a downward floor transition, but Stonegate's chair scene is a special imprisonment sequence that clears the town presentation, marks the party into the long-term consequence state, and returns after a fade. Rune/lever-style tiles print their local effect text and redraw.
+
+The top-down poison-gas terrain case is keyed by live town tile id `0x04` while the party's current transport marker is the on-foot marker `0x1C`. This is a tile-id rule, not a coordinate sidecar: any loaded town-family cell that still has live tile `0x04` and is processed while the party is on foot uses this effect. The handler scans active party slots in order. Dead (`D`) and already Poisoned (`P`) slots are skipped. Every other status, including Sleeping, is eligible. For each eligible slot, roll the shared inclusive random range `0..29`; if the result is greater than that member's Dexterity byte, set the member's status to Poisoned and emit the standard status feedback. If the roll is less than or equal to Dexterity, the member is unchanged.
 
 ## 11. Multi-floor locations
 
