@@ -96,7 +96,7 @@ hand-equipment tag, and ammunition rows have no readied-equipment tag.
 | `0x40` | Body armour | Uses the body-armour slot and participates in the combat armour lock. |
 | `0x20` | One-hand hand equipment | Covers shields and one-handed weapons. The hand branch resolves whether the weapon hand or off hand can accept the item. |
 | `0x30` | Two-hand hand equipment | Requires both hands to be free when selected; a currently readied item with this tag blocks shield/off-hand readiness. |
-| `0x02` | Ring equipment | Uses the ring slot. Ring of Invisibility and Ring of Regeneration also have random vanish checks after a successful ready action. |
+| `0x02` | Ring equipment | Uses the ring slot. Ring of Invisibility and Ring of Regeneration also have random vanish checks after a successful ready action; Ring of Regeneration is also read by the hourly non-combat regeneration tick. |
 | `0x04` | Amulet / neck equipment | Uses the amulet/neck slot. |
 | `0x00` | Ammunition stock | Not an ordinary readied-equipment class; used as carried ammunition for compatible weapons. |
 

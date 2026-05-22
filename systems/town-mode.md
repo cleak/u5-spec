@@ -236,8 +236,10 @@ advances simulated rest through a caller-owned loop. For each requested hour the
 town-hours path can run up to sixteen schedule/world-tick passes, checking after
 each pass for a rest-interruption event. If an interruption fires, rest stops
 without rolling back elapsed side effects. If the requested duration completes,
-sleeping members are restored to good status and eligible living members receive
-capped HP recovery before control returns to the town loop.
+sleeping members are restored to good status before control returns to the town
+loop. The town-bed path does not contain its own HP/MP recovery block; recovery
+claims belong in `systems/rest-and-camp.md` and time-driven effects such as the
+hourly Ring of Regeneration tick belong in `systems/time.md`.
 
 Hole-up is the only path that runs the schedule processor outside the per-turn
 epilogue. The cadence differs from ordinary turns, but the scheduler contract is
@@ -334,7 +336,7 @@ its rest simulation loop, up to sixteen times per requested rest hour.
 **Time.** Each consumed turn calls the time spec's per-turn cleanup with a one-minute increment. The cleanup advances the clock, refreshes daylight, and triggers any once-per-hour side effects. When that one-minute cleanup changes the hour to `5` or `20`, town mode also runs the dawn/dusk gate substitution against the loaded tile buffer.
 
 **Rest and camp.** `rest-and-camp.md` owns the H-Hole-up hours prompt,
-simulated-time loop, recovery effects, and interruption boundary. Town mode
+simulated-time loop, status cleanup, camp recovery effects, and interruption boundary. Town mode
 owns only the bed/tile gate and the schedule-walker integration.
 
 **Active objects.** Town mode owns the active-object table during a town visit. Entry clears it (preserving slot zero), the schedule walker fills it from the NPC roster, the per-turn loop refreshes slot zero from world-state on each iteration, and town interaction handlers mutate NPC-linked slots through their own clear, death, alarm, and placement helpers.

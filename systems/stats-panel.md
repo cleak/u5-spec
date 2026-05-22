@@ -123,8 +123,8 @@ hull byte.
 Common refresh triggers include:
 
 - startup or mode-entry UI assembly;
-- party damage, trap damage, poison, disease, cure, heal, resurrection, and
-  rest recovery;
+- party damage, trap damage, poison, disease, cure, heal, resurrection, camp
+  recovery, and hourly ring regeneration;
 - active-player selection changes;
 - torch or light-spell counter updates;
 - combat entry/exit and combat action presentation;

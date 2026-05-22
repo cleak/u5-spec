@@ -92,24 +92,45 @@ prompt" and "the party is actually sleeping or camping."
 
 ## 5. Party Recovery
 
-A completed or partially completed rest pass walks the active party records and
-applies recovery effects:
+H-Hole-up has three distinct effects that should not be collapsed into one
+"rest recovery" rule.
 
-- Dead party members are skipped by ordinary rest recovery.
-- Sleeping members are returned to Good status during cleanup.
-- In the traced town-hours path, active party members who are in Good status are
-  temporarily marked Sleeping for the elapsed-rest loop, then all Sleeping
-  members are restored to Good during cleanup. Non-Good members are not changed
-  by that temporary sleep-marking pass.
-- In the traced rest-with-watch path, Good, Poisoned, and Sleeping members are
-  the rest-participating statuses. Poisoned members are remembered as poisoned
-  for any sleep-ambush restoration and do not receive ordinary rest HP recovery.
-- Statuses outside the rest-participating set, including Charmed or Ashes if
-  present in the party record, have no dedicated H-Hole-up status transition in
-  the traced caller. Their changes remain owned by combat, magic, hazards,
-  healers, or other status-specific systems.
-- Eligible living members can recover current HP, capped at maximum HP.
-- The stats panel is marked for refresh after visible HP or status changes.
+**Town-bed rest is status cleanup plus time passage.** In the traced town-hours
+path, active party members who are in Good status are temporarily marked
+Sleeping for the elapsed-rest loop. Cleanup changes any Sleeping member back to
+Good and restores the input mode. This path does not contain its own HP or MP
+restore block. Any HP change observed during a town-bed sleep comes from other
+time-driven systems, such as poison/starvation damage or the hourly Ring of
+Regeneration check.
+
+**Rest-with-watch is a prompt and delegation wrapper.** The resident
+overworld/dungeon H handler prompts for a duration, counts Good and Poisoned
+members for watch eligibility, optionally records a Good-status watcher, and
+then delegates the accepted rest to the rest/combat sandwich. It does not write
+HP, MP, or equipment slots directly. It also does not set or clear the ring
+slot byte used by Ring of Regeneration.
+
+**Completed long-camp recovery is a separate CMDS block.** On the completed
+camp path, after the "Party rested!" result, the handler can walk active party
+records and apply recovery if all of these guards pass:
+
+- The rest is not in the suppressed active-camp state.
+- The accepted duration is greater than five hours.
+- The member was not marked poisoned in the rest-local snapshot.
+- The member is not Dead.
+- The member is not the selected watch/target slot.
+
+For each member that passes those guards, the handler adds a uniform random
+`1..63` HP and caps current HP at maximum HP. It then restores MP only for
+specific class rows: Avatar and Mage set current MP to Intelligence, Bard sets
+current MP to half Intelligence, and other classes receive no MP write from this
+block. Poisoned members keep Poisoned status; rest does not cure poison.
+
+Statuses outside the rest-participating set, including Charmed or Ashes if
+present in the party record, have no dedicated H-Hole-up status transition in
+the traced caller. Their changes remain owned by combat, magic, hazards,
+healers, or other status-specific systems. The stats panel is marked for
+refresh after visible HP, MP, or status changes.
 
 Rest does not own a separate food/provision cadence. The rest loop advances
 time, and the hourly status/provision cadence in `systems/time.md` observes any
@@ -118,6 +139,10 @@ ten-minute cleanup calls can therefore cross 06:00, 12:00, or 18:00 and spend
 provisions through the shared hourly rule; if the counter is already zero on an
 hour crossing, the shared starvation branch applies. Shop food purchase
 semantics remain outside H-Hole-up.
+
+The hourly Ring of Regeneration tick is also time-owned rather than rest-owned.
+It checks the member's ring equipment slot for the Ring of Regeneration item id
+and can add exactly 1 HP on a 1-in-8 roll. H-Hole-up does not set that byte.
 
 ## 6. Interruption And Ambush
 
@@ -261,10 +286,11 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/CMDS_OVL/0x0552_cmds_holeup_hours.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3C9A_party_view_screen.md`
-  (resident H-Hole-up rest-with-watch handler; the private filename is a stale
-  working name for this behavior).
+  (resident H-Hole-up rest-with-watch handler; private filename retained for
+  continuity).
 - `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x6360_exit_combat.md`.
+- `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3EF0_sat_add_byte.md`.
 - `u5-decomp/functions/OUTSUBS_OVL/0x0658_lord_british_dialogue.md`.

@@ -55,7 +55,8 @@ band. What is known from refusal text and command behaviour is:
   selected character's Strength.
 - Ring of Invisibility and Ring of Regeneration are readied as ring-slot
   equipment, but each has a random vanish check after a successful ready action
-  and another random removal check while worn in combat.
+  and another random removal check while worn in combat. Ring of Regeneration
+  also participates in the hourly non-combat regeneration tick.
 
 R-Ready moves items between the carried equipment band and these six readied
 slots. It lists rows whose carried counter is nonzero and rows already readied
@@ -64,10 +65,9 @@ combat-armour, and hand-occupancy gates, then decrements the carried counter
 only after an equip is accepted. Selecting an already readied row unequips the
 first matching slot and returns one carried copy up to the R-Ready equipment
 stock cap of `99`. Different items are not swapped atomically into occupied
-slots. Ring of Invisibility and Ring of Regeneration have no traced non-combat
-periodic timer or persistent world-mode effect writer beyond the immediate
-R-Ready vanish check; their continuing effects are combat consumers. The public
-flow lives in `systems/inventory.md`.
+slots. Ring of Regeneration has a traced hourly non-combat HP tick while worn;
+Ring of Invisibility's continuing traced effect is combat-side. The public flow
+lives in `systems/inventory.md`.
 
 The active-object table is the third inventory-adjacent store. Vehicles and dropped objects exist as active objects while they are on the map. Boarding a vehicle moves the party into a vehicle state; exiting creates or restores an active-object vehicle on the map so it can be boarded later.
 
@@ -332,7 +332,7 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 |------|--------|------------|------|
 | Ring of Invisibility | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check; when worn by a combatant, it marks that combatant hidden/suppressed and can be randomly removed by the combat round loop. No separate non-combat invisibility timer or world-mode effect writer is traced. | Broader combat visibility details live in `systems/combat.md`. |
 | Ring of Protection | Ring | Magic ring; one ring may be worn at a time. | Protection value, duration, and whether it has any related random-removal path. |
-| Ring of Regeneration | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check; in combat, each living wearer can be healed by the regeneration pass and can have the ring randomly removed by the combat round loop. No separate non-combat healing tick or world-mode effect writer is traced. | Combat healing cadence lives in `systems/combat.md`. |
+| Ring of Regeneration | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check. Outside combat, the hourly party-status pass gives each non-Dead wearer a 1-in-8 chance to recover exactly 1 HP, capped at maximum HP. In combat, each living wearer can be healed by the regeneration pass and can have the ring randomly removed by the combat round loop. | Hourly non-combat cadence lives in `systems/time.md`; combat healing cadence lives in `systems/combat.md`. |
 | Amulet/Turning | Amulet | Amulet/neck-slot equipment row. Its combat passive effect applies when a living party wearer is targeted by a turnable ranged/effect attack: half the time, the attack is forced through the scattered-impact path instead of the ordinary hit-roll result. The v1 flagged attackers are Mage, Wanderer, Blackthorn, Lord British, Sea Horse, Reaper, Gazer, Daemon, and Shadow Lord. | No U-Use activation, countdown, random disappearance, or non-combat periodic effect is traced. |
 | Spiked Collar | Neck item | Listed beside amulets; likely neck-slot equipment. | Whether it is equippable, cursed, or creature-specific. |
 | Ankh | Miscellaneous amulet/neck equipment row | Metadata places it in the same amulet/neck equipment class as the neck-slot rows above. The traced CAST U-Use picker and dispatcher do not include Ankh in their usable-item family, and no carried quest, ritual, or consumable consumer is traced. | No U-Use activation, quest ritual, or consumable effect is traced. |
@@ -639,6 +639,7 @@ This catalog is a cleanroom prose rewrite from the following source notes and sa
 - `u5-decomp/notes/engine_idioms.md`
 - `u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`
 - `u5-decomp/functions/ULTIMA_EXE/0x6794_combatant_set_carrier.md`
+- `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`
 - `u5-decomp/functions/ULTIMA_EXE/0x6DA8_compute_party_member_weight.md`
 - `u5-decomp/functions/ULTIMA_EXE/0x6E60_remove_inventory_match.md`
 - `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`

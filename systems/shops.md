@@ -584,9 +584,11 @@ the player selects the action target.
 The main menu accepts three actions:
 
 - `R` (Rest for the night) — the party sleeps in the inn's beds. The world clock
-  advances through the inn/rest pipeline; sleeping status is cleared and
-  eligible living members recover according to the shared rest rules. Food is
-  consumed at the per-night rate. The quote is based on the inn's adjusted room
+  advances through the inn/rest pipeline and sleeping status is cleared. The
+  town-bed path does not contain its own HP/MP recovery block; any HP change
+  during the stay comes from time-driven effects such as the hourly Ring of
+  Regeneration check, poison, or starvation. Food is consumed at the per-night
+  rate. The quote is based on the inn's adjusted room
   rate and the travelling party size. This is a paid, safe town rest rather than
   a wilderness ambush-risk camp.
 - `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. A quoted deposit based on ten local room-rate units is debited before the transfer completes.
@@ -820,8 +822,9 @@ Several shop interactions read or write the world clock:
 
 - **The `@` time-of-day substitution** reads the hour byte on every record render. Greetings vary by morning / afternoon / evening.
 - **The inn rest mode** advances the clock through the rest pipeline until the
-  stay completes. It uses the same status-cleanup and capped recovery semantics
-  as the camp command, but without the wilderness ambush risk.
+  stay completes. It uses the same status-cleanup semantics as town H-Hole-up,
+  but without the wilderness ambush risk or the completed long-camp recovery
+  block.
 - **The inn pickup mode** computes the bill from the inn's local lodging charge
   and the selected guest's stored stay counter. A zero counter is billed as one
   unit. The time system increments the counter on each 28-day month rollover,

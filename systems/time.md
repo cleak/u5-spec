@@ -115,6 +115,13 @@ food is spent at other hour changes. After the branch is handled, the
 status/provision pass updates its previous-hour snapshot so the branch cannot
 repeat until the clock crosses another hour.
 
+After the food/starvation/status work, the same hourly party pass runs the
+Ring of Regeneration check. For each active party member who is not Dead and
+whose ring equipment slot contains Ring of Regeneration, the engine rolls a
+1-in-8 chance; on success, that member gains exactly 1 current HP capped at
+maximum HP. This check is tied to hour crossings, not to a rest state. Rest,
+wait, movement, and town-bed sleeps can all expose it by advancing the clock.
+
 ## 6. Daylight
 
 The daylight value is a single byte that the cleanup routine recomputes on every call (mode 0 included). It represents how much ambient light the world has right now and is consumed by the visibility system to decide what cells the player can see and how the screen should look.
@@ -351,6 +358,8 @@ The behaviour described here was derived from the private function notes listed 
   consumer exclusion, poison tick, starvation branch, and 06:00/12:00/18:00
   food decrement - derived from
   `u5-decomp/functions/ULTIMA_EXE/0x2AE8_per_turn_party_damage.md`.
+- The hourly Ring of Regeneration predicate and +1 HP capped-add effect -
+  derived from `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
 - The Shadowlord-location table consumed by the day-rollover bundle — derived from `u5-decomp/formats/data-ovl.md` and cross-checked against `u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`.
 - The distinction between the timing/state tag byte and the boarded vehicle/transport byte — derived from `u5-decomp/formats/ds-bss-map.md` and `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The selection of an NPC's active waypoint from the four-byte time field, including the wrap-back-to-waypoint-1 behaviour — derived from `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.

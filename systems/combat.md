@@ -921,7 +921,6 @@ The behaviour described here was derived from the private function and format no
 - Equipped Ring of Invisibility and Ring of Regeneration combat behaviour,
   including hidden-flag marking, wearer healing, and combat-round removal checks
   -- derived from `u5-decomp/functions/ULTIMA_EXE/0x6794_combatant_set_carrier.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`,
   `u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`, and
   `u5-decomp/functions/ULTIMA_EXE/0x6E60_remove_inventory_match.md`.
 - The damage application and status transitions, the per-monster-class flag word's effect on damage and death, the special-class death paths, the slime-divide replication path, and the combat-local attacker experience credit — derived from `u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`, `u5-decomp/functions/COMBAT_OVL/0x194A_resolve_attack_damage.md`, `u5-decomp/functions/COMBAT_OVL/0x18BA_apply_party_status_or_damage.md`, and `u5-decomp/functions/ULTIMA_EXE/0x3F14_sat_add_word.md`.
