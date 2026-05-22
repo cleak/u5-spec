@@ -227,13 +227,14 @@ Several read-only pricing tables live in the resident data segment:
   per-instance fee. Healer prices do not depend on which party member is
   treated.
 - **Per-room-rate table** (innkeeper). A per-inn base/minimum-rate table feeds
-  the room quote and affordability checks. Rest quotes multiply the base rate
-  by the travelling party size, then apply the speaking member's Intelligence
-  adjustment. Leave deposits use an Intelligence-adjusted local lodging charge
-  derived from ten room-rate units. Pickup bills use that same adjusted lodging
-  charge times the selected guest's stored stay counter, with a stored zero
-  billed as one unit. The time system increments that stored counter on each
-  28-day month rollover, capped at 25.
+  the room quote and affordability checks. Inn charges use this adjustment:
+  `adjusted(raw, Intelligence) = raw + trunc(raw * (100 - 3 * Intelligence) / 100)`.
+  The division truncates toward zero. Rest uses
+  `raw = base_rate * travelling_party_size`. Leave deposits use
+  `raw = base_rate * 10`. Pickup first computes that same adjusted ten-unit
+  lodging charge, then multiplies it by the selected guest's stored stay
+  counter, with a stored zero billed as one unit. The time system increments
+  that stored counter on each 28-day month rollover, capped at 25.
 
 Horse-trader and shipwright purchases also use fixed local base-price rows
 before the ordinary quote, confirmation, affordability, and payment flow. The
@@ -603,15 +604,17 @@ the player selects the action target.
 The main menu accepts three actions:
 
 - `R` (Rest for the night) — the party sleeps in the inn's beds. The world clock
-  advances through the inn/rest pipeline and sleeping status is cleared. The
-  town-bed path does not contain its own HP/MP recovery block; any HP change
-  during the stay comes from time-driven effects such as the hourly Ring of
-  Regeneration check, poison, or starvation. Food is consumed at the per-night
-  rate. The quote is based on the inn's adjusted room
-  rate and the travelling party size. This is a paid, safe town rest rather than
-  a wilderness ambush-risk camp.
-- `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. A quoted deposit based on ten local room-rate units is debited before the transfer completes.
-- `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill uses the adjusted local lodging charge times the selected guest's stored stay counter, treating zero as one billable unit. The guest's record is copied into the next active roster slot, the party-size byte is incremented, the registry view is compacted as needed, and the returned slot's former guest marker is cleared to zero.
+  advances through the inn/rest pipeline and the paid rest recovery pass runs.
+  Non-dead party members have current hit points restored to maximum. Avatar
+  and Mage set current MP to Intelligence; Bard sets current MP to half
+  Intelligence; other classes do not receive this MP branch. Sleeping status is
+  cleared to Good. Poisoned members die during the recovery pass and return
+  with zero current hit points. The shared hourly provision cadence may apply
+  as the clock advances. The quote is
+  `adjusted(base_rate * travelling_party_size, speaker_intelligence)`. This is
+  a paid, safe town rest rather than a wilderness ambush-risk camp.
+- `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. A quoted deposit of `adjusted(base_rate * 10, speaker_intelligence)` is debited before the transfer completes.
+- `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill first computes `adjusted(base_rate * 10, speaker_intelligence)`, then multiplies that adjusted local lodging charge by the selected guest's stored stay counter, treating zero as one billable unit. The guest's record is copied into the next active roster slot, the party-size byte is incremented, the registry view is compacted as needed, and the returned slot's former guest marker is cleared to zero.
 
 The inn registry is the inn's persistent state: a 16-slot, save-backed resident
 view with the same 32-byte stride as party records. It is a shifted legacy view
@@ -844,13 +847,12 @@ Several shop interactions read or write the world clock:
 
 - **The `@` time-of-day substitution** reads the hour byte on every record render. Greetings vary by morning / afternoon / evening.
 - **The inn rest mode** advances the clock through the rest pipeline until the
-  stay completes. It uses the same status-cleanup semantics as town H-Hole-up,
-  but without the wilderness ambush risk or the completed long-camp recovery
-  block.
-- **The inn pickup mode** computes the bill from the inn's local lodging charge
-  and the selected guest's stored stay counter. A zero counter is billed as one
-  unit. The time system increments the counter on each 28-day month rollover,
-  capped at 25.
+  stay completes. It runs the paid inn recovery pass described above, without
+  the wilderness ambush risk.
+- **The inn pickup mode** computes an Intelligence-adjusted ten-unit local
+  lodging charge first, then multiplies it by the selected guest's stored stay
+  counter. A zero counter is billed as one unit. The time system increments the
+  counter on each 28-day month rollover, capped at 25.
 
 Shop overlays do not consume turns themselves; the time the player spends in a shop menu does not advance the clock. Only the inn rest mode advances time as part of its action.
 
@@ -932,7 +934,12 @@ The behaviour described here was derived from the private function and format no
   local SHOPPES2 shipwright control-flow analysis — tavernkeeper, ship broker,
   sage, and the correction that the traced `F`/`S` pending-action flow belongs
   to shipwright sales rather than a provisions merchant.
-- `u5-decomp/functions/SHOPPES3_OVL/_OVERVIEW.md` and `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md` — innkeeper, inn registry, persistent guest-lodging state.
+- `u5-decomp/functions/SHOPPES3_OVL/_OVERVIEW.md`,
+  `u5-decomp/functions/SHOPPES3_OVL/0x0072_inn_rest_for_night.md`,
+  `u5-decomp/functions/SHOPPES3_OVL/0x02AE_leave_companion.md`,
+  `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md`, and
+  `u5-decomp/functions/SHOPPES3_OVL/0x08B4_inn_menu_dispatch.md` — innkeeper
+  pricing, rest recovery, inn registry, and persistent guest-lodging state.
 - `u5-decomp/formats/data-tables.md` — `SHOPPE.DAT` record layout, substitution placeholders, shared bark renderer.
 - `u5-decomp/formats/data-ovl.md` — 128-entry phrase-token dictionary
   location, byte-range bias, shop-kind trigger table, and SHOPPES2 shipwright
