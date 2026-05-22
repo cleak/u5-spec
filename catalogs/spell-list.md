@@ -208,6 +208,13 @@ charge or mana.
   same field with the existing dungeon visit marker bit preserved. Placement
   succeeds only on live dungeon passage bytes `0x00` or `0x08`; all other
   selected cells fail with no live-map write.
+- Non-combat Blink is direction-prompted and deterministic. It scans from the
+  adjacent cell in the chosen cardinal direction through the active 32-by-32
+  loaded world window and lands on the farthest grass tile (`0x05`) found on
+  that ray. It does not choose a random target, does not retry candidate cells,
+  and does not use the ordinary movement passability or active-object
+  occupancy checks. If no grass tile is found, the spent cast fails without
+  moving the party.
 - The CAST dispatcher table follows this exact public order. Handler-family
   classification is now known for the major shared cases: `IL`/`LV` write the
   light counter, `GP`/`FV`/`CX` are active-target attack wrappers using the
