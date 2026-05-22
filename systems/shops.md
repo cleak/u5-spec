@@ -716,9 +716,9 @@ The sage uses free-text input rather than letter selection. After a banner ("Of
 what wouldst thou hear my lore?") the player types a keyword of up to fifteen
 characters. Empty input exits.
 
-The sage checks the input against a fixed resident topic list containing
-twenty-six rumour topics. Matching is case-insensitive and uses a strict
-topic-boundary check: after the stored topic text matches, the next input
+The sage checks the input against the fixed 26-row table in
+`catalogs/sage-rumours.md`. Matching is case-insensitive and uses a strict
+topic-boundary check: after the four-letter topic key matches, the next input
 character must be either the end of the input or a space. Partial prefixes
 therefore do not match longer stored topics, and longer words that merely start
 with a topic are rejected. On no match, the sage replies "That, I cannot help
@@ -726,12 +726,15 @@ thee with." and the keyword input is re-prompted.
 
 Every topic carries a gold fee, a subject string, and a destination selector.
 When a topic matches, the sage quotes the fee and asks for confirmation. If the
-party cannot pay, the sage refuses with a no-credit bark and no rumour is
-given. If the player confirms and has enough gold, the fee is deducted, the
+party cannot pay, the sage refuses with a paying-customers bark and no rumour
+is given. If the player confirms and has enough gold, the fee is deducted, the
 topic's subject fills the `&` substitution, the selected destination fills the
-`*` substitution, and one of a small set of rumour record templates is rendered.
-The common form is "Seek ye & in *!", with the exact text selected by the
-resident template table and `SHOPPE.DAT` record ids.
+`*` substitution, and one of the four shared success templates is selected at
+random from SHOPPE.DAT records 85-88.
+
+The same topic table is used by the traced sage flow. There is no per-sage
+16-row rumour table. The tavern/menu state only controls which visible action
+letter reaches the sage prompt.
 
 ### 8.9 Reagent vendor
 

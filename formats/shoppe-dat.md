@@ -24,10 +24,12 @@ of which 194 are non-empty in the shipped data, followed by an empty trailer.
 | Literal encoding | Low-ASCII text |
 | Compression | One-byte phrase tokens in the high-byte range |
 
-The consumer passes a record id to the shop text renderer. The renderer then
-locates the corresponding NUL-terminated record in `SHOPPE.DAT`, expands
-tokens and placeholders, and prints the result. Records are not named in the
-file. Some record ids are effectively unused or empty.
+The original consumer passes a selector that identifies the start of a
+NUL-terminated record in `SHOPPE.DAT`. Public catalogs may also refer to the
+same records by their sequential ordinal ids for readability. The renderer
+locates the selected record, expands tokens and placeholders, and prints the
+result. Records are not named in the file. Some record ids are effectively
+unused or empty.
 
 ## 3. Record Byte Semantics
 
@@ -108,7 +110,9 @@ shop kinds populate different substitution values before rendering:
 
 - Arms shops set item names and prices.
 - Reagent vendors set quantity and gold totals.
-- Sages set the rumour fee, asked-about subject, and destination place.
+- Sages set the rumour fee, asked-about subject, and destination place. The
+  sage success templates are ordinal records 85-88; the original selector
+  table stores their record-start positions rather than only those ordinals.
 - Innkeepers set room-rate or guest-list values.
 - Generic greetings use vendor name, shop name, and time of day.
 

@@ -271,8 +271,9 @@ known or likely roles include:
   prices.
 - Sage rumour resources: a fixed topic list, per-topic fee table, per-topic
   displayed subject, destination selector, destination-name pool, and rumour
-  template record ids. The sage shop flow combines these tables with
-  `SHOPPE.DAT` substitutions after the player pays for a matched topic.
+  template selectors. The sage shop flow combines these tables with
+  `SHOPPE.DAT` substitutions after the player pays for a matched topic; the
+  clean row catalog is `catalogs/sage-rumours.md`.
 
 The presence and broad purpose of these tables is clear, but not every field is
 publicly named yet. Item and equipment tables should remain semantic until the
