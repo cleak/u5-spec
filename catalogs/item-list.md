@@ -467,7 +467,7 @@ Vehicles straddle inventory and world state. A vehicle can be a map object, a sh
 
 | Vehicle | Form | Known behaviour | Catalog boundary |
 |---------|------|-----------------|------|
-| Horse | Active-object vehicle; Talk-entered stable purchase path | Boardable when available. Overland transport. Stable base prices are listed below. Mounted-horse passability and one-cell movement cadence are owned by `systems/movement.md` and `systems/vehicles.md`. | None at item-catalog level. |
+| Horse | Active-object vehicle; Talk-entered stable purchase path | Boardable when available. Overland transport. Stable base prices are listed below; the shop quote applies the speaking member's Intelligence adjustment before the affordability check. Mounted-horse passability and one-cell movement cadence are owned by `systems/movement.md` and `systems/vehicles.md`. | None at item-catalog level. |
 | Ship | Active-object vehicle; ship-broker purchase path | Boardable; carries condition and skiff-count state; can fire broadsides; warns when badly damaged or without skiffs; sail state determines whether wind cadence applies. Shipwright Frigate purchases create a full-hull ship with two skiffs. Shipwright base prices are listed below. Boarding from a carpet-compatible state stows a carried carpet for later ship-exit redeploy when no landing support or skiffs are available. Ship facing and sail-state marker ranges are owned by `systems/vehicles.md`. | No traced command-level repair path in the analyzed baseline. |
 | Skiff | Active-object vehicle; also ship-carried | Boardable; water transport; time system halves movement time for the skiff/raft timing state. Facing-sensitive skiff terrain predicates are owned by `systems/movement.md`. | Ship-carried object variants outside the normal skiff transport-marker range. |
 | Magic Carpet | Inventory item and active vehicle | Boardable as a carpet. The current timing-tag cleanup no longer treats the `T` tag as proof of carpet identity; outdoor Klimb is gated by the Grapple flag instead of by carpet ownership. Normal carpet terrain predicates are owned by `systems/movement.md`. | Inventory flag and edge variants outside the normal carpet transport-marker range. |
@@ -484,7 +484,8 @@ Z-transition command behaviour in `systems/doors-and-z-transitions.md`.
 ### 9.1 Vehicle purchase base prices
 
 Horse traders and shipwrights use fixed local base prices before the ordinary
-shop quote and post-transaction surcharge behaviour.
+shop quote and post-transaction surcharge behaviour. Horse quotes also apply
+the speaking member's Intelligence adjustment described in `systems/shops.md`.
 
 | Stable | Horse base price |
 |---|---:|

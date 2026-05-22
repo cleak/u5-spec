@@ -110,13 +110,18 @@ place a ship-family active object with a standard full-hull auxiliary value and
 the queued skiff count; standalone Skiff purchases place a skiff-family active
 object. The pending state is then cleared.
 
-The stock horse-trader base prices are:
+The stock horse-trader sale rows are:
 
-| Stable | Horse base price |
-|---|---:|
-| Horse & Rider | 100 |
-| The Stablehouse | 130 |
-| Wishing Well Horses | 160 |
+| Scene | Location | Stable | Sale object | Base price |
+|---:|---|---|---|---:|
+| `6` | Trinsic | `Horse & Rider` | Horse active object | 100 |
+| `20` | North Britanny | `The Stablehouse` | Horse active object | 130 |
+| `22` | Paws | `Wishing Well Horses` | Horse active object | 160 |
+
+The shipped resident horse-price table also contains a fourth row for scene
+`30`, but the shipped NPC roster does not contain a `0x83` horse-trader trigger
+in that scene. Treat the three triggered rows above as the public horse-trader
+contract.
 
 The confirmed Talk-driven shop arms all receive the caller's Talk context and
 the resident shop buffers prepared before dispatch. On return, the Talk action
@@ -198,10 +203,11 @@ The `%` substitution prints decimal digits with no thousands separator. The `@` 
 
 Shop headline prices come from resident asset tables and small deterministic
 adjustments. They are *not* karma-modulated, *not* time-of-day-modulated, and
-not haggled. The arms equipment paths and inn room-rate paths are the notable
-stat-sensitive cases: the speaking party member's Intelligence changes the
-quoted equipment or room price. Other decoded shop headline prices are fixed
-by the relevant shop, commodity, or treatment table.
+not haggled. The arms equipment paths, horse-trader sale path, and inn
+room-rate paths are the notable stat-sensitive cases: the speaking party
+member's Intelligence changes the quoted equipment, horse, or room price. Other
+decoded shop headline prices are fixed by the relevant shop, commodity, or
+treatment table.
 
 Several read-only pricing tables live in the resident data segment:
 
@@ -235,11 +241,17 @@ Several read-only pricing tables live in the resident data segment:
   lodging charge, then multiplies it by the selected guest's stored stay
   counter, with a stored zero billed as one unit. The time system increments
   that stored counter on each 28-day month rollover, capped at 25.
+- **Horse-trader rows** (stable sales). The three shipped Talk-triggered horse
+  traders use the base prices listed in Section 3, then apply the same
+  adjustment shape as inn charges:
+  `adjusted(base, Intelligence) = base + trunc(base * (100 - 3 * Intelligence) / 100)`.
+  The division truncates toward zero. The resulting quote is checked against
+  party gold before the horse object is placed.
 
-Horse-trader and shipwright purchases also use fixed local base-price rows
-before the ordinary quote, confirmation, affordability, and payment flow. The
-tables below list the base headline values before any stat-sensitive quote
-adjustment and before the random post-transaction surcharge.
+Shipwright purchases use fixed local base-price rows before the ordinary quote,
+confirmation, affordability, and payment flow. The tables below list base
+headline values before any stat-sensitive quote adjustment and before the
+random post-transaction surcharge.
 
 Reagent vendors use a fixed price/availability matrix keyed by the current
 herbalist and the underlying reagent id. A nonzero entry means the herbalist
@@ -773,18 +785,24 @@ gold is deducted and the corresponding reagent counter is incremented. Invalid
 letters do not purchase anything; exit keys leave the reagent loop and return to
 the shop farewell path.
 
-### 8.10 Stationary display purchase
+### 8.10 Horse-trader sale placement
 
-One Talk-entered SHOPPES helper is a stationary-display purchase flow rather
-than a Buy/Sell menu. It is used when the item being sold is represented by a
-nearby map display object, such as a stock item placed on a counter or floor.
+The Talk-entered SHOPPES helper formerly described as a stationary-display
+purchase is the horse-trader sale arm. It does not publish an arbitrary
+display-stock table, sale item id, carried-item destination, or per-display
+SHOPPE text selector. Its sale item is always a horse active object.
 
-On entry, the flow scans the active-object table for a sale marker adjacent to
-the player. Candidate markers are resolved through the same map-tile reader used
-by other town interactions, and the NPC/occupancy classifier rejects candidates
-that are not usable shop displays. The first accepted display marker selects
-the current shop instance and therefore the base unit price and rendered item
-description.
+On entry, the flow first finds a free active-object slot. It then probes the
+four cardinal cells adjacent to the party, in south, north, east, west order,
+and accepts the first cell whose map tile is one of the horse-sale placement
+tiles (`0x44`, `0x45`, or `0x05`) and whose occupancy/classifier check allows
+the sale. If no placement cell or no free object slot is available, the shop
+prints the refusal line and exits without a purchase.
+
+The local shop instance is already selected by the Talk shop dispatch from the
+current scene. That scene-selected row supplies the stable name, vendor name,
+and base horse price listed in Section 3; the nearby marker does not select a
+different stock row.
 
 The purchase loop is Y/N driven:
 
@@ -793,23 +811,23 @@ The purchase loop is Y/N driven:
 - `Y` prints the item offer, asks for confirmation, and aborts cleanly on a
   negative answer.
 - If the confirmed price exceeds party gold, the shop prints its insufficient
-  funds line and exits without changing the displayed item or party inventory.
+  funds line and exits without placing a horse.
 - On success, the price is deducted, the normal post-transaction surcharge
-  helper may run, and the purchased display item is written into the speaking
-  party member's carried-item state. The local view is then redrawn to reflect
-  the taken item.
+  helper may run, and a horse-family active-object record is written into the
+  free slot at the accepted adjacent coordinate on the current floor. The local
+  view is then redrawn so the boardable horse is visible.
 
 This flow is distinct from arms/guild/reagent stock. It does not browse a
-lettered stock table and it does not deplete a shop inventory row; the visible
-nearby display object is the sale target.
+lettered stock table, does not deplete a shop inventory row, and does not write
+a carried item into a party member record.
 
 ## 9. Karma effects
 
 The karma system does not directly modulate shop headline pricing or inventory.
-Arms purchases and inn room quotes can vary with the speaking party member's
-Intelligence, but not with virtue standing. Reagent, treatment, guild, and
-other decoded headline prices come from their resident tables rather than from
-karma. The random post-transaction surcharge is also not a karma price
+Arms purchases, horse purchases, and inn room quotes can vary with the speaking
+party member's Intelligence, but not with virtue standing. Reagent, treatment,
+guild, and other decoded headline prices come from their resident tables rather
+than from karma. The random post-transaction surcharge is also not a karma price
 modifier; it is gated by shared town/conversation state rather than by virtue
 standing. This is a deliberate departure from Ultima IV, where shopkeepers
 cheated the dishonourable on prices and item availability.
@@ -887,8 +905,7 @@ between the active table and the inn registry; sage-style rumour flows debit
 gold for paid rumours; horse traders write a horse active object through the
 Talk-entered vehicle-sale helper; ship brokers write a pending vehicle
 acquisition state consumed by overworld entry to place a frigate or skiff active
-object; stationary-display purchases write the displayed item into the speaking
-member's carried-item state.
+object.
 The tavern drink branch writes nothing persistent in the traced flavour-drink
 flow. The tavern/meal-counter provision branch writes the shared food counter
 and debits gold per served unit; this branch is intentionally not atomic across
@@ -903,9 +920,9 @@ image's inventory region.
 The analyzed shop-flow contract is complete at gameplay depth: Talk-entry shop
 dispatch, stock-shop menus, arms buy/sell behavior, guild purchases, healer
 treatments, reagent availability, tavern drinks, meal-counter provisions,
-sage topics, stationary-display purchases, horse-trader sale, shipwright
-pending delivery, inn rest and guest registry behavior, shop surcharge,
-persistence, and karma non-modulation are fixed.
+sage topics, horse-trader sale, shipwright pending delivery, inn rest and guest
+registry behavior, shop surcharge, persistence, and karma non-modulation are
+fixed.
 
 - Remaining equipment class restrictions and armour defence values are tracked
   by `catalogs/item-list.md` and `formats/data-ovl.md`.
@@ -924,8 +941,8 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/SHOPPES_OVL/0x14F8_healer_main.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x12B2_arms_main.md`, and the private
   SHOPPES healer-main trace — weaponsmith / armourer, guildmaster, healer /
-  sanctum, herbalist, stationary-display purchase, and post-transaction
-  surcharge behavior.
+  sanctum, herbalist, horse-trader sale, and post-transaction surcharge
+  behavior.
 - `u5-decomp/functions/SHOPPES2_OVL/_OVERVIEW.md`,
   `u5-decomp/functions/SHOPPES2_OVL/0x066C_tavern_main.md`,
   `u5-decomp/functions/SHOPPES2_OVL/0x0508_sage_main.md`,
