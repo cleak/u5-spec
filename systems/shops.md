@@ -491,11 +491,12 @@ Each scene-byte appears in exactly one shop kind's table — there is no scene t
 After a randomised greeting ("Hail, friend! Wouldst thou Buy or Sell?"), the player presses one of three keys:
 
 - `B` (Buy) — the overlay renders the shop's "We have:" line followed by an
-  `a` through `h` item listing built from the current shop's eight-entry stock
-  table, ending early at a sentinel. The player picks a letter; the overlay
-  confirms, refuses if the corresponding party inventory counter is already
-  capped, runs the affordability check, deducts gold, increments the shared
-  equipment counter, and re-prompts.
+  item listing built from the current shop's eight-entry stock table. Slots are
+  assigned to menu letters `a` through `h`, but the row ends early at the
+  `0xFF` terminator. The player picks a letter; the overlay confirms, refuses
+  if the corresponding party inventory counter is already capped, runs the
+  affordability check, deducts gold, increments the shared equipment counter,
+  and re-prompts.
 - `S` (Sell) — the overlay opens an inventory browser over the party's carried
   equipment counters. It skips empty counters, refuses item ids the arms shop
   does not buy, quotes the shop's offer, asks for `Y`/`N`, and on acceptance
@@ -507,6 +508,24 @@ Both sub-menus re-prompt after each completed action. The buy side refuses
 capped counters and insufficient gold without changing inventory. The sell
 side refuses empty, unsellable, or explicitly excluded equipment without
 changing inventory. Either side can exit when the player walks away.
+
+The stock arms buy rows are scene-local and use the equipment item-id order in
+`catalogs/item-list.md`. `0xFF` is the end-of-row marker. `0x00` is not empty in
+this table; it is item id `0`, Leather Helm. In the shipped rows below, slot
+`h` is the terminator for every shop, so the visible menu choices are `a`
+through `g`.
+
+| Scene | Location | Shop | a | b | c | d | e | f | g | h |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `2` | Britain | `Iolo's Bows` | 16 | 17 | 26 | 27 | 28 | 29 | 36 | `0xFF` |
+| `3` | Jhelom | `Naughty Nomaan's` | 19 | 24 | 46 | 22 | 3 | 6 | 25 | `0xFF` |
+| `4` | Yew | `Arms of Justice` | 0 | 9 | 10 | 18 | 21 | 37 | 38 | `0xFF` |
+| `5` | Minoc | `Darkwatch Armoury` | 2 | 4 | 11 | 23 | 30 | 24 | 31 | `0xFF` |
+| `6` | Trinsic | `The Paladin's Protectorate!` | 32 | 33 | 34 | 2 | 5 | 12 | 14 | `0xFF` |
+| `17` | Lord British's Castle | `North Star Armoury` | 1 | 7 | 13 | 14 | 30 | 37 | 43 | `0xFF` |
+| `24` | Buccaneer's Den | `Buccaneers Booty` | 0 | 10 | 16 | 20 | 23 | 19 | 42 | `0xFF` |
+| `26` | Bordermarch | `The Shattered Shield` | 7 | 32 | 36 | 27 | 31 | 44 | 45 | `0xFF` |
+| `32` | Serpent's Hold | `Siege Crafters` | 1 | 13 | 28 | 29 | 34 | 22 | 25 | `0xFF` |
 
 ### 8.2 Guildmaster (magic shop)
 
@@ -884,8 +903,7 @@ dispatch, stock-shop menus, arms buy/sell behavior, guild purchases, healer
 treatments, reagent availability, tavern drinks, meal-counter provisions,
 sage topics, stationary-display purchases, horse-trader sale, shipwright
 pending delivery, inn rest and guest registry behavior, shop surcharge,
-persistence, and karma non-modulation are fixed. Remaining work belongs to
-catalog and data-table publication rather than shop control flow.
+persistence, and karma non-modulation are fixed.
 
 - Remaining equipment class restrictions and armour defence values are tracked
   by `catalogs/item-list.md` and `formats/data-ovl.md`.
@@ -899,6 +917,8 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/SHOPPES_OVL/0x04A2_guild_main.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x075E_reagent_main.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x07BE_find_shopkeeper.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x0B30_arms_buy_menu.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x0F64_arms_sell_inventory.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x14F8_healer_main.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x12B2_arms_main.md`, and the private
   SHOPPES healer-main trace — weaponsmith / armourer, guildmaster, healer /

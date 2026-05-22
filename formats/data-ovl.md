@@ -256,9 +256,11 @@ known or likely roles include:
   suppress arms sale/buyback for that item, and a separate per-shop
   eight-candidate table feeds the arms `B` buy menu. Candidate bytes are direct
   equipment item ids: the same id selects the item-name row, the base-price
-  row, and the save-backed equipment counter. The arms `S` sell menu instead
-  scans the party's nonzero equipment counters and applies the sell-back offer
-  path. Guild shops consume fixed per-shop stock and unit-price records.
+  row, and the save-backed equipment counter. The per-scene arms stock rows are
+  published in `systems/shops.md`; `0xFF` terminates a row, while `0x00` is the
+  valid Leather Helm item id. The arms `S` sell menu instead scans the party's
+  nonzero equipment counters and applies the sell-back offer path. Guild shops
+  consume fixed per-shop stock and unit-price records.
   Healers use per-instance cure, heal, and resurrection price tables; the
   Minoc healer instance, `The Healers Mission`, bypasses the ordinary price
   path for Cure and Heal.
