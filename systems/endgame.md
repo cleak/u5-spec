@@ -103,6 +103,57 @@ For each party member:
 
 The restoration is part of the ending presentation. Because the sequence cannot return to gameplay or save afterward, these mutations should not be interpreted as a normal resurrection service that the player can carry back into the world. A modern implementation with a post-ending menu should avoid writing these cinematic changes into a resumable save unless it deliberately defines a new post-game mode.
 
+### Party tableau active-object layout
+
+The endgame reuses the active-object record shape described in
+`active-objects.md`, but the records are cinematic sprites rather than live
+map objects. On entry, the original clears only each slot's type and
+tile/frame bytes for all 32 active-object slots, then rebuilds the tableau.
+The setup sites listed below write type, tile/frame, X, Y, and phase; they
+do not initialize the record's floor/Z or auxiliary bytes. Clean engines
+should treat this scene as a single cinematic plane rather than deriving
+gameplay floor semantics from those untouched bytes.
+
+The renderer's ordinary active-object order still matters: slots are scanned
+from 31 down to 0, so lower-numbered slots draw on top when sprites overlap.
+That means the party leader in slot 0 draws above other party members, Lord
+British in slot 6, and the scene marker in slot 31.
+
+| Slot | Role | Initial type/tile | Initial X,Y | Phase | Initial settled target |
+|---:|---|---:|---|---:|---|
+| 0 | Active party member 0 / party leader | Class table | 5,9 | 0 | 5,5 |
+| 1 | Active party member 1 | Class table | 5,9 | 0 | 4,6 |
+| 2 | Active party member 2 | Class table | 5,9 | 0 | 6,6 |
+| 3 | Active party member 3 | Class table | 5,9 | 0 | 3,7 |
+| 4 | Active party member 4 | Class table | 5,9 | 0 | 5,7 |
+| 5 | Active party member 5 | Class table | 5,9 | 0 | 7,7 |
+| 6 | Lord British, victory branch only | `0x0E` | 5,4 | 0 | Created already at target |
+| 31 | Scene marker | `0x7C` | 5,8 | 0 | Branch-specific |
+
+Party slots are populated only for active party indices below the current
+party count. The setup loop does not synthesize absent party members for
+empty slots above the party count.
+
+The party type and tile/frame bytes are both initialized from the class table:
+
+| Class byte | Class | Tableau type/tile |
+|---|---|---:|
+| `A` | Avatar | `0x4C` |
+| `M` | Mage | `0x40` |
+| `B` | Bard | `0x44` |
+| `F` | Fighter | `0x48` |
+| `D` | Druid | `0x4C` |
+| `T` | Tinker | `0x4C` |
+| `P` | Paladin | `0x4C` |
+| `R` | Ranger | `0x4C` |
+| `S` | Shepherd | `0x4C` |
+
+Only the Dead status has a special restoration branch during tableau setup:
+it is changed to the restored/present status and current health is copied from
+maximum health. Asleep, poisoned, ashes, and other non-Dead statuses are not
+filtered by this setup pass; those party records are still assigned tableau
+actors from their class byte.
+
 ## 5. Lord British dialogue and confirmation
 
 After setup, Lord British greets the party leader by name and presents a two-step box-delivery confirmation. The text itself is data-driven; this spec intentionally describes the content rather than reproducing the original wording.
@@ -127,6 +178,33 @@ If the final confirmation is not yes, or if the saved sandalwood-box completion 
 
 This branch is terminal in practice. It does not restore the previous map, re-enter the main loop, return to the title menu, or offer a new prompt to resume play. A modern implementation should treat it as a dead-end ending state. If an implementation adds a restart or title-menu command for usability, that command should be an out-of-band modern affordance rather than part of the original endgame state.
 
+The refusal/missing-box branch uses the same initial party tableau setup, then
+changes the scene as follows:
+
+1. Slot 0's Y coordinate is decremented once.
+2. The script repeatedly steps slot 2 toward (8,6), slot 31 toward (4,1),
+   and slot 0 toward (8,4) until all three have arrived.
+3. The terminal loop then jitters only slots 1, 3, 4, and 5. Slot 0, slot 2,
+   Lord British's slot, and the scene marker do not participate in that jitter
+   loop.
+
+The jitter helper is a local cinematic wander. On each call for an occupied
+slot, movement is first throttled by a random yes/no gate. If movement is
+allowed, the helper tries up to eight random cardinal candidates:
+
+| Random result | Candidate |
+|---:|---|
+| 0 | `x + 1` |
+| 1 | `x - 1` |
+| 2 | `y + 1` |
+| 3 | `y - 1` |
+
+The first candidate whose local scene-buffer cell is the authored walkable
+marker `0x44` is committed. Other cell values are blocked. The helper does
+not check active-object occupancy, so actor-to-actor collision is not part of
+this terminal wander rule. Each call advances the display tick once whether
+or not movement is committed.
+
 ## 7. Victory rite and visual animation
 
 If the final confirmation is yes and the saved completion flag is present, the endgame enters the victory rite. The rite is a scripted cinematic, not a gameplay loop.
@@ -146,6 +224,23 @@ The movement predicate used by the endgame is grid based: each call examines one
 The separate tableau animation helper is a random local wander, not an animation-frame table. When the selected active-object slot is occupied, the helper first throttles the step with a two-outcome random roll. On an allowed step it samples up to eight four-direction candidates around the current cell, in random direction order, and commits the first candidate whose scene cell is marked as part of the endgame tableau's walkable region. If no candidate qualifies, the slot remains where it is for that call. The helper then advances the display/palette tick once before returning.
 
 This helper is used by the terminal "wait here a while" tableau for party-member slots rather than by ordinary gameplay movement. It should be modeled as cinematic jitter within the authored endgame scene, not as a reusable NPC pathfinder, not as a direction-facing animation switch, and not as evidence for an unresolved party-sprite facing map.
+
+The scripted victory movement order is:
+
+1. Step slot 0 from its initial settled position to (5,4), then back to
+   (5,5).
+2. Create Lord British in slot 6 at (5,4) with type/tile `0x0E`.
+3. Print the Lord British message beats.
+4. Change Lord British's slot 6 type/tile to `0x08`.
+5. After the long wait, clear Lord British's slot 6 type/tile.
+6. Move slot 31, the scene marker, to (5,4), then clear its type/tile.
+7. For each active party slot in ascending party order, step that slot to
+   (5,4), then clear its type/tile before advancing to the next party slot.
+
+The step helper moves one cell per call and runs one display tick after each
+movement. It prefers the axis with greater remaining distance; equal remaining
+distance chooses X movement. The caller loops until the current actor reaches
+its target before advancing to the next scripted actor or message beat.
 
 The display effects are palette/display operations and full-screen rectangle transitions driven by resident helpers. The exact helper names are implementation details. The compatibility requirement is the order and blocking nature of the presentation: messages pause, movement settles before the next beat, and the final certificate is reached only after the fade/transition sequence completes.
 
@@ -259,7 +354,10 @@ The original uses the active-object renderer for cinematic movement. A modern en
 
 ## 12. Gaps and open questions
 
-- **Character-animation pose mapping.** The refusal tableau and follow sequence call a compact per-character animation helper whose public contract is terminal cinematic movement inside the authored endgame scene. The exact four-state pose/direction mapping remains a presentation-parity item.
+- **Pixel-perfect endgame scene rasters.** The terminal tableau slot layout,
+  sprite ids, movement order, and local wander rule are specified here. Exact
+  per-frame display-helper internals for every fade/palette transition remain
+  presentation-parity work.
 - **Display helper taxonomy.** The visual sequence uses resident display, palette, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
 - **Asset variant mapping.** The paired graphics archive family and bitmap formats are specified, but exact endgame resource-slot-to-panel selection should be cross-checked if pixel-perfect presentation parity becomes required.
 
