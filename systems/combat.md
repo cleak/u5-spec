@@ -467,14 +467,15 @@ one-half rolls a morale check that sets fleeing on 252 of 256 possible
 random-byte results, and one-half or higher clears fleeing. It also returns a
 four-bucket wound score for other AI consumers.
 
-A separate lower-tier summon/tame-style spell helper writes the same combat
-actor-state flag while repurposing eligible live non-party, non-humanoid actors
-into a summoned-creature state. Treat that as a spell-side actor repurpose /
-activation side effect, not as the fear spell and not as wound morale. The
-no-target centre fallback described above is the other traced direct writer:
-it marks eligible monster-side slots with the flee flag while forcing their
-critical-HP marker. The decoded possess/blink/summon-daemon hook does not write
-the fleeing flag.
+A separate lower-tier summon/tame-style spell helper repurposes eligible live
+non-party, non-humanoid actors into a summoned-creature state and uses the
+descriptor low bit `0x01`, the same team/control bit used by charm/controlled
+actor dispatch. Treat that as a spell-side actor repurpose / activation side
+effect, not as the fear spell and not as wound morale. The no-target centre
+fallback described above is the other traced direct flee writer: it marks
+eligible monster-side slots with the flee flag while forcing their critical-HP
+marker. The decoded possess/blink/summon-daemon hook does not write the fleeing
+flag.
 
 **Pass 3 — Synthesise.** A combat-specific input gate reads the synthesised byte from the actor's record. The AI's chosen direction is encoded as the byte the player would press if they wanted to walk the same way (`'N'`, `'S'`, `'E'`, `'W'` direction codes), or the byte for "Attack" if the chosen direction puts the target adjacent. The byte falls into the same per-letter dispatcher as the player command handler. Before the command runs, the AI assembles a one-line narration string — for example `<monster name> attacks <target name>, armed with <weapon>!` — by stitching together a short verb composer.
 
@@ -878,11 +879,10 @@ without independent behavioral consumers remain opaque metadata.
 - **Flee mechanics.** The monster wound-score morale classifier is the confirmed
   morale writer of the fleeing flag, and Cause Fear/fear-panic spell handlers
   are confirmed upstream routes that force hostile targets into the critical-HP
-  state consumed by that classifier. A lower-tier summon/tame-style spell helper
-  also sets the same actor-state flag while repurposing eligible live
-  non-party, non-humanoid actors; keep that as a spell-side activation side
-  effect rather than a fear/morale path. The no-target centre fallback also
-  writes the same flag and critical-HP marker for eligible monster-side slots.
+  state consumed by that classifier. The lower-tier summon/tame-style helper is
+  separate: it repurposes eligible live non-party, non-humanoid actors and uses
+  descriptor bit `0x01`, not the flee bit. The no-target centre fallback also
+  writes the flee flag and critical-HP marker for eligible monster-side slots.
   Section 9 specifies how the flag reverses movement. The out-of-arena leave
   helper is specified above. The decoded possess/blink/summon-daemon hook does
   not set the flee flag.

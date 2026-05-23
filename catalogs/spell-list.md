@@ -256,20 +256,24 @@ charge or mana.
   sweeps hostile combat actors and forces each accepted target into the
   critical-HP flee setup; the combat wound-score morale classifier performs the
   actual fleeing-flag write from that state. A separate lower-tier
-  summon/tame-style helper can set the same combat actor-state flag while
-  repurposing eligible live non-party, non-humanoid actors, but that is a
-  summon activation side effect rather than the `CIQ` fear path.
+  summon/tame-style helper repurposes eligible live non-party, non-humanoid
+  actors using descriptor bit `0x01`, the same team/control bit used by charm;
+  that is a summon activation side effect rather than the `CIQ` fear path and
+  not a write to the flee bit `0x02`.
   Conjure selects Giant Rat, Giant Spider, Bat, or Python from a fixed weighted
-  animal selector before random legal-cell placement. Swarm tries eight random
-  target cells and uses short placement retries for accepted cells. Clone
-  duplicates an accepted creature into paired free combat actor and
-  dynamic-object slots, and Summon uses the
+  animal selector before making up to eight independent `0..10` X/Y random
+  arena placement attempts. Swarm walks the eight-cell ring around the caster
+  and gives each target cell up to four placement probes, with the first probe
+  testing the target cell itself. Clone duplicates an accepted creature into
+  paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor
-  at an accepted target cell. A previously suspected CAST2 placement helper is
-  now attributed to shrine/urn kneel presentation. It prepares temporary
-  active-object records from a private visual pattern and is not a traced party
-  C-Cast row for Conjure, Swarm, or Summon. Do not publish or reuse that
-  private pattern as spell placement data.
+  at the first accepted cell in north, northeast, east, southeast, south,
+  southwest, west, northwest order around the cached target coordinate. A
+  previously suspected CAST2 placement helper is now attributed to shrine/urn
+  kneel presentation. It prepares temporary active-object records from a
+  private visual pattern and is not a traced party C-Cast row for Conjure,
+  Swarm, or Summon. Do not publish or reuse that private pattern as spell
+  placement data.
   `PRV` prompts `To phase:` and accepts digits `1`..`8`,
   mapping the digit to the matching persisted moonstone slot before teleporting
   to that slot's saved scene/X/Y/Z destination. Moonstone burying writes those

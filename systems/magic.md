@@ -412,19 +412,22 @@ own active-effect path and is not a field-removal spell.
 helper families rather than one shared spell effect. Conjure plays its summon
 effect, rolls one of fifteen weighted outcomes, and selects Giant Rat for six
 outcomes, Giant Spider for five, Bat for three, and Python for one. It then
-tries up to eight random legal arena placements around the caster-side state.
-Accepted placements create active combat objects and mark the placed slot
-active. Swarm plays a stronger effect, tries eight random legal target cells,
-and for each accepted cell allows up to four placement/animation retries before
-marking the resulting actor/object active. Both spells therefore create or
-activate temporary combat actors through random legal-cell selection; neither
-uses the shrine/urn presentation pattern.
+tries up to eight random arena placements. Each attempt rolls X and Y
+independently in the inclusive `0..10` arena range; the first empty/walkable
+cell accepts, and all-eight failure reports ordinary spell failure after
+resource consumption. Swarm plays a stronger effect and walks the eight cells
+in the Chebyshev-distance-one ring around the caster. For each target cell, it
+tests that cell first and then allows up to three small random jitter retries
+around it before advancing to the next ring cell. Both spells therefore create
+or activate temporary combat actors through legal-cell placement; neither uses
+the shrine/urn presentation pattern.
 
 One traced lower-tier summon/tame-style helper sweeps eligible live non-party,
 non-humanoid combat actors, repurposes accepted actors into the summoned-
-creature state, and sets the same combat actor-state flag that ordinary AI
-movement otherwise treats as fleeing. This is a spell-side actor repurpose /
-activation effect, distinct from Cause Fear's critical-HP setup. Clone is
+creature state, and sets the descriptor low bit `0x01`, the same team/control
+bit used by charm/controlled actor dispatch. This is a spell-side actor
+repurpose / activation effect, distinct from Cause Fear's critical-HP setup and
+from the fleeing bit `0x02`. Clone is
 target-derived: after the `Creature:` target is accepted, it searches for one
 free combat actor slot and one free dynamic-object slot, copies the target's
 paired records only after both slots exist, relinks the new combat record to the
@@ -437,16 +440,17 @@ as a no-op failure. Clone is not an adjacency-based spell.
 
 Summon uses the per-tile placement/impact helper, not the shrine/urn helper. It
 searches up to eight candidate cells around the cached target coordinate,
-requires a valid map cell, places a Daemon-class combat actor at the accepted
-cell, plays the temporary flame/daemon impact animation, and marks the placed
-slot as having taken effect. This spell path uses the self-checking mode of the
-helper: if the placement would rebound onto the caster under the helper's
-resistance/probability check, it prints the self-hit message and reports the
-special self-failure result. Summoned or cloned combat actors then run through
-the standard combat actor-table machinery. The traced summon, clone, combat
-tick, and death/record-clear paths do not expose an independent per-spell
-duration countdown; combat-exit lifetime is instead bounded by the combat
-framer restoring the pre-combat actor tables.
+in north, northeast, east, southeast, south, southwest, west, northwest order.
+It requires a valid map cell, places a Daemon-class combat actor at the first
+accepted cell, plays the temporary flame/daemon impact animation, and marks the
+placed slot as having taken effect. This spell path uses the self-checking mode
+of the helper: if the placement would rebound onto the caster under the
+helper's resistance/probability check, it prints the self-hit message and
+reports the special self-failure result. Summoned or cloned combat actors then
+run through the standard combat actor-table machinery. The traced summon,
+clone, combat tick, and death/record-clear paths do not expose an independent
+per-spell duration countdown; combat-exit lifetime is instead bounded by the
+combat framer restoring the pre-combat actor tables.
 
 A previously suspected CAST2 helper remains attributed to shrine/urn kneel
 presentation. It prepares temporary active-object records from a private visual
@@ -574,13 +578,14 @@ forty-eight player spell definitions.
 - **Summon placement and clone lifetime.** The traced summon/conjuration
   helpers place, activate, repurpose, or clone actor records, but they do not
   install an independent per-spell duration counter. Conjure uses a fixed
-  weighted animal selector before random legal-cell placement, Swarm uses a
-  fixed eight-cell scan with short per-cell placement retries, Clone performs
-  paired
+  weighted animal selector before independent `0..10` X/Y arena placement
+  attempts, Swarm uses a fixed eight-cell scan with short per-cell placement
+  retries, Clone performs paired
   actor/object copying after a `Creature:` target is accepted, and Summon uses
-  the self-checking per-tile placement helper to create a Daemon-class combat
-  actor. The CAST2 shrine/urn active-object pattern helper is explicitly not
-  that path. Summoned and cloned combat actors live in the same temporary
+  the self-checking per-tile placement helper's ordered eight-cell ring to
+  create a Daemon-class combat actor. The CAST2 shrine/urn active-object
+  pattern helper is explicitly not that path. Summoned and cloned combat actors
+  live in the same temporary
   combat actor/dynamic-object
   tables as ordinary combat participants; ordinary death/record-clear paths can
   remove them during the fight, and combat exit restores the pre-combat table

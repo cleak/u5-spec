@@ -397,10 +397,10 @@ an unresolved summon-duration gap.
 
 **Current summon placement cleanup:** 2026-05-13 - the public magic,
 spell-list, and extraction docs now distinguish Conjure's fixed weighted animal
-selector plus random legal-cell placement, Swarm's eight target cells with
-short placement retries, Clone's paired-slot copy, the spell-side summon/tame
-actor-repurpose helper, and Summon's self-checking per-tile Daemon-class
-placement helper. The CAST2
+selector plus independent `0..10` X/Y placement attempts, Swarm's eight target
+cells with short placement retries, Clone's paired-slot copy, the spell-side
+summon/tame actor-repurpose helper using descriptor bit `0x01`, and Summon's
+ordered eight-cell Daemon-class placement helper. The CAST2
 shrine/urn active-object pattern helper remains shrine/urn kneel presentation
 rather than a party C-Cast summon row, so its private visual pattern must not be
 published or reused as Conjure/Swarm/Summon placement data.
@@ -851,9 +851,11 @@ post-fight SJOG loot sweep is part of the core combat contract.
 
 **Current summon-edge cleanup:** 2026-05-13 - `systems/magic.md`,
 `catalogs/spell-list.md`, and extraction now promote the completed CAST summon
-edge details: Conjure's fixed weighted animal selector, Swarm's eight target
-cells with short placement retries, and the continued separation of
-Conjure/Swarm/Summon from the CAST2 shrine/urn presentation pattern.
+edge details: Conjure's fixed weighted animal selector plus independent
+`0..10` X/Y placement attempts, Swarm's eight target cells with short placement
+retries, Summon's ordered eight-cell placement ring, and the continued
+separation of Conjure/Swarm/Summon from the CAST2 shrine/urn presentation
+pattern.
 
 **Current combat class-flag boundary cleanup:** 2026-05-13 -
 `systems/combat.md` now frames the former variation list as an opaque
@@ -2168,7 +2170,7 @@ class-attribute entries and special movement-gate visual identities.
 
 **Current combat target-picker cleanup:** 2026-05-07 - combat, magic, and monster-bestiary docs now publish the target-picker's separate phase/hidden suppression filter, ordinary invisibility filter, first-five-party-slot fallback guard, centre fallback with monster-side flee marking, and monster-spell separation from the party C-Cast dispatcher.
 
-**Current combat fleeing cleanup:** 2026-05-12 - combat, magic, spell-list, monster-bestiary, and extraction docs now separate Cause Fear/fear-panic spell handling from the actual morale writer: those spell routes force accepted hostile actors into the critical-HP state, while the wound-score morale classifier writes or clears the fleeing flag from current HP. A lower-tier summon/tame-style spell helper is now recorded as a separate same-flag writer while it repurposes eligible live non-party, non-humanoid actors into summoned-creature state. The docs also specify the out-of-arena leave/escape helper including ship-style refusal and constrained same-direction exits. The no-target centre fallback is now recorded as another direct writer of the fleeing flag plus the critical-HP marker for eligible monster-side slots; the decoded possess/blink/summon-daemon hook still does not set flee.
+**Current combat fleeing cleanup:** 2026-05-12 - combat, magic, spell-list, monster-bestiary, and extraction docs now separate Cause Fear/fear-panic spell handling from the actual morale writer: those spell routes force accepted hostile actors into the critical-HP state, while the wound-score morale classifier writes or clears the fleeing flag from current HP. A lower-tier summon/tame-style spell helper is now recorded as a descriptor bit `0x01` actor-repurpose path, not a flee-bit writer. The docs also specify the out-of-arena leave/escape helper including ship-style refusal and constrained same-direction exits. The no-target centre fallback is now recorded as another direct writer of the fleeing flag plus the critical-HP marker for eligible monster-side slots; the decoded possess/blink/summon-daemon hook still does not set flee.
 
 **Current combat reward cleanup:** 2026-05-12 - combat, encounters, containers, monster-bestiary, and extraction now close the automatic post-combat reward gap: ordinary attack and spell/effect callers with a living party attacker credit the damage/status helper's returned damage or monster-kill reward unit directly to that attacker's experience, capped at `9999`, before the combat framer restores the world table. The ordinary terrain-target caller restores the saved world-object table again, then clears the original trigger slot or rewrites a `0x2C..0x2F` body-family trigger into persistent body/retrieval state. No traced combat-exit path promotes arbitrary killed-monster drops, adds party gold, changes karma, or grants a separate victory bonus; later food/gold/plague results belong to Search/Get on the rewritten body-like slot.
 
