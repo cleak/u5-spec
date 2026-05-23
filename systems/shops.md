@@ -540,6 +540,38 @@ through `g`.
 | `26` | Bordermarch | `The Shattered Shield` | 7 | 32 | 36 | 27 | 31 | 44 | 45 | `0xFF` |
 | `32` | Serpent's Hold | `Siege Crafters` | 1 | 13 | 28 | 29 | 34 | 22 | 25 | `0xFF` |
 
+When a valid buy letter is selected, the shop computes the adjusted price,
+stores it in the `%` substitution, and renders the selected item's
+SHOPPE.DAT description record. The item-description selector is keyed by
+equipment item id:
+
+| Equipment id(s) | SHOPPE.DAT buy quote record(s) |
+|---|---|
+| `0..7` | records `8..15` respectively |
+| `9..14` | records `16..21` respectively |
+| `16..34` | records `22..40` respectively |
+| `36..38` | records `41..43` respectively |
+| `42..46` | records `44..48` respectively |
+| `8`, `15`, `35`, `39`, `40`, `41`, `47` | no arms-buy quote record in the traced selector; these ids are not present in the nine stock rows |
+
+After the item description, the buy path chooses one of four literal
+confirmation prompts uniformly: `Wouldst thou buy one?`, `Wilt thou take it?`,
+`Wish ye it?`, or `May I get one for thee?`. The player must answer `Y` or
+`N`; other keys re-prompt without changing gold or inventory. `N` exits that
+item quote. `Y` first checks whether the carried equipment counter for that
+item is already `99`; if so it prints the carry-capacity refusal and returns to
+the buy menu. It then checks party gold against the adjusted price. Short
+funds print a random no-credit bark plus the shopkeeper name and leave gold and
+inventory unchanged. A successful purchase debits the adjusted price, applies
+the normal post-transaction surcharge, increments the carried equipment counter
+or caps arrows/quarrels at `99`, and prints the fixed success line `Sold!`.
+There is no separate successful-purchase item-name template.
+
+Invalid buy selectors, including letters at or beyond the `0xFF` terminator,
+do not print a refusal line. The buy menu simply keeps waiting for a valid
+letter, Space, or Escape. Item id `0` is ordinary stock: it uses the same
+menu-name source as the other equipment ids and quote record `8`.
+
 ### 8.2 Guildmaster (magic shop)
 
 After the greeting, the player chooses from a three-item letter menu — typically `a` Keys (skeleton keys), `b` Gems (gem-of-vision), `c` Torches. The player picks a letter and a quantity, the affordability check runs, gold is deducted, and the item is added to inventory. The guildmaster does not buy back; commerce is one-way. There is no class restriction. Spells are *not* sold here; they are mixed by the player from reagents (see `magic.md`).
