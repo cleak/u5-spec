@@ -321,6 +321,34 @@ described below. Arms sell-back runs in the other direction: it increases the
 gold word, capped by the normal gold limit, and decrements the sold equipment
 counter.
 
+The shared `0x82` tavern/meal-counter/sage arm selects one of four menu states
+per tavern row. These states choose the visible letters for round drinks,
+secondary tavern actions, provisions, and sage lore:
+
+| Tavern or meal counter | State | Round/meal letter | Secondary tavern letter | Provision letter | Sage/lore letter |
+|---|---:|---|---|---|---|
+| The Honest Meal | 0 | `M` | `A` | `R` | `C` |
+| The Wayfarer Tavern | 0 | `M` | `A` | `R` | `C` |
+| The Sword and Keg | 0 | `M` | `A` | `R` | `C` |
+| The Slaughtered Lamb | 2 | `B` | `R` | none | `H` |
+| The Humble Palate | 3 | `F` | `S` | `P` | `A` |
+| The Blue Boar Tavern | 1 | `C` | `W` | none | `T` |
+| The Cat's Lair | 0 | `M` | `A` | `R` | `C` |
+| The Fallen Virgin | 2 | `B` | `R` | none | `H` |
+| The Folley Tap | 0 | `M` | `A` | `R` | `C` |
+
+The Blue Boar's fixed six-choice drink list is the state-1 secondary tavern
+letter `W`. Other secondary tavern letters remain in the tavern service family;
+they are not provisions and do not enter sage lore.
+
+Post-list dispatch checks exit keys first, then the round/meal letter, then the
+secondary tavern letter, then the provision letter, and finally the sage/lore
+letter. A state has exactly one sage/lore letter. The sage/lore letter is gated
+by the tavern continuation state: if it is pressed before a prior accepted menu
+branch has established continuation, it is ignored and the menu waits for
+another post-list key. Blue Boar therefore has no `C` lore conflict: `C` is its
+round/meal letter, while its lore letter is `T`.
+
 ### 6.1 The affordability check
 
 Most purchases are gated by an affordability check against the gold word. If

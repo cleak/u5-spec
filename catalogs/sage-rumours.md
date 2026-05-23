@@ -37,6 +37,25 @@ letters enter the same 26-row topic table.
 | 2 | `H` | Shared 26-row table |
 | 3 | `A` | Shared 26-row table |
 
+The tavern row selects the state as follows:
+
+| Tavern or meal counter | Menu state | Sage action letter |
+|---|---:|---|
+| The Honest Meal | 0 | `C` |
+| The Wayfarer Tavern | 0 | `C` |
+| The Sword and Keg | 0 | `C` |
+| The Slaughtered Lamb | 2 | `H` |
+| The Humble Palate | 3 | `A` |
+| The Blue Boar Tavern | 1 | `T` |
+| The Cat's Lair | 0 | `C` |
+| The Fallen Virgin | 2 | `H` |
+| The Folley Tap | 0 | `C` |
+
+The enclosing tavern menu checks ordinary tavern actions before the sage
+letter. The sage letter is also a continuation action: pressing it before a
+prior accepted tavern branch has put the menu into its continuation state does
+not enter the keyword prompt.
+
 ## 3. Success Templates
 
 The original selector table stores SHOPPE.DAT record starts; the ordinal record
