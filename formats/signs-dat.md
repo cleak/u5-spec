@@ -149,6 +149,26 @@ party names without consulting the file's scene blocks. That exception belongs
 to the Look command behavior, but implementers should not try to find that
 poster in `SIGNS.DAT`.
 
+The poster's logical rows are:
+
+```text
+abbbbbbbbbbbbbc
+g   Wanted:   g
+g             g
+g<slot 0 name>g
+g<slot 1 name>g
+g<slot 2 name>g
+g             g
+gDead or Aliveg
+deeeeeeeeeeeeeef
+```
+
+The border letters above are the resident sign-border glyph fragments used by
+the original text layer, not prose to be word-wrapped. The three name rows use
+current party slots `0..2` in order and are centered by starting each name at
+column `7 - floor(name_length / 2)` before emitting the right border at column
+`14`. Rows whose slot index is not below the current party count remain blank.
+
 ## 7. Validation and Error Handling
 
 Validation should separate hard file errors from data that the runtime simply

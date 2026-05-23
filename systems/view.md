@@ -58,10 +58,20 @@ Special LOOKOBJ look cases include:
 - **Signs and wanted posters.** Prints the sign/poster heading, then renders
   the sign or poster text through the sign/poster helper. One fixed exception
   in Yew, floor `0`, at local coordinate `(x=17, y=21)` renders the
-  resident wanted-poster presentation and inserts the current party names;
-  that poster is not read from `SIGNS.DAT`. Other sign/poster tiles load a
-  scene-indexed `SIGNS.DAT` record by current scene and target coordinate. If
-  no record matches, the sign path prints the blank-sign fallback.
+  resident wanted-poster presentation; that poster is not read from
+  `SIGNS.DAT`. Other sign/poster tiles load a scene-indexed `SIGNS.DAT`
+  record by current scene and target coordinate. If no record matches, the
+  sign path prints the blank-sign fallback.
+
+  The fixed wanted poster is a nine-row framed sign stream. It prints the
+  heading `Wanted:`, one blank spacer row, three centered name rows, another
+  blank spacer row, and the footer `Dead or Alive`. The name rows are filled
+  from party slots `0`, `1`, and `2` in that order, but only while the slot
+  index is lower than the current party count. A one- or two-member party
+  leaves the remaining name rows blank. Slots `3+` are not listed, and status
+  does not filter a listed slot. Each printed name starts at column
+  `7 - floor(name_length / 2)` within the poster row, then the right border is
+  emitted at column `14`.
 - **Clock tiles.** Prints the tile description and appends the current game
   time using the normal twelve-hour AM/PM presentation.
 - **Shrine and dungeon-entrance tiles.** Prints the generic tile description
