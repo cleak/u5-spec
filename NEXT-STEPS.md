@@ -2215,6 +2215,12 @@ dungeon-room monster-count roll. The remaining non-final gap is naming the
 unrelated special setup ids; the final Doom absorbable marker and room-clear
 `0xF?` to `0xA?` behavior are already covered.
 
+**Current combat field-placement correction:** 2026-05-23 - `systems/magic.md`
+and `systems/combat.md` now state that Fire/Sleep/Energy field marker
+materialization has no random acceptance gate once impact resolution confirms an
+in-arena cell. The coordinate lookup determines the returned contact target,
+not whether the marker is placed.
+
 **Current encounter flag rollover cleanup:** 2026-05-13 - encounters,
 save-format, time, and extraction docs now correct the fortunes-of-war clear
 boundary: ordinary midnight/day rollover does not clear the flag; the 28-day
