@@ -276,14 +276,25 @@ NPC interaction facts for cross-session world state.
 
 ### 9.1 Quest progress
 
-Two bytes at file offsets `0x0326` and `0x0328` hold the shrine-quest progress as parallel bitmasks.
+Shadowlord and shrine quest progress live in several small save-backed fields in
+the resident image.
 
 | Offset   | Width  | Field            | Meaning                                                                                                                       |
 |----------|--------|------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `0x0322..0x0324` | 3 bytes | Shadowlord hideout / vanquished slots | Slot order is Falsehood/Faulinei, Hatred/Astaroth, Cowardice/Nosfentor. A living slot holds the current hideout id `1..8`; successful shard/flame destruction writes `0xFF` to the matching slot. Doom entry and Shadowlord spawn/report paths treat high-bit-set values as vanquished. |
+| `0x0325` | 1 byte | Active Shadowlord id | Runtime handshake set by the Shadowlord-name Yell path and checked by shard/spell destruction. Values `0..2` identify the active named Shadowlord; preserve other values byte-for-byte. |
 | `0x0326` | 1 byte | Ordained mask    | Bit per virtue: 0 Honesty, 1 Compassion, 2 Valor, 3 Justice, 4 Sacrifice, 5 Honor, 6 Spirituality, 7 Humility. Bit set = "ordained, must visit Codex". |
 | `0x0328` | 1 byte | Codex-visited mask | Same eight-bit layout. Bit set = "Codex page read for this virtue".                                                          |
+| `0x0624..0x0625` | 2 bytes | Quest-progress flags | Save-backed quest bit word. Successful Shadowlord destruction ORs the low byte with `0x02` for Falsehood/Faulinei, `0x04` for Hatred/Astaroth, and `0x08` for Cowardice/Nosfentor. Preserve other bits. |
 
 The two bitmasks together encode a four-state virtue quest: not started (both zero), ordained (ordained set, codex clear), codex-read (both set), complete (ordained clear, codex set — the ordained bit is cleared on shrine turn-in). All eight virtues use the same encoding, with the same bit-to-virtue map, so the layout is uniform. Ordinary post-completion shrine offerings leave these masks unchanged; they update gold and shrine standing instead.
+
+The Shadowlord slot bytes are the gameplay-visible vanquish state: they gate
+Shadowlord re-rolls, name summons, town-entry Shadowlord installation, Sextant
+reports, Stonegate atmosphere, and Doom entry. The quest-progress word at
+`0x0624` is also written by the same successful destruction path for
+byte-compatible state, but do not use it as a substitute for the three
+Shadowlord slot bytes when deciding whether a Shadowlord is alive.
 
 ### 9.2 NPC Interaction Boundary
 

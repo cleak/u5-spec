@@ -191,8 +191,13 @@ are the values consumed by the Shadowlord view, Yell, and town-entry paths. At
 midnight, the time cleanup rerolls each living Shadowlord's hideout
 so that no living Shadowlord remains in the party's current scene and no two
 living Shadowlords are assigned the same hideout in that pass. When the player
-destroys a Shadowlord through the shard-and-flame spell path, that slot becomes
-vanquished and is no longer rerolled.
+destroys a Shadowlord through the shared shard/spell destruction path, that
+slot becomes vanquished and is no longer rerolled. The same success path also
+ORs a per-Shadowlord bit into the save-backed quest-progress word:
+Falsehood/Faulinei sets `0x02`, Hatred/Astaroth sets `0x04`, and
+Cowardice/Nosfentor sets `0x08` in the low byte of `SAVED.GAM 0x0624`. The
+three Shadowlord slot bytes remain the authoritative alive/vanquished state for
+gameplay gates.
 
 Several user-visible behaviours consume the same state:
 
