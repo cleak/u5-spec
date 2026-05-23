@@ -223,14 +223,23 @@ The currently named payload families are:
 
 When the player steps onto (or attacks) an active-object tile that the engine recognises as hostile, the world loop calls the combat framer with `entry_mode = 0` (terrain combat). The framer then runs the **terrain-combat setup pipeline** described in `combat.md`. From the encounter system's side, the relevant sub-stages of that pipeline are:
 
-**Arena selection.** The active-object's tile-class byte picks one of sixteen *outdoor arenas* via a small linear formula: `arena_id = (class − 0x40) / 4` for class bytes in the range `0x40..0x7F`, with two known exceptions (a "skiff" class is hard-coded to arena 1 to handle pirate-ship encounters; classes outside the linear range fall through to scripted handling). The sixteen outdoor arenas are stored in the on-disk **outdoor combat arena bank**; each arena is an 11×11 terrain grid with a band of placement metadata (see `formats/cbt.md` for the on-disk format).
+**Arena selection.** The active-object record's byte 0 picks one of sixteen
+*outdoor arenas*. The selector reads the hostile active object's own type/frame
+byte; it does not inspect the party transport marker or the terrain tile under
+the object. For active-object bytes in `0x40..0x7F`, the linear formula is
+`arena_id = (byte0 - 0x40) / 4`. For the pirate/water-creature special case,
+the selector first masks byte 0 with `0xFC`; therefore every byte in
+`0x2C..0x2F` hard-codes outdoor arena 1. The sixteen outdoor arenas are stored
+in the on-disk **outdoor combat arena bank**; each arena is an 11x11 terrain
+grid with a band of placement metadata (see `formats/cbt.md` for the on-disk
+format).
 
 The range collapse is exact:
 
 | Outdoor arena | Trigger class bytes |
 |--------------:|---------------------|
 | 0 | `0x40..0x43` |
-| 1 | `0x44..0x47`; also the skiff/pirate-ship special class |
+| 1 | `0x44..0x47`; also active-object byte `0x2C..0x2F` for the pirate/water-creature special case |
 | 2 | `0x48..0x4B` |
 | 3 | `0x4C..0x4F` |
 | 4 | `0x50..0x53` |
