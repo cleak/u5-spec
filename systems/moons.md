@@ -16,9 +16,9 @@ markers:
 
 - A fixed marker derived directly from the current hour.
 - Trammel's glyph, read from the first resident moon table for the current
-  calendar day.
+  hour.
 - Felucca's glyph, read from the second resident moon table for the current
-  calendar day.
+  hour.
 
 The hour determines whether a marker is visible in the twelve-cell horizon and,
 if so, which cell receives it. The fixed marker uses an hour-derived position
@@ -59,8 +59,8 @@ The glyph identity for each moon is table-driven, **indexed by the current hour 
 | 7 | `'3'` | `'5'` |
 | 8 | `'4'` | `'6'` |
 | 9 | `'5'` | `'7'` |
-| 10 | `'5'` | `'0'` (off-horizon) |
-| 11 | `'6'` | `'0'` (off-horizon) |
+| 10 | `'5'` | `'0'` |
+| 11 | `'6'` | `'0'` |
 | 12 | `'6'` | `'1'` |
 | 13 | `'7'` | `'2'` |
 | 14 | `'7'` | `'3'` |
@@ -68,15 +68,15 @@ The glyph identity for each moon is table-driven, **indexed by the current hour 
 | 16 | `'1'` | `'5'` |
 | 17 | `'1'` | `'6'` |
 | 18 | `'2'` | `'7'` |
-| 19 | `'2'` | `'0'` (off-horizon) |
-| 20 | `'3'` | `'0'` (off-horizon) |
+| 19 | `'2'` | `'0'` |
+| 20 | `'3'` | `'0'` |
 | 21 | `'3'` | `'1'` |
 | 22 | `'4'` | `'2'` |
 | 23 | `'5'` | `'3'` |
 
-Each phase digit `'0'..'7'` corresponds to a Moonstone slot index `0..7`, which the natural-moongate entry hook uses (after stripping `'0'`) to look up the saved Moonstone destination. High-bit sentinels (`0xF0`, `0x80`) mean the moon is below the horizon for that hour; the entry hook treats high-bit cached glyphs as "no gate for this slot".
+Each phase digit `'0'..'7'` corresponds to a Moonstone slot index `0..7`, which the natural-moongate entry hook uses (after stripping `'0'`) to look up the saved Moonstone destination. The table's high-bit entries (`0xF0` for Trammel at hour 0, `0x80` for Felucca at hour 0) are sentinel bytes rather than phase digits. Literal `'0'` is always phase/slot 0, including Felucca hours 10, 11, 19, and 20.
 
-Trammel cycles through all eight phases roughly twice per day (the larger, slower moon); Felucca cycles once per day with off-horizon gaps near hours 10-11 and 19-20.
+Trammel cycles through all eight phases roughly twice per day. Felucca cycles once per day. Whether a cached phase digit is actually drawn in the twelve-cell status strip is controlled by the separate visible-hour/cell-position rule above; do not reinterpret an undrawn literal digit as an off-horizon sentinel.
 
 The strip is presentation only. It caches the selected moon glyph bytes for the
 current render pass, but those cached bytes are not gameplay state and are not
