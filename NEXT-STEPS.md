@@ -2207,6 +2207,14 @@ traced town overlay handles hostile NPCs through attack, alarm, arrest, pacify,
 death, and slot-clear paths without arena combat. The terrain helper's indoor
 single-attacker override remains documented only as a bounded helper behavior.
 
+**Current dungeon-room setup correction:** 2026-05-23 - `formats/cbt.md` and
+`systems/dungeon-mode.md` now specify the DNGLOOK room setup pass at metadata
+row/column level: party-entry rows, sixteen source cells, per-source X/Y rows,
+ordinary versus special source conversion, and the lack of a separate
+dungeon-room monster-count roll. The remaining non-final gap is naming the
+unrelated special setup ids; the final Doom absorbable marker and room-clear
+`0xF?` to `0xA?` behavior are already covered.
+
 **Current encounter flag rollover cleanup:** 2026-05-13 - encounters,
 save-format, time, and extraction docs now correct the fortunes-of-war clear
 boundary: ordinary midnight/day rollover does not clear the flag; the 28-day

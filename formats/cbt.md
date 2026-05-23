@@ -98,24 +98,51 @@ Do not treat the metadata band as the complete actor-placement model. Terrain co
 
 The `DUNGEON.CBT` room loader is confirmed to load the same complete record
 shape into the combat terrain buffer. Dungeon-room setup then performs its own
-metadata pass. For room-trigger entries, that pass scans sixteen source cells
-from the loaded record's metadata band, beginning at row five, metadata column
-eleven. Each nonzero source cell is converted into a temporary actor or special
-active-object marker:
+metadata pass. For stock `0xF?` room-trigger entries, that pass first reads
+party-entry coordinates from a facing-selected metadata row, then scans sixteen
+room source cells:
 
-- Class-derived source cells in the ordinary combatant range are reduced to a
-  monster/setup class and placed as ordinary combat actors through the shared
-  arena placer. The class-derived path excludes the animated/special families
-  that share nearby tile ranges but are not ordinary room monsters.
-- Low special source cells and the excluded animated/special families are
-  routed through the room's special-placement path. These cells are not terrain
-  to render directly; they are setup sources for temporary active-object
-  markers, random room glyphs, traps, fields, or other room-local specials.
-- Source values in the low special range keep their value unless a later
-  post-placement rule explicitly remaps them. The final Doom marker is in this
-  range, so it becomes an active-object family whose masked class is the
-  `0x3C` absorbable-field family recognized by the combat post-step hook.
+| Record row | Metadata columns | Dungeon-room role |
+|---:|---:|---|
+| 1 | 11-16 and 17-22 | Party X/Y coordinates for one room-entry facing seed. |
+| 2 | 11-16 and 17-22 | Party X/Y coordinates for one room-entry facing seed. |
+| 3 | 11-16 and 17-22 | Party X/Y coordinates for room-entry facing seeds `0` and `5`. |
+| 4 | 11-16 and 17-22 | Party X/Y coordinates for the default room-entry facing seed. |
+| 5 | 11-26 | Sixteen room source cells. |
+| 6 | 11-26 | X coordinate for each room source cell. |
+| 7 | 11-26 | Y coordinate for each room source cell. |
 
+Rows and columns are zero-based. For party slot `i`, the setup helper reads X
+from column `11 + i` and Y from column `17 + i` of the selected party row, for
+as many party slots as are currently active. The selected row comes from the
+room-entry facing seed: seed `3` selects row 1, seed `1` selects row 2, seeds
+`0` and `5` select row 3, and all other seeds select row 4.
+
+The sixteen source cells are consumed in index order `0..15`. Source index `i`
+uses the source byte from row 5 column `11 + i`, X from row 6 column `11 + i`,
+and Y from row 7 column `11 + i`. A zero source byte is empty. Nonzero source
+bytes are converted as follows:
+
+- Ordinary source: if the source is at least `0x40`, and its masked family is
+  neither `0xB4` nor `0xE8`, the setup class is `(source - 0x40) / 4` and the
+  actor is placed through the ordinary room-combat path.
+- Special source: all lower values and the excluded `0xB4`/`0xE8` families use
+  the special room-placement path with the source value as the setup id.
+- Random-special family: source values whose masked family is `0xEC` first
+  select one of four pre-rolled room-special setup ids using the source low two
+  bits.
+
+Special setup ids have one additional post-placement rule. Id `1` writes a
+level-derived value, id `2` writes a level-scaled random value, ids `3..15`
+choose a monster kind from a small resident range table, and ids `16` or higher
+receive no post-write from this helper. The final Doom marker is in that last
+category: it is placed as a special active-object family whose masked class is
+the `0x3C` absorbable-field family recognized by the combat post-step hook, not
+as an ordinary monster kind.
+
+The placement scan runs for stock room-trigger bytes `0xF0..0xFF` in the
+dungeon room-enter path. Runtime `0xA?` room-helper cells use the same arena
+selection and party-entry readback but skip the sixteen-source placement scan.
 This dungeon-room metadata pass is separate from the outdoor arena loader. Do
 not infer it from the outdoor placement-coordinate slices alone.
 

@@ -662,11 +662,19 @@ is the `0x3C` absorbable-field family marker. A compatible implementation must
 preserve both the room-trigger selection and the final arena's metadata band;
 treating the arena as visible terrain only loses the terminal handoff.
 
-Room setup also builds a temporary eleven-by-eleven combat/view layout. The
-layout starts from a corridor/room pattern, overlays facing-dependent
-decorative glyphs, then seeds monster/NPC starting positions from room tables
-and random placement. That generated layout is the combat/view input; it is not
-a persistent rewrite of the dungeon cell grid.
+Room setup also builds the temporary combat actor layout from the loaded
+`DUNGEON.CBT` metadata. Party entry is independent of monster placement: a
+room-entry facing seed chooses one metadata row, and party slot `i` receives X
+from that row's column `11 + i` and Y from column `17 + i`. The monster/special
+scan then walks sixteen source slots in order. Source slot `i` reads its source
+byte from row 5 column `11 + i`, X from row 6 column `11 + i`, and Y from row 7
+column `11 + i`. Ordinary source bytes become deterministic setup classes;
+special source bytes become special active-object markers or special-derived
+monster kinds as described in the CBT format spec. There is no separate
+dungeon-room monster-count roll: the scan attempts one placement for each
+nonzero source cell, with only special subtypes adding their own small random
+post-placement choices. That generated actor setup is combat-local; it is not a
+persistent rewrite of the dungeon cell grid.
 
 While building the local room layout, the room painter also updates the
 resident tile-restoration flag used later by the combat framer. A two-way
