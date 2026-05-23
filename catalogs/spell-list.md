@@ -225,14 +225,15 @@ charge or mana.
   whole combat actor table for Tremor damage checks, rolls 1..20 damage per
   accepted actor, and credits returned monster-kill reward units to the
   caster's experience with a 9999 cap. `IZ`/`HIN`/`CGIV`/`FHI` share the
-  directed target-walk effect helper: the shared scan de-duplicates actors
-  and skips empty/status-masked records, but neither the shared scan nor the
-  per-effect branches perform a friend/foe lookup or caster exclusion.
-  `IZ` applies sleep status, `HIN` applies a resistance/random gate before
-  poison status, `CGIV` uses the decimal 99 instant-kill sentinel through the
-  shared damage/status path, and `FHI` rolls raw 1..30 through that same path.
-  The two damage winds credit returned monster-kill reward units to the caster
-  with the normal 9999 experience cap.
+  directed wind-cone helper: the spell prompts for a cardinal direction, builds
+  the widening clipped cone from the caster's adjacent cell, de-duplicates
+  selected cells, and writes up to 63 arena coordinates before scanning actors.
+  Neither the shared scan nor the per-effect branches perform a friend/foe
+  lookup or same-faction exclusion. `IZ` applies sleep status, `HIN` applies a
+  resistance/random gate before poison status, `CGIV` uses the decimal 99
+  instant-kill sentinel through the shared damage/status path, and `FHI` rolls
+  raw 1..30 through that same path. The two damage winds credit returned
+  monster-kill reward units to the caster with the normal 9999 experience cap.
   `IS`/`RT`/`AQW`/`AI` route through the shared active-effect display helper
   with cast-time tag/counter pairs `P`/20, `Q`/30, `C`/20, and `N`/10.
   The `IS` `P` tag adds 3 to party-member combat defense after equipment
@@ -285,11 +286,10 @@ charge or mana.
   the tag on expiry; ordinary clock cleanup only observes `T` to skip minute
   advancement while stopped time is active. Tremor does not run a friend/foe lookup; party actors and
   monsters are eligible alike after the common damageability and resistance
-  gates. The directed target-walk path de-duplicates actors for the
-  current spell pass and skips common empty/status-masked records. Its
+  gates. The directed wind-cone path de-duplicates actors for the current spell
+  pass and skips common empty/status-masked records. Its
   Sleep/Poison Wind/Death Wind/Flame Wind branches also do not perform the
-  friend/foe lookup, do not reject same-faction actors, and do not reject the
-  caster if the caster's cell is in the directed area. Combat field
+  friend/foe lookup or reject same-faction actors. Combat field
   casting maps Fire/Poison/Sleep/Energy to combat field-kind bytes
   `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind and active target
   slot to the arena-field helper rather than the dungeon byte writer. That
