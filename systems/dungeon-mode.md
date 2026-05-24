@@ -670,11 +670,13 @@ scan then walks sixteen source slots in order. Source slot `i` reads its source
 byte from row 5 column `11 + i`, X from row 6 column `11 + i`, and Y from row 7
 column `11 + i`. Ordinary source bytes become deterministic setup classes;
 special source bytes become special active-object markers or special-derived
-monster kinds as described in the CBT format spec. There is no separate
+auxiliary values as described in the CBT format spec. There is no separate
 dungeon-room monster-count roll: the scan attempts one placement for each
 nonzero source cell, with only special subtypes adding their own small random
-post-placement choices. That generated actor setup is combat-local; it is not a
-persistent rewrite of the dungeon cell grid.
+post-placement choices. Special placements remain on the special active-object
+path; this setup helper does not turn them into ordinary monster setup classes.
+That generated actor setup is combat-local; it is not a persistent rewrite of
+the dungeon cell grid.
 
 While building the local room layout, the room painter also updates the
 resident tile-restoration flag used later by the combat framer. A two-way

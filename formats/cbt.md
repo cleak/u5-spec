@@ -132,13 +132,42 @@ bytes are converted as follows:
   select one of four pre-rolled room-special setup ids using the source low two
   bits.
 
-Special setup ids have one additional post-placement rule. Id `1` writes a
-level-derived value, id `2` writes a level-scaled random value, ids `3..15`
-choose a monster kind from a small resident range table, and ids `16` or higher
-receive no post-write from this helper. The final Doom marker is in that last
-category: it is placed as a special active-object family whose masked class is
-the `0x3C` absorbable-field family recognized by the combat post-step hook, not
-as an ordinary monster kind.
+Special setup ids have one additional post-placement rule that writes the
+placed active object's auxiliary byte:
+
+| Setup id | Auxiliary-byte rule |
+|---:|---|
+| `1` | Write `Z * 3 + 7`, where `Z` is the current dungeon level. |
+| `2` | Write `random_range(1, 10 * Z + 10)`. |
+| `3` | Write `random_range(0, 7)`. |
+| `4` | Write `random_range(0, 7)`. |
+| `5` | Write `30 + random_range(0, 3)`. |
+| `6` | Write `4 + random_range(0, 2)`. |
+| `7` | Write `1 + random_range(0, 7)`. |
+| `8` | Write `1 + random_range(0, 7)`. |
+| `9` | Write `random_range(0, 3)`. |
+| `10` | Write `42 + random_range(0, 2)`. |
+| `11` | Write `9 + random_range(0, 5)`. |
+| `12` | Write `45 + random_range(0, 2)`. |
+| `13` | Write `1 + random_range(0, 7)`. |
+| `14` | Write `1`. |
+| `15` | Write `1 + random_range(0, 7)`. |
+| `16+` | No auxiliary-byte post-write in this helper. |
+
+The random-special family `0xEC..0xEF` does not use those source bytes directly
+as setup ids. Before the scan, the helper rolls four setup ids by sampling this
+eight-entry palette with `random_range(0, 7)`: `[20, 21, 22, 34, 33, 24, 31,
+24]`. Source low bits `0..3` select one of those four pre-rolled ids. Those
+palette ids are all in the `16+` category above, so this helper places them as
+special active-object markers and performs no auxiliary-byte post-write for
+them.
+
+The final Doom marker is also in the `16+` category: source `0x3C` is placed as
+a special active-object family whose masked class is the `0x3C`
+absorbable-field family recognized by the combat post-step hook, not as an
+ordinary monster kind. Special placements use the special active-object path;
+this helper does not convert them into ordinary monster setup classes or party
+slot descriptors.
 
 The placement scan runs for stock room-trigger bytes `0xF0..0xFF` in the
 dungeon room-enter path. Runtime `0xA?` room-helper cells use the same arena
