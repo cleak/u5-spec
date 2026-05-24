@@ -485,11 +485,15 @@ a later dispatcher call draws again.
 | Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, charges tax, and queues the pending watercraft placement |
 | Inn flow | Resident innkeeper text and `SHOPPE.DAT` records from the inn record table | Room quote and registry text are deterministic from the current inn and branch | Room, leave-companion, and pickup-companion branches use branch-local prompts and registry screens; failed eligibility checks print resident refusal text and return without a fresh room quote | Rest charges and registry mutations occur only after the corresponding branch validation and accepted payment/selection |
 
-Exact text-window rectangles and cursor origins are still not promoted for the
-full shop family. The traced shop overlays distinguish text-window clears from
-append-style prints, and those clears are captured above where they affect
-dialogue ordering, but pixel/window geometry still needs a caller-specific
-presentation trace before an engine can target frame-identical shop screens.
+The traced ordinary arms, guild, reagent, healer, tavern, sage, meal/provision,
+horse-trader, and shipwright overlay paths do not install shop-local
+text-window rectangles or cursor origins. They render into the active text
+window inherited from the conversation/text system, with the clear/append
+ordering captured above where it affects dialogue behavior. The promoted
+shop-owned geometry exception is the inn multi-guest pickup register in Section
+8.4. Any further exact frame contract for menu/status rectangles must be tied to
+the caller that configured the inherited active window rather than inferred from
+the shop flow itself.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -1121,3 +1125,5 @@ The behaviour described here was derived from the private function and format no
 - `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` -- shared
   preamble, initial-greeting, and farewell random-bark record ordinals by
   shop trigger.
+- `u5-decomp/notes/shoppe_window_geometry_call_sweep_2026-05-24.md` --
+  overlay call sweep for shop-owned text-window rectangle and cursor setters.
