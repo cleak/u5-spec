@@ -729,6 +729,17 @@ guest-selection display can be skipped because there is only one candidate.
 With multiple guests, the inn renders a full-screen "Guest Register" list before
 the player selects the action target.
 
+The multi-guest pickup register uses a fixed text-window presentation. It
+selects text window `1`, sets that window to cell rectangle `(24, 1)..(38, 9)`,
+clears it, then widens the right edge to `(24, 1)..(39, 9)` for the framed
+register. The frame/list renderer uses window-local cursor positions
+`(0, row)` and `(14, row)` for the vertical row borders over rows `1..7`, places
+the register heading at `(1, 1)` and subheading at `(1, 2)`, then prints each
+matching guest line at a row-local cursor derived from the enumerated guest.
+Before the post-register selection and prompt loop, the helper restores active
+text window `2`. These are text-cell coordinates in the fixed 40-by-25 text
+grid, not pixel coordinates.
+
 The main menu accepts three actions:
 
 - `R` (Rest for the night) — the party sleeps in the inn's beds. The world clock
