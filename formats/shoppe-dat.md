@@ -102,7 +102,36 @@ sanctum Cure/Heal treatment lines, and the exit line; the treatment eligibility,
 gold debit, status writes, and HP writes are owned by the shop overlay rather
 than by `SHOPPE.DAT`.
 
-## 7. Consumer Behavior
+## 7. Record Selection And Timing
+
+The shop overlays select records; `SHOPPE.DAT` only stores the text. The public
+contract should therefore treat record selection as caller-owned runtime
+behavior, with these traced shared rules:
+
+| Flow point | Selection rule | Random draw timing |
+|---|---|---|
+| Shared shop noticing bark | Pick one of four records from the current shop-kind row of the noticing-bark table. | One uniform `0..3` draw when the preamble is rendered. |
+| Shared initial greeting | Pick one of four records from the current shop-kind row of the initial-greeting table. | One uniform `0..3` draw when the greeting dispatcher is called in greeting mode. |
+| Shared farewell | Pick one of four records from the current shop-kind row of the farewell table. | One uniform `0..3` draw when the greeting dispatcher is called in farewell mode. |
+| Arms long greeting | Pick one of two resident literal greeting variants, then print the fixed arms prompt literals. | One uniform `0..1` draw during arms entry. |
+| Arms buy affirmation | Pick one of four resident literal affirmation variants before entering the buy menu. | One uniform `0..3` draw only after the player selects Buy. |
+| Arms buy item quote | Select the item-description record from the chosen equipment id; the public mapping is in `systems/shops.md`. | No random draw. |
+| Tavern list | Select the tavern/menu record from the current tavern state; the visible selector table is in `systems/shops.md`. | No random draw for list selection. |
+| Sage fee quote | Render record 84 after a topic row matches. `%` is the row fee. | No random draw. |
+| Sage paid success | Pick one of records 85-88 after confirmation and successful gold debit. `&` is the subject and `*` is the location. | One uniform `0..3` draw after payment only. Refusal and short funds do not consume this draw. |
+| Sage short funds | Render record 91 and exit the sage flow. | No success-template draw. |
+
+The shared `Y`/`N` prompt primitive echoes resident literals rather than
+selecting a `SHOPPE.DAT` record. Individual shop arms may also print resident
+literals before or after a `SHOPPE.DAT` record, so a clean implementation
+should not assume every visible shop line comes from this file.
+
+The exact all-shop live-dialogue record table is not complete in the public
+contract yet. Known record families and the specific sage records above are
+normative; for other shop kinds, `systems/shops.md` owns the currently
+published semantic flow and any per-flow record ids that have been promoted.
+
+## 8. Consumer Behavior
 
 The shop overlays select records by id, expand tokens and substitutions into a
 scratch buffer, and print the result through the text-output system. Different
@@ -119,7 +148,7 @@ shop kinds populate different substitution values before rendering:
 Purchases, sales, inventory updates, karma checks, and inn registry updates are
 not encoded here. `SHOPPE.DAT` only supplies the text those flows display.
 
-## 8. Validation and Error Handling
+## 9. Validation and Error Handling
 
 A reader should validate that every record id requested by the shop system
 resolves to a NUL-terminated record inside the file and that token expansion
@@ -134,7 +163,7 @@ For byte-compatible tooling, preserve unknown high-byte tokens rather than
 guessing English text. For a modern runtime, a missing record should produce a
 clear asset error rather than a partial shop menu.
 
-## 9. Boundaries And Caller Ownership
+## 10. Boundaries And Caller Ownership
 
 The Talk-entry shop dispatcher, shipped shop-trigger values, stock tables,
 pricing, and side effects are documented in `formats/npc.md`,
@@ -146,7 +175,7 @@ families. That is a caller inventory question, not an on-disk format rule:
 records remain sequential NUL-terminated text slots addressed by id regardless
 of which shop flow, if any, selects a given id.
 
-## 10. Sources
+## 11. Sources
 
 This is a cleanroom prose specification derived from:
 
