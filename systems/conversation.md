@@ -89,6 +89,45 @@ Keyword input uses two distinct scans, and they should not be collapsed into one
 
 First, the engine checks a fixed reserved-keyword table that lives outside the `.TLK` files. That table has thirty-four entries. Five are functional conversation words: `NAME`, `JOB`, `WORK`, `BYE`, and `THANK`. The remaining entries are profanity/default rebuke words that route to a chastisement and bounded pause loop. This table is engine-owned vocabulary, not a per-NPC pointer table.
 
+The fixed reserved table is:
+
+| Index | Keyword | Behavior |
+|---:|---|---|
+| 0 | `NAME` | Run the Name entry with the fixed name prefix. |
+| 1 | `JOB` | Run the Job entry. |
+| 2 | `WORK` | Alias for `JOB`. |
+| 3 | `BYE` | Run the Bye entry and exit the conversation. |
+| 4 | `THANK` | Alias for `BYE`. |
+| 5 | `FUCK` | Rebuke branch. |
+| 6 | `SHIT` | Rebuke branch. |
+| 7 | `DAMN` | Rebuke branch. |
+| 8 | `DICK` | Rebuke branch. |
+| 9 | `PRICK` | Rebuke branch. |
+| 10 | `PUSSY` | Rebuke branch. |
+| 11 | `CUNT` | Rebuke branch. |
+| 12 | `ASS` | Rebuke branch. |
+| 13 | `BUTT` | Rebuke branch. |
+| 14 | `BOOGER` | Rebuke branch. |
+| 15 | `PISS` | Rebuke branch. |
+| 16 | `JACK OFF` | Rebuke branch. |
+| 17 | `MASTURBATE` | Rebuke branch. |
+| 18 | `SUCK` | Rebuke branch. |
+| 19 | `FART` | Rebuke branch. |
+| 20 | `TITS` | Rebuke branch. |
+| 21 | `BOOB` | Rebuke branch. |
+| 22 | `MELONS` | Rebuke branch. |
+| 23 | `BLOW` | Rebuke branch. |
+| 24 | `PENIS` | Rebuke branch. |
+| 25 | `BREAST` | Rebuke branch. |
+| 26 | `CLIT` | Rebuke branch. |
+| 27 | `BALLS` | Rebuke branch. |
+| 28 | `SCROTUM` | Rebuke branch. |
+| 29 | `NUTS` | Rebuke branch. |
+| 30 | `BULLSHIT` | Rebuke branch. |
+| 31 | `CUM` | Rebuke branch. |
+| 32 | `CROTCH` | Rebuke branch. |
+| 33 | `MOTHERFUCKER` | Rebuke branch. |
+
 Second, if the fixed table does not handle the input, the engine scans the ordinary keyword/response pairs in the loaded NPC blob. The blob still has five mandatory leading entries (Name, Description, Greeting, Job, Bye), and those entries are reached by fixed ordinal paths when the conversation envelope needs them. Ordinary player keywords begin after those five entries. On match, the engine keeps the matched ordinary keyword index and seeks to that keyword's paired response stream.
 
 `JOIN` and `WHO ART THOU` are not engine-reserved keywords. If an NPC supports a visible `JOIN` topic, it is an ordinary keyword in that NPC's blob. The recruitment and "ask who" mechanics are then driven by control bytes embedded in the response stream.
@@ -103,7 +142,7 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 
 3. **Empty-input shortcut.** If the player pressed Enter on an empty line, the engine prints `BYE\n\n`, runs the NPC's `Bye` entry through the byte runner, and returns to the caller. This is the most common way conversations end.
 
-4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. `NAME` runs the Name entry with the engine's prefix, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below.
+4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, table keywords are compared by their NUL-terminated length, and a match accepts either exact end-of-input or a literal space immediately after the reserved word. `NAME` runs the Name entry with the engine's prefix, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below.
 
 5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword is compared against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
 
@@ -115,13 +154,14 @@ The match is space-boundary prefix matching, not arbitrary prefix matching. An N
 
 The fixed-table profanity/default branch is presentation-confirmed but no
 longer public as a confirmed karma mutator. Matching one of those fixed words
-prints the chastisement, emits the same quote/newline framing used by other
-reserved responses, then runs a bounded pause loop that redraws the world,
-allows an early key-abort path, and calls the same resident timing/presentation
-helper used by ordinary dialogue pause handling after each non-aborted pass.
-The wrapped near-call is not a stats-panel or virtue-standing writer. If
-profanity changes karma in another cleanup path, that producer remains
-untraced.
+prints `With language like that, how did you become an Avatar?`, emits the same
+quote/newline framing used by other reserved responses, then runs a bounded
+pause loop. The loop attempts at most twenty-eight redraw/pause/status passes;
+an early key-abort path runs the same final pause-screen helper and exits the
+loop early. In either case the branch returns to the same keyword prompt rather
+than ending the conversation. The branch does not write a confirmed karma,
+curse, conversation-progress, toll, or quest-state field. If profanity changes
+karma in another cleanup path, that producer remains untraced.
 
 ## 7. The byte runner
 
