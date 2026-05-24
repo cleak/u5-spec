@@ -145,30 +145,38 @@ for that tile remains a tile/LOOK2 reconciliation issue and should not change
 the renderer contract.
 
 The local 32-by-32 overlay renders at a four-pixel cell scale inside the
-message-panel region. Each sampled cell is mapped through a private visual
-class and then through one of the class renderers below. The tile-id ranges are
-the tile catalog ids after active-object/terrain lookup has selected the cell
-to draw.
+message-panel region. A cell anchor is:
 
-| View class | Public visual contract |
-|---:|---|
-| `0` | Empty/pass-through; no cell ornament beyond any surrounding overlay state. |
-| `1` | Sparse corner/checker pattern using the secondary terrain bank. |
-| `2` | Solid four-by-four filled cell using the same secondary terrain bank. |
-| `3` | Filled cell-frame style used by the dispatcher path. |
-| `4` | Two full-width horizontal rails at the top and bottom of the cell. |
-| `5` | Two short centered horizontal bars, forming a tiny central marker. |
-| `6` | Hollow four-edge rectangle. |
-| `8` | Diagonal two-quadrant step pattern using its dedicated terrain bank. |
-| `9` | Hybrid vegetation-style pattern: horizontal strokes plus lower-half blits. |
-| `0xA` | Four-corner room/feature ring whose bank can vary by view mode and cell class. |
-| `0xB` | Two diagonal blits whose bank changes under peer/gem-view mode. |
-| `0xC` | Table-mapped no-op/default class for tile id `0x01`; it falls through without a dedicated renderer. |
-| `0xD` | Creature-on-terrain composite: fixed active-object layer over a modal background layer. |
-| `0xE` | Vertical two-line wall/door presentation. |
-| `0xF` | Peer-spell/gem-view variant using the alternate tile bank. |
-| `0x10` | Fence/wall renderer: four edge bits select top/right/bottom/left strokes, with small orientation markers for selected creature-facing tile ids. |
-| `0x5A` | Water/wall bank-D path combined with the ordinary cell frame. No shipped tile-id entry in the traced table maps here; preserve the handler for compatibility with direct or variant callers. |
+```text
+anchor_x = 32 + column * 4
+anchor_y = 32 + row * 4
+```
+
+Each sampled cell is mapped through a private visual class and then through one
+of the class renderers below. The tile-id ranges are the tile catalog ids after
+active-object/terrain lookup has selected the cell to draw. Coordinates in the
+renderer table are relative to the cell anchor and use `(x,y)` order.
+
+| View class | Source family | Clean pixel/stroke contract |
+|---:|---|---|
+| `0` | none | No-op; leaves the cell unornamented. |
+| `1` | secondary terrain bank | Four 8-by-8 micro-blits rooted at `(1,0)`, `(1,2)`, `(3,1)`, `(3,3)`, forming the sparse checker/corner pattern. |
+| `2` | secondary terrain bank | Filled rectangle from `(0,0)` through `(3,3)`. |
+| `3` | frame-fill bank | Filled rectangle from `(0,0)` through `(3,3)`. This uses the frame-fill source family rather than the class-2 terrain source. |
+| `4` | frame-line bank | Horizontal line `(0,0)..(3,0)` and horizontal line `(0,3)..(3,3)`. |
+| `5` | frame-line bank | Horizontal line `(1,1)..(2,1)` and horizontal line `(1,2)..(2,2)`, forming a centered two-by-two marker. |
+| `6` | frame-line bank | Hollow rectangle: top `(0,0)..(3,0)`, bottom `(0,3)..(3,3)`, left `(0,1)..(0,2)`, right `(3,1)..(3,2)`. |
+| `7` | frame-line bank | Direct frame-chain variant. It selects the same frame-line source family used by class `0x5A`, then draws the ordinary filled cell frame. |
+| `8` | dedicated rough-terrain bank | Upper-left two-by-two block plus lower-right two-by-two block: `(0,0)..(1,0)`, `(0,1)..(1,1)`, `(2,2)..(3,2)`, `(2,3)..(3,3)`. |
+| `9` | secondary terrain bank | Hybrid pattern: horizontal line `(0,0)..(3,0)`, horizontal line `(0,2)..(3,2)`, plus two lower-half micro-blits rooted at `(1,2)` and `(0,3)`. |
+| `0xA` | modal terrain banks | Four-corner/ring renderer rooted at `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)`. Source selection is per corner and may switch among normal, secondary, and peer/blue families according to the view-mode flag and the cell's low-nibble class. |
+| `0xB` | modal terrain banks | Two diagonal micro-blits rooted at `(0,0)` and `(2,2)`. Normal and peer/gem-view modes select different source families. |
+| `0xC` | none | Table-mapped no-op/default class for tile id `0x01`; it falls through without a dedicated renderer. |
+| `0xD` | fixed plus modal terrain banks | Four micro-blits. The top pair `(1,0)` and `(3,1)` always use the fixed secondary terrain source; the bottom pair `(0,2)` and `(2,3)` use the modal normal/peer source. |
+| `0xE` | frame-line bank | Vertical line `(1,0)..(1,3)` and vertical line `(2,0)..(2,3)`. |
+| `0xF` | normal terrain bank | Direct peer/gem-view variant using the normal terrain source with the ordinary cell-frame chain. |
+| `0x10` | frame-fill and frame-line banks | Fence/wall renderer. It first paints a center fill `(1,1)..(2,2)`. Edge bits then add top `(1,0)..(2,0)`, right `(3,1)..(3,2)`, bottom `(1,3)..(2,3)`, and left `(0,1)..(0,2)`. Tile ids `0x22..0x25` add one interior orientation marker at `(1,2)`, `(1,1)`, `(2,1)`, or `(2,2)` respectively. |
+| `0x5A` | frame-line bank | Compatibility/direct-call class. It uses the same source family and filled-cell frame chain as class `7`; no shipped tile-id table entry maps here. |
 
 The resident view-class table maps tile ids to these classes as compact ranges:
 
@@ -195,6 +203,27 @@ The resident view-class table maps tile ids to these classes as compact ranges:
 Classes that switch banks under peer/gem-view mode affect presentation only.
 They do not change terrain, active objects, or visibility state.
 
+The source-family names above are public renderer roles, not raw asset
+addresses. The renderer uses these families consistently:
+
+| Source family | Used by |
+|---|---|
+| Frame fill | Class `3`, the center fill in class `0x10`, and the full-map party marker layer. |
+| Frame line / structure outline | Classes `4`, `5`, `6`, `7`, `0xE`, and compatibility class `0x5A`. |
+| Normal terrain | Class `0xF` and the normal-mode branches of `0xA`, `0xB`, and `0xD`. |
+| Secondary terrain | Classes `1`, `2`, `9`, the fixed top layer of class `0xD`, and one class-`0xA` branch. |
+| Peer/blue terrain | Peer/gem-view branches of classes `0xA`, `0xB`, and `0xD`. |
+| Dedicated rough terrain | Class `8` only. |
+
+The full Britannia chunk-map renderer is a separate overlay from the local
+32-by-32 view. Its base chunk-cell painter uses the world-map glyph family,
+places each shorthand cell on an eight-pixel grid, then overlays the party
+marker from the frame-fill family after the base glyph. The marker is clipped
+against the visible strip and is composed as a small crosshair/diamond-shaped
+highlight. The map is eight rows by twenty-two columns, wraps at the world
+edges as it walks the chunk index, prints the day/night flavour line after
+painting, then busy-waits until any key is available.
+
 ## 5. Dungeon Look
 
 DNGLOOK's `L` path describes the dungeon cell in front of the party. It:
@@ -220,16 +249,19 @@ record, reveal secret doors, or enter combat.
 In a dungeon, `V` View spends one gem in the resident dispatcher and then enters
 DNGLOOK's minimap renderer. The renderer:
 
-- clears the side panel used by the first-person dungeon view;
+- clears the side panel used by the first-person dungeon view, covering the
+  rectangle from `(8,8)` through `(183,183)`;
 - initializes a temporary unrevealed/visited grid and queue;
 - seeds the queue at the party's current cell;
-- flood-walks up to eight neighbours per visited cell;
+- flood-walks up to eight neighbours per visited cell in this order:
+  northwest, north, northeast, west, east, southwest, south, southeast;
 - converts each accepted scratch coordinate back to the current dungeon level's
   wrapped eight-by-eight cell coordinates;
 - paints each visible cell by dungeon class;
 - stops expansion only on dungeon minimap wall presentation classes;
 - waits for a keypress or poll result;
-- clears the minimap and restores the first-person dungeon renderer.
+- clears the same side-panel rectangle and restores the first-person dungeon
+  renderer.
 
 When the magic peer-view flag is active, the renderer applies the same
 alternate/tinted tile-source branch used by the peer spell. This affects
@@ -249,6 +281,15 @@ class-to-glyph and flood-return table lives in `systems/dungeon-mode.md`; in
 short, `0xB?`, `0xC?`, and `0xD?` wall presentation classes stop expansion,
 while heavy-door/room-trigger classes still paint a door glyph and allow the
 minimap flood to continue.
+
+The dungeon minimap is also source-family based rather than raw-pixel-table
+based. Passage, ladder, chest, pit, door, and wall classes emit the glyph ids
+specified in `systems/dungeon-mode.md`. Fountain cells paint a two-by-three
+multi-cell icon rooted at the mapped cell. The `0x8?` stair/field helper paints
+stacked horizontal rules through the upper part of the minimap cell using the
+dungeon minimap source families. Peer-view mode changes the source family for
+the magic-vision tint branches only; it does not change the flood queue, visited
+grid, or dungeon bytes.
 
 ## 7. Data Ownership
 
@@ -270,10 +311,11 @@ overlays, dungeon look descriptions, and dungeon minimap flood behavior are
 fixed. Remaining work is visual cataloging and pixel-level parity, not command
 state or persistence behavior.
 
-- **Exact pixel layout.** The major overlay shapes and visual-class routing are
-  known, but pixel-perfect surface/town V-View parity still needs empirical
-  screenshot confirmation for per-class glyph placement, source-bank selection,
-  border restoration timing, and a few modal palette variants.
+- **Exact visual QA.** The clean per-class pixel/stroke placement, source
+  family selection, dungeon flood order, and overlay clear/restore rectangles
+  are specified above. Remaining visual parity work is empirical screenshot QA
+  against DOS output and catalog naming for source-family palettes, not unknown
+  gameplay or renderer control flow.
 - **Tile special cases.** Tile id `0x59` is the traced ordinary-Look trigger
   for the full Britannia map renderer. Its final in-world catalog label still
   needs reconciliation with the tile catalog and `LOOK2.DAT` description.
