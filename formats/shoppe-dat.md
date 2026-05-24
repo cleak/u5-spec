@@ -126,10 +126,12 @@ selecting a `SHOPPE.DAT` record. Individual shop arms may also print resident
 literals before or after a `SHOPPE.DAT` record, so a clean implementation
 should not assume every visible shop line comes from this file.
 
-The exact all-shop live-dialogue record table is not complete in the public
-contract yet. Known record families and the specific sage records above are
-normative; for other shop kinds, `systems/shops.md` owns the currently
-published semantic flow and any per-flow record ids that have been promoted.
+The shared preamble, initial-greeting, and farewell random-bark rows now have
+public record-id tables in `systems/shops.md`. The exact all-shop
+live-dialogue table is still not complete in the public contract; known record
+families, the shared random-bark rows, and the specific sage records above are
+normative, while `systems/shops.md` owns any further per-flow record ids that
+have been promoted.
 
 ## 8. Consumer Behavior
 

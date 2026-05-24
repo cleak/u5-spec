@@ -446,10 +446,24 @@ Shop dialogue draws from two kinds of text source:
 
 The renderer accepts a record-start selector. For records whose ordinal ids are
 listed in this document, implementations may treat the selector as that
-published ordinal. For shared random-bark tables whose individual record
-ordinals are not yet listed here, the contract is the timing and random range:
-the game selects one entry from the current shop-kind row at the moment the
-flow point is rendered.
+published ordinal. Shared random-bark rows are selected by the normalized shop
+trigger byte: `.NPC` dialog byte `0x81` uses row `0`, `0x82` uses row `1`, and
+so on through `0x88` row `7`. Each visible shared row selection draws one
+uniform ordinal `0..3` at the moment that flow point is rendered. The selected
+ordinal is not retained in shared state; a caller that re-polls input without
+recalling the bark dispatcher reuses the visible text already on screen, while
+a later dispatcher call draws again.
+
+| Shop trigger / role | Shared preamble records | Initial-greeting records | Farewell records |
+|---|---|---|---|
+| `0x81` Weaponsmith / armourer | Not used by the ordinary arms entry path | `0, 1, 2, 3` | `4, 5, 6, 7` |
+| `0x82` Tavern / meal counter / sage | `57, 58, 59, 60` | `61, 62, 63, 64` | `65, 66, 67, 68` |
+| `0x83` Horse trader | `92, 93, 94, 95` | `96, 97, 98, 99` | `100, 101, 102, 103` |
+| `0x84` Ship broker / shipwright | `105, 106, 107, 108` | `109, 110, 111, 112` | `113, 114, 115, 116` |
+| `0x85` Herbalist | `127, 128, 129, 130` | `131, 132, 133, 134` | `135, 136, 137, 138` |
+| `0x86` Guildmaster | `148, 149, 150, 151` | `152, 153, 154, 155` | `156, 157, 158, 159` |
+| `0x87` Healer / sanctum | `165, 166, 167, 168` | `169, 170, 171, 172` | `169, 170, 171, 172` |
+| `0x88` Innkeeper | `174, 175, 176, 177` | `178, 179, 180, 181` | `182, 183, 184, 185` |
 
 | Flow point | Text source | Selection timing | Wait, clear, and retry behavior | State effects |
 |---|---|---|---|---|
@@ -471,11 +485,11 @@ flow point is rendered.
 | Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, charges tax, and queues the pending watercraft placement |
 | Inn flow | Resident innkeeper text and `SHOPPE.DAT` records from the inn record table | Room quote and registry text are deterministic from the current inn and branch | Room, leave-companion, and pickup-companion branches use branch-local prompts and registry screens; failed eligibility checks print resident refusal text and return without a fresh room quote | Rest charges and registry mutations occur only after the corresponding branch validation and accepted payment/selection |
 
-Exact text-window rectangles and cursor origins are not yet part of this clean
-contract. The traced shop overlays do distinguish text-window clears from
+Exact text-window rectangles and cursor origins are still not promoted for the
+full shop family. The traced shop overlays distinguish text-window clears from
 append-style prints, and those clears are captured above where they affect
-dialogue ordering, but pixel/window geometry still needs a separate clean
-presentation contract before an engine can target frame-identical shop screens.
+dialogue ordering, but pixel/window geometry still needs a caller-specific
+presentation trace before an engine can target frame-identical shop screens.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -1093,3 +1107,6 @@ The behaviour described here was derived from the private function and format no
 - `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md` and direct
   `SHOPPE.DAT` record inspection -- Frigate/Skiff labels, boardable ship/skiff
   families, and ship hull/skiff-count auxiliary semantics.
+- `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` -- shared
+  preamble, initial-greeting, and farewell random-bark record ordinals by
+  shop trigger.
