@@ -301,7 +301,12 @@ quest bit for an ordained virtue.
 
 **Town and dungeon entrances.** Entering on a fixed entrance coordinate sets the scene byte and dispatches the town-mode or dungeon-mode setup. The trigger is recognised by the resident world-location table, not by tile id alone; rows 0..31 select town-mode scenes and rows 32..39 select dungeon scenes.
 
-**Waterfalls.** Specific water-tile variants drive a "you are swept downstream" handler that moves the party several cells in the waterfall's direction.
+**Water/current effects.** The traced overworld contract does not publish a
+general player-facing waterfall/current sweep. Treat water-like terrain as
+ordinary transport-specific passability unless a mode spec names a concrete
+handler. The currently promoted outdoor forced-water transition is the
+whirlpool active-object engagement in `systems/overworld.md`; the fixed
+surface falls/chasm is coordinate-triggered, not a water-tile sweep.
 
 **Ladders / staircases.** In town mode, facing-sensitive stairway tiles are the `0xC4..0xC7` family. The low two bits are a facing selector in the town movement wrapper's normalized direction space: entering along that facing goes up one floor, entering from the opposite facing goes down one floor, and side crossings leave the current floor unchanged. K-Klimb ladders and trapdoors use the same floor-reload machinery after their own underfoot command checks. In dungeon mode, ladders are encoded in the tile byte's high nibble and handled by the dungeon turn loop's K-Klimb branch.
 

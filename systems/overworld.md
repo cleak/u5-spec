@@ -210,6 +210,20 @@ A small set of tile classes triggers special handling in the per-turn block, rec
   underworld plane. This is an active-object engagement effect, not a dungeon
   or town scene-entry route.
 
+- **Water and current-like movement.** The traced overworld loop does not
+  publish a general player-facing waterfall/current sweep that repeatedly
+  pushes the party or vessel through a coordinate row. Water movement is
+  ordinary one-cell movement through the transport-specific terrain predicates
+  in `systems/movement.md`, plus the active-object effects listed below.
+
+  | Trigger family | Trigger source | Movement / transition effect | Transport handling | Damage, messages, and persistence |
+  |---|---|---|---|---|
+  | Ordinary water travel | Player directional movement into a destination cell accepted by the current transport predicate | One committed cardinal step; no sweep, queue, or multi-cell current is installed | Ships accept the deep-water/water predicate; skiffs use the facing-sensitive skiff predicate; foot and horse reject ordinary water through their predicates; carpets use their own carpet predicate; balloon has no promoted live transport path | Normal consumed-turn timing only; no drowning roll or queued forced-movement state |
+  | Pre-loop `0xFF` underfoot state | The tile under the party is the special all-ones tile and the exemption state is not active | Suppresses the next movement commit while forcing the cached light/radius to zero | Applies to the mode loop state rather than to a vehicle family | No damage, no status change, and no scene/plane transition; clearing the state recomputes light with a zero-minute cleanup |
+  | Surface chasm/falls | Britannia coordinate `(54, 138)` | Prints the falls presentation, switches the world plane to the underworld value, and reloads the destination plane/object state | Vehicle marker is saved across the presentation and restored before the plane swap completes | Each non-dead party member is checked once during the fall presentation and may take 1 HP damage through the normal party-damage helper. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, party HP/status, and active-object table |
+  | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | On-foot state is a no-op defensive branch. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached | No drowning damage is applied by the whirlpool branch. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
+  | Water-creature / pirate active-object movement | Outdoor active-object slots in the water-creature/pirate frame family | Active objects move one cardinal cell when their cadence and validation allow it; they do not push the player along a current row | This is actor movement, not player transport. Wind cadence controls ship-like water-creature movement; ordinary player ship/skiff movement remains command-driven | May print the attack line or enter the ordinary engagement/combat path when adjacency/collision rules fire; it does not install a water-current sweep |
+
 - **Other plane-transition routes.** Current writer sweeps identify no
   additional outdoor plane writer beyond the traced falls, whirlpool, and
   interior-exit cases. Treat any future route as a new writer requiring its own
@@ -222,6 +236,21 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 - **Wells, springs, caves.** Smaller tile classes with their own minor handlers — give a hint, restore a small amount of MP, drop a chest.
 
 The order in which the per-turn block tests these classes matters for correctness. The handlers themselves are mostly thin: some set the scene byte and let the mode loop exit, some swap the world plane, and others run a small interactive flow before returning to the same cell.
+
+The precedence relevant to water/current parity is:
+
+1. Natural moongate live-tile entry is checked before ordinary input dispatch.
+2. A successful movement/action must consume a turn before the post-action
+   special-tile pass runs.
+3. The post-action pass handles fixed coordinate/tile effects such as the
+   surface chasm/falls, narrative gate, camp/well checks, status helper, and
+   active-object epilogue in the order described by the mode loop.
+4. Active-object whirlpool transition is not an underfoot terrain effect. It
+   runs from the active-object animator's adjacent-engagement path after the
+   per-turn block reaches the active-object epilogue.
+
+There is no separate save-backed "current in progress" state. Effects above
+finish synchronously inside the consumed turn that reaches them.
 
 ## 9. Moongates
 
