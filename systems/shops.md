@@ -819,12 +819,16 @@ with a topic are rejected. On no match, the sage replies "That, I cannot help
 thee with." and the keyword input is re-prompted.
 
 Every topic carries a gold fee, a subject string, and a destination selector.
-When a topic matches, the sage quotes the fee and asks for confirmation. If the
-party cannot pay, the sage refuses with a paying-customers bark and no rumour
-is given. If the player confirms and has enough gold, the fee is deducted, the
-topic's subject fills the `&` substitution, the selected destination fills the
-`*` substitution, and one of the four shared success templates is selected at
-random from SHOPPE.DAT records 85-88.
+When a topic matches, the sage renders SHOPPE.DAT record 84 to quote the fee
+and ask for confirmation; the `%` placeholder is the row fee. If the player
+refuses, the sage exits. If the player accepts but the party cannot pay, the
+sage renders SHOPPE.DAT record 91, the paying-customers refusal, and exits
+without giving a rumour. If the player confirms and has enough gold, the fee is
+deducted, the topic's subject fills the `&` substitution, the selected
+destination fills the `*` substitution, and one of the four shared success
+templates is selected at random from SHOPPE.DAT records 85-88. The
+success-template draw is reached only after confirmation and successful payment;
+refusal and short-funds exits do not consume that draw.
 
 The same topic table is used by the traced sage flow. There is no per-sage
 16-row rumour table. The tavern/menu state only controls which visible action

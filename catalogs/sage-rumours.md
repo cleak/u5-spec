@@ -13,12 +13,14 @@ below. Each topic key is a four-letter keyword. The key must either consume the
 whole input or be followed by a space; longer words that merely start with the
 four-letter key do not match.
 
-On a match, the sage quotes the row's fee. If the player refuses, the shop
-exits. If the player accepts but lacks enough gold, the sage prints the
-paying-customers refusal and exits. If the player accepts and can pay, the fee
-is deducted, the row subject fills the `&` placeholder, the row location fills
-the `*` placeholder, and one of the four shared success templates is selected
-randomly.
+On a match, the sage quotes the row's fee with SHOPPE.DAT record 84. If the
+player refuses, the shop exits. If the player accepts but lacks enough gold, the
+sage renders SHOPPE.DAT record 91, the paying-customers refusal, and exits. If
+the player accepts and can pay, the fee is deducted, the row subject fills the
+`&` placeholder, the row location fills the `*` placeholder, and one of the four
+shared success templates is selected randomly. The success-template random draw
+happens only after confirmation and a successful gold debit; refusal and
+short-funds exits do not consume a success-template draw.
 
 The same 26-row table is shared by the sage flow. There is no per-sage
 16-entry rumour table in the traced handler. Tavern/menu state only selects the
@@ -56,11 +58,20 @@ letter. The sage letter is also a continuation action: pressing it before a
 prior accepted tavern branch has put the menu into its continuation state does
 not enter the keyword prompt.
 
-## 3. Success Templates
+## 3. SHOPPE.DAT Records
 
 The original selector table stores SHOPPE.DAT record starts; the ordinal record
 ids below are the equivalent sequential record numbers used by the public
 SHOPPE.DAT catalog.
+
+Fixed sage records:
+
+| Record | Template meaning |
+|---:|---|
+| 84 | Fee quote and confirmation prompt. The `%` placeholder is the matched row fee. |
+| 91 | Insufficient-gold / paying-customers refusal. This branch exits the sage flow. |
+
+Paid-success records:
 
 | Record | Template meaning |
 |---:|---|
