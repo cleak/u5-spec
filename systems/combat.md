@@ -543,9 +543,18 @@ A side path — controlled by special-combat state bits — runs a **post-step e
 Combat field casting itself enters a shared arena-field helper that separates
 marker placement from contact/application before any per-field result is
 applied. The CAST field-kind table maps Fire/Poison/Sleep/Energy to
-`0x35`/`0x33`/`0x34`/`0x36` for this path. Placement requires a confirmed
-in-arena impact cell, but there is no Fire/Sleep/Energy random acceptance gate
-for marker materialization. Once impact resolution confirms the cell, the
+`0x35`/`0x33`/`0x34`/`0x36` for this path. Player C-Cast field targeting uses
+the combat arena cursor, followed by the ordinary projectile/impact resolver;
+it is not an adjacent-direction prompt. The cursor is bounded to the
+eleven-by-eleven arena and the spell's range. Invalid cursor moves are ignored
+rather than clipped or wrapped, and the cursor stage does not reject blocked
+terrain, occupied cells, or empty cells. Escape cancels after C-Cast has spent
+the premixed charge and mana, but before spell sound, coordinate lookup,
+projectile/impact resolution, or marker placement.
+
+After cursor confirmation, placement requires a confirmed impact cell from the
+projectile/geometry helper, but there is no Fire/Sleep/Energy random acceptance
+gate for marker materialization. Once impact resolution confirms the cell, the
 field-kind switch places the matching active-object marker in the temporary
 combat table without creating a paired combat-effect descriptor. The helper also
 scans slots in ascending order and returns the first descriptor at the selected

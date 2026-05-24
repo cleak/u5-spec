@@ -295,15 +295,20 @@ charge or mana.
   friend/foe lookup or reject same-faction actors. Combat field
   casting maps Fire/Poison/Sleep/Energy to combat field-kind bytes
   `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind and active target
-  slot to the arena-field helper rather than the dungeon byte writer. That
-  helper splits placement from field-contact/application work. Placement uses
-  active-object field markers in the temporary combat table once target
-  selection and impact resolution confirm an in-arena cell. The coordinate
-  lookup scans slots low-to-high for the first selected-coordinate descriptor
-  with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked
-  active-object tile byte `0xF4`; that lookup reports the immediate
-  hit/contact target and does not gate marker materialization. Fire, Poison,
-  Sleep, and Energy have no extra random placement gate. Contact is bounded to
+  slot to the arena-field helper rather than the dungeon byte writer. Player
+  combat C-Cast uses the arena cursor followed by the ordinary
+  projectile/impact resolver, not an adjacent direction prompt. Cursor moves
+  outside the eleven-by-eleven arena or beyond range are ignored; Escape
+  cancels after charge and mana debit but before spell sound, coordinate
+  lookup, impact resolution, or marker placement. The helper splits placement
+  from field-contact/application work. Placement uses active-object field
+  markers in the temporary combat table once impact resolution confirms an
+  in-arena cell. The coordinate lookup scans slots low-to-high for the first
+  selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or
+  `0x04`, and without linked active-object tile byte `0xF4`; that lookup
+  reports the immediate hit/contact target and does not gate marker
+  materialization. Fire, Poison, Sleep, and Energy have no extra random
+  placement gate. Contact is bounded to
   the post-step effect hook that runs after a
   successful step-or-attack commits its new coordinate, then matches marker
   coordinates against that actor. The contact scan skips the current active
