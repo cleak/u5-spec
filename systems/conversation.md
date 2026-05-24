@@ -377,6 +377,14 @@ The conversation engine touches several other systems through narrow, well-defin
 
 **Text output.** Every emission goes through the wrap-aware string printer described in `text-output.md`. The conversation overlay neither reaches around the print system nor maintains a parallel renderer. The active window is the main text window at conversation entry; some stub messages and prompts may switch windows briefly. Word-wrap behaviour, colour, and style flags are owned by the text-output system.
 
+When Talk resolves a shopkeeper, the shop dispatcher inherits this same
+conversation-owned output state instead of configuring a new shop window. The
+ordinary shop entry path preserves active window selector `2` and whatever
+cursor the main text descriptor has at the moment of dispatch, after the shared
+Talk entry newline has been emitted. Shop-specific clear, append, or side-panel
+behaviour is therefore owned by the selected shop flow, not by a separate
+conversation-to-shop window setup layer.
+
 **Free-text input.** The keyword prompt and the ASK-PARTY-NAME / ASK-WHO prompts use the free-text input variant described in `input.md`. The engine clears the buffer-flush gate on entry to allow type-ahead and restores it on exit. The fifteen-character cap is the engine's invariant; the input pipeline itself does not know about it.
 
 **Single-keystroke input.** The PAUSE and WAIT-KEY codes use the single-keystroke "wait for the next command" routine — the same one that drives the per-mode loops — but in *prompt mode*, with the prompt-character byte set so that the world tick is suppressed. Time does not pass while the player is reading.

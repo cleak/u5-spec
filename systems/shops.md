@@ -495,6 +495,27 @@ shop-owned geometry exception is the inn multi-guest pickup register in Section
 the caller that configured the inherited active window rather than inferred from
 the shop flow itself.
 
+For the ordinary Talk-to-shop entry path, the inherited caller-owned state is:
+active text window selector `2`, the main text-window descriptor configured by
+the surrounding scene UI, and that descriptor's current cursor. The Talk shop
+dispatcher does not reset the selector, rectangle, cursor, colour, or style
+before it calls the selected shop arm. It first emits the same conversation
+entry newline used for all Talk dispatches, resolves the shop trigger, and then
+hands control to the shop overlay. As a result, ordinary arms, guild, reagent,
+healer, tavern/sage/meal, horse-trader, and shipwright output begins in the
+conversation-owned main window unless the specific flow later clears or moves
+within that inherited window.
+
+The inherited state is shared by the normal facing-tile Talk path and the
+counter/talk-through fallback; the fallback changes only which NPC is resolved.
+No separate direct-tile shop trigger has been traced outside Talk dispatch.
+Short-funds refusals, counter-cap refusals, post-purchase redraws, and
+`SHOPPE.DAT`-missing fallback handling are inside shop or resource paths after
+the same inherited entry state has already been established. The inn
+multi-guest pickup register remains the promoted exception: it temporarily
+selects window `1` for the register side panel and restores window `2` before
+returning to its ordinary prompt path.
+
 ### 8.0 Scene-byte to shop-instance row mapping
 
 Every Talk-triggered shop kind resolves its per-location row through the active scene byte (`SAVED.GAM 0x02ED`) by indexing a per-kind scene-byte lookup table in the resident shop-data region. The eight per-kind tables, in their full byte-traced form, are:

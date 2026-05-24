@@ -182,6 +182,13 @@ not add dithering, blending, recolouring, or gameplay-time advancement. This
 step-1 contract does not define bounds or rates for any other intro or endgame
 caller.
 
+The start/menu-screen loader has its own caller contract. After `STARTSC` has
+been drawn, callers that request the animated loader path reveal the inclusive
+upper-screen rectangle `(0, 0)..(319, 100)` from left to right using the same
+one-column-per-title-tick helper. This is a title/menu-screen effect, not a
+story-slide effect. Input is sampled after the reveal, so the reveal itself is
+blocking once started.
+
 The Return-to-View preview is another intro-local display sequence. Its map
 strips and command stream live in `MISCMAPS.DAT`; the display layer only sees
 the resulting tile draws, preview actors, rectangle operations, waits, and frame

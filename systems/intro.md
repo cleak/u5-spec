@@ -309,6 +309,19 @@ transition table. If later evidence identifies additional story-page callers of
 the same rectangle helper, specify their bounds and rates per caller instead of
 inheriting the step-1 bounds by default.
 
+The start/menu-screen loader's separate rectangle use is optional and
+caller-selected. It first loads and directly draws the `STARTSC` art, then, only
+when the caller requests the animated path, reveals the inclusive pixel
+rectangle `(0, 0)..(319, 100)` with the same left-to-right, one-pixel-column per
+title-tick helper used by story step 1. Unrevealed columns retain the prior
+screen contents until their column is copied. The loader polls input only after
+this rectangle pass has completed; that poll can affect the following
+start-screen prompt/continuation path, but it does not interrupt the reveal
+itself. The traced call sites are the initial title/menu load and the menu
+re-entry tails after acknowledgements, the `U` story slide loop, and the
+credits/return path; only a nonzero loader argument enables the rectangle
+reveal.
+
 The slide loop does not mutate gameplay state, does not create a save, and does not select a gameplay scene. Its only persistent effect is that, when it returns, the intro reloads or redraws the start/menu view so the six-option menu can continue.
 
 The screen-panel asset container is specified in `formats/tiles.md`. The proportional text output contract is described in `text-output.md`, and the story text file is specified in `formats/story-dat.md`.

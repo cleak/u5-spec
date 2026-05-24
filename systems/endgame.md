@@ -244,6 +244,14 @@ its target before advancing to the next scripted actor or message beat.
 
 The display effects are palette/display operations and full-screen rectangle transitions driven by resident helpers. The exact helper names are implementation details. The compatibility requirement is the order and blocking nature of the presentation: messages pause, movement settles before the next beat, and the final certificate is reached only after the fade/transition sequence completes.
 
+The late orb/certificate path includes one traced full-screen rectangle
+operation after the pulse/fade and panel-transition sequence and before the
+certificate setup. Its bounds are the full inclusive 320-by-200 surface:
+`(0, 0)..(319, 199)`. The immediate caller does not sample input around that
+operation. Current evidence is sufficient to preserve its ordering and
+full-screen bounds, but not to model it as the intro-style column reveal or to
+assign a per-column tick cadence.
+
 ## 8. Final narrative presentation
 
 Immediately before the final scroll, the endgame runs a fixed narrative
@@ -283,9 +291,11 @@ The exact page-in transition rectangles and reveal rates for the six fixed
 current endgame entry trace does not expose a six-per-window page-in rectangle
 table. The traced endgame entry surface identifies one full-screen rectangle
 operation in the late orb/certificate transition path, but that is not evidence
-for six distinct `END.DAT` page wipes. Do not inherit the intro step-1 rectangle
-or one-column-per-title-tick rate for these endgame windows unless a
-caller-specific trace supplies the endgame bounds and rate.
+for six distinct `END.DAT` page wipes, and that full-screen operation belongs
+after the final transition sequence rather than to the ordinary fixed-window
+narrative helper. Do not inherit the intro step-1 rectangle or
+one-column-per-title-tick rate for these endgame windows unless a caller-specific
+trace supplies the endgame bounds and rate.
 
 ## 9. Certificate scroll
 
