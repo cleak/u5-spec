@@ -268,9 +268,11 @@ handler.
 
 **Falls.** The traced surface chasm trigger is the fixed Britannia coordinate
 `(54, 138)`. Stepping onto that falls cell triggers the
-fall-into-the-underworld handler — print a banner, apply random fall damage,
-swap the world plane, re-initialise the active-object table. Any additional
-plane-transition sources remain with the overworld transition inventory.
+fall-into-the-underworld handler: print a banner, run the Dexterity-gated
+one-point damage check described in `systems/overworld.md`, restore the
+pre-fall transport marker after the presentation clear, swap the world plane,
+and re-initialise the active-object table. Any additional plane-transition
+sources remain with the overworld transition inventory.
 
 **Outdoor ascents.** The public spec does not yet publish a traced set of underworld-to-surface outdoor ascent tiles. Preserve candidate special tiles as tile identities, but do not assign an ascent contract until the overworld transition inventory is traced.
 
@@ -307,6 +309,8 @@ ordinary transport-specific passability unless a mode spec names a concrete
 handler. The currently promoted outdoor forced-water transition is the
 whirlpool active-object engagement in `systems/overworld.md`; the fixed
 surface falls/chasm is coordinate-triggered, not a water-tile sweep.
+
+No `world_waterfalls.tsv` runtime sidecar is part of the promoted baseline.
 
 **Ladders / staircases.** In town mode, facing-sensitive stairway tiles are the `0xC4..0xC7` family. The low two bits are a facing selector in the town movement wrapper's normalized direction space: entering along that facing goes up one floor, entering from the opposite facing goes down one floor, and side crossings leave the current floor unchanged. K-Klimb ladders and trapdoors use the same floor-reload machinery after their own underfoot command checks. In dungeon mode, ladders are encoded in the tile byte's high nibble and handled by the dungeon turn loop's K-Klimb branch.
 

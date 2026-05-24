@@ -20,7 +20,7 @@ Britannia and the Underworld are the two values the *world plane* selects betwee
 The player crosses between planes through traced plane writers and unresolved
 transition candidates:
 
-- **Falling.** The traced falls handler has a confirmed fixed trigger at Britannia coordinate `(54, 138)`. When the party steps onto that chasm cell, the handler prints a falls banner and an underworld-transition line, applies a random fall-damage roll to each conscious party member, swaps the world plane to the underworld value, and re-initialises the active-object table for the new plane. The coordinate is hard-wired and fixed across all playthroughs.
+- **Falling.** The traced falls handler has a confirmed fixed trigger at Britannia coordinate `(54, 138)`. When the party steps onto that chasm cell, the handler prints a falls banner and an underworld-transition line, applies the Dexterity-gated fall-damage check described in Section 8 to each non-dead party member, restores the pre-fall transport marker after the presentation clear, swaps the world plane to the underworld value, and re-initialises the active-object table for the new plane. The coordinate is hard-wired and fixed across all playthroughs.
 
 - **Whirlpool forced-underworld transition.** Outdoor whirlpool active objects
   are another traced surface-to-underworld writer. When the adjacent-engagement
@@ -220,7 +220,7 @@ A small set of tile classes triggers special handling in the per-turn block, rec
   |---|---|---|---|---|
   | Ordinary water travel | Player directional movement into a destination cell accepted by the current transport predicate | One committed cardinal step; no sweep, queue, or multi-cell current is installed | Ships accept the deep-water/water predicate; skiffs use the facing-sensitive skiff predicate; foot and horse reject ordinary water through their predicates; carpets use their own carpet predicate; balloon has no promoted live transport path | Normal consumed-turn timing only; no drowning roll or queued forced-movement state |
   | Pre-loop `0xFF` underfoot state | The tile under the party is the special all-ones tile and the exemption state is not active | Suppresses the next movement commit while forcing the cached light/radius to zero | Applies to the mode loop state rather than to a vehicle family | No damage, no status change, and no scene/plane transition; clearing the state recomputes light with a zero-minute cleanup |
-  | Surface chasm/falls | Britannia coordinate `(54, 138)` | Prints the falls presentation, switches the world plane to the underworld value, and reloads the destination plane/object state | Vehicle marker is saved across the presentation and restored before the plane swap completes | Each non-dead party member is checked once during the fall presentation and may take 1 HP damage through the normal party-damage helper. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, party HP/status, and active-object table |
+  | Surface chasm/falls | Britannia coordinate `(54, 138)` | Prints the falls presentation, switches the world plane to the underworld value, and reloads the destination plane/object state | Vehicle marker is saved across the presentation clear and restored before the plane swap completes; the traced falls handler does not force the durable post-transition transport marker to foot | Each non-dead party member is checked once during the fall presentation: draw one random byte `0..255`; if the member's Dexterity byte is greater than the roll, no damage is applied, otherwise the normal party-damage helper applies `1 HP` damage. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, transport marker, party HP/status, and active-object table |
   | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | On-foot state is a no-op defensive branch. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached | No drowning damage is applied by the whirlpool branch. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
   | Water-creature / pirate active-object movement | Outdoor active-object slots in the water-creature/pirate frame family | Active objects move one cardinal cell when their cadence and validation allow it; they do not push the player along a current row | This is actor movement, not player transport. Wind cadence controls ship-like water-creature movement; ordinary player ship/skiff movement remains command-driven | May print the attack line or enter the ordinary engagement/combat path when adjacency/collision rules fire; it does not install a water-current sweep |
 
@@ -251,6 +251,11 @@ The precedence relevant to water/current parity is:
 
 There is no separate save-backed "current in progress" state. Effects above
 finish synchronously inside the consumed turn that reaches them.
+
+No `world_waterfalls.tsv` or equivalent sidecar table is part of the promoted
+runtime contract. Tooling may retain such data as a retired compatibility or
+diagnostic artifact, but baseline movement must not consume it as a current or
+waterfall sweep source.
 
 ## 9. Moongates
 
