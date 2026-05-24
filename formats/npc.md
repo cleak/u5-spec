@@ -66,7 +66,7 @@ Each five-hundred-seventy-six-byte sub-map is partitioned into three back-to-bac
 
 The three arrays are *parallel*: the *n*-th schedule record corresponds to the *n*-th type byte and the *n*-th dialog index byte. NPC slot *n* is the tuple (schedule[n], type[n], dialog[n]); the engine reads the three arrays into separate working tables and only joins them by index at runtime.
 
-Slot zero of every sub-map is reserved as an unused sentinel. Its schedule record is all zeros, its type byte is zero, and its dialog index is zero. The engine's per-tick walker iterates from slot one to slot thirty-one inclusive and skips slot zero entirely. Effective capacity per sub-map is therefore thirty-one NPCs, and per file is two hundred forty-eight NPCs (thirty-one × eight sub-maps); across the four files, the world's named-location NPC roster is bounded above by nine hundred ninety-two.
+Slot zero of every sub-map is reserved as an unused sentinel. The engine's per-tick walker iterates from slot one to slot thirty-one inclusive and skips slot zero entirely. Effective capacity per sub-map is therefore thirty-one NPCs, and per file is two hundred forty-eight NPCs (thirty-one times eight sub-maps); across the four files, the world's named-location NPC roster is bounded above by nine hundred ninety-two. In shipped data, slot zero's schedule record and dialog index are zero. Several shipped sub-maps carry a nonzero slot-zero type/tag byte as a structural marker; that byte is not a live NPC and is ignored by scheduling, Talk, collision, roster counts, and active-object linking.
 
 The "empty slot" sentinel for indices one through thirty-one is `type[n] == 0`. The schedule processor uses the type byte as the slot's occupancy flag: any non-zero value means the slot is occupied; zero means the slot is unused and the schedule, type, and dialog index for that slot should be ignored.
 
@@ -249,9 +249,9 @@ The engine reads the *(scene − 1) & 7*-th sub-map on town entry; the engine ne
 
 ## 9. Slot zero and the empty-slot sentinel
 
-Slot zero of every sub-map is the *unused sentinel slot*: its schedule record is sixteen zero bytes, its type byte is zero, and its dialog index is zero. This is true for every sub-map of every shipped `.NPC` file.
+Slot zero of every sub-map is the *unused sentinel slot*. Its schedule record is zeroed and its dialog index is zero in shipped data. Its type/tag byte is not a validity predicate: some shipped sub-maps store a nonzero type/tag marker there, but the runtime still skips slot zero before scheduling, Talk lookup, collision participation, roster counts, or active-object linkage.
 
-The sentinel is structural, not optional. The schedule processor iterates from slot one to slot thirty-one inclusive; slot zero is skipped at the loop's entry condition. The reservation lets the processor use index zero as a "no NPC" marker in other tables (active-object link, stuck counter, pathfinding queue) without colliding with a real NPC.
+The sentinel is structural, not optional. The schedule processor iterates from slot one to slot thirty-one inclusive; slot zero is skipped at the loop's entry condition. The reservation lets the processor use index zero as a "no NPC" marker in other tables (active-object link, stuck counter, pathfinding queue) without colliding with a real NPC. Clean validators must not reject a nonzero slot-zero type/tag byte. They may warn on nonzero slot-zero schedule or dialog bytes as noncanonical data, but runtime behavior remains "skip slot zero regardless of stored bytes."
 
 A sub-map with fewer than thirty-one NPCs uses the empty-slot sentinel — `type[n] == 0` — to mark the unused tail. The schedule and dialog index entries for an unused slot are unconstrained by the format, but in shipped content they are zeroed.
 
@@ -262,7 +262,7 @@ reproducing raw shipped bytes.
 
 The file begins at byte zero of `TOWNE.NPC`. The first five hundred seventy-six bytes are the per-sub-map block for sub-map zero. Within that block, bytes zero through five hundred eleven are the schedule array (thirty-two records of sixteen bytes); bytes five hundred twelve through five hundred forty-three are the type array (thirty-two bytes); bytes five hundred forty-four through five hundred seventy-five are the dialog index array (thirty-two bytes).
 
-The first sixteen bytes of the schedule array (bytes zero through fifteen) are slot zero's schedule, which is all zeros. Slot zero's type byte (byte five hundred twelve) is zero. Slot zero's dialog index byte (byte five hundred forty-four) is zero. This is the unused sentinel slot.
+The first sixteen bytes of the schedule array (bytes zero through fifteen) are slot zero's schedule, which is all zeros in shipped data. Slot zero's dialog index byte (byte five hundred forty-four) is zero. Slot zero's type byte (byte five hundred twelve) may be zero or a nonzero structural marker; either way, slot zero is the unused sentinel slot and is not a live NPC.
 
 The second schedule record (bytes sixteen through thirty-one) is slot one: the
 first real NPC slot of that sub-map. Interpreting the sixteen bytes in the
@@ -293,7 +293,7 @@ display tile and town filters are interpreted by the runtime; a dialog index of
 A reader can sanity-check a `.NPC` decoder by:
 
 1. Confirming the file size equals four thousand six hundred eight bytes.
-2. Confirming bytes zero through fifteen are all zero (slot zero's schedule), and that bytes five hundred twelve and five hundred forty-four are zero (slot zero's type and dialog index).
+2. Confirming bytes zero through fifteen are all zero (slot zero's schedule), confirming byte five hundred forty-four is zero (slot zero's dialog index), and treating byte five hundred twelve as an ignored slot-zero type/tag marker rather than a live occupancy flag.
 3. Picking any populated slot (`type[n] != 0`), decoding its sixteen-byte schedule against the waypoint selection rule, and confirming the resulting waypoint coordinates fall within the location's thirty-two-by-thirty-two grid.
 
 ## 11. Format Boundary And Catalog Work

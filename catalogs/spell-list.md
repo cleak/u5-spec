@@ -135,7 +135,7 @@ charge or mana.
 | 8 | `HR` | Rel Hur | Wind Change | 2 | Sulfur Ash + Blood Moss | O | utility |
 | 9 | `IW` | In Wis | Locate | 2 | Nightshade | O | utility; prints the shared sextant-style Y-then-X coordinate line |
 | 10 | `KX` | Kal Xen | Conjure | 2 | Spider Silk + Mandrake | C | summon; weighted Giant Rat/Giant Spider/Bat/Python placement |
-| 11 | `IMX` | In Xen Mani | Create Food | 2 | Ginseng + Garlic + Mandrake | C/D/I/O | utility |
+| 11 | `IMX` | In Xen Mani | Create Food | 2 | Ginseng + Garlic + Mandrake | C/D/I/O | utility; adds random 1..3 food/provisions, capped at 9999 |
 | 12 | `LV` | Vas Lor | Great Light | 3 | Sulfur Ash + Mandrake | D/I/O | utility |
 | 13 | `FV` | Vas Flam | Fireball | 3 | Sulfur Ash + Black Pearl | C | damage; single target, raw roll 1..30 before target defense |
 | 14 | `FGI` | In Flam Grav | Fire Field | 3 | Sulfur Ash + Spider Silk + Black Pearl | C/D | field |
@@ -294,14 +294,14 @@ charge or mana.
   `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind and active target
   slot to the arena-field helper rather than the dungeon byte writer. That
   helper splits placement from field-contact/application work. Placement uses
-  active-object field markers in the temporary combat table, but only after
-  target selection, coordinate lookup, and COMBAT acceptance all succeed. The
-  coordinate lookup scans slots low-to-high for the first selected-coordinate
-  descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without
-  linked active-object tile byte `0xF4`. Poison Field's kind byte is
-  immediate-accept in the normal combat-cast state; Fire, Sleep, and Energy use
-  the callback's per-slot lookup plus random gate. Contact is bounded to the
-  post-step effect hook that runs after a
+  active-object field markers in the temporary combat table once target
+  selection and impact resolution confirm an in-arena cell. The coordinate
+  lookup scans slots low-to-high for the first selected-coordinate descriptor
+  with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked
+  active-object tile byte `0xF4`; that lookup reports the immediate
+  hit/contact target and does not gate marker materialization. Fire, Poison,
+  Sleep, and Energy have no extra random placement gate. Contact is bounded to
+  the post-step effect hook that runs after a
   successful step-or-attack commits its new coordinate, then matches marker
   coordinates against that actor. The contact scan skips the current active
   actor slot but does not run the creature-prompt friend/foe lookup, and it
@@ -317,6 +317,13 @@ charge or mana.
   monster death/record-clear path show no field countdown/decrement or
   pre-exit removal; placed field markers persist until combat exit restores
   the pre-combat active-object table.
+
+- `IMX` / Create Food uses the standard cast gates and resource ordering. On
+  an accepted cast it rolls a uniform `1..3` food/provisions delta, adds that
+  delta to the shared party food word with the 9999 cap, marks the stats panel
+  dirty, and returns through the ordinary success path. It does not roll
+  `0..2`, cannot produce a zero-food successful cast in the traced baseline,
+  and does not print the numeric grant.
 
 ## 7. Sources and Confidence
 

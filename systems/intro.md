@@ -327,8 +327,9 @@ Each map-strip transition selects one of four 4-column by 19-row preview
 sections and renders a centered chapter caption above it. Captions are derived
 from the strip index: strip 0 is The Summoning, strip 1 is The Journey, strip 2
 is The Arrival, and strip 3 is The Welcoming. The command stream does not carry
-a separate caption opcode or inline caption text. The strip starts from its
-middle row and expands outward over subsequent animation ticks. Static terrain
+a separate caption opcode or inline caption text. Command `0x06` loads the
+selected 4-by-19 strip into the preview buffers as one script action; the public
+clean contract does not require a middle-row outward reveal mask. Static terrain
 cells are copied into the active 32-by-32 preview tile planes, while moving
 preview actors use the shared active-object table and are scattered into the
 overlay plane each frame. The per-frame tick also runs the ordinary

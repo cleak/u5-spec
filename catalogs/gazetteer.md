@@ -26,11 +26,12 @@ behaviour is that each fixed place resolves consistently to its class, display
 name, destination handler, scene identity where applicable, and validation
 rules.
 
-Exact overworld coordinates are out of scope until they are present in an
-existing cleanroom spec. The private analysis confirms that the original has
-resident coordinate tables for overworld locations and shrines, but this public
-catalog names those tables semantically rather than reproducing their raw
-contents.
+The forty-entry overworld entry/return table for town, dwelling, castle, keep,
+and dungeon scenes is published in Section 5.1. Coordinate families outside
+that table remain owned by their specific systems: shrine/Codex routes by the
+shrine and karma specs, natural moongate live placement by the overworld
+moongate contract, and surface/underworld plane-transition branches by the
+overworld and dungeon-transition specs.
 
 ## 2. Location Classes
 
@@ -263,6 +264,16 @@ The last eight entries (scenes 33..40, the dungeons) double as the Word-of-Power
 
 The four "Britain" castles cluster around `(80..90, 105..107)` plus Lord Blackthorn's Castle at the far southeast outlier `(196, 245)`. Buccaneer's Den at the map center `(136, 158)` sits on its eponymous central island. Doom at `(128, 128)` is on the underworld plane.
 
+This table is complete for stock scene entry and ordinary exterior return for
+the forty scene rows. It does not claim to publish every coordinate-like
+landmark in the game. Remaining non-table coordinate families are:
+shrine/Codex route and return positions; saved Moonstone slot destinations and
+runtime natural-moongate live-terrain placement; the confirmed surface chasm
+and whirlpool underworld transitions; Hythloth bottom-level and special dungeon
+exit branches; and any future traced outdoor underworld-to-surface ascent
+branch. Those rows should stay in their owning systems unless they become a
+stable named-landmark catalog.
+
 ## 6. Dungeons
 
 There are eight named dungeons. Dungeon mode, `DUNGEON.DAT`, and the DATA.OVL
@@ -373,27 +384,26 @@ Runtime error handling should be conservative:
 
 The following gaps are intentional in this first catalog:
 
-1. **Exact overworld coordinates.** Resident tables are known to exist for
-   locations and shrines, but their byte-exact contents have not been published
-   in a cleanroom spec.
+1. **Shrine and Codex route coordinates.** The forty scene entry/return rows
+   are published above. Shrine, Codex, and related virtue-route coordinate
+   families remain with the shrine/karma specs until their clean tables are
+   published.
 2. **Blank resident town-mode names.** Scenes 14 through 18 have blank resident
    location-name strings. `CASTLE:0` and `CASTLE:1` are semantically identified
    by roster and special-behaviour evidence; `DWELLING:5` through
    `DWELLING:7` remain stable keyed rows with no public display name.
-3. **Location coordinate publication.** The scene/name binding is public, but
-   the exact overworld coordinates for those rows are still omitted from this
-   cleanroom catalog.
-4. **Dungeon return and special-transition coordinates.** The dungeon
-   scene/name/data-record order is public, but exact entrance and return
-   coordinates are still omitted from this cleanroom catalog.
+3. **Special-transition coordinates.** Ordinary town/dungeon scene entry and
+   exterior return coordinates are public in Section 5.1. Hythloth bottom-level
+   handoff, Doom/Codex special cases, and any nonordinary dungeon exit branches
+   remain owned by the dungeon and transition specs.
+4. **Underworld and plane-transition pairs.** Confirmed falls and whirlpool
+   transitions are public in `systems/overworld.md`; a general outdoor
+   underworld-to-surface ascent set is not currently published.
 5. **Moongate coordinates.** The overworld spec describes the traced animator,
    saved-slot live-terrain refresh, live entry hook, and fixed narrative-gate
    boundary. Exact public coordinate tables for authored landmarks remain
    omitted from this catalog.
-6. **Plane-transition pairs.** The traced surface falls coordinate is public,
-   but Underworld ascents and any additional non-chasm plane-transition pairs
-   are not public yet.
-7. **Minor landmark names.** Wishing wells, springs, caves, signs, and special
+6. **Minor landmark names.** Wishing wells, springs, caves, signs, and special
    holes need a later pass that joins tile data, sign data, and coordinate
    triggers.
 

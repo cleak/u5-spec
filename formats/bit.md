@@ -35,6 +35,16 @@ Ultima V has two separate compressed graphics families:
 Do not feed `.BIT` files to the LZW decoder. Their first word is an entry
 count for the driver resource table, not a decoded-length field.
 
+Some local re-release or tool-produced asset folders may contain pre-decoded
+bitmap bodies under the same filenames. Those files are not the canonical
+Ultima V on-disk `.BIT` format and are not required for the v1 clean resource
+contract. A strict original-data validator should identify them as
+noncanonical rather than trying to reinterpret this format. Engines that choose
+to support such local packaging variants may add an implementation-local
+fallback loader, but this spec does not define a byte-compatible predicate or
+body layout for those variants because they are outside the shipped sparse
+resource format.
+
 ## 3. File Layout
 
 Every identified `.BIT` file starts with a sparse pointer table:

@@ -233,7 +233,7 @@ The *order* of the gates matters:
 
 The forty-eight spell effects fall into seven broad categories. Each handler takes the active-player slot and the dispatcher's per-spell context as input; each returns a success/failure code that the dispatcher uses to print the trailing `Failed!` if appropriate.
 
-**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Most utility effects have a short narration message and finish in a single handler call.
+**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. Most utility effects have a short narration message and finish in a single handler call.
 
 Direction-targeted utility spells use the shared spell direction prompt
 specified in `systems/input.md`: cardinal choices cache an adjacent target cell,
@@ -654,6 +654,8 @@ The behaviour described here was derived by reading the private function and for
   field and wound-score classifier in `u5-decomp/formats/data-ovl.md` and
   `u5-decomp/functions/COMBAT_OVL/0x1A5C_compute_wound_score.md`.
 - The active-target attack wrapper path for Magic Missile, Fireball, and Kill — aiming/projectile routing, spell-tag damage lookup, defense subtraction, and instant-kill sentinel — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
+- Create Food's 1..3 food/provisions delta and 9999 cap are derived from
+  `u5-decomp/functions/CAST_OVL/0x05B4_cast_create_food.md`.
 - Arena-field placement, contact, non-consuming markers, Poison/Sleep status
   gates, Dispel Field's dungeon live-cell rewrite and combat active-object
   removal path, and combat-exit marker lifetime are derived from local CAST,

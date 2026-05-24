@@ -32,6 +32,12 @@ same paragraph renderer for story text.
 `PROPORT.PCS` starts with the same sparse pointer-table envelope described in
 `formats/bit.md` and `systems/display-driver-abi.md`:
 
+As with `.BIT`, pre-decoded local packaging variants are outside the canonical
+v1 resource contract. A strict original-data validator should treat a
+leading-length raw body as noncanonical `PROPORT.PCS` data. Engines may keep
+best-effort fallback support for local asset folders, but no exact
+variant-detection predicate or alternate body layout is published here.
+
 | Field | Width | Meaning |
 |---|---:|---|
 | Entry count | 2 bytes | Number of pointer-table entries scanned by the driver/font path. |
