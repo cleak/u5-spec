@@ -435,6 +435,48 @@ The one exception to the read-only model is the **inn registry**, which *is* per
 
 Each Talk-driven shop kind follows a common shape: a randomised greeting, a Y/N or letter-driven menu, a per-action sub-loop, an "anything else?" re-prompt for shops that allow multiple sub-actions, and a randomised farewell. The kinds vary in their inner steps.
 
+### 8.A Live dialogue selection, waits, and mutation timing
+
+Shop dialogue draws from two kinds of text source:
+
+- `SHOPPE.DAT` records, selected by the active shop overlay and expanded through
+  the shared shop text renderer.
+- Resident literals, printed directly by the active overlay. These include
+  short echoes, prompt wrappers, menu labels, and many refusal/success lines.
+
+The renderer accepts a record-start selector. For records whose ordinal ids are
+listed in this document, implementations may treat the selector as that
+published ordinal. For shared random-bark tables whose individual record
+ordinals are not yet listed here, the contract is the timing and random range:
+the game selects one entry from the current shop-kind row at the moment the
+flow point is rendered.
+
+| Flow point | Text source | Selection timing | Wait, clear, and retry behavior | State effects |
+|---|---|---|---|---|
+| Shared non-arms shop preamble | One of four `SHOPPE.DAT` records from the current shop-kind preamble row, followed by resident tail text | Uniform `0..3` draw when the preamble is rendered | Printed once on entry for guild, reagent, healer, and horse-trader flows; arms does not use this preamble | No inventory, gold, or object mutation |
+| Shared initial greeting | One of four `SHOPPE.DAT` records from the current shop-kind initial-greeting row | Uniform `0..3` draw when called with initial-greeting mode | Caller-owned; only calls that request this mode render text | No inventory, gold, or object mutation |
+| Shared farewell | One of four `SHOPPE.DAT` records from the current shop-kind farewell row | Uniform `0..3` draw when called with farewell mode; other modes may be silent | Caller-owned; silent modes exit without rendering a fresh farewell | No inventory, gold, or object mutation |
+| Shared `Y`/`N` prompt primitive | Resident literals for the accepted echo | No `SHOPPE.DAT` selection | Loops until uppercase `Y` or `N`; `Y` echoes the resident `Yes` literal and `N` echoes the resident `No` literal; other keys are ignored and do not redraw or advance | Returns only the accepted key |
+| Arms entry | Resident/tokenized greeting plus a resident long-greeting variant | Long-greeting variant draws uniform `0..1` after the initial wait | Prints the entry greeting, waits for one key, then asks for `B`, `S`, or exit input | No inventory or gold mutation |
+| Arms `B` branch | Resident `Buy` echo and resident affirmation | Affirmation draws uniform `0..3` only after `B` is accepted | Renders the current stock list; Space or Escape exits the buy list; letters outside the displayed stock count are ignored without a refusal bark | No mutation until an item confirmation passes |
+| Arms buy quote | Deterministic `SHOPPE.DAT` record from the selected equipment id; mapping is published in Section 8.1 | Selected immediately after a valid stock letter is accepted | Renders the quote and a resident confirmation prompt; `N` declines and returns without a fresh quote, other non-accepted keys keep waiting at the same prompt | No mutation before confirmation, cap check, and affordability check |
+| Arms buy confirmation | Resident prompt chosen from four variants | Uniform `0..3` after the deterministic item quote | `N` prints the resident decline echo and returns. Counter-cap refusal prints a fixed resident refusal and waits for a key. Short funds prints one fresh resident no-credit bark from a four-entry pool and exits the shop flow | Successful payment deducts gold, charges tax, and then increments the equipment counter or fills arrows/quarrels to `99` |
+| Arms `S` branch | Resident/menu literals and deterministic sell-back quote text | Selection is driven by the carried item being browsed | Empty inventory, unsellable items, and excluded ammunition are refused without changing inventory; accepted `N` responses leave the selected item unchanged | Successful sale adds gold and decrements the carried counter |
+| Guildmaster entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the guild stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted stock purchase |
+| Reagent-vendor entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the reagent stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted reagent purchase |
+| Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
+| Horse-trader sale | Shared non-arms preamble, deterministic horse quote record, resident confirmation/refusal text | Preamble draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the silent farewell mode. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote. Short funds prints resident refusal text and exits | Successful payment deducts gold, charges tax, and places a horse active object adjacent to the player |
+| Tavern drink flow | Tavern entry bark and list `SHOPPE.DAT` records selected by the active tavern state | Entry/list records are deterministic from the current tavern state; sage-style success records draw only in the sage subflow described below | The tavern clears the conversation text window before its greeting. `N` or Space prints the resident pardon/refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
+| Sage rumour flow | `SHOPPE.DAT` record `84` for fee quote, records `85..88` for paid success, record `91` for short funds | Record `84` is deterministic after topic match. Paid success draws uniform `0..3` across records `85..88` only after confirmation and successful debit. Short funds deterministically uses record `91` | Refusal does not consume a success draw. Short funds does not consume a success draw | Gold is deducted before the success rumour record is drawn and rendered |
+| Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, charges tax, and queues the pending watercraft placement |
+| Inn flow | Resident innkeeper text and `SHOPPE.DAT` records from the inn record table | Room quote and registry text are deterministic from the current inn and branch | Room, leave-companion, and pickup-companion branches use branch-local prompts and registry screens; failed eligibility checks print resident refusal text and return without a fresh room quote | Rest charges and registry mutations occur only after the corresponding branch validation and accepted payment/selection |
+
+Exact text-window rectangles and cursor origins are not yet part of this clean
+contract. The traced shop overlays do distinguish text-window clears from
+append-style prints, and those clears are captured above where they affect
+dialogue ordering, but pixel/window geometry still needs a separate clean
+presentation contract before an engine can target frame-identical shop screens.
+
 ### 8.0 Scene-byte to shop-instance row mapping
 
 Every Talk-triggered shop kind resolves its per-location row through the active scene byte (`SAVED.GAM 0x02ED`) by indexing a per-kind scene-byte lookup table in the resident shop-data region. The eight per-kind tables, in their full byte-traced form, are:
@@ -990,16 +1032,25 @@ fixed.
 
 - Remaining equipment class restrictions and armour defence values are tracked
   by `catalogs/item-list.md` and `formats/data-ovl.md`.
+- Exact shop text-window rectangles, cursor origins, and frame-level
+  presentation timing are still presentation-contract work. They are not
+  required for the gameplay contract above, but they are required for
+  frame-identical shop rendering.
 
 ## 12. Sources
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x017A_render_shoppe_record.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x01B6_shop_greeting_preamble.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x0202_farewell_dispatch.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x0280_yes_no_prompt.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x019A_charge_random_tax.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x04A2_guild_main.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x075E_reagent_main.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x07BE_find_shopkeeper.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x09AC_arms_buy_confirm.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x0B30_arms_buy_menu.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x0F64_arms_sell_inventory.md`,
   `u5-decomp/functions/SHOPPES_OVL/0x14F8_healer_main.md`,
