@@ -201,9 +201,25 @@ Do not store sleep, charm, casting, or other status bits in byte 4. The
 sleep/charm/disabled flag is byte 2 bit `0x08` (`DS:0xBA16 + slot * 8`).
 Using byte 4 as a bitfield will collide with ordinary active-object slot ids.
 
-A paired per-slot duration counter at `DS:0x57C0 + slot` (sixty-four bytes
-total) ticks once per combat round; on reaching zero the per-round cleanup
-clears bit `0x08` so the actor wakes.
+The combat sleep/disabled bit has no traced per-slot duration counter. Player
+Sleep, Sleep Field contact, and any other combat path that marks a non-party
+actor asleep set descriptor byte 2 bit `0x08`; they do not seed a separate
+`DS:0x57C0 + slot` countdown for that descriptor state.
+
+Wake timing is owned by the acting slot's dispatch. When a slot whose descriptor
+still has bit `0x08` set reaches its own action dispatch, the driver rolls a
+uniform inclusive `0..16` value. Any result other than `16` consumes that
+dispatch and leaves the bit set. On result `16`, the wake helper clears bit
+`0x08`, refreshes the linked presentation/status state, and still returns
+without continuing into the normal action parser or monster action path. The
+actor becomes eligible for later predicates after the bit is cleared, but the
+dispatch that performed the wake check is spent.
+
+While bit `0x08` remains set, the actor remains present in the descriptor table
+and still occupies its arena cell; the bit does not imply death, slot removal,
+or loss of the active-object link. Consumers that explicitly reject asleep or
+disabled actors, such as the action dispatcher and combat spell prerequisite
+gate, continue to reject it until the own-turn wake helper clears the bit.
 
 ### 6.3 Death-marker tile bytes
 
@@ -696,8 +712,12 @@ world loot after the framer restores the pre-combat active-object table.
 
 **Other status changes** — Sleep, Poison, Charm — are applied by separate
 per-effect handlers (a poison-tick handler firing once per round, a sleep-effect
-handler invoked when the Sleep spell hits). Those handlers update the character
-status byte to `'S'` (asleep) or `'P'` (poisoned) and run their own narration.
+handler invoked when the Sleep spell hits). Sleep writes the character status
+byte to `'S'` for party targets and descriptor byte 2 bit `0x08` for non-party
+combat targets; non-party wake timing is the random own-turn wake check
+described in Section 6.2, not a deterministic countdown. Those handlers update
+the character status byte to `'S'` (asleep) or `'P'` (poisoned) and run their own
+narration.
 Inventory counters for carried equipment and use-items live in the same
 resident save image and may be decremented by equipment or combat/spell helper
 paths, but they are inventory stock, not combat effect timers. Do not

@@ -229,7 +229,9 @@ charge or mana.
   the widening clipped cone from the caster's adjacent cell, de-duplicates
   selected cells, and writes up to 63 arena coordinates before scanning actors.
   Neither the shared scan nor the per-effect branches perform a friend/foe
-  lookup or same-faction exclusion. `IZ` applies sleep status, `HIN` applies a
+  lookup or same-faction exclusion. `IZ` applies party sleep status or the
+  non-party combat sleep/disabled bit; non-party wake uses the combat actor's
+  later 1-in-17 own-turn wake check rather than a seeded countdown. `HIN` applies a
   resistance/random gate before poison status, `CGIV` uses the decimal 99
   instant-kill sentinel through the shared damage/status path, and `FHI` rolls
   raw 1..30 through that same path. The two damage winds credit returned
@@ -311,7 +313,7 @@ charge or mana.
   currently Good, while monsters and already non-Good party targets fall
   through to poison damage with no field-contact XP credit. Sleep Field skips
   dead party members, otherwise writing party sleep status or the non-party
-  combat sleep/disabled bit. Fire Field rolls raw damage in `[1, 21]` before
+  combat sleep/disabled bit without seeding a sleep countdown. Fire Field rolls raw damage in `[1, 21]` before
   the target's random defense subtraction. Energy Field supplies raw zero to
   the same damage/value path.
   The traced placement/contact/redraw path, generic active-object tick, and
