@@ -349,6 +349,23 @@ eligible animal sprites a random chance to step one cardinal cell, constrained
 by a narrow terrain predicate and by empty-destination checks. A committed step
 updates the sprite coordinate/facing and marks visibility dirty.
 
+The exact free-roaming object contract is:
+
+| Step | Rule |
+|---|---|
+| Slot scan | Walk all 32 active-object slots in ascending slot order. Eligibility is based on active-object byte `+0`, not the rendered tile buffer. |
+| Eligible object bytes | `(byte0 & 0xFE) == 0x10`; in the traced data this is the animal/horse/cow style pair `0x10` and `0x11`. Empty slots, linked NPC sprite classes, player/phantom slot bytes, and all other object families are skipped. |
+| Floor gate | Active-object byte `+4` must equal the current floor/Z byte exactly as a byte. Off-floor objects are skipped and are not moved toward the current floor. |
+| Chance gate | After the byte and floor gates pass, draw one uniform bit through the shared PRNG range helper. Nonzero skips the object for this tick; zero proceeds, so each eligible on-floor object has a 50% movement-attempt chance. No PRNG value is consumed for ineligible or off-floor slots. |
+| Pen gate | Before selecting a destination, test all four cardinal neighbours with the walker-local terrain predicate. If any cardinal neighbour fails, the object makes no movement attempt this tick. |
+| Walker terrain predicate | A candidate terrain cell is accepted only when the live town tile byte is exactly `0xA2` or exactly `0x43`. This is not the NPC pathfinding bitmap and not the foot/avatar movement predicate. |
+| Direction selection | After the pen gate passes, draw two uniform bits: one selects the movement axis, the other selects the sign on that axis. This yields one of the four cardinal one-cell destinations with equal probability. There is no retry with a different direction after the chosen destination fails later checks. |
+| Bounds | Destination X and Y must remain in the loaded 32-by-32 location floor, `0..31` on each axis. Town object walking does not wrap at edges. |
+| Destination terrain and occupancy | The chosen destination is re-read and must pass the resident terrain classifier used by the town movement layer. The active-object lookup at that destination and current floor must return no occupied slot. The player cell, NPC-linked objects, unlinked objects, and slot-zero records therefore block by occupying the destination coordinate on the current floor. |
+| State update on success | Write the chosen animal facing byte to active-object bytes `+0` and `+1`, write the destination X/Y to bytes `+2` and `+3`, and set the visibility-dirty bit. Byte `+4` and auxiliary bytes are left as they were. |
+| State update on failure | Failed terrain, bounds, or occupancy checks leave the object record unchanged and do not mark visibility dirty. |
+| Persistence | The active-object table is part of the saved town scene state, so a save made after a free-roaming object has moved preserves the moved object record. Reloading a saved town scene then runs normal town entry reconciliation, which may reattach roster-driven NPCs from schedules; unlinked animal/object records remain active-object state rather than schedule waypoints. |
+
 **Movement.** The shared movement spec owns direction-code routing,
 the resident terrain-query layer, dynamic occupancy, and commit rules. This
 town-mode spec owns the current floor buffer, NPC collision/scheduling side,
