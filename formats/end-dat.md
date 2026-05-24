@@ -31,7 +31,9 @@ selected bounded window into the shared scratch buffer and then hands that
 window to the proportional text renderer. Brace markers inside the selected
 window are layout markers for the renderer or its caller; they are not a
 runtime ordinal section index by themselves. Any NUL padding in the shipped
-asset is not a separate rendered page.
+asset is not a separate rendered page. The file likewise carries no page-in
+transition rectangle table; visual transition ownership belongs to the endgame
+display caller, not to `END.DAT` itself.
 
 ## 3. Text Markers
 

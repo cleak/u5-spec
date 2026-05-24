@@ -238,9 +238,10 @@ in scope.
   driver-binary parity becomes in scope.
 - **Story rectangle-transition helper.** Fixed title artwork placement, menu
   idle ticking, story-art selection, story primary placement, and the step-1
-  story-transition rectangle reveal are specified in `intro.md`. Remaining work
-  is a caller census for any non-step-1 intro or endgame uses of that helper,
-  with per-caller bounds and reveal rates.
+  story-transition rectangle reveal are specified in `intro.md`. A focused
+  intro slide-loop caller census did not find a step-2 or later story-page
+  column-wipe table. Any non-story intro helper use or endgame display-helper
+  use needs its own caller-specific bounds and reveal-rate trace.
 - **Return-to-View resident helper internals.** The script-level command
   schedule, rectangle coordinates, actor draw ordering, and preview tick counts
   are specified in `formats/location-dat.md`. The remaining display gap is the

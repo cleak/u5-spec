@@ -279,9 +279,13 @@ data-driven, but their semantic role is fixed narrative presentation, not
 party-slot retirement data.
 
 The exact page-in transition rectangles and reveal rates for the six fixed
-`END.DAT` narrative windows are not promoted into this baseline. Do not inherit
-the intro step-1 rectangle or one-column-per-title-tick rate for these endgame
-windows unless a caller-specific trace supplies the endgame bounds and rate.
+`END.DAT` narrative windows are not promoted into this baseline because the
+current endgame entry trace does not expose a six-per-window page-in rectangle
+table. The traced endgame entry surface identifies one full-screen rectangle
+operation in the late orb/certificate transition path, but that is not evidence
+for six distinct `END.DAT` page wipes. Do not inherit the intro step-1 rectangle
+or one-column-per-title-tick rate for these endgame windows unless a
+caller-specific trace supplies the endgame bounds and rate.
 
 ## 9. Certificate scroll
 
@@ -364,8 +368,10 @@ The original uses the active-object renderer for cinematic movement. A modern en
   per-frame display-helper internals for every fade/palette transition remain
   presentation-parity work.
 - **Final narrative page-in transitions.** The six fixed `END.DAT` windows and
-  their narrative roles are specified, but the per-window page-in transition
-  rectangles and reveal rates still need caller-specific tracing.
+  their narrative roles are specified. The traced endgame entry surface has one
+  late full-screen rectangle operation, not a six-entry page-in rectangle table;
+  per-window transition rectangles and reveal rates therefore remain
+  unspecified unless a more specific caller trace identifies them.
 - **Display helper taxonomy.** The visual sequence uses resident display, palette, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
 - **Asset variant mapping.** The paired graphics archive family and bitmap formats are specified, but exact endgame resource-slot-to-panel selection should be cross-checked if pixel-perfect presentation parity becomes required.
 

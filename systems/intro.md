@@ -298,11 +298,15 @@ contents, and the effect does not dither, blend, or recolour the panel. The
 player-input gate is the wait before the transition; once the reveal starts,
 the transition is a blocking local visual effect.
 
-No wider intro story-page rectangle/rate table is part of this baseline. Steps
-0, 7, and 14 are pre-drawn transition-strip art, not column-wipe rectangles,
-and the secondary art passes for steps 15 through 20 are direct draws after the
-step waits. If later evidence identifies additional callers of the same
-rectangle helper, specify their bounds and rates per caller instead of
+No wider intro story-page rectangle/rate table is part of this baseline. A
+focused caller sweep of the intro slide loop identifies the step-1 case as the
+only column-wipe rectangle in that twenty-one-step story sequence. Steps 0, 7,
+and 14 are pre-drawn transition-strip art, not column-wipe rectangles, and the
+secondary art passes for steps 15 through 20 are direct draws after the step
+waits. A separate start/menu-screen loader also uses a rectangle helper, but it
+belongs to start-screen presentation rather than to a step-2 or later story-page
+transition table. If later evidence identifies additional story-page callers of
+the same rectangle helper, specify their bounds and rates per caller instead of
 inheriting the step-1 bounds by default.
 
 The slide loop does not mutate gameplay state, does not create a save, and does not select a gameplay scene. Its only persistent effect is that, when it returns, the intro reloads or redraws the start/menu view so the six-option menu can continue.
@@ -407,9 +411,11 @@ historical-renderer parity work.
   rasterization, and the short fixed wait.
 - **Story rectangle-transition helper.** The fixed story-step list, primary
   story-art placement, secondary draws, text source, key-advance behavior, and
-  step-1 left-to-right rectangle reveal are specified. Remaining parity work is
-  a focused caller census for any non-step-1 intro or endgame uses of the same
-  helper.
+  step-1 left-to-right rectangle reveal are specified. A focused slide-loop
+  caller census did not find additional story-page column-wipe rectangles.
+  Remaining parity work is limited to independently traced non-story intro
+  presentation helpers or endgame display helpers, not an inferred story-page
+  table.
 - **Acknowledgement screen content.** The acknowledgement branch is identified
   as a self-contained intro submenu. Its exact text and pagination are left to
   a source-free content transcription rather than copied binary text dumps.
