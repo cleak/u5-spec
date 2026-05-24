@@ -290,11 +290,20 @@ The transition effects are local to the story loop and do not advance gameplay
 time. Steps 0, 7, and 14 are static transition-strip pre-draws before the
 primary story art. Step 1 is the only confirmed rectangular transition: after
 the player advances that step, the extra `STORY1.16` art is drawn at `(40, 86)`
-and the intro delegates the inclusive rectangle `(40, 86)..(75, 120)` once to
-the resident/display transition helper. The intro loop itself does not contain
-a per-frame wipe schedule for this effect. The exact historical pixel pattern
-and pacing are therefore helper-local; the public v1 contract is the affected
-region, ordering, and the final visible pixels.
+and the intro runs a left-to-right column reveal over the inclusive rectangle
+`(40, 86)..(75, 120)`. The reveal is 36 title ticks long: one pixel column is
+made visible per tick, starting at `x = 40` and ending at `x = 75`. Previously
+revealed columns remain visible, unrevealed columns retain the previous screen
+contents, and the effect does not dither, blend, or recolour the panel. The
+player-input gate is the wait before the transition; once the reveal starts,
+the transition is a blocking local visual effect.
+
+No wider intro story-page rectangle/rate table is part of this baseline. Steps
+0, 7, and 14 are pre-drawn transition-strip art, not column-wipe rectangles,
+and the secondary art passes for steps 15 through 20 are direct draws after the
+step waits. If later evidence identifies additional callers of the same
+rectangle helper, specify their bounds and rates per caller instead of
+inheriting the step-1 bounds by default.
 
 The slide loop does not mutate gameplay state, does not create a save, and does not select a gameplay scene. Its only persistent effect is that, when it returns, the intro reloads or redraws the start/menu view so the six-option menu can continue.
 
@@ -374,11 +383,11 @@ A modern implementation does not need to reproduce the overlay loader, DOS inter
 - Make the Journey load path validate the save before leaving the intro.
 - Route successful gameplay entry through the main-loop scene dispatcher.
 
-For pixel-perfect reproduction, an implementation will also need the resident
-helper's internal wipe pattern and timing for the story rectangle transition
-and some sub-screens. The title/menu idle contract is narrower: run the
-driver-style title tick while waiting, and keep that tick separate from
-gameplay time.
+For pixel-perfect reproduction, an implementation should preserve the step-1
+story rectangle's 36-tick left-to-right reveal and any still-unspecified
+resident helper behaviour for other sub-screens. The title/menu idle contract
+is narrower: run the driver-style title tick while waiting, and keep that tick
+separate from gameplay time.
 
 ## 15. Intro Boundaries And Remaining Visual Parity Work
 
@@ -398,9 +407,9 @@ historical-renderer parity work.
   rasterization, and the short fixed wait.
 - **Story rectangle-transition helper.** The fixed story-step list, primary
   story-art placement, secondary draws, text source, key-advance behavior, and
-  affected rectangle for the one local transition are known. Pixel-perfect
-  reproduction still needs the delegated helper's wipe pattern and pacing,
-  either from a focused helper trace or a capture comparison.
+  step-1 left-to-right rectangle reveal are specified. Remaining parity work is
+  a focused caller census for any non-step-1 intro or endgame uses of the same
+  helper.
 - **Acknowledgement screen content.** The acknowledgement branch is identified
   as a self-contained intro submenu. Its exact text and pagination are left to
   a source-free content transcription rather than copied binary text dumps.

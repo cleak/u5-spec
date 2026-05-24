@@ -278,6 +278,11 @@ renderer. A clean implementation should keep the six window selections
 data-driven, but their semantic role is fixed narrative presentation, not
 party-slot retirement data.
 
+The exact page-in transition rectangles and reveal rates for the six fixed
+`END.DAT` narrative windows are not promoted into this baseline. Do not inherit
+the intro step-1 rectangle or one-column-per-title-tick rate for these endgame
+windows unless a caller-specific trace supplies the endgame bounds and rate.
+
 ## 9. Certificate scroll
 
 The certificate scroll is the final successful ending screen. It uses the text-output system, but with a small endgame-specific line accumulator so the overlay can compose a line from multiple fragments before flushing it to the screen.
@@ -358,6 +363,9 @@ The original uses the active-object renderer for cinematic movement. A modern en
   sprite ids, movement order, and local wander rule are specified here. Exact
   per-frame display-helper internals for every fade/palette transition remain
   presentation-parity work.
+- **Final narrative page-in transitions.** The six fixed `END.DAT` windows and
+  their narrative roles are specified, but the per-window page-in transition
+  rectangles and reveal rates still need caller-specific tracing.
 - **Display helper taxonomy.** The visual sequence uses resident display, palette, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
 - **Asset variant mapping.** The paired graphics archive family and bitmap formats are specified, but exact endgame resource-slot-to-panel selection should be cross-checked if pixel-perfect presentation parity becomes required.
 

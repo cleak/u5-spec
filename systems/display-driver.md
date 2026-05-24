@@ -174,11 +174,13 @@ player input in the intro code; any transition work is a local visual effect
 around that input-driven sequence, not a gameplay-time advance.
 
 For the step-1 story rectangle transition, the intro draws the extra story
-panel first and then delegates the inclusive rectangle `(40, 86)..(75, 120)` to
-the resident/display transition helper once. The public v1 display contract is
-the rectangle, ordering, and final pixels. The helper's internal wipe curve and
-delay schedule remain below the current driver contract unless pixel-perfect
-intro transition parity becomes in scope.
+panel first and then reveals the inclusive rectangle `(40, 86)..(75, 120)` from
+left to right. The effect is 36 title ticks long, revealing one pixel column per
+tick from `x = 40` through `x = 75`. Previously revealed columns remain visible,
+unrevealed columns retain the prior screen contents, and the display layer must
+not add dithering, blending, recolouring, or gameplay-time advancement. This
+step-1 contract does not define bounds or rates for any other intro or endgame
+caller.
 
 The Return-to-View preview is another intro-local display sequence. Its map
 strips and command stream live in `MISCMAPS.DAT`; the display layer only sees
@@ -235,11 +237,10 @@ in scope.
   a driver-free cleanroom renderer must be independently authored unless exact
   driver-binary parity becomes in scope.
 - **Story rectangle-transition helper.** Fixed title artwork placement, menu
-  idle ticking, story-art selection, story primary placement, and the affected
-  story-transition rectangle are specified in `intro.md`. The intro delegates
-  that rectangle once to a resident/display helper; the helper's internal wipe
-  curve and delay schedule still need a focused trace or capture for
-  pixel-perfect reproduction.
+  idle ticking, story-art selection, story primary placement, and the step-1
+  story-transition rectangle reveal are specified in `intro.md`. Remaining work
+  is a caller census for any non-step-1 intro or endgame uses of that helper,
+  with per-caller bounds and reveal rates.
 - **Return-to-View resident helper internals.** The script-level command
   schedule, rectangle coordinates, actor draw ordering, and preview tick counts
   are specified in `formats/location-dat.md`. The remaining display gap is the
