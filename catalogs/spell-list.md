@@ -268,8 +268,9 @@ charge or mana.
   testing the target cell itself. Clone duplicates an accepted creature into
   paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor
-  at the first accepted cell in north, northeast, east, southeast, south,
-  southwest, west, northwest order around the cached target coordinate. A
+  at the first accepted cell from up to eight independent random arena-coordinate
+  probes. It does not use the direction prompt, an adjacent cached target
+  coordinate, or an ordered eight-cell ring. A
   previously suspected CAST2 placement helper is now attributed to shrine/urn
   kneel presentation. It prepares temporary active-object records from a
   private visual pattern and is not a traced party C-Cast row for Conjure,

@@ -455,19 +455,28 @@ capacity path, so compatibility layers may need to preserve the original's
 unpredictable success/failure narration; deterministic engines should model it
 as a no-op failure. Clone is not an adjacency-based spell.
 
-Summon uses the per-tile placement/impact helper, not the shrine/urn helper. It
-searches up to eight candidate cells around the cached target coordinate,
-in north, northeast, east, southeast, south, southwest, west, northwest order.
-It requires a valid map cell, places a Daemon-class combat actor at the first
-accepted cell, plays the temporary flame/daemon impact animation, and marks the
-placed slot as having taken effect. This spell path uses the self-checking mode
-of the helper: if the placement would rebound onto the caster under the
-helper's resistance/probability check, it prints the self-hit message and
-reports the special self-failure result. Summoned or cloned combat actors then
-run through the standard combat actor-table machinery. The traced summon,
-clone, combat tick, and death/record-clear paths do not expose an independent
-per-spell duration countdown; combat-exit lifetime is instead bounded by the
-combat framer restoring the pre-combat actor tables.
+Summon uses the per-tile placement/impact helper, not the shrine/urn helper and
+not the shared direction prompt. The helper makes up to eight independent random
+arena-coordinate probes. Each probe rolls a candidate X and Y in a wider
+four-bit range, rejects candidates outside the eleven-by-eleven arena, then runs
+the normal spawn-cell validation. The first accepted cell receives a
+Daemon-class combat actor, plays the temporary flame/daemon impact animation,
+and, on ordinary success, marks the placed slot as having taken effect. There is
+no cached adjacent target coordinate, ordered eight-cell ring, or off-arena
+direction case for this player spell path.
+
+This spell path uses the helper's self-checking mode after a Daemon has been
+placed and animated. It computes the active caster's resistance threshold and
+compares it with a random value in `1..30`; the Oops branch fires when the roll
+is greater than or equal to that threshold. That branch prints `Oops...`,
+returns the special nonzero failure result, does not set the placed slot's
+took-effect flag, and does not print the ordinary `Success!` or `Failed!`
+epilogue message. The placed Daemon record is not suppressed by this branch.
+Summoned or cloned combat actors then run through the standard combat
+actor-table machinery. The traced summon, clone, combat tick, and
+death/record-clear paths do not expose an independent per-spell duration
+countdown; combat-exit lifetime is instead bounded by the combat framer
+restoring the pre-combat actor tables.
 
 A previously suspected CAST2 helper remains attributed to shrine/urn kneel
 presentation. It prepares temporary active-object records from a private visual
@@ -600,8 +609,8 @@ forty-eight player spell definitions.
   attempts, Swarm uses a fixed eight-cell scan with short per-cell placement
   retries, Clone performs paired
   actor/object copying after a `Creature:` target is accepted, and Summon uses
-  the self-checking per-tile placement helper's ordered eight-cell ring to
-  create a Daemon-class combat actor. The CAST2 shrine/urn active-object
+  the self-checking per-tile placement helper's eight random arena-coordinate
+  probes to create a Daemon-class combat actor. The CAST2 shrine/urn active-object
   pattern helper is explicitly not that path. Summoned and cloned combat actors
   live in the same temporary
   combat actor/dynamic-object
