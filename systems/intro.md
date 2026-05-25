@@ -57,12 +57,14 @@ The title phase accepts an early `J` keystroke. If the player presses `J` during
 
 The fixed title-screen bitmap placements use 320-by-200 pixel coordinates with
 the origin at the upper-left corner. `TITLE.BIT` slots `0..6` form the initial
-title-mark flourish. They are cumulative, not mutually exclusive animation
-alternatives: begin from the freshly cleared title surface, draw slot `0`, then
-draw slots `1` through `6` in ascending order without clearing between them.
-Center each slot horizontally, start at `y = 0`, and advance `y` by the drawn
-slot's height before drawing the next slot. The effect is a single built-up
-title mark, not a choice of one final slot.
+title-mark flourish, but the source placement and the visible placement are
+different.
+
+The resident title helper first builds a hidden source surface. It stamps
+`TITLE.BIT` slots `0..6` in ascending order into that hidden surface, centered
+horizontally, starting at hidden `y = 0`, and advancing hidden `y` by the drawn
+slot's height before stamping the next slot. That hidden stack is only an
+animation source. It must not be rendered directly to the visible title page.
 
 | `TITLE.BIT` slot | Top-left X | Top-left Y | Size |
 |---:|---:|---:|---|
@@ -73,6 +75,51 @@ title mark, not a choice of one final slot.
 | 4 | 84 | 41 | 152 x 32 |
 | 5 | 52 | 73 | 216 x 45 |
 | 6 | 20 | 118 | 280 x 61 |
+
+The visible flourish then presents those hidden source rows through the EGA
+driver's title animation player. The visible frame for each slot is centered at
+the following destination, replacing the previous visible flourish frame rather
+than accumulating on top of it:
+
+| `TITLE.BIT` slot | Hidden source Y | Visible top-left X | Visible top-left Y | Size |
+|---:|---:|---:|---:|---|
+| 0 | 0 | 148 | 75 | 24 x 3 |
+| 1 | 3 | 140 | 72 | 40 x 7 |
+| 2 | 10 | 124 | 71 | 72 x 11 |
+| 3 | 21 | 104 | 66 | 112 x 20 |
+| 4 | 41 | 84 | 60 | 152 x 32 |
+| 5 | 73 | 52 | 53 | 216 x 45 |
+| 6 | 118 | 20 | 46 | 280 x 61 |
+
+For a clean renderer, the compatibility rule is: show slot `0`, then replace
+it with slot `1`, then replace that with slot `2`, continuing through slot
+`6`. Clear the prior visible flourish area as needed so earlier slots do not
+remain visible. The completed title flourish is a single coherent `TITLE.BIT`
+slot `6` mark at `(20, 46)`, not seven stacked `ORIGIN SYSTEMS INC` fragments.
+
+For frame-accurate EGA-style playback, each visible slot is revealed by rows in
+the following source-row groups. Row numbers are relative to that slot's own
+top row, not absolute screen rows. A vertical bar separates presentation
+updates; an empty group is a timing/update step that does not add rows.
+
+| Slot | Row reveal groups |
+|---:|---|
+| 0 | empty \| empty \| empty \| `1` \| empty \| empty \| empty \| empty \| `0, 2` \| empty |
+| 1 | empty \| empty \| `1, 5` \| empty \| empty \| `2, 4` \| empty \| empty \| `3` \| empty \| `0, 6` \| empty |
+| 2 | empty \| empty \| `2, 8` \| `3, 7` \| `1, 9` \| `4, 6` \| `5` \| `0, 10` \| empty |
+| 3 | empty \| `4, 15` \| `1, 7, 12, 18` \| `5, 14` \| `2, 8, 11, 17` \| `3, 6, 13, 16` \| `9, 10` \| `0, 19` \| empty |
+| 4 | empty \| `7, 24` \| `2, 12, 19, 29` \| `3, 8, 13, 18, 23, 28` \| `1, 6, 11, 20, 25, 30` \| `4, 9, 14, 17, 22, 27` \| `5, 10, 15, 16, 21, 26` \| `0, 31` \| empty |
+| 5 | empty \| `4, 11, 18, 26, 33, 40` \| `1, 8, 15, 19, 36, 43` \| `6, 13, 20, 24, 31, 38` \| `3, 10, 17, 22, 27, 34, 41` \| `2, 5, 9, 12, 16, 19, 25, 28, 32, 35, 39, 42` \| `7, 14, 21, 23, 30, 37` \| `0, 44` \| empty |
+| 6 | empty \| `28, 23, 18, 13, 8, 3, 32, 37, 42, 47, 52, 57` \| `26, 21, 16, 11, 6, 1, 34, 39, 44, 49, 54, 59` \| `29, 24, 19, 14, 9, 4, 31, 36, 41, 46, 51, 56` \| `27, 22, 17, 12, 7, 2, 33, 38, 43, 48, 53, 58` \| `25, 15, 5, 35, 45, 55` \| `30, 40, 50, 20, 10` \| `0, 60` \| empty |
+
+The EGA baseline is not a normal white-on-black foreground blit. The helper
+stamps 1-bit source pixels into the hidden driver surface, and the animation
+player copies only the blue and intensity planes to the visible page. Treat set
+source pixels as palette index `9` on the black title background for this
+initial flourish. There is no XOR, inverse, alpha, or source sub-rectangle mode
+for slots `0..6`; each source slot is consumed from its own `(0, 0)` origin for
+its full documented width and height before the driver presentation script
+chooses which rows to show.
 
 The remaining title sequence uses four explicit overlay draws:
 
@@ -85,7 +132,7 @@ The remaining title sequence uses four explicit overlay draws:
 
 Their draw order is part of the compatibility contract:
 
-1. After the seven-step `TITLE.BIT` `0..6` helper returns, clear the lower
+1. After the seven-step `TITLE.BIT` `0..6` flourish returns, clear the lower
    screen band from `y = 140` through the bottom of the 320-by-200 surface.
 2. Draw `TITLE.BIT` slot `7` at `(108, 140)`.
 3. Draw `TITLE.BIT` slot `8` at `(152, 0)`.
@@ -100,17 +147,18 @@ after those strokes and supplies the completed bitmap overlay for the final
 pre-menu title frame. A clean renderer should not draw `BRITISH.BIT` before
 `BRITISH.PTH` and then stroke on top of it.
 
-The final title frame before `STARTSC` is drawn is the accumulated `TITLE.BIT`
-upper title mark from slots `0..6`, with the lower band replaced by the later
-slot `7` and slot `9` overlays, the small slot `8` overlay at the top, and the
-completed `BRITISH.BIT` overlay over the middle/lower signature area. The
-subsequent `STARTSC` load replaces this title presentation; it is not another
-transparent layer over the final title frame.
+The final title frame before `STARTSC` is drawn contains the single completed
+`TITLE.BIT` slot `6` flourish at `(20, 46)`, with the lower band replaced by
+the later slot `7` and slot `9` overlays, the small slot `8` overlay at the
+top, and the completed `BRITISH.BIT` overlay over the middle/lower signature
+area. The subsequent `STARTSC` load replaces this title presentation; it is not
+another transparent layer over the final title frame.
 
 Only these semantic title slots are visible. Do not render every decoded
 resource record from `TITLE.BIT` or `BRITISH.BIT` as an independent visible
-sprite, and do not draw slots `0..6` as alternatives that replace one another.
-Their visibility is controlled by the intro call sequence above.
+sprite, and do not draw the hidden slot `0..6` source stack directly to the
+front page. Their visibility is controlled by the intro call sequence and
+driver presentation rules above.
 
 The start/menu surface is built from `STARTSC` after the title flourish ends
 or is skipped. `STARTSC` is a three-panel screen composition, not pre-rendered
@@ -588,10 +636,12 @@ The behaviour described here was derived by reading the function and format note
 - Boot initialisation, title-screen orchestration, asset-depth selection, intro menu rendering, key dispatch, and the high-level hand-off to the main loop: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - Start/menu screen loading, `STARTSC` composition use, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, and `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`.
 - Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, lower-band
+- Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, hidden-source
+  versus visible-destination placement, EGA row reveal groups, lower-band
   clearing, and the explicit slot `7`, slot `8`, `BRITISH.BIT` slot `0`, and
-  slot `9` overlay order: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`
-  and fresh local resident display-helper verification.
+  slot `9` overlay order: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
+  `u5-decomp/formats/ega-driver.md`, and fresh local resident
+  display-helper verification.
 - Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh local rectangle-transition helper analysis.
 - Return-to-View entry point, preview bytecode runtime, preview map-strip
   loader, per-frame active-object animation bridge, per-cell tile rendering,

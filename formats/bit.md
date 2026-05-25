@@ -92,11 +92,12 @@ encode menu timing, input handling, or the title/menu idle animation.
 For intro-title compatibility, the resource's decoded records are not a
 standalone draw list. `systems/intro.md` names the only title records that
 become visible and the order in which they are drawn. In particular, the intro
-title helper draws `TITLE.BIT` records `0..6` cumulatively onto one cleared
-title surface, then the later title phase draws only the explicitly named
-records `7`, `8`, and `9` around the signature sequence. A renderer that draws
-every decoded record from this file as a simultaneous sprite layer will produce
-spliced duplicate title marks.
+title helper uses `TITLE.BIT` records `0..6` as hidden animation sources, then
+presents one visible flourish frame at a time through the display driver. Those
+records are not seven simultaneous visible layers. The later title phase draws
+only the explicitly named records `7`, `8`, and `9` around the signature
+sequence. A renderer that draws every decoded record from this file as a
+simultaneous sprite layer will produce spliced duplicate title marks.
 
 ### 4.2 `BRITISH.BIT`
 
