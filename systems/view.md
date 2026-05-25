@@ -218,11 +218,31 @@ addresses. The renderer uses these families consistently:
 The full Britannia chunk-map renderer is a separate overlay from the local
 32-by-32 view. Its base chunk-cell painter uses the world-map glyph family,
 places each shorthand cell on an eight-pixel grid, then overlays the party
-marker from the frame-fill family after the base glyph. The marker is clipped
-against the visible strip and is composed as a small crosshair/diamond-shaped
-highlight. The map is eight rows by twenty-two columns, wraps at the world
-edges as it walks the chunk index, prints the day/night flavour line after
-painting, then busy-waits until any key is available.
+marker from the frame-fill family after the base glyph. Let
+`base_x = chunk_col * 8` and `base_y = chunk_row * 8`. The marker is an
+opaque overlay made of these horizontal strips, with coordinates inclusive:
+
+| Visibility gate | Strip |
+|---|---|
+| `base_y > 2` | `x = base_x + 10..base_x + 12`, `y = base_y + 5` |
+| `base_y > 2` | `x = base_x + 10..base_x + 12`, `y = base_y + 6` |
+| `base_y > 2` | `x = base_x + 8..base_x + 12`, `y = base_y + 7` |
+| `base_y <= 175` | `x = base_x + 8..base_x + 12`, `y = base_y + 8` |
+| `base_y <= 174` | `x = base_x + 6..base_x + 10`, `y = base_y + 9` |
+| `base_y <= 173` | `x = base_x + 6..base_x + 10`, `y = base_y + 10` |
+| `base_y <= 172` | `x = base_x + 5..base_x + 8`, `y = base_y + 11` |
+| `base_y <= 171` | `x = base_x + 5..base_x + 7`, `y = base_y + 12` |
+
+The marker is not a replacement tile: it is composed after the base world-map
+glyph and before the renderer's final text/key-wait path. The map grid is
+eight rows by twenty-two columns and wraps at the world edges as it walks the
+chunk index.
+
+The traced renderer has two presentation paths. During the daylight interval
+`6 <= hour < 18`, it prints `the sun!` followed by a newline, flushes the
+coordinate text path, and returns before painting the full chunk map. Outside
+that daylight interval, it paints the full grid, overlays the party marker,
+then prints `the night sky! ` before busy-waiting until any key is available.
 
 ## 5. Dungeon Look
 

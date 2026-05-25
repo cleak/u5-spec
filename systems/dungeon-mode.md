@@ -577,20 +577,58 @@ The class-to-glyph contract for the dungeon minimap is:
 | `0x2?` | Down-ladder glyph `0x2D`. | Yes. |
 | `0x3?` | Two-way-ladder glyph `0x2F`. | Yes. |
 | `0x4?` | Closed-chest glyph `0x70`. | Yes. |
-| `0x5?` | Six-cell fountain icon rooted at the mapped cell. | Yes. |
+| `0x5?` | Fountain mask rooted at the mapped cell; see below. | Yes. |
 | Exact `0x60` | Pit glyph `0x19`. | Yes. |
 | Exact `0x61` or `0x69` | Hidden/fall-pit glyph `0x71`. | Yes. |
 | Exact `0x68` | Fired/walked-through pit glyph `0x12`. | Yes. |
 | Other `0x6?` | Trap/blocker glyph `0x72`. | Yes. |
 | `0x7?` | No glyph. | Yes. |
-| `0x8?` | Stair/field helper glyph family. | Yes. |
+| `0x8?` | Stair/field helper mask; see below. | Yes. |
 | `0x9?` | No glyph. | Yes. |
 | `0xA?` or `0xF?` | Heavy-door glyph `0x73`. | Yes. |
 | Exact `0xB0` | Wall glyph `0x7F`. | No. |
 | Other `0xB?` | Wall glyph `0x74`. | No. |
-| `0xC?` | Flavour-wall glyph `0x75` plus its paired terminator cell. | No. |
+| `0xC?` | Flavour-wall glyph `0x75`, then a source-selector reset. No second visible cell is painted. | No. |
 | `0xD?` | Extra-wall glyph `0x76`, with the peer-view tint source when active. | No. |
 | `0xE?` | Heavy-door variant glyph `0x77`. | Yes. |
+
+For the fountain and stair/field masks, let `(x, y)` be the accepted
+minimap cell's pixel origin. All line ranges below are inclusive. The fountain
+class first draws the basin strokes with the active minimap line source:
+
+| Fountain stroke | Geometry |
+|---|---|
+| Lower lip | `x + 1..x + 6` at `y + 4` |
+| Middle lip | `x + 2..x + 5` at `y + 5` |
+| Left foot | `x + 1..x + 2` at `y + 6` |
+| Right foot | `x + 5..x + 6` at `y + 6` |
+
+It then switches to the secondary fountain detail source and draws:
+
+| Fountain detail | Geometry |
+|---|---|
+| Upper-left dot | glyph pixel at `(x + 2, y + 1)` |
+| Upper-right dot | glyph pixel at `(x + 5, y + 1)` |
+| Left side dot | glyph pixel at `(x + 1, y + 2)` |
+| Right side dot | glyph pixel at `(x + 6, y + 2)` |
+| Upper cap | `x + 3..x + 4` at `y + 2` |
+| Lower cap | `x + 3..x + 4` at `y + 3` |
+
+The stair/field helper draws eight one-pixel-high horizontal rules over the
+upper eight rows of the minimap cell, leaving the lower four rows untouched:
+
+| Source family | Geometry |
+|---|---|
+| Stair band A | `x + 1..x + 6` at `y` and `y + 1` |
+| Stair band B | `x + 1..x + 6` at `y + 2` and `y + 3` |
+| Stair band C | `x + 1..x + 6` at `y + 4` and `y + 5` |
+| Stair band D | `x + 1..x + 6` at `y + 6` and `y + 7` |
+
+The stair/field helper itself does not branch on peer-spell mode. Peer-spell
+mode affects the surrounding V-View source choices for the tinting wall
+classes, but the `0x8?` helper always emits the four-band rule pattern above.
+The `0xC?` reset after glyph `0x75` is a source-selector terminator only; it
+has no relative offset, shape, or extra drawable cell for the minimap renderer.
 
 When peer-spell view mode is active, V-View applies the same magic-vision tint branch used by the dungeon peer path. When the flood walk finishes, the handler waits for a key/poll result, clears the side panel again, and calls back into the dungeon renderer to restore the first-person view before returning. The minimap is therefore an inspect overlay, not a persistent panel that waits for the next turn loop to erase it.
 
