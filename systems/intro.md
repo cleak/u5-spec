@@ -83,6 +83,25 @@ Before slot 7 is drawn, the title flow clears the lower screen band from
 signature walker then draws its four path segments from these pen origins, in
 order: `(68, 44)`, `(94, 64)`, `(78, 143)`, and `(105, 167)`.
 
+The start/menu surface is built from `STARTSC` after the title flourish ends
+or is skipped. `STARTSC` is a three-panel screen composition, not pre-rendered
+menu text:
+
+| `STARTSC` slot | Role | Top-left X | Top-left Y | Size |
+|---:|---|---:|---:|---|
+| 0 | Left side strip | 0 | 0 | 16 x 137 |
+| 1 | Central start/menu backing art | 16 | 0 | 288 x 137 |
+| 2 | Right side strip | 304 | 0 | 16 x 137 |
+
+The loader clears the active intro display/text surface before drawing this
+composition, draws all three panels as one adjacent 320-by-137 upper-screen
+surface, then draws the intro menu text window over the lower portion of the
+screen. The `STARTSC` panels therefore do not themselves contain the six menu
+labels. The box/text-window pass owns the bottom menu area and overwrites any
+pixels it covers; pixels below the 137-pixel panel height are established by
+the preceding clear and by the subsequent text-window drawing, not by hidden
+`STARTSC` artwork.
+
 ## 4. `BRITISH.PTH` signature animation
 
 `BRITISH.PTH` is a one-off path stream used only by the intro. The file stores small signed pen movements, not absolute coordinates and not NPC schedule data. The intro loads the whole path file into a scratch buffer, then calls a path walker four times. Each call starts from a fixed title-screen origin and consumes one segment of the path stream, so the four calls together draw the whole Lord British signature.
@@ -123,6 +142,15 @@ driver binaries should treat the tick as an intro-only four-frame overlay in
 that rectangle, preserving the cadence and destination even if the replacement
 frames are independently authored.
 
+The public v1 replacement target is deterministic and opaque. A clean
+implementation should provide four independently authored frames, advance one
+frame per title-tick call, wrap modulo four, and overwrite the entire
+`(0, 65)` `320 x 49` rectangle on every tick. There is no transparency key for
+this overlay: black replacement pixels are still drawn as black pixels and
+replace what was previously under them. A static placeholder can be useful
+during development, but it is a lower-fidelity fallback rather than the
+specified title/menu idle animation.
+
 ## 6. Intro menu model
 
 The intro menu is a six-entry key menu. It is rendered after the title/start screen is ready and remains the controlling loop until a valid Journey Onward load returns to the main loop or the process exits by another path. Keys are folded to uppercase before dispatch, matching the input-system contract in `input.md`.
@@ -137,6 +165,25 @@ The accepted keys are:
 | `U` | Ultima V Introduction | Play the story slide sequence, then return to the intro menu. |
 | `A` | Acknowledgements | Show credits/acknowledgements, then return to the intro menu. |
 | `R` | Return to View | Run the non-interactive Return-to-View preview, restore the menu surface, then remain in intro mode. |
+
+The menu labels are rendered as fixed-cell text inside the intro menu window,
+after `STARTSC` and the lower window frame have been drawn. The labels appear
+in this order and at these text-cell origins:
+
+| Row | Key | Label | Text-cell origin |
+|---:|---|---|---|
+| 0 | `J` | Journey Onward | column 12, row 17 |
+| 1 | `C` | Create New Char. | column 9, row 18 |
+| 2 | `T` | Transfer from U4 | column 8, row 19 |
+| 3 | `U` | Ultima V Intro. | column 9, row 20 |
+| 4 | `A` | Acknowledgements | column 11, row 21 |
+| 5 | `R` | Return to View | column 10, row 22 |
+
+Each label is emitted with one leading and one trailing blank around the
+label text at that origin. When a row is highlighted, the text output layer's
+inverse-video toggle is emitted before that line and again after it, so the
+highlight is a text-attribute effect over the same label placement. Dispatch
+is still by key, not by row index; the row number only controls presentation.
 
 Invalid keys are ignored and the menu continues polling. The menu also keeps a
 short recent-selection cache for repeat-by-Enter behaviour; pressing Enter can
@@ -166,6 +213,12 @@ The load path does the following at a behavioural level:
 After the intro returns, the main loop reads the scene state that came from the loaded save and dispatches to overworld, town, or dungeon as appropriate. The intro does not load map files such as world data, location data, NPC files, or talk files during this path. Those are loaded by the gameplay mode that the main loop selects.
 
 The file roles, empty-save guard, object-overlay mirror writes, and disk-swap semantics are specified in `save-load.md`, `formats/saved-gam.md`, and `formats/ool.md`.
+
+The empty-save message is written into the current intro text window after the
+failed load check, then the path waits for one keypress and returns to the
+intro menu loop. It does not start a gameplay mode, does not tick world time,
+and does not require a fresh `STARTSC` art load before the menu labels are
+repainted by the normal menu loop.
 
 ## 8. Create New Character (`C`)
 
@@ -313,14 +366,15 @@ The start/menu-screen loader's separate rectangle use is optional and
 caller-selected. It first loads and directly draws the `STARTSC` art, then, only
 when the caller requests the animated path, reveals the inclusive pixel
 rectangle `(0, 0)..(319, 100)` with the same left-to-right, one-pixel-column per
-title-tick helper used by story step 1. Unrevealed columns retain the prior
-screen contents until their column is copied. The loader polls input only after
-this rectangle pass has completed; that poll can affect the following
-start-screen prompt/continuation path, but it does not interrupt the reveal
-itself. The traced call sites are the initial title/menu load and the menu
-re-entry tails after acknowledgements, the `U` story slide loop, and the
-credits/return path; only a nonzero loader argument enables the rectangle
-reveal.
+title-tick helper used by story step 1. The reveal is therefore 320 title ticks
+long when enabled, copying columns `x = 0` through `x = 319` in order.
+Unrevealed columns retain the prior screen contents until their column is
+copied. The loader polls input only after this rectangle pass has completed;
+that poll can affect the following start-screen prompt/continuation path, but
+it does not interrupt the reveal itself. Ordinary direct `STARTSC` loads skip
+this rectangle pass. Fixed `END.DAT` and other ordinary bitmap-window callers
+do not inherit the start-screen reveal contract; their clear, page-in, border
+redraw, and wait timing remain caller-owned presentation details.
 
 The slide loop does not mutate gameplay state, does not create a save, and does not select a gameplay scene. Its only persistent effect is that, when it returns, the intro reloads or redraws the start/menu view so the six-option menu can continue.
 
@@ -447,6 +501,7 @@ historical-renderer parity work.
 The behaviour described here was derived by reading the function and format notes listed below. None of those notes' assembly excerpts, decompiled code, private addresses, or binary text dumps appear in this spec; this document is a cleanroom prose re-derivation of the observed behaviour.
 
 - Boot initialisation, title-screen orchestration, asset-depth selection, intro menu rendering, key dispatch, and the high-level hand-off to the main loop: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+- Start/menu screen loading, `STARTSC` composition use, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, and `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`.
 - Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
 - Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh local rectangle-transition helper analysis.
 - Return-to-View entry point, preview bytecode runtime, preview map-strip

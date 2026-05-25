@@ -166,6 +166,23 @@ cadence, intro-only ownership, and separation from gameplay time; exact reuse
 of the historical driver-resident pixels is a driver-binary parity issue, not
 an asset-format requirement.
 
+A cleanroom replacement must be independently authored. For v1 fidelity, treat
+the replacement as four opaque frames in the active EGA-compatible palette:
+each title-tick call draws the next frame over the full `(0, 65)` `320 x 49`
+destination rectangle, including black pixels, then advances the frame index
+modulo four. The renderer should not alpha-blend, mask, scale, crop, or reuse
+the previous surface contents inside that rectangle. A static placeholder is
+acceptable only as an explicit development fallback; it does not satisfy the
+four-frame idle-animation contract.
+
+The animation advances only when intro or cutscene code requests the title
+tick. It runs during the Lord British signature loop, during finished-menu
+idle polling, and during start/menu transition helpers that explicitly call the
+same tick. It continues over the `STARTSC` menu surface because the same
+destination rectangle is redrawn after the menu is visible. Blocking waits or
+message paths that do not call the title tick should not advance the title/menu
+idle animation on their own.
+
 Story-sequence art selection and primary placement are specified in
 `intro.md`, including the special secondary panel draws. The display layer
 only needs to provide the requested panel draws, the step-1 rectangle
