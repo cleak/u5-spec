@@ -89,12 +89,24 @@ surface, draw the title resource, draw the Lord British resource and path
 animation, then enter the menu/start-screen flow. The file format does not
 encode menu timing, input handling, or the title/menu idle animation.
 
+For intro-title compatibility, the resource's decoded records are not a
+standalone draw list. `systems/intro.md` names the only title records that
+become visible and the order in which they are drawn. In particular, the intro
+title helper draws `TITLE.BIT` records `0..6` cumulatively onto one cleared
+title surface, then the later title phase draws only the explicitly named
+records `7`, `8`, and `9` around the signature sequence. A renderer that draws
+every decoded record from this file as a simultaneous sprite layer will produce
+spliced duplicate title marks.
+
 ### 4.2 `BRITISH.BIT`
 
 `BRITISH.BIT` uses the same sparse strip resource model as `TITLE.BIT`. It is
-drawn during the title sequence before or during the `BRITISH.PTH` path-stroke
-animation. The path file supplies the animated pen movement; `BRITISH.BIT`
-supplies bitmap artwork consumed by the driver.
+drawn during the title sequence as a caller-selected record, not as an
+automatic overlay for every decoded record. In the intro title flow,
+`BRITISH.PTH` supplies the animated pen movement first, and `BRITISH.BIT`
+record `0` is drawn afterward as the completed bitmap overlay. A renderer
+should not put `BRITISH.BIT` under the path strokes unless it is deliberately
+rendering a non-compatible preview.
 
 ### 4.3 `WD.BIT`
 
@@ -164,6 +176,9 @@ large entry counts in known resources.
 - A modern renderer can convert populated strips directly to an RGBA or indexed
   surface, but the result must match the EGA baseline's strip order, row count,
   clipping, and colour interpretation.
+- Treat decoded records as addressable resources. The caller decides which
+  records are drawn, where they are placed, and whether earlier screen contents
+  remain visible.
 - Replacement title/menu idle frames are not stored in `.BIT`; those are
   driver-local animation frames described in `systems/display-driver.md`.
 
@@ -206,3 +221,6 @@ data.
 - Intro title and story consumers:
   `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md` and
   `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+- Intro title record visibility and ordering:
+  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md` and fresh local
+  resident display-helper verification.

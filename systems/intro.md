@@ -34,14 +34,16 @@ On old hardware, one display case can be downgraded to a simpler driver if the d
 
 ## 3. Title-screen construction
 
-After boot setup, the intro builds the title presentation in layers:
+After boot setup, the intro builds the title presentation in ordered phases:
 
 1. Clear and configure the full-screen text/graphics surface.
 2. Render the initial title/rune text appropriate to the active driver.
-3. Load the title and Lord British artwork.
-4. Draw the title artwork through the display driver's compressed-bitmap path.
-5. Load `BRITISH.PTH`.
-6. Play the signature animation over the title screen unless the player skips it.
+3. Load the title and Lord British artwork resources.
+4. Run the seven-step initial title-mark helper for `TITLE.BIT` slots `0..6`.
+5. Draw the later title overlays around the signature phase in the order
+   specified below.
+6. Play the `BRITISH.PTH` signature animation over the title screen unless
+   the player skips it.
 7. Load and draw the start/menu screen used behind the six menu options.
 
 The intro uses two different graphics-resource families. Screen-panel assets
@@ -54,10 +56,13 @@ belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
 The title phase accepts an early `J` keystroke. If the player presses `J` during the first title wait, the intro skips the remaining title flourish and commits to the Journey Onward load path. This is a convenience fast path into the same load behaviour reached by selecting `J` from the finished menu.
 
 The fixed title-screen bitmap placements use 320-by-200 pixel coordinates with
-the origin at the upper-left corner. `TITLE.BIT` slots 0 through 6 form the
-initial title mark: draw them in ascending slot order, center each slot
-horizontally, start at `y = 0`, and advance `y` by the drawn slot's height
-before drawing the next slot.
+the origin at the upper-left corner. `TITLE.BIT` slots `0..6` form the initial
+title-mark flourish. They are cumulative, not mutually exclusive animation
+alternatives: begin from the freshly cleared title surface, draw slot `0`, then
+draw slots `1` through `6` in ascending order without clearing between them.
+Center each slot horizontally, start at `y = 0`, and advance `y` by the drawn
+slot's height before drawing the next slot. The effect is a single built-up
+title mark, not a choice of one final slot.
 
 | `TITLE.BIT` slot | Top-left X | Top-left Y | Size |
 |---:|---:|---:|---|
@@ -69,7 +74,7 @@ before drawing the next slot.
 | 5 | 52 | 73 | 216 x 45 |
 | 6 | 20 | 118 | 280 x 61 |
 
-The remaining title sequence consumes the rest of the decoded bitmap blocks:
+The remaining title sequence uses four explicit overlay draws:
 
 | Asset | Slot | Top-left X | Top-left Y | Size |
 |---|---:|---:|---:|---|
@@ -78,10 +83,34 @@ The remaining title sequence consumes the rest of the decoded bitmap blocks:
 | `BRITISH.BIT` | 0 | 24 | 66 | 272 x 62 |
 | `TITLE.BIT` | 9 | 104 | 160 | 112 x 33 |
 
-Before slot 7 is drawn, the title flow clears the lower screen band from
-`y = 140` through the bottom of the 320-by-200 surface. The `BRITISH.PTH`
-signature walker then draws its four path segments from these pen origins, in
-order: `(68, 44)`, `(94, 64)`, `(78, 143)`, and `(105, 167)`.
+Their draw order is part of the compatibility contract:
+
+1. After the seven-step `TITLE.BIT` `0..6` helper returns, clear the lower
+   screen band from `y = 140` through the bottom of the 320-by-200 surface.
+2. Draw `TITLE.BIT` slot `7` at `(108, 140)`.
+3. Draw `TITLE.BIT` slot `8` at `(152, 0)`.
+4. Draw the four `BRITISH.PTH` signature path segments, in order, from pen
+   origins `(68, 44)`, `(94, 64)`, `(78, 143)`, and `(105, 167)`.
+5. Draw `BRITISH.BIT` slot `0` at `(24, 66)`.
+6. Draw `TITLE.BIT` slot `9` at `(104, 160)`.
+
+`BRITISH.BIT` is therefore not a backing image under the live path strokes.
+The path strokes are the animated pen movement; the `BRITISH.BIT` draw happens
+after those strokes and supplies the completed bitmap overlay for the final
+pre-menu title frame. A clean renderer should not draw `BRITISH.BIT` before
+`BRITISH.PTH` and then stroke on top of it.
+
+The final title frame before `STARTSC` is drawn is the accumulated `TITLE.BIT`
+upper title mark from slots `0..6`, with the lower band replaced by the later
+slot `7` and slot `9` overlays, the small slot `8` overlay at the top, and the
+completed `BRITISH.BIT` overlay over the middle/lower signature area. The
+subsequent `STARTSC` load replaces this title presentation; it is not another
+transparent layer over the final title frame.
+
+Only these semantic title slots are visible. Do not render every decoded
+resource record from `TITLE.BIT` or `BRITISH.BIT` as an independent visible
+sprite, and do not draw slots `0..6` as alternatives that replace one another.
+Their visibility is controlled by the intro call sequence above.
 
 The start/menu surface is built from `STARTSC` after the title flourish ends
 or is skipped. `STARTSC` is a three-panel screen composition, not pre-rendered
@@ -559,6 +588,10 @@ The behaviour described here was derived by reading the function and format note
 - Boot initialisation, title-screen orchestration, asset-depth selection, intro menu rendering, key dispatch, and the high-level hand-off to the main loop: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - Start/menu screen loading, `STARTSC` composition use, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, and `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`.
 - Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
+- Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, lower-band
+  clearing, and the explicit slot `7`, slot `8`, `BRITISH.BIT` slot `0`, and
+  slot `9` overlay order: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`
+  and fresh local resident display-helper verification.
 - Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh local rectangle-transition helper analysis.
 - Return-to-View entry point, preview bytecode runtime, preview map-strip
   loader, per-frame active-object animation bridge, per-cell tile rendering,
