@@ -485,6 +485,45 @@ a later dispatcher call draws again.
 | Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, charges tax, and queues the pending watercraft placement |
 | Inn flow | Resident innkeeper text and `SHOPPE.DAT` records from the inn record table | Room quote and registry text are deterministic from the current inn and branch | Room, leave-companion, and pickup-companion branches use branch-local prompts and registry screens; failed eligibility checks print resident refusal text and return without a fresh room quote | Rest charges and registry mutations occur only after the corresponding branch validation and accepted payment/selection |
 
+For frame-oriented rendering, the live transcript contract is:
+
+| Flow state | Text source | Clear or append | Cursor movement | Wait / ignored input |
+|---|---|---|---|---|
+| Arms entry | Resident/tokenized shop greeting, resident shopkeeper-intro literal, two-entry resident long-greeting pool, then a resident closing quote/space | Appends to the inherited conversation window; no shop-local clear | No explicit shop cursor setter; output advances from the inherited cursor | Waits once after the first greeting, then waits for `B`, `S`, Space, or another exit key |
+| Arms buy stock list | Resident `Buy` echo, four-entry resident affirmation pool, four-entry resident stock-call pool, current stock item names | Appends after the entry transcript | Natural text advance only | Invalid stock letters leave the stock list visible and keep waiting; they do not redraw the list or consume a random draw |
+| Arms item quote and confirmation | Deterministic `SHOPPE.DAT` quote by equipment id, then one of four resident confirmation prompts | Appends after the stock list | Natural text advance only | Only `Y` and `N` advance. Other keys leave the quote/prompt visible and do not redraw or consume a random draw |
+| Arms sell browser | Resident sell-side literals plus deterministic sell-back quote records for the browsed carried item | Appends inside the inherited window | Natural text advance only | Empty, unsellable, and declined items return through the browser without a fresh shared bark |
+| Guild entry | Shared non-arms preamble row, resident acceptance/refusal literals, then guild stock menu | Appends; no shop-local clear | Natural text advance only | `Y`, `N`, and Space are accepted. Other keys leave the prompt visible and keep polling |
+| Reagent entry | Shared non-arms preamble row, resident acceptance/refusal literals, then reagent stock menu | Appends; no shop-local clear | Natural text advance only | Same as guild entry; ignored keys do not redraw or consume a random draw |
+| Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service choices re-prompt from the service menu rather than selecting a new shared preamble |
+| Tavern / meal entry | Per-shop tavern greeting and menu records selected by the tavern state | Clears the inherited conversation text window before the greeting, then appends | No shop-local cursor origin after the clear | Entry accepts `Y`, `N`, or Space. Other keys leave the greeting visible and keep polling |
+| Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
+| Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input returns; unknown topics print the no-help line and re-prompt. `N` exits before a success draw; short funds exits without a success draw |
+| Horse-trader entry and quote | Shared non-arms preamble row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space exits silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
+| Shipwright entry and branch | Shared shipwright bark rows, resident Frigate/Skiff menu text, deterministic local quote text | The shipwright body clears the inherited conversation text window before its prompt body, then appends branch text | No shop-local cursor origin after the clear | Invalid outer choices re-poll the menu. Delivery-pending and short-funds refusals print branch text and return without queueing a vehicle |
+| Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Branch-local prompts wait according to the selected room, leave, or pickup path; failed eligibility checks print their refusal and return to the inn prompt path |
+| Inn multi-guest pickup register | Resident register frame/list text and guest names copied from the inn registry | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
+
+The short resident literal pools that affect prompt parity are:
+
+| Use | Literal contract |
+|---|---|
+| Shared Y/N prompt echo | `Y` echoes `Yes` plus newline; `N` echoes `No` plus newline. Other keys print nothing and keep polling. |
+| Arms buy confirmation prompts | One prompt is selected uniformly from: `Wouldst thou buy one?`, `Wilt thou take it?`, `Wish ye it?`, `May I get one for thee?` |
+| Arms buy decline echo | `N` prints `No` followed by a blank line, then returns from that quote without changing gold or inventory. |
+| Arms carry-cap refusal | Prints the fixed carry-cap refusal followed by the shopkeeper suffix, waits for one key, then returns from the quote. |
+| Arms no-credit barks | One no-credit bark is selected uniformly from the four-entry resident pool, wrapped in the resident yelling suffix; this exits the shop flow without changing gold or inventory. |
+| Arms successful sale tail | Prints the fixed sold line, then the post-item "anything else" prompt addressed by Avatar gender. |
+
+Prompt redraw rules are intentionally narrow. A prompt redraw occurs only when
+the flow explicitly calls the prompt/menu renderer again, such as healer service
+re-prompting or sage no-match re-prompting. Plain ignored-key waits do not clear
+the inherited window, do not re-render the visible quote or menu, and do not
+consume a random bark draw. Shared preamble, initial-greeting, and farewell
+random barks are not retained in hidden state: the visible text remains only
+because the caller keeps polling without calling the bark dispatcher again.
+A later dispatcher call selects a fresh row ordinal.
+
 The traced ordinary arms, guild, reagent, healer, tavern, sage, meal/provision,
 horse-trader, and shipwright overlay paths do not install shop-local
 text-window rectangles or cursor origins. They render into the active text
@@ -1082,10 +1121,11 @@ fixed.
 
 - Remaining equipment class restrictions and armour defence values are tracked
   by `catalogs/item-list.md` and `formats/data-ovl.md`.
-- Exact shop text-window rectangles, cursor origins, and frame-level
-  presentation timing are still presentation-contract work. They are not
-  required for the gameplay contract above, but they are required for
-  frame-identical shop rendering.
+- Shop-owned transcript clear/append, prompt wait, and cursor-origin behavior
+  is specified in Section 8.A. The remaining frame-identical presentation
+  boundary is caller-owned: the exact rectangle, cursor, colour, and style of
+  the inherited conversation window must come from the Talk/text-window specs
+  that set up window `2` before the shop overlay is called.
 
 ## 12. Sources
 
