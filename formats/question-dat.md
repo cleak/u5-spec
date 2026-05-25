@@ -15,7 +15,7 @@ selection logic, answer handling, or save-writing code.
 
 The file is a simple sequence of NUL-terminated text records:
 
-- Two introductory records for the gypsy scene.
+- One opening gypsy-scene record and one post-question/result gypsy record.
 - Twenty-eight dilemma records, one for each unordered pair of the eight
   Britannian virtues.
 
@@ -32,17 +32,18 @@ field, count word, offset table, per-record length, checksum, or compression.
 | Record range | Count | Purpose |
 |---|---:|---|
 | 0 | 1 | Gypsy-scene arrival narrative. |
-| 1 | 1 | Gypsy invitation and setup for the questions. |
+| 1 | 1 | Post-question/result gypsy paragraph before save commit. |
 | 2..29 | 28 | A/B virtue dilemma paragraphs. |
 
 The shipped file ends immediately after the last record terminator. A reader
 can enumerate records by scanning from the beginning of the file, splitting at
 NUL bytes, and ignoring any empty trailing records if future data adds padding.
 
-Record ordinals are semantic. The two introductory records are addressed by
-their fixed positions. The dilemma records are addressed indirectly: the
-chargen system resolves a virtue pair to the byte offset of the corresponding
-record and then reads from that position until the terminating NUL.
+Record ordinals are semantic. Record 0 is addressed directly before the
+tournament, record 1 is addressed directly after the tournament, and the
+dilemma records are addressed indirectly: the chargen system resolves a virtue
+pair to the byte offset of the corresponding record and then reads from that
+position until the terminating NUL.
 
 ## 3. String Encoding and Markup
 

@@ -47,9 +47,64 @@ After both prompts are answered, chargen sets up a full-screen text rectangle fo
 
 The questionnaire's text content lives in `QUESTION.DAT`, a 7,746-byte data file shipped with the game. It is laid out as thirty NUL-terminated text records in plain ASCII, sharing two lightweight markup conventions with the intro narrative file: a leading `{` marking the start of a paragraph (consumed by the renderer as a paragraph-break sigil that produces no glyph), and `_` anywhere mid-word as a soft hyphen — a syllable-break the line-wrapper may use as a wrap candidate but which produces no glyph otherwise.
 
-The thirty records decompose as: record 0, the gypsy-wagon arrival narrative (about 800 bytes); record 1, the gypsy's "So be it!" invitation (about 900 bytes); and records 2 through 29, the twenty-eight virtue-pair dilemmas, each a short prose paragraph (150 to 300 bytes) asking the player to choose between an option A and an option B. Twenty-eight is the count of unique unordered pairs of eight virtues, and the records cover exactly those twenty-eight pairings. The mapping from pair to record is held in an eight-by-eight symmetric table in the resident data image: indexing by the smaller-numbered virtue along one axis and the larger-numbered along the other yields the selected record. The diagonal cells are zero and unreachable because no virtue is paired with itself. The public record-ordinal mapping is listed in `formats/question-dat.md`.
+The thirty records decompose as: record 0, the gypsy-wagon arrival narrative (about 800 bytes); record 1, the gypsy's post-question/result paragraph (about 900 bytes); and records 2 through 29, the twenty-eight virtue-pair dilemmas, each a short prose paragraph (150 to 300 bytes) asking the player to choose between an option A and an option B. Twenty-eight is the count of unique unordered pairs of eight virtues, and the records cover exactly those twenty-eight pairings. The mapping from pair to record is held in an eight-by-eight symmetric table in the resident data image: indexing by the smaller-numbered virtue along one axis and the larger-numbered along the other yields the selected record. The diagonal cells are zero and unreachable because no virtue is paired with itself. The public record-ordinal mapping is listed in `formats/question-dat.md`.
 
-The file is read in slices during chargen, never as a whole. Records 0 and 1 are loaded at the start for the gypsy scene; the remaining seven slices are one-per-question, with the file seek calculated from the pair table. The game opens the file, seeks to the requested record, reads two kilobytes (more than any record but small enough for the scratch buffer), and the proportional-font renderer reads up to the NUL terminator. The same scratch buffer is reused across all reads.
+The file is read in slices during chargen, never as a whole. Record 0 is loaded for the opening gypsy scene, records 2 through 29 are loaded one-per-question during the seven-question tournament, and record 1 is loaded after the tournament as the final gypsy/result paragraph before save commit. The game opens the file, seeks to the requested record, reads two kilobytes (more than any record but small enough for the scratch buffer), and the proportional-font renderer reads up to the NUL terminator. The same scratch buffer is reused across all reads.
+
+## 5.1 Presentation layout
+
+The character-creation graphics come from the eleven-slot `CREATE` image
+directory. Name and gender prompts do not draw a `CREATE` panel; they are
+fixed-cell text prompts over the chargen display state after the proportional
+font and `CREATE` asset have been loaded.
+
+| Flow point | `CREATE` slot | Top-left X | Top-left Y | Size | Role |
+|---|---:|---:|---:|---|---|
+| Opening gypsy paragraph | 0 | 0 | 96 | 168 x 96 | Opening scene panel |
+| Question frame left backing | 1 | 16 | 0 | 120 x 148 | Left option backing |
+| Question frame right backing | 1 | 200 | 0 | 120 x 148 | Right option backing |
+| Post-question/result paragraph | 10 | 168 | 100 | 152 x 100 | Closing/result scene panel |
+
+Slots 2 through 9 are the virtue option panels. The option labelled `A` uses
+the lower-numbered virtue in the current pair and is drawn at that virtue's
+base origin. The option labelled `B` uses the higher-numbered virtue and is
+drawn 184 pixels to the right of that virtue's base origin.
+
+| Virtue | `CREATE` slot | Base X | Base Y | Size |
+|---|---:|---:|---:|---|
+| Honesty | 2 | 40 | 5 | 51 x 67 |
+| Compassion | 3 | 48 | 7 | 43 x 67 |
+| Valor | 4 | 48 | 4 | 34 x 69 |
+| Justice | 5 | 40 | 10 | 55 x 58 |
+| Sacrifice | 6 | 40 | 8 | 48 x 61 |
+| Honor | 7 | 48 | 0 | 42 x 64 |
+| Spirituality | 8 | 40 | 5 | 50 x 65 |
+| Humility | 9 | 48 | 6 | 42 x 65 |
+
+The visible draw order is:
+
+1. Render the name prompt at fixed-cell column 3, row 17.
+2. Read up to eight typed characters at fixed-cell column 14, row 19.
+3. If the entered name is empty, abort back to the intro menu without drawing
+   the gypsy panels or writing the save.
+4. Render the gender prompt at fixed-cell column 8, row 21, loop silently until
+   `M` or `F`, then echo the accepted key and store the encoded gender byte.
+5. Draw `CREATE` slot 0, render `QUESTION.DAT` record 0 in the proportional
+   font, flush the display, and wait for one keypress.
+6. For each of the seven questions, draw slot 1 twice as the left and right
+   backing panels, choose two eligible virtues, draw their option panels, load
+   and render the selected question paragraph, flush the display, then loop
+   until `A` or `B`.
+7. Draw `CREATE` slot 10, render `QUESTION.DAT` record 1 in the proportional
+   font, flush the display, and wait for one keypress.
+8. Commit the generated save files, restore intro scene ownership, and return
+   to the intro menu.
+
+Invalid gender and question keys do not trigger a redraw or error message; the
+polling loop keeps waiting. The paragraph renderer owns word wrapping through
+the proportional font width table and advances within the caller's active
+paragraph rectangle. The caller flushes after each paragraph/page and performs
+the wait; paragraph rendering itself does not consume input.
 
 ## 6. The questionnaire — eight virtues, seven questions
 
