@@ -115,32 +115,46 @@ The path format, segmentation, and pen-up rule are specified in `formats/pth.md`
 ## 5. Title Tick And Idle Animation
 
 The title sequence has a small display-driver-owned tick distinct from the
-gameplay world tick. It is used while the signature animation is running and
-again while the finished intro menu is waiting for input. The tick advances the
-driver's title/flame-style visual state and presents the updated frame; it does
-not run gameplay animation, NPC schedules, or the world clock.
+gameplay world tick. It advances the driver's title/flame-style visual state
+and presents the updated frame; it does not run gameplay animation, NPC
+schedules, or the world clock.
 
-During the signature phase, the intro alternates between path drawing,
-keyboard polling, and title ticks. A keypress stops the remaining signature
-strokes and proceeds to the start/menu view; it does not skip boot setup or
-menu rendering. During the finished menu, input polling runs in bounded idle
-chunks. If no accepted key arrives during a chunk, the intro runs one title
-tick and resumes polling. This is why the menu remains visually alive without
-advancing any saved-game state.
+The title tick advances only at explicit intro/display call sites. The Lord
+British signature path itself is paced by keyboard polling and real-time delay
+ticks while it draws the path stream; those delay ticks do not advance the
+four-frame title strip. A keypress stops the remaining signature strokes and
+proceeds to the start/menu view; it does not skip boot setup or menu rendering.
+
+Once `STARTSC` has been drawn, the start-screen loader runs one clear-carry
+title tick before it redraws the lower intro text window and before the menu
+labels are rendered. The finished menu then polls input in a bounded idle loop:
+each no-key poll pass runs one clear-carry title tick, then polls again. If
+two hundred consecutive no-key passes elapse, the menu commits the same path as
+`R` Return to View. This is why the menu remains visually alive without
+advancing any saved-game state, and why the Return-to-View preview can start
+after a long unattended menu idle.
 
 The historical driver implements the title tick behind a display dispatch
 rather than in `FLAMES.OVL`. The observed EGA/CGA/Hercules/Tandy paths use a
 small four-frame counter. A modern renderer can implement the same visible
 contract as a four-frame loop tied to the intro menu's idle cadence.
 
-For the EGA-compatible baseline, one title tick draws one driver-local frame
-strip over the title screen at pixel `(0, 65)` with size `320 x 49`, then
-advances the driver-local frame index modulo four. The source pixels are not in
-`TITLE.BIT`, `BRITISH.BIT`, or another external art file; they are embedded in
-the loaded display driver. A cleanroom renderer that does not use the original
-driver binaries should treat the tick as an intro-only four-frame overlay in
-that rectangle, preserving the cadence and destination even if the replacement
-frames are independently authored.
+For the EGA-compatible baseline, one clear-carry title tick draws the current
+driver-local frame strip over the title/start screen at pixel `(0, 65)` with
+size `320 x 49`, then advances the driver-local frame index modulo four. The
+covered destination rows are `65..113` inclusive and the covered columns are
+`0..319` inclusive. The first frame after driver initialisation is frame `0`;
+the frame index is not reset merely because `STARTSC` is redrawn, a menu row is
+re-highlighted, or a non-play submenu returns.
+
+The source pixels are not in `TITLE.BIT`, `BRITISH.BIT`, `STARTSC`, or another
+external art file; they are owned by the loaded display driver. In the EGA
+driver, the four source phases are laid out as four 320-pixel-wide frame
+bands with a 50-row source stride, and the tick copies the upper 49 rows of
+the selected band to the destination rectangle. A cleanroom renderer that does
+not use the original driver binaries should treat the tick as an intro-only
+four-frame overlay in that rectangle, preserving the cadence and destination
+even if the replacement frames are independently authored.
 
 The public v1 replacement target is deterministic and opaque. A clean
 implementation should provide four independently authored frames, advance one
@@ -150,6 +164,42 @@ this overlay: black replacement pixels are still drawn as black pixels and
 replace what was previously under them. A static placeholder can be useful
 during development, but it is a lower-fidelity fallback rather than the
 specified title/menu idle animation.
+
+Frame-perfect replacement behaviour can be implemented as:
+
+```text
+state title_frame = 0        ; initialised when the intro renderer/driver is created
+
+clear_carry_title_tick():
+    draw replacement_frame[title_frame] to pixels x=0..319, y=65..113
+    title_frame = (title_frame + 1) mod 4
+```
+
+The replacement frames must use the active 16-colour EGA-compatible palette
+indices directly. Do not alpha-blend, scale, dither against the previous
+screen, or treat any palette index as transparent. If a replacement frame
+contains palette index `0`, those pixels overwrite the destination as black.
+
+The carry-set title helper used by some start-screen transition code is not the
+public frame-advance operation. Only the clear-carry title tick above advances
+the four-frame idle strip in the public intro/menu contract.
+
+The menu and message timing rules are:
+
+| Situation | Title-strip advancement |
+|---|---|
+| Signature path drawing `BRITISH.PTH` | No title-strip advancement from the signature delay/poll steps. |
+| Plain `STARTSC` load or redraw | One clear-carry title tick before the lower intro text window and menu labels are redrawn. |
+| Finished menu idle, no key returned | One clear-carry title tick for each no-key poll pass, up to the two-hundred-pass Return-to-View timeout. |
+| Valid menu key returned | No extra idle tick for that key pass; dispatch begins immediately. |
+| Invalid key returned | No extra idle tick for that key pass; the menu is re-rendered and resumes polling. |
+| Empty-save / no-active-game message | No autonomous title ticks while the message is waiting; the following menu redraw performs the ordinary one-tick `STARTSC` path. |
+| Return from story, transfer, chargen, acknowledgement, or Return-to-View | No background ticking while the subflow owns the screen. Ticking resumes only at explicit transition/title-tick calls and then in the menu idle loop. |
+
+Return-to-View is the exception among subflows in that its own per-frame
+preview tick calls the same clear-carry title tick before drawing preview
+content. The preview then draws over the affected area for that frame and
+restores the preserved title/menu surface before returning to menu polling.
 
 ## 6. Intro menu model
 
@@ -185,16 +235,22 @@ inverse-video toggle is emitted before that line and again after it, so the
 highlight is a text-attribute effect over the same label placement. Dispatch
 is still by key, not by row index; the row number only controls presentation.
 
-Invalid keys are ignored and the menu continues polling. The menu also keeps a
-short recent-selection cache for repeat-by-Enter behaviour; pressing Enter can
-reuse a cached menu selection while the intro menu remains active. If there is
-no cached selection, Enter behaves like any other ignored key.
+Invalid keys are ignored and the menu continues polling. An invalid nonzero
+key does not run the title-strip tick for that key pass; the menu highlight is
+redrawn and polling resumes. The menu also keeps a short recent-selection cache
+for repeat-by-Enter behaviour; pressing Enter can reuse a cached menu
+selection while the intro menu remains active. If there is no cached
+selection, Enter behaves like any other ignored key.
 
 Behaviourally, the player sees a stable six-option menu that waits for one of
 the accepted keys and returns to that same menu after non-play sub-screens
 finish.
 
-While the menu waits, the intro continues to run its lightweight title tick so the screen does not become a dead static wait. This is separate from the gameplay world tick. No gameplay time advances while the intro menu is active because no gameplay mode has started.
+While the menu waits, the intro continues to run its lightweight title tick
+only on no-key poll passes, and after two hundred consecutive no-key passes it
+enters the Return-to-View preview as if `R` had been selected. This is separate
+from the gameplay world tick. No gameplay time advances while the intro menu is
+active because no gameplay mode has started.
 
 ## 7. Journey Onward (`J`)
 
@@ -514,7 +570,13 @@ The behaviour described here was derived by reading the function and format note
   `u5-decomp/functions/FONT_OVL/0x02A2_render_entity_tile.md`,
   `u5-decomp/functions/FONT_OVL/0x0E52_screen_save.md`, and
   `u5-decomp/functions/FONT_OVL/0x0E7B_screen_restore.md`.
-- Title tick ownership, EGA destination rectangle, four-frame cadence, and the clarification that `FLAMES.OVL` is a scratch-buffer thunk, not the flame renderer: `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md` and fresh local title-animation helper analysis.
+- Title tick ownership, EGA destination rectangle, four-frame cadence, signature
+  delay/poll separation, and the clarification that `FLAMES.OVL` is a
+  scratch-buffer thunk, not the flame renderer:
+  `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`,
+  `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`,
+  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`, and
+  `u5-decomp/formats/ega-driver.md`.
 - Filled-rectangle dispatch, corrected driver-compressed bitmap dispatch, and
   driver-side title/bitmap rendering relationship:
   `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`,

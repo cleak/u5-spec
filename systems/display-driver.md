@@ -151,20 +151,33 @@ fixed there. This display-driver spec owns only the rendering operations those
 placements require.
 
 The title/menu idle animation is a display-driver tick, not a gameplay tick.
-The intro calls it while drawing the Lord British signature and while polling
-the finished menu. The observed driver implementations maintain a compact
-four-frame title/flame-style cycle. A cleanroom renderer should expose this as
-an intro-only animation step that can be advanced on demand, independent of
-world time, NPC schedules, or active-object animation.
+The intro advances it only through explicit title-tick call sites: after the
+`STARTSC` surface is drawn, during no-key finished-menu idle polling, and in
+intro-local preview or transition helpers that call the same tick. The Lord
+British signature walker is paced by keyboard polling and real-time delay
+ticks; those delay ticks do not advance the four-frame title strip. The
+observed driver implementations maintain a compact four-frame
+title/flame-style cycle. A cleanroom renderer should expose this as an
+intro-only animation step that can be advanced on demand, independent of world
+time, NPC schedules, or active-object animation.
 
 For the EGA-compatible baseline, that title tick copies a driver-local
 four-frame strip into the title screen at pixel `(0, 65)`, covering
-`320 x 49` pixels. The original driver stores the frames internally rather than
-loading them from `TITLE.BIT`, `BRITISH.BIT`, or any other external resource.
-The public v1 contract is therefore the destination rectangle, four-frame
-cadence, intro-only ownership, and separation from gameplay time; exact reuse
-of the historical driver-resident pixels is a driver-binary parity issue, not
-an asset-format requirement.
+`320 x 49` pixels, with covered columns `0..319` and covered rows `65..113`.
+The first frame after driver or renderer initialisation is frame `0`; each
+clear-carry tick draws the current frame and then advances the frame index
+modulo four. Redrawing `STARTSC`, re-highlighting a menu row, or returning from
+a non-play intro subflow does not reset that frame index.
+
+The original driver stores the frames internally rather than loading them from
+`TITLE.BIT`, `BRITISH.BIT`, `STARTSC`, or any other external resource. The EGA
+driver source layout has four 320-pixel-wide frame bands with a 50-row source
+stride, and each tick copies the upper 49 rows of the selected band to the
+destination rectangle. The public v1 contract is therefore the destination
+rectangle, four-frame cadence, intro-only ownership, opaque overwrite
+semantics, and separation from gameplay time; exact reuse of the historical
+driver-resident pixels is a driver-binary parity issue, not an asset-format
+requirement.
 
 A cleanroom replacement must be independently authored. For v1 fidelity, treat
 the replacement as four opaque frames in the active EGA-compatible palette:
@@ -176,12 +189,12 @@ acceptable only as an explicit development fallback; it does not satisfy the
 four-frame idle-animation contract.
 
 The animation advances only when intro or cutscene code requests the title
-tick. It runs during the Lord British signature loop, during finished-menu
-idle polling, and during start/menu transition helpers that explicitly call the
-same tick. It continues over the `STARTSC` menu surface because the same
-destination rectangle is redrawn after the menu is visible. Blocking waits or
-message paths that do not call the title tick should not advance the title/menu
-idle animation on their own.
+tick. It runs once after `STARTSC` drawing, once for each no-key finished-menu
+poll pass, and during start/menu transition or preview helpers that explicitly
+call the same tick. Finished-menu idle polling auto-enters Return-to-View after
+two hundred consecutive no-key passes; valid and invalid nonzero key passes do
+not add an extra idle tick. Blocking waits or message paths that do not call
+the title tick should not advance the title/menu idle animation on their own.
 
 Story-sequence art selection and primary placement are specified in
 `intro.md`, including the special secondary panel draws. The display layer
@@ -302,9 +315,12 @@ addresses.
   `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`,
   `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`, and
   `u5-decomp/formats/ega-driver.md`.
-- Title display tick and driver-side frame-counter evidence:
-  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md` and fresh
-  local title-animation helper analysis.
+- Title display tick, intro call-site cadence, driver-side frame-counter
+  evidence, and signature delay/poll separation:
+  `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`,
+  `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`,
+  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`, and
+  `u5-decomp/formats/ega-driver.md`.
 - Story panel draw ordering and the local rectangle transition:
   `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh
   local rectangle-transition helper analysis.
