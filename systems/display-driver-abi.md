@@ -50,7 +50,13 @@ not be treated as part of the `*.DRV` ABI. Its public behaviour is specified in
 ## 3. EGA Baseline Mode
 
 The EGA-compatible baseline uses the IBM EGA 320-by-200, 16-colour planar
-graphics mode.
+graphics mode. The mode is shared by VGA-compatible adapters at the firmware
+level, so there is no separate VGA driver and no separate VGA code path; VGA
+hosts run this same driver in this same mode. The mode-initialisation
+sequence, the planar buffer layout, the back-buffer four-plane arrangement,
+and the palette mechanics are specified in
+[`display-driver-mode.md`](display-driver-mode.md); the table below summarises
+the dispatch-facing properties only.
 
 | Property | Contract |
 |---|---|
@@ -114,35 +120,35 @@ without visible effect.
 | `0x0F` | 5 | Set the descriptor render-target selector. |
 | `0x12` | 6 | No-op. |
 | `0x15` | 7 | No-op. |
-| `0x18` | 8 | Prepare back-buffer segment state for resident helper paths. |
-| `0x1B` | 9 | Back-buffer or presentation state helper; exact visible role is not yet load-bearing. |
-| `0x1E` | 10 | Full-screen back-buffer/front-buffer transfer helper. |
+| `0x18` | 8 | Carry-flag-gated dispatcher to whole-screen plane-copy helpers. Under the resident core's `clc`-bracketed dispatch convention this entry is effectively a no-op; older calling conventions could set carry to request a flush. |
+| `0x1B` | 9 | Two-direction full-screen plane copy used by back-buffer-touching paths to refresh or seed the alternate buffer. |
+| `0x1E` | 10 | Full-screen front-buffer and back-buffer in-place swap, row by row, using a driver-internal scanline scratch. This is a swap, not a one-way transfer. |
 | `0x21` | 11 | No-op. |
 | `0x24` | 12 | Read one pixel and return its 4-bit colour. |
-| `0x27` | 13 | Scroll the screen/text region upward by one 8-pixel text row. |
+| `0x27` | 13 | Scroll the right-side text panel upward by exactly eight scanlines. See section 9.5 for the precise region and exposed-band policy. |
 | `0x2A` | 14 | No-op. |
 | `0x2D` | 15 | Set the current 4-bit drawing colour. |
-| `0x30` | 16 | Plot one pixel. |
-| `0x33` | 17 | Draw a line. |
+| `0x30` | 16 | Plot one pixel. The back-buffer override path silently no-ops, so this is effectively a front-buffer operation. |
+| `0x33` | 17 | Draw an arbitrary-direction integer line between two pixel endpoints. |
 | `0x36` | 18 | No-op. |
-| `0x39` | 19 | Fill a horizontal span into the back-buffer path. |
-| `0x3C` | 20 | Fill a rectangle through the older rectangle path. |
-| `0x3F` | 21 | Fill a clipped rectangle with the current colour. |
+| `0x39` | 19 | Fill a single horizontal scanline in either buffer. The row coordinate is the entry's Y argument; there is no row loop. |
+| `0x3C` | 20 | Fill a rectangle in either buffer using the earlier-generation rectangle helper. |
+| `0x3F` | 21 | Fill a clipped rectangle with the current colour. Front-buffer only; back-buffer fills go through dispatch offset `0x39` or `0x3C`. |
 | `0x42` | 22 | Decode and draw a driver-compressed bitmap/font-strip resource. |
 | `0x45` | 23 | No-op. |
-| `0x48` | 24 | Pack or transfer screen data into the back-buffer representation. |
-| `0x4B` | 25 | General tile or sprite blit. |
+| `0x48` | 24 | Register a loaded asset segment as the active tile/sprite asset and prepare it for blitting by converting its embedded pixel payload from packed to planar layout in place. Despite the historical working name "pack to back buffer", this entry does not touch the back buffer; it operates on the asset segment. |
+| `0x4B` | 25 | General tile or sprite blit. Accepts a render-flags word whose low bits choose between an opaque blit and a transparency-mask blit. |
 | `0x4E` | 26 | Stamp a one-bit silhouette sprite into the back buffer. |
 | `0x51` | 27 | Draw one 16-by-16 tile directly to the front buffer. |
 | `0x54` | 28 | No-op. |
 | `0x57` | 29 | No-op. |
-| `0x5A` | 30 | Release the current asset segment. |
+| `0x5A` | 30 | Release the current asset segment back to DOS. |
 | `0x5D` | 31 | Draw one 8-by-8 fixed-cell glyph directly to the front buffer. |
-| `0x60` | 32 | Mutate loaded tile graphics for animated shimmer effects. |
-| `0x63` | 33 | General tile blit with an additional flag set. |
-| `0x66` | 34 | Copy a rectangle from back buffer to front buffer in pseudo-random dissolve order. |
+| `0x60` | 32 | Mutate loaded tile graphics for animated shimmer effects. The mutation phase is followed by a propagation/composite phase, so the body of this entry is substantially larger than just the noise step. |
+| `0x63` | 33 | Tile blit with the transparency-mask flag forced on. Equivalent to dispatch offset `0x4B` with the caller-supplied flag word bitwise-ORed with the transparency bit. |
+| `0x66` | 34 | Copy a rectangle from back buffer to front buffer in pseudo-random dissolve order. The visit order is driven by a Galois-style LFSR; see section 9.6 for the public visit-order contract. |
 | `0x69` | 35 | Advance and draw the title/menu flame-style animation strip. |
-| `0x6C` | 36 | Loaded-tile graphics palette-plane mutation/save/restore helper. The combat framer reaches this entry with mode value `1` when the resident tile-restoration flag is set. |
+| `0x6C` | 36 | Loaded-tile graphics palette-plane mutation, save, restore, byte-parameterized substitution, and an extended mode reached only by alternate paths. The combat framer reaches this entry with mode value `1` when the resident tile-restoration flag is set. |
 | `0x6F` | 37 | CPU-calibrated delay with byte-stream animation playback. |
 
 The most important correction from the full driver pass is that dispatch
@@ -256,7 +262,152 @@ to the visible page.
 Neither the 16-by-16 tile entry nor the fixed-cell glyph entry is used for
 ordinary back-buffer updates in the EGA baseline.
 
-## 9. Transitions And Animation Entries
+## 9. Additional Public Entries
+
+The earlier sections cover the main draw surface (rectangle fill, compressed
+bitmap, tile, glyph). The remaining entries are documented below at the same
+public-contract depth.
+
+### 9.1 Mode And State Setup
+
+Dispatch offset `0x03` performs the one-time graphics-mode entry. When invoked
+with a non-zero primary-argument flag the entry switches the adapter to the
+EGA-compatible 320-by-200, 16-colour mode, loads sixteen attribute-controller
+palette entries from the resident screen descriptor's palette table, selects
+hardware page zero as the visible page, and resets the sequencer plane-write
+mask, the graphics-controller bit mask, and the graphics-controller function
+select to their pass-through values. When invoked with a zero flag the entry
+skips the BIOS mode change and the palette load but still caches the
+descriptor pointer for later entries. After the first successful invocation,
+the entry treats its scanline-row table and edge-mask lookup table as one-time
+initialised and does not rebuild them.
+
+Dispatch offset `0x06` reserves the driver back buffer and zeroes its contents,
+then returns the back-buffer segment to the caller for later use by other
+entries that need to address it. Dispatch offset `0x0C` is a release entry
+with mismatched semantics relative to `0x06`; the resident core does not call
+it on its main exit path, so it should be treated as historical scaffolding.
+
+Dispatch offset `0x0F` updates the resident screen descriptor's render-target
+selector. Subsequent entries that consult that selector route their output to
+the front buffer when the field is zero and to the back buffer when it is
+non-zero. Not every entry honours the selector; entries explicitly noted as
+front-buffer-only ignore it.
+
+Dispatch offset `0x2D` stores a 4-bit drawing colour into a driver-resident
+single-byte register. Later entries that fill, plot, or rasterise without an
+explicit colour argument use that register. Setting the colour does not
+itself touch the framebuffer.
+
+### 9.2 Pixel-Level Primitives
+
+Dispatch offset `0x24` reads one pixel from the front buffer and returns the
+4-bit colour value through the third register. It always reads from the
+visible page and ignores the render-target selector. The colour is reassembled
+by selecting each colour-plane in turn and bit-testing the relevant byte.
+
+Dispatch offset `0x30` writes one pixel to the front buffer using the current
+drawing colour. The entry has a code path that consults the render-target
+selector, but the inner pixel-write helper rejects non-front-buffer segments,
+so back-buffer plotting is silently a no-op. Modern implementations may
+collapse the back-buffer branch and document the entry as front-buffer only.
+
+Dispatch offset `0x33` draws an integer line between two pixel endpoints. The
+implementation uses a textbook integer Bresenham step over the major axis with
+plus-or-minus-one minor-axis steps, so the line includes both endpoints and
+covers all eight octants. Each plotted pixel uses the same single-pixel
+front-buffer writer as dispatch offset `0x30`; the entry does not optimise
+horizontal or vertical lines into rectangle fills.
+
+### 9.3 Asset Segment Lifecycle
+
+Dispatch offset `0x48` registers a caller-supplied DOS segment as the active
+asset segment and prepares it for tile and glyph blits. The entry walks the
+segment's embedded pixel payload and rewrites it in place from the on-disk
+chunky packed-nibble layout into the byte-interleaved planar layout that the
+tile and glyph entries consume. After this entry returns successfully, the
+driver-resident asset-segment pointer names the supplied segment and the
+tile-blit entries can read tile data from it directly.
+
+Dispatch offset `0x5A` releases the current asset segment back to DOS. It
+issues a DOS free-block call against the driver-resident asset-segment pointer
+and ignores any DOS error. The pointer is not explicitly cleared after the
+call; consumers should treat the driver as having no active asset segment and
+must call dispatch offset `0x48` again before the next tile blit.
+
+A caller that wants to swap one asset segment for another therefore issues
+release-then-prepare in sequence; there is no atomic replace.
+
+### 9.4 Buffer Maintenance
+
+Dispatch offset `0x18` is a carry-flag-gated entry that dispatches between two
+internal whole-screen plane-copy helpers. The resident core's dispatch sites
+clear carry before issuing the far call, so the entry as it is reached in
+practice is a no-op. Modern implementations need not expose this entry at all
+unless they intend to drive an alternate carry-set path that the shipped
+binary does not exercise.
+
+Dispatch offset `0x1B` performs a two-direction full-screen plane copy. It is
+used after back-buffer effects to refresh or seed the alternate buffer so a
+subsequent front-or-back-targeted draw observes a coherent starting image.
+
+Dispatch offset `0x1E` is a full-screen in-place swap of the front and back
+buffers, performed scanline by scanline with a driver-resident scratch row.
+After this entry returns, every pixel that was on the front buffer is on the
+back buffer and vice versa. The entry is not a one-way transfer; modern
+implementations must preserve the swap semantics for any caller path that
+relies on it. The shipped resident core does not appear to call this entry on
+its mainline paths, but its presence in the dispatch table is part of the
+public ABI.
+
+### 9.5 Text Panel Scroll
+
+Dispatch offset `0x27` is the text-panel scroll entry. It scrolls a fixed
+window upward by eight scanlines:
+
+| Property | Value |
+|---|---|
+| Horizontal extent | Pixel columns 192 through 319 inclusive (a 128-pixel-wide right-side text panel, 16 character cells wide). |
+| Vertical extent | Pixel rows 88 through 199, advanced one row per inner iteration; iterations that reach beyond the visible 200 rows write to non-visible video memory and are harmless. |
+| Scroll distance | Exactly eight scanlines upward. The distance is a driver-internal constant; any per-call distance argument is vestigial and is not honoured by the entry. |
+| Exposed band | Not blanked by this entry. After the scroll, the bottom eight scanlines of the panel inherit whatever pixels happened to lie immediately below the panel before the scroll. The caller paints fresh content into the bottom row immediately after the scroll, which masks the un-blanked content. |
+| Caller responsibility | Callers that need a clear bottom row must request a fill or a fresh glyph draw for those scanlines after the scroll completes. |
+
+The entry checks that the primary register argument names the panel's left
+edge before proceeding; calls with any other left-edge value return without
+visible effect. This makes the entry strictly a right-side-text-panel scroll,
+not a general scroll-rectangle helper. A compatible engine may either match
+the hardcoded extent and exposed-band policy exactly, or expose a more general
+scroll-rectangle operation and reduce it to this one when the resident core
+asks for it.
+
+### 9.6 Rectangle Dissolve Visit Order
+
+Dispatch offset `0x66` copies pixels from the back buffer to the front buffer
+in pseudo-random order until every pixel in the requested rectangle has been
+copied exactly once. The original implementation uses a Galois-style LFSR
+indexed by the rectangle's pixel count to select the next visited pixel; the
+visible contract is:
+
+1. Every pixel inside the inclusive rectangle is visited exactly once.
+2. After the entry returns, the front buffer matches the back buffer inside
+   the rectangle.
+3. The visit order is deterministic and reproducible across calls with the
+   same rectangle dimensions.
+4. The visit order is not row-major, not column-major, and not a clean spiral;
+   it should appear as scattered single-pixel updates to a viewer.
+
+A compatible engine that wants exact frame-by-frame visual parity with the
+original can reuse the original tap-set inventory, indexed by the integer
+log2 of the rectangle's pixel count. The size-class taps are stored in the
+driver as 16-bit Galois polynomials; the resident core's dissolve caller wraps
+this entry in an outer loop that re-invokes the world tick every few visits,
+so the dissolve does not freeze gameplay timing for the duration of a
+full-screen transition. An engine that does not need exact frame-by-frame
+parity may substitute any other order that satisfies the four bullet points
+above.
+
+## 10. Transitions And Animation Entries
 
 The EGA driver owns several visual effects that are not gameplay systems:
 
@@ -283,7 +434,7 @@ The EGA driver owns several visual effects that are not gameplay systems:
 These effects do not advance saved-game time, NPC schedules, combat rounds, or
 active-object simulation.
 
-## 10. ABI Boundaries And Remaining Hardware Parity
+## 11. ABI Boundaries And Remaining Hardware Parity
 
 The EGA-facing ABI contract is complete for the v1 compatibility target:
 dispatch-cell loading, EGA buffer layout, rectangle fill, compressed bitmap
@@ -306,16 +457,32 @@ Remaining work is historical hardware and exact visual parity:
   path. If another driver uses it for placement or palette selection, that is
   an alternate-driver compatibility detail.
 
-## 11. Sources
+## 12. Sources
 
 Cleanroom prose derived from these private analysis notes:
 
 - `u5-decomp/formats/ega-driver.md`.
-- `u5-decomp/functions/EGA_DRV/_OVERVIEW.md`.
-- `u5-decomp/functions/EGA_DRV/0x1180_fill_rect_v2.md`.
-- `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
-- `u5-decomp/functions/EGA_DRV/0x1637_tile_blit_16x16.md`.
-- `u5-decomp/functions/EGA_DRV/0x19D2_glyph_8x8.md`.
+- `u5-decomp/functions/EGA_DRV/_OVERVIEW.md` (full per-slot index, 38 slots
+  plus helper-routine notes, completed during the 2026-05-26 follow-up pass).
+- Per-slot notes for every dispatch entry the engine reaches, including
+  `0x0868_set_video_mode.md`, `0x08E4_alloc_back_buffer.md`,
+  `0x093C_set_descriptor_render_target.md`,
+  `0x0958_set_es_to_back_buffer.md`, `0x098A_back_buffer_invalidate.md`,
+  `0x09AE_back_to_front_full_transfer.md`, `0x0A78_get_pixel.md`,
+  `0x0AEA_scroll_screen_up_8.md`, `0x0E66_set_color.md`,
+  `0x0E6C_plot_pixel.md`, `0x0F8E_draw_line_bresenham.md`,
+  `0x1072_fill_horizontal_to_back.md`, `0x10FE_fill_rect_v1.md`,
+  `0x1180_fill_rect_v2.md`, `0x1226_draw_compressed_bitmap.md`,
+  `0x12B4_tile_blit_general.md`, `0x162E_tile_blit_general_flagged.md`,
+  `0x1637_tile_blit_16x16.md`, `0x17A9_pack_to_back_buffer.md`,
+  `0x18F6_free_asset_segment.md`, `0x190E_silhouette_stamp_back_buffer.md`,
+  `0x19D2_glyph_8x8.md`, `0x1DE8_delay_with_animation_step.md`,
+  `0x1F98_tile_pixel_randomize.md`, `0x256B_lfsr_pixel_dissolve.md`,
+  `0x282D_animate_flames_strip.md`,
+  `0x2AB3_tile_palette_swap_save_restore.md`.
+- Load-bearing helper notes: `0x045C_compute_edge_masks.md`,
+  `0x04F6_front_buffer_scanline_fill.md`,
+  `0x263A_lfsr_pixel_copy_helper.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.

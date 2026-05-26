@@ -11,8 +11,10 @@ and which asset formats feed those operations.
 
 This document defines that v1 contract for a cleanroom engine. The
 driver-facing ABI for the EGA baseline is specified separately in
-`display-driver-abi.md`; that companion document names dispatch slots and
-resource contracts without reproducing driver code. A modern implementation may
+`display-driver-abi.md`; the underlying mode setup, planar buffer layout, and
+palette mechanics are specified in `display-driver-mode.md`. Those companion
+documents name dispatch slots, buffer layouts, palette tables, and resource
+contracts without reproducing driver code. A modern implementation may
 collapse the historical drivers into one renderer as long as it preserves the
 visible behaviour described here and the asset-facing contracts in the format
 specs.
@@ -38,6 +40,16 @@ family. See `formats/tiles.md`.
 For v1 asset compatibility, an implementation should support the EGA-compatible
 rendering path and the original asset selectors. It may reject or map the
 historical CGA/Tandy/Hercules requests unless exact hardware parity is a goal.
+
+The original distribution ships only the four driver families listed above.
+There is no separate VGA driver. VGA-equipped hosts run the EGA driver in the
+standard 320-by-200, 16-colour mode, because VGA hardware preserves backward
+compatibility with that EGA mode at the BIOS level. A modern engine that wants
+to claim "VGA support" should treat that label as a synonym for "the EGA-
+compatible rendering path running on a VGA-class adapter"; it does not imply a
+new dispatch table, a wider colour palette, a higher resolution, or any 256-
+colour code path. Higher-resolution and 256-colour modes were not shipped with
+Ultima V and are not part of this contract.
 
 ## 3. Coordinate Systems
 
