@@ -37,7 +37,12 @@ On old hardware, one display case can be downgraded to a simpler driver if the d
 After boot setup, the intro builds the title presentation in ordered phases:
 
 1. Clear and configure the full-screen text/graphics surface.
-2. Render the initial title/rune text appropriate to the active driver.
+2. Prepare the intro text pipeline by loading the IBM and rune glyph
+   assets, activating the IBM glyph asset, configuring the full-screen
+   text window, selecting the active display-driver descriptor, and
+   polling once for the early Journey Onward shortcut. This phase
+   does not draw any text or runes; it only readies the fonts and
+   checks for a queued `J` keypress.
 3. Load the title and Lord British artwork resources.
 4. Run the seven-step initial title-mark helper for `TITLE.BIT` slots `0..6`.
 5. Draw the later title overlays around the signature phase in the order
@@ -53,7 +58,85 @@ driver's compressed bitmap resource format instead. The intro orchestrates file
 selection, loading, placement, and draw calls; the data formats themselves
 belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
 
-The title phase accepts an early `J` keystroke. If the player presses `J` during the first title wait, the intro skips the remaining title flourish and commits to the Journey Onward load path. This is a convenience fast path into the same load behaviour reached by selecting `J` from the finished menu.
+### Pre-flourish phase (step 2)
+
+The pre-flourish phase is a non-visual preparation pass. The intro
+performs the following actions in order; none of them draw text,
+runes, or other glyphs to the screen, and no portion of the display
+surface is changed by this phase beyond the descriptor and active-font
+bookkeeping described below:
+
+1. Probe the loaded display driver for an "intro-ready" status. If
+   the driver returns a zero status, the intro aborts: it restores
+   the BIOS video mode that was captured before driver setup and
+   terminates the program with exit code 1. This is a hard
+   boot-failure path; a clean implementation that does not reuse the
+   original driver dispatch can either omit this probe or replace it
+   with an equivalent "display backend ready" assertion.
+2. Load two bitmap-font assets into the resident font slot table:
+   slot 0 receives the normal IBM-style glyph set used for ordinary
+   intro and menu text; slot 1 receives the Britannian runic glyph
+   set, kept resident for later activation when rune-styled text is
+   required. The asset filenames differ only by driver:
+
+   | Driver | IBM slot file | Rune slot file |
+   |---|---|---|
+   | EGA | `IBM.CH` | `RUNES.CH` |
+   | CGA | `IBM.CH` | `RUNES.CH` |
+   | Tandy | `IBM.CH` | `RUNES.CH` |
+   | Hercules | `IBM.HCS` | `RUNES.HCS` |
+
+   The pair-by-driver distinction is purely an asset-format choice:
+   the `.CH` files are the 8×8 IBM-PC bitmap form used by the
+   colour drivers; the `.HCS` files are the high-resolution monochrome
+   form used by the Hercules driver. The loader is a generic "open,
+   size, allocate, read" sequence; each load retries only when the
+   file read returns zero bytes, and a non-zero return (success or a
+   sentinel error) exits the retry. A clean v1 implementation that
+   ships a single EGA-compatible bitmap font may load the EGA pair
+   unconditionally; the driver-specific asset distinction is
+   historical-parity work for the alternate display drivers.
+3. Activate font slot 0 as the current glyph source so that any
+   later intro text (e.g. the Journey Onward shortcut message in
+   step 5, the start/menu labels in section 6) is drawn through the
+   IBM glyph set by default. Slot 1 remains loaded and is reachable
+   later through the same active-font selector when the rune glyph
+   set is needed.
+4. Reset the primary text-window descriptor to the full 40-column by
+   25-row text-cell rectangle covering the entire screen. This
+   establishes the print/cursor bounds for any subsequent
+   text-window output in the intro.
+5. Select display-driver descriptor index 0 as the active driver
+   descriptor. This is the configuration bookkeeping step that
+   publishes the descriptor's per-driver flags (column width, text
+   foreground/background, centre-output gate) to the resident text
+   primitives. It does not change the BIOS video mode.
+6. Perform exactly one non-blocking keyboard poll, fold the returned
+   byte to uppercase, and compare it to `J`. If a key was queued
+   before this poll (typically because the player pressed `J`
+   while the boot was still proceeding) and the key folds to `J`,
+   the intro takes the early Journey Onward shortcut: it prints
+   "Journey Onward" centered in the cleared text window, transitions
+   the intro scene state to the post-menu transition state, and
+   jumps directly to the Journey Onward load handler in section 7.
+   For any other key, or no key, the intro falls through to step 3
+   of the outer phase list (title and Lord British resource loads).
+
+The early `J` shortcut is therefore accepted at exactly this single
+poll, not throughout the flourish. The TITLE.BIT flourish in steps
+4–5 and the `BRITISH.PTH` animation in step 6 can be interrupted by
+any keystroke, but those interruptions proceed to the start/menu
+screen, not to the Journey Onward load. The two paths are distinct:
+the pre-flourish poll commits the load, while later flourish
+keystrokes only skip the visual flourish.
+
+This phase never draws to the display surface, so no pixels from it
+persist into the TITLE.BIT flourish. The flourish loader stamps its
+source surface and draws its visible frames over whatever the boot
+setup and the preceding clear left on the screen. A clean
+implementation may therefore implement step 2 as a pure preparation
+pass with no rendering and no clearing beyond what step 1 already
+performed.
 
 The fixed title-screen bitmap placements use 320-by-200 pixel coordinates with
 the origin at the upper-left corner. `TITLE.BIT` slots `0..6` form the initial
@@ -335,13 +418,20 @@ active because no gameplay mode has started.
 
 The load path does the following at a behavioural level:
 
-1. Read the whole `SAVED.GAM` image into the resident save-state region.
-2. Check whether the save contains an active Avatar record.
-3. If the save is empty, display the "no active game" style message, wait for a key, and return to the intro menu.
-4. Read `SAVED.OOL`, the object-overlay companion file.
-5. Mirror the surface and underworld object-overlay halves to their per-plane files.
-6. If the loaded state resumes on the underworld surface, prompt/probe for the underworld data disk and refresh the underworld object overlay once the disk is available.
-7. Mark the display/gameplay transition as ready and return from the intro overlay.
+1. Draw the standard game-screen border frame. This is the viewport, stats panel, and command-prompt chrome shared by all gameplay modes. The frame is a pure deterministic paint that depends on no save data; it sets up the visual layout in preparation for gameplay.
+2. Initialise the scene-transition display state. At this point the intro scene state is still active, so this step is effectively a no-op; it primes the transition cell for the post-load hand-off.
+3. Switch the display mode to the gameplay configuration and position the text cursor.
+4. If the intro scene state is still the menu state, load any required transition resource and advance to the post-menu transition state.
+5. Show a wait indicator.
+6. Read the whole `SAVED.GAM` image into the resident save-state region.
+7. Check whether the save contains an active Avatar record.
+8. If the save is empty, display the "no active game" style message, wait for a key, and return to the intro menu.
+9. Read `SAVED.OOL`, the object-overlay companion file.
+10. Mirror the surface and underworld object-overlay halves to their per-plane files.
+11. If the loaded state resumes on the underworld surface, prompt/probe for the underworld data disk and refresh the underworld object overlay once the disk is available.
+12. Mark the display/gameplay transition as ready and return from the intro overlay.
+
+Steps 1 through 5 prepare the display for gameplay before any save data is read. The game-screen frame is drawn first so the player sees the gameplay viewport appear while the save loads. The frame consists of the left viewport area, the right stats panel with horizontal subdividers, and the bottom command-prompt area, formed by filled rectangles and box-drawing corner glyphs. This is the same screen layout used by overworld, town, dungeon, and combat modes.
 
 After the intro returns, the main loop reads the scene state that came from the loaded save and dispatches to overworld, town, or dungeon as appropriate. The intro does not load map files such as world data, location data, NPC files, or talk files during this path. Those are loaded by the gameplay mode that the main loop selects.
 
@@ -355,7 +445,7 @@ repainted by the normal menu loop.
 
 ## 8. Create New Character (`C`)
 
-`C` hands control from the intro menu to the character-creation flow. The hand-off goes through a resident trampoline into the proportional-font overlay, which owns both the paragraph renderer used by the questionnaire and the chargen driver.
+`C` hands control from the intro menu to the character-creation flow. The hand-off goes through a resident trampoline into the proportional-font overlay, which owns both the paragraph renderer used by the questionnaire and the chargen driver. The chargen routine is entirely self-contained within that overlay: it loads its own assets, runs the questionnaire using local helpers, writes the save files through resident I/O wrappers, and returns directly to the intro menu. It does not chain through the spell-casting overlay or any other overlay.
 
 From the intro system's perspective, the contract is simple:
 
@@ -517,6 +607,8 @@ The screen-panel asset container is specified in `formats/tiles.md`. The proport
 
 `A` displays the acknowledgement/credits screen and then returns to the intro menu. It uses the same already-initialised display and text systems as the title and story paths. The acknowledgement path is self-contained: it does not read or write the save image, does not change the gameplay scene, and does not exit the program.
 
+The acknowledgement screen loads its own graphics resource from the end-screen asset family, draws the credits artwork at a fixed position, and presents it through a pair of animated wipe transitions. The entry wipe reveals the credits from the bottom of the screen upward by copying successive horizontal slabs with a fixed pixel stride. After the credits are fully visible, the screen waits for a keypress. The exit wipe reverses the direction, wiping the credits artwork away from top to bottom. After the exit wipe, the acknowledgements handler reloads the start/menu screen and redraws the menu.
+
 After the acknowledgement screen finishes, the intro returns to its menu loop with intro state still active. A later `J`, `C`, or `T` selection is required to leave the intro.
 
 ## 12. Return to View (`R`)
@@ -634,6 +726,12 @@ historical-renderer parity work.
 The behaviour described here was derived by reading the function and format notes listed below. None of those notes' assembly excerpts, decompiled code, private addresses, or binary text dumps appear in this spec; this document is a cleanroom prose re-derivation of the observed behaviour.
 
 - Boot initialisation, title-screen orchestration, asset-depth selection, intro menu rendering, key dispatch, and the high-level hand-off to the main loop: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+- Pre-flourish phase composition (driver-ready probe, IBM/RUNES glyph
+  asset loading by driver, active-font selection, text-window descriptor
+  reset, driver-descriptor selection, and the early Journey Onward
+  single-poll shortcut): `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
+  `u5-decomp/functions/ULTIMA_EXE/0x1D02_load_font_into_slot.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/0x1C9E_select_active_font.md`.
 - Start/menu screen loading, `STARTSC` composition use, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, and `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`.
 - Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
 - Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, hidden-source
@@ -665,7 +763,8 @@ The behaviour described here was derived by reading the function and format note
   `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`,
   `u5-decomp/functions/EGA_DRV/0x1180_fill_rect_v2.md`, and
   `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
-- Journey Onward load path, empty-save guard, `SAVED.GAM` and `SAVED.OOL` reads, object-overlay mirror writes, underworld disk-swap branch, and final return to the main loop: `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
+- Journey Onward load path, pre-load game-screen-frame draw, empty-save guard, `SAVED.GAM` and `SAVED.OOL` reads, object-overlay mirror writes, underworld disk-swap branch, and final return to the main loop: `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md` and `u5-decomp/functions/ULTIMA_EXE/0x637E_combat_screen_layout.md` (renamed to `draw_game_screen_frame` 2026-05-24).
+- Character-creation chain verification: the `C` key enters `chargen_main` in the proportional-font overlay and returns directly to the intro menu. The chargen routine is self-contained and does not chain through the spell-casting overlay. Verified via `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` callee list (2026-05-24).
 - Transfer/continue roster path, transfer disk-state setup, seed loads, roster/status screen rendering, and commit/abort behaviour: `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - Outer main-loop boot context, scene dispatch after intro return, and overlay call model: `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
 - Display-driver loading and initial mode setup: `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
