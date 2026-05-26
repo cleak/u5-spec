@@ -89,6 +89,17 @@ The load flow is invoked from the title-screen menu when the player presses `J` 
 
 ### 4.2 Step-by-step
 
+Before the load begins, the intro overlay performs several display-setup steps that do not depend on save data:
+
+- Draw the standard game-screen border frame (viewport, stats panel, command prompt area). This is the same screen layout shared by all gameplay modes; it is painted before the save is read so the player sees the gameplay viewport appear while the file loads.
+- Prime the scene-transition display state. At this point the intro scene state is still active, so this is effectively a no-op.
+- Switch the display mode to the gameplay configuration and position the text cursor.
+- Show a wait indicator.
+
+These steps are documented in the intro spec because they belong to the intro's display-ownership contract. They do not read or write save data.
+
+The subsequent save-read sequence is:
+
 1. **Read `SAVED.GAM` into the save image region.** The full 4192 bytes are read in one operation through the I/O layer's retry-and-prompt wrapper (see Section 7). On success, the save image is in memory and every gameplay system's state is correct.
 
 2. **Test for an empty save.** The first byte of the Avatar name field is checked against zero. In `SAVED.GAM` this is file offset `0x0002`, because two leading save-image bytes precede the roster. If the byte is zero, the save is treated as uninitialised. The intro prints a three-line message ("No active game", "Please create a character", "or transfer one from Ultima IV"), waits for any keystroke, and returns to the title menu.
