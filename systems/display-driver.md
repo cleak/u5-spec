@@ -181,15 +181,22 @@ clear-carry tick draws the current frame and then advances the frame index
 modulo four. Redrawing `STARTSC`, re-highlighting a menu row, or returning from
 a non-play intro subflow does not reset that frame index.
 
-The original driver stores the frames internally rather than loading them from
-`TITLE.BIT`, `BRITISH.BIT`, `STARTSC`, or any other external resource. The EGA
-driver source layout has four 320-pixel-wide frame bands with a 50-row source
-stride, and each tick copies the upper 49 rows of the selected band to the
-destination rectangle. The public v1 contract is therefore the destination
+The original driver produces the frames at runtime rather than loading them
+from `TITLE.BIT`, `BRITISH.BIT`, `STARTSC`, or any other external resource.
+The EGA driver reads its source from its own back-buffer region of EGA video
+memory, treating it as four 320-pixel-wide frame bands with a 50-row source
+stride and copying the upper 49 rows of the selected band to the destination
+rectangle. The back-buffer holding those bands is populated by other
+display-driver entries earlier in the intro setup; the bands are not present
+as a contiguous data block inside the `EGA.DRV` file image, and there is no
+fixed byte offset within the driver image at which a clean engine can find
+them by passive parsing. The public v1 contract is therefore the destination
 rectangle, four-frame cadence, intro-only ownership, opaque overwrite
 semantics, and separation from gameplay time; exact reuse of the historical
-driver-resident pixels is a driver-binary parity issue, not an asset-format
-requirement.
+driver-resident pixels is a driver-binary parity issue, not a static
+asset-format requirement, and a clean engine that wants byte-identical title
+visuals must either capture the runtime back-buffer through the original
+driver or supply independently authored replacement frames.
 
 A cleanroom replacement must be independently authored. For v1 fidelity, treat
 the replacement as four opaque frames in the active EGA-compatible palette:
