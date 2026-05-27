@@ -308,13 +308,33 @@ the frame index is not reset merely because `STARTSC` is redrawn, a menu row is
 re-highlighted, or a non-play submenu returns.
 
 The source pixels are not in `TITLE.BIT`, `BRITISH.BIT`, `STARTSC`, or another
-external art file; they are owned by the loaded display driver. In the EGA
-driver, the four source phases are laid out as four 320-pixel-wide frame
-bands with a 50-row source stride, and the tick copies the upper 49 rows of
-the selected band to the destination rectangle. A cleanroom renderer that does
-not use the original driver binaries should treat the tick as an intro-only
-four-frame overlay in that rectangle, preserving the cadence and destination
-even if the replacement frames are independently authored.
+external art file; they are produced at runtime by the loaded display driver.
+In the EGA driver, the tick reads its source from the driver's own back-buffer
+region of EGA video memory, treating it as four 320-pixel-wide frame bands
+with a 50-row source stride and copying the upper 49 rows of the selected
+band into the destination rectangle. The back-buffer holding those bands is
+populated by other display-driver entries earlier in the intro setup, not by
+an external asset file that a clean engine can parse.
+
+Because the source pixels live in video memory rather than at any fixed byte
+offset inside `EGA.DRV` itself, a clean engine cannot extract the four bands
+by reading the driver file as a passive data container. There is no stable
+"title-tick frame offset" to publish: scanning the driver image for a 1-bit
+silhouette region, a 4-bit-planar block, or a contiguous bitmap will not find
+the original frames, and any heuristic that appears to succeed on one driver
+revision is necessarily a coincidence. A clean engine that wants the original
+title-tick visuals must either run the original driver binary against the
+real hardware path or load user-captured PNG frames of the bands; a clean
+engine that does not need exact visual parity should provide independently
+authored replacement frames in the active EGA-compatible palette as the
+default cleanroom asset for this overlay. The `U5_EGA_DRV_TITLE_TICK_OFFSET`
+style of locator-from-driver-file approach is not implementable against this
+contract.
+
+A cleanroom renderer that does not use the original driver binaries should
+treat the tick as an intro-only four-frame overlay in that rectangle,
+preserving the cadence and destination even if the replacement frames are
+independently authored.
 
 The public v1 replacement target is deterministic and opaque. A clean
 implementation should provide four independently authored frames, advance one
@@ -375,6 +395,51 @@ The accepted keys are:
 | `U` | Ultima V Introduction | Play the story slide sequence, then return to the intro menu. |
 | `A` | Acknowledgements | Show credits/acknowledgements, then return to the intro menu. |
 | `R` | Return to View | Run the non-interactive Return-to-View preview, restore the menu surface, then remain in intro mode. |
+
+### 6.1 Lower text-window frame
+
+The lower intro text-window frame is drawn after the one clear-carry title tick
+and before the six menu labels. It is a single-line rectangle composed of the
+intro's fixed-cell box-drawing glyphs (the five-glyph corner/edge set the font
+file reserves for that purpose) and a thin horizontal rule beneath the top
+border row.
+
+| Property | Value |
+|---|---|
+| Anchor cell | column `0`, row `15` |
+| Width | 40 text cells (full screen width, columns `0..39`) |
+| Height | 10 text cells (rows `15..24`, inclusive), giving pixel rows `120..199` |
+| Top border row | row `15`: top-left corner glyph, 38 top-edge glyphs, top-right corner glyph |
+| Side rows | rows `16..23`: left-edge glyph at column `0`, right-edge glyph at column `39`, interior preserved for menu and message text |
+| Bottom border row | row `24`: bottom-left corner glyph, 38 bottom-edge glyphs, bottom-right corner glyph |
+| Glyph colour | the intro's bright foreground palette index, applied as the current text attribute |
+| Glyph set | the fixed-cell font's reserved corner-and-edge codes for the menu window; the same five-glyph set used elsewhere in the intro for boxed text |
+
+The bottom-right corner glyph is emitted with the text-attribute "inverse" flag
+briefly cleared so that the corner is drawn in plain foreground colour even
+when the surrounding cells are inverse-video. The flag is restored immediately
+after the corner glyph.
+
+After the corner-and-edge pass completes, the intro emits one thin horizontal
+rule through the display driver's line primitive at pixel `y = 127`, spanning
+columns `7..312` in the current intro foreground colour. The rule lies inside
+the top border row's eight-pixel cell, immediately under the top-edge glyph
+row; the intro then issues two short horizontal fills below that rule to
+finish the underline detail.
+
+The frame does not clear the interior cells. The preceding intro display
+clear, the `STARTSC` paint, and the title tick are the steps that establish
+the interior pixels; the frame's job is the border and underline, not the
+fill.
+
+For the no-active-save message, the intro reuses the same window. The message
+is written into the interior cells through the normal text-output path
+(which clears each output cell as it draws), waits for one keystroke, and
+returns to the menu polling loop. The frame itself is not redrawn between the
+message and the menu labels; the rectangle established here remains visible
+through the entire intro menu lifetime.
+
+### 6.2 Menu labels
 
 The menu labels are rendered as fixed-cell text inside the intro menu window,
 after `STARTSC` and the lower window frame have been drawn. The labels appear
