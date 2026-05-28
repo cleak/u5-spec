@@ -279,6 +279,16 @@ gameplay world tick. It advances the driver's title/flame-style visual state
 and presents the updated frame; it does not run gameplay animation, NPC
 schedules, or the world clock.
 
+The wall-clock cadence for every visible intro animation phase is specified
+in `timing.md` section 5; this section gives the per-phase behaviour and
+defers the unit, the catch-up policy, and the slow-CPU-gate handling to that
+document. The unit is one DOS BIOS user-tick (approximately 54.945 ms at the
+standard 18.2065 Hz rate), and the title-tick helper has that one-tick wait
+built into its body. The `TITLE.BIT` flourish, the `BRITISH.PTH` signature,
+the `STARTSC` reveal, the story step-1 reveal, and the menu idle pump all
+inherit that same unit through their reliance on the title-tick helper or on
+a direct hardware-tick wait.
+
 The title tick advances only at explicit intro/display call sites. The Lord
 British signature path itself is paced by keyboard polling and real-time delay
 ticks while it draws the path stream; those delay ticks do not advance the
