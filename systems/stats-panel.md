@@ -243,8 +243,9 @@ installing a new effect displaces whatever was there.
 When the code is zero the refresh repaints the band instead of drawing anything:
 fill `(191, 57) - (312, 62)` in the chrome colour, then stroke the two single
 scanlines `(192, 56) - (311, 56)` and `(192, 63) - (311, 63)` in the accent
-colour. That is why a freshly loaded save shows a plain blue band and a slot only
-appears once an effect is running.
+colour. That is why a freshly loaded save shows a plain chrome-coloured band — blue on
+the sixteen-colour drivers — and a slot only appears once an effect is
+running.
 
 The countdown is driven by the shared per-turn party pass: a non-zero,
 non-permanent counter is decremented, and when it reaches zero the effect code is

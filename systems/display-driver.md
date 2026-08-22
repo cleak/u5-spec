@@ -77,8 +77,14 @@ differ between the two families:
 | 6 | 7 | 3 |
 
 The low-colour values are all inside `0..3` because the CGA and Hercules
-drawing-colour entries mask their argument to two bits before translating it,
-so any larger index would alias. Known consumers are the Return-to-View caption
+drawing-colour entries mask their argument to two bits before translating it
+through a small driver-local table, so any larger index would alias. On the
+Hercules path that translation does not produce a hue at all: the adapter is
+one bit per pixel, so the four table outputs are a blank byte, two opposite
+half-density dither patterns, and a solid byte. Read the "value" column for
+that family as a pen selector, not as a colour.
+
+Known consumers are the Return-to-View caption
 panel (slot 2 for the panel fill, slot 1 for the rule beneath it), the
 Return-to-View fixed wipe command (slot 1), the Ultima IV transfer preview
 screen (slot 2 for its frame glyphs and panel bars, slot 1 for its pixel rules

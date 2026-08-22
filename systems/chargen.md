@@ -73,8 +73,14 @@ The one fixed-cell reset that *does* happen is a **single opaque fill of the
 menu window's interior**, pixels `(8, 128)..(311, 191)`, in colour 0, issued
 once immediately before the name prompt. That rectangle is character cells
 `(1, 16)..(38, 23)`. Above it, two small fills draw the prompt area's divider:
-a colour-1 fill of `(120, 120)..(200, 126)` and a colour-3 horizontal rule from
-`(120, 127)` to `(200, 127)`.
+a fill of `(120, 120)..(200, 126)` in user-interface colour slot 2 and a
+horizontal rule from `(120, 127)` to `(200, 127)` in user-interface colour
+slot 1 (`display-driver.md` section 2). Those are the same chrome and accent
+pens the rest of the interface uses — palette indices `1` and `15` on the
+sixteen-colour drivers, `1` and `3` on the low-colour pair. An earlier revision
+of this paragraph gave them as literal colours `1` and `3`; that is withdrawn.
+The `3` was the low-colour table value for the accent pen, not the colour the
+EGA baseline draws the rule in.
 
 The interior is **not** cleared again between the name and gender steps, which
 is why the name prompt and the typed name stay visible under the gender prompt.

@@ -457,10 +457,11 @@ replacement cell, and the body is drawn first.
 
 #### 4.2.6 Colours
 
-Three distinct colour slots are used, all taken from the resident per-driver
-chrome table rather than being literals in the renderer: one for the starfield
-(offset into the bright half of the palette), one for the bodies, and one for
-the Shadowlord markers. A clean implementation should expose them as three
+Three distinct colour slots are used, all taken from the boot-time
+user-interface colour table (`display-driver.md` section 2) rather than being
+literals in the renderer: the starfield uses the chrome slot biased into the
+bright half of the palette, the bodies use the accent slot, and the Shadowlord
+markers use slot 0. A clean implementation should expose them as three
 configurable indices rather than hard-coding EGA numbers, because the shipped
 values are per-display-mode.
 
