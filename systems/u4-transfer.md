@@ -210,8 +210,10 @@ sixteen bytes that begin six bytes into the party-wide block and require every
 one of them to be zero. That is the shipped test, and it produces the correct
 result regardless of how a particular predecessor save spells the standings.
 
-The test is **eight independent comparisons against zero** — no loop, no index
-register, no accumulation, and no summation. Element width is 16 bits and the
+The test is **satisfied only when each of the eight values is individually
+zero**. It is not a sum, a total, or a check on any wider aggregate, so a
+predecessor save whose standings happen to cancel out or wrap around still
+fails it. Element width is 16 bits and the
 stride is two bytes, giving file offsets `0x0146`, `0x0148`, `0x014A`, `0x014C`,
 `0x014E`, `0x0150`, `0x0152` and `0x0154`, with the block ending at `0x0155`.
 The 182-byte read that supplies them begins at file offset `0x0140`, so the
@@ -743,7 +745,7 @@ private offsets, or binary text dumps are reproduced.
   party-wide values as the virtue standings:
   `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - Third-pass re-verification of the virtue-standing block's offset, element
-  width and stride, the unrolled eight-comparison form of the test, the
+  width and stride, the per-element (rather than aggregate) form of the test, the
   one-shot latch behaviour of the resulting flag, and the staged
   maximum-hit-points-derived level shown on the summary page:
   `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
