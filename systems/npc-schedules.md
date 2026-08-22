@@ -88,7 +88,7 @@ The on-disk schedule is read-only at runtime. Mutable state lives in a separate 
 |   6    | word  | `current_z`   | The NPC's current floor. Drives the Z-mismatch states.                                            |
 |   8    | word  | `type_mirror` | A copy of the NPC's type byte for quick local lookup.                                             |
 |  12    | word  | `linked_obj`  | Index into the active-object table (Section 11). Zero = not currently rendered.                   |
-|  14    | word  | `cached_wp`   | The waypoint index most recently observed by the state machine. Drives transition detection.     |
+|  14    | word  | `cached_wp`   | The waypoint the NPC was last actually *sent to and reached*. Drives transition detection; refreshed only on arrival (Section 6), never when a period merely begins. |
 
 Three parallel side tables, indexed by NPC slot, hold pathfinding-only state:
 
@@ -139,14 +139,38 @@ The floor index grows upward: "above" means a numerically larger floor byte than
 
 After classifying, the trigger does one extra check: if the NPC's runtime `(target_x, target_y, current_z)` already equals the new waypoint's `(x, y, z)`, the NPC is already on the waypoint and state is reset to "idle".
 
-The trigger does *not* update the cached waypoint field. It only compares the
-cached value against the active waypoint and writes the movement state. The
-per-tick walker updates the cached waypoint later, after route replay or step
-application has resolved the transition to the newly active waypoint; at that
-point it also settles the NPC back to the idle state and deactivates the active
-move queue. Until that settle path runs, the cached value intentionally remains
-old so a still-unresolved boundary transition can keep reclassifying on later
-ticks.
+**When the cached waypoint is refreshed.** This is the load-bearing detail of
+the whole state machine, and it is easy to guess wrong. The trigger does *not*
+update the cached waypoint field; it only compares it against the active
+waypoint and writes the movement state. The cache is written in exactly three
+situations, and no others:
+
+1. **On entering the location.** The initialisation pass sets every occupied
+   slot's cache to the waypoint active at the entry hour (Section 5).
+2. **When the NPC is placed directly onto its waypoint.** This is the forced
+   relocation arm: the walker teleports the NPC onto the active waypoint's
+   coordinates, then writes the cache. It covers the "neither end on this floor"
+   state and the on-floor transition states once the floor-transition gate
+   accepts.
+3. **When the NPC actually walks onto its waypoint.** The per-step cell check
+   reports a distinct "permitted, and this cell *is* the active schedule
+   waypoint" outcome (Section 10), and only that outcome refreshes the cache.
+
+In other words the memory is refreshed on **arrival**, never on departure and
+never on the first committed step of a journey. It is also never refreshed
+merely because a new schedule period began.
+
+Both refresh sites do the same three things together: write the cache, return
+the NPC to the idle state, and discard any queued route.
+
+The behavioural consequence is what makes the scheduler robust. From the hour a
+period changes until the moment the NPC is standing on its new waypoint, every
+later hour boundary still reads "cached differs from active" and re-issues the
+movement order. An NPC that is blocked, detoured, interrupted by a crowd, or
+stranded on the wrong floor therefore keeps pursuing its current destination
+across boundaries instead of forgetting it. An implementation that refreshes the
+cache when the period changes, or on the first step taken, will produce NPCs
+that abandon their destinations and drift.
 
 ## 7. The state machine
 
@@ -420,6 +444,33 @@ waypoint is active.
 ## 10. Movement constraints
 
 Several rules govern whether a candidate cell is a legal step. All are consulted by the workspace builder's per-cell walkability predicate (Section 8.3).
+
+**The per-step gate.** Before a queued step is actually taken, the destination
+cell is checked once more. That check asks three things in order: is the cell
+inside the map, is its terrain passable for an NPC (the dedicated NPC tile set
+below, not any player transport set), and is the cell occupied by another active
+object. An occupied cell is refused even where the terrain allows it.
+
+The check reports **three** outcomes, not two:
+
+| Outcome | Meaning |
+|---|---|
+| Refused | Out of bounds, obstacle terrain, or occupied. The step is not taken. |
+| Permitted | An ordinary legal step. |
+| Permitted, and this is the destination | The cell's coordinates equal the active schedule waypoint's coordinates on all three axes. |
+
+Only the third outcome ends the journey: it is what refreshes the NPC's cached
+waypoint, returns it to idle, and discards the remaining route (Section 6).
+The occupancy test can only ever turn a permitted result into a refusal; it
+never manufactures the third outcome.
+
+Note that this gate's occupancy rule is stricter than the workspace builder's.
+The builder applies a distance cutoff to dynamic obstacles (see
+"Active-object collisions" below) so that a distant occupant does not perturb
+route planning; the per-step gate applies no cutoff, so a route planned around a
+far-off actor can still be refused a step when that actor has since moved into
+the way. This is what makes crowded rooms produce shuffling rather than
+walk-through.
 
 **Tile passability.** NPC pathfinding does not reuse the foot/avatar or vehicle
 terrain-query families from `systems/movement.md`. Its workspace builder uses a
@@ -707,5 +758,13 @@ The behaviour described above was derived by reading the function and format not
 - The save-format omission of NPC runtime state and the location-entry re-initialisation that fills its place — `u5-decomp/formats/saves.md`.
 - The scene-byte lifecycle audit that resolves the NPC loader's temporary
   scene-index conversion — `u5-decomp/notes/critical_state_lifecycles.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` -- the complete
+  enumeration of the cached-waypoint field's writers (the two entry seeders and
+  the two arrival refreshers), the fact that the refresh happens on arrival
+  rather than on departure or on the first committed step, and the three effects
+  each refresh performs together. Cross-checked against
+  `u5-decomp/notes/system-trace_npc-tick.md` section 4.6, whose earlier
+  "updates on the first committed step" reading is superseded.
 - The outdoor active-object trace that separates overworld monster/vehicle
   motion from `.NPC` scheduling — `u5-decomp/notes/outdoor_npc_scheduling.md`.

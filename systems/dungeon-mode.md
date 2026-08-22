@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Ultima V's dungeon mode is the third top-level world mode, after the overworld and the town/dwelling/castle/keep family. Where those modes paint top-down tile views of the world, dungeon mode paints a sparse first-person three-dimensional view of a small grid the player walks through cell by cell. There are eight such grids — the named dungeons of Britannia, in resident entry and `DUNGEON.DAT` record order: Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, and Doom. Each dungeon is a stack of eight levels, and each level is a square eight-by-eight grid of cells. The player enters from a fixed surface or underworld location, descends or ascends through ladders, fights room encounters that swap into combat mode, and either climbs back out the way they came in or wins the dungeon's deepest reward and exits.
+Ultima V's dungeon mode is the third top-level world mode, after the overworld and the town/dwelling/castle/keep family. Where those modes paint top-down tile views of the world, dungeon mode paints a sparse first-person three-dimensional view of a small grid the player walks through cell by cell. There are eight such grids — the named dungeons of Britannia, in resident entry and `DUNGEON.DAT` record order: Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, and Doom. Each dungeon is a stack of eight levels, and each level is a square eight-by-eight grid of cells. The player enters from a fixed surface or underworld location, descends or ascends through ladders and through the two dungeon level-change spells, fights room encounters that swap into combat mode, and leaves by passing the top or the bottom of the level stack - which always returns the party to that dungeon's own outdoor entrance cell, on Britannia from the top and in the Underworld from the bottom.
 
 Structurally, dungeon mode is a sibling of town mode: it has its own per-turn loop, its own special tile reactions, its own command handler that forwards letter inputs to the resident A-Z dispatcher, and its own per-turn epilogue that advances the world clock. It differs in three important ways. First, the floor is not a tile grid the player sees from above — it is a 3D first-person view of what the party would see standing inside the dungeon. Second, the renderer is not a raycaster and not a line renderer; it plots sparse precomputed pixel constellations for visible wall and feature cues. Third, NPC schedules do not run in dungeons — there are no scheduled inhabitants underground — so the per-turn loop never invokes the NPC scheduler.
 
@@ -54,7 +54,7 @@ Each cell byte packs two four-bit fields. The high nibble selects the tile class
 | `0x4`       | Wooden chest                   | Open / Search interaction. |
 | `0x5`       | Fountain                       | L-Look triggers drink Y/N (§ 8). |
 | `0x6`       | Pit / trap family              | Exact bytes drive fall traps versus bomb traps. |
-| `0x7`       | Passage / corridor variant     | Renders as passage. |
+| `0x7`       | Open chest                     | Produced at runtime by dungeon Open on a wooden chest; Get loots it and consumes it. Renders as passage, but L-Look, Search, Open, and Get all treat it as an open chest, not as floor. It never occurs in the shipped dungeon file. |
 | `0x8`       | Energy field                   | Sub-types: sleep, poison gas, fire, electric (§ 8). |
 | `0x9`       | Energy field (secondary)       | Generic energy field. |
 | `0xA`       | Room-helper / cleared-room state | Routed through the same underfoot helper as room triggers (§ 5). Reloaded cleared rooms use this high nibble. |
@@ -91,7 +91,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 **Inner loop.**
 1. **Pendulum tick.** In Q-quest mode the loop alternates between running and skipping the time-advance call so quest scenes pass time at half rate. Normal play keeps the pendulum disabled.
 2. **Render and poll.** Paint the sparse first-person view (§ 6) and wait for a keystroke. If input idled long enough that the player slept through one tick, the primitive returns a special "idle slept" sentinel.
-3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes numpad direction keys to the dungeon movement dispatcher, digit keys to a digit helper, control-S to a sound toggle, the Q letter to an "Exit to DOS?" prompt, and any letter A-Z to the resident command dispatcher (§ 10).
+3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes the four cardinal direction codes — and Enter and the period key, which mean "advance" here — to the dungeon movement dispatcher; digits to the solo-member selector, always reporting "no action" afterwards; the four shared Control bindings (exit-to-DOS prompt, moral-standing readout, sound toggle, version banner) to their own arms; and everything else, letters included, to the resident command dispatcher (§ 10). The handler's own default is "acted", so an unrecognised byte forwarded to the dispatcher reports whatever the dispatcher decides.
 4. **Scene-byte exit check.** If the scene byte has dropped to thirty-two or below, the player has climbed out (§ 13) and the loop breaks.
 5. **Refresh tile cache.** Re-read the underfoot tile and update the cached high nibble.
 6. **Post-action hook.** If the dispatch did anything, call a post-action helper for end-of-turn cleanup.
@@ -140,7 +140,8 @@ class the wandering-monster combat path consumes directly (§ 14.1). The eight
 classes are Giant Rat, Bat, Giant Spider, Ghost, Slime, Gremlin, Gazer, and
 Reaper. Placement makes up
 to eight random attempts on the current 8-by-8 level, accepting only cells in
-the pit/corridor spawn families (`0x6?` or `0x7?`) and rejecting the party's
+the pit and open-chest spawn families (`0x6?` or `0x7?`) — both of which the
+renderer paints as passage — and rejecting the party's
 current cell. On success the same X/Y is written to the active-object slot and
 the first dungeon creature slot. On failure the active-object coordinates and
 sprite marker are cleared so no wandering object is drawn. Two traced sprite
@@ -382,11 +383,34 @@ consumes the open chest by clearing its chest class in the loaded dungeon image
 while preserving the visit-marker bit, then runs the seven-row reward generator
 specified in `containers.md`.
 
+The three chest commands form one lifecycle built from a single rewrite idiom:
+keep the cell's variant bit, then replace the class and the remaining low bits.
+A successful dungeon Jimmy rewrites a locked chest cell to the variant bit plus
+the closed-chest class, which clears the lock/trap sub-type. Open rewrites that
+cell to the variant bit plus the open-chest class. Get rewrites it to the
+variant bit alone, which is a plain passage cell. Get therefore leaves floor
+behind rather than promoting the cell to some further "looted chest" state,
+because the class it is looting from already *is* the open-chest class — there
+is nothing above it to promote to. There is exactly one write per command and no
+second write elsewhere corrects it.
+
+On stock data the post-loot cell value is always the plain passage byte with no
+variant bit set: the shipped dungeon file contains no cell in the open-chest
+class at all — that class exists only as runtime state — and every static chest
+cell it does contain has the variant bit clear. The variant-bit preservation
+must still be implemented, because the same bit is read by the dungeon view's
+painter and by a dungeon overlay test, and the same preserve-bit-then-replace-
+class idiom is used by other feature-consuming rewrites; custom or mutated
+dungeon data can set it on a chest cell.
+
 Dungeon Search also recognizes the chest class. In light, Search applies a
 party-member stat roll against the current depth's trap difficulty and prints
 no-trap, simple-trap, complex-trap, or generic-trap narration. The threshold is
-`(2 * Z - member lock-pick class + 30) / 2`, using the same unsigned halving
-convention as the dungeon Jimmy chest path. Search rolls `1..30` against that
+`(2 * Z - member Dexterity + 30) / 2`, using the same unsigned halving
+convention as the dungeon Jimmy chest path. This is the identical threshold
+expression the dungeon lock-pick uses, borrowed purely as a detection roll; it
+carries no lock semantics here and does not make Search a third lock-pick
+formula. Search rolls `1..30` against that
 threshold. If the roll is above the threshold and the searched cell is the
 plain closed chest byte, Search reports no trap. Otherwise it derives a trap
 tier: a fresh `1..8` roll when the first roll is at or below the threshold, or
@@ -436,7 +460,7 @@ extra handling only for exact unmarked pit-family bytes:
 |---:|---|
 | `0x60` | Reports nothing in the pit; no state change. |
 | `0x61` | Reports a found secret door, rewrites the searched cell to `0x60`, and, unless already on the deepest level, marks the same X/Y cell one level below with the visit bit. This is a visit-local reveal in the loaded dungeon image. |
-| `0x62` | Rolls `1..30` against `(2 * Z - member lock-pick class + 30) / 2`. A roll above the threshold springs the bomb, reports it, and clears the searched cell to `0x00`; a roll at or below the threshold reports nothing on the pit and leaves the cell unchanged. |
+| `0x62` | Rolls `1..30` against `(2 * Z - member Dexterity + 30) / 2`. A roll above the threshold springs the bomb, reports it, and clears the searched cell to `0x00`; a roll at or below the threshold reports nothing on the pit and leaves the cell unchanged. |
 | Other `0x6?` values | No extra Search-specific handling beyond the generic preamble. |
 
 The `0x61` and `0x62` Search branches are local dungeon mechanics: they do not
@@ -457,7 +481,7 @@ surface-reset helper.
 
 **Door-like dungeon classes.** High nibbles `0xA`, `0xE`, and `0xF` all have door-like presentation in parts of the dungeon renderer and minimap, but they are not interchangeable storage states. `0xF?` is the stock room-trigger family, with the low nibble selecting the `DUNGEON.CBT` room id. `0xA?` is the runtime room-helper / cleared-room state produced both after room combat and by the save-image room-clear demotion pass on reload. `0xE?` is a separate door-presentation variant used by other runtime wall/search paths; it is not produced by cleared-room replay.
 
-The dungeon Open command operates on the **underfoot tile** (not the cell in front). It can affect `0x4?` wooden chest cells and `0x7?` passage/chest-style variants, but no traced Open or Jimmy mechanism mutates `0xA?`, `0xE?`, or `0xF?` dungeon door/room presentation cells. Room-trigger durability is handled by the room helper and the room-clear bitmap instead.
+The dungeon Open command operates on the **underfoot tile** (not the cell in front). It can affect `0x4?` wooden chest cells and `0x7?` open-chest cells, but no traced Open or Jimmy mechanism mutates `0xA?`, `0xE?`, or `0xF?` dungeon door/room presentation cells. Room-trigger durability is handled by the room helper and the room-clear bitmap instead.
 
 **Special walls / secret doors.** Some wall-style and flavour cells can be
 rewritten by Search for the current dungeon visit. For flavour class `0xC?`,
@@ -503,7 +527,7 @@ When the dungeon command handler receives a printable letter, it forwards the le
 - **V** — View; paint a top-down minimap of the current level (§ 12).
 - **T** — Talk; always prints "Funny, no response!" (no NPCs in dungeons).
 
-Letters that are no-ops in dungeons print "What?" or a stock refusal: **B** Board, **D**, **E** Enter, **F** Fire, **P** Push, **X** X-it. **Q** runs the "Exit to DOS?" prompt path.
+Letters that are no-ops in dungeons print "What?" or a stock refusal: **B** Board, **D**, **E** Enter, **F** Fire, **P** Push, **X** X-it. **Q** is the ordinary save-game route; the "Exit to DOS?" prompt is a Control binding in the mode-local table, not a letter.
 
 The dungeon-mode A-Attack handler is a point-blank forward probe. It prints
 the attack label, computes the wrapped cell one step ahead of the party's
@@ -531,11 +555,19 @@ redraws the first-person view. Both surface-exit arms clear the dungeon scene,
 which is exactly why that gate exists.
 
 Before letters reach that dispatcher, the dungeon command parser intercepts
-mode-local controls: movement keys, Enter/period as forward movement,
-Ctrl-S/sound toggle, numeric digits for digit accumulation, Q/quit-to-DOS, and
-idle/sleep notifications. This is why ordinary shared commands such as M-Mix
-still work in dungeons: they are not handled by the local parser and fall
-through to the resident command dispatcher.
+mode-local controls: the four cardinal direction codes plus Enter and the period
+key as forward movement, the four shared Control bindings (exit-to-DOS prompt,
+moral-standing readout, sound toggle, version banner), digits as a solo-member
+select that always reports "no action", and idle/sleep notifications. The
+exit-to-DOS prompt is one of those Control bindings, not the `Q` letter — `Q`
+reaching the resident dispatcher is the ordinary save-game route. This is why
+ordinary shared commands such as M-Mix still work in dungeons: they are not
+handled by the local parser and fall through to the resident command dispatcher.
+
+Dungeon mode is also the one mode that does not run the shifted-digit-to-
+direction translation of `input.md` Section 5. Shifted or NumLock-ed top-row
+digits stay ordinary digits underground and select a solo party member like any
+other digit.
 
 ## 11. Camp / sleep (H-Hole-up)
 
@@ -604,7 +636,7 @@ passability. The per-cell painter returns "expand" for most classes after
 painting their glyph. Only the wall presentation classes `0xB?`, `0xC?`, and
 `0xD?` stop expansion. Heavy-door and room-trigger families (`0xA?`, `0xE?`,
 and `0xF?`) paint door glyphs but still return expand to the flood walker.
-Open chest/no-op classes paint nothing and still return expand.
+The open-chest class paints nothing and still returns expand.
 
 The class-to-glyph contract for the dungeon minimap is:
 
@@ -621,7 +653,7 @@ The class-to-glyph contract for the dungeon minimap is:
 | Exact `0x61` or `0x69` | Hidden/fall-pit glyph `0x71`. | Yes. |
 | Exact `0x68` | Fired/walked-through pit glyph `0x12`. | Yes. |
 | Other `0x6?` | Trap/blocker glyph `0x72`. | Yes. |
-| `0x7?` | No glyph. | Yes. |
+| `0x7?` | No glyph (the open chest is not drawn on the minimap). | Yes. |
 | `0x8?` | Stair/field helper mask; see below. | Yes. |
 | `0x9?` | No glyph. | Yes. |
 | `0xA?` or `0xF?` | Heavy-door glyph `0x73`. | Yes. |
@@ -673,46 +705,122 @@ When peer-spell view mode is active, V-View applies the same magic-vision tint b
 
 ## 13. Z transitions and exiting
 
-The Z axis is moved through *only* by K-Klimb (and by certain pit cells that auto-descend without input). K-Klimb routes to the dungeon overlay's K handler:
+### 13.1 The two deliberate ways to change level
 
-1. Read the underfoot tile and check the high nibble.
-2. **Up ladder (`0x1`).** If Z is greater than zero, decrement Z; the party moves up to the same X, Y on the level above. If Z is already zero, the traced apply path refuses the level change rather than publishing a general plane-transition rule.
-3. **Down ladder (`0x2`).** Increment Z when the current level is below seven; the traced apply path refuses descent below level seven.
-4. **Two-way (`0x3`).** Prompt up/down.
-5. **Exact pit byte `0x60`.** Bypass ordinary ladder apply and invoke the
-   surface-reset helper.
-6. **Other cells.** Return without a level change.
+A dungeon's level index changes deliberately by exactly two routes, and they are
+gated quite differently.
 
-The up/down prompt accepts explicit up and down selections and the standard
-cancel/pass keys. After a direction is chosen, the target level's same X/Y cell
-is tested for passability; an obstructed destination prints the blocked
-feedback and leaves Z unchanged.
+**K-Klimb.** K reads the cell the party is standing on and offers whichever
+directions that cell provides:
 
-The destination test is deliberately narrower than ordinary movement
-passability. It reads the same X/Y cell on the target Z level and rejects plain
-passage plus the major wall families (`0xB?`, `0xC?`, `0xD?`, and `0xE?`) when
-strict checking is requested. Other feature families can be valid climb landing
-cells; the check is a ladder-exit obstruction test, not a full terrain-effect
-dispatcher.
+- **Up** is offered when the cell is an up ladder or a two-way ladder, and also
+  when the cell is marked climbable-with-equipment and the party is carrying the
+  climbing gear.
+- **Down** is offered when the cell is a down ladder, a two-way ladder, or a pit.
+- When both are available the handler prompts for up or down, accepting the
+  explicit up and down selections and the standard cancel/pass keys.
+- Any other cell returns with no level change.
 
-Dungeon-to-overworld exits are split across two contracts:
+A climb **never inspects the cell it lands on.** The ladder or pit under the
+party is treated as proof enough that the destination is reachable, so a climb
+cannot be blocked by what is on the level above or below. An earlier revision of
+this section said the destination cell is tested for passability before the
+level index is written; that is withdrawn - it belongs to the spell route below.
 
-- The surface-reset helper clears the dungeon scene and restores the party to
-  the dungeon's exterior coordinate for exact `0x60` K-Klimb pit exits,
-  explicit reset/edge paths, and combat-result level-change boundary paths. It
-  has two arms, selected by the level byte it finds on entry. Entered with a
-  **nonzero** level byte - the party was pushed below the bottom floor - it
-  narrates an exit to the Underworld and leaves the level byte at the all-ones
-  sentinel. Entered with a **zero** level byte - the party was pushed above the
-  top floor - it narrates an exit to Britannia and leaves the level byte at
-  zero. Both arms write the exterior X and Y from the per-dungeon exterior
-  tables before clearing the scene.
-- The pit-chain off-bottom path clears the scene after the chain increments the
-  level past seven. It preserves the current X/Y and leaves the level byte at
-  the incremented off-bottom value; it does not call the surface-reset helper
-  or its exterior-coordinate tables.
+**The dungeon level-change spells.** The Up and Down pair (`catalogs/spell-list.md`
+ids 21 and 22) are castable only inside a dungeon, and they move the party one
+level from wherever they stand with **no ladder, pit, or equipment required**.
+They are the stricter of the two routes in one respect only: they do test the
+destination cell and refuse it when it is in the base `0x0` class or in the wall
+and door-presentation families `0xB?` through `0xE?`. Both spells refuse Doom
+outright.
 
-A second exit path is the **exit-dungeon tile** — a small set of cells in some dungeons that the engine recognises as "exit immediately" and dumps the party back to the overworld regardless of Z. The third exit path is **death**: total party wipe routes to the death sequence and the dungeon mode terminates as part of the broader game-over flow. A fourth, terminal path exists for the endgame: dungeon-room and post-combat cleanup can consume the special combat absorption marker and enter the endgame overlay instead of restoring ordinary dungeon play. In stock data, the authored route is Doom level seven's room-id-fifteen trigger at local coordinate `(X=5, Y=7)`, which selects the final Doom room arena. The dungeon turn loop's only contract is that *if the scene byte drops to thirty-two or below, the loop exits*; how it got there is the caller's concern.
+Two further routes change the level without being asked to: automatic pit falls
+(Section 8 and `systems/doors-and-z-transitions.md` Section 10), and the
+post-combat result codes described in Section 10, which move the party one level
+up or down through the same machinery. An up-or-down movement request raised
+inside a dungeon **room** is handled identically: it is queued as the same
+movement intent and applied by the same code.
+
+### 13.2 Leaving the dungeon
+
+Whichever of the routes above is taken, hitting a level edge leaves the dungeon,
+and every exit goes through **one** shared contract - the routine other sections
+of this spec set call the *surface-reset helper*. There is no second
+dungeon-to-outdoor path in the build and no per-dungeon special case:
+
+- The destination X and Y are the dungeon's own **outdoor entrance
+  coordinate**, taken from the same per-scene location table that entry used.
+  Both arms use the identical cell.
+- The destination **world plane** comes from the level the party was standing on
+  when the edge was reached. Level zero means they left off the top, so they
+  surface on Britannia; any other level - in practice the lowest one - means
+  they went out through the bottom, so they arrive in the Underworld. The two
+  arms narrate an exit to Britannia and an exit to the Underworld respectively.
+- The dungeon scene byte is then cleared, which is what returns the game to
+  outdoor mode.
+
+Because seven of the eight dungeon mouths carry an entrance tile at the same
+coordinate on **both** world maps, one coordinate serves both arms. Entry is the
+mirror image: from the surface the party starts on the top level in the
+north-west corner; from the Underworld they start on the bottom level in the
+south-east corner - which is exactly where the five dungeons that have one place
+their bottom-level down-ladder, so the climbed round trip is reciprocal. Doom is
+the exception in both directions (Section 13.3). Only foot travel may enter a
+dungeon at all.
+
+The practical consequence, and the reason this matters: **every dungeon except
+Doom can be left at either end**, because the level-change spells reach the edge
+without needing a ladder. What the shipped map data decides is only which
+dungeons can be left by **climbing** alone, and by that measure the two ends are
+not symmetric - `catalogs/gazetteer.md` Section 6.1 carries the per-dungeon
+table. An earlier revision of this document treated the climbable-exit set as
+the set of dungeons that have a bottom handoff at all, and singled Hythloth out
+as an open question; both readings are withdrawn.
+
+Two further mechanical notes on the exit path:
+
+- The exact pit byte `0x60` is the special non-ladder K-Klimb case: it bypasses
+  the ordinary level-step helper and invokes the exit contract directly.
+- The **pit-chain off-bottom path** is genuinely separate. When a chain of
+  automatic fall traps increments the level past the deepest one, the scene byte
+  is cleared with the off-bottom level and the party's current X/Y still in
+  resident state; it does not run the exit contract and does not consult the
+  exterior coordinate table. Stock data cannot produce this, and it is retained
+  as defensive compatibility behaviour.
+
+An earlier revision of this document also described an "exit-dungeon tile" - a
+set of cells in some dungeons that dump the party outdoors regardless of level.
+No such cell class exists; that claim is withdrawn.
+
+### 13.3 Doom
+
+Doom is the exception to nearly every rule above:
+
+- Its mouth exists in the Underworld only. On the Britannia surface that
+  position falls inside open ocean, so Doom has no surface entrance.
+- Entry is refused unless all three Shadowlords have been destroyed. A party
+  that tries earlier is told it is attacked at the entrance, an ambush is
+  spawned, and entry does not happen.
+- Uniquely among dungeons entered from below, Doom seeds the party on its
+  **topmost** level in the north-west corner rather than the bottom level.
+- Doom cannot be left. Its top level carries neither an up ladder nor a
+  climbing-gear cell, and both level-change spells refuse to run inside it, so
+  the "exit to Britannia" arm - which would otherwise strand the party in
+  mid-ocean - is unreachable. Doom is a one-way descent.
+
+### 13.4 The other ways dungeon mode ends
+
+Beyond the level-edge exit, dungeon mode terminates through **death** (a total
+party wipe routes to the death sequence and the game-over flow) and through the
+**endgame** hand-off, where dungeon-room and post-combat cleanup can consume the
+special combat absorption marker and enter the endgame overlay instead of
+restoring ordinary dungeon play. In stock data the authored route is Doom level
+seven's room-id-fifteen trigger at local coordinate `(X=5, Y=7)`, which selects
+the final Doom room arena.
+
+The dungeon turn loop's only contract is that *if the scene byte drops to
+thirty-two or below, the loop exits*; how it got there is the caller's concern.
 
 ## 14. Combat triggers
 
@@ -970,9 +1078,12 @@ specified, and stock data cannot produce that edge.
   unless a system spec names the subtype.
 - **Dungeon Search trap thresholds.** Dungeon Search's light gate,
   high-nibble feature classes, chest trap-tier narration, pit-family reveal,
-  bomb branch, and `0xC?`/`0xD?` rewrites are now covered. Remaining trap
-  exactness belongs to still-untraced caller-side trap selection tables, not to
-  the local dungeon Search feature classifier.
+  bomb branch, and `0xC?`/`0xD?` rewrites are covered, and so is the caller
+  layer above them. There is no caller-side trap-selection table: a container is
+  trapped or not — one flag on a surface or town container object, a non-zero
+  lock/trap sub-type on a dungeon chest cell — and the trap's flavour is chosen
+  entirely by the shared resolver's four-way distribution published in
+  `systems/traps.md`. Nothing further is outstanding here.
 - **V-View visual parity.** The minimap painter's class-to-glyph ids and flood
   expansion rules are specified. Visual confirmation of those glyph ids against
   the active font/tile bank and pixel placement of the multi-cell
@@ -980,7 +1091,15 @@ specified, and stock data cannot produce that edge.
   rule.
 - **Open/Get chest traps.** Search's chest trap narration is covered here, while
   Open owns the trap-springing gameplay path and Get owns the seven-row
-  open-chest reward generator specified in `containers.md`.
+  open-chest reward generator specified in `containers.md`. The caller layer is
+  fully covered: Open passes only "trapped" or "not trapped" into the shared
+  resolver, and because the same sub-type is both the lock difficulty and the
+  trap flag, a successful Jimmy makes the following Open trap-free.
+- **Room-mediated level changes.** The uniform exit contract, the two
+  deliberate level-change routes and their differing gates are published in
+  Section 13. The one narrow item left open is which dungeon *room* maps place a
+  ladder cell under the party, since an up-or-down request raised inside a room
+  feeds the same machinery as K-Klimb.
 - **Random-encounter cadence and monster sets per level** — see `encounters.md`.
 - **Pit-chain off-bottom stock-data boundary.** Chained pit falls that run past
   level seven clear the dungeon scene byte with the off-bottom level byte and
@@ -1021,6 +1140,12 @@ The behaviour described here was derived by reading the private function notes l
   and `u5-decomp/functions/DUNGEON_OVL/0x0000_dungeon_room_enter.md`.
 - The first-person renderer's sparse point-plotting model, distance bands, direction-delta-table indexing, side/front wall pass order, helper pipeline, back-buffer redraw bracket, and binary light gate -- derived from `u5-decomp/functions/DUNGEON_OVL/0x1A90_dungeon_render_3d.md`, `u5-decomp/notes/system-trace_dungeon-rendering.md`, and cross-checked against `u5-decomp/CORRECTIONS.md`.
 - The dungeon-entry scene/name/record binding, selected-record load, and entry seed coordinates — derived from the MAINOUT E-Enter helper and its dungeon-entry subhelper, cross-checked against `u5-decomp/formats/data-ovl.md`.
+- Source provenance: the single shared exit contract and its plane rule, the
+  four routes that reach it, the foot-travel entry gate, Doom's Shadowlord gate
+  and one-way descent, the withdrawal of the "exit-dungeon tile" class, the
+  klimb-versus-spell split on destination testing, and the per-dungeon
+  climbable-exit table are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - The mode-aware letter dispatch table including the dungeon-specific routes for A-Attack, K-Klimb, L-Look, T-Talk, V-View, and the H-Hole-up overworld path — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
 - The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/0x006C_sjog_dir_step.md` and `u5-decomp/functions/SJOG_OVL/0x002A_sjog_apply_dir_step.md`. The View handler's centered flood map, wait/clear/restore flow, and peer-spell tint branch — derived from `u5-decomp/functions/DNGLOOK_OVL/0x06A8_dnglook_v_view.md`.
 - The wrapped dungeon cell reader's class-sensitive `0x08` normalization and
@@ -1048,6 +1173,14 @@ The behaviour described here was derived by reading the private function notes l
   from `u5-decomp/functions/SJOG_OVL/0x0646_sjog_search_inner.md`.
 - The dungeon Get open-chest consumption and seven-row reward-generator shape -
   derived from `u5-decomp/functions/SJOG_OVL/0x179E_sjog_get_dungeon_chest.md`.
+- The closed/open/looted chest lifecycle as one preserve-variant-bit rewrite
+  idiom, the identification of the `0x7?` class as the open chest rather than a
+  passage variant, the absence of any second write that could re-promote a
+  looted cell, the shipped-data facts that no static cell carries the open-chest
+  class and that every static chest cell has the variant bit clear, and the
+  absence of any caller-side trap-selection table above the shared trap
+  resolver. Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The dungeon post-action tile-effect pass, including exact `0x61`/`0x69`
   fall traps, exact `0x62`/`0x6A` bomb traps, visit-local trap-cell rewrites,
   sleep-field one-shot resolution, and poison-field repeat resolution --
@@ -1071,3 +1204,10 @@ The behaviour described here was derived by reading the private function notes l
 - The DNGLOOK minimap cell painter, passage/room painters, room-clear bitmap reader/writer, cleared-room demotion pass, room NPC setup, and view teardown/init helpers - derived from `u5-decomp/functions/DNGLOOK_OVL/0x0340_v_view_paint_cell.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0284_paint_stair_glyph.md`, `u5-decomp/functions/DNGLOOK_OVL/0x097E_paint_passage_full.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0A48_paint_passage_short.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0AEE_paint_passage_medium.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0B9E_paint_passage_from_party.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0C6C_paint_room_layout.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0FDA_apply_movement.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0844_set_room_cleared.md`, `u5-decomp/functions/DNGLOOK_OVL/0x08D4_is_room_cleared.md`, `u5-decomp/functions/DNGLOOK_OVL/0x093A_demote_cleared_room_markers.md`, `u5-decomp/functions/DNGLOOK_OVL/0x109E_init_dungeon_view.md`, `u5-decomp/functions/DNGLOOK_OVL/0x1130_teardown_dungeon_view.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`.
 - The H-Hole-up code path's per-slot rest, ambush check, and HP regeneration — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
 - The world-clock advance contract and the integration with combat for room-trigger and wandering-monster encounters — derived from sibling specs `u5-spec/systems/time.md` and `u5-spec/systems/combat.md`.
+
+- The dungeon mode-local control-code table, the Enter/period movement
+  bindings, the digit handler's "no action" result, the absence of the
+  shifted-digit direction translation underground, and the corrected return
+  values of dungeon Klimb. Source provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
+  `../u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`.

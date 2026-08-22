@@ -68,9 +68,10 @@ Remaining byte values are unused; the engine treats them as "no key" and continu
 The input layer can represent eight direction requests: four cardinal
 directions and four diagonals. This is an input vocabulary, not a guarantee
 that every mode moves in eight directions. World, town, dungeon, and combat
-movement consumers accept only the cardinal subset; diagonals are available to
-special prompts or handlers that explicitly want them, and otherwise fall
-through as non-movement input.
+movement consumers accept only the cardinal subset. The diagonals have exactly
+one movement-style consumer in the whole game — the combat targeting cursor —
+and otherwise act as paging keys inside the full-screen stats/inventory and shop
+lists; everywhere else they fall through as non-movement input.
 
 The keyboard layer accepts several physical ways of asking for a direction and
 translates them into one internal direction-code set:
@@ -83,36 +84,48 @@ translates them into one internal direction-code set:
 | Home / End / PgUp / PgDn | Home / End / PgUp / PgDn | northwest / southwest / northeast / southeast |
 | Top-row digits with a modifier | digit `1` through `9` while Shift or NumLock is held | same as the numpad layout above |
 
-The eight resulting direction codes occupy high byte values outside printable
-ASCII, so a single returned byte unambiguously says either "the player typed
-letter X" or "the player asked to move in direction D". The final input-layer
-codes are:
+The four cardinals land in a low code block and the four diagonals in a high
+one, and neither collides with printable ASCII, so a single returned byte
+unambiguously says "the player typed letter X" or "the player asked for
+direction D". The final input-layer codes are:
 
 | Direction | Final internal code |
 |---|---:|
+| West | `0x01` |
+| East | `0x02` |
+| North | `0x03` |
+| South | `0x04` |
 | Northwest | `0xD3` |
 | Southwest | `0xD4` |
 | Northeast | `0xD5` |
 | Southeast | `0xD6` |
-| West | `0xFB` |
-| East | `0xFC` |
-| North | `0xFD` |
-| South | `0xFE` |
 
-A separate flag internal to the keyboard peek marks numpad-equivalent input so
-the upper layer can apply the final digit/cardinal translation. Diagonals are
-already in their final high-byte range when they leave the keyboard peek.
+The digit `5` at the centre of the numpad has no direction and is passed through
+as the ordinary character.
+
+A separate flag internal to the keyboard peek marks input that arrived through
+the scancode table or through the shifted top-row-digit rule, so the upper layer
+can apply the final digit-to-direction translation only to those keys. That flag
+also suppresses the pseudo-code rewrite described below, which is why a cursor
+or numpad key can never be delivered as one of the high pseudo-codes.
+
+Typed ASCII characters, control characters included, are passed through
+verbatim, with one exception: a typed Control character in the low range that
+was *not* produced by the scancode table is biased into a block of high
+pseudo-codes. Only one of those is ever consumed anywhere in the game — the one
+produced by Control with the second letter of the alphabet, which is the
+typeahead-buffer toggle described in Section 6 and in `commands.md`. Every other
+typed Control character reaches the mode loops as its ordinary low code, where
+each loop's own control-code table decides what it means.
 
 Function keys F1 through F10 are also remapped into a different contiguous
 block, returned directly without passing through the numpad/direction-code
-path. The resident A-Z command dispatcher does not own this block, and the
-traced gameplay mode loops and free-text prompts do not assign it a command
-meaning. A compatible implementation should still preserve the remapped range
-at the keyboard boundary so any menu-specific or untraced consumer can see the
-same values; otherwise these keys are safely ignored by ordinary gameplay
-command dispatch.
+path. Nothing in the game consumes that block: no mode loop, no letter
+dispatcher, no prompt, and no panel. An implementation may simply not generate
+these codes; if it does generate them, it should keep the block distinct so
+nothing mistakes a function key for a direction or a command.
 
-The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger.
+The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger. Dungeon mode is the one exception to the whole rule: it does not run the digit-to-direction translation at all, so shifted or NumLock-ed top-row digits stay ordinary digits there and select the solo party member like unshifted ones.
 
 The extended-key translation table accepts all four arrow keys plus Home, End,
 PgUp, and PgDn. Left and right arrows reach the same West/East cardinal path as
@@ -127,7 +140,20 @@ Two transformations are applied to every keystroke between the keyboard peek and
 
 **Buffer flush.** After each successful read, the BIOS keyboard buffer is reset — its head and tail pointers are forced equal, discarding keystrokes that piled up during the just-completed action. This is the game's distinctive feel: type-ahead is suppressed, one keystroke advances exactly one game turn, and a fast typist cannot accidentally walk through a hostile NPC by holding a movement key.
 
-The flush is gated on a global flag, enabled by default. Text-input prompts (NPC keywords, character names, save filenames, hour counts) clear the flag before they begin and restore it afterwards. While clear, the BIOS buffer is *not* flushed after each read, and the player can type ahead through a multi-character word at full speed.
+The flush is gated on a global setting, and it is best described by behaviour
+rather than by a flag value. The setting has two states: with type-ahead **on**,
+keystrokes queued during an animation or a long action are honoured in order;
+with it **off**, the queue is emptied on every read. Off is the default at
+startup, which is why the stock game feels strictly one-key-per-turn.
+
+Three things write the setting and nothing else does. The player toggles it from
+the world command dispatcher (Control with the second letter of the alphabet),
+combat offers a second, independent copy of the same toggle writing the same
+setting, and the free-text line reader saves the setting, forces type-ahead on
+for the duration of a typed line, and restores it afterwards. That last one
+means typing a name, a keyword, or a word of power always honours the queue
+regardless of the player's choice. The engine prints the new state as a short
+Buffer On / Buffer Off message; "on" is the honour-the-queue state.
 
 A correct implementation on a modern event-driven keyboard API: maintain a small input queue per game state; when the flush flag is set, drop all pending keystrokes after consuming one; when the flag is clear, leave the queue alone so subsequent calls drain it in order.
 
@@ -135,10 +161,9 @@ A correct implementation on a modern event-driven keyboard API: maintain a small
 
 The translated byte that emerges from the wait loop goes to one of the three top-level mode loops (overworld, town, dungeon). Each loop does a small amount of pre-routing:
 
-- **Direction codes** are handled inline by the mode loop as "move the player one cell that way." They never reach the central dispatcher, with one minor exception (the cursor-east code, in at least one mode, toggles a typeahead flag).
+- **Direction codes** are handled inline by the mode loop as "move the player one cell that way." They never reach the central dispatcher — the rule is unconditional. The one non-letter code the central dispatcher does accept is the typeahead toggle, and that is a typed Control character, not a cursor code.
 - **Function-key remap codes** are outside printable-letter dispatch. The
-  keyboard layer produces them, but the currently public dispatcher trace does
-  not assign resident A-Z meanings to them.
+  keyboard layer produces them and nothing in the game consumes them.
 - **Letter commands** — uppercase A through Z and a small set of punctuation like Space — are passed to the *central command dispatcher*.
 
 The central dispatcher routes by letter. Each letter has a unique handler; many letters have *multiple* handlers selected by the engine's *scene* state (overworld / town / dungeon; combat uses its own dispatcher). The full per-letter behaviour belongs in `commands.md`; the input-side relevance is only that:
@@ -305,12 +330,14 @@ runtime gap: the full recognised set for the game-mode-specific entry stamp.
   surface NumLock state can omit this modifier without changing the accepted
   command vocabulary.
 
-- **Function-key destinations.** The remapped F1..F10 codes are produced by the
-  keyboard layer, but no traced gameplay command dispatcher, direction prompt,
-  or free-text prompt consumes them. The remapped block is contiguous and
-  disjoint from the letter and direction blocks, so preserving it at the
-  keyboard boundary is sufficient for compatibility while ordinary gameplay
-  ignores it.
+- **Function-key destinations — closed.** An exhaustive sweep of every shipped
+  code file for consumers of the remapped F1..F10 block finds none: no mode
+  loop, no letter dispatcher, no direction prompt, no free-text prompt, and no
+  full-screen panel. The block is produced and then accepted by nothing, so an
+  implementation may simply not generate it. If it does, the block must stay
+  disjoint from the letter and direction blocks. The same sweep settled the
+  diagonal block the other way: its consumers are the combat targeting cursor
+  and the paging keys of the stats/inventory and shop lists.
 
 - **Prompt-character byte writers.** Several prompt families select the
   visible prompt/idle cursor byte before entering the shared input wait. The
@@ -355,3 +382,12 @@ The behaviour described here was derived from the private function notes listed 
 - The free-text reader's printable-byte, Backspace, Enter, Escape, echo, and
   NUL-termination behavior -- derived from
   `u5-decomp/functions/ULTIMA_EXE/0x1E38_read_text_input.md`.
+
+- The corrected direction-code assignments of Section 5, the mutual exclusion
+  between scancode translation and the typed-Control pseudo-code rewrite, the
+  behavioural description of the type-ahead setting and its three writers, and
+  the closure of the function-key and diagonal-code consumer questions. Source
+  provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`, with
+  `../u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md` and
+  `../u5-decomp/functions/COMSUBS_OVL/0x0504_arena_cursor_picker.md`.

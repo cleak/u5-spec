@@ -443,7 +443,9 @@ For a terrain fight:
   by class id and never by arena index. Counts of 1, 8, and 16 are exact; other
   counts are rolled into a 1-to-max range. Since the largest shipped count is 16
   and 16 is exact, a terrain encounter never spawns more than sixteen monsters.
-- A "fortunes of war" flag can cause the count roll to be repeated.
+- The early-game encounter-size damper repeats the count roll while it is set,
+  which lowers the count; it is active for the first in-game month of a new game
+  and off permanently afterwards (`systems/encounters.md` Section 5).
 - Town-style hostility overrides the count to one attacker.
 - Placement uses sixteen arena slots supplied by the selected arena's metadata
   and cached in resident scratch before placement. Terrain fights use

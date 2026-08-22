@@ -203,8 +203,9 @@ render/present the frame that observes both updates.
 ### Overworld
 
 The overworld is the main consumer of ambient animation. Water, lava-like
-terrain, moongate frames, vehicles, and random outdoor monsters all use the
-animation tick. The overworld's per-turn epilogue can also prune off-screen
+terrain, vehicles, and random outdoor monsters all use the animation tick.
+Natural moongates do not: a gate is a live terrain byte written and removed by
+the once-per-turn saved-slot refresh, with no frame cycle of its own. The overworld's per-turn epilogue can also prune off-screen
 active objects; pruning is separate from animation and may remove slots that
 would otherwise be considered on later ticks.
 

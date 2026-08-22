@@ -152,6 +152,21 @@ The save handler is a callable function, distinct from the inline load flow. The
 
 The save flow does not write `INIT.GAM` or `INIT.OOL` — those are shipped read-only. It does not write the world data files. It does not write a temporary or backup copy before overwriting; a save is an immediate destructive overwrite of `SAVED.GAM` and `SAVED.OOL`. An implementation that wants crash-safety should add an out-of-band copy step.
 
+Above all, **no live map tiles are persisted.** An exhaustive census of every
+disk write the game performs shows four written regions and no others: the
+saved-state window, the two per-world object tables, and the live object list.
+The saved-state window ends immediately below the live tile buffer, and the load
+side reads back exactly the window that was written and nothing above it. Map
+tiles are read-only game data: entering a location re-reads that location's grid
+wholesale from its data file, and the overworld streams its window a quadrant at
+a time from the world data files. The practical consequence is that **no tile
+mutation of any kind is durable** — a pushed chair, a stamped floor cell, an
+opened door, or a revealed secret door survives only until the owning scene is
+re-entered or the overworld window re-streams that region, and cannot survive a
+save/load round trip. Systems whose changes *are* meant to persist do so through
+saved flags that the loader re-applies to the tiles on entry, not by editing the
+map.
+
 ## 6. The Ultima IV character-transfer producer
 
 The title menu's `T` key is a fresh-save producer for players who have
@@ -297,3 +312,10 @@ generic DOS file I/O, not an LZW decompressor.
 - Inner write primitive — create-or-truncate, write, close, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-write edge — derived from `u5-decomp/functions/ULTIMA_EXE/0xF0C6_write_file.md`.
 
 - Save-image layout, `SAVED.OOL` split, the `BRIT.OOL` / `UNDER.OOL` / `INIT.OOL` / `INIT.GAM` family, and the object-record structure — derived from `u5-decomp/formats/saves.md`.
+
+- The exhaustive census of the engine's disk writes and reads that establishes
+  the saved-state window's upper boundary against the live tile buffer, and with
+  it the impossibility of any durable tile mutation. Source provenance: derived
+  from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
+  `../u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`.

@@ -210,9 +210,13 @@ values `0x81` through `0x88` are Talk-entry shop triggers:
 
 The value identifies the shop family; the active scene and resident shop tables
 select the local shop instance, display name, vendor name, prices, and stock.
-The shipped rosters also contain special high values outside this range, such as
-`0xFF`, for non-shop Talk special cases. Treat those as conversation/town-system
-special markers rather than `.TLK` ids.
+The shipped rosters also contain special high values outside this range for
+non-shop Talk special cases. Treat those as conversation/town-system special
+markers rather than `.TLK` ids. The value `0xFF` is the reserved
+"not a real NPC" marker: Talk on such a figure runs the scene-keyed
+Blackthorn guard-demand handler instead of loading any dialogue, as specified
+in `systems/conversation.md` Section 2.1 and `systems/blackthorn.md`
+Section 7a.
 
 A non-zero ordinary dialog index that does not resolve to any header entry in the matching `.TLK` file is a content error in the source data. The engine does not validate the lookup; an unresolved index will cause the talk dispatcher to read garbage from the working buffer.
 

@@ -84,6 +84,11 @@ one-byte recipe mask. The bit order is:
 The table below lists recipes semantically rather than dumping the raw bytes.
 To reconstruct the exact resident recipe byte, OR the listed reagent bits.
 
+Recipes are not unique. Several distinct spells share an identical reagent set,
+so a recipe alone does not identify a spell. That is why M-Mix asks the player
+to name the spell first and then compares the chosen reagents against that one
+spell's recipe: the mixer matches a recipe, it never searches for one.
+
 ## 4. Scene Mask
 
 Each spell also has a one-byte scene allow mask. The cast dispatcher computes a
@@ -143,24 +148,24 @@ charge or mana.
 | 16 | `GIZ` | In Zu Grav | Sleep Field | 3 | Ginseng + Spider Silk + Black Pearl | C/D | field |
 | 17 | `IP` | In Por | Blink | 3 | Spider Silk + Blood Moss | C/O | utility |
 | 18 | `AG` | An Grav | Dispel Field | 4 | Sulfur Ash + Black Pearl | C/D | field |
-| 19 | `IS` | In Sanct | Protection | 4 | Sulfur Ash + Ginseng + Garlic | C/D/I/O | buff/debuff; +3 party defense |
+| 19 | `IS` | In Sanct | Protection | 4 | Sulfur Ash + Ginseng + Garlic | C/D/I/O | buff/debuff; shared timed-effect slot, tag `P`, 20 turns; no mechanical consequence in the shipped game |
 | 20 | `GIS` | In Sanct Grav | Energy Field | 4 | Spider Silk + Black Pearl + Mandrake | C/D | field |
-| 21 | `PU` | Uus Por | Up | 4 | Spider Silk + Blood Moss | D | utility |
-| 22 | `DP` | Des Por | Down | 4 | Spider Silk + Blood Moss | D | utility |
+| 21 | `PU` | Uus Por | Up | 4 | Spider Silk + Blood Moss | D | utility; moves the party one dungeon level up from wherever it stands, no ladder needed; refuses a destination cell in the base or wall/door classes; cast on the topmost level it leaves the dungeon to Britannia; refused outright in Doom |
+| 22 | `DP` | Des Por | Down | 4 | Spider Silk + Blood Moss | D | utility; the mirror of id 21 - one level down, no ladder needed, same destination-cell refusal; cast on the lowest level it leaves the dungeon into the Underworld; refused outright in Doom |
 | 23 | `QW` | Wis Quas | Reveal | 4 | Spider Silk + Nightshade | C | utility |
 | 24 | `BIX` | In Bet Xen | Swarm | 5 | Sulfur Ash + Spider Silk + Blood Moss | C | summon; up to eight probes find one legal cell, then up to four Insect Swarm actors are placed at that single coordinate |
 | 25 | `AEP` | An Ex Por | Magic Lock | 5 | Sulfur Ash + Garlic + Blood Moss | C/I | utility; directed tile helper, `0xB8`/`0xB9`→`0x97` and `0xBA`/`0xBB`→`0x98`; works on combat-arena terrain too |
 | 26 | `EIP` | In Ex Por | Unlock Magic | 5 | Sulfur Ash + Blood Moss | C/I | utility; directed tile helper, the only magic-lock removal: `0x97`→`0xB8` and `0x98`→`0xBA`; works on combat-arena terrain too |
 | 27 | `MV` | Vas Mani | Great Heal | 5 | Ginseng + Spider Silk + Mandrake | C/D/I/O | healing; selected-member current HP restore to maximum, refuses Dead targets and the dungeon combat-active substate |
 | 28 | `IZ` | In Zu | Sleep | 5 | Ginseng + Spider Silk + Nightshade | C | buff/debuff |
-| 29 | `RT` | Rel Tym | Quickness | 5 | Sulfur Ash + Blood Moss + Mandrake | C/D/I/O | buff/debuff; player-dispatch gate |
+| 29 | `RT` | Rel Tym | Quickness | 5 | Sulfur Ash + Blood Moss + Mandrake | C/D/I/O | buff/debuff; shared timed-effect slot, tag `Q`, 30 turns; halves the per-turn minute increment and gates player and enemy turns |
 | 30 | `IPVY` | In Vas Por Ylem | Tremor | 6 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
-| 31 | `AQW` | Quas An Wis | Mass Charm | 6 | Nightshade + Mandrake | C | buff/debuff; AI target remap |
-| 32 | `AI` | In An | Negate Magic | 6 | Sulfur Ash + Garlic + Mandrake | C/D/I/O | marquee; absorbs combat casts |
+| 31 | `AQW` | Quas An Wis | Mass Charm | 6 | Nightshade + Mandrake | C | buff/debuff; shared timed-effect slot, tag `C`, 20 turns; AI target remap |
+| 32 | `AI` | In An | Negate Magic | 6 | Sulfur Ash + Garlic + Mandrake | C/D/I/O | marquee; shared timed-effect slot, tag `N`, 10 turns; absorbs combat casts |
 | 33 | `AWY` | Wis An Ylem | X-Ray | 6 | Sulfur Ash + Mandrake | I/O | utility |
 | 34 | `AEX` | An Xen Ex | Charm | 6 | Spider Silk + Black Pearl + Nightshade | C | buff/debuff; toggles the controlled/charmed descriptor bit `0x01` on the picked creature (a second cast clears it), sets a party-side target's roster status letter back to Good, prints `<name> charmed!` and suppresses the shared epilogue; it does not change faction |
 | 35 | `BRX` | Rel Xen Bet | Polymorph | 6 | Sulfur Ash + Spider Silk + Nightshade + Mandrake | C | buff/debuff |
-| 36 | `LS` | Sanct Lor | Invisibility | 7 | Blood Moss + Nightshade + Mandrake | C | buff/debuff |
+| 36 | `LS` | Sanct Lor | Invisibility | 7 | Blood Moss + Nightshade + Mandrake | C | buff/debuff; caster-only hidden flag with no duration at all, and no use of the shared timed-effect slot |
 | 37 | `CX` | Xen Corp | Kill | 7 | Black Pearl + Nightshade | C | damage; single-target instant kill |
 | 38 | `IQX` | In Quas Xen | Clone | 7 | Sulfur Ash + Ginseng + Spider Silk + Blood Moss + Mandrake | C | summon |
 | 39 | `IQW` | In Quas Wis | Peer | 7 | Nightshade + Mandrake | D/I/O | utility |
@@ -171,7 +176,7 @@ charge or mana.
 | 44 | `CGIV` | In Vas Grav Corp | Death Wind | 8 | Sulfur Ash + Nightshade + Mandrake | C | damage |
 | 45 | `FHI` | In Flam Hur | Flame Wind | 8 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
 | 46 | `PRV` | Vas Rel Por | Gate Travel | 8 | Sulfur Ash + Black Pearl + Mandrake | D/I/O | marquee |
-| 47 | `AT` | An Tym | Negate Time | 8 | Garlic + Blood Moss + Mandrake | C/D/I/O | marquee |
+| 47 | `AT` | An Tym | Negate Time | 8 | Garlic + Blood Moss + Mandrake | C/D/I/O | marquee; shared timed-effect slot, tag `T`, 10 turns; freezes the clock and skips enemy turns |
 
 ## 6. Notes for Implementers
 
@@ -272,8 +277,14 @@ charge or mana.
   monster-kill reward units to the caster with the normal 9999 experience cap.
   `IS`/`RT`/`AQW`/`AI` route through the shared active-effect display helper
   with cast-time tag/counter pairs `P`/20, `Q`/30, `C`/20, and `N`/10.
-  The `IS` `P` tag adds 3 to party-member combat defense after equipment
-  defense is summed. The `RT` `Q` tag gates player-side combat command
+  All four write the one shared timed-effect slot, so a new effect replaces the
+  previous one rather than stacking; the three timed scrolls and the three
+  regalia auras share that same slot. The `IS` `P` tag has no effective
+  consumer: the party-member defence bonus it was meant to add rides on a
+  per-item defence total that is unreachable and never read, so Protection
+  changes no combat number in the shipped game. The `RT` `Q` tag also halves
+  the per-turn game-minute increment outside combat, with a floor of one
+  minute, and gates player-side combat command
   dispatch with an inclusive 0..1 random roll: zero consumes the ready dispatch
   without input, while one continues normally.
   The `AQW` `C` tag is consumed by monster AI target selection; while active,

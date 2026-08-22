@@ -36,29 +36,102 @@ a zero divisor after consuming that state advance. Parity code should not
 silently clamp, swap, or repair such a range unless it intentionally diverges
 from the original edge behavior.
 
-## 3. Usage Notes
+## 3. Seeding and Re-seeding
+
+The generator has exactly one state word, and exactly one primitive that
+assigns it. That primitive performs a plain assignment: it takes a 16-bit value
+and installs it as the new state with no mixing, validation, or return value.
+Every seeding event in the game is a call to that primitive; nothing else
+writes the state except the generator's own advance step.
+
+**Shipped initial value.** In the shipped initialised data image the state word
+is zero. If nothing seeded it, every fresh run would replay an identical roll
+sequence.
+
+**Boot seed.** The program seeds the state once per run, during the intro
+sequence, on the straight-line path into the intro menu — that is, before the
+player chooses New Game, Journey Onward, or Transfer. The seed value is derived
+from the host time-of-day clock: the hour, minute, second, and
+hundredth-of-a-second fields are shifted by differing amounts, summed, combined
+with a fixed mixing constant, and then **masked to twelve bits**. The seed is
+therefore a value in `0..4095`.
+
+Two consequences follow, and both are part of the contract:
+
+- Fresh games are *not* identical, but they are only 4,096 ways distinct. The
+  state word holds sixteen bits; only twelve of them are ever seeded at boot.
+- Two runs that reach the intro menu within the same host clock tick receive
+  the same seed and replay the same roll sequence. (The underlying DOS clock
+  advances in roughly 55-millisecond steps, so the effective resolution is
+  coarser than the hundredth-of-a-second field suggests.)
+
+**Play-time re-seeds.** Four further events re-assign the state during a
+session:
+
+| Event | Seed source | Effect |
+|---|---|---|
+| An hour elapses while camping | Host clock | Fresh entropy immediately before the camp-event roll. |
+| A conversation's script runner reaches its coin-flip step | Host clock | Fresh entropy immediately before that coin flip. |
+| A conversation ends (teardown) | Host clock | Fresh entropy. |
+| A town map is entered | Calendar day-of-month | Deterministic; makes the town's crop and orchard scatter identical for every entry on the same in-game day. Immediately afterwards the same entry pass re-seeds from the host clock, so the deterministic seed does not leak into later gameplay rolls. |
+
+Note that the town-entry pair is a deterministic seed followed by a clock
+re-seed, **not** a save-and-restore of the previous stream position. The state
+in effect before town entry is lost.
+
+**Determinism contract.** Because three ordinary gameplay events re-seed from
+the host clock, the roll stream is not reproducible from game state alone. The
+state word is not part of the saved game, and even if it were, re-seeding would
+destroy reproducibility at the next camp hour or conversation. An
+implementation cannot promise save-deterministic randomness and simultaneously
+match the original's behaviour; a port that wants a reproducible stream is
+making a deliberate, documented divergence.
+
+## 4. Usage Notes
 
 The public name `make_tag` in some private notes is misleading. The routine is
 the engine-wide PRNG range primitive. A call such as `random(1, 30)` consumes one
 state advance and returns one value from the inclusive 30-sided range.
 
-Sound effects have a separate randomness source for short PC-speaker jitter and
-ambient rumble variation. That source samples the live DOS clock and derives a
-small one-shot value for audio variation; it is not the iterating game-logic
-range PRNG, does not share this state word, and must not be used for encounter,
-combat, NPC, shop, or quest randomness. A deterministic port may replace the
-sound-only jitter source without changing gameplay RNG parity.
+**The audio jitter source is a separate stream and must not be conflated with
+the game PRNG.** The PC-speaker rumble effect carries its own private copy of
+the same state-advance formula operating on its own state word. That word ships
+with a non-zero value in the initialised data image and is *never* seeded by
+anything, so speaker jitter is fully deterministic from boot, is identical on
+every run, and shares nothing with game-logic randomness. Conversely, the
+clock-sampling helper described in section 3 is not an audio helper at all:
+every one of its uses feeds the game PRNG's seed primitive. A deterministic
+port may replace the speaker jitter stream freely without affecting gameplay
+RNG parity, but must not reuse the game PRNG for it, and must not skip the
+clock seeding of the game PRNG on the mistaken assumption that it is
+presentation-only.
 
 The generator is entirely integer arithmetic. No floating point, heap allocation,
 or formatted I/O is involved.
 
-## 4. Sources
+## 5. Sources
 
 This public description is a cleanroom prose rewrite from private analysis. It
 does not reproduce decompiled source, assembly listings, raw bytes, or private
 address tables.
 
 - PRNG range helper semantics and state-advance formula -- `u5-decomp/functions/ULTIMA_EXE/0x2092_prng_range.md`.
-- Sound-only DOS-clock jitter source used by PC-speaker effects -- `u5-decomp/functions/ULTIMA_EXE/0x2056_prng_time_seed.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/ULTIMA_EXE/0x207E_prng_seed.md` -- the state-assignment
+  primitive, its shipped zero initial value, the complete list of seeding
+  events, and the boot-seed placement in the intro sequence.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/ULTIMA_EXE/0x2056_prng_time_seed.md` -- the clock-derived
+  seed value and its twelve-bit width. This note supersedes the earlier
+  "sound-only jitter" characterisation of that helper.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/ULTIMA_EXE/0x223C_pc_speaker_random_rumble.md` -- the
+  separate, never-seeded audio jitter state.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
+  deterministic day-of-month seed at town entry and the clock re-seed that
+  follows it.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - Earlier engine-wide call-site identification for the routine historically named `make_tag` -- `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - Library fingerprint confirming integer-only game logic and absence of floating-point/runtime allocation dependencies -- `u5-decomp/functions/ULTIMA_EXE/_LIBRARY_FIDB.md`.

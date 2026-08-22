@@ -17,6 +17,20 @@ party HP or status-side effect. It does not own the tables that decide whether
 a given chest is trapped, how hard a trap is to detect or disarm, or how
 dungeon room cells select combat arenas.
 
+The "families" framing above is about where traps are *reached from*, not about
+how many effect resolvers exist. Only three call sites in the shipped game reach
+this resolver: opening a trapped surface or town container object, opening a
+trapped dungeon chest cell, and mixing a wrong reagent recipe. Search narration,
+dungeon floor pit and bomb cells, town underfoot damage tiles, and combat
+post-pass tile restoration never enter it, even where their prose uses the word
+trap.
+
+There is also no caller-side trap-class table anywhere in the game. A caller
+never chooses or passes a trap flavour. A container is simply trapped or not
+trapped — a single flag on a surface or town container object, or a non-zero
+lock/trap sub-type on a dungeon chest cell — and every flavour distinction is
+made inside this resolver by the distribution published in § 3.
+
 ## 2. Shared Trap-Effect Resolver
 
 When a caller resolves to the shared trap-effect path, the engine performs
@@ -41,17 +55,21 @@ The shared resolver has four effect families:
 | Effect id | Family | Behaviour |
 |---:|---|---|
 | 0 | Acid / single-slot damage | Prints the acid trap message, rolls a short random damage amount in the `1..30` range, applies it to the triggering party slot, and refreshes party stats. If HP reaches zero, the normal damage helper marks the character dead and clears the active-member hint when needed. |
-| 1 | Poison / single-slot revive helper | Prints the poison trap message and runs the revive helper for the triggering party slot. The helper only changes slots currently marked dead; living slots are left unchanged. |
+| 1 | Poison / single-slot poisoning | Prints the poison trap message and applies Poisoned status to the triggering party slot. The status helper acts only on a slot inside the current party count, and it skips a member already marked Dead; a living member is left Poisoned. |
 | 2 | Bomb / party damage | Prints the bomb trap message and rolls `1..8` damage separately for each living member in the six-slot party band. Each accepted member is routed through the ordinary party-damage helper. |
-| 3 | Gas / party revive helper | Prints the gas trap message and runs the revive helper across slots `0..5`. As with single-slot revive, living members are not rewritten. |
+| 3 | Gas / party poisoning | Prints the gas trap message and applies Poisoned status across slots `0..5` using the same status helper, so every living member of the six-slot band ends up Poisoned and members already marked Dead are skipped. |
 
-The revive helper used by effect ids 1 and 3 is intentionally narrow. It tests
-whether the target slot is within the current party count and currently has
-Dead status; only then does it write raw status `P` and redraw the stats panel.
-It does not restore HP, recompute maximum HP, rebuild MP, or run the spell
-resurrection path. Compatible implementations should preserve this trap-helper
-edge exactly rather than replacing it with the broader resurrection spell
-contract.
+The status helper used by effect ids 1 and 3 is a poison primitive, not a
+revival primitive. It tests whether the target slot is within the current party
+count and whether that member is already marked Dead. A slot outside the party
+is ignored, and a member already Dead is skipped and left Dead. Only a living,
+in-party member is written, and the write sets that member's status to the
+Poisoned state and redraws the stats panel. It changes nothing else: no hit
+points, no maximum hit points, no magic points, and no relation to the
+resurrection spell path. Earlier drafts of this document described the helper as
+a narrow revive that only rewrote dead members; that reading was backwards and
+is retracted. The correct polarity is what gives effect ids 1 and 3 their
+in-game poison and gas labelling.
 
 The non-combat lookup table maps the eight equiprobable roll outcomes to
 effect ids in this distribution:
@@ -68,17 +86,25 @@ and `1`, so combat traps can produce only the acid or poison labelled branches.
 
 The original strings give these effects their in-game flavour, but the gameplay
 contract is the state mutation above. Implementations should keep the effect
-families separate from trap selection: a chest, door, Search result, or combat
-post-pass may choose a trap differently while still using the same four
-effect handlers once a shared trap effect is selected.
+families separate from the decision to spring a trap at all: a caller decides
+only *whether* a trap fires, and this resolver decides *which*. No caller can
+request a particular effect family, and no caller can weight the distribution.
 
 ## 4. Relationship To Other Trap Systems
 
 **Chest and container traps.** Container and lock helpers decide whether an
-interaction is safe, empty, grants loot, or invokes a trap. Once they enter the
-shared resolver, the four effect families above apply. The caller selection
-layer is documented with the command/container helpers: surface chest content
-pools live in `systems/containers.md`, and dungeon room combat arena selection
+interaction is safe, empty, grants loot, or invokes a trap. That decision is a
+single yes/no: the surface and town container carries its lock/trap state as one
+flag alongside its content class, and the dungeon chest cell carries it as a
+lock/trap sub-type that is non-zero when the chest is both locked and trapped.
+Neither passes any trap-class information along. Once they enter the shared
+resolver, the four effect families above apply and the flavour is chosen here.
+Because the flag doubles as the lock flag, a successful Jimmy disarms the
+container as well as unlocking it, so a Jimmy-then-Open sequence never reaches
+this resolver at all. The caller selection layer is documented with the
+command/container helpers: surface chest content pools live in
+`systems/containers.md`, the lock rolls live in
+`systems/doors-and-z-transitions.md`, and dungeon room combat arena selection
 lives in `systems/dungeon-mode.md` and `formats/cbt.md`.
 
 **Search traps and feature traps.** Search can classify traps and features
@@ -93,11 +119,16 @@ Any Search outcome that actually invokes the resident resolver should use this
 document's effect contract.
 
 **M-Mix wrong recipes.** The reagent mixer also uses this resolver after a
-wrong recipe. The mixer owns the reagent loss and no-charge result; before
-calling the trap-effect resolver it refreshes its target scratch slot to the
-first travelling member currently marked Good or Poisoned when such a member
-exists. The trap resolver then applies the ordinary four-family effect contract
-above.
+wrong recipe, so the wrong-mix penalty and the chest/locked-door penalty must
+share one implementation. The mixer owns the reagent loss and no-charge result;
+before calling the trap-effect resolver it refreshes its target scratch slot to
+the first travelling member currently marked Good or Poisoned when such a
+member exists. When no such member exists the scratch slot is left holding
+whatever party index it last held, and the trap lands on that stale index; a
+port should treat that as undefined behaviour and decide deliberately rather
+than inventing a fallback. A spell name the parser cannot match takes the same
+wrong-recipe path, so a mistyped incantation also springs the trap. The trap
+resolver then applies the ordinary four-family effect contract above.
 
 **Dungeon floor traps.** Dungeon pit and bomb traps are direct cell effects,
 not the shared resolver. Fall traps move the party down the dungeon stack;
@@ -124,8 +155,11 @@ wording for the same wrapper.
 
 ## 5. Caller Boundaries
 
-The shared resolver has no remaining effect-family gap in this document. Caller
-selection remains owned by the invoking systems:
+The shared resolver has no remaining effect-family gap in this document, and the
+caller layer above it is fully covered: there is nothing left to trace on trap
+selection, because selection is a single trapped/not-trapped bit and the three
+call sites named in § 1 are the only ones. Caller selection remains owned by the
+invoking systems:
 
 - `systems/containers.md` owns surface/town chest class handling, trapped-chest
   flow, and the primary and secondary chest result pools.
@@ -146,13 +180,25 @@ private address maps.
 
 - `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md`.
 - `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`.
+- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the
+  wrong-mix branch's exact three steps, the stale victim-index edge, and the
+  unmatched-spell-name route into the same branch.
 - `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md`.
 - `u5-decomp/functions/SJOG_OVL/0x02EA_sjog_search_object_handler.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x2A52_party_take_damage.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2FA6_party_revive_slot.md`.
+- `u5-decomp/functions/ULTIMA_EXE/0x2FA6_party_revive_slot.md` (the note's
+  filename predates the correction; the helper it describes applies Poisoned
+  status and does not revive).
+- `u5-decomp/functions/SJOG_OVL/0x0F88_sjog_trap_dispatch.md`.
+- `u5-decomp/functions/SJOG_OVL/0x12D4_sjog_open_inner.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3ABE_random_short_delay.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3AAE_prng_roll_max.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+
+Source provenance: the effect-1/effect-3 polarity correction, the absence of
+any caller-side trap-class table, and the three-call-site census are derived
+from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.

@@ -9,10 +9,12 @@ segment. One slot is the player; the rest are NPCs, monsters, vehicles, combat
 field markers, dropped or scripted props, and other traced entities that need
 table-backed position and animation state.
 
-Not every visible effect uses this table. Projectile and impact visuals,
-moongate frame stamps, and ordinary terrain-animation frames are direct
-scratch-buffer or renderer effects unless a specific owning system writes an
-active-object record for them.
+Not every visible effect uses this table. Projectile and impact visuals and
+ordinary terrain-animation frames are direct scratch-buffer or renderer effects
+unless a specific owning system writes an active-object record for them.
+Natural moongates are in neither group: a gate is live terrain written into the
+map buffer by the once-per-turn refresh in `systems/overworld.md`, not a slot
+and not a render-time stamp.
 
 The top-down world modes and combat read and write this same table. The renderer composites it into the top-down viewport. The visibility pipeline uses the table during compositing to decide which active sprites survive the current visibility grid. The NPC scheduler links into it when its NPCs cross onto the player's floor. Dungeon exploration is the main exception: its first-person view is rendered from dungeon coordinate globals and the loaded dungeon grid, not from active-object slots. When a dungeon room or ambush enters combat, the normal combat framer swaps the table for an isolated combat instance and swaps it back when the fight ends. The save image preserves the table byte-for-byte.
 
@@ -228,16 +230,23 @@ the resident frame animator. Its first phase handles immediate hostile
 reactions:
 
 - Orthogonally adjacent hostile slots engage the player immediately.
-- Sea Serpent and Dragon first-frame hostile classes near the player roll a
-  one-in-seven trigger and, on a clear directed probe, run the same per-turn
-  finishers as other outdoor encounter effects.
+- Sea Serpent and Dragon first-frame hostile classes within three cells of the
+  player on **both** axes roll a one-in-eight trigger, and on success loose a
+  breath attack: a line is traced from the creature's cell to the party's, drawn
+  as an animated projectile, and tested for obstructions. If the line reaches
+  the party, the same per-turn finishers as other outdoor encounter effects
+  run and damage is applied. See `systems/overworld.md` for the shared
+  ranged-attack contract.
 - Adjacent whirlpool engagement is a plane-transition effect when the party is
   not on foot: it announces the whirlpool, runs the swallow presentation, moves
   the party to underworld coordinate `(34, 18)`, and re-enters overworld setup
   for the new plane. The same branch is a no-op if reached while the party
   marker is the ordinary on-foot avatar.
-- Ship-like water-creature and pirate frames aligned with the player within
-  three cells print the attack message and run the water-creature step path.
+- Ship-like water-creature and pirate frames aligned with the player on the same
+  row or column within three cells fire a broadside: they print the boom message
+  and then resolve the same traced-line ranged attack as the breath attack
+  above. The generic "attacked" message belongs to the adjacent-engagement path,
+  not to this one.
 
 If none of those immediate reactions fires, the cleanup phase decides ordinary
 movement. Whirlpool-class slots toggle a two-frame swirl and occasionally take
@@ -266,13 +275,23 @@ through to ordinary directed movement. Listed cells increment the slot's first
 auxiliary byte as an age counter; while that counter remains below twenty, the
 slot requests a directed step toward the player through the same step planner.
 
-The directed step planner is deliberately small. It computes the one-cell X
-and Y steps that would reduce wrapped distance to the player, then rolls a
-one-bit random value to choose which axis to try first. If that candidate is
-blocked, it tries the other axis. A candidate must pass the outdoor
-tile-walkability check and the target-cell check before the step committer is
-called. If neither directed axis can be accepted, the slot falls back to the
-random four-direction walker.
+The directed step planner is deliberately small, and it is smaller than it looks.
+It reduces each axis offset from the player to a **sign** -- move one cell toward
+the player, or do not move on that axis -- and never forms or compares the two
+distances. There is no preference for the longer axis, and there is no special
+case for a creature standing exactly diagonal from the party. Having formed the
+two candidate steps, it rolls a fair coin to decide which axis to attempt first;
+if that candidate is blocked it tries the other. A candidate must pass the
+outdoor tile-walkability check and the target-cell check before the step
+committer is called. If neither directed axis can be accepted, the slot falls
+back to the random four-direction walker, which rolls one cardinal direction and
+makes a single attempt at it -- so a blocked creature shuffles rather than
+freezing, and can back itself out of a dead end.
+
+On an exact diagonal, therefore, the creature moves horizontally half the time
+and vertically half the time, re-rolled fresh every turn, exactly as it does in
+every other geometry. There is no tie-break rule to reproduce because there is
+no tie to break.
 
 The outdoor tile-walkability check reads the candidate world tile, passes that
 tile plus the moving slot's type byte through the shared tile-class dispatcher,
@@ -451,6 +470,13 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
 - The NPC per-tick walker that drives schedule-based NPC movement and feeds the world-mutation helper — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
 - The save image's region holding the table and the on-disk overlay files — `u5-decomp/formats/saves.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` -- the confirmation
+  that the directed step planner never compares the two axis distances (so
+  there is no longer-axis preference and no diagonal tie-break), the coin flip's
+  role as attempt ordering only, the single-attempt random wanderer fallback,
+  and the identification of the shared five-argument helper as the ranged
+  projectile animator rather than a movement probe or path-clear scan.
 - The combat/spell projectile visual path and per-cell effect renderer -
   `u5-decomp/functions/COMSUBS_OVL/0x12DE_projectile_animate.md` and
   `u5-decomp/functions/COMSUBS_OVL/0x0F4A_tile_effect_render.md`.

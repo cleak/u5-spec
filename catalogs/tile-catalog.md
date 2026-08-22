@@ -88,7 +88,7 @@ The fourteen classes split into three super-categories:
   top-down map and arena terrain grids. They do not describe packed
   `DUNGEON.DAT` cells.
 - **Actor-and-item classes** (vehicle, NPC, monster, item, effect, avatar, indices `160..511`) live in *active-object records* — the dynamic sprite layer drawn over terrain. Records carry the tile id directly; the renderer composites them on top of the underlying cell.
-- **Transient effects** are written into the rendered tile buffer by the moongate animator, projectile animator, and certain spell handlers, but are not stored in any persistent map.
+- **Transient effects** are written into the rendered tile buffer by the projectile animator and certain spell handlers, but are not stored in any persistent map. Moongates are *not* in this group: a natural gate is live terrain written into the map buffer by the once-per-turn refresh, not a transient render effect.
 
 Storage discipline is rigorous: a chair in a town map is a furniture-class index in the tile grid; a horse the player can mount is a vehicle-class index in the active-object table; a fireball mid-flight is an effect-class index temporarily in a slot; a dungeon wall or fountain cell is instead a packed dungeon class/variant byte interpreted by dungeon-mode systems. The same five-hundred-and-twelve-entry sprite sheet serves top-down terrain, actors, items, and effects, while dungeon cell geometry is specified by `formats/dungeon-dat.md` and `systems/dungeon-mode.md`.
 
@@ -166,11 +166,14 @@ used as behavioural predicates elsewhere in this spec set, are: crystal sphere
 bed `0xAB`; stairway family `0xC4..0xC7`; ascend/descend floor links `0xC8` and
 `0xC9`; wooden fence `0xCA..0xCB`; moon gate `0xDC`; shrine flame `0xDE`;
 collapsed dungeon entrance `0xDF`; shop-sign family `0xF0..0xF7` and `0xF9`;
-grandfather clock `0xFA..0xFB`. A further group is confirmed as *sentinel* rows
-— ids whose description record is the shared placeholder string because a
-command handler produces their output instead: `0x59` (night sky), the
-sign/poster ids `0x89`, `0x8A`, `0xA0`, `0xA4` and `0xF8`, and the fountain band
-`0xD8..0xDB`. Those ids are used as Look predicates in `systems/view.md`
+grandfather clock `0xFA..0xFB`; **telescope** `0x59`. A further group is
+confirmed as *sentinel* rows — ids whose description record is the shared
+placeholder string because a command handler produces their output instead:
+`0x59` again, the sign/poster ids `0x89`, `0x8A`, `0xA0`, `0xA4` and `0xF8`, and
+the fountain band `0xD8..0xDB`. The telescope appears in both lists because its
+name is confirmed from its **art**, not from a description record: its row in
+the description table holds only the placeholder, since looking at it runs the
+sky renderer instead of printing a string. Those ids are used as Look predicates in `systems/view.md`
 Section 3 and are therefore fixed even though they carry no name. The two
 groups are not complements: the wishing well `0xA1` is a Look predicate
 handled entirely by a command handler, yet it appears in the *named* list
@@ -186,11 +189,15 @@ A subset of classes animates. The engine implements animation by reserving a con
 
 The dominant pattern is the **four-frame cycle**: a single conceptual tile (water, lava, fire) reserves four sequential indices `N, N+1, N+2, N+3`, each carrying a sprite for one phase. The animator advances the cell's stored index by one each turn (modulo four within the run). The renderer paints whichever index is currently in the cell.
 
-Moongate graphics use a bespoke render-frame plate driven by the overworld
-moongate animator. They are not ordinary stored map-cell animation and are not
-selected from the sky/status moon glyph display. The animator's phase counter
-cycles through a sixteen-step visual sequence; `systems/overworld.md` owns the
-timing and scratch-state contract.
+Moongate graphics are **not** animated at all. A natural moongate is ordinary
+live terrain: the once-per-turn refresh writes the moon-gate tile onto an
+eligible Moonstone cell at night and restores the underlying grass after dawn,
+and the renderer paints it like any other tile. An earlier revision of this
+catalog described a bespoke render-frame plate driven by a moongate animator
+that cycled a sixteen-step visual sequence; that reading is withdrawn. The
+sixteen-step cycle it described belongs to the night-time light beacon
+(`systems/visibility.md` Section 12.6), which paints light, not gates.
+`systems/overworld.md` owns the gate placement and entry contract.
 
 | Class        | Cycle length    | Animator                                    |
 |--------------|-----------------|---------------------------------------------|
@@ -308,14 +315,14 @@ pre-fall transport marker after the presentation clear, swap the world plane,
 and re-initialise the active-object table. Any additional plane-transition
 sources remain with the overworld transition inventory.
 
-**Outdoor ascents.** The public spec does not yet publish a traced set of underworld-to-surface outdoor ascent tiles. Preserve candidate special tiles as tile identities, but do not assign an ascent contract until the overworld transition inventory is traced.
+**Outdoor ascents.** There are none, and this is settled rather than pending: no Underworld terrain tile lifts the party to the surface. Preserve candidate special tiles as tile identities, but do not assign an ascent contract to any of them. The routes back up are a dungeon's top exit, a moongate or Gate Travel to a surface Moonstone slot, and a saved-position reload; `catalogs/gazetteer.md` Section 8.3 carries the closed inventory.
 
 **Moongate cells.** Terrain byte `0xDC` is LOOK2-named as a moon
 gate and is accepted by movement and local-light systems as
-moon-gate-family state. Saved Moonstone slots drive the traced live-terrain
-placement/waning schedule, and the natural-moongate animator can stamp frame
-tiles into the rendered world view while a gate is visible. General underfoot
-entry is specified in `systems/overworld.md`; this catalog only names
+moon-gate-family state. Saved Moonstone slots drive the live-terrain
+placement and waning schedule, and that terrain byte is the whole of a gate's
+presentation - there is no separate frame plate and no animator. General
+underfoot entry is specified in `systems/overworld.md`; this catalog only names
 storage-domain semantics. The `0x80..0x87` special range is a
 pendulum/restraint/grate/archway fixture range in the LOOK2-backed catalog, not
 the traced natural-moongate terrain byte; do not infer teleport behavior solely
@@ -415,6 +422,18 @@ stairway family they sit beside; what is special about them is only that the
 scheduler's tile-ID search mode additionally stamps them as goal cells. They
 remain distinct ids from the visible stairway family `0xC4..0xC7` and must not
 be folded into it.
+
+**Telescopes.** Tile `0x59` is a telescope: a light tube on a splayed tripod.
+It is a Look trigger, not a step trigger, and looking at one shows the sky
+rather than any kind of map — the sun by day, at the cost of one point of damage
+to the active party member, and a moving star field at night.
+`systems/view.md` Sections 3 and 4.2 own the full contract. Two labels that were
+previously attached to this id are withdrawn: it is **not** a wishing well (that
+is the separate tile `0xA1` below, which has its own handler and its own
+description), and its Look path is **not** the gem's View command or any
+Britannia overview map. It has no gem or item precondition of any kind. Exactly
+three telescopes are placed in shipped data, all indoors: in Moonglow, in Skara
+Brae, and in West Britanny.
 
 **Wishing-wells, springs, caves.** The deep-well tile `0xA1` is a Look trigger, not a step trigger: looking at it runs the coin-and-wish handler whose six accepted words are the Easter-egg list "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse". In the two granting scenes every accepted word creates the same horse-family active object, so the older "wish for a vehicle" framing is a misnomer. `systems/view.md` Section 3 owns the full contract. Springs restore MP; caves drop a chest.
 
@@ -525,10 +544,13 @@ Effect sprites occupy indices `448..495`. Effects are short-lived sprites compos
 
 The principal effect families:
 
-- **Moongate frames.** A bespoke transient frame plate used by the overworld
-  moongate animator. The selected frame comes from the animator's local phase
-  counter, not from the status-strip Trammel/Felucca glyph tables and not from
-  the saved-slot live-terrain placement/waning schedule.
+- **Moongate frames.** *None exist.* An earlier revision of this catalog listed
+  a bespoke transient frame plate driven by an overworld moongate animator and
+  selected by that animator's phase counter. Both the plate and the animator are
+  withdrawn: a natural gate is the live terrain byte `0xDC`, written and removed
+  by the saved-slot refresh and drawn by the ordinary renderer. The
+  sixteen-position cycle that reading described belongs to the night-time light
+  beacon in `systems/visibility.md` Section 12.6.
 - **Projectile frames.** Arrow, axe, sling, magic missile sprites in flight. The combat handler walks a projectile from caster to target one cell per render frame.
 - **Splash / explosion / impact.** Multi-frame sprites for fireball impact, lightning hit, explosion clouds, smoke. The effect handler runs through the frames and clears.
 - **Fields.** Fire field, poison field, sleep field, energy field, electric field. Dungeon field placement writes the field terrain bytes documented in `systems/magic.md` into the live dungeon image, optionally preserving the dungeon visit marker bit. Combat arena fields are handled by the arena-field helper instead of direct dungeon terrain writes; contact is checked after a successful step commits, then routes to the per-field status or damage/value helper.
@@ -558,7 +580,7 @@ Some class-specific encodings layer on top:
 
 - **Dungeon tiles.** Dungeon `.DAT` cells pack two four-bit fields: high nibble is a strict dungeon tile class (open, wall, door, ladder, chest, trap, fountain, field), low nibble is class-specific attribute. Dungeon tile bytes are *not* indices into the unified five-hundred-and-twelve-tile space and do not share the world/town high-nibble buckets — they are a separate dungeon tile-class encoding rendered by the sparse first-person dungeon renderer.
 - **Combat arenas.** Combat `.CBT` terrain cells use standard one-byte tile ids in an eleven-by-eleven grid with a thirty-two-byte row stride. The twenty-one bytes after each terrain row are arena metadata and must be preserved. For `BRIT.CBT`, traced setup copies the party-entry and placement-slot coordinate slices from that metadata into resident tables; spawn counts and companion-class rolls still come from resident per-class combat tables, keyed by combat class id rather than by arena index.
-- **Markers in town maps.** Marker bytes — NPC start markers `0x48`/`0x49`, spawn marker `0x2A`, dash/period conditional markers `0x2D`/`0x2E`, dawn/dusk archway marker `0x87`, and the NPC floor-link markers `0xC8`/`0xC9` — appear in on-disk tile grids and are consumed by location-load or NPC-scheduler passes. Some are harvested into runtime state, some are conditionally rewritten in the runtime tile buffer, and `0xC8`/`0xC9` remain queryable as runtime tile-ID goals. They should not be treated as ordinary terrain. For the dawn/dusk pass, `0x87` marks the south-adjacent gate cell; shipped maps pair it with `0x44` cobble, which toggles to `0x99` portcullis via XOR `0xDD` at night.
+- **Markers in town maps.** Marker bytes — NPC start markers `0x48`/`0x49`, spawn marker `0x2A`, dawn/dusk archway marker `0x87`, and the NPC floor-link markers `0xC8`/`0xC9` — appear in on-disk tile grids and are consumed by location-load or NPC-scheduler passes. Some are harvested into runtime state, some are conditionally rewritten in the runtime tile buffer, and `0xC8`/`0xC9` remain queryable as runtime tile-ID goals. They should not be treated as ordinary terrain. The standing-crop and fruit-tree terrain values `0x2D`/`0x2E` were previously listed here as markers; they are not. They are ordinary named terrain that a load-time harvest pass thins into their plowed-patch and hollow-stump counterparts (`0x2C` and `0x2B`) seven times in eight, on a stream keyed to the calendar day. For the dawn/dusk pass, `0x87` marks the south-adjacent gate cell; shipped maps pair it with `0x44` cobble, which toggles to `0x99` portcullis via XOR `0xDD` at night.
 
 ## 13. Graphics-asset encoding
 
@@ -596,6 +618,11 @@ The data here is drawn from four sources. Each tile's position in the partition 
 - The special-trigger comparisons in the per-mode walk loops.
 - The marker-byte consumers (NPC start markers, waypoint markers, dawn/dusk archway marker `0x87`, and the NPC floor-link markers `0xC8` and `0xC9`).
 - The two-nibble dungeon tile encoding and its separate tile-class space.
+- Source provenance: the telescope identity of tile `0x59`, its three shipped
+  placements, the separation from the wishing-well tile `0xA1`, and the
+  withdrawal of the moongate-animation plate are derived from private analysis
+  notes `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` and
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 
 **From the published Ultima V manual** (`The Book of Lore`, `The Book of Play`):
 
@@ -638,7 +665,7 @@ special-trigger routing, active-object classing, and file-format boundaries.
 - `systems/movement.md` - Shared movement and passability predicate, including
   the resident terrain bitset, caller-query dispatcher, vehicle layer, dynamic
   occupancy, and commit rules.
-- `systems/overworld.md` — Overworld mode specification, including the active-object animator, the per-turn tile probe, and the moongate animator. Section 8 lists the special tile classes the per-turn block recognises.
+- `systems/overworld.md` — Overworld mode specification, including the active-object animator, the per-turn tile probe, and the once-per-turn moongate terrain refresh. Section 8 lists the special tile classes the per-turn block recognises.
 - `systems/town-mode.md` — Town-mode specification, including marker harvest/runtime marker handling (Section 3 / Section 6), the dawn/dusk gate substitution (Section 6), and the per-tile interaction commands (Section 9).
 - `systems/dungeon-mode.md` — Dungeon-mode specification, including the two-nibble dungeon tile encoding (Section 4) and the sparse renderer's wall checks (Section 6).
 - `systems/active-objects.md` — Active-object table specification, including the per-slot record format and the animator pass.
@@ -668,7 +695,7 @@ specified by this catalog and the linked system specs.
    loading owns NPC start and conditional rewrite markers, while the NPC
    scheduler owns the `0xC8`/`0xC9` floor-link goal markers.
 5. Check any remaining visual edge cases around local-light writer order and
-   special runtime stamps; the core propagation-blocker list and moongate-mask
+   special runtime stamps; the core propagation-blocker list and beacon-mask
    ordering are covered in `systems/visibility.md`.
 6. Refine the field-tile per-frame tile-id runs (Fire Field, Poison Field,
    Sleep Field, Energy Field, Wall of Fire, Electric Field) and their visual

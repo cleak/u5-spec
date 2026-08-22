@@ -122,23 +122,33 @@ Earlier wording here named that default as "column fifteen, a per-scene row from
 
 The marker is harvested into runtime spawn coordinates. Any visual replacement is handled by the broader town load pipeline, not by the spawn-coordinate harvest itself.
 
-### Cosmetic dash/period variation
+### Farmland and orchard harvest scatter
 
-Two adjacent tile values -- the ASCII bytes for the dash and the period
-(`0x2D` and `0x2E`) -- are consumed by a second-tier cosmetic pass gated on
-the player slot being known. This pass scans the 32-by-32 runtime tile buffer
-after load-time marker harvest. It brackets the scan with the resident
-deterministic RNG setup/restore path using the location subtype byte, so the
-variation is stable for a given location and does not perturb gameplay RNG
-state.
+Four adjacent tile values form two authored/harvested pairs of ordinary
+terrain: standing crops (`0x2D`) and its plowed-patch counterpart (`0x2C`),
+and a fruit tree (`0x2E`) and its hollow-stump counterpart (`0x2B`). The
+in-game look-at description table names all four, so they are visible terrain,
+not markers and not route hints.
 
-- `0x2D` rewrites to `0x2B` on a nonzero roll from `0..6`, i.e. six times
-  out of seven.
-- `0x2E` rewrites to `0x2C` on the same six-in-seven roll.
+Location files store only the *full* member of each pair. A second-tier pass,
+gated on the player's actor slot already being assigned, scans the 32-by-32
+runtime tile buffer after load-time marker harvest and thins them:
 
-If the roll is zero, the byte is left unchanged in the runtime buffer. These
-bytes are visual terrain-detail seeds, not NPC route waypoints and not a public
-route-hint table.
+- Standing crops (`0x2D`) rewrite to a plowed patch (`0x2C`) on a nonzero roll
+  from `0..7`, i.e. seven times out of eight.
+- A fruit tree (`0x2E`) rewrites to a hollow stump (`0x2B`) on the same
+  seven-in-eight roll.
+
+If the roll is zero the cell is left standing. The rewrite is confined to the
+runtime buffer; the on-disk file is unchanged, and a decoder reading the file
+always sees the full-terrain form.
+
+The pass is bracketed by two generator seeds, not by a save and restore. Before
+the scan the gameplay PRNG is seeded from the calendar day of the month, so the
+scatter is identical for every entry to every location on the same in-game day
+and re-rolls when the date advances; after the scan the generator is re-seeded
+from the host clock, so the previous stream position is discarded rather than
+recovered. See `systems/prng.md` section 3 and `systems/town-mode.md` section 3.
 
 ### NPC floor-link markers
 
@@ -468,8 +478,12 @@ The format described above was derived from the analysis notes listed below. Non
 - The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
-- The town-mode cosmetic terrain-variation pass for dash/period bytes -
-  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
+  farmland/orchard harvest scatter, the direction of both substitutions, the
+  seven-in-eight rate, the day-of-month seed, and the clock re-seed that
+  follows the pass. That note's earlier "grass/path texturing", "six-in-seven"
+  and "save/restore the PRNG" readings are superseded.
 - The town-mode entry orchestrator that calls the loader once per location entry and re-entry — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
 - The world-mutation primitive that links logical NPC state to active-object slots, consuming the harvested NPC start positions — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
 - The facing-sensitive town stair family and floor-change reload path -

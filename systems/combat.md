@@ -226,13 +226,28 @@ is one field of the eight-byte class stat row specified in
 `formats/data-ovl.md`; the surrounding bytes are the other class stat fields,
 not terrain-combat weights. Three count values are treated as exact counts and
 used unchanged: one, eight, and sixteen. Any other value is treated as a
-maximum: the actual count is rolled to a uniform integer in `[1, max]`. A
-"double-encounter" runtime flag, when set, re-rolls the count once more and
-takes the second roll. The effect is not a guaranteed size increase; it changes
-the encounter's random count by replacing the first roll. The flag is
-save-backed resident state and is cleared by the 28-day month-boundary bundle.
-Current static sweeps found no gameplay setter. The reroll arm ends with a
-defensive cap at twenty-six.
+maximum: the actual count is rolled to a uniform integer in `[1, max]`.
+
+An **early-game encounter-size damper** — a saved-game flag historically
+mislabelled the "double-encounter" or "fortunes of war" flag — modifies that
+roll while it is set. Both rolls draw a uniform integer in `[1, n]`, so applying
+the second roll to the first roll's result can only lower the count, never raise
+it: the flag is a damper, not a doubler. It has no effect at all on encounter
+classes whose spawn-count field is one of the three exact-count values one,
+eight and sixteen, because those skip both rolls. Its full life cycle is now
+settled and no player action participates in it:
+
+- The flag is a persistent byte of the saved game (`formats/saved-gam.md`).
+- The factory new-game template ships it **already switched on**, and character
+  creation copies that template wholesale into the first save, so every fresh
+  game starts with the damper active. Save and load carry it unchanged.
+- Nothing in gameplay ever sets it. The only write anywhere in the engine is a
+  clear, performed by the per-turn cleanup at the calendar-month rollover.
+- Because the shipped calendar starts partway through a month, the damper
+  survives the first twenty-four in-game days of a new game and is then cleared
+  permanently — nothing can switch it on again.
+
+The reroll arm ends with a defensive cap at twenty-six.
 
 **Reachable-count invariant.** With shipped class data the count can never
 exceed sixteen. The largest default spawn count in the forty-eight-row class
@@ -630,7 +645,7 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 **End-of-round exit checks.** Three flags control exit:
 
 - **Defeat flag**: the entire party is dead, asleep, or fled. Result is "defeat".
-- **Leave-combat flag**: the out-of-arena leave helper has accepted, a spell or tile effect has ended combat, or the combat-only X-it cleanup path has accepted after no live foes remain. On the *first* such trigger per fight, the exit-message string is printed; subsequent reads pass through silently.
+- **Leave-combat flag**: the out-of-arena leave helper has accepted, a spell or tile effect has ended combat, or the combat-only Escape cleanup path has accepted after no live foes remain. On the *first* such trigger per fight, the exit-message string is printed; subsequent reads pass through silently.
 - **Exhausted slots** (loop reached slot 32): start a new round.
 
 When defeat or leave-combat fires, the round loop returns "1" (victory/escape) or "0" (defeat).
@@ -664,52 +679,84 @@ The phase-counter / base-step structure means actors act at *staggered* paces. T
 
 When the round walker dispatches a player slot, the player command handler normally reads exactly one keystroke from the input pipeline (using the same input system that drives the rest of the engine). If Quickness's shared `Q` active-effect tag is live, that handler first rolls an inclusive 0..1 random gate: a zero result consumes the ready dispatch without reading input, while a one result continues normally. When input is read, the keystroke is folded to upper case, case-checked against the combat command set, and dispatched.
 
-The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Space, digits, direction codes). Dispatcher-level coverage is complete for all twenty-six letters and the special inputs listed below. Recognition is not the same as world-mode success: several letter branches print the familiar verb label and then run the combat scene-message/abort tail, while others enter shared command overlays through combat-specific stubs. The public map below names those overlay targets where they are resolved; object-specific success and refusal cases remain with the command-family specs.
+The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Ctrl-B, Space, digits, direction codes). Every letter and every special input is now pinned, and recognition is not the same as world-mode success. The parser routes its letters through two shared shapes plus a handful of direct calls.
+
+**Shape A — the labelled prompt with a live-actor gate.** The helper prints the verb label, then requires that the acting combatant is still alive. A dead actor gets the short "Can't!" refusal and the prompt is re-issued at no cost. A live actor's command is handed to one shared world-mode delegate chosen by the letter, and the combatant's action ends. Six letters use this shape: `G` Get, `J` Jimmy, `O` Open, `R` Ready, `S` Search and `U` Use. Their delegates are the same handlers the world modes use — the shared tile-interaction overlay for Get/Jimmy/Open/Search, the status/equipment overlay for Ready, and the item-use handler for Use.
+
+**Shape B — the shared "that verb means nothing here" responder.** The responder prints the verb label, appends one of three fixed tails (" what?", "-Not here", or "-Funny, no response!"), plays a two-tone refusal beep, and always re-prompts without cost. Twelve letters use it: `B` Board and `X` X-it take the first tail; `E` Enter, `F` Fire, `H` Hole up, `I` Ignite, `L` Look, `M` Mix, `N` New order, `Q` Quit and `V` View take the second; `T` Talk takes the third. `D` and `W` bypass the responder and print their own `D-What?` / `W-What?`, with the same no-cost re-prompt.
+
+The remaining letters call their targets directly, as the table below records.
 
 | Key   | Combat behaviour |
 |-------|------------------|
-| **A** | Attack. Prompts for a direction key, then runs the step-or-attack primitive (Section 11). |
-| **B** | Recognised as Board, then routed to the combat scene-message/abort tail. |
-| **C** | Cast a spell through the combat spell path (Section 10). |
-| **D** | Prints the combat-specific `D-What?` refusal and aborts the command. |
-| **E** | Recognised as Enter, then routed to the combat scene-message/abort tail. |
-| **F** | Recognised as Fire, then routed to the combat scene-message/abort tail. |
-| **G** | Get. Prints `Get-`, gates on the active combat actor still being alive, then dispatches through the shared SJOG Get handler and returns to the combat parser for any follow-up input. |
-| **H** | Recognised as Hole up, then routed to the combat scene-message/abort tail. |
-| **I** | Recognised as Ignite torch, then routed to the combat scene-message/abort tail; no torch counter update is proven on this combat branch. |
-| **J** | Jimmy. Prints `Jimmy-`, applies the same live-actor gate as Get, then dispatches through the shared SJOG Jimmy handler. |
-| **K** | Klimb. Dispatches to the SJOG combat Klimb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. |
-| **L** | Recognised as Look, then routed to the combat scene-message/abort tail; this dispatcher does not run the world/town LOOKOBJ flow. |
-| **M** | Recognised as Mix, then routed to the combat scene-message/abort tail; it does not open the reagent mixer. |
-| **N** | Recognised as New order, then routed to the combat scene-message/abort tail. |
-| **O** | Open. Prints `Open-`, applies the same live-actor gate as Get, then dispatches through the shared SJOG Open handler. |
-| **P** | Push. Prints `Push-` and calls the shared CMDS P-Push handler directly. It is not one of the live-actor-gated Get/Jimmy/Open/Search prompt-helper branches. In combat, the handler uses the active combat actor as the coordinate anchor; successful push/pull effects mutate the temporary arena tile/object state, advance that actor's arena position, dirty redraw, and then return to the combat round loop. |
-| **Q** | Combat Quit / abandon party. It prints the combat Quit label, sets the combat defeat path, and returns to the round loop so the fight exits as a defeat. It is not the resident Q save-game command and does not save. |
-| **R** | Ready. Prints the combat verb label, gates on the active actor still being alive, then dispatches to the ZSTATS R-Ready handler. In combat, the character picker reuses the active combat actor instead of prompting for an arbitrary party member; equipment mutation semantics, including the body-armour combat lock, are specified in `inventory.md`. |
-| **S** | Search. Prints `Search-`, applies the same live-actor gate as Get, then dispatches through the shared SJOG Search handler. |
-| **T** | Recognised as Talk, then routed to the combat scene-message/abort tail. |
-| **U** | Recognised as Use item, then routed to the combat scene-message/abort tail. It does not enter the non-combat CAST-owned item-use picker and does not apply potion, scroll, Moonstone, regalia, or other U-Use item effects in combat. |
-| **V** | Recognised as View, then routed to the combat scene-message/abort tail; it is not the resident gem-view map path. |
-| **W** | Prints the combat-specific `W-What?` refusal and aborts the command. |
-| **X** | X-it. Calls the combat-only CMDS escape handler. The command succeeds only when no active-not-dead foes remain; otherwise it prints a combat refusal. Fleeing while enemies remain is handled by stepping out of arena bounds, not by this branch. |
-| **Y** | Yell. Prints the combat Yell label and dispatches to the shared CMDS Yell handler, but combat's scene frame is not accepted by the ship-sail, Word-of-Power, or Shadowlord-name success branches. In combat, nonempty Yell input reaches the handler's no-effect path; empty input still uses the normal nothing-said result. |
-| **Z** | Z-stats. Dispatches to the ZSTATS display handler; in combat it selects the active combat actor's party slot instead of prompting for an arbitrary character. |
+| **A** | Attack. Routes into the shared arena attack helper with the acting combatant and a flag saying whether that combatant is armed; the helper announces the actor and the weapons it is wielding (or bare hands) before the attack resolves. Resolution is Section 11. Ends the actor's action. |
+| **B** | Board — shared refusal responder, first tail. No cost. |
+| **C** | Cast a spell: the combat prerequisite check, then either the in-arena prompt loop or the shared spell dispatcher (Section 10). Ends the actor's action unless the caster is dead, which re-prompts. |
+| **D** | Prints the combat-specific `D-What?` refusal and re-prompts at no cost. |
+| **E** | Enter — shared refusal responder, second tail. No cost. |
+| **F** | Fire — shared refusal responder, second tail. No cost. |
+| **G** | Get. Labelled prompt with the live-actor gate, then the shared Get handler. |
+| **H** | Hole up — shared refusal responder, second tail. World-mode rest is not available inside an arena. No cost. |
+| **I** | Ignite — shared refusal responder, second tail. No torch counter is touched on this branch. No cost. |
+| **J** | Jimmy. Labelled prompt with the live-actor gate, then the shared Jimmy handler. |
+| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
+| **L** | Look — shared refusal responder, second tail. This dispatcher does not run the world/town look flow. No cost. |
+| **M** | Mix — shared refusal responder, second tail. It does not open the reagent mixer. No cost. |
+| **N** | New order — shared refusal responder, second tail. No cost. |
+| **O** | Open. Labelled prompt with the live-actor gate, then the shared Open handler. That handler carries no combat-specific branch of its own, so in an arena it behaves as it does on the surface. |
+| **P** | Push. Prints the `Push-` label and calls the shared movable-tile handler directly, without the live-actor gate used by Shape A. In combat the handler uses the acting combatant as the coordinate anchor; a successful push or pull mutates the temporary arena tile/object state, advances that actor's arena position, dirties the redraw, and returns to the round loop. Ends the actor's action. |
+| **Q** | Quit — shared refusal responder, second tail. An earlier revision of this section described combat `Q` as an "abandon party" command that forced the defeat exit; that is withdrawn. Combat `Q` prints its label and re-prompts, and there is no resident save route in combat either. |
+| **R** | Ready. Labelled prompt with the live-actor gate, then the same status/equipment handler non-combat `R` uses, with the selection bound to the acting combatant instead of prompting for an arbitrary party member. Equipment mutation semantics, including the body-armour lock, are in `inventory.md`. |
+| **S** | Search. Labelled prompt with the live-actor gate, then the shared Search handler. |
+| **T** | Talk — shared refusal responder, third tail. No cost. |
+| **U** | Use item. Labelled prompt with the live-actor gate, then the same item-use handler the world modes use, which opens the special-item picker and has its own combat branches. An earlier revision of this section said combat `U` was label-only and aborted without entering the item-use flow; that is withdrawn. Which individual item families accept a combat scene is owned by `inventory.md` and `catalogs/item-list.md`. |
+| **V** | View — shared refusal responder, second tail. It is not the resident gem-view map path and consumes no gem. No cost. |
+| **W** | Prints the combat-specific `W-What?` refusal and re-prompts at no cost. |
+| **X** | X-it — shared refusal responder, first tail. Combat cannot be left with `X`: the command prints its label with the "what?" tail and re-prompts. An earlier revision of this section routed combat `X` to the escape handler; that is withdrawn. Leaving a fight is done by Escape, by stepping out of arena bounds, or by winning. |
+| **Y** | Yell. Prints the combat Yell label and dispatches to the shared Yell handler, but combat's scene frame is not accepted by the ship-sail, Word-of-Power, or Shadowlord-name success branches. In combat, nonempty Yell input reaches the handler's no-effect path; empty input still uses the normal nothing-said result. Ends the actor's action. |
+| **Z** | Z-stats. Dispatches to the same status display handler the world modes use, with no live-actor gate, selecting the acting combatant's party slot instead of prompting. Ends the actor's action. |
 
 Other inputs:
 
-- **Space** — pass / wait one phase.
-- **Escape** — abort whichever multi-stage prompt is active.
-- **Ctrl-S** — toggle music.
-- **Digit `0`** — clear the active-player selection.
-- **Digits `1`–`6`** — select party member 1 through 6 as the active player.
+- **Space** — pass / wait one phase. Ends the actor's action.
+- **Escape** — routes to the combat escape handler, which is the command form of
+  leaving a fight; its own result decides whether the actor's action ends or the
+  prompt is re-issued.
+- **Ctrl-S** — toggle sound. Re-prompts without even reaching the turn test.
+- **Ctrl-B** — combat's own copy of the typeahead-buffer toggle, writing the
+  same engine-wide setting as the resident one (`commands.md`). Re-prompts.
+- **Digit `0`** — clear the active-player selection and repaint the panel.
+- **Digits `1`–`6`** — select party member 1 through 6 as the active player. A
+  failed selection re-prompts at no cost.
 - **Cardinal direction codes** — move one cell in the requested cardinal
   direction. Movement uses the step-or-attack primitive: if the cell is
   occupied by a hostile, attack instead; if the destination leaves the arena,
-  run the out-of-arena helper described in Section 3. Diagonal direction codes
-  produced by the input layer are not combat movement commands; they fall
-  through to the ordinary invalid-command refusal.
+  run the out-of-arena helper described in Section 3. A blocked step re-prompts
+  at no cost. Diagonal direction codes are not combat movement commands; they
+  fall through to the ordinary invalid-command refusal.
+- **Anything else** — the stock `What?` refusal and a free re-prompt.
 
-Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Search, Yell, and some delegated arena handlers): they print a short prompt or call a sub-handler that reads a follow-up keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' visible vocabulary so muscle memory transfers cleanly between play modes, but the combat parser owns its own branches and refusals. The most distinctive combat-only paths are Attack, Cast, active-player selection, combat U-Use refusal, combat Yell's no-effect scene fallthrough, out-of-bounds fleeing, and the X-it cleanup exit.
+**The turn rule.** The parser keeps a single re-prompt flag, cleared at the head
+of every parse. It is raised only by the dead-actor refusal, the shared
+"not meaningful here" responder, the `D` / `W` / `What?` stubs, the escape
+handler's own result, a failed party-member select, and the dead-caster Cast
+path; a blocked step and a blocked climb raise it too. When the flag is raised
+the player is returned to the prompt and the combatant has spent nothing. When
+it is clear, that combatant's action is over. Every accepted verb therefore
+costs the acting combatant its action, and every refusal is free — including a
+refused Ready, whose refusal is indistinguishable from success to everything
+outside the equipment overlay.
+
+**Diagonal input and the targeting cursor.** Combat is the one place in the game
+that accepts eight-way input, and it is not movement. While combat asks the
+player to pick a cell, the four cardinal keys move the targeting cursor one cell
+and the four corner keys (Home / End / PgUp / PgDn, or the numpad corners) move
+it one cell diagonally. Enter or the attack letter confirms, Escape cancels, and
+Space runs the self-target check. An implementer should not generalise this into
+diagonal stepping: no mode loop, and no letter dispatcher, accepts a diagonal
+step.
+
+Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Search, Use, Yell, and some delegated arena handlers): they print a short prompt or call a sub-handler that reads a follow-up keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' visible vocabulary so muscle memory transfers cleanly between play modes, but the combat parser owns its own branches and refusals. The most distinctive combat-only paths are Attack, Cast, active-player selection, the arena targeting cursor, combat Yell's no-effect scene fallthrough, out-of-bounds fleeing, and the Escape cleanup exit.
 
 ## 9. Monster AI
 
@@ -783,12 +830,23 @@ After this hook, the AI target picker and direction synthesis run as normal.
   monster's default group lives in that monster's **per-class flag word**, not
   in the descriptor byte. The controlled bit `0x01` is not consulted here at
   all, so charming or possessing an actor does not by itself move it between
-  factions. A party-class actor whose referenced roster
-  name has lowercase `j` as its fifth character is forced into the monster-side
-  group for this comparison. In the stock initial roster this matches the
-  Saduj template, but the rule is literal roster-name data: a compatible engine
-  should preserve the same edge for custom or edited roster entries. This is
-  part of combat grouping, not a conversation or quest flag.
+  factions. One shipped roster template is hard-wired hostile: whenever a
+  party-class actor stands in for the game's traitor character - the last
+  record of the shipped sixteen-record roster - the resolver forces it into
+  the monster-side group however it reached the field (charm, summon, or
+  scripted spawn), so it reads as an enemy to the party and as a friend to the
+  monsters, for both the friendly-fire filter and the player-versus-AI dispatch
+  gate. **The player's own character is exempt by construction, and no name the
+  player can enter changes any actor's team.** The override is consulted only
+  for slots that reference a *non-zero* roster record, and roster record zero is
+  the player's own character; further, record zero is the only record the player
+  ever names - character creation and the Ultima IV import both write only that
+  record, and no path in the game writes the name field of any other roster
+  record, which arrive verbatim from the shipped seed roster or from the save.
+  In the shipped roster exactly one record matches, and it is the traitor
+  template. An implementation may key this rule directly to that roster record;
+  it must not key it to any property that a player-entered name could satisfy.
+  This is part of combat grouping, not a conversation or quest flag.
 - Not in a suppressed phase/hidden state, except that combat whose saved
   pre-combat scene is Doom and combat whose acting monster class is Shadow Lord
   bypass this extra suppression filter. The exception is separate from ordinary
@@ -1049,7 +1107,7 @@ Gremlin cast-like branch row, and the Mimic pre-gate bypass row.
 
 The damage-and-status handler bundles "apply damage, update status, narrate the result, and handle special-class death effects" into one function. It takes a damage amount and a target slot.
 
-**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill reaches it with the instant-kill sentinel and skips that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. A separate resident equipped-item statistic helper can sum readied equipment values and add 3 when Protection's shared `P` tag is active, but the only identified caller discards its return value and no traced combat path recomputes the character-defense byte from readied armour. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
+**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill reaches it with the instant-kill sentinel and skips that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat", because the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
 
 **Monster status/effect attacks.** The attack resolver checks monster-only
 status branches before ordinary melee damage. Classes with the poison/status
@@ -1134,8 +1192,10 @@ full actor-table sweep. The traced combat-side aging endpoint is the
 active-player/selection cleanup path; Negate Time's `T` tag uses the same counter
 shape, while the per-turn clock cleanup only observes `T` to skip minute
 advancement. The tag is not display-only.
-Protection's `P` tag adds 3 inside the separate equipped-item statistic helper;
-current traced combat damage still reads the cached party defense byte.
+Protection's `P` tag has no effective consumer: the defence bonus it was meant
+to add rides on a per-item defence total that is both unreachable and never
+read, so Protection changes no combat number. Combat damage reads the cached
+party defense byte instead.
 Quickness's `Q` tag randomly gates player-side combat command dispatch with a
 0..1 roll; Mass
 Charm's `C` tag lets the AI target picker roll against the acting monster's
@@ -1177,8 +1237,10 @@ descriptor faction tag rather than a separate class-family table.
 
 The grouping helper therefore combines actor-family defaults (descriptor flags
 bit `0x40` identifies the monster side), the per-class team-override flag from
-the monster's class flag word, and the Saduj-linked roster override, rather than
-consulting a separate faction table.
+the monster's class flag word, and the single hard-wired hostile roster template
+described in Section 9, rather than consulting a separate faction table. That
+last override is guarded so that it can never apply to the player's own
+character.
 
 ## 14. Victory, defeat, and escape
 
@@ -1186,9 +1248,9 @@ Three exit conditions end combat; each sets one of the round-loop's flag bytes, 
 
 **Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round-loop exits with result code "1". The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a post-combat award. The traced SJOG calls reached from COMBAT are command-time delegates and per-round helpers, not an after-victory loot-conversion pass. Ordinary terrain-trigger removal happens after the framer, in the resident caller that invokes the post-combat object reconciler for the original trigger slot. This settles the combat-exit boundary: ordinary attack/spell experience can be credited before the framer restores the world, the original trigger slot can be cleared or rewritten by the caller-side reconciler, and any body-like food/gold result belongs to later Search/Get interaction with that rewritten slot. Arbitrary combat corpse markers, party gold, karma, and any victory bonus are not automatic framer outputs. No separate victory message prints — the death-tile transitions tell the story.
 
-**Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine sets the defeat flag and the round loop returns "0". Combat `Q` reaches the same defeat exit intentionally: it is an abandon-party command, not a save command and not a harmless prompt abort. What happens next depends on the calling mode loop - typically a game-over sequence; a few specific encounters treat defeat as a scripted plot event rather than a death. The Blackthorn capture version of that handoff is owned by `systems/blackthorn.md`.
+**Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine sets the defeat flag and the round loop returns "0". There is no command that reaches the defeat exit deliberately: an earlier revision of this section described combat `Q` as an abandon-party command that did so, and that is withdrawn — the combat parser refuses `Q` like the other meaningless verbs (Section 8). What happens next is not decided by combat: control returns to the exploration loop that framed the fight, and that loop's next per-turn party-capability check sees the result. A wipe with nobody left able to act and nobody asleep runs the rescue/refuge cinematic specified in `systems/blackthorn.md` Section 7 — which restores the party and resumes play at Lord British's Castle, so an ordinary wipe is not a terminal game-over. A wipe that leaves a sleeping member instead simply passes turns until someone wakes or dies.
 
-**Escape.** Moving outside the arena reaches the out-of-bounds combat leave helper. Ship-style fights can refuse the attempt, and constrained encounters require party exits to share the established exit direction. Once the helper accepts, it sets the leave-combat path; the first accepted trigger per fight prints the exit presentation and the round loop exits with code "1". Surviving party members and monsters are not given a chance to land final blows once that helper accepts. The `X` command is different: its CMDS escape handler scans for active-not-dead foes and refuses while any remain, so it is a cleanup/victory exit path rather than the ordinary flee-with-enemies-live path.
+**Escape.** Moving outside the arena reaches the out-of-bounds combat leave helper. Ship-style fights can refuse the attempt, and constrained encounters require party exits to share the established exit direction. Once the helper accepts, it sets the leave-combat path; the first accepted trigger per fight prints the exit presentation and the round loop exits with code "1". Surviving party members and monsters are not given a chance to land final blows once that helper accepts. The Escape key is different: its escape handler scans for active-not-dead foes and refuses while any remain, so it is a cleanup/victory exit path rather than the ordinary flee-with-enemies-live path. The `X` letter does not reach that handler at all — the combat parser refuses it outright (Section 8).
 
 The framer's restore phase runs the same way for all three — the only difference is the result code returned. Combat time advances from the round loop's round-counter wrap, which fires the per-turn cleanup with a one-minute increment; a separate one-minute exit increment is not part of the currently traced framer restore.
 
@@ -1250,22 +1312,27 @@ without independent behavioral consumers remain opaque metadata.
   component-bit labels are required for the analyzed baseline beyond those
   behavior traits.
 
-- **The "double-encounter" runtime flag writer.** The flag that causes the
-  spawn count to be re-rolled (Section 5) is save-backed resident state and is
-  cleared by the 28-day month-boundary bundle. Broad static sweeps found the
-  terrain-setup read and month-boundary clear, but no gameplay setter. Treat
-  sleep ambushes and scripted encounter families as candidates until a setter
-  is traced.
+- **The encounter-size damper — closed.** The flag that causes the spawn count
+  to be re-rolled (Section 5) has no gameplay setter because it never had one.
+  It is a saved-game byte that the factory new-game template ships switched on,
+  and the only write in the engine is the clear performed at the calendar-month
+  rollover. Sleep ambushes and scripted encounter families are not producers and
+  must not be modelled as such. The remaining uncertainty is a formality: a
+  write through a computed pointer cannot be excluded by static means alone, but
+  nothing in the traced control flow suggests one exists.
 
 - **Wait commands in combat.** Space is "pass". Best evidence is "advance the actor's phase counter past zero so it does not act this round but does not lose its position in the table." Implementers should treat Space as "no movement, no attack, end the actor's turn cleanly".
 
-- **Combat command branch bodies.** The dispatcher-level map for all twenty-six
-  letters and the special keys is complete, and most delegated overlay targets
-  are now named. Combat U-Use is label-only and aborts rather than entering the
-  CAST-owned item-use picker. Combat P-Push is now bounded to a direct call into
-  the shared movable-tile handler using the active combat actor's coordinate
-  anchor. Remaining exactness work is limited to command-family edge cases in
-  the SJOG/CMDS/ZSTATS helpers.
+- **Combat command branch bodies — closed.** Every letter's delegate and every
+  letter's turn cost are exact (Section 8): two shared shapes, a handful of
+  direct calls, and one re-prompt flag. Two earlier claims are withdrawn there —
+  combat U-Use does enter the item-use flow, and combat X-it is refused outright
+  rather than escaping the fight. What remains is interior detail rather than
+  routing: the combat-mode branches inside the shared Get, Jimmy, Search, Klimb,
+  Yell and member-select delegates are surveyed but not enumerated one branch at
+  a time. Two are settled negatively — the shared Open handler and the escape
+  handler carry no combat-specific branch at all, so they behave in an arena
+  exactly as they do on the surface.
 
 - **Post-combat loot boundary.** Current COMBAT-to-SJOG call coverage does not
   include an after-victory loot sweep. The resident terrain-target caller has a
@@ -1359,8 +1426,8 @@ The behaviour described here was derived from the private function and format no
   per-letter parser — derived from
   `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
 - Delegated combat command targets and edge behaviour for SJOG
-  Get/Jimmy/Open/Search/Klimb, CMDS X-it/Yell/Push, ZSTATS
-  Ready/Z-stats, plus the combat U-Use label-only abort branch - derived from
+  Get/Jimmy/Open/Search/Klimb, CMDS escape/Yell/Push, and ZSTATS
+  Ready/Z-stats - derived from
   the corresponding COMBAT command table plus
   `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
   `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`,
@@ -1395,10 +1462,23 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the sibling
   COMBAT damage/death note that identifies the same random-byte helper.
 - The combat slot-to-group helper, including party/monster default inversion,
-  the monster-side descriptor bit `0x40` test, the per-class team-override flag,
-  and the Saduj-linked roster override, derived from
+  the monster-side descriptor bit `0x40` test, and the per-class team-override
+  flag, derived from
   `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` and
   `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` -- the hard-wired
+  hostile roster template, the guard that keeps roster record zero out of the
+  override, the census of shipped roster names confirming exactly one match, and
+  the confirmation that character creation and the Ultima IV import name only
+  roster record zero. Cross-checked against
+  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+- Note for save-tooling authors: a hand-edited save could in principle make one
+  of the other roster records match the shipped traitor template's name shape
+  and so flip that companion to the monster side. No path in the shipped game
+  reaches that state, so an implementation keyed to the roster record itself is
+  behaviourally equivalent; the distinction matters only to code that validates
+  or migrates save files.
 - The controlled/charmed bit contract in Section 6.1a — its four writers, its
   three readers, the Charm toggle as the only in-combat clear, the fact that the
   round walker does not dispatch on it, and the separation of the
@@ -1483,3 +1563,18 @@ The behaviour described here was derived from the private function and format no
 - The framer's ambush entry branch, its setup target, and its discarded slot
   argument -- derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`
   and `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
+- The per-letter combat command map of Section 8 — the two shared delegate
+  shapes, the three refusal tails, the direct-call letters, the exact re-prompt
+  rule, and the withdrawal of the earlier U-Use, X-it and Quit readings — plus
+  the encounter-size damper's full life cycle in Section 5. Source provenance:
+  derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
+  `../u5-decomp/functions/COMBAT_OVL/0x0544_prompt_with_string.md`,
+  `../u5-decomp/functions/SJOG_OVL/0x1F26_sjog_verb_not_here.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
+  `../u5-decomp/functions/CAST_OVL/0x1792_use_item.md`.
+- Combat's own typeahead toggle, its Escape / Space / actor-select bindings, and
+  the arena targeting cursor as the game's only eight-way input surface. Source
+  provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
+  `../u5-decomp/functions/COMSUBS_OVL/0x0504_arena_cursor_picker.md`.

@@ -81,8 +81,8 @@ per-map object case wins over the sign case when both would match.
 | Order | Predicate | Result |
 |---:|---|---|
 | 1 | Live tile `0xE0`, `0xE1` or `0xE2` | Redirect: move the target cell one step and re-read it, then start this table over. `0xE0` moves one cell north, `0xE1` one cell east, `0xE2` one cell west. The redirect can chain, so a run of redirect tiles resolves to one final cell. |
-| 2 | Live tile `0x59` | Enter the sky renderer of Section 4.2 instead of printing any description text. |
-| 3 | Live tile `0xA1` | Wishing-well handler. |
+| 2 | Live tile `0x59`, a **telescope** | Enter the sky renderer of Section 4.2 instead of printing any description text. Looking at a telescope shows the sky, not a map, and needs no gem or item. |
+| 3 | Live tile `0xA1`, a **wishing well** | Wishing-well handler: drop a coin, make a wish. A different tile from the telescope, with its own handler and its own description. |
 | 4 | Live tile `0xD8`, `0xD9`, `0xDA` or `0xDB` | Fountain handler. |
 | 5 | Any other tile | Print that tile's base `LOOK2.DAT` description, then apply at most one appender from the rows below. |
 | 5a | Live tile `0xFA` or `0xFB` | Append the current clock time: hour reduced to a twelve-hour value (zero displayed as twelve), a colon, two-digit minutes, then an `AM` suffix for hours zero through eleven and a `PM` suffix otherwise. |
@@ -99,6 +99,15 @@ entry-dispatch row 5; but `0xA1` carries a real description record of its own
 naming a deep well, which the Look path simply never reaches. Implementations
 should key these branches on the tile ids listed here, never on "the record is
 a placeholder".
+
+The telescope's missing description is therefore not an unreconciled gap: the
+description table deliberately holds the placeholder for it, because the special
+handler produces the output instead of a base string. Rows 2 and 3 are also two
+genuinely different fixtures, tested one after the other and routed to different
+handlers - an earlier revision of this document glossed the telescope tile as a
+wishing well, and that label is withdrawn. Only three telescopes are placed in
+shipped data, all indoors: in Moonglow, in Skara Brae, and in West Britanny,
+each standing near a ladder inside the same building.
 
 The shared line-spacing cleanup belongs to the plain-description path only. A
 tile that took none of the appender rows above -- that is, a tile that is not
@@ -216,10 +225,20 @@ chunk-map renderer" and said it paints an eight-row by twenty-two-column
 shorthand map of Britannia chunks with the party's chunk marked. **That
 description is withdrawn in full.** It is a sky renderer: it draws a starfield
 and eight moving celestial bodies whose positions are driven by the calendar
-date, and its overlay marker tracks the Shadowlords, not the party. The traced
-LOOKOBJ path that enters it from ordinary Look is keyed by tile id `0x59`; the
-final catalog name for that tile remains a tile/LOOK2 reconciliation issue and
-should not change the renderer contract.
+date, and its overlay marker tracks the Shadowlords, not the party.
+
+The path that enters it from ordinary Look is keyed by tile id `0x59`, and that
+tile is a **telescope** - a light tube on a splayed tripod. The in-world reading
+is simply that *looking at a telescope shows the sky*. Three things follow, and
+all three correct earlier wording:
+
+- It is **not** a wishing well. The wishing well is the separate tile `0xA1`,
+  with its own coin-and-wish handler and its own printed description.
+- It draws **no map of any kind**, and it is not "the same view the gem
+  provides". The gem's `V` View command is an unrelated path with its own
+  dispatch and its own renderer, described in the rest of this section.
+- It has **no gem or item precondition**. The gem spend described above belongs
+  to `V` View alone; a telescope answers Look whatever the party is carrying.
 
 The local 32-by-32 overlay renders at a four-pixel cell scale inside the
 message-panel region. A cell anchor is:
@@ -447,11 +466,18 @@ values are per-display-mode.
 
 #### 4.2.7 What is still open
 
-Static analysis fixes the geometry and the selection rule but not the visual
-identity of the eight rows. They key to scene ids `1..8`, the eight towns,
-through the Shadowlord comparison. Whether they read on screen as
-constellations, planets, or something else is a question for a screenshot
+Static analysis fixes the geometry, the cadence, and the selection rule, but not
+the visual identity of the eight rows. Their return periods are 3, 5, 7, 11, 13,
+17, 19 and 22 days (Section 4.2.3), and they key to scene ids `1..8`, the eight
+towns, through the Shadowlord comparison. Whether they read on screen as
+constellations, planets, moons, or something else is a question for a screenshot
 comparison, not for this contract.
+
+One earlier "open question" here is retracted rather than answered: this
+renderer was once said to begin with a gem-count band check that might or might
+not apply on the telescope route. There is no gem-count read in it at all - the
+band is the hour band of Section 4.2.1 - so the question was based on a
+misreading and does not need resolving.
 
 ## 5. Dungeon Look
 
@@ -545,16 +571,16 @@ state or persistence behavior.
   are specified above. Remaining visual parity work is empirical screenshot QA
   against DOS output and catalog naming for source-family palettes, not unknown
   gameplay or renderer control flow.
-- **Tile special cases.** The full trigger set for top-down Look is published
-  in Section 3, including the dispatch order and the redirect tiles. Tile id
-  `0x59` is the trigger for the sky renderer of Section 4.2; the older
-  "Britannia chunk-map renderer" reading of that path is withdrawn in full, as
-  Section 4 records. Whether a trigger tile also owns a `LOOK2.DAT` description
-  record is a separate question and is not a test for handler ownership: `0x59`,
-  the fountain ids and the sign ids carry only the shared placeholder record,
-  while the wishing-well tile `0xA1` carries a real record of its own naming a
-  deep well that the Look path never reaches. Naming those ids in the in-world
-  tile catalog is presentation cataloguing, not an open behaviour question.
+- **Tile special cases.** *Closed.* The full trigger set for top-down Look is
+  published in Section 3, including the dispatch order and the redirect tiles.
+  Tile id `0x59` is a **telescope**, and it is the trigger for the sky renderer
+  of Section 4.2; the older "Britannia chunk-map renderer" reading of that path
+  and the older "wishing well" label for that tile are both withdrawn in full,
+  as Sections 3 and 4 record. Whether a trigger tile also owns a `LOOK2.DAT`
+  description record is a separate question and is not a test for handler
+  ownership: `0x59`, the fountain ids and the sign ids carry only the shared
+  placeholder record, while the wishing-well tile `0xA1` carries a real record
+  of its own naming a deep well that the Look path never reaches.
 
 ## 9. Sources
 
@@ -577,6 +603,11 @@ private address maps.
   retraction of the chunk-map/party-marker reading —
   `u5-decomp/functions/LOOKOBJ_OVL/0x0366_gem_world_map_renderer.md` and
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 5.
+- Source provenance: the telescope identity of tile `0x59`, its three shipped
+  placements, the placeholder-description reconciliation, the separation from
+  the wishing-well tile, and the absence of any gem or item precondition on the
+  Look route are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x01AC_view_blit_tile.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x024C_view_party_marker.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x0A9C_set_view_origin.md`.

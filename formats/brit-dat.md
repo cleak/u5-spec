@@ -97,11 +97,14 @@ The location files use a different format: fixed 32-by-32 floor grids, grouped b
 
 Dungeon entrances, shrines, chasms, wells, and other static surface behavior follow the same split: the map supplies a terrain tile and coordinate; the runtime tables and system logic decide whether that cell triggers a mode change, prompt, teleport, or other effect.
 
-Natural moongate frames are different. Current shipped-map scans find no static
-moongate tile cells in `BRIT.DAT`, so the traced moongate presentation and
-saved-slot live-terrain refresh are supplied by runtime state rather than by
-source terrain cells. The live-terrain landing and entry hook is specified in
-`systems/overworld.md`.
+Natural moongates are different. Shipped-map scans find no static moongate tile
+cells in `BRIT.DAT` at all: every one of the eight default Moonstone positions
+holds ordinary grass on disk, which is exactly the terrain the daytime pass
+restores when a gate closes. A gate's presence is therefore entirely runtime
+state, written into the live map by the saved-slot refresh and removed again
+after dawn. The live-terrain landing and entry hook is specified in
+`systems/overworld.md`, and the eight shipped positions in
+`catalogs/gazetteer.md` Section 8.1.
 
 ## 7. Relationship To Visibility And Rendering
 

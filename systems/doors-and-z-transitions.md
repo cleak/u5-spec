@@ -10,12 +10,20 @@ This spec describes that cluster: the door tile family and the J-Jimmy and O-Ope
 
 Doors live in two parallel encodings — one for the surface and town tile maps, the other for the packed-nibble dungeon grid. Both distinguish *closed-and-unlocked*, *closed-and-locked*, *closed-and-magic-locked*, and *open*; both encode the lock state in adjacent tile bytes so that toggling the lock is a one-byte rewrite.
 
-In the surface and town encoding, the relevant tile codes form four small ranges of adjacent bytes:
+In the surface and town encoding, the tile codes J-Jimmy and O-Open care about fall into these groups:
 
-- **Closed door pair.** Each door orientation has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the north-south pair and `0xBA`/`0xBB` the east-west pair. The magic-locked forms live outside that pair, at `0x97` for north-south and `0x98` for east-west; Jimmy refuses them and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write the standing open-door code below; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
+- **Closed door pair.** Each door orientation has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the north-south pair and `0xBA`/`0xBB` the east-west pair. The magic-locked forms live outside that pair, at `0x97` for north-south and `0x98` for east-west; Jimmy refuses them without rolling (though it still breaks a key doing so), and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write the standing open-door code below; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
 - **Open door.** A single code drawn as the open-door sprite. Both Jimmy and Open recognise this as already-open and consume the turn without acting. The renderer paints it identically to a passage.
-- **Chest-on-floor pair.** Closeable-versus-locked, structurally identical to the door pair. Open success writes a fixed "open container" tile; Jimmy success rolls a key-pick check.
-- **Pickpocketable NPC marker.** A non-rendered occupancy marker returned by the tile-probe path when the target cell is occupied by an NPC.
+- **Restraint tiles.** Stocks and a set of manacles. These are not containers and not doors: J-Jimmy treats them as prisoner releases (§ 3.1), and they never convert to an "unlocked" counterpart tile.
+- **NPC occupancy marker.** A non-rendered marker returned by the tile-probe path when the target cell is occupied by an NPC. J-Jimmy uses it only to find the prisoner standing on a restraint tile; there is no pickpocket interaction.
+
+Surface and town chests are **not** part of this locked/unlocked tile pairing.
+A chest is a per-map container *object*, and its lock, trap, and contents state
+lives on the object record rather than in the tile grid. J-Jimmy in particular
+never matches a chest through its tile cascade at all — chests reach it only
+through the object scan (§ 3.2). Earlier drafts listed a locked-versus-closeable
+"chest-on-floor tile pair" here alongside the door pair; treat the object record,
+not a tile pair, as the authority for whether a container is locked.
 
 The dungeon grid packs the tile class into the high four bits of the cell byte and a sub-type into the low four bits. One high-nibble value identifies "heavy door"; another identifies "secret door / room trigger". The low nibble selects per-class variant — open versus closed, orientation. The dungeon Open handler matches purely on the high nibble; the dungeon Jimmy and Search handlers consult the low nibble for variant-specific narration.
 
@@ -23,64 +31,179 @@ A separate set of tile codes encodes *secret doors* — see § 8.
 
 ## 3. The J-Jimmy command
 
-J-Jimmy is the engine's lockpick verb, dispatched from the A-Z router via the verb prefix `Jimmy-` and a single direction prompt. It exists for three interactions: doors, chests on the floor, and NPC pockets.
+J-Jimmy is the engine's lockpick verb, dispatched from the A-Z router via the
+verb prefix `Jimmy-` and a single direction prompt. There are exactly **two**
+lock-pick rolls in the command, and they apply to disjoint families of targets.
+The target family is decided from the target tile before any roll happens:
+
+- **Locked doors** take *roll one*, the flat Dexterity test.
+- **Restraints** — stocks and a set of manacles — take *roll one* as well, from
+  a second, independent copy of the same test, but their success outcome is a
+  prisoner release rather than an unlocking.
+- **Magically locked doors** are refused with no roll at all, and the refusal
+  still costs a key.
+- **Everything else** falls through to the per-map container scan and takes
+  *roll two*, the difficulty-versus-Dexterity threshold. A tile with no
+  container object on it draws the generic no-lock refusal.
+
+Both rolls read the same character statistic: the acting party member's
+**Dexterity**. Neither reads a class or profession byte, so there is no sense in
+which different character classes are better at doors than at chests. Earlier
+drafts of this document called that byte a "lock-pick class byte"; that reading
+is retracted.
+
+Two further corrections to earlier drafts are worth stating plainly, because
+they change what an implementer builds:
+
+- **There is no pickpocketing in the Jimmy command.** No branch of it takes gold
+  or items from an NPC. The thank-you line and moral-standing increase that
+  earlier drafts attributed to a pickpocket belong to the restraint case below,
+  which frees a prisoner and transfers nothing.
+- **Floor and town chests are not tiles this command matches on.** The handler
+  reads the target tile as a single byte, and the chest tile identity lies above
+  the range a single byte can express, so a chest can never reach the tile
+  cascade. Surface and town chests are per-map *container objects*, and they
+  always take roll two. Applying the flat Dexterity test to a floor chest is
+  wrong.
 
 The handler first checks the scene byte. Dungeon scenes route to a
 dungeon-specific inner handler that uses the packed-nibble grid. Other scenes
 check key inventory up front: if the key inventory is zero, Jimmy prints
 "No keys!" and returns before the shared tile preflight gate.
 
-For a non-dungeon door, the handler:
+### 3.1 Roll one — the flat Dexterity test
 
-1. Prompts for which party member is picking.
-2. Rolls a uniform `1..29` die and compares it to the selected member's
-   lock-pick class byte. The attempt succeeds only when the class byte is
-   strictly greater than the roll. A roll greater than or equal to the class
-   byte fails.
-3. **On success**, decrement the door's tile byte by one (one rung down the lock-state ladder), set the tile-changed dirty bit, and print "Unlocked!". A subsequent Open turns the cell into an open door.
-4. **On failure**, decrement the key counter and print "Key broke!" — the key snapped. The door's tile byte is *unchanged*; the lock still stands.
+The handler prompts for which party member is picking, then rolls a uniform die
+with **thirty outcomes beginning at zero**. The attempt succeeds when that
+member's Dexterity is **strictly greater** than the roll.
 
-For a visible locked chest tile, the same `1..29` strict-greater roll is used.
-On success, the tile is decremented into the unlocked/closeable variant. It is
-not opened by the Jimmy command itself; a later Open or container helper owns
-contents and traps. On failure, the key counter is decremented and the tile is
-unchanged.
+The cleanest statement of the contract is the resulting probability: success
+chance is the acting member's Dexterity divided by thirty, clamped at both ends.
+A member with Dexterity zero never picks; a member at Dexterity thirty or above
+always picks. Note that the die's lowest outcome is zero — an earlier draft's
+"uniform `1..29` die" is off by one at the top of the curve, and would deny a
+maximum-Dexterity character the guaranteed success the original gives.
 
-For an NPC, success is a pickpocket: the engine checks that an active NPC really
-occupies the target cell, looks up that NPC's interaction record, clears the
-pending loot marker when present, and, when the NPC has not already been
-handled, marks the NPC's pickpocket/thank-you state, prints the NPC's thanks
-line, and raises the shared moral-standing selector by `+2` with the normal
-ninety-nine cap. Failure uses the broken-key narration and decrements the key
-counter. It does not advance the picked/thanked state or apply the
-moral-standing increase.
+Success consumes **no** key. Only failure consumes one, printing the broken-key
+result.
 
-A handful of cases short-circuit before the roll:
+**Locked doors.** Success converts the door to its unlocked counterpart, sets
+the tile-changed dirty bit, and prints "Unlocked!". Each locked door form has
+exactly one paired unlocked form — a locked plain door becomes a plain wooden
+door, and a locked door with a window becomes a wooden door with a window — so
+implement the conversion as that pairing rather than as arithmetic on a tile
+number. Jimmy does not open the door; a subsequent Open turns the cell into an
+open door. On failure the key counter is decremented, the broken-key result is
+printed, and the door's tile is *unchanged*: the lock still stands and the door
+may be attempted again while keys remain.
 
-- **Wrong tile class** — print "No lock!" and return.
-- **No NPC at the cell** — when the tile-probe path reports the NPC occupancy marker but the active-object table reports no NPC at those coordinates, print "No one is there!".
-- **Magic lock** — reject unconditionally with "Magic lock!" (no roll, no key consumed).
+**Restraints — stocks and manacles.** This is a prisoner release, not a
+container pick, and it should be read as its own interaction. It uses its own
+copy of the flat Dexterity test with the same thirty-outcome die and the same
+strictly-greater comparison, but the success tail is entirely different.
 
-The per-map object chest helper uses a different lock formula from ordinary
-door, visible-chest, and NPC picks. It prompts for a member, reads the matched
-object slot's stat byte, and requires the stat high bit to be set before a real
-pick can occur. With the high bit set, it computes a threshold from the low
-seven bits of the object stat, the member class byte, and a `+30` bias:
-`(object difficulty - member class + 30) / 2`, preserving the original unsigned
-word halving behaviour. It then rolls `1..30`; the pick succeeds when the roll
-is less than or equal to that threshold. Success prints the success result and
-consumes one key. Failure prints the broken-key result and clears the object's
-stat high bit, leaving the object in a broken-lock state; this failure path
-does not consume an additional key. If the high bit was already clear, Jimmy
-prints the broken-key result and returns without changing keys.
+On success the engine probes for an NPC standing on the restraint tile. If no
+NPC is there it prints "No one is there!" and stops. Otherwise it walks that
+NPC's record chain, sets that NPC's state bytes to the freed value, prints the
+NPC's thanks line, and raises the shared moral-standing selector by `+2` with
+the normal ninety-nine cap (see `systems/karma.md`).
 
-The dungeon Jimmy variant has its own formula. It prompts for a member before
-checking keys for the relevant cell. For lockable dungeon chest variants it
-computes `(2 * dungeon_depth - member class + 30) / 2`, rolls `1..30`, and
-unlocks only on `roll <= threshold`. Plain closed chest variants break a key
-immediately when keys are available, without a roll. Already-open dungeon chest
-classes report already open, and non-lockable classes report the generic
-refusal.
+On the large outdoor maps the same success takes a different tail: it stamps the
+restraint tile to plain cobble and prints a differently worded, unpunctuated
+unlocked message — a distinct string from the door case's "Unlocked!" — and
+frees nobody.
+
+A restraint never converts to an "unlocked restraint" form: the success tail
+never steps its tile down a rung the way the door case does, and the tile one
+rung below stocks is an unrelated feature. A restraint also never yields loot,
+gold, or any inventory change.
+
+**Magically locked doors.** The magic-locked forms are refused inside this
+command, with no roll, no Dexterity read, and no member prompt. The refusal is
+real and it lives here — an earlier draft's suggestion that it must originate in
+the command dispatcher or the tile classifier is retracted. What that draft got
+wrong is the refusal's narration and its cost: it prints the **broken-key**
+result and it **does** consume one key. It does not print a distinct "magic
+lock" message and it is not free. Only the Unlock Magic spell converts a
+magic-locked door back (§ 7).
+
+### 3.2 Roll two — the difficulty-versus-Dexterity threshold
+
+Every target the tile cascade does not claim falls through to a scan of the
+per-map container objects at the target coordinates. If no container is there,
+Jimmy prints the generic "No lock!" refusal and returns. If one is there, the
+handler prompts for a member and computes a threshold as
+
+difficulty minus the member's Dexterity, plus thirty, halved.
+
+The halving is an unsigned halving of a word value, so out-of-range Dexterity or
+difficulty values wrap the way the original does; preserve that rather than
+clamping. The handler then rolls `1..30`, and the pick succeeds when the roll is
+**strictly greater** than the threshold. Earlier statements of this comparison —
+for the per-map container, for the dungeon chest, and in the inventory summary
+below — all had it inverted.
+
+The difficulty term is the only difference between the two places this roll is
+used:
+
+| Instance | Difficulty term |
+|---|---|
+| Surface / town container object | The container's own difficulty, carried in the same byte as its lock/trap flag. |
+| Dungeon chest cell | Twice the current dungeon level. |
+
+The doubling exists **only** underground. A surface or town container never
+inherits it, and its difficulty never depends on where the party is.
+
+**Success** clears the container's locked/trapped flag while preserving the
+content class, prints the success result, and consumes **no** key and plays no
+sound. **Failure** prints the broken-key result, plays the key-snap sound,
+decrements the key counter, and leaves the container's state completely
+untouched: same lock, same contents, and it may be attempted again for as long
+as keys remain.
+
+**Container contents can never be lost by Jimmy.** The content class and the
+lock/trap flag share one byte but occupy different parts of it, and the only
+write Jimmy ever makes to that byte is the success write that clears the flag.
+A broken key changes nothing, so there is no "broken-lock state" and no way for
+a failed pick to destroy loot. Earlier drafts of this document and of
+`systems/containers.md` described such a state; it does not exist, and every
+mention of it is retracted.
+
+Because the flag Jimmy clears on success is simultaneously the **trap** flag, a
+successful Jimmy both unlocks and disarms. A later Open on that container skips
+the trap narration and the shared trap-effect resolver entirely and goes
+straight to the contents. Jimmy-then-Open is therefore the game's intended
+disarm loop; see `systems/traps.md` for what an armed container does instead.
+
+**Already-unlocked short-circuit.** A container whose lock/trap flag is already
+clear — equivalently, a dungeon chest cell whose lock/trap sub-type is already
+zero — is not re-rolled. Jimmy prints the broken-key result and **consumes one
+key** for nothing. That wasteful outcome is the correct behaviour on both the
+surface and the dungeon path; an earlier draft's claim that the dungeon
+short-circuit "returns without changing keys" is wrong. The reason a
+successfully picked container reaches this state at all is that the lock
+difficulty and the trap flag are the same field, and a successful pick zeroes
+it.
+
+There is no reachable state in which a container exists but cannot be opened.
+Open consumes the container object outright — it clears the object record before
+generating contents — so every container is either still lockable and openable,
+or gone.
+
+**Not a third formula.** Dungeon Search reuses the identical threshold
+expression as a pure *detection* roll, with no lock semantics and no effect on
+keys or lock state (see `systems/dungeon-mode.md`). That reuse is why a third
+lock-pick variant appeared to exist; there are only two.
+
+### 3.3 Dungeon Jimmy specifics
+
+The dungeon inner handler prompts for a member before checking keys for the
+relevant cell. A lockable dungeon chest cell takes roll two with the doubled
+depth term above; on success the cell is rewritten to the closed-chest class
+with its lock/trap sub-type cleared and its variant bit preserved, and the
+unlocked message is printed. A chest cell whose sub-type is already zero takes
+the wasteful short-circuit described above. Already-open dungeon chest classes
+report already open, and non-lockable classes report the generic refusal.
 
 ## 4. The O-Open command
 
@@ -132,7 +255,11 @@ town.
 
 Some doors carry a magical lock that no key can pick — the lower byte of the door pair (§ 2). Magic-locked doors appear mostly in plot-critical locations: a sealed throne room, the entrance to a quest reward, a story-gated dungeon cell.
 
-J-Jimmy on a magic-locked door rejects with "Magic lock!" and consumes neither a key nor a turn. The paths through are:
+J-Jimmy on a magic-locked door refuses without rolling: no member is prompted
+and no Dexterity is read. The refusal is not free, though — it prints the
+ordinary broken-key result and consumes one key (§ 3.1). Earlier drafts of this
+document reported a distinct "Magic lock!" message at no cost; both halves of
+that claim are retracted. The paths through are:
 
 - **Unlock Magic** cast on the door rewrites the cell from magic-locked straight to the closed-and-*unlocked* form for that orientation (`0x97` becomes `0xB8`, `0x98` becomes `0xBA`), so O-Open works on it immediately and no Jimmy roll is needed.
 - **Magic Lock** is the inverse and the only writer of the magic-locked forms. It collapses both the unlocked and the ordinary-locked byte of an orientation onto that orientation's magic-locked byte (`0xB8` or `0xB9` becomes `0x97`, `0xBA` or `0xBB` becomes `0x98`), so magic-locking an ordinary locked door and then unlocking it magically leaves the door merely closed.
@@ -212,7 +339,24 @@ preserved; only the floor index and the surrounding 32-by-32 tile content
 shift. Non-ladder underfoot tiles print "Not climbable!" and consume no turn.
 There is no falling within a town's floor structure.
 
-**Dungeon K.** In a dungeon scene, K reads the underfoot dungeon tile's high nibble. Three classes are climbable: up-ladder, down-ladder, two-way. Up-ladder decrements the level Z, down-ladder increments it, and two-way prompts before choosing a direction. X and Y on the new level are the same as on the old. The traced apply path rejects attempts to move above level zero or below level seven, and it separately tests the destination cell on the target level for passability before committing the Z write. Exact pit byte `0x60` is the special non-ladder K path: it bypasses the ladder apply helper and invokes the dungeon surface-reset helper. Other non-ladder cells return without a level change. Ordinary boundary ladders do not define a plane transition.
+**Dungeon K.** In a dungeon scene, K reads the underfoot dungeon tile's high
+nibble and offers whichever directions that cell provides. Up is offered on an
+up-ladder or two-way cell, and also on a cell marked climbable-with-equipment
+while the party carries the climbing gear; down is offered on a down-ladder,
+two-way, or pit cell; when both are available the handler prompts for a
+direction. Up decrements the level Z, down increments it, and X and Y on the new
+level are the same as on the old. Exact pit byte `0x60` is the special
+non-ladder K path: it bypasses the ladder apply helper and invokes the dungeon
+surface-reset helper. Other cells return without a level change.
+
+Two corrections to earlier revisions of this paragraph. First, a **climb never
+tests the cell it lands on** - the ladder or pit under the party is treated as
+sufficient, and the destination-cell test described here previously belongs to
+the dungeon level-change spells, not to K. Second, **boundary ladders do define
+a plane transition**: attempting to climb above the topmost level or below the
+lowest one is not refused, it leaves the dungeon through the shared exit
+contract, surfacing on Britannia from the top and in the Underworld from the
+bottom. `systems/dungeon-mode.md` Section 13 owns both contracts.
 
 ## 10. Automatic descent: chutes, pits, and falls
 
@@ -222,9 +366,9 @@ Three movement events change Z without a Klimb:
 - **Overworld chasms.** The traced surface chasm trigger is Britannia
   coordinate `(54, 138)`. Walking onto it prints the falls/underworld
   transition messages, applies fall-damage, swaps the world plane to the
-  underworld value, and re-initialises the active-object table. The current
-  writer census does not show a mirror outdoor underworld-to-surface ascent
-  coordinate set; do not infer one from the traced falls handler.
+  underworld value, and re-initialises the active-object table. There is no
+  mirror outdoor underworld-to-surface ascent cell anywhere - the plane-writer
+  census is complete - so do not infer one from the traced falls handler.
 - **Town and dwelling trap-doors.** A few interiors have trap-door cells in their floor (an oubliette, a basement entry); walking onto one triggers the same Z-down behaviour as a dungeon pit.
 
 In all three cases the trigger is an *underfoot reaction*, not a command, run as part of the per-turn epilogue's tile-effect pass — the same pass that handles damage tiles, energy fields, and moongate landings.
@@ -233,9 +377,11 @@ In all three cases the trigger is an *underfoot reaction*, not a command, run as
 
 The ordinary X-Xit command is the vehicle dismount command. Do not treat the
 player's `X` key in normal dungeon mode as a dungeon escape spell:
-dungeon-mode `X` is routed as a refusal/no-op. The command-overlay routine
-with "Escape" refusal wording is the combat-only X-it handler and is specified
-in `systems/combat.md`; it is not a dungeon ladder or spell escape path.
+dungeon-mode `X` is routed as a refusal/no-op, and combat `X` is refused by the
+combat parser as well. The command-overlay routine with "Escape" refusal wording
+is the combat-only escape handler, bound to the Escape key rather than to `X`,
+and is specified in `systems/combat.md`; it is not a dungeon ladder or spell
+escape path.
 
 **Vehicle dismount.** When the party is on a horse, in a skiff, on a carpet, or
 aboard a ship, X-Xit dismounts or transfers to a carried craft. It refuses in
@@ -282,22 +428,28 @@ The transitions across the major boundaries are:
   surface-reset helper, pit-chain off-bottom path, or total-party-wipe path can
   also clear the scene byte. The mode loop's only contract is "if the scene byte
   is no longer in my range, exit". Town-family exits also write the destination
-  plane: ordinary exits select Britannia, while scene byte `0x19` selects the
-  Underworld. The dungeon surface-reset helper restores the exterior
-  coordinate. Pit-chain off-bottom clears the scene after incrementing beyond
+  plane: ordinary exits select Britannia, while scene byte `0x19` - Ararat, the
+  one location that exists only underground - selects the Underworld. The
+  dungeon surface-reset helper restores the exterior coordinate and writes the
+  destination plane from the level the party was on: off the topmost level they
+  surface on Britannia, off the bottom of the lowest level they arrive in the
+  Underworld. Deepest-level ladders therefore **do** publish an underworld
+  handoff, and an earlier statement to the contrary is withdrawn. Pit-chain
+  off-bottom is the one exception: it clears the scene after incrementing beyond
   the deepest dungeon level and keeps the trap-chain X/Y; it does not call the
-  exterior-coordinate reset table. Ordinary deepest-level ladders do not
-  publish an underworld handoff.
+  exterior-coordinate reset table.
 - **Town floor ↔ town floor.** Klimb on a ladder cell rewrites the active floor index and reloads the tile buffer from the corresponding slice of the location's per-floor pair. The scene byte does not change. NPCs on the new floor are linked into the active-object table; NPCs on the old floor are unlinked. Quick and stateless: a single tile-buffer reload, a single NPC re-link, no save-game write.
-- **Dungeon level ↔ dungeon level.** Klimb on an up-ladder, down-ladder, or two-way cell, stepping on an automatic fall-trap pit, or standing on a scripted teleport changes the level index. The new level's eight-by-eight slice of DUNGEON.DAT becomes active. The scene byte does not change unless a fall-trap chain runs past level seven.
+- **Dungeon level ↔ dungeon level.** Klimb on an up-ladder, down-ladder, or two-way cell, casting either of the two dungeon level-change spells, stepping on an automatic fall-trap pit, or standing on a scripted teleport changes the level index. The new level's eight-by-eight slice of DUNGEON.DAT becomes active. The scene byte does not change unless the change would carry the party past the top or bottom of the stack, in which case the exit contract runs; a fall-trap chain running past the deepest level is the separate off-bottom case.
 - **Surface and underworld.** The confirmed outdoor plane swap is the surface
   fall at `(54, 138)`, which writes the underworld plane and re-initialises the
   active-object table while leaving the scene byte at the overworld value.
   The overworld spec also owns the later-traced whirlpool forced-underworld
   writer and the town-family exit branch that selects the underworld plane for
-  scene byte `0x19`. Current function-note and disassembly sweeps identify no
-  additional outdoor underworld-to-surface writer. Dungeon exit/reset helpers
-  remain dungeon-owned scene clears, not general outdoor ascent tiles.
+  scene byte `0x19`. The writer census is complete and identifies no outdoor
+  underworld-to-surface writer at all. The dungeon exit helper does write the
+  surface plane when the party leaves off the topmost level, but it is a
+  dungeon-owned scene clear reached from inside a dungeon, not an outdoor
+  ascent tile.
 - **Any mode → combat.** A movement step onto a hostile, an encounter roll firing in the per-turn block, or a room-cell trigger inside a dungeon swaps the scene byte to the combat-class marker. Combat saves the active-object table, reloads it with combatants from a `.CBT` arena file, and runs the combat loop; exit restores the saved table and resets the scene byte to its pre-combat value. Coordinates are preserved.
 
 ## 13. Hooks into the rest of the engine
@@ -305,7 +457,7 @@ The transitions across the major boundaries are:
 - **Active-object table.** Vehicle dismount allocates a slot for the abandoned vehicle; `vehicles.md` owns the broader parked-vehicle persistence contract. Town floor changes re-link the NPC table. Combat enter/exit replaces and restores the table wholesale.
 - **Per-turn epilogue.** Door auto-close runs from the tile-effect pass. Pit triggers, chasm triggers, and energy-field triggers run from the same pass.
 - **Visibility.** Door state changes mark the dirty flag so the renderer rebuilds the visibility set. Z transitions reset visibility entirely — the new floor or level paints from scratch.
-- **Save image.** Scene byte, floor or level index, party chunk-X / chunk-Y, the four-byte door-close-tracker block, and the per-character class fields that drive the lockpick roll are all persisted. Loaded saves resume mid-floor, mid-dungeon, mid-vehicle, or mid-combat.
+- **Save image.** Scene byte, floor or level index, party chunk-X / chunk-Y, the four-byte door-close-tracker block, and the per-character Dexterity values that drive both lockpick rolls are all persisted. Loaded saves resume mid-floor, mid-dungeon, mid-vehicle, or mid-combat.
 - **Spells.** Unlock Magic clears magic locks, Magic Lock applies them, and the
   Open spell steps an ordinary locked door down to its unlocked form — all three
   change lock state without keys and without arming O-Open's auto-close tracker,
@@ -315,18 +467,20 @@ The transitions across the major boundaries are:
   and in combat scenes that same lookup addresses the combat-arena terrain grid,
   so the door-facing spells can rewrite arena door tiles during a fight; see
   `systems/magic.md`.
-- **Inventory.** Non-dungeon Jimmy checks key stock before ordinary door,
-  visible-chest, and NPC pocket rolls. Failed ordinary door, visible-chest, and
-  NPC pocket rolls decrement the key counter. Per-map object chest picks have
-  their own high-bit lock-state rule: success consumes one key, while broken or
-  already-broken locks do not consume an additional key. Open does not touch
+- **Inventory.** Non-dungeon Jimmy checks key stock up front and refuses when
+  it is zero. Key accounting is uniform across both rolls and both target
+  families: **success never consumes a key; failure always consumes exactly
+  one.** The refusal on a magic-locked door and the short-circuit on an
+  already-unlocked container both take the failure path, so each of those costs
+  a key too. Nothing Jimmy does can add or remove any other inventory item, and
+  a failed pick never destroys a container's contents. Open does not touch
   inventory. Overworld Klimb reads the Grapple flag before it will attempt an
   outdoor climb.
 - **Traps.** Chest and dungeon feature helpers can enter the shared resident
   trap-effect resolver documented in `traps.md`. This document owns the door
   and container routes that may precede that resolver; `traps.md` owns the
   common party HP/status effects once selected.
-- **Time.** Door open / close, vehicle dismount, and Klimb each consume one turn at the current mode's rate (two minutes outdoor, one minute indoor / dungeon). Jimmy attempts that reach a door, chest, or NPC outcome also consume a turn, including failed attempts.
+- **Time.** Door open / close, vehicle dismount, and Klimb each consume one turn at the current mode's rate (two minutes outdoor, one minute indoor / dungeon). Jimmy attempts that reach a door, restraint, or container outcome also consume a turn, including failed attempts.
 
 ## 14. Transition Boundaries
 
@@ -335,10 +489,12 @@ and scene-transition depth: ordinary door Open/Jimmy behavior, magic ordinary
 door opening, dungeon Word-of-Power door transmutation, outdoor Grapple Klimb,
 town-floor Klimb, dungeon level changes, vehicle X-Xit boundaries, combat
 enter/exit state preservation, facing-sensitive town stair tiles, and the
-confirmed surface-to-underworld chasm fall are public. The traced plane-writer
-set is bounded to the surface fall, whirlpool forced-underworld branch,
-scene-`0x19` interior exit, and dungeon-owned exit/reset helpers; no separate
-outdoor underworld-to-surface writer is currently identified. Door, magic-lock,
+confirmed surface-to-underworld chasm fall are public. The plane-writer set is
+**closed**: the surface fall, the whirlpool forced-underworld branch, the
+scene-`0x19` interior exit at Ararat, the dungeon exit helper, and the
+Moonstone-slot warp shared by moongates and Gate Travel. There is no separate
+outdoor underworld-to-surface writer, and that is an exhaustive negative rather
+than an unexplored area. Door, magic-lock,
 secret-door, cannon-destroyed-door, and dungeon Search rewrites are covered as
 visit-local tile-buffer mutations unless a named quest flag or room-clear
 bitmap owns durable state. The remaining notes in this section are catalog,
@@ -372,19 +528,25 @@ behavior.
 - **X-Xit vehicle landing predicates.** X-it's nearby-support predicate is now
   specified in `vehicles.md`; this document only owns the Z-transition boundary
   around ordinary vehicle dismounts.
-- **Dungeon spell escape.** No command-overlay dungeon escape helper is traced
-  in the current public evidence. If a spell path later proves to clear a
-  dungeon scene back to the overworld, document it under `systems/magic.md`
-  and cross-reference this Z-transition contract.
+- **Dungeon spell escape.** *Resolved, and the earlier negative is withdrawn.*
+  The two dungeon level-change spells do clear the dungeon scene: cast at a
+  level edge they hand off to the same surface-reset helper a ladder would, so
+  Down on the lowest level exits to the Underworld and Up on the topmost level
+  exits to Britannia, in every dungeon except Doom, where both spells refuse to
+  run. `systems/dungeon-mode.md` Section 13 owns the contract and
+  `catalogs/spell-list.md` the two spell rows.
 
 ## 15. Sources
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The J-Jimmy command's tile cascade, lock-pick roll and class-byte-versus-die formula, key consumption on failure, NPC pickpocket path, dungeon-mode routing, and the encoding of the door / chest / NPC tile pairs — derived from `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`, `u5-decomp/functions/SJOG_OVL/0x0C3E_sjog_jimmy_inner.md`, and `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
-- The per-map object chest lock-state high-bit rule, threshold formula,
-  success key consumption, and broken-lock failure state -- derived from
-  `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`.
+- The J-Jimmy command's tile cascade, dungeon-mode routing, and the encoding of the door tile pairs — derived from `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`, `u5-decomp/functions/SJOG_OVL/0x0C3E_sjog_jimmy_inner.md`, and `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
+- The reconciliation of the two lock-pick rolls into one contract: that both read the acting member's Dexterity rather than any class field; the thirty-outcome zero-based die and its clamped Dexterity-over-thirty success chance; the corrected target families (locked doors and restraints on the flat test, containers on the threshold test, the magic-locked door refused with no roll, and no pickpocket anywhere in the command); the strictly-greater comparison on the threshold test; the depth doubling existing only on the dungeon path; the uniform "success spends no key, failure spends one" accounting; and the restraint case's prisoner-release outcome. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+- The per-map container's lock/trap flag, its threshold formula, and the fact
+  that a failed pick leaves the container completely untouched while a
+  successful pick clears the lock/trap flag and preserves the content class --
+  derived from `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`
+  and `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The O-Open command's tile cascade, the auto-close countdown's record format and decrement, the pre-flight gate shared with Jimmy and Search, and the route to the chest-on-floor helper — derived from `u5-decomp/functions/SJOG_OVL/0x1374_sjog_open.md`.
 - The magic Open/Unlock helper's ordinary wooden-door tile rewrites,
   Space/Pass no-effect branch, dirty marking, and separation from O-Open's
@@ -402,16 +564,21 @@ The behaviour described here was derived from the private function notes listed 
   family branches, nearby-land validation, ship skiff/carpet transfer cases,
   and parked-object state preservation -- derived from
   `u5-decomp/functions/CMDS_OVL/0x0EB4_cmds_xit_vehicle.md`.
-- The combat-only ownership of CMDS "Escape" / "Not here!" / "Not yet!"
-  X-it wording, used here only to avoid conflating it with dungeon Z
-  transitions -- derived from
+- The combat-only ownership of the "Escape" / "Not here!" / "Not yet!" wording,
+  which belongs to the Escape-key handler rather than to the `X` letter, used
+  here only to avoid conflating it with dungeon Z transitions -- derived from
   `u5-decomp/functions/CMDS_OVL/0x17EC_cmds_escape.md`.
 - The mode-aware routing of K-Klimb across CMDS, TOWN, and DUNGEON overlays; the "BOOOM!" / "Door destroyed!" string association with F-Fire's ship-cannon path; and the verb-prefix scheme that the dispatcher prints before each per-letter handler — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
+- Source provenance: the shared dungeon exit contract and its plane rule, the
+  correction that a climb does not test its destination cell, the level-change
+  spells' route to the same exit, and the closed plane-writer census are derived
+  from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with boundary refusals separated from surface-reset and pit-chain off-bottom exits — derived from `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
-- The shared resident trap-effect resolver used after a chest or dungeon feature
-  trap has been selected -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md` and sibling resident
-  party-damage/revive helper notes.
+- The shared resident trap-effect resolver used after a chest trap has been
+  selected, including the fact that the caller passes no trap flavour -- derived
+  from `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md` and sibling
+  resident party-damage and status helper notes.
 - The town-mode floor-pair encoding and the per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
 - The town-family tile-`0x59` exit threshold, prompt, scene clear, exterior
   coordinate lookup, and scene-`0x19` underworld-plane selection -- derived

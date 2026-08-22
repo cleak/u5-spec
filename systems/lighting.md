@@ -23,8 +23,8 @@ Lighting state consists of three runtime values:
 | State | Meaning |
 |-------|---------|
 | Ambient light | The current daylight or darkness level used by surface visibility. |
-| Torch counter | Nonzero while the party has an active torch. |
-| Light-spell counter | Nonzero while a light spell is active. |
+| Torch counter | Remaining duration, in game minutes, while the party has a burning torch. |
+| Light-spell counter | Remaining duration, in game minutes, while magic light is active. |
 
 The torch and spell counters are independent. A torch can expire while the spell remains active, and a spell can expire while a torch remains active. The dungeon renderer treats either one as sufficient to see; both being zero is the blackout state.
 
@@ -69,22 +69,39 @@ Ambient daylight also gates moongate presentation: moongates only animate when t
 
 Torches and light spells modify visibility after the base ambient value has been chosen. They do not replace the clock. Outdoors at noon, daylight is already sufficient; at night, in the Underworld, and in dungeons, a personal light source is what lets the party see around itself.
 
-The original engine applies the torch and spell effects as separate minimum-light floors on the cached ambient value. On the original light scale, the torch floor is 18 and the spell-light floor is 10. The torch and spell profiles are different, which is why implementations should keep two counters rather than collapsing them into one boolean "has light" flag.
+The original engine applies the torch and spell effects as separate minimum-light floors on the cached ambient value. On the original light scale, the **spell-light floor is 18** and the **torch floor is 10** — magic light is the brighter of the two. The torch and spell profiles are different, which is why implementations should keep two counters rather than collapsing them into one boolean "has light" flag.
 
 For modern gameplay purposes, the contract is:
 
 - If both counters are zero, personal light contributes nothing.
-- If the torch counter is nonzero, the party has torch lighting until the counter decays to zero; the cached ambient value is raised to the torch floor when it would otherwise be darker than that floor.
-- If the spell counter is nonzero, the party has spell lighting until the counter decays to zero; the cached ambient value is raised to the spell-light floor when it would otherwise be darker than that floor.
-- If both are nonzero, the torch floor dominates this cached ambient value because it is applied first and is brighter than the spell-light floor; do not stack them into an unlimited radius.
+- If the spell counter is nonzero, the party has spell lighting until the counter decays to zero; the cached ambient value is raised to the spell-light floor of 18 when it would otherwise be darker than that floor.
+- If the torch counter is nonzero, the party has torch lighting until the counter decays to zero; the cached ambient value is raised to the torch floor of 10 when it would otherwise be darker than that floor.
+- If both are nonzero, the spell-light floor dominates this cached ambient value because it is applied first and is the brighter of the two; do not stack them into an unlimited radius.
+
+Neither counter is itself a radius. Each is a remaining-duration count that the
+per-turn recomputation consults when it decides how bright the scene is; the
+radius the renderer uses is the recomputed ambient value, recomputed from
+scratch each turn.
 
 ## 5. Counter Decay
 
-The counters decay through the same turn cadence that advances time. A normal town, dungeon, or combat turn spends one counter unit; a normal overworld turn spends two. Longer waits spend their requested increment. The per-turn cleanup applies the same vehicle adjustments that it applies to time before it decays the counters.
+The counters decay through the same turn cadence that advances time. A normal town, dungeon, or combat turn spends one counter unit; a normal overworld turn spends two. Longer waits spend their requested increment. A counter unit is one game minute: the per-turn cleanup decays the counters by the same effective increment it just applied to the clock, after the Quickness and Negate Time adjustments described below.
 
-This section covers only torches and light spells. Combat active effects
-(`P`, `Q`, `C`, `N`) and Negate Time are non-light spell state with separate
-decrement paths.
+This section covers only torches and light spells. The timed magic effects
+(`P`, `Q`, `C`, `N`, `T`) live in the single shared timed-effect slot specified
+in `systems/magic.md`; that slot counts world turns, not the game minutes these
+two light counters count, and it ages on a completely separate path. Do not
+merge the three.
+
+Two of those effects do reach into this cadence, because they change how much
+time the turn spends:
+
+- While Negate Time (`T`) is active, the per-turn cleanup skips the whole time
+  advance. The clock is frozen, and neither light counter is decayed at all, so
+  a torch or light spell burns no duration for as long as time is negated.
+- While Quickness (`Q`) is active, the per-turn minute increment is halved with
+  a floor of one minute, so both counters drain at half rate along with the
+  clock and the NPC schedules.
 
 Decay is saturating subtraction: if the remaining counter is greater than the spent increment, subtract the increment; otherwise set the counter to zero. Counters never underflow or wrap.
 
@@ -132,7 +149,15 @@ This means re-lighting a torch in a dungeon can extend an already-burning torch,
 
 Light spells are cast through the normal C-Cast pipeline. The magic system owns charge, mana, level, and scene gating. Once the spell succeeds, lighting owns the resulting light-spell counter and its decay.
 
-The ordinary Light spell, *In Lor*, sets the light-spell counter to 100 counter units. Great Light, *Vas Lor*, sets the same counter to 255 counter units. These spells overwrite the spell-light duration rather than adding to it, and they do not consume torches.
+The ordinary Light spell, *In Lor*, sets the light-spell counter to 100 counter units. Great Light, *Vas Lor*, sets the same counter to 255 counter units. The Light scroll sets the same counter to 240 counter units. These three are the only writers that start spell light; all of them overwrite the spell-light duration rather than adding to it, and none of them consumes a torch.
+
+Two other paths write light state without being spells. The G-Get "borrow"
+branch, which lifts a lit fixture out of a town or castle cell, sets the torch
+counter to 100 counter units and consumes no carried torch; it is specified in
+`systems/containers.md`. And the Blackthorn rescue/refuge restoration zeroes
+both counters outright as it hands control back to ordinary play, so that
+scene transition extinguishes torch and spell light together; see
+`systems/blackthorn.md`.
 
 ## 9. Persistence
 
@@ -161,6 +186,15 @@ The behavior described here was derived from cleanroom reading of the following 
   `u5-decomp/functions/MAINOUT_OVL/0x0A1A_mainout_pre_loop_water_check.md`.
 - Saturating counter decrement and Ignite's torch debit/start rules - local helper analysis of the resident counter helpers and the CMDS Ignite command path.
 - Light spell counter writes for *In Lor* and *Vas Lor* - `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`, `u5-decomp/functions/CAST2_OVL/_OVERVIEW.md`, and the CAST2 helper reached through the overlay dispatch map in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+- The corrected assignment of the two floors to their counters (spell light 18,
+  torch 10), the Light scroll's 240-minute write, the complete writer census
+  for both counters including the G-Get borrow branch and the Blackthorn
+  restoration clear, the minute-based drain, and the Negate Time / Quickness
+  interaction with that drain -
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
+  `u5-decomp/functions/CAST2_OVL/0x08EA_set_torch_radius.md`. This supersedes
+  the counter labelling in the private DS/BSS map notes, in which the two
+  counter names were swapped and both were misdescribed as radii.
 - Dungeon first-person blackout when both light counters are zero, plus dungeon-local light upkeep - `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 - Shared resident data model and relevant string/table regions - `u5-decomp/formats/data-ovl.md`.
 - Existing cleanroom descriptions of time, dungeon lighting consumers, magic

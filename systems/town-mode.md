@@ -40,12 +40,43 @@ The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID 
 
 - **NPC start markers** (`0x48` or `0x49`) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and exact marker byte.
 - **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). Locations with no asterisk inherit a default per-scene spawn coordinate.
-- **Dash/period markers** (the dash and period tile values) are processed by a secondary pass that runs at the end of the map load. When the runtime predicate accepts them, they rewrite to nearby ordinary tile-detail values; they are not currently proven to be per-NPC route hints.
+- **Farmland and orchard terrain** (the standing-crop and fruit-tree tile values) is not marker data at all, but it is rewritten in place by a depletion pass that runs at the end of the map load. See the harvest scatter below.
 - **NPC floor-link markers** (`0xC8` and `0xC9`) are consumed by the NPC scheduler's tile-ID pathfinder after map load. They must remain distinguishable in the live tile buffer for the schedule processor.
 
 Marker processing is in-memory only: the on-disk `.DAT` floor is unchanged. By the time normal play begins, runtime passes have harvested the markers needed for spawn/NPC state and may have rewritten selected marker cells, while visible actors are represented through the dynamic sprite layer. Some markers, notably the `0xC8`/`0xC9` floor-link pair, remain meaningful to runtime consumers after the initial load pass.
 
-At the end of the map load, a cosmetic variation pass may rewrite selected live floor cells that were authored as dash or period terrain into neighbouring visual variants. This is not an NPC waypoint load. It is a deterministic per-location texture pass: it is seeded from location state, saves and restores the gameplay PRNG around the pass, and exists only to break up large uniform stretches of path/ground in the loaded tile buffer.
+### Harvest scatter on farmland and orchards
+
+At the end of the map load — after the player's own actor slot has been
+assigned, so it does not run on a bare map load — a depletion pass walks the
+whole live floor buffer and thins out farmland and orchards. It is not an NPC
+waypoint load and it is not path or grass texturing.
+
+The shipped location files store every farm cell as standing crops and every
+orchard cell as a fruit tree. The pass knocks most of them down to their
+harvested counterparts:
+
+| Authored terrain | Becomes | Chance |
+|---|---|---|
+| Standing crops | Plowed patch | Seven times in eight |
+| Fruit tree | Hollow stump | Seven times in eight |
+
+So on any given visit roughly one farm cell in eight is still bearing and
+roughly one orchard cell in eight still has its tree. The in-game look-at
+descriptions name all four tiles, so this is a visible world-state statement
+rather than a texture flourish. Nothing is written back to the location file;
+the rewrite is confined to the live floor buffer.
+
+The pass runs on a deterministic stream: immediately before the walk the
+gameplay PRNG is seeded from the **calendar day of the month**, and immediately
+after the walk it is re-seeded from the host clock. Two consequences follow.
+First, the scatter is identical for every entry to every town on the same
+in-game day and re-rolls when the date advances, making "which crops and trees
+are still standing" a stable, date-keyed property of the world; every town
+visited on the same day shares one scatter stream. Second, the bracketing is
+**not** a save-and-restore of the PRNG: entering a town discards whatever
+generator state was running and replaces it with fresh clock entropy. See
+`systems/prng.md` section 3.
 
 The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a scene place its ground floor in the middle of nearby authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
 
@@ -53,16 +84,43 @@ The floor byte is interpreted as signed eight-bit for map loading. Values `0..12
 
 Each named location carries a roster of up to thirty-one NPCs (slot zero is a sentinel). The roster lives in the per-class `.NPC` file, one 576-byte block per location, holding three parallel sub-blocks: a sixteen-byte schedule per slot, a one-byte type per slot, and a one-byte dialogue index per slot. Empty slots (zero type byte) are skipped at runtime. The schedule encoding and the per-tick walker are described in the NPC schedules spec.
 
-Town entry applies an additional per-scene activation mask before a rostered NPC
-becomes active. The mask is indexed by scene and NPC slot and is consulted only
-for the NPC type families that participate in this persistent scene-state
-system. The companion write path marks selected killed or removed NPC classes
-into the same per-scene mask, so a later re-entry can suppress or alter that
-slot according to scene state without editing the on-disk roster. This is not
+Town entry applies an additional per-scene removal mask before a rostered NPC
+becomes active. The mask holds one bit per NPC roster slot per town-mode
+location, and a set bit means "this slot is permanently gone from this location;
+do not place it". It is read once per slot on entry and it is durable: it lives
+in the save image (`formats/saved-gam.md` section 9.2), nothing clears it on
+scene exit or reload, and a new game starts with every bit clear. This is not
 the same table as the hidden-NPC visual mask used by the schedule system when
-allocating an already-active NPC's sprite: the activation/death mask controls
-whether a slot enters the scheduler, while the hidden mask only changes the
-tile used for the linked sprite.
+allocating an already-active NPC's sprite: the removal mask controls whether a
+slot enters the scheduler at all, while the hidden mask only changes the tile
+used for the linked sprite.
+
+**Which removals are recorded.** The write path filters on the NPC's sprite
+class, and the filter is narrow:
+
+| Sprite class group | Recorded as permanently gone? |
+|---|---|
+| The human/townsperson sprite classes (everything below the creature range) | Yes, with one exception below |
+| The guard sprite group | **No** |
+| Every creature sprite class | **No** |
+| The royal-regalia sprite group (shard, crown, sceptre, amulet) | Yes |
+
+So killing a townsperson or a named character is permanent: that slot is never
+placed again in that location. Killing a guard or a monster is not recorded at
+all, and those slots are placed again on the very next entry — which is why a
+town's guard population regenerates however many the player cuts down.
+
+Two removals bypass the sprite-class filter and are written directly against a
+fixed location and slot:
+
+- Vanquishing a Shadowlord marks that Shadowlord's roster slot in Stonegate as
+  removed. A Shadowlord's sprite class is a creature class and would otherwise
+  be rejected by the filter.
+- Picking up the sandalwood box marks the box's roster slot in Lord British's
+  Castle as removed. That pickup lives in a different overlay from the shared
+  removal helper.
+
+Both are ordinary entries in the same mask; neither is a separate quest field.
 
 Dialogue lives in the per-class `.TLK` file, indexed by the per-NPC dialogue index. The dialogue engine, described in its own spec, is invoked when the player initiates a conversation (Section 9).
 
@@ -168,7 +226,41 @@ After entry, control sits in a tight loop that reads one command per iteration a
 4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, runs the underfoot-effect handler described in Section 10, ticks down the curse/buff counter, copies the party's current map coordinates into slot zero, and calls the NPC schedule processor with the current hour byte. The underfoot-effect handler is called unconditionally on every consumed turn and it re-reads the tile the party is standing on, so it is not gated on the party having moved; its last act is to run the shared party status/provision pass specified in `systems/time.md`.
 5. **Render.** If the schedule processor reported any NPC moved, or the visibility-dirty flag is set, a full render runs. Otherwise the screen is left as-is and the loop reads the next command.
 
+Ahead of step one, each iteration runs the shared party-capability check that all three exploration modes use, described in `systems/main-loop.md` Section 6: if nobody in the party can act but somebody is asleep, the loop prints the sleep line and passes the turn without reading a command; if nobody can act and nobody is asleep, it runs the total-party-defeat sequence of `systems/blackthorn.md` Section 7 instead. Town mode adds no condition of its own to that check.
+
 The dispatcher's return code decides when to skip parts of the epilogue: actions that take no turn (a cancelled command, a "What?" fallthrough, the buffer-toggle key) skip both the time advance and the schedule tick. Actions that consume more than one turn advance the clock once per inner action.
+
+Town is the only mode that reads the dispatcher's status as more than a boolean.
+Its four-way test is specified in `commands.md` Section 3: a "conversation
+happened" result runs the epilogue but skips the hour-advance step and fires the
+town post-action cleanup, and a "re-prompt" result returns straight to the input
+parser with no turn and no epilogue at all. The second of those has exactly one
+producer, described under the harpsichord below.
+
+### 7.1 Drunkenness
+
+Town mode has one pre-dispatch stage no other mode has. Over-drinking at a
+tavern arms a counter at twenty-five; while that counter is non-zero, every
+command the player enters is subject to an even-odds scramble. When the scramble
+fires, the engine discards the entered command and substitutes a random cardinal
+step, prints the short hiccup line, scatters nearby NPCs, and decrements the
+counter by one; when it does not fire, the entered command runs normally and the
+counter is untouched. The counter therefore drains only on scrambled commands,
+not on every turn. Entering a town clears it outright, so the effect never
+survives leaving and re-entering a location, and the tavern branch that arms it
+is the only producer anywhere in the game. `systems/shops.md` owns the tavern
+prompt that arms it.
+
+### 7.2 Digits
+
+Digits in town go to one handler with two behaviours. Seated at the harpsichord
+in Lord British's castle, each digit plays a note and the handler reports the
+town-only "re-prompt without advancing the world" status — the sole producer of
+that status anywhere in the game, and the reason a player can key in a tune
+without burning world turns or letting the NPC schedule run. Section 13 owns the
+instrument's full contract. Anywhere else the same handler falls through to the
+ordinary solo-member selector, which reports "acted" for an ordinary selection
+and "no action" for the deselect-to-whole-party case.
 
 Cardinal movement in town is a mode-owned wrapper around the shared movement layer. It computes a bounded destination in the current 32-by-32 floor, prints the direction phrase, optionally prefixes it with the active vehicle verb ("Ride", "Row", or "Fly"), samples the target terrain, and asks the shared passability classifier with the current transport marker. A rejected destination prints the standard blocked feedback and leaves the avatar in place.
 
@@ -244,7 +336,7 @@ Several letter commands map to per-tile interactions that are interesting in tow
 
 Town-mode Open has a small amount of local policy before it reaches the shared door/chest machinery: it refuses while the player is mounted, samples the adjacent tile after the direction prompt, accepts the ordinary closed-door and gate families as openable, and recognizes the town chest family as a separate chest path. If opening or stepping through a door exposes a stair transition, the same stair/floor-change handling described in Section 7 runs.
 
-**Attack.** A-Attack prompts for a direction and targets the adjacent cell. It refuses attacks from blocked posture/terrain states, resolves a small smashable-prop case, then looks for a live NPC linked to the target sprite. A valid hostile or attackable NPC target plays the attack presentation and either removes the NPC through the death flow or triggers town-wide alarm effects. Invalid targets produce the ordinary failure text. Attacking in town is therefore an in-town scene-state mutator: killing selected NPC classes updates the per-scene activation mask used on re-entry.
+**Attack.** A-Attack prompts for a direction and targets the adjacent cell. It refuses attacks from blocked posture/terrain states, resolves a small smashable-prop case, then looks for a live NPC linked to the target sprite. A valid hostile or attackable NPC target plays the attack presentation and either removes the NPC through the death flow or triggers town-wide alarm effects. Invalid targets produce the ordinary failure text. Attacking in town is therefore an in-town scene-state mutator: killing a townsperson or a named character records that slot as permanently removed in the per-scene removal mask (Section 4), while killing a guard or a creature records nothing and that slot is placed again on the next entry.
 
 **Push.** P-Push is the shared movable-tile command specified in
 `commands.md`. In town-family scenes it samples the adjacent cell relative to
@@ -402,13 +494,42 @@ The terminal endgame dialogue is owned by `systems/endgame.md`, not by the
 ordinary town Talk loop. Town mode should not claim an endgame
 audience-prompt or quest-item-presentation contract.
 
-Lord British's castle also has a basement-only secret-door chord. While the
-scene and floor gate are active, numpad digits advance a fixed combination
-state with partial-match recovery after mistakes; correct progress gives audio
-feedback, and completing the sequence flips the live secret-door tile. Outside
-that gated state, the same entry point falls through to ordinary command
-dispatch. The exact shipped digit sequence remains a data-table verification
-item.
+**The harpsichord and the secret passage.** Lord British's castle holds a
+harpsichord — tile `0x8D`, whose `LOOK2.DAT` description names it as an
+instrument with ten keys numbered zero through nine — on logical floor two,
+with a chair in the cell immediately north of it. The instrument is armed by
+position alone, and the test is exactly "the tile one cell south of the party
+is the harpsichord tile": no flag, latch, or prior event arms it. This is the
+same four-neighbour probe the Fire and Yell commands use.
+
+While the party is seated there, the town turn loop routes the digit keys `0`
+through `9` to the instrument instead of to the ordinary command dispatcher.
+Anywhere else, and on any other floor, the handler immediately forwards the
+digit to the ordinary dispatcher and returns its result, so digits behave as
+normal commands everywhere but the chair.
+
+- **Sound.** Pressing a digit plays one note, and only when the global sound
+  setting is on. The ten keys are a descending major scale: digit `1` is the
+  highest pitch, the pitch falls through `2`..`9`, and digit `0` is the lowest,
+  one whole step below `9`. The scale's two semitone steps fall between `3` and
+  `4` and between `7` and `8`.
+- **No turn is consumed.** The handler returns the loop's re-prompt result, so
+  playing the instrument never advances the clock, never ticks the NPC
+  schedule, and never redraws.
+- **The tune is thirteen notes:** `6 7 8 9 8 7 8 7 6 7 6 5 3`.
+- **A wrong note does not necessarily start the player over.** Progress
+  re-syncs to the longest run of just-played notes that is still a beginning of
+  the tune. Concretely: after ten correct notes a stray `8` leaves the player
+  three notes in; after eleven correct notes a stray `7` leaves them two notes
+  in; a stray `6` at any other point leaves them one note in; any other wrong
+  note resets progress to zero. Progress is not cleared by leaving the chair —
+  only by a wrong note or by completing the tune.
+- **Completion.** On the thirteenth correct note, and only while the scene is
+  Lord British's Castle on logical floor two, the wall cell five squares north
+  of the harpsichord in the same column is rewritten in the live tile buffer to
+  ordinary cobble floor, opening the passage behind it, and the view is marked
+  dirty. Progress resets to zero. The rewrite is a live tile-buffer edit rather
+  than a saved map change, so reloading that floor restores the wall.
 
 The castle's tile grid, NPC roster, and dialogue file are otherwise ordinary. A
 handful of other named locations have one-scene quirks (a scripted NPC arrival
@@ -463,6 +584,15 @@ of the town's thirty-two-by-thirty-two grid at a fixed per-town row:
 The actor is also given a stationary three-waypoint schedule pinned to that same
 cell, so it does not wander away from its install position on its own.
 
+The host is also announced to the player. After the map has been loaded and the
+host recorded, a settlement that hosts a Shadowlord prints one line naming
+which — an air of falsehood, of hatred, or of cowardice doth surround thee —
+and plays the associated tone. That single line is the only in-town notice, and
+a settlement hosting none prints nothing. Stonegate's separate entry
+presentation, described at the end of this section, is a different producer: it
+prints one such line per still-living Shadowlord regardless of where each is
+hiding.
+
 Which of the three is hosted also selects a one-shot, town-wide NPC state
 sweep that runs at the end of the same entry pass. This paragraph is the only
 statement of that mapping in this spec — nothing earlier describes it. Hatred
@@ -471,7 +601,19 @@ eligible NPC into the pacified state, and Falsehood changes no NPC state at all
 (its effects are the shop surcharge and the conversation theft). Eligibility is
 the same per-NPC predicate the alarm sweeps of Section 14 use, and the two
 resulting states are the same fortified and pacified states described there;
-the difference is only the trigger. In a town hosting no Shadowlord, and in a
+the difference is only the trigger. Eligibility asks three things of an NPC:
+that its daily schedule block is not empty, that its type falls in the
+ordinary-townsperson band, and that a per-NPC coin flip comes up — so roughly
+half of the eligible cast flips on any given entry.
+
+That predicate carries one original-code quirk worth naming rather than
+inheriting by accident: the type-band half of the test is evaluated against a
+fixed roster slot instead of against the NPC being tested, so it returns the
+same answer for every NPC in the sweep, while the schedule test and the coin
+flip are per-NPC as intended. The state-setting helper the sweep then calls
+performs the same band test correctly, against the real NPC. A reimplementation
+should decide deliberately whether to reproduce the fixed-slot read; it is an
+implementation artefact, not a designed rule. In a town hosting no Shadowlord, and in a
 town whose install was skipped by the row-`4` guard, the sweep does not run.
 
 Stonegate has a separate entry-time presentation surface. On entry, the town
@@ -495,7 +637,7 @@ NPCs whose hostile predicate is always true remain schedule-driven town actors b
 
 Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, eligible NPCs are forced into a fortified/alert schedule state or into a pacified/fleeing schedule state; some special classes — the Shadow Lord actor class, the lich/death-mage class, and the guard class — are fortified instead of fleeing. Other eligible townsfolk use a random half-chance before switching into the fleeing state. The schedule walker consumes these state changes on later ticks.
 
-After each schedule tick, town mode interprets the walker's event bytes. A non-attack/flee event from an alarmed NPC can print the associated message and pacify that NPC. A guard-catch event can run the arrest sequence: surrendering moves the party to the Yew jail scene, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing triggers the alarm sweep and consumes the turn. If that same arrest handler is reached while the party is already in the Blackthorn captive scene, it enters the Blackthorn audience/capture cinematic instead of the ordinary Yew-arrest prompt. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
+After each schedule tick, town mode interprets the walker's event bytes. A non-attack/flee event from an alarmed NPC can print the associated message and pacify that NPC. Three routings reach the arrest sequence: a guard-catch event byte raised for an NPC that is not already alarmed and whose active-object tile is in the guard sprite family; the Talk entry reporting a positive result for the flagged NPC; and a preceding command whose dispatch result carried the arrest outcome code, which reaches the handler unconditionally regardless of any event byte. Which commands can produce that third result is not yet enumerated; an implementation should keep the routing but treat the command set behind it as open. The sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In every other location, and in Blackthorn's castle when nobody can act and nobody is asleep, it prints the arrest challenge and asks whether the party will come quietly: surrendering prints the knockout and awakening lines, fades, moves the party to the Yew jail scene at `(25, 4, 0)`, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing prints the guards' challenge, triggers the alarm sweep, and consumes the turn. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
 
 ## 15. Exit
 
@@ -570,7 +712,7 @@ boundary-tile exit, and floor-transition hooks around successful movement.
 ## 17. Town Boundaries And Remaining Data Work
 
 Town/interior mode is complete at behavioral-contract depth: entry, map load,
-marker harvest, dawn/dusk substitution, cosmetic variation, movement and
+marker harvest, dawn/dusk substitution, farmland/orchard harvest scatter, movement and
 floor/exit transitions, command hooks, alarm/arrest handling, NPC schedule
 integration, active-object ownership, free-roaming object movement, entry-mode
 preservation behavior, and save/load entry reconstruction are specified.
@@ -613,14 +755,24 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/0x47F4_npc_warp_to_scene.md`.
 - The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
 - The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md` and `u5-decomp/functions/TOWN_OVL/0x0170_town_dawn_dusk_pass.md`.
-- The per-location cosmetic terrain variation pass - `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
+  farmland/orchard harvest scatter, its two substitutions, its seven-in-eight
+  rate, its day-of-month seed, and the clock re-seed that follows it. That
+  note's earlier "grass/path texturing", "six-in-seven" and
+  "save/restore the PRNG" readings are superseded.
 - The town-entry Shadowlord install — its hideout-slot match, its
   one-at-a-time reject, its actor-index choice, and its placement and schedule —
   `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md` (see that
   note's 2026-08-22 repair-round correction, which supersedes its original
   "player attach" framing) and
   `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
-- The per-scene NPC activation mask reader/writer and runtime slot free helper - `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`, `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`, and `u5-decomp/functions/TOWN_OVL/0x00B0_npc_clear_slot.md`.
+- The per-scene NPC removal mask reader/writer and runtime slot free helper - `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`, `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`, and `u5-decomp/functions/TOWN_OVL/0x00B0_npc_clear_slot.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the
+  corrected sprite-class filter for recorded removals (townspeople and royal
+  regalia in, guards and creatures out), the two hard-wired removal writers, and
+  the exhaustive accessor sweep showing the mask has no other owners.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/0x011E_npc_find_idle.md`.
 - The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md`, `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
 - The town Attack and Open handlers - `u5-decomp/functions/TOWN_OVL/0x09E6_town_attack_handler.md` and `u5-decomp/functions/TOWN_OVL/0x0B82_town_open_handler.md`.
@@ -652,3 +804,17 @@ The behaviour described above was derived by reading the function and format not
 - The clean verification summary for Lord British's castle scene binding and
   town-mode load smoke checks - `u5-spec/NEXT-STEPS.md`.
 - The save image's scene-byte encoding and the per-location coordinate state — `u5-decomp/formats/saves.md`.
+
+Source provenance: derived from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, sections Q1, Q3
+and Q31, for the three routings into the arrest sequence and its
+Blackthorn-castle branch, the resident-Shadowlord entry effects, and the
+harpsichord's arming condition, key-to-pitch mapping, thirteen-note tune,
+mistake re-sync, and completion effect.
+
+- The town drunkenness stage (the tavern-armed counter, the even-odds command
+  substitution with its hiccup line and NPC scatter, the decrement rule, and the
+  town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
+  status, and the town loop's four-way reading of the command status. Source
+  provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`.

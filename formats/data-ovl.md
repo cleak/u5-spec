@@ -118,9 +118,21 @@ strings, so a reader must stop at the published entry count.
 The resident image contains metadata that makes the disk map files meaningful:
 
 - A Britannia chunk-index table for the sparse overworld file. The table has
-  one entry per 16-by-16 chunk in the surface world. A sentinel entry means the
-  chunk is pure water and should be synthesized without disk I/O; other entries
-  identify stored chunks in `BRIT.DAT`.
+  one entry per 16-by-16 chunk in the surface world, 256 entries in row-major
+  grid order. A sentinel entry means the chunk is pure water and should be
+  synthesized without disk I/O; other entries identify stored chunks in
+  `BRIT.DAT`. In shipped data exactly 205 entries are non-sentinel, and their
+  values run `0, 1, 2, ... 204` in ascending grid order, which accounts for
+  every stored chunk in the 52,480-byte file and leaves fifty-one sentinel
+  holes. There is **no** second such table for the Underworld and none is
+  needed: the underworld file is dense, so its chunk index is the identity map
+  and is computed rather than looked up. The loader tells the two cases apart
+  from the **first letter of the map filename** it is handed, taking the
+  table-lookup arm for `BRIT.DAT` and the direct-arithmetic arm otherwise.
+- The two map-file name strings themselves, one per world plane, which the
+  four-chunk reload passes down to the per-chunk loader as that discriminator.
+  Earlier wording that treated this pair as a second set of chunk-index tables
+  is withdrawn.
 - A `WorldLocationTable` used to map overworld cells to named towns,
   dwellings, castles, keeps, dungeons, and other fixed world features. The
   first thirty-two entries are the town-mode location entries; overworld entry
@@ -153,10 +165,16 @@ The resident image contains metadata that makes the disk map files meaningful:
   presentation rows, Yell's live-vs-vanquished gate, and Doom's all-vanquished
   entrance gate.
 
-`UNDER.DAT` is dense from the map-format point of view. The source notes have
-not established a separate public underworld chunk-index table in DATA.OVL.
-Implementations should use the overworld spec's dense-underworld rule unless
-future analysis proves an additional resident table is required.
+`UNDER.DAT` is dense, and this is settled rather than assumed. Three
+independent facts agree: the underworld file is exactly 65,536 bytes, which is
+256 chunks of 256 bytes, one per cell of the chunk grid; the one resident
+chunk-index table accounts completely for the 205 stored surface chunks and has
+nothing left over for a second world; and the per-chunk loader's underworld arm
+uses the caller's descriptor directly as a file offset instead of indexing
+anything. That works because the descriptor the caller builds from a
+chunk-aligned window origin already evaluates to the grid index times 256.
+Implementations should compute the underworld chunk offset arithmetically and
+must not expect a resident underworld index table to exist.
 
 ### 5.3 Tile Metadata
 
@@ -228,6 +246,14 @@ The magic system reads several resident tables:
   Energy Field uses a raw damage value of zero in the same path.
 - Reagent names and abbreviated reagent labels.
 - Eight virtue names and the corresponding shrine mantras.
+- **One** eight-entry shrine coordinate table, in the standard virtue order,
+  paired with the name and mantra tables above. It is a single table serving two
+  roles - the "is the party standing at a shrine" position test and the
+  "the shrine of *virtue*" name lookup the Enter command prints - and any
+  earlier reading that found two parallel shrine coordinate tables was a
+  units mismatch between file offsets and resident offsets, not two tables. Its
+  contents, the Spirituality sentinel row, and the behavioural rule that sentinel
+  encodes are published in `catalogs/gazetteer.md` Section 7.
 - Small virtue-prefix or name-match tables used by shrine, keyword, or prompt
   logic.
 - Two parallel four-entry Blackthorn challenge tables. One selects the virtue
@@ -480,11 +506,13 @@ DATA.OVL also provides reusable runtime buffers:
   refreshed, and inventory or party-state changes that require status refresh.
   The exact bit-level encoding is an implementation-compatibility detail, but
   the semantic split is visible in command behavior.
-- A shared coordinate/animation scratch block that the moongate animator
-  interprets as origin, optional destination, and phase state when active. The
-  same resident words are reused by chunk-loading and mode-entry contexts, so
-  they are transient subsystem scratch rather than durable saved-slot
-  natural-gate schedule storage.
+- A shared coordinate/phase scratch block owned by the **night-time light
+  beacon** (`systems/visibility.md` Section 12.6): up to two light-source
+  positions plus the beam's current bearing. Earlier wording called this a
+  moongate animator's origin, destination, and animation phase; that reading is
+  withdrawn - the block never holds a moongate. The same resident words are
+  reused by chunk-loading and mode-entry contexts, so they are transient
+  subsystem scratch rather than durable state.
 
 These buffers are rebuilt from map files and resident state. Most should be
 treated as transient even when the original flat save image happens to include
@@ -620,7 +648,7 @@ Current specs that consume DATA.OVL facts:
 | `systems/text-output.md` | Text-window descriptors, active-window cache, and display-driver-facing text state. |
 | `systems/input.md` | Cursor-blink state, keyboard translation tables, prompt-state gate, typeahead flush gate. |
 | `systems/active-objects.md` | Shared 32-slot active-object table and combat backup/restore. |
-| `systems/overworld.md` | Chunk index, location/shrine coordinates, shared coordinate scratch used by chunk loading and moongate animation, tile buffer, object overlays. |
+| `systems/overworld.md` | Chunk index, location/shrine coordinates, shared coordinate scratch used by chunk loading and by the night-time light beacon, tile buffer, object overlays. |
 | `systems/town-mode.md` | Scene partition, per-scene entry data, active floor, location load buffers, NPC runtime state. |
 | `formats/location-dat.md` | Resident location-name and floor/entry tables needed to interpret per-class map blocks. |
 | `systems/dungeon-mode.md` | Dungeon scene selection, runtime terrain buffers, room/encounter metadata. |
@@ -700,9 +728,10 @@ When preserving compatibility with original files:
   target scoring is a separate computed range path. The visibility tile
   predicate's public tile identities are named in `systems/visibility.md`; only
   the caller-flag semantics remain open.
-- The underworld map-index story is still provisional: current public specs
-  treat `UNDER.DAT` as dense unless further analysis proves a resident
-  underworld index is used.
+- The underworld map-index question is closed: `UNDER.DAT` is dense, its chunk
+  index is the identity map computed arithmetically, and no resident underworld
+  index table exists. Section 5.2 carries the evidence and the loader's
+  filename-letter discriminator.
 - Some runtime scratch bytes are saved only because the original engine writes
   a flat memory slice. Their semantic importance after load varies by mode and
   is documented in the relevant system specs.
@@ -718,6 +747,11 @@ cross-checked against
 `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md`.
 Moon sky-strip table ownership was cross-checked against
 `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`.
+Source provenance: the dense-underworld resolution, the 205-entry surface chunk
+index, the filename-letter loader discriminator, and the single shrine
+coordinate table are derived from private analysis notes
+`u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md` and
+`u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 Intro/story presentation metadata ownership was cross-checked against
 `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
 Viewport-buffer semantics were cross-checked against

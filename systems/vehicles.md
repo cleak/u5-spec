@@ -40,24 +40,57 @@ is mounted or aboard. Boarding copies any needed object auxiliary state into the
 party's active vehicle state; exiting should copy it back into the parked object
 that remains on the map.
 
-The known byte-compatible transport/action marker ranges are:
+**The transport/action marker is the sprite the party is drawn as.** Every time
+the viewport is composed, the engine copies this one byte verbatim into both the
+tile and the frame byte of the party's own entry in the active-object table
+(slot zero). It is not an abstract vehicle enum with an incidental art mapping;
+the art mapping *is* the encoding, and that is why the value set is exactly the
+party/vehicle block of the sprite atlas.
+
+The persistent value set is closed and complete. An exhaustive sweep of every
+shipped binary found no other persistent writer and no reader for any other
+value:
 
 | Values | Family | Facing / mode contract |
 |--------|--------|------------------------|
-| `0x10..0x13` | Mounted horse | Low two bits give facing: `0` north, `1` east, `2` south, `3` west. Ordinary terrain queries use the horse predicate family in `systems/movement.md`. A mounted directional command is still a single destination-cell step; no separate player rough-terrain stride table is part of the traced baseline. |
-| `0x14..0x17` | Magic carpet | Low two bits give facing. Ordinary terrain queries use the carpet predicate family in `systems/movement.md`. The current traces do not prove that the `T` timing tag means carpet, so carpet identity must come from this transport marker, not from the timing tag alone. |
-| `0x1C..0x1F` | Foot/avatar | Low two bits give the party leader facing. Clean seed/default state is `0x1C`, facing north. No parked vehicle state is implied. |
-| `0x20..0x23` | Ship under sail | Low two bits give ship facing. The ship is in the hoisted-sail, wind-controlled state. Ordinary terrain queries use the ship predicate family in `systems/movement.md`. |
-| `0x24..0x27` | Ship furled / manually handled | Low two bits give ship facing. The ship is aboard but not under wind control. Ordinary terrain queries use the same ship predicate family as the under-sail range. |
-| `0x28..0x2B` | Skiff | Low two bits give skiff facing. Ordinary terrain queries use the facing-sensitive skiff/water predicate family in `systems/movement.md`. Slow-water timing is represented separately by the `Q` timing/status tag. |
+| `0x00` | Party sprite suppressed | The party is drawn as nothing. As a *persistent* state this is reached only by drowning when a ship is lost with no skiff and no carpet available; see Section 6. |
+| `0x12`, `0x13` | Mounted horse | **Two frames only**, not four: `0x12` when the last announced move was east, `0x13` when it was west. Moving north or south leaves the frame unchanged. Ordinary terrain queries use the horse predicate family in `systems/movement.md`. A mounted directional command is still a single destination-cell step; no separate player rough-terrain stride table is part of the traced baseline. |
+| `0x14`, `0x15` | Magic carpet | **Two frames only**, on the same east/west rule as the horse. Ordinary terrain queries use the carpet predicate family in `systems/movement.md`. The current traces do not prove that the `T` timing tag means carpet, so carpet identity must come from this transport marker, not from the timing tag alone. |
+| `0x1C` | Foot/avatar | The clean seed and default state. The adjacent value `0x1D` is the second frame of the on-foot sprite pair and is accepted by the engine's two "party is on foot" predicates, but nothing ever writes it; treat it as defensive breadth, not a reachable state. |
+| `0x20..0x23` | Frigate, sails hoisted | Full four-way facing in the low two bits: `0` north, `1` east, `2` south, `3` west. The ship is under wind control. Ordinary terrain queries use the ship predicate family in `systems/movement.md`. |
+| `0x24..0x27` | Frigate, sails furled | Full four-way facing on the same convention. The ship is aboard but not under wind control. Ordinary terrain queries use the same ship predicate family as the under-sail range. |
+| `0x28..0x2B` | Skiff | Full four-way facing on the same convention. Ordinary terrain queries use the facing-sensitive skiff/water predicate family in `systems/movement.md`. Slow-water timing is represented separately by the `Q` timing/status tag. |
 
-Values outside the known ranges above should remain opaque in byte-compatible
-save tools until their consumers are documented. They are not a public balloon
-range in the analyzed baseline. Implementations that do not need byte-identical
-save editing can model the known transport families semantically, with facing
-and sail state carried separately. The stats panel's ship-hull middle counter
-is selected only by the `0x20..0x27` ship family; out-of-range marker values
-remain opaque transport state rather than alternate hull-display selectors.
+Note that `0x10` and `0x11` (a riderless horse) and `0x1B` (a carpet lying on
+the ground) are **object** tiles for parked vehicles, not marker values.
+Boarding converts them; they are never stored in the party's marker.
+
+**Four further values exist only as one-frame animation overrides.** Each is
+written by a single routine that saves the previous marker on entry and restores
+it before returning, so no save can ever observe them and a byte-compatible
+implementation never has to persist them: a moongate-transit frame while
+stepping onto a moongate tile, the corpse sprite used by the Blackthorn rescue
+cutscene, a whirlpool frame while a whirlpool swallows the party, and a blank
+sprite during the two "you fall through" scenes.
+
+**There is no balloon and no sixth vehicle family.** This is settled by the
+arithmetic writers rather than by absence of evidence, because arithmetic is the
+only way a value could drift out of a family: boarding stores the boarded
+object's own tile and the boarding gates admit only a horse pair, a furled
+frigate, or a skiff; furl, hoist, and docking move the marker by exactly one
+four-value sprite run and are gated on the party already being aboard a frigate;
+the ship-loss fallback either keeps the current facing while switching to a
+skiff, or picks a carpet frame, or blanks the sprite; and the facing compose
+replaces only the low two bits with a direction code that every call site passes
+as a literal zero through three, so it cannot climb out of the run it started in.
+A fourth ship-sprite block exists in the tile atlas and is even accepted by one
+"afloat" range test, but nothing can ever write it. Do not model balloon art as a
+transport state.
+
+The stats panel's ship-hull middle counter is selected only by the `0x20..0x27`
+ship family. Implementations that do not need byte-identical save editing can
+model the transport families semantically, with facing and sail state carried
+separately.
 
 The overworld active-object and encounter epilogue has a separate
 alternate-turn pendulum for the traced marker pairs `0x12`/`0x13` and
@@ -91,7 +124,7 @@ boarded-state transitions are byte-compatible:
 |---------------|------------------------|--------------------------|
 | Horse | `0x10..0x11` | Requires the party to be on foot; writes the corresponding mounted-horse marker by adding two to the object byte, producing `0x12..0x13`. |
 | Magic carpet | `0x1B` | Requires the party to be on foot; writes carpet transport marker `0x14`. |
-| Ship | `0x24..0x27` | Accepts the ship-boarding precondition below; preserves the selected ship byte as the party ship marker and copies hull/skiff auxiliary state. |
+| Ship | `0x24..0x27` | Accepts the ship-boarding precondition below; preserves the selected ship byte as the party ship marker and copies hull/skiff auxiliary state. Only the furled-sail object run is boardable, so **a boarded frigate always starts with its sails furled**; the hoisted state is reachable only afterwards, through Y-Yell. |
 | Skiff | `0x28..0x2B` | Requires the party to be on foot; preserves the selected skiff byte as the party skiff marker. |
 
 These bytes are vehicle object and transport-state values, not tile-sheet art
@@ -122,11 +155,11 @@ baseline.
   carried/stowed carpet counter so X-Xit can redeploy that carpet if the ship
   later has no nearby landing support and no skiffs aboard.
 
-Under the transport-marker facing convention in Section 2, the two accepted
-carpet-compatible values are the north/east carpet markers. The south/west
-carpet markers remain ordinary carpet transport values for movement and X-Xit,
-but they are outside this ship-boarding precondition and receive the same
-refusal as any other non-accepted starting state.
+The two carpet-compatible values `0x14` and `0x15` are the *only* carpet marker
+values (Section 2), so in practice any airborne party can board a ship. An
+earlier revision of this section described them as "the north/east carpet
+markers" with south/west counterparts outside the precondition; that is
+withdrawn, because the carpet has only the two frames.
 
 Successful boarding then runs the shared object-update helper for the boarded
 slot, marks map/object state dirty, and returns as a consumed command. Refusals
@@ -192,7 +225,10 @@ The vehicle families behave as follows:
   coordinate. If nearby landing support exists, the party leaves on foot and
   the parked ship keeps its carried-skiff count. If no landing support exists
   but the ship has a carried skiff, the party launches into a skiff facing the
-  same direction and the parked ship's carried-skiff count is decremented. If
+  same direction and the parked ship's carried-skiff count is decremented. The
+  furled requirement is structural for this branch as well as for the refusal
+  above: the transition to a skiff works by advancing the marker one sprite run,
+  which reaches the skiff run only from the furled ship run. If
   no support and no skiff are available but a stowed carpet is available, the
   party redeploys that carpet and the stowed-carpet count is decremented. This
   is the counterpart to the ship-boarding path that records a carpet-compatible
@@ -248,6 +284,25 @@ refusal behavior, but both ship ranges use the same ordinary static terrain
 predicate. `systems/movement.md` lists the exact accepted static tile ranges
 for these ordinary vehicle terrain queries.
 
+### Movement Announcements And Facing Frames
+
+Each announced directional step in a vehicle prints a vehicle prefix in front of
+the direction word:
+
+| Vehicle | Prefix |
+|---|---|
+| Mounted horse | "Ride" |
+| Magic carpet | "Fly" |
+| Skiff | "Row" |
+| Frigate (either sail state) | No prefix in town-family scenes; on the overworld a frigate turning in place announces with "Head". |
+
+The same step updates the marker's facing. Horse and carpet carry only two
+sprite frames each, so only an east or a west step rewrites the frame; a north
+or south step leaves the frame exactly as it was. Frigates and skiffs carry all
+four facings, so their step composes the direction code into the low two bits of
+the marker. The direction code is always one of the four cardinals, which is why
+the compose can never produce a value outside the vehicle's own sprite run.
+
 ### Ship Sails
 
 Y-Yell is the ship sail command when the party is aboard a ship. The vehicle
@@ -260,10 +315,33 @@ branch toggles between two visible modes:
   advance the ship while furled.
 
 Toggling sail state updates the party's ship state but does not directly move
-the ship. X-Xit should refuse the under-sail case while the ship is in the
-hoisted/wind-control range `0x20..0x23`. The furled/manual ship range is
-`0x24..0x27`. In both ranges, the low two bits carry heading as north, east,
-south, west.
+the ship. Mechanically the toggle moves the marker by exactly one four-value
+sprite run and leaves the heading bits alone: furling adds a run, hoisting
+subtracts one. It is gated on the party already being aboard a frigate and on
+the scene being a top-down world scene. X-Xit should refuse the under-sail case
+while the ship is in the hoisted/wind-control range `0x20..0x23`. The
+furled/manual ship range is `0x24..0x27`. In both ranges, the low two bits carry
+heading as north, east, south, west.
+
+**Docking furls automatically.** On the overworld, a step that takes a ship onto
+a pier tile, while the ship is under sail, prints a docking message and applies
+the same one-run furl. The neighbouring outcomes for a ship that hits something
+it cannot enter are a collision message and, when the hull gives way, a
+breaking-up message.
+
+### Losing The Ship
+
+When a frigate is destroyed, the party is not simply killed. The engine walks a
+fixed fallback ladder and takes the first option that is available:
+
+1. **A skiff is aboard.** The party abandons into a skiff, keeping the ship's
+   current facing, and the marker becomes the matching skiff value.
+2. **Otherwise, a carpet is in stock.** The party deploys a carried carpet, the
+   carried-carpet count is decremented, and the marker becomes one of the two
+   carpet frames (chosen at random, since the frame is cosmetic).
+3. **Otherwise, the party drowns.** The marker is set to the
+   sprite-suppressed value and the drowning outcome runs. This is the only way
+   the suppressed value becomes persistent state.
 
 Y-Yell's word-of-power and Shadowlord-name branches are command-system
 features, not vehicle behavior.
@@ -378,13 +456,14 @@ wind cadence ownership are fixed. Remaining work is catalog or opaque-state work
 change to the known horse, carpet, ship, skiff, broadside, or town-cannon command
 transitions.
 
-- **Unknown transport-marker consumers.** The known foot, horse, carpet, ship,
-  and skiff ranges are public. The stats-panel now separates the nearby
-  timing/status glyph byte from this transport/action marker, and it identifies
-  marker family `0x20..0x27` as the ship hull-condition panel selector, but
-  values outside the known marker ranges are still opaque. Keep this separate
-  from the `Q`/`T` timing tag byte used by `time.md`; do not relabel opaque
-  transport values as balloon state without a traced writer and consumer.
+- **Transport-marker consumers.** Closed. The persistent value set in Section 2
+  is complete: an exhaustive sweep of every shipped binary found no persistent
+  writer and no reader outside it, and there are no pointer-based accesses to
+  the marker anywhere, so nothing can alias it. There are no remaining opaque
+  transport-marker values to preserve: a value outside the published set cannot
+  be produced by the original engine. Keep the marker separate from the `Q`/`T`
+  timing tag byte used by `time.md`; the stats panel selects its ship
+  hull-condition readout from marker family `0x20..0x27`.
 - **Vehicle art verification.** B-Board's object-byte families and boarded
   transport-state writes are public. Remaining catalog work is visual
   sprite-sheet naming for those vehicle frames; do not confuse sprite-sheet IDs
@@ -394,11 +473,11 @@ transitions.
   separate repair command. If a repair service is later identified, document it
   under the shop/item acquisition surface that triggers it and leave the vehicle
   command transitions unchanged.
-- **Balloon boundary.** Balloon sprites remain catalog assets, but the traced
-  B-Board, X-Xit, U-Use, shipwright, and movement contracts do not provide a
-  live balloon transport path for the analyzed baseline. Preserve the art family
-  and any opaque saved marker values, but do not invent boarding, landing, or
-  wind-driven balloon movement from catalog evidence alone.
+- **Balloon boundary.** Settled, not merely untraced. Balloon sprites are
+  catalog assets only. No value a balloon could occupy is written or read by any
+  shipped binary, and Section 2 gives the arithmetic argument that closes the
+  last route by which such a value could have been reached. Do not invent
+  boarding, landing, or wind-driven balloon movement.
 
 ## 12. Sources
 
@@ -424,6 +503,17 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
 - `u5-decomp/formats/ds-bss-map.md`.
 - `u5-decomp/formats/saves.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the marker's
+  identity as the party sprite, the complete persistent value set and the
+  transient one-frame overrides, the two-frame horse and carpet rule, the
+  movement-announcer prefixes, the furled-on-boarding gate, the docking gate and
+  auto-furl, the furled precondition for exiting a ship into a skiff, and the
+  ship-loss fallback ladder.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md` -- the vehicle
+  prefix strings and the facing-compose bound. That note's earlier
+  skiff/carpet prefix assignment was swapped and is superseded.
 - `systems/overworld.md`.
 - `systems/doors-and-z-transitions.md`.
 - `systems/time.md`.

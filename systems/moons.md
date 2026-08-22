@@ -160,12 +160,24 @@ whether either marker is on the visible horizon, so the cache holds the current
 day's phase for both moons even when neither marker is drawn. Consumers of the
 cache must not infer "no phase" from "not drawn".
 
-Natural moongates remain separate from the sky/status renderer: the overworld
-moongate animator paints any currently active gate, the saved Moonstone slots
-drive live-terrain placement/waning, and the overworld loop has a separate live
-entry hook plus the fixed narrative gate branch. Do not treat the hourly
-sky/status refresh by itself as evidence for natural-moongate placement or
-entry behavior.
+Natural moongates remain separate from the sky/status renderer. The saved
+Moonstone slots drive live-terrain placement and waning, and the overworld loop
+has a separate live entry hook; the Shrine of the Codex approach gate is a third
+and unrelated branch. Do not treat the hourly sky/status refresh by itself as
+evidence for natural-moongate placement or entry behaviour.
+
+Two further separations matter, because the phase glyphs above are easy to
+over-read:
+
+- **The moon phase does not place gates.** Placement is gated on the hour alone,
+  so every eligible gate opens together at nightfall and fades together after
+  dawn. The glyph the strip shows decides only which Moonstone slot an entered
+  gate leads to.
+- **There is no moongate animator.** An earlier revision of this document
+  referred to one; that reading is withdrawn in full. Gates are ordinary live
+  terrain, and the render-frame scratch block once attributed to a gate animator
+  belongs to the night-time light beacon in `systems/visibility.md` Section
+  12.6.
 
 The renderer is suppressed for dungeon-class views and the underworld status
 presentation. Those scenes use their own lower-row presentation instead of the
@@ -185,6 +197,9 @@ glyph dumps, or private address tables.
   zero), the `*` hour-marker character, the per-cell colour selection, and the
   flat fill used when the strip is suppressed --
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 6.6.
+- Source provenance: the separation of moon phase from moongate placement, and
+  the withdrawal of the moongate animator, are derived from private analysis
+  note `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - Calendar bounds (day one through twenty-eight, reset after twenty-eight) and
   the single hour-change trigger --
   `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md` and

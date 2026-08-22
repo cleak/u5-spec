@@ -54,16 +54,18 @@ The R-Ready burden values are item metadata and are listed in
 total-readied-burden check: a legal slot family can still refuse if the member
 is not strong enough to carry the resulting readied set.
 
-The resident engine also has a separate helper that computes an equipped-item
-weight statistic from the six readied slot bytes using a different lookup table
-from the R-Ready burden gate. That lookup is item-id keyed and is listed in
-`catalogs/item-list.md`. The helper treats empty equipment slots as zero and
-adds 3 when the shared active-effect/status tag is Protection. In the traced
-baseline, its only identified call is after the resident "remove first matching
-readied item" helper used by combat-side ring removal, and that caller discards
-the computed return value before returning its own hit/miss result. Do not add
+The resident engine also has a separate helper that was intended to compute a
+per-item defence contribution from the six readied slot bytes, using a
+different lookup table from the R-Ready burden gate. That lookup is item-id
+keyed and is listed in `catalogs/item-list.md`. As designed, the helper would
+treat empty equipment slots as zero and add a small bonus while the shared
+timed-effect code is Protection. As shipped, it produces nothing: each per-slot
+accumulation is guarded by a comparison that is always true and therefore
+always skipped, and the helper's result is never consumed by any reachable
+caller — one call site discards it, and the other is reached only through an
+attribute-selector arm that nothing in the game ever selects. Do not add
 non-R-Ready encumbrance, readiness enforcement, or combat-defense
-recalculation from this helper.
+recalculation from this helper. See `systems/combat.md` and `systems/magic.md`.
 
 ## 3. Character Equipment Slots
 
@@ -179,15 +181,31 @@ these readied-equipment writes.
    "nothing to ready" refusal and exits.
 3. Otherwise it opens an eight-row picker over the equipment stock band.
 4. Up/down movement scrolls to the previous or next displayable equipment id.
-   Page movement advances by a full eight-row window where the translated key
-   code is available. Enter confirms the current row. Escape exits and
-   restores the HUD.
+   The four corner keys — Home, End, PgUp and PgDn, or the numpad corners, which
+   the input layer delivers as the four diagonal codes — page the list by a full
+   eight-row window. This and the shop list navigator are the only places
+   outside combat's targeting cursor that consume those codes at all. Enter
+   confirms the current row. Escape exits and restores the HUD.
 5. After a successful or refused selection, the picker remains open until the
    player exits, so several items can be attempted in one R-Ready invocation.
 
 The picker is shared infrastructure. In R-Ready mode it walks the equipment
 stock band; another caller can reuse the same picker against a different item
 band and name table.
+
+**Turn cost.** R-Ready costs a turn in every mode, and a refusal costs exactly
+what a success costs — there is no free retry. The equipment overlay reports no
+status of its own: the cascade returns the same value for every refusal and for
+every successful equip, the picker consumes that value only as a "close the
+panel" signal, and the command layer discards it. Outside combat the dispatcher
+reports its default "acted" status for `R` whatever the overlay did, so the
+mode loop runs its per-turn epilogue and the clock advances even if the player
+opens the panel and immediately backs out. In combat, `R` runs through the
+labelled prompt with the live-actor gate, so it ends the acting combatant's
+action; only a dead actor escapes the cost, with a short refusal and a free
+re-prompt. Because the panel stays open until the player exits, the cost is per
+invocation of the command, not per item readied: several items can be equipped,
+unequipped or refused within one turn.
 
 ## 6. R-Ready Eligibility And Writes
 
@@ -203,7 +221,9 @@ metadata and applies these gates before writing a slot:
   the resident removal helper.
 - **Ammunition and ranged-weapon readiness.** Arrows and quarrels are carried
   ammunition stocks, not readied equipment; selecting either row exits the
-  cascade without mutation. Bow and Magic Bow readiness requires at least one
+  cascade at the very top, with no mutation and **no message at all** — the
+  refusal is silent, which is unique among the cascade's exits. Bow and Magic
+  Bow readiness requires at least one
   arrow in the shared equipment counter band. Crossbow readiness requires at
   least one quarrel. Missing ammunition prints the ammunition refusal and
   leaves equipment and counters unchanged.
@@ -214,10 +234,15 @@ metadata and applies these gates before writing a slot:
   character can ready an item.
 - **Combat armour lock.** Combat `R` routes through the same R-Ready entry
   point and cascade as non-combat `R`, after binding the selection to the
-  active living combat actor. The traced combat-scene-specific refusal is the
-  body-armour lock: the party is in a combat scene, the selected item is in
-  the body-armour class range, and the internal ready guard for that branch is
-  clear. This is not a blanket refusal for every R-Ready item during combat.
+  active living combat actor. Exactly one combat-scene refusal exists, and it
+  is narrow: the selected item belongs to the body-armour class, the scene is a
+  combat arena, **and** the battle has not yet been decided. All three must hold.
+  Helm, weapon, shield, ring and amulet swaps are therefore permitted during a
+  fight; only the body-armour family is locked, and the lock lifts as soon as
+  the outcome has been announced, even though the party is still standing in the
+  arena. Nothing else about the cascade is scene-dependent — its other
+  combat-scene tests are bookkeeping for the Ring of Invisibility's sprite
+  handling, not restrictions.
 - **Occupied-slot refusal.** Helm, body armour, ring, and amulet classes require
   their corresponding slot to be empty before a different item can be readied.
 - **Hand occupancy.** Weapon and shield classes share the weapon-hand/off-hand
@@ -243,10 +268,14 @@ slot.
 
 ## 7. U-Use Item Flow
 
-U-Use is the non-combat item-activation command. Surface, town, keep, castle,
-and dungeon-exploration modes route `U` to the CAST-owned item-use handler.
-Combat mode does not: combat `U` only prints the verb label and aborts through
-the combat scene-message path.
+U-Use is the item-activation command in every mode. Surface, town, keep, castle,
+and dungeon-exploration modes route `U` to the item-use handler, and so does
+combat: the combat parser prints the verb label, checks that the acting
+combatant is still alive, and then enters the same handler. An earlier revision
+of this section said combat `U` was label-only and aborted before reaching the
+handler; that is withdrawn. What differs in combat is not the routing but the
+per-family gates — several item families test the scene and refuse in an arena,
+as the family table below and `catalogs/item-list.md` record.
 
 The item-use handler opens an item picker over usable carried stock. If the
 party has no usable item, it prints the no-usable-items refusal and exits. A
@@ -257,11 +286,11 @@ Confirmed U-Use families:
 
 | Family | Behaviour |
 |---|---|
-| Spell scrolls | Eight scroll counters dispatch to spell-like effects: light, wind change, Protection, Negate Magic, View, Summon Daemon, Resurrection, and Negate Time. A scroll counter is decremented before its branch-specific scene gate, target prompt, or helper return. Scrolls share the spell-code labels but have item-specific constants: `LV` starts light with value 240, `IS` installs `P`/100, `AI` installs `N`/20, and `AT` installs `T`/20 except in Stonegate and Doom, where it reports no effect. |
+| Spell scrolls | Eight scroll counters dispatch to spell-like effects: light, wind change, Protection, Negate Magic, View, Summon Daemon, Resurrection, and Negate Time. A scroll counter is decremented before its branch-specific scene gate, target prompt, or helper return. Scrolls share the spell-code labels but have item-specific constants: `LV` sets the magic-light counter to 240 minutes, while `IS`, `AI`, and `AT` write the single shared timed-effect slot in `systems/magic.md` with `P`/100, `N`/20, and `T`/20 turns respectively — replacing whatever effect was already there. `AT` reports no effect in Stonegate and Doom. |
 | Potions | Eight colour-coded potion counters dispatch through a party-member target path. Display order is Blue, Yellow, Red, Green, Orange, Purple, Black, White, with normal effects wake, heal, cure poison, poison, sleep, combat-only "Poof" presentation, combat invisibility, and a surface/town visibility-sweep animation. A consumed potion normally applies the selected colour's effect, but a variation roll gives one chance in sixteen to force the Orange sleep effect and one chance in sixteen to replace the effect with a random potion row. |
 | Magic Carpet | Usable outside dungeon/combat scenes when the party is on foot and the current tile accepts carpet boarding. On success it changes the party transport marker to a carpet state and decrements the carried carpet counter. If the party is aboard a ship or otherwise not on foot, it prints the matching refusal instead. |
 | Skull Key | Decrements the skull-key/special-key counter, then runs the adjacent-lock helper in non-combat scenes that support it. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. |
-| Regalia | Amulet of Lord British and Crown of Lord British toggle through a shared worn-regalia state: using the item while it is already active removes it; otherwise the handler prints the wearing message and installs the corresponding state. The Black Badge uses the same remove-if-active helper and can install its own worn state. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
+| Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
 | Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only outside dungeon/combat scenes and only on accepted terrain; Search/Get recovery later invalidates the slot. |
 | Spyglass | Surface-only utility. It refuses in unsupported scenes and when the sky-state check says there are no stars; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
@@ -281,7 +310,11 @@ For a compatible recreation:
 - Display R-Ready candidates when either the carried counter is nonzero or the
   selected character already has that item readied.
 - Apply strength, combat-armour, occupied-slot, and hand-occupancy gates before
-  mutating counters.
+  mutating counters. Restrict the combat gate to the body-armour family and to
+  an undecided battle; do not block other slot families during a fight.
+- Charge one turn per R-Ready invocation regardless of outcome, and keep the
+  picker open across repeated attempts within that turn.
+- Refuse ammunition rows silently, with no message.
 - Treat arrows and quarrels as carried ammunition stocks rather than readied
   slots, and apply the traced bow/crossbow ammunition prerequisites.
 - Use the R-Ready burden table for the strength check; do not use the separate
@@ -306,7 +339,10 @@ regalia, shards, magic carpet, skull keys, Spyglass, HMS Cape plans, Sextant,
 Pocket Watch, Black Badge, and Box have public item-activation contracts.
 No ZSTATS-owned page-routing or R-Ready storage gap remains at this layer;
 object pickup visuals, combat-side equipment consumers, dialogue reactions, and
-opaque save/runtime bytes are delegated to their own specs.
+opaque save/runtime bytes are delegated to their own specs. The scope of the
+combat restriction, the silent ammunition exit, and R-Ready's turn cost are all
+settled; the one residual inside the cascade is the resident helper behind the
+magic-ring vanish roll, whose internals are read only from its call shape.
 
 - **Magic ring and Amulet/Turning boundary.** Ring of Invisibility and Ring of
   Regeneration both have confirmed equip-time and combat-time checks. The two
@@ -374,3 +410,18 @@ subhandlers in the same overlay, the Shadowlord shard handler at
 Moonstone slot writer at
 `u5-decomp/functions/CAST_OVL/0x153C_use_moonstone.md`, cross-checked against
 Search/Get Moonstone recovery notes.
+
+Combat-lock scope, silent-ammunition, and turn-cost provenance: the in-combat
+restriction applies to the body-armour family only and lifts once the battle's
+outcome has been announced; ammunition rows exit the cascade silently; and a
+refused R-Ready costs exactly what a successful one costs, in every mode.
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
+`../u5-decomp/functions/ZSTATS_OVL/0x0C5C_ready_apply_or_unequip.md` and
+`../u5-decomp/functions/ZSTATS_OVL/0x1296_ready_main.md`.
+
+Combat U-Use correction provenance: combat routes `U` into the same item-use
+handler the world modes use, after the live-actor gate. Source provenance:
+derived from private analysis note
+`../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` and
+`../u5-decomp/functions/COMBAT_OVL/0x0544_prompt_with_string.md`.

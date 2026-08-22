@@ -28,6 +28,17 @@ on the active mode and caller path. A compatible implementation should preserve
 the visible rule: if the selected cell or current terrain does not support
 rest, H-Hole-up prints the local refusal and consumes no useful rest.
 
+**Timed magic effects are cancelled first.** Before any terrain gate or hours
+prompt, H-Hole-up unconditionally clears the single shared timed-effect slot
+specified in `systems/magic.md`. That slot holds one effect at a time, so
+resting cancels an active Protection, Quickness, Mass Charm, Negate Magic, or
+Negate Time — and, because the worn regalia share the same slot, it also strips
+the otherwise permanent Amulet of Lord British, Crown of Lord British, and
+Black Badge auras. A rested party must re-use those items to get the aura back;
+in particular, resting closes the Blackthorn palace-gate password exchange that
+the worn Badge unlocks. The clear happens on entry, so it applies even when the
+terrain gate then refuses the rest.
+
 ## 3. Terrain And Entry Gates
 
 Outdoor camping probes the tile under or near the party through the same
@@ -338,6 +349,9 @@ tables, or implementation-specific addresses.
   (superseded identity note; structural observations only).
 - `u5-decomp/notes/lord_british_dialogue.md`.
 - `u5-decomp/notes/npc_walker_callers_2026-05-08.md`.
+- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`
+  (H-Hole-up's entry clear of the shared timed-effect slot, including the
+  permanent regalia auras).
 - `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`
   (cadence of the shared status/provision pass, and the town-bed versus
   wilderness-camp difference).

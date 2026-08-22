@@ -17,8 +17,8 @@ to it?" It sits between the world map formats and the runtime mode specs:
   scene-byte identities, location names, and transition tables. The saved-slot
   natural-moongate live-terrain schedule and live entry hook are owned by
   `systems/overworld.md`, not by this catalog.
-- Town mode, dungeon mode, shrine meditation, the traced moongate animator
-  boundary, and other handlers consume those semantic records.
+- Town mode, dungeon mode, shrine meditation, the natural-moongate terrain
+  refresh, and other handlers consume those semantic records.
 
 The catalog is implementation-neutral. A modern engine may store it as JSON,
 database rows, hardcoded constants, or authored resources. The required
@@ -196,6 +196,19 @@ every row is an in-world castle. The resident order is:
 | 23 | `CASTLE:6` | Cove |
 | 24 | `CASTLE:7` | Buccaneer's Den |
 
+`CASTLE:0` carries one authored puzzle worth noting here: a harpsichord on its
+logical floor two, which opens a walled-off passage when a fixed thirteen-note
+tune is played from the chair beside it. `systems/town-mode.md` Section 13 owns
+that contract. Source provenance: derived from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q31.
+
+`CASTLE:1` carries a scene-specific gate of its own: a guard at the palace
+demands a password from the party, but only while the party is wearing the
+Black Badge, and only the first four typed letters are compared.
+`systems/blackthorn.md` Section 7a owns that contract. Source provenance:
+derived from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`.
+
 ### Keeps
 
 Keep rows use `KEEP:n` keys and load `KEEP.DAT`, `KEEP.NPC`, and `KEEP.TLK`.
@@ -276,14 +289,15 @@ derived from the scene entry/exit mapping. Do not resolve a ship delivery
 through this table.
 
 This table is complete for stock scene entry and ordinary exterior return for
-the forty scene rows. It does not claim to publish every coordinate-like
-landmark in the game. Remaining non-table coordinate families are:
-shrine/Codex route and return positions; saved Moonstone slot destinations and
-runtime natural-moongate live-terrain placement; the confirmed surface chasm
-and whirlpool underworld transitions; Hythloth bottom-level and special dungeon
-exit branches; and any future traced outdoor underworld-to-surface ascent
-branch. Those rows should stay in their owning systems unless they become a
-stable named-landmark catalog.
+the forty scene rows, and the dungeon rows are also the destination of every
+dungeon exit: there is no separate exit-coordinate family and no per-dungeon
+special case (Section 6). The shrine and Codex-route coordinates are published
+in Section 7, and the eight default Moonstone/moongate positions, the four
+lighthouse positions, and the two fixed plane-transition coordinates are
+published in Section 8. What remains outside this catalog is the runtime
+placement state itself - which moongates are currently lit, where a moonstone
+has since been buried - which is save state owned by `systems/overworld.md`,
+not a fixed landmark.
 
 ## 6. Dungeons
 
@@ -298,7 +312,7 @@ world-location rows agree on this scene/name/record order:
 | 36 | `DUNGEON:3` | 3 | Wrong | Dungeon-mode scene; presentation flavour byte 3. |
 | 37 | `DUNGEON:4` | 4 | Covetous | Dungeon-mode scene; presentation flavour byte 3. |
 | 38 | `DUNGEON:5` | 5 | Shame | Dungeon-mode scene; mine presentation flavour. |
-| 39 | `DUNGEON:6` | 6 | Hythloth | Dungeon-mode scene; mine presentation flavour; bottom-level underworld transition remains a specific open question. |
+| 39 | `DUNGEON:6` | 6 | Hythloth | Dungeon-mode scene; mine presentation flavour. |
 | 40 | `DUNGEON:7` | 7 | Doom | Dungeon-mode scene; normal presentation flavour. |
 
 The `DUNGEON.DAT` file is dungeon-major and stores eight dungeon records in the
@@ -309,7 +323,56 @@ and any special exit or scripted transition behaviour.
 The standard dungeon-mode entry seed is `(Z=0, X=1, Y=1)` facing east when
 entered from Britannia. When entered from the underworld, non-Doom dungeons use
 `(Z=7, X=7, Y=7)` facing west; Doom is the exception and still uses the
-surface-style seed.
+surface-style seed. Only a party travelling on foot may enter a dungeon;
+mounted, sailing, and flying parties are refused at the mouth.
+
+### 6.1 Leaving a dungeon
+
+Leaving a dungeon follows one uniform rule, and there is no per-dungeon exit
+branch of any kind. Whatever caused the party to pass the top or the bottom of
+the level stack, the engine returns them to **that dungeon's own row in the
+Section 5.1 table** - the same outdoor cell they would have entered by. The
+world plane is chosen by the level they were standing on: leaving off the
+topmost level surfaces them on Britannia, and leaving through the bottom of the
+lowest level puts them in the Underworld. Because seven of the eight dungeon
+mouths carry an entrance tile at the *same* coordinate on both world maps, the
+one published coordinate serves both arms.
+
+Earlier revisions of this catalog described a Hythloth-specific bottom-level
+handoff and additional Doom or Codex dungeon-exit branches. Both are withdrawn:
+no such branch exists, and the Codex approach is an outdoor coordinate gate
+(Section 8.1), not a dungeon exit.
+
+Every dungeon except Doom therefore has a working exit at both ends, because
+the two dungeon level-change spells move the party one level from wherever they
+stand and, at a level edge, hand off to that same exit. What the map data
+decides is only where the party may **climb** between levels without a spell,
+and by that route the two ends are not symmetric:
+
+| Dungeon | Climbable exit off the topmost level | Climbable exit off the lowest level |
+|---|---|---|
+| Deceit | ladder | none |
+| Despise | ladder | pit and two-way ladder |
+| Destard | only while carrying the climbing gear | pit |
+| Wrong | ladder | several pits and a ladder |
+| Covetous | ladder | ladder |
+| Shame | none | ladder |
+| Hythloth | two-way ladder | none |
+| Doom | none | none |
+
+Each of the five dungeons with a climbable exit off the lowest level places one
+of them on the very cell the underworld-side entry drops the party onto, so that
+round trip is reciprocal.
+
+**Doom is the exception in every direction.** Its mouth coordinate `(128, 128)`
+holds an entrance tile in the Underworld only - on the surface that position
+falls inside open ocean - so Doom is entered from the Underworld and nowhere
+else. Entry is refused unless all three Shadowlords have been destroyed; a
+party that tries earlier is ambushed at the entrance instead. Alone among the
+dungeons entered from below, Doom seeds the party on its **topmost** level in
+the north-west corner rather than the bottom level. And it cannot be left at
+all: its top level carries neither a ladder nor a climbing-gear cell, and the
+two level-change spells refuse to work inside it. Doom is a one-way descent.
 
 Dungeon rows must not be modeled as town interiors. They have no `*.NPC` roster
 and no `*.TLK` block. Talking in dungeon mode always follows the dungeon-mode
@@ -332,10 +395,44 @@ by the karma system:
 | `SHRINE:humility` | Humility | `Lum` | Meditation and Humility karma/ordainment. |
 
 Shrines are fixed overworld landmarks, not scene-byte interiors. The shrine
-handler should resolve the active shrine from the shrine table, ask for the
-mantra, ask for an offering, update the appropriate karma and quest flags, and
-return to overworld mode. The exact shrine coordinates belong in the cleanroom
-resident-table transcription when available.
+handler resolves the active shrine from the shrine table, asks for the mantra,
+asks for an offering, updates the appropriate karma and quest flags, and
+returns to overworld mode.
+
+There is **one** resident shrine coordinate table, not two. It serves both
+roles at once: the "is the party standing at a shrine" test and the
+"the shrine of *virtue*" name the Enter command prints. Any earlier wording
+implying a separate render-position table and a separate position-test table is
+withdrawn. The table is in the standard virtue order:
+
+| Virtue | X | Y |
+|---|---:|---:|
+| Honesty | 233 | 66 |
+| Compassion | 128 | 92 |
+| Valor | 36 | 229 |
+| Justice | 73 | 11 |
+| Sacrifice | 205 | 45 |
+| Honor | 81 | 207 |
+| Spirituality | 0 | 0 |
+| Humility | 231 | 216 |
+
+The seven non-zero rows are Britannia surface coordinates, and each one holds
+the shrine tile; the whole surface map holds exactly those seven shrine tiles
+and the Underworld map holds none.
+
+Spirituality's `(0, 0)` row is a **deliberate sentinel** meaning "not on the
+surface map", and it encodes a behavioural rule rather than a position:
+`(0, 0)` is open ocean, so no party can ever stand there, and a meditation
+attempt whose position matches none of the seven mapped shrines resolves to
+**Spirituality**. That is how the Shrine of Spirituality - which is not placed
+on the Britannia surface - is reached. An implementation must therefore treat
+"matched no row" as "Spirituality", not as an error. An older reading of the
+same fall-through as a hidden ninth-virtue Humility case is withdrawn; Humility
+is an ordinary row and matches by position like the rest.
+
+The **Shrine of the Codex** is a separate landmark with its own tile, occurring
+exactly once on the Britannia surface at `(233, 233)` and nowhere in the
+Underworld. Its approach gate is described in Section 8.1.
 
 ## 8. Other Travel Landmarks
 
@@ -344,9 +441,13 @@ do not have town/dungeon scene rows.
 
 | Landmark class | Engine contract |
 |---|---|
-| Moongates | Saved-slot-driven surface gates whose live-terrain refresh and live `0xDC` entry handling are specified in `systems/overworld.md`. The renderer's animation phase is transient runtime scratch, not gazetteer content. |
+| Moongates | Saved-slot-driven surface gates whose live-terrain refresh and live `0xDC` entry handling are specified in `systems/overworld.md`. Their eight shipped positions are tabulated below; the positions are save state, so burying a moonstone moves that gate. |
+| Lighthouses | Four surface landmarks that double as the outdoor night-time light source (below). Each is also a town-family scene row in Section 5.1. |
+| Shrine of the Codex | One surface cell at `(233, 233)`, approached from `(233, 235)` (below). |
 | Falls / chasms | The confirmed surface chasm at Britannia `(54, 138)` damages the party, swaps the plane to the Underworld, and reseeds active objects. |
-| Underworld ascents | Potential plane-transition landmarks. No clean spec currently publishes a byte-compatible general outdoor underworld-to-surface ascent set. |
+| Whirlpools | Outdoor active objects, not fixed cells. Being swallowed while aboard a vessel always deposits the party at the fixed Underworld coordinate `(34, 18)`. |
+| Underworld ascents | **There are none.** No outdoor Underworld terrain feature lifts the party to the surface; see Section 8.3. |
+| Telescopes | Three indoor fixtures - in Moonglow, Skara Brae, and West Britanny - each standing near a ladder inside its building. Looking at one shows the sky (`systems/view.md`). |
 | Wishing wells | Tile-triggered or command-triggered prompt/effect landmarks; no scene byte. |
 | Springs | Minor restorative landmarks; no scene byte. |
 | Caves and special holes | Local handlers that may give treasure, trigger descent, or route to another mode depending on tile and coordinate. |
@@ -356,6 +457,80 @@ do not have town/dungeon scene rows.
 For these rows, a gazetteer implementation should record the class, display
 name if one exists, trigger conditions, destination or effect handler, and
 whether the landmark persists, animates, or depends on time.
+
+### 8.1 Fixed landmark coordinates
+
+**The eight Moonstone / natural-moongate positions.** These are the shipped
+values of the eight saved Moonstone slots on a new game. All eight are grass
+cells on the Britannia surface, and the daytime pass restores exactly that
+grass when a gate closes.
+
+| Slot | X | Y | Slot | X | Y |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 224 | 133 | 4 | 166 | 19 |
+| 1 | 96 | 102 | 5 | 104 | 194 |
+| 2 | 38 | 224 | 6 | 23 | 126 |
+| 3 | 50 | 37 | 7 | 187 | 167 |
+
+These are **save state**, not fixed geography. Burying a moonstone rewrites its
+slot with the party's current position, which relocates both that gate's
+nightly appearance and the destination every gate that selects that slot leads
+to. A catalog should present the table above as the shipped starting layout.
+
+**The four lighthouses.** Stormcrow `(152, 24)`, Fogsbane `(88, 120)`,
+Waveguide `(216, 120)`, and Greyhaven `(104, 216)` - the same coordinates their
+scene rows carry in Section 5.1. Each is also the outdoor night-time light
+source described in `systems/overworld.md`: after dark, a lighthouse inside the
+loaded map window sweeps a rotating beam across the surrounding cells.
+
+**The Shrine of the Codex approach.** The shrine tile itself is at
+`(233, 233)`. The gate the player actually meets is one cell of open approach
+at `(233, 235)`: standing there on the Britannia surface, the game either
+grants passage or refuses it and pushes the party one cell back south,
+according to the saved ordained-progress state. `systems/overworld.md` owns the
+branch; it is an outdoor coordinate gate and has nothing to do with dungeon
+exits.
+
+**The two fixed plane-transition cells.** The surface chasm at `(54, 138)`
+drops the party into the Underworld, and every whirlpool deposits them at
+`(34, 18)`.
+
+### 8.2 What the Enter command recognises
+
+The overworld Enter command switches on the terrain the party is standing on
+and prints `Enter` plus a label. The recognised terrain kinds, and the label
+each prints, are: hut, **the Shrine of the Codex!**, keep, village, towne,
+castle, cave, mine, dungeon, **the shrine of** *virtue* (the virtue selected
+from the Section 7 table), ruins, lighthouse, **the palace of Blackthorn!**,
+and **the Castle of Lord British!**. Standing on anything else answers `What?`
+and consumes nothing.
+
+Recognising the terrain is not the same as entering: the town-family and
+dungeon paths still require the party's coordinate to match a Section 5.1 row,
+and dungeon entry additionally requires foot travel and, for Doom, the
+Shadowlord gate of Section 6.1.
+
+### 8.3 Crossing between the two world planes
+
+The inventory of plane transitions is closed, and it is asymmetric.
+
+**Surface to Underworld**, three routes: the fixed chasm at `(54, 138)`; being
+swallowed by a whirlpool while aboard a vessel, which always lands at
+`(34, 18)`; and leaving a dungeon through the bottom of its lowest level.
+
+**Underworld to surface**, three routes, **none of them outdoor terrain**:
+leaving a dungeon off its topmost level; taking a moongate or casting Gate
+Travel to a Moonstone slot whose recorded position is on the surface (all eight
+ship that way); and a save-state restore that simply replays a previously saved
+position. There is no Underworld cell that lifts the party up - no mirror of
+the surface chasm exists, and the claim is exhaustive rather than
+not-yet-found.
+
+One location exists **only** in the Underworld: **Ararat**, at `(49, 58)`,
+where the Underworld map carries a keep and the surface map carries plain
+brush. Leaving Ararat correctly returns the party to the Underworld rather than
+to the surface, and it is the only location row that behaves that way; every
+other location exit selects the surface.
 
 ## 9. Validation And Error Handling
 
@@ -395,25 +570,26 @@ Runtime error handling should be conservative:
 
 The following gaps are intentional in this first catalog:
 
-1. **Shrine and Codex route coordinates.** The forty scene entry/return rows
-   are published above. Shrine, Codex, and related virtue-route coordinate
-   families remain with the shrine/karma specs until their clean tables are
-   published.
+1. **Minor virtue-route waypoints.** The forty scene entry/return rows, the
+   eight shrine coordinates, and the Shrine of the Codex coordinate and its
+   approach cell are all published above. What is not catalogued is the
+   narrative furniture of the virtue quests - urn placements inside buildings
+   and similar interior fixtures - which stay with `systems/karma.md`.
 2. **Blank resident town-mode names.** Scenes 14 through 18 have blank resident
    location-name strings. `CASTLE:0` and `CASTLE:1` are semantically identified
    by roster and special-behaviour evidence; `DWELLING:5` through
    `DWELLING:7` remain stable keyed rows with no public display name.
-3. **Special-transition coordinates.** Ordinary town/dungeon scene entry and
-   exterior return coordinates are public in Section 5.1. Hythloth bottom-level
-   handoff, Doom/Codex special cases, and any nonordinary dungeon exit branches
-   remain owned by the dungeon and transition specs.
-4. **Underworld and plane-transition pairs.** Confirmed falls and whirlpool
-   transitions are public in `systems/overworld.md`; a general outdoor
-   underworld-to-surface ascent set is not currently published.
-5. **Moongate coordinates.** The overworld spec describes the traced animator,
-   saved-slot live-terrain refresh, live entry hook, and fixed narrative-gate
-   boundary. Exact public coordinate tables for authored landmarks remain
-   omitted from this catalog.
+3. **Room-mediated dungeon level changes.** The uniform dungeon exit rule, the
+   per-dungeon climbable-exit table, and Doom's special case are published in
+   Section 6.1. The one narrow thing left open is which dungeon *room* maps
+   place a ladder cell under the party, since an up-or-down request raised
+   inside a room feeds the same level-change and exit machinery.
+4. **Quest-bit semantics behind the Codex approach gate.** The gate itself is
+   published in Section 8.1, but exactly which quest beats set the saved
+   ordained-progress state it reads is still owned by `systems/quest-flags.md`
+   and is not fully traced.
+5. *(This gap is closed. The eight shipped Moonstone positions, the four
+   lighthouses, and the Codex approach are published in Section 8.1.)*
 6. **Minor landmark names.** Wishing wells, springs, caves, signs, and special
    holes need a later pass that joins tile data, sign data, and coordinate
    triggers.
@@ -433,8 +609,8 @@ Public specs used:
   exit, location classes, Lord British's Castle special entry behaviour, and
   hostile NPC notes.
 - `u5-spec/systems/dungeon-mode.md` - dungeon scene model, named dungeon set,
-  scene/name/data-record order, flavour classes, movement, exits, and Hythloth
-  open question.
+  scene/name/data-record order, flavour classes, movement, and the level-change
+  and exit contract.
 - `u5-spec/formats/brit-dat.md` - Britannia map shape and relationship between
   terrain cells and resident location metadata.
 - `u5-spec/formats/under-dat.md` - Underworld map shape and plane-transition
@@ -463,6 +639,16 @@ Private analysis provenance:
   scene byte for entries one through thirty-two.
 - `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md` -
   confirms the traced surface falls coordinate and underworld plane swap.
+- Source provenance: the uniform dungeon exit rule, the per-dungeon climbable
+  exit table, Doom's entry gate and one-way descent, the closed
+  plane-transition inventory, Ararat's underworld-only status, the eight
+  shipped Moonstone positions, the four lighthouse positions, and the Shrine of
+  the Codex approach are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+- Source provenance: the single shrine coordinate table, the Spirituality
+  sentinel rule, the Shrine of the Codex coordinate, the Enter label set, and
+  the three shipped telescope placements are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - MAINOUT E-Enter helper analysis in `u5-decomp` - confirms that rows
   thirty-two through thirty-nine use the same row-plus-one scene rule for
   dungeons, load the matching `DUNGEON.DAT` record, and seed the dungeon entry
