@@ -151,6 +151,41 @@ the visible page; later presentation effects copy or dissolve from
 driver-managed page memory into that visible page rather than flipping ordinary
 world/text frames between hardware pages.
 
+### Shared game-screen frame
+
+The chrome that surrounds gameplay — the border around the world viewport, the
+party stats panel on the right, and the command/prompt area along the bottom —
+is a single mode-independent paint. Overworld, town, dungeon, and combat all
+present the same frame; it is not combat chrome, and a cleanroom engine should
+not attach it to combat entry or to any other single mode. Earlier analysis
+drafts labelled it as combat screen setup, which was a mistaken inference from
+neighbouring combat code rather than from what the routine does.
+
+The paint is deterministic and reads no gameplay state: not save data, not the
+scene state, not combat state, not party contents. Its only inputs are the
+border colour indices selected for the active display family. Because of that
+it can legitimately run before any world state exists — the intro's Journey
+Onward path draws the frame before it reads the save file, so the player sees
+the gameplay layout appear while the load proceeds (see `intro.md` and
+`save-load.md`).
+
+On the 320-by-200 baseline the frame divides the screen into three zones:
+
+| Zone | Extent | Contents |
+|---|---|---|
+| World viewport | Left band, roughly 184 pixels wide, inset from the top and left screen edges | Tile view for the active mode. |
+| Stats panel | Right band, the remaining width of roughly 134 pixels | Party rows and the bottom information block described in `stats-panel.md`, split into an upper, a middle, and a lower zone by two horizontal dividers. |
+| Command/prompt area | Band along the bottom beneath the viewport | Text output and command echo. |
+
+The frame itself is built from filled rectangles: a full-screen ground fill, a
+top bar, left and bottom viewport borders, the vertical divider between the
+viewport and the stats panel, the stats panel's outer right edge, and the two
+horizontal dividers inside that panel. Three box-drawing glyphs are then
+stamped through the ordinary text path at the top-left, top-right, and
+bottom-left text-grid corners, and line-draw helpers close the outlines of the
+viewport, the stats panel, and the prompt area. There are no conditional
+branches in the paint, so the frame looks identical on every entry.
+
 ## 8. Intro and Cutscene Effects
 
 Intro and cutscene code uses the same display layer for title art, Lord British
@@ -303,6 +338,13 @@ in scope.
   are specified in `formats/location-dat.md`. The remaining display gap is the
   exact resident helper implementation for special actor draws, local
   cell-effect rastering, and the short fixed wait.
+- **Which entry paths repaint the game-screen frame.** The frame's content and
+  its independence from gameplay state are settled, and the intro's Journey
+  Onward path is a confirmed painter. Whether each mode-loop entry repaints it
+  on every transition, or whether it persists once painted, has not been traced
+  exhaustively. Because the paint is deterministic, repainting more often than
+  the original is visually indistinguishable except for the cost of the redraw.
+
 - **Alternate hardware parity.** CGA, Hercules, and Tandy conversion details
   are outside the v1 baseline unless a later implementation targets those modes
   explicitly.
@@ -315,6 +357,12 @@ addresses.
 
 - Driver selection and load sequence:
   `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
+- Shared game-screen frame — zone layout, deterministic paint, absence of any
+  gameplay-state dependency, and the correction that the frame is common to all
+  gameplay modes rather than combat-specific:
+  `u5-decomp/functions/ULTIMA_EXE/0x637E_combat_screen_layout.md` (the note file
+  keeps its original filename; its contents were corrected on 2026-05-24) and
+  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - EGA dispatch ABI, slot inventory, rectangle fill, driver-compressed bitmap
   decode, 16-by-16 tile blit, and 8-by-8 glyph blit:
   `u5-decomp/formats/ega-driver.md` and the `u5-decomp/functions/EGA_DRV/`
