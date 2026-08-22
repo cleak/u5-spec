@@ -55,6 +55,39 @@ wording usually survives in two or three sibling docs that were never opened.
 Grep the whole spec for the retracted phrasing before treating a correction as
 propagated.
 
+## Shipped-Text Policy — Open Question For The Repository Owner
+
+A semantic cleanroom audit on 2026-08-22 read all eighty-four documents against
+the boundary rules and found the spec substantially clean: one clear violation
+(since rewritten), no decompiled code, no assembly, no private address tables,
+and no reproduction of the game's writing in the great majority of docs. Several
+docs state an explicit policy of *not* transcribing authored content and
+summarise it instead.
+
+What the audit did surface is a question the repository owner should settle
+rather than an agent: **how much shipped text this spec should reproduce.**
+The great bulk of what is published is short interface text — command echoes,
+prompts, refusals, menu labels, place and item names — which a faithful
+reimplementation cannot omit and which totals roughly 1,000–1,200 words across
+the whole spec. Four items sit outside that justification:
+
+| Item | Doc | Approx. size | Character |
+|---|---|---|---|
+| The Avatarhood certificate (body, ceremonial closing title, closing report) | `systems/endgame.md` §9.2–9.4 | ~60 words | Authored ceremonial prose — the clearest case of the game's *writing* rather than its interface |
+| The two step-6 inline doorway narration lines | `systems/intro.md` §10.1 | ~17 words | Authored narrative sentences from the story sequence |
+| The eight Words of Power and their dungeon mapping | `systems/commands.md` §11.1 | 8 words | Puzzle solutions the player is meant to discover; also parser input the seal predicate cannot be specified without |
+| The 128-slot common-word token vocabulary | `catalogs/common-word-dictionary.md` | 118 words | A decode table — a `.TLK`/`SHOPPE.DAT` renderer cannot produce correct output without it |
+
+None of these is large, and each has a defensible functional argument. But the
+certificate and the doorway lines are the game's authored prose rather than its
+interface, and both repositories are currently private, so nothing is exposed
+today. If this specification is ever published, that decision should be taken
+deliberately: the options are to keep them, to replace them with structural
+descriptions plus placeholder text, or to describe their layout and let the
+implementer read the strings from the user's own copy of the game data at
+runtime — which is the approach several other specs here already take for
+`SHOPPE.DAT` barks and `KARMA.DAT` verdict paragraphs.
+
 ## Known V1 Deferrals
 
 These items are intentionally not treated as blockers for the v1 visible-MVP
