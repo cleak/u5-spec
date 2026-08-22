@@ -1159,9 +1159,17 @@ rows** of the cell, in four two-row colour bands:
 | C | `x + 1..x + 6` at `y + 4` and `y + 5` |
 | D | `x + 1..x + 6` at `y + 6` and `y + 7` |
 
+Each band carries its own pen, taken from the boot-time user-interface colour
+table of `display-driver.md` Section 2 rather than from a literal: band A uses
+slot 4, band B slot 0, band C slot 2 and band D slot 3, each biased into the
+bright half of the palette by adding eight. An implementation should resolve
+these through the same colour table the rest of the interface uses, so the
+low-colour drivers inherit their own values.
+
 The energy-field drawing **reads no sub-type**, so all four field flavours look
-identical on the map. That is a genuine behaviour of the original, not an
-omission in this spec.
+identical on the map — the four bands are a fixed decorative pattern, not one
+band per flavour. That is a genuine behaviour of the original, not an omission
+in this spec.
 
 ### 12.6 Frame contract
 
