@@ -28,7 +28,9 @@ Confirmed durable families include:
 | Special item flags and counters | `formats/saved-gam.md` and `systems/inventory.md` | Carried story items, equipment-like use items, shard flags, and the Sandalwood Box flag. |
 | Shrine/Codex masks | `formats/saved-gam.md` and `systems/karma.md` | One bit per virtue for ordained and Codex-read progress. |
 | NPC interaction facts | `systems/conversation.md`, `systems/town-mode.md`, and save-backed state | Persistent named-NPC facts are semantic state written by their owning systems, such as town-side killed/cleared NPC state. Do not model the entire mixed save band before the active-object table as a dense NPC flag array. |
-| Shadowlord state | `catalogs/quest-graph.md` and related systems | Current hideout or vanquished state for each Shadowlord. |
+| Shadowlord state | `catalogs/quest-graph.md` and related systems | Current hideout town or vanquished state for each Shadowlord, plus the active-Shadowlord handshake. |
+| Word-of-Power seal flags | `systems/commands.md` and `formats/saved-gam.md` | One durable flag per dungeon recording whether its Word of Power has been spoken. Region loading re-derives the sealed entrance tile from these flags, so they are world state, not presentation scratch. |
+| Shrine ruin flags | `systems/karma.md` and `formats/saved-gam.md` | One durable flag per shrine recording whether that shrine currently stands ruined; region loading re-derives the ruined tile from it. |
 
 These fields are ordinary game state, not conversation scratch. If a branch
 grants an item, marks a shrine path complete, vanquishes a Shadowlord, or sets
@@ -45,25 +47,43 @@ The public contract is:
 
 1. The active scene id selects the slot. This is per scene, not merely per
    `.TLK` file class.
-2. A flag setter builds a one-bit 32-bit mask from the script-provided bit
-   index and ORs it into the active scene's slot.
-3. A flag tester builds the same mask and returns true when any matching bit is
-   already set in the active scene's slot.
-4. The `0x8C` IF/ELSE control code uses this tester for its one-byte flag
-   argument. In the existing conversation spec, a set bit selects the branch
-   described as the alternate/else arm; a clear bit falls through to the
-   normal/then arm.
+2. **The bit index is the roster slot of the NPC currently being spoken to**, in
+   the range zero through thirty-one. It is supplied by the engine from the
+   Talk target, never chosen by the dialogue script. One scene word therefore
+   holds one bit per NPC slot in that scene.
+3. The setter builds a one-bit thirty-two-bit mask from that index and ORs it
+   into the active scene's slot. The tester builds the same mask and returns
+   true when the bit is already set.
+4. **The setter is reachable from the byte runner.** The ASK-WHO control code
+   (`0x88`) calls it after the player types a line that names a live party
+   member. That is the only in-stream writer, and it is the only writer traced
+   anywhere.
+5. The IF-ELSE control code (`0x8C`) calls the tester. Its argument byte is the
+   **branch target label**, not a flag identifier: when the bit is clear the
+   runner falls through in-stream, and when it is set the runner transfers to
+   the labelled record named by the argument (or, for the reserved argument
+   value `0xFF`, ends the response and returns to the keyword prompt).
 
-The mask builder is a plain 32-bit left shift of a one-bit value. It does not
-wrap or clamp the bit index. Indices `0..31` address the expected bit
-positions; indices `32` and above produce a zero mask. A setter with such an
-out-of-range index therefore changes nothing, and a tester with such an index
-always reports "not set" for the active scene.
+Because the index is engine-supplied and bounded by the thirty-two-slot NPC
+roster, it is always in range. The mask builder is a plain thirty-two-bit left
+shift with no wrap or clamp, so an out-of-range index would produce a zero mask —
+a setter that changes nothing and a tester that always reads clear — but no
+content, shipped or custom, can reach that case through the `.TLK` byte stream.
+Implementations should still floor the behaviour defensively rather than
+indexing out of bounds.
 
-These flags are conversation branch memory. They let an NPC avoid repeating a
-line, remember that a local answer was given, or gate an immediate follow-up
-inside the active scene's conversation set. Do not model them as global quest
-completion flags unless a separate durable writer is also traced.
+Two earlier public statements about this bank are withdrawn: that the bit index
+comes from the script, and that the bank has no setter opcode and is written only
+by out-of-band quest-progression side effects. Both are wrong.
+
+These flags are conversation branch memory with a specific shipped meaning:
+"this NPC has been told who the party is". The idiom is an IF-ELSE with the
+reserved `0xFF` argument placed immediately before an ASK-WHO in an NPC's Name or
+Greeting entry, so the introduction happens once and is skipped thereafter. They
+let an NPC avoid repeating a line, remember that a local answer was given, or
+gate an immediate follow-up inside the active scene's conversation set. Do not
+model them as global quest completion flags unless a separate durable writer is
+also traced.
 
 ## 4. Generic Conversation Action Flags
 
@@ -147,7 +167,10 @@ The `.TLK` format records control bytes and their argument widths. It does not
 own the flag stores. Runtime handling belongs here and in
 `systems/conversation.md`:
 
-- `0x8C` tests the active scene's per-scene 32-bit branch slot.
+- `0x8C` tests the active scene's per-scene 32-bit branch slot at the speaking
+  NPC's roster-slot bit, and uses its argument byte as the branch target label.
+- `0x88` (ASK-WHO) sets that same bit, for that same NPC, on a successful name
+  match. It is the bank's only setter.
 - `0xFE` is a separate karma-threshold branch; it compares the shared
   moral-standing selector to a threshold and jumps to a label when the
   comparison succeeds. `systems/karma.md` owns that selector.
@@ -163,9 +186,13 @@ branch argument as a save-backed quest bit.
   NPC interaction facts.
 - Preserve the distinction between transient one-conversation signal arrays and
   durable item, shrine, NPC, and Shadowlord state.
-- Model the per-scene TALK flag bank as 32-bit slots. Bit indices outside the
-  clean `0..31` range build a zero mask: setters become no-ops and tests read
-  as clear.
+- Model the per-scene TALK flag bank as 32-bit slots indexed by NPC roster slot.
+  The index is engine-supplied and cannot exceed thirty-one through normal
+  content; if an implementation can produce an out-of-range index anyway, make
+  it build a zero mask so setters become no-ops and tests read as clear.
+- Keep ASK-WHO wired to the setter. Removing it leaves a bank that is tested but
+  never set, which silently breaks every "have we met" branch in the shipped
+  dialogue.
 - Run the end-of-conversation cleanup even when the player exits with an empty
   input/BYE path, because side effects may have occurred before exit.
 - Preserve the cleanup pass's shared-sentinel early return. Do not force
@@ -187,6 +214,10 @@ does not reproduce private source, decompiler output, assembly excerpts, raw
 dumps, private address tables, or implementation listings.
 
 - Per-scene branch flag setter: `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`.
+- The in-stream setter's call site, the engine-supplied bit index, and the
+  corrected IF-ELSE argument role:
+  `u5-decomp/notes/talk_group_retrace_2026-08-22.md` and
+  `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`.
 - Per-scene branch flag tester: `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.
 - Branch-mask shift helper identity:
   `u5-decomp/functions/ULTIMA_EXE/_LIBRARY_FIDB.md`.

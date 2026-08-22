@@ -113,7 +113,9 @@ The thirty-four-entry table involved in keyword input is not a `.TLK` blob point
 
 Every printable text byte has bit 7 (`0x80`) set on disk. The byte runner strips bit 7 before emitting; equivalently, a reader recovers low-ASCII by XOR-ing each text byte with `0x80`. A literal space (`0x20`) is stored as `0xA0`; a literal `'A'` (`0x41`) as `0xC1`.
 
-This is a one-bit flag, not encryption. Its consequence is that the high bit serves as a *type tag*: bit 7 set means text byte (in the range `0xA0..0xFD`), bit 7 clear means a dictionary-token candidate or NUL terminator, and the engine-control range `0x80..0x9F` plus `0xFE` and `0xFF` carry the dispatch codes. The format has no escape sequences — every byte is classified by value range alone.
+This is a one-bit flag, not encryption. Its consequence is that the high bit is *almost* a type tag: text bytes have bit 7 set (range `0xA0..0xFD`), the engine-control range `0x81..0x9F` plus `0xFE` and `0xFF` carry the dispatch codes, and everything below `0x81` is either the NUL terminator or a dictionary token. The format has no escape sequences — every byte is classified by value range alone.
+
+The one place the high bit is a misleading tag is the top of the dictionary range. The runner's classifier is the single test "below `0x81`", so `0x80` — a byte with bit 7 set — is a dictionary token (index one hundred twenty-eight), not text and not a control code. Section 10 covers the range in full.
 
 The cost is that the printable-text range is `0xA0..0xFD` on disk (`0x20..0x7D` after strip — ASCII space through right-curly-brace). Lower-case letters are reachable. The tilde character (`0x7E`/`0xFE`) is *not* reachable as ordinary text because its on-disk encoding collides with the multi-byte introducer.
 
@@ -121,29 +123,29 @@ NUL (`0x00`) terminates each entry. The runner treats `0x00` as end-of-entry and
 
 ## 9. Control bytes
 
-Bytes with bit 7 clear (excluding NUL) enter the dictionary-token path; the
-engine normalizes them into the shared 128-entry common-word dictionary and
-expands them inline. Bytes with bit 7 set in the range
-`0x80..0xFF` are either engine control codes or printable text (after bit-7
-strip). The full dispatch table:
+Bytes in the range `0x01..0x80` enter the dictionary-token path; the byte is
+the index into the shared one-hundred-twenty-eight-entry common-word dictionary
+published in `catalogs/common-word-dictionary.md`, and the word is expanded
+inline. Bytes in the range `0x81..0xFF` are either engine control codes or
+printable text (after bit-7 strip). The full dispatch table:
 
 | Code   | Mnemonic            | Effect (concise)                                                                                                         |
 |--------|---------------------|--------------------------------------------------------------------------------------------------------------------------|
-| `0x80` | (NUL on disk)       | The high-bit-clear NUL is the entry terminator; `0x80` itself is unused.                                                 |
+| `0x80` | DICTIONARY-TOKEN    | Not a control code. `0x80` is the highest common-word dictionary token (index one hundred twenty-eight). The entry terminator is the NUL byte `0x00`. |
 | `0x81` | PRINT-AVATAR-NAME   | Emit the player's saved name (the name chosen during character creation) into the output stream.                         |
 | `0x82` | END-STREAM          | Stop the current stream and signal the caller "this stream is finished". Used to terminate the fixed leading entries.   |
 | `0x83` | PAUSE               | Redraw the world view and wait for any key. After the key, refresh the party panel for every member.                    |
 | `0x84` | ASK-PARTY-NAME      | Prompt the player to type a party member's name. Used by the JOIN sequence and similar "name a companion" prompts.       |
 | `0x85` | GOLD-PAYMENT        | Multi-byte introducer (three argument bytes follow): collect a gold amount and run the gold-payment routine.             |
 | `0x86` | ACTION-DISPATCH     | Multi-byte introducer (one argument byte follows): collect a letter `A..K` for the global action table, or a small generic flag index. |
-| `0x87` | SET-FLAG            | Save stream pointer, walk the keyword scan against the next stream segment, run any matched response, restore on miss.   |
-| `0x88` | ASK-WHO             | Variant of ASK-PARTY-NAME used for "who is the X?" replies that produce a name.                                          |
-| `0x89` | (unused)            | Falls through to the printable-text path; effectively a no-op.                                                           |
-| `0x8A` | PANEL-NEWLINE       | Mark a newline boundary that also flushes the party-panel state.                                                          |
+| `0x87` | KEYWORD-ALIAS       | No argument byte. Save the stream position, skip forward past the rest of the current record and past the whole record that follows it, run the record after that as a nested stream, then restore the saved position and continue — unless the nested stream signalled stop, which propagates. Used as a whole response body to make one keyword an alias for the next keyword's response. The historical mnemonic "SET-FLAG" is wrong; `0x87` writes no flag and performs no keyword matching. |
+| `0x88` | ASK-WHO             | No argument byte. Ask the player to name someone and read a typed line. On a match against a live party member, set the active scene's branch-flag bit for the NPC currently speaking — this is the in-stream setter that `0x8C` tests — and print the affirmative acknowledgement; otherwise print the dismissive one. |
+| `0x89` | STANDING-UP         | Raise the shared moral-standing selector by one, clamped at ninety-nine. Emits no text. |
+| `0x8A` | STANDING-DOWN       | Lower the shared moral-standing selector by one, floored at zero. Emits no text. Earlier drafts described this code as a newline/panel-flush; that was a misreading of the printable path, which rewrites `0x8D` to the value `0x8A` *after* control-code dispatch is already past. |
 | `0x8B` | CURSE-CHECK         | Run the resident curse-check routine. Used in dialog with cursed-item NPCs.                                              |
-| `0x8C` | IF-ELSE             | Multi-byte introducer (one argument byte follows): test the active scene's TALK branch flag and branch.                  |
+| `0x8C` | IF-ELSE             | Multi-byte introducer (one argument byte follows). The argument is the branch **target label**. Test the active scene's branch-flag bit for the NPC currently speaking; if clear, fall through in-stream; if set, transfer to that label (or, for the argument `0xFF`, end the response and return to the keyword prompt). |
 | `0x8D` | LITERAL-NEWLINE     | Force-emit a literal newline through the text-output system.                                                              |
-| `0x8E` | PROTECT-RUN         | Toggle the print mask's high bit. Used in matched pairs around short literal runs whose internal spaces should not force ordinary word-buffer breaks. |
+| `0x8E` | ALTERNATE-FONT      | Toggle the print mask's high bit. While flipped, printable bytes are queued without their high bit, which selects the alternate (runic) font at flush time and also stops the run's internal spaces and newlines from forcing word-buffer breaks. Used in matched pairs around mantras and Words of Power. |
 | `0x8F` | WAIT-KEY            | Block for one keystroke. Unlike PAUSE, no redraw work is done.                                                            |
 | `0x90` | LABEL-RECORD        | Labelled-block record separator used by the label-search and scoped-prompt machinery. It is data structure, not ordinary printable text. |
 | `0x91`-`0x9F` | LABEL / scoped prompt | Up to fifteen label bytes per blob. Encountered in a response stream, they enter the label handler; inside labelled blocks, repeated label bytes mark records and sub-records. Empty input inside the scoped prompt is local to that prompt, and top-level reserved words are suppressed there before label-scoped keyword matching. |
@@ -154,11 +156,20 @@ Multi-byte introducers (`0x85`, `0x86`, `0x8C`, `0xFE`) consume one or more byte
 
 The full runtime semantics of each code — how PAUSE redraws, how IF-ELSE walks its arms, how ASK-PARTY-NAME interacts with party state — belong in `systems/conversation.md`. This format spec restricts itself to the on-disk arrangement and the byte-by-byte type tags.
 
+A label is *declared* by the two-byte record marker `0x90 <label>`. A transfer
+to label `L` rewinds to the start of the blob and scans forward for the byte
+`0x90`, checks whether the byte after it equals `L`, and resumes the stream
+immediately past `L` on a match; otherwise it keeps scanning. This is a
+byte-for-byte scan with no case folding and no id normalisation, and it is the
+same mechanism used by the `0x91`..`0x9F` GOTO codes and by an `0x8C` branch
+that is taken.
+
 Label bytes are not unique declarations. Shipped blobs often contain repeated
 instances of the same value because a response can transfer into a labelled
 block and the block itself uses the same byte value to mark its records. A
 decoder should preserve order and byte values rather than folding labels into a
-dictionary keyed only by label id.
+dictionary keyed only by label id. In shipped content the value `0x9F` is
+conventionally the blob's final record marker.
 
 ### 9.1 Multi-byte introducer argument counts
 
@@ -166,7 +177,7 @@ dictionary keyed only by label id.
 |------------|----------------|-------------------------------------------------------------------------------------------------|
 | `0x85`     | 3              | Three ASCII digit bytes encoding a decimal gold amount for the gold-payment prompt.              |
 | `0x86`     | 1              | Letter `A..K` selecting a global fixed-slot action, or a small numeric generic flag index.       |
-| `0x8C`     | 1              | TALK branch-flag bit index; tested against the active scene's branch flag slot. Values `32` and above build a zero mask rather than wrapping. |
+| `0x8C`     | 1              | Branch **target label** taken when the tested flag is set, or `0xFF` meaning "end the response and return to the keyword prompt". It is *not* a flag identifier: the bit tested is chosen by the engine (the speaking NPC's roster slot), never by the script. |
 | `0xFE`     | 2              | Moral-standing threshold byte and target-label byte for a karma-conditional branch.             |
 
 
@@ -202,33 +213,59 @@ to avoid doubled quotes in the rendered text.
 
 ## 10. The common-word dictionary substitution
 
-Nonzero high-bit-clear bytes on the dictionary path are *common-word dictionary
-tokens*. Each such byte is normalized into a dictionary lookup: the engine
-indexes the shared 128-entry near-pointer table with the same logical entry
-order used by the shop renderer and emits the NUL-terminated word at the
-pointed-to address inline as if it had been written out as ordinary text. For
-example, the first dialogue dictionary token resolves to the same logical entry
-as shop token `0x80`.
+A stream byte in the range `0x01`..`0x80` is a *common-word dictionary token*.
+The byte is the index itself into the shared one-hundred-twenty-eight-entry
+dictionary, whose full contents are published as
+`catalogs/common-word-dictionary.md`. The referenced word is emitted inline as
+if it had been written out as ordinary text.
 
-The pointer table sits in the engine's resident data region (technically in
-`DATA.OVL`, the resident data slab). The vocabulary it targets -- the actual word
-strings -- is concatenated nearby as a run of NUL-terminated strings. The
-vocabulary contains common English articles, pronouns, and connectives such as
-`the`, `thou`, `of`, `and`, `you`, plus Britannian proper nouns such as
-`Blackthorn`, `Britannia`, `Lord British`, and the major-city names. Proper
-nouns in the table let many NPCs share canonical references without restating
-the full string in each blob.
+Note the top of the range. The runner classifies with a single comparison: a
+byte below `0x81` takes the dictionary path, everything from `0x81` upward takes
+the control-code or printable path. Token `0x80` therefore has bit seven **set**
+and is still a dictionary token - it is index one hundred twenty-eight. The
+older framing "bit seven clear means dictionary token" is off by one at that
+boundary, and shipped blobs do use token `0x80`.
 
-Some dictionary entries are intentionally empty and act as word-boundary
-sentinels. When the byte runner encounters an empty entry, it does not abort;
-instead, it sets a "leading space needed" flag that is consumed by the next
-emitted character. This is the format's way of indicating a soft word boundary
-without consuming a byte for an explicit space. The flag is reset after the next
-character is emitted.
+The pointer run and its packed string pool live in the resident data image
+described in `formats/data-ovl.md`, not in the `.TLK` files, so a renderer needs
+the dictionary as a sibling input. The same physical table serves the shop bark
+renderer under a different byte bias; see `catalogs/common-word-dictionary.md`
+section 2 and `formats/shoppe-dat.md` section 5.
 
-The dictionary substitution happens *during* text emission, character by character. There is no pre-pass that expands a blob into a flat string; each dictionary index is expanded on the fly through the same word-buffer queue that handles ordinary text bytes, so dictionary expansions interact correctly with word-wrap, the active text window, and the leading-space flag.
+### 10.1 Emission order and spacing
 
-The exact word at each dictionary index belongs in a separate data spec (the resident `DATA.OVL` content); this format spec records only the substitution mechanism. Implementations that want to render `.TLK` blobs to plain text need access to the dictionary as a sibling input.
+Expansion happens *during* text emission, one character at a time through the
+same word-buffer queue that handles ordinary text bytes, so expansions interact
+correctly with word-wrap and the active text window. There is no pre-pass that
+flattens a blob into a string.
+
+The order for one dictionary token is fixed:
+
+1. Emit a single space. This happens for **every** dictionary token, whether or
+   not the entry is populated.
+2. Emit the entry's characters, if any.
+3. If the entry was populated, arm a *pending space* flag.
+
+The pending-space flag is consumed - and cleared - by the next **printable text
+byte**, which emits one space ahead of itself. It is not consumed by a following
+dictionary token, because the token path neither reads nor clears the flag; a
+run of adjacent tokens therefore produces exactly one space between words and
+leaves the flag armed for whatever printable byte comes next.
+
+Two consequences worth stating because earlier drafts of this spec had them
+backwards:
+
+- Empty entries are **not** word-boundary sentinels, and they do **not** set the
+  pending-space flag. An empty entry emits the leading space and then the raw
+  token byte as a literal character. See
+  `catalogs/common-word-dictionary.md` section 3; no shipped content reaches
+  this path.
+- The pending-space flag is armed by a **successful** expansion, not by an empty
+  one.
+
+Punctuation is not special-cased. A token that should be followed immediately by
+a comma is handled in the content, not the renderer: the vocabulary contains
+punctuation-bearing entries such as `thee,` for exactly that purpose.
 
 ## 11. Engine-reserved keywords
 
@@ -267,6 +304,7 @@ A reader can sanity-check a `.TLK` decoder by:
 ## 13. Cross-references
 
 - The conversation engine that consumes this format — the byte runner's full semantics, the keyword input loop, the multi-byte command machinery, the GOTO-label semantics, and the per-conversation state — `systems/conversation.md`.
+- The published contents of the shared common-word dictionary, its two token biases, its empty slots, and its validation invariants — `catalogs/common-word-dictionary.md`.
 - The per-class NPC roster file format providing the `dialog_index` field for each live NPC — `formats/npc.md` (a separate format spec).
 - The per-class location data file format whose tile grids host the live NPCs — `formats/location-dat.md`.
 - The text-output pipeline that ultimately renders the emitted bytes — `systems/text-output.md`.
@@ -304,4 +342,5 @@ The format described above was derived from the analysis notes listed below. Non
 - The keyword input loop, reserved-keyword table, ordinary keyword scan, and profanity/default branch -- `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`, `u5-decomp/functions/TALK_OVL/0x09D8_tlk_find_keyword_match.md`, `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, and the summary correction in `u5-decomp/CORRECTIONS.md`.
 - The case-insensitive bit-7-stripping string-equality routine used by the keyword match and the JOIN-name compare — `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
 - The resident common-word dictionary and shop-side use of the same logical token order — `u5-decomp/formats/data-ovl.md`.
+- The 2026-08-22 retrace that corrected the `0x87`, `0x88`, `0x89`, `0x8A`, and `0x8E` control-code rows, the `0x8C` argument role, the dictionary token range, and the dictionary emission/spacing order — `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, with the supporting per-function notes `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`, `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.
 - The conversation-system spec covering the runtime semantics this format spec only references — `u5-spec/systems/conversation.md`.

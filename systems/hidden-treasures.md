@@ -19,13 +19,23 @@ transfer where the pickup class is Get-compatible.
 Most records are ordinary one-shot finds. The save-backed found bitmap prevents
 the same record from being staged again after a successful Search.
 
-Three records have special gates:
+Three records have special gates. None of the three sets a found-bitmap bit, and
+none of the three has a persistence field of its own. Each reads a byte that a
+different system already owns, so an implementation must alias the existing
+field rather than allocate a private cookie:
 
-| Record | Rule |
-|---:|---|
-| 13 | Requires the party to own no keys and the searched tile not to be occupied by an NPC. |
-| 14 | Can stage once per in-game day; success stores the current day as the cooldown cookie. |
-| 15 | Requires its single-use cookie to be clear and the searched tile not to be occupied by an NPC; the scan does not set that cookie on grant. |
+| Record | Gate field | Rule |
+|---:|---|---|
+| 13 | The party's Keys counter | Stages only when the party owns **no** keys and the searched tile is not occupied by an NPC. Acquiring any key closes the record; spending every key opens it again. The scan does not modify the keys counter. |
+| 14 | An otherwise-unused byte in the special/quest-item band | Stages only when the current day-of-month differs from the byte's value; success writes the current day into it. So the record can stage at most once per in-game day, indefinitely. Nothing resets the byte at day rollover; it simply stops matching. Factory value is zero, which matches no calendar day, so the record is available on the first search. |
+| 15 | The equipment-inventory counter for the item it grants | Stages only when that counter is zero and the searched tile is not occupied by an NPC. The skip condition is therefore "counter non-zero **or** an NPC is present". The scan never writes the counter; the ordinary inventory grant for the item does, and that is exactly what makes the record single-use. |
+
+Record 15's granted item is the Glass Sword (equipment item id `39` in
+`catalogs/item-list.md`), and its gate is that same item's carried counter. An
+engine that models the gate as a separate flag the scan never sets will hand out
+an unlimited supply of Glass Swords. Likewise, a party that discards or loses
+its Glass Sword makes the record available again — that is original behaviour,
+not a defect. `formats/saved-gam.md` Sections 7 and 10 carry the field offsets.
 
 `Z/floor` is the active floor/depth byte. For overworld entries, `0` is
 Britannia and `255` is the Underworld plane. For town-style interiors it is the

@@ -70,7 +70,7 @@ change the clock increment and it is not a player movement-speed table.
 |---------|------------------------|--------------------|----------------|
 | Foot | Default state. | No vehicle object; normal terrain restrictions. | None at this level. |
 | Horse | Boardable. X-Xit can leave a horse object behind. | Overland transport; requires the party to be on foot before boarding. Directional movement uses the ordinary one-cell overland step with mounted-horse passability. | None at this level. |
-| Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with full hull and two skiffs; boarding warns when hull is below ten or no skiffs are aboard. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
+| Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; boarding warns when hull is below ten or no skiffs are aboard. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
 | Skiff | Boardable. | Water transport; time cleanup halves non-zero turn increments with a one-minute floor. The shared movement spec names the facing-sensitive skiff predicate family. | None at this level. |
 | Magic carpet | Boardable as a carpet. | Boarding changes the party transport state to the carpet transport marker. The B-Board trace does not prove the `T` timing tag is carpet; outdoor Klimb is a separate Grapple-gated command, not a carpet ownership test. The shared movement spec names the carpet predicate family. | None at this level. |
 | Balloon | Vehicle tile family only in the analyzed baseline. | Balloon art and manual-facing references can be preserved as assets, but no traced B-Board, X-Xit, U-Use, shipwright, or ordinary movement branch promotes a live balloon transport state. | No command-level balloon mechanics are specified for v1; do not infer a boardable vehicle from art alone. |
@@ -140,17 +140,23 @@ Talk-entered shop helper that pays for and places a boardable horse object; afte
 that, B-Board treats the horse like any other boardable object. Ship-broker
 purchase is also Talk-entered: payment queues an overworld acquisition, and the
 next overworld entry places either a Frigate as a ship-family object or a
-standalone skiff-family object at the stored sale coordinates. A purchased
+standalone skiff-family object at the selling shipwright's fixed delivery cell
+(`systems/shops.md` Section 8.7). A purchased
 Magic Carpet can also be activated through U-Use: outside dungeon/combat scenes,
 when the party is on foot and the current tile accepts it, the item-use handler
 changes the party transport marker to a carpet state and decrements the carried
 carpet counter. That U-Use path is inventory-owned; B-Board remains the command
 for boarding a carpet object already present on the map.
 
-Frigate starts with hull condition `100` and two skiffs aboard; buying a Skiff
-while that Frigate is still queued increments its carried-skiff count and does
-not place a second object. Buying a second standalone Skiff before delivery is
-refused by the shipwright flow. Ordinary B-Board then owns boarding the placed
+The delivered Frigate starts with hull condition `99` in byte `+5` and two
+skiffs aboard in byte `+7`; buying a Skiff while that Frigate is still queued
+increments its carried-skiff count to `3` and does not place a second object.
+Buying a second standalone Skiff before delivery is refused by the shipwright
+flow. A delivered standalone Skiff is placed with a carried-skiff byte of `0`.
+Both are placed on the overworld plane, facing the same family index, at the
+selling shipwright's fixed delivery cell — the per-shipwright coordinate table
+in `systems/shops.md` Section 8.7, which is a sidecar table and not the town's
+exterior entrance or exit cell. Ordinary B-Board then owns boarding the placed
 object.
 
 ## 5. X-Xit

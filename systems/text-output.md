@@ -153,34 +153,155 @@ The text system's contract with the driver is "render this prepared cell at this
 The intro slides, chargen gypsy paragraphs, and chargen question prompts use a
 separate proportional-font paragraph renderer from the FONT overlay. It is not
 the same path as the fixed 40-by-25 text-window printer above. Its coordinates
-are pixel-oriented, its glyph advances come from the proportional font's width
-table, and it is called with a loaded NUL-terminated text buffer plus the active
-proportional-font resource segment.
+are pixel-oriented, its glyph advances come from the resident advance table
+published in `formats/font-pcs.md` section 4, and it is called with a loaded
+NUL-terminated text buffer plus the active proportional-font resource segment.
 
-The proportional renderer owns layout and glyph emission only. The caller owns
-which text record is loaded, where the paragraph rectangle begins, and whether
-the player must press a key before the next record is drawn.
+The renderer owns layout and glyph emission. The caller owns which text record
+is loaded, where the paragraph starts, and whether the player must press a key
+before the next record is drawn.
 
-Its public contract:
+### 8.1 Layout descriptor
 
-- Text is consumed byte-by-byte until NUL.
-- Ordinary visible bytes draw one proportional glyph at the current pixel
-  cursor and advance by that glyph's width.
-- Space is a legal word-break candidate. The renderer looks ahead far enough to
-  decide whether the next word fits before the right edge; if not, it breaks at
-  the space rather than drawing it past the edge.
-- Line-feed is a hard newline.
-- Underscore is a soft hyphen / syllable marker. It produces no glyph but gives
-  the layout another place where a word may be split cleanly.
-- Left brace is a paragraph-start/page marker. It produces no glyph and does
-  not itself wait for input; the caller's record loop supplies any pause.
-- The renderer updates its pixel cursor as it goes so a caller can chain
-  another paragraph into the next position.
+The renderer reads and updates a small resident descriptor. It holds, in pixel
+units:
+
+| Field | Meaning |
+|---|---|
+| Left margin A, right margin A | Horizontal bounds used outside the special band. |
+| Left margin B, right margin B | Horizontal bounds used inside the special band. |
+| Band low, band high | The vertical range that selects the B margins. |
+| Space advance | Pixels a space contributes (shipped default 5). |
+| Pen X, pen Y | The running cursor. |
+
+Margin selection is evaluated once at entry and again after every line break:
+the B pair is used when `band_low < pen_y < band_high` — strictly inside, both
+ends excluded — and the A pair otherwise. `available = right - left` for the
+selected pair. Because the check runs per line, a paragraph can flow around a
+picture: the chargen gypsy-wagon paragraph uses full width above the artwork
+and an indented left margin below it.
+
+At entry the renderer treats `pen_x - left` as width already consumed on the
+current line, so a caller can chain a second paragraph onto a partly filled
+line without resetting the pen.
+
+The shipped resident defaults are margins `0..320` for both pairs, a band of
+`200..200` (which never matches, so the A pair always applies), a space advance
+of `5`, and a pen of `(0, 60)`. Callers overwrite what they need. The only
+caller that changes the space advance is character creation, which uses `4` for
+one paragraph and restores `5` immediately afterwards.
+
+### 8.2 Byte handling
+
+| Byte | Measured as | Drawn as |
+|---|---|---|
+| NUL | ends the buffer | nothing |
+| Line feed (`0x0A`) | ends the line | nothing |
+| Space (`0x20`) | the descriptor's space advance | horizontal advance only, plus justification padding |
+| Any other byte at or below `0x20` | same as space | same as space |
+| Left brace (`0x7B`) | a fixed **15** pixels | nothing; the pen still advances 15 |
+| Underscore (`0x5F`) | **zero** | nothing, and no advance |
+| Any byte above `0x20` not listed above | its advance-table entry **plus one** | one glyph, then the same advance |
+
+The plus-one is the inter-glyph gap. It applies to every drawn glyph including
+the last one on a line, and it is not part of the table values. A space never
+gets the plus-one.
+
+Neither the advance table nor the font gives the space a width of its own; both
+record zero. The space advance comes from the descriptor. An engine that
+measures spaces from the font will collapse every space to nothing.
+
+Left brace is a paragraph/page marker owned by the caller's record loop: the
+renderer does not wait for input on it, it just leaves a 15-pixel gap.
+Underscore is a soft hyphen: invisible and weightless, but a legal break point
+(section 8.3).
+
+Control bytes other than NUL and line feed do not appear in shipped text. The
+renderer would measure and advance them as spaces, so that is the safe
+behaviour to implement; do not look up an advance-table entry for a code below
+`0x21`.
+
+### 8.3 Measurement, wrapping, and the right edge
+
+Measurement runs from the current line start, accumulating an advance and
+counting spaces, and stops at the first of:
+
+- NUL or line feed, which ends the line cleanly;
+- `available <= accumulated`, which is an overflow.
+
+The right edge is therefore **exclusive**: a line is kept only while its total
+advance is strictly less than the available width.
+
+On overflow the renderer backtracks from the stop position, subtracting each
+glyph's advance as it goes and skipping brace and underscore without
+subtracting, until one of:
+
+- **a space** — break there. The space is not drawn: its advance is subtracted
+  and the space count drops by one.
+- **an underscore that fits** — break there, and add the hyphen glyph's advance
+  plus one to the line, because a visible hyphen will be drawn. "Fits" means
+  `hyphen_advance + accumulated + 1 < available`, using the advance-table entry
+  for `-` (which is `3` in the shipped font).
+- **the start of the line** — a degenerate single-token overflow. The line ends
+  where it is and the walk consumes one byte, so an over-long unbreakable token
+  is emitted one byte per line rather than looping forever.
+
+After the line is drawn, the renderer skips **exactly one** break byte: the
+space, line feed, or underscore it broke at. That is the leading-space rule: a
+single space after a wrap is dropped, and a run of two or more leaves the
+extras as leading spaces on the next line. Line feed is likewise consumed once,
+so a blank line requires two consecutive line feeds.
+
+### 8.4 Justification, not centering
+
+There is **no centering** in this renderer. Single-line intro overlays are not
+centered from a measured width; their pen X comes from the caller's per-slide
+layout values. An engine that centers proportional intro text will not match
+the original.
+
+What the renderer does instead is **full justification**. When a line is
+accepted, `slack = available - measured_advance` is computed once. During the
+render pass, at each space, after the ordinary space advance:
+
+```text
+extra = slack / spaces_remaining        (integer division, truncating)
+pen_x += extra
+slack -= extra
+spaces_remaining -= 1
+```
+
+Because the division truncates and the remainder is carried forward, the
+leftover pixels land on the **last** spaces of the line, not the first.
+
+Justification is skipped entirely when the byte the line broke at is NUL or
+line feed. So the last line of a paragraph, and any line ended by an explicit
+newline, are left ragged-right; every other line is flush on both margins.
+
+### 8.5 Line advance and clipping
+
+If the line broke at an underscore, the hyphen glyph is drawn at the pen before
+the line advances.
+
+The line advance is a fixed **9** pixels of pen Y, independent of the margins
+or the space advance. After advancing, the margin pair is re-selected, pen X is
+reset to the selected left margin, and the available width is recomputed.
+
+Glyph drawing is clipped at the bottom: once pen Y reaches **192**, glyphs stop
+being drawn but the pen still advances exactly as if they were, so layout does
+not change when text runs off the bottom.
 
 `QUESTION.DAT` and the intro story records both rely on the brace and
-underscore conventions. A compatible implementation should therefore treat
-those bytes as lightweight markup in this proportional-font path only; they are
-not global control bytes for the fixed-cell resident printer.
+underscore conventions. A compatible implementation should treat those bytes as
+lightweight markup in this proportional-font path only; they are not global
+control bytes for the fixed-cell resident printer.
+
+### 8.6 Centered single-line captions
+
+Some intro-family text is centered, but it does not go through this renderer at
+all — it goes through the fixed-cell printer. See `systems/intro.md` for the
+Return-to-View chapter captions and the title-screen credit line, which share
+one centered-caption helper: the caption is centered by character cell, not by
+measured pixel width.
 
 ## 9. Boot-Time Setup and Window Configuration
 
@@ -190,7 +311,38 @@ At program startup, the text system is initialised in three steps:
 
 2. **Window descriptor defaults.** All four window descriptors are reset to a known initial state: each window's rectangle is set to the full 40×25 screen (corners `(0, 0)` and `(39, 24)`), each cursor is set to `(0, 0)`, each colour is set to bright white on black (foreground 15, background 0), and each window's flags are cleared. The active window is set to window 0. After this step, any output call produces visible output.
 
-3. **Per-window configuration by gameplay code.** When the game's UI is assembled, gameplay routines call the rectangle setter to lay out each window — main text area, status panel, input prompt, and so on — and the cursor and colour setters as needed. From then on, the active window is switched whenever UI focus moves.
+3. **Per-window configuration by gameplay code.** A census of every call to the
+   rectangle setter in the analyzed build shows that gameplay code reshapes only
+   two of the four windows, and it does so transiently rather than as a one-time
+   UI layout pass:
+
+   - **Window 0** is reshaped by the resident inverse-text banner helper, which
+     narrows it to a single-row strip spanning columns 6 to 33 on rows 12–13 and
+     then restores it to the full screen, and by the dungeon view, which sets a
+     variable left/top with the full right/bottom and later restores full
+     screen.
+   - **Window 1** is the framed right-hand side panel. Every caller — the
+     character-sheet overlay, the command overlay, the inn guest register, and
+     the arms-shop sell browser — uses the same idiom: set the window to
+     `(24, 1)..(38, N)` and clear it, then widen the right edge to
+     `(24, 1)..(39, 9)` and draw the frame.
+   - **Windows 2 and 3 are never passed to the rectangle setter at all.** They
+     keep the boot-time defaults from step 2 for the whole session: full-screen
+     rectangle, bright white on black, cleared flags.
+
+   Window 2 is the one ordinary gameplay text goes to — conversation, shop
+   dialogue, command feedback. Because it is never reshaped or recoloured, its
+   only mutable state is its cursor, which advances with output and is moved
+   only by explicit cursor calls made while it is active. The colour setters are
+   called only by the dungeon inspection overlay and by the resident
+   framed-message-window helpers; the town, overworld, and conversation overlays
+   never call them.
+
+   From then on, the active window is switched whenever UI focus moves; a panel
+   selects window 1, draws, and selects window 2 again when it is done.
+
+   Source provenance: derived from private analysis note
+   `../u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`.
 
 The rectangle setter takes a window index (0–3) and four cell coordinates, and updates only the four rectangle bytes of the chosen descriptor; it leaves the cursor, colour, and flag bytes untouched, so a window can be resized without losing its other state. The setter clamps each X to 0–39 and each Y to 0–24, then swaps the X pair if the supplied left exceeds the supplied right and swaps the Y pair if the supplied top exceeds the supplied bottom. The result always satisfies the rectangle invariant. An out-of-range window index is a silent no-op.
 
@@ -231,11 +383,15 @@ pixel-parity work.
   supports a pixel-distance argument; that is display-driver ABI detail, not a
   separate text-output rule.
 
-- **Proportional right-edge exactness.** The proportional paragraph renderer is
-  now specified at semantic depth, including caller-owned pauses and the
-  brace/underscore markup bytes. Exact pixel parity depends on preserving the
-  resident width-table advances and decoding the `PROPORT.PCS` sparse-strip
-  glyph artwork through the driver-resource rules in `formats/font-pcs.md`.
+- **Proportional right-edge exactness.** Resolved. The advance table is
+  published in `formats/font-pcs.md` section 4, the exclusive right-edge test,
+  the plus-one inter-glyph gap, the space advance source, the backtracking
+  break rule, and the justification arithmetic are in section 8 above, and the
+  glyph artwork container is specified in `formats/font-pcs.md` section 3.
+  What remains is screenshot comparison, not unknown rules. The one honestly
+  unknown piece is the advance-table entries for codes below `0x20`, which
+  overlap unrelated resident data and are unreachable through the renderer;
+  they must not be invented.
 
 - **Single-driver collapse.** A modern implementation does not need four
   parallel hardware drivers unless it is explicitly emulating original hardware
@@ -252,14 +408,19 @@ The behaviour described here was derived from the private function notes listed 
 - The padded numeric printer — derived from `u5-decomp/functions/ULTIMA_EXE/0x1A3E_print_number.md`.
 - The cursor accessors — derived from `u5-decomp/functions/ULTIMA_EXE/0x1F12_get_cursor_x.md`, `u5-decomp/functions/ULTIMA_EXE/0x1CEE_get_cursor_y.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1BF2_set_cursor_pos.md`.
 - The window-descriptor initialisation, rectangle configuration, and active-window selection — derived from `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`, `u5-decomp/functions/ULTIMA_EXE/0x1C22_set_text_descriptor_rect.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1B94_set_display_mode.md` (the latter, despite its filename, is the active-window selector).
+- The whole-build census of which windows are actually configured at runtime — derived from `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`.
 - The driver-load step in boot-time setup — derived from `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
 - The C-runtime string-length utility used at some call sites for label width — derived from `u5-decomp/functions/ULTIMA_EXE/0x216C_string_length.md`. This utility is the standard NUL-terminated string length function and does not warrant a dedicated spec section.
 - Cross-overlay call-frequency and no-thunk text-output architecture — derived
   from `u5-decomp/notes/hot_path_analysis.md` and
   `u5-decomp/notes/engine_idioms.md`.
 - The proportional-font paragraph renderer used by intro, chargen, and
-  Return-to-View text -- derived from
-  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
+  Return-to-View text, including the layout descriptor field roles, the
+  exclusive right-edge test, the plus-one inter-glyph gap, the backtracking
+  break rule, the justification arithmetic, and the fixed nine-pixel line
+  advance -- derived from
+  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md` and
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 2.
 - The typed-input space eraser and cursor-advance gate preservation -- derived
   from `u5-decomp/functions/ULTIMA_EXE/0x1FA0_print_n_spaces.md` and
   cross-checked against

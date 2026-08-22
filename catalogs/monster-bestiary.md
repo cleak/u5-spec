@@ -10,8 +10,13 @@ default loot-roll inputs, and best-effort encounter placement.
 ## 1. Overview
 
 Ultima V's combat data uses a shared class table for party members, town actors,
-special NPCs, and monsters. The monster bestiary starts at class 16 and runs
-through class 47, with two identity gaps at classes 42 and 43. Class 42 has no
+special NPCs, and monsters. All forty-eight rows have the same eight-byte shape,
+and Section 2 now publishes every one of them. Classes 0 through 11 are the
+human/townsfolk actor classes (Section 2 gives their rows because terrain combat
+can and does spawn them - the pirate boarding action uses class 1, and the four
+party sprites are classes 0 through 3). The monster bestiary proper starts at
+class 16 and runs through class 47, with two identity gaps at classes 42 and
+43. Class 42 has no
 decoded name and an all-zero stat row in the analyzed table. Class 43 is the
 same: no decoded name and an all-zero stat row. Treat both as reserved identity
 gaps rather than spawned monsters. Classes 12 through 15 are included
@@ -36,14 +41,20 @@ The confirmed per-class data supports these fields:
   award. This catalog does not define any additional victory XP, gold, karma,
   loot, or score effect of that value.
 - **Drop cap** - the class byte used by the default monster-death drop gate.
-  The first random check decides whether the combat-instance active-object
-  becomes a dead-monster/drop marker; when it does, byte five of that record
-  stores this drop-cap value. A second random check may set bit `0x80` in the
-  same byte as a special-drop marker. The combat framer restores the pre-combat
-  world active-object table after the round loop, so this marker is not a
-  durable world object by itself. Zero means the current notes do not show a
-  default drop bound for that class; it does not prove the absence of all
-  post-kill effects.
+  Each of the two checks draws a near-uniform integer in `1..30`. The first
+  check accepts when its draw is less than or equal to this drop cap; on
+  acceptance the combat-instance active-object becomes the dead-monster/drop
+  marker and byte five of that record stores **this drop-cap value itself**,
+  not a random amount. The second check sets bit `0x80` in the same byte as a
+  special-drop marker when its draw is strictly less than the drop cap. The
+  combat framer restores the pre-combat world active-object table after the
+  round loop, so this marker is not a durable world object by itself. Because
+  the draw is never zero, a drop cap of zero can never accept: those classes
+  always take the reject arm and leave the alternate no-drop death marker. The
+  drop gate is also reached only from the ordinary death branch - classes with
+  the vanish or incorporeal class-flag bit, the Gargoyle branch, and deaths on
+  the excluded arena terrain values never run it at all
+  (`systems/combat.md` Section 6.3).
 - **Charm threshold** - the class byte used by Mass Charm's target-selection
   remap gate. While Mass Charm's shared `C` tag is active, a monster target pick
   rolls one uniform random byte in `[0, 255]`; the acting monster is remapped to
@@ -77,6 +88,18 @@ the fixed class-stat layout:
 
 | Class | Actor / creature | Tier | Speed | Flip HP | Defense | Attack cap | HP | Spawn count | Drop cap |
 |------:|------------------|-----:|------:|--------:|--------:|-----------:|---:|------------:|---------:|
+| 0 | Mage | 10 | 15 | 20 | 0 | 15 | 10 | 3 | 20 |
+| 1 | Bard | 15 | 20 | 10 | 4 | 12 | 15 | 9 | 10 |
+| 2 | Fighter | 20 | 15 | 10 | 8 | 15 | 20 | 6 | 15 |
+| 3 | Avatar | 25 | 25 | 25 | 7 | 30 | 20 | 1 | 25 |
+| 4 | Villager | 12 | 12 | 12 | 0 | 6 | 8 | 1 | 10 |
+| 5 | Merchant | 12 | 12 | 18 | 0 | 6 | 8 | 1 | 10 |
+| 6 | Jester | 12 | 18 | 12 | 0 | 6 | 8 | 1 | 10 |
+| 7 | Bard (second row) | 12 | 16 | 14 | 0 | 6 | 8 | 1 | 10 |
+| 8 | Pirate | 12 | 12 | 12 | 0 | 0 | 5 | 1 | 0 |
+| 9 | Unnamed reserved | 12 | 12 | 12 | 0 | 0 | 5 | 1 | 0 |
+| 10 | Child | 8 | 8 | 8 | 0 | 0 | 5 | 1 | 0 |
+| 11 | Beggar | 8 | 8 | 8 | 0 | 0 | 5 | 1 | 0 |
 | 12 | Guard | 22 | 30 | 10 | 6 | 30 | 99 | 8 | 5 |
 | 13 | Wanderer | 30 | 30 | 30 | 30 | 99 | 99 | 1 | 0 |
 | 14 | Blackthorn | 30 | 30 | 30 | 30 | 30 | 99 | 1 | 0 |
@@ -113,6 +136,56 @@ the fixed class-stat layout:
 | 45 | Corpser | 17 | 10 | 8 | 0 | 15 | 40 | 4 | 0 |
 | 46 | Rot Worm | 5 | 17 | 6 | 0 | 6 | 5 | 10 | 0 |
 | 47 | Shadow Lord | 25 | 30 | 30 | 10 | 30 | 99 | 1 | 0 |
+
+Notes on the low rows:
+
+- Classes 0 through 3 are the four party sprites. A character's class letter
+  maps to one of them at combat entry: Avatar to 3, Bard/Shepherd/Tinker to 1,
+  Fighter/Paladin/Ranger to 2, Druid/Mage to 0. Seated party members read their
+  HP and stats from the character record, not from these rows; the rows matter
+  when a *hostile* actor of that class is spawned.
+- Class 1 is the row terrain combat uses for the pirate/ship boarding action, so
+  a boarded pirate ship yields nine fifteen-HP human combatants.
+- Classes 8 and 9 are the passive/neutral classes: an actor placed with either
+  class id gets the passive faction tag instead of the hostile one, so it is
+  visible and addressable but never targeted.
+- Classes 9, 42, and 43 have no display name in the shipped name tables. Rows 42
+  and 43 are all-zero identity gaps; row 9's stats duplicate class 8's. The two
+  gap rows sit exactly where the special outdoor animated sprite families
+  (`0xE8..0xEB` and `0xEC..0xEF`) would map, which is consistent with those
+  families never entering ordinary combat. Their zero spawn count is not a
+  usable value - see the reachable-count invariant in `systems/encounters.md`
+  Section 4.
+
+### 2.1 Companion Classes
+
+A separate forty-eight-entry resident table, indexed by class id, gives each
+class a **companion class**. During terrain-combat placement, each spawn index
+below the `(count / 4) + 1` threshold rolls a one-in-nine check; on success that
+actor is created as the companion class instead of the base class. The values
+are class ids, not tile ids.
+
+| Class | Companion | Class | Companion | Class | Companion |
+|---:|---:|---:|---:|---:|---:|
+| 0 Mage | 33 Skeleton | 16 Sea Horse | 17 Squid | 32 Orc | 41 Troll |
+| 1 Bard | 1 Bard | 17 Squid | 16 Sea Horse | 33 Skeleton | 0 Mage |
+| 2 Fighter | 1 Bard | 18 Sea Serpent | 17 Squid | 34 Python | 22 Giant Spider |
+| 3 Avatar | 3 Avatar | 19 Shark | 19 Shark | 35 Ettin | 36 Headless |
+| 4 Villager | 4 Villager | 20 Giant Rat | 33 Skeleton | 36 Headless | 35 Ettin |
+| 5 Merchant | 4 Villager | 21 Bat | 21 Bat | 37 Wisp | 23 Ghost |
+| 6 Jester | 4 Villager | 22 Giant Spider | 20 Giant Rat | 38 Daemon | 39 Dragon |
+| 7 Bard (second) | 4 Villager | 23 Ghost | 33 Skeleton | 39 Dragon | 39 Dragon |
+| 8 Pirate | 4 Villager | 24 Slime | 24 Slime | 40 Sand Trap | 40 Sand Trap |
+| 9 Unnamed | 4 Villager | 25 Gremlin | 26 Mimic | 41 Troll | 20 Giant Rat |
+| 10 Child | 10 Child | 26 Mimic | 35 Ettin | 42 Gap | 42 Gap |
+| 11 Beggar | 4 Villager | 27 Reaper | 21 Bat | 43 Gap | 43 Gap |
+| 12 Guard | 12 Guard | 28 Gazer | 21 Bat | 44 Mongbat | 44 Mongbat |
+| 13 Wanderer | 13 Wanderer | 29 Crawler | 24 Slime | 45 Corpser | 45 Corpser |
+| 14 Blackthorn | 14 Blackthorn | 30 Gargoyle | 30 Gargoyle | 46 Rot Worm | 20 Giant Rat |
+| 15 Lord British | 15 Lord British | 31 Insect Swarm | 24 Slime | 47 Shadow Lord | 38 Daemon |
+
+Eighteen of the forty-eight classes are their own companion, which makes the
+substitution a no-op for them; it is only observable for the rest.
 
 ## 3. Ranged/Effect Side Rows
 
@@ -220,6 +293,16 @@ damage, spell, target-picker, movement, and monster-special readers:
 | `turnable attack` | When this class targets a living party member wearing Amulet/Turning with a ranged or special effect attack, half of attempts are forced into the scattered-impact path instead of the ordinary hit-roll result. |
 | `teleport-capable` | If ordinary attack/action handling falls through to movement, a class with this flag can attempt a random legal arena-cell move before ordinary stepping. |
 
+**No-corpse death family.** Ten classes carry the low class-flag bit without the
+vanish bit: Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect
+Swarm, Wisp, and Daemon. Their deaths release the combat slot immediately and
+write no tile marker and no drop byte at all - they never reach the Gazer,
+Gargoyle, terrain, or drop-gate logic. Treat this as a first-class death branch,
+not as a default kill whose roll happened to fail. The four vanish-bit classes
+(Wanderer, Blackthorn, Lord British, Shadow Lord) are the other branch that
+leaves the ordinary path, and they do write the vanish marker before releasing
+the slot.
+
 Default monster kills can update the combat-instance active-object table with
 post-kill markers. The current notes confirm the class drop-cap marker and
 special-drop high bit, and also confirm that the combat framer restores the
@@ -291,9 +374,9 @@ class. The contexts below are therefore broad.
 |------:|----------|------------|---:|------------:|---------:|---------------:|--------|-------------------|
 | 26 | Mimic | `0xA8..0xAB` | 30 | 8 | 20 | 12 | team override | Chest-like or ambush-style monster |
 | 27 | Reaper | `0xAC..0xAF` | 40 | 11 | 25 | 12 | team override; turnable attack | Forest or fixed dungeon encounter |
-| 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death; possess; turnable attack | Eye-burst death effect |
+| 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death; possess; turnable attack | Eye-burst death effect: writes the eye-burst tile, spawns the matching tile effect, redraws, and keeps the slot. No drop roll. |
 | 29 | Crawler | `0xB4..0xB7` | 35 | 9 | 0 | 12 | - | Dungeon or underworld encounter |
-| 30 | Gargoyle | `0xB8..0xBB` | 40 | 11 | 0 | 5 | splits; team override; special death | Terrain-hazard transition before normal cleanup; pixel details belong to combat presentation QA. |
+| 30 | Gargoyle | `0xB8..0xBB` | 40 | 11 | 0 | 5 | splits; team override; special death | Writes the lava-pool byte into the arena terrain under the corpse, then releases the slot. It does **not** continue into the default kill path, so it leaves no corpse marker and no drop; pixel details belong to combat presentation QA. |
 | 32 | Orc | `0xC0..0xC3` | 10 | 3 | 11 | 10 | team override | Humanoid wilderness or dungeon group |
 | 33 | Skeleton | `0xC4..0xC7` | 20 | 6 | 13 | 5 | physical half | Undead encounter |
 | 35 | Ettin | `0xCC..0xCF` | 30 | 8 | 17 | 12 | team override | Large humanoid encounter |
@@ -344,31 +427,34 @@ variant data set ever routes that class through the ranged/effect attack path.
 The encounter system does not directly start most overworld fights. It normally
 spawns a hostile active object near the party; combat begins when the player or
 monster contacts the other. Terrain combat then chooses one of sixteen outdoor
-arenas from the triggering active-object class and populates up to twenty-six
-combat actors.
+arenas from the terrain under the triggering active object (plus the party's
+vehicle state), derives the encounter's base class from that object's sprite
+byte, and populates at most sixteen monster actors plus the seated party.
 
 For a terrain fight:
 
-- The base monster count comes from the encounter base class's stat row. For
-  stock ordinary terrain combat the outdoor arena id and base class id are the
-  same value, so this can be described as a per-arena count at encounter level;
-  the surrounding bytes are still class stats, not terrain weights. Counts of
-  1, 8, and 16 are exact; other counts are rolled into a 1-to-max range.
+- The base monster count comes from the encounter base class's stat row, indexed
+  by class id and never by arena index. Counts of 1, 8, and 16 are exact; other
+  counts are rolled into a 1-to-max range. Since the largest shipped count is 16
+  and 16 is exact, a terrain encounter never spawns more than sixteen monsters.
 - A "fortunes of war" flag can cause the count roll to be repeated.
 - Town-style hostility overrides the count to one attacker.
 - Placement uses sixteen arena slots supplied by the selected arena's metadata
   and cached in resident scratch before placement. Terrain fights use
   deterministic slot order; ambushes can shuffle the slots.
-- The first placed monster uses the triggering arena class. For later placements,
-  actors whose placement index is below `(count / 4) + 1` may use a per-arena
-  replacement class when the replacement predicate permits it; later actors reuse
-  the triggering class. This is the confirmed basis for the leader/follower
-  shorthand used elsewhere.
+- The first placed monster uses the encounter's base class. For later
+  placements, actors whose placement index is below `(count / 4) + 1` may use
+  the base class's **companion class** when the one-in-nine predicate permits
+  it; later actors reuse the base class. The companion mapping is per class, not
+  per arena, and is published in Section 2.1. This is the confirmed basis for
+  the leader/follower shorthand used elsewhere.
+- Party members are seated first, from the selected arena's own party entry
+  coordinates, and do not occupy monster placement slots.
 
 Dungeon room encounters use the same combat framer and select arenas from the
 dungeon encounter bank. No traced dungeon chest path currently selects a
-`DUNGEON.CBT` arena. Room-trigger selection, per-arena spawn counts, placement
-slots, and replacement-tile behavior are encounter/arena data contracts owned
+`DUNGEON.CBT` arena. Room-trigger selection, placement slots, and the
+companion-class substitution are encounter/arena data contracts owned
 by `systems/encounters.md`, `systems/dungeon-mode.md`, and `formats/cbt.md`;
 this bestiary owns the class rows consumed after a room arena has chosen actor
 classes.
@@ -381,6 +467,11 @@ classes.
   Sea Horse through Shadow Lord, excluding identity-gap classes 42 and 43.
 - Hostile/special NPC combat classes confirmed by the shared combat table:
   Guard, Wanderer, Blackthorn, Lord British.
+- The low human/townsfolk classes 0 through 11, whose stat rows are now
+  published in Section 2. Their traits, ranged/effect rows, and Mass Charm
+  behaviour are not covered here; only the eight stat fields and the companion
+  mapping are.
+- The full forty-eight-entry companion-class mapping (Section 2.1).
 - Initial HP, raw reward unit, raw drop-cap byte, Mass Charm threshold,
   active-object sprite run, full eight-field stat rows, and decoded combat
   traits for every listed class.
@@ -413,9 +504,10 @@ classes.
    `systems/combat.md`, not a separate class-script table.
 3. Outdoor random-spawn terrain buckets are specified in `systems/encounters.md`
    as ordered weighted active-object payload tables. Dungeon room arena
-   selection, per-arena spawn counts, placement slots, and replacement-tile
-   behavior are also specified by the encounter, dungeon-mode, and `.CBT`
-   specs. This catalog does not duplicate those tables per monster row; a
+   selection, outdoor arena selection, and placement-slot geometry are also
+   specified by the encounter, dungeon-mode, and `.CBT` specs. Spawn counts and
+   companion classes are class-indexed and live here, in Section 2 and Section
+   2.1. This catalog does not duplicate those tables per monster row; a
    monster-centric cross-index would be an optional convenience artifact, not a
    missing class-table contract.
 4. Caller-side ordinary drop contents and post-combat reward consumers are
@@ -446,6 +538,17 @@ offsets, raw private addresses, binary dumps, or private note prose.
 
 **Private analysis sources used:**
 
+- Terrain-combat entry chain retrace of 2026-08-22 - outdoor arena selection from
+  world terrain plus ship state, the class-id derivation and its separation from
+  the arena index, the reachable spawn-count invariant, the forty-eight-entry
+  companion-class table, and the party-seating pass that runs before monster
+  placement. Source provenance: derived from private analysis notes
+  `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
+  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
 - `u5-decomp/formats/data-ovl.md` - resident data segment overview, monster name
   and combat table regions, ranged/effect side rows, and DATA.OVL completion
   notes.

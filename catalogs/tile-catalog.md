@@ -157,6 +157,18 @@ The full breakdown by contiguous index range. The ranges below correspond to run
 
 The ranges above are the working partition. Gameplay systems should rely on the class, storage, passability, animator, and special-trigger contracts here and in the cross-referenced system specs. Some precise visual names within the upper actor/item/effect ranges remain presentation/catalog QA rather than unresolved gameplay behavior.
 
+Where an individual id has been confirmed directly against the shipped
+description table (`formats/look2-dat.md`), that confirmation takes precedence
+over the nominal range it falls in above. Ids confirmed this way so far, and
+used as behavioural predicates elsewhere in this spec set, are: crystal sphere
+`0x29`; metal grate `0x86`; loose brick `0x8C`; chair `0x90..0x93`; mirror
+`0x9D`, mirror-with-reflection `0x9E`, broken mirror `0x9F`; deep well `0xA1`;
+bed `0xAB`; stairway family `0xC4..0xC7`; ascend/descend floor links `0xC8` and
+`0xC9`; wooden fence `0xCA..0xCB`; moon gate `0xDC`; shrine flame `0xDE`;
+collapsed dungeon entrance `0xDF`; shop-sign family `0xF0..0xF7` and `0xF9`;
+grandfather clock `0xFA..0xFB`. Reconciling the remaining nominal ranges against
+that table is open catalogue work.
+
 ## 4. Animation phases
 
 A subset of classes animates. The engine implements animation by reserving a contiguous run of two, four, or eight indices for one animated tile, and stepping the displayed index through the run on each per-turn animator pass.
@@ -266,6 +278,17 @@ does not need a coordinate fallback for this effect. The same tile id remains
 ordinary static terrain for systems that do not run the town underfoot-effect
 handler.
 
+The probe is not step-gated. Town mode's underfoot handler runs once per
+turn-consuming action, after that turn's clock advance, and re-reads the tile
+the party currently occupies, so the effect re-rolls for every turn spent
+standing on the tile.
+
+Two further town underfoot tile families are damage tiles rather than cosmetic
+ones: live tile `0x8C` (shipped description "a loose brick"; it also changes
+floor outside the Stonegate scene) and live tiles `0xBC` and `0x8F` (the rune/lever
+family). Both apply an independently rolled `1..8` hit points to every non-Dead
+party slot. Their behavior is specified in `systems/town-mode.md`.
+
 **Falls.** The traced surface chasm trigger is the fixed Britannia coordinate
 `(54, 138)`. Stepping onto that falls cell triggers the
 fall-into-the-underworld handler: print a banner, run the Dexterity-gated
@@ -303,6 +326,38 @@ quest bit for an ordained virtue.
 
 **Town and dungeon entrances.** Entering on a fixed entrance coordinate sets the scene byte and dispatches the town-mode or dungeon-mode setup. The trigger is recognised by the resident world-location table, not by tile id alone; rows 0..31 select town-mode scenes and rows 32..39 select dungeon scenes.
 
+**Dungeon-entrance seal pair.** Four overworld tile ids form the Word-of-Power
+seal family, and an implementation needs their identities because the Yell path
+and the region-load pass swap between them:
+
+| Tile id | Look name | Passable | Role |
+|---:|---|---|---|
+| `0x16` | a dark cave | yes | Unsealed entrance variant used by Despise, Destard, and Doom. |
+| `0x17` | an abandoned mine | yes | Unsealed entrance variant used by Shame and Hythloth. |
+| `0x18` | a dungeon | yes | Unsealed entrance variant used by Deceit, Wrong, and Covetous. |
+| `0xDF` | the collapsed entrance to the dungeon | no | The single sealed form shared by all eight entrances. |
+
+The shipped world maps store only the unsealed variants. The sealed form is
+written into the live view at region-load time for every entrance whose word is
+still unspoken, and the Yell path toggles a single cell between the two forms.
+Because the sealed form is impassable, a sealed entrance cannot be stood on and
+therefore cannot be entered. `systems/commands.md` Section 11 owns the
+behaviour.
+
+The shrine pair works the same way: `0x19` ("a mystic shrine", passable) is
+rewritten to `0x1A` ("a ruined shrine", impassable) for any shrine whose saved
+ruin flag is set. The Eternal Flame fixture inside the three flame keeps is a
+separate impassable special tile; the party stands beside it rather than on it.
+
+The ids in the two paragraphs above are hexadecimal. Section 3's coarse range
+partition is written in decimal and does not resolve this band correctly: it
+assigns decimal `16..23` to paved-path art and `24..47` to walls, but decimal
+`22`, `23`, and `24` are the three dungeon-entrance variants named here,
+decimal `25` and `26` are the shrine pair, and decimal `27` is a lighthouse.
+Where the coarse partition and a named-tile row disagree, the named row is
+authoritative; the partition is a working summary of art families, not a
+per-id table.
+
 **Water/current effects.** The traced overworld contract does not publish a
 general player-facing waterfall/current sweep. Treat water-like terrain as
 ordinary transport-specific passability unless a mode spec names a concrete
@@ -322,15 +377,43 @@ No `world_waterfalls.tsv` runtime sidecar is part of the promoted baseline.
 
 **Beds.** A bed tile in an inn enables H-Hole-up. Outside an inn or off a bed, H prints "Not here!" and consumes no turn. The hours/rest contract is in `systems/rest-and-camp.md`.
 
-**Chairs.** The visible chair trigger in town mode is tile `0x8C`; Stonegate adds a special scene effect when the party steps on it. Do not conflate that chair tile with the paired NPC floor-link markers `0xC8` and `0xC9`.
+**Town step trigger `0x8C`.** Stepping onto live town tile `0x8C` runs the town
+step-interaction handler's scripted branch, which in Stonegate plays a special
+scene effect. The shipped description table names `0x8C` a loose brick, not a
+chair; ordinary seat tiles are `0x90..0x93` and carry no step trigger. Do not
+conflate `0x8C` with the paired NPC floor-link markers `0xC8` and `0xC9`
+either.
 
-**NPC floor-link markers.** Two marker bytes - `0xC8` and `0xC9` - appear in town tile grids and are consumed by the NPC scheduler's tile-ID pathfinder variant. When schedule movement needs to bridge floors, the pathfinder searches the live tile buffer for cells containing one selected marker ID and uses those cells as goals. Shipped location data places these values as authored floor-link annotations rather than ordinary furniture. Do not treat these IDs as ordinary passable terrain, and do not assume they are unavailable to runtime consumers.
+**Floor-link markers `0xC8` and `0xC9`.** Two marker bytes appear in town tile
+grids as authored floor links. They share one description string in the shipped
+description table, so a Look at either reports the same thing, but they are
+directional and are not interchangeable:
+
+| Tile id | Role | Effect of climbing while standing on it |
+|---|---|---|
+| `0xC8` | Ascend link | Floor index increases by one. |
+| `0xC9` | Descend link | Floor index decreases by one. |
+
+Tile `0x86` shares the descend behaviour under the player's climb command. The
+NPC scheduler consumes the same two bytes: when schedule movement must bridge
+floors it searches the live tile buffer for cells carrying whichever marker
+points toward the floor that is not currently displayed, and uses those cells as
+pathfinding goals. `systems/npc-schedules.md` Section 8.5 owns that selection
+rule. These ids are not ordinary passable terrain for NPC routing (they are
+blocked as intermediate cells and stamped only as goals), and they are distinct
+from the visible stairway family `0xC4..0xC7`.
 
 **Wishing-wells, springs, caves.** Wishing-wells run the wish-for-a-vehicle handler (the Easter-egg "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse" dialogue); in the granting scenes, all accepted well words create the same horse-family active object. Springs restore MP; caves drop a chest.
 
 **Camp / fire.** Camp tiles and brazier tiles trigger the camp-and-rest handler when H-Hole-up is invoked on them. Outdoor rest and the rare camp-event level-up live in `systems/rest-and-camp.md`.
 
-The exact tile-id-to-trigger mapping is implementation-detail of the per-mode walk loops, captured in the private per-mode loop notes rather than as a free-standing table here.
+The per-mode *walk loop* trigger set above (what happens when the party steps
+onto a tile) is documented case by case rather than as one free-standing table,
+because each case belongs to a different mode spec. The *inspection* trigger set
+is different and is now published in full: `systems/view.md` Section 3 carries a
+"Top-down Look special cases" table giving each tile id and object class that
+diverts the overworld/town Look command away from the plain description path,
+together with the order in which the dispatcher tests them.
 
 ## 7. Monster tiles
 
@@ -355,7 +438,20 @@ Cross-reference: `catalogs/npc-roster.md` for per-NPC names, dialogue file links
 
 NPCs appear only in town mode and in scripted overworld events. The active-object table records the current sprite tile id directly; the per-tick walker advances the schedule and updates the position and sprite fields.
 
-A pre-conversation gate inspects the candidate NPC's current sprite tile to detect transient states. Specific tile ids carry status semantics — a "sleeping" sprite renders the gate's "Zzzzzz..." response without entering the dialogue engine. The status-tile mapping is part of the NPC roster, not the tile catalog.
+A pre-conversation gate runs before the dialogue engine, but it does **not**
+inspect an NPC sprite id. It reads the live **map tile** occupying the cell the
+Talk command resolved to, and the two ids it tests are furniture ids in the
+`LOOK2.DAT` terrain-description domain, not actor sprites. Exactly two ids
+divert the command:
+
+| Live map tile at the resolved cell | Shipped description | Talk result |
+|---|---|---|
+| `0x9D` | a mirror | The "no response" line; the conversation engine is not entered. |
+| `0xAB` | a bed | The sleeping line; the conversation engine is not entered. |
+
+Every other value falls through to normal conversation entry. The full gate
+contract, including where it sits relative to shop-trigger and dialogue-index
+dispatch, is in `systems/conversation.md` Section 2.
 
 ## 9. Item tiles
 

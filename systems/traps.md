@@ -105,6 +105,15 @@ bomb traps fire their own dungeon post-action branch. Their byte-level cell
 families are specified in `systems/dungeon-mode.md` and
 `systems/doors-and-z-transitions.md`.
 
+**Town underfoot damage tiles.** Town mode's per-turn underfoot handler is not
+this resolver either. Its trapdoor/chair family and rune/lever family apply an
+independently rolled `1..8` hit points to every non-Dead party slot, and its
+poison-gas terrain case applies a Dexterity save that sets Poisoned status
+without dealing damage. All three run once per turn-consuming action while the
+party occupies the tile, not once per step, and none of them selects an effect
+family from this document. They are specified in `systems/town-mode.md`, with
+the tile identities catalogued in `catalogs/tile-catalog.md`.
+
 **Combat post-pass tile restoration.** The combat wrapper samples a resident
 tile-restoration flag as it restores the suspended world state. That
 driver-facing call reaches the display-driver tile-graphics
@@ -124,6 +133,8 @@ selection remains owned by the invoking systems:
   including the trap-detection threshold and false-positive/missed-trap cases.
 - `systems/dungeon-mode.md` and `systems/doors-and-z-transitions.md` own
   dungeon floor pit/bomb trap cells.
+- `systems/town-mode.md` owns the town per-turn underfoot damage and
+  poison-gas tiles.
 - Combat restore-time driver effects are presentation cleanup, not calls into
   this party-effect resolver.
 

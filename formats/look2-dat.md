@@ -121,19 +121,28 @@ description-category translation step inside the file format.
 
 A few tile ids have command-specific handling around the table lookup:
 
-- `0x59` routes to LOOKOBJ's full Britannia chunk-map renderer instead of
+- `0x59` routes to LOOKOBJ's sky renderer (`systems/view.md` section 4.2) instead of
   printing the base `LOOK2.DAT` string. Its final in-world catalog label is
   intentionally left to `systems/view.md` and `catalogs/tile-catalog.md`.
-- `0xA1` and `0xD8..0xDB` route to LOOKOBJ-owned special handlers instead of
-  printing only the base string. These cover dungeon-mouth and
-  fountain/signpost-style presentation paths at command level; final tile
-  labels are catalog work, not `LOOK2.DAT` file-format semantics.
+- `0xA1` routes to the LOOKOBJ wishing-well handler and `0xD8..0xDB` routes to
+  the LOOKOBJ fountain handler. Both replace the base string entirely rather
+  than decorating it, which is why those entries carry no usable description
+  record. `0xD8..0xDB` here is a terrain-domain id; the identically numbered
+  entries in the object domain are an unrelated creature sprite run.
+- `0xE0`, `0xE1` and `0xE2` are redirect entries rather than descriptions: the
+  look command moves its target cell one step (north, east and west
+  respectively) and re-resolves before any lookup happens, so these ids never
+  reach the table themselves.
 - `0xFA` and `0xFB` print their base `LOOK2.DAT` description, then append the
   current clock time with an AM/PM suffix.
 - `0xDE` prints its base description, then appends the current shrine
   principle or virtue context.
 - `0xDF` prints its base description, then appends the dungeon name selected
   from the command context.
+
+The command-level trigger table, including the dispatch order and the
+predicates that never reach this file at all, is in `systems/view.md`
+Section 3.
 
 These rules belong to the L-Look command path. The data file itself remains a
 plain table from a domain-specific lookup id to a base description string.

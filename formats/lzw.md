@@ -7,9 +7,11 @@ their format-specific payload begins. This document specifies only that
 envelope and compression dialect. The decompressed payload layout is owned by
 the consuming file-format spec, such as `formats/tiles.md`.
 
-This envelope applies to the paired `.16` and `.4` graphics archive family. It
-does not apply to `TITLE.BIT`, `BRITISH.BIT`, `WD.BIT`, or `PROPORT.PCS`; those
-use the display driver's sparse strip resource format.
+This envelope applies to the paired `.16` and `.4` graphics archive family and
+to the standalone bitmap family: `TITLE.BIT`, `BRITISH.BIT`, and
+`PROPORT.PCS`. The one documented exception is `WD.BIT`, which stores its
+payload raw with no envelope. Earlier revisions of this document excluded the
+whole `.BIT` and `.PCS` family from the envelope; that exclusion was wrong.
 
 ## 2. Envelope
 
@@ -65,13 +67,18 @@ above and feed the exact decoded payload to the owning format parser.
   after this envelope is removed.
 - `systems/display-driver.md` and `systems/display-driver-abi.md` own the
   display conversion after graphics payloads are decoded.
-- `formats/bit.md` and `formats/font-pcs.md` explicitly do not use this
-  envelope.
+- `formats/bit.md` owns the one-bit-per-pixel sub-image list carried by
+  `TITLE.BIT`, `BRITISH.BIT`, and (raw, without this envelope) `WD.BIT`.
+- `formats/font-pcs.md` owns the same sub-image list as used for the
+  proportional font glyphs in `PROPORT.PCS`.
 
 ## 6. Sources
 
-Source provenance: derived from private analysis note
-`u5-decomp/formats/tile-graphics.md`, cross-checked against the later generic
+Source provenance: derived from private analysis notes
+`u5-decomp/formats/tile-graphics.md` and
+`u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 1 (which
+validates the decoder against a `.16` archive and then against the three
+enveloped `.BIT`/`.PCS` files), cross-checked against the later generic
 file-read correction in
 `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`, which confirms that
 plain `.DAT`, `.GAM`, and `.OOL` file reads are not LZW decoding paths.

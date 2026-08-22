@@ -12,14 +12,18 @@ The file is token-compressed prose addressed by record id.
 
 ## 2. File Structure
 
-The shipped file is 10,135 bytes. The source notes describe 196 record slots,
-of which 194 are non-empty in the shipped data, followed by an empty trailer.
+The shipped file is 10,135 bytes. Counting NUL terminators gives exactly **195**
+records, ordinals `0` through `194`; the file's last byte is the terminator of
+the last record, so there is no unterminated tail and no trailer beyond it. A
+handful of those slots are empty (a lone terminator), which is why earlier
+descriptions gave 194 "non-empty" records. Parsers should split on the
+terminator and stop at end of file rather than expecting a fixed slot count.
 
 | Property | Value |
 |---|---|
 | Header | None |
 | In-file offset table | None |
-| Record count | 196 record slots; 194 non-empty records in the shipped data |
+| Record count | 195 records, ordinals `0`..`194`; a few are empty slots |
 | Record addressing | By record id selected by the shop renderer |
 | Literal encoding | Low-ASCII text |
 | Compression | One-byte phrase tokens in the high-byte range |
@@ -67,14 +71,28 @@ explicit modern escape rather than relying on original behavior.
 
 ## 5. Phrase Tokens
 
-High-byte tokens expand through the same resident common-word dictionary used
-by NPC conversation text. The shop renderer and conversation byte runner use
-different byte biases, but both reach the same physical dictionary.
+Record bytes `0x80` through `0xFF` are phrase tokens. They expand through the
+same resident common-word dictionary used by NPC conversation text; the full
+one-hundred-twenty-eight-entry table is published in
+`catalogs/common-word-dictionary.md`.
 
-The dictionary contains common Britannian function words, pronouns, titles,
-and recurring proper nouns. Some dictionary entries are null sentinels used as
-word-boundary hints. The exact dictionary contents belong to the resident data
-resource, not to `SHOPPE.DAT` itself.
+The two renderers apply different biases to the same physical table. A shop
+token `t` selects catalog index `t - 0x7F`, so `0x80` is catalog index one and
+`0xFF` is catalog index one hundred twenty-eight; a conversation token is the
+catalog index itself. Shop token `0x80` and conversation token `0x01` are the
+same entry.
+
+The dictionary contains common Britannian function words, pronouns, titles, and
+a few recurring proper nouns. Ten entries are empty. They are **not**
+word-boundary sentinels, and the shop renderer has no handling for them at all;
+no shipped record references one, so an empty-entry token in `SHOPPE.DAT` should
+be treated as malformed content.
+
+Spacing is supplied by the renderer, not by the stored words. One space is
+emitted before every expanded word, and a trailing space is emitted after it
+only when the following record byte is ordinary text rather than another token
+or the record terminator. `systems/shops.md` section 4.2 owns the renderer-side
+statement of the same rule.
 
 ## 6. Record Families
 
@@ -116,7 +134,13 @@ behavior, with these traced shared rules:
 | Arms long greeting | Pick one of two resident literal greeting variants, then print the fixed arms prompt literals. | One uniform `0..1` draw during arms entry. |
 | Arms buy affirmation | Pick one of four resident literal affirmation variants before entering the buy menu. | One uniform `0..3` draw only after the player selects Buy. |
 | Arms buy item quote | Select the item-description record from the chosen equipment id; the public mapping is in `systems/shops.md`. | No random draw. |
-| Tavern list | Select the tavern/menu record from the current tavern state; the visible selector table is in `systems/shops.md`. | No random draw for list selection. |
+| Tavern list | Select the tavern/menu record from the current tavern state, not from the tavern instance: states `0..3` map to records `69, 70, 71, 72`. The visible letter table for each state is in `systems/shops.md`. | No random draw for list selection. |
+| Tavern post-branch follow-up | After an accepted branch and a `Y` answer to the "anything else" prompt, render the current state's follow-up record: states `0..3` map to records `73, 74, 75, 76`. | No random draw. |
+| Horse-trader quote | Render record `104` with the Intelligence-adjusted local price in `%`. | No random draw. |
+| Shipwright menu body | Render record `119` at the top of each pass of the Frigate/Skiff menu loop. | No random draw. |
+| Shipwright quote | Render record `117` for a Frigate or `118` for a Skiff, then the shared take-it confirmation record `126`. | No random draw. |
+| Shipwright pending-delivery cases | Render `125` when a Frigate is requested while a delivery is pending, `120` when a Skiff is stowed as cargo on a pending Frigate, `121` when a Skiff is requested while a standalone Skiff is pending. | No random draw. |
+| Shipwright post-sale | Render `123` at the moment the delivery is queued, then `124` for the post-sale "anything else" body. | No random draw. |
 | Sage fee quote | Render record 84 after a topic row matches. `%` is the row fee. | No random draw. |
 | Sage paid success | Pick one of records 85-88 after confirmation and successful gold debit. `&` is the subject and `*` is the location. | One uniform `0..3` draw after payment only. Refusal and short funds do not consume this draw. |
 | Sage short funds | Render record 91 and exit the sage flow. | No success-template draw. |
@@ -126,12 +150,28 @@ selecting a `SHOPPE.DAT` record. Individual shop arms may also print resident
 literals before or after a `SHOPPE.DAT` record, so a clean implementation
 should not assume every visible shop line comes from this file.
 
-The shared preamble, initial-greeting, and farewell random-bark rows now have
-public record-id tables in `systems/shops.md`. The exact all-shop
-live-dialogue table is still not complete in the public contract; known record
-families, the shared random-bark rows, and the specific sage records above are
-normative, while `systems/shops.md` owns any further per-flow record ids that
-have been promoted.
+The shared preamble, initial-greeting, and farewell random-bark rows have
+public record-id tables in `systems/shops.md`. The rows in that table are taken
+from the shipped selector tables as they stand, including one case that looks
+like a mistake and is not: the healer/sanctum kind names the same four records
+for its initial greeting and its farewell. That is the shipped data and should
+be reproduced, not repaired.
+
+Selector tables in the resident data hold each record's start position rather
+than its ordinal. The two are interchangeable because records are stored
+back-to-back in ordinal order, so an implementation that addresses records by
+ordinal — as this document and `systems/shops.md` do throughout — reproduces the
+original selection exactly.
+
+**Wording policy.** Text stored in this file is addressed by ordinal and is
+never transcribed into the public specs; the shipped asset is the source of the
+words. Resident literals, which are not in this file, are published verbatim in
+`systems/shops.md` where an engine must reproduce them for frame parity, and
+described behaviourally otherwise. When a spec passage names a line in quotes,
+it is a resident literal; when it names a number, it is a record in this file.
+
+`systems/shops.md` owns any further per-flow record ids that have been
+promoted.
 
 ## 8. Consumer Behavior
 
@@ -156,10 +196,10 @@ A reader should validate that every record id requested by the shop system
 resolves to a NUL-terminated record inside the file and that token expansion
 cannot overrun the output buffer. The lookup mechanism may be implemented by a
 precomputed index table, a scan over sequential records, or another equivalent
-reader; that mechanism is outside the on-disk `SHOPPE.DAT` format. Missing
-dictionary entries should be treated as word-boundary sentinels only where the
-resident dictionary marks them as such; unexpected null dictionary entries
-should be surfaced in debugging builds.
+reader; that mechanism is outside the on-disk `SHOPPE.DAT` format. An empty dictionary entry is not a
+word-boundary sentinel on the shop side and no shipped record reaches one;
+surface such a token as a content error in debugging builds rather than
+rendering it.
 
 For byte-compatible tooling, preserve unknown high-byte tokens rather than
 guessing English text. For a modern runtime, a missing record should produce a
@@ -177,13 +217,29 @@ families. That is a caller inventory question, not an on-disk format rule:
 records remain sequential NUL-terminated text slots addressed by id regardless
 of which shop flow, if any, selects a given id.
 
+Presentation geometry is also not owned here. Ordinary shop output renders into
+the inherited conversation text window, whose descriptor is never reconfigured
+by any caller in the analyzed build; the two shop flows that do install their
+own framed side panel are specified in `systems/shops.md`. See
+`systems/text-output.md` for the window model and the boot-time descriptor
+values that the inherited window keeps.
+
 ## 11. Sources
 
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/data-tables.md` (`SHOPPE.DAT` section).
+- `u5-decomp/functions/SHOPPES_OVL/0x0026_format_record_with_tokens.md` and
+  `u5-decomp/notes/talk_group_retrace_2026-08-22.md` (the token bias, the
+  published dictionary contents and empty-slot census, and the renderer's
+  leading/trailing space rule).
 - `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`.
 - `u5-decomp/functions/SHOPPES2_OVL/_OVERVIEW.md`.
 - `u5-decomp/functions/SHOPPES3_OVL/_OVERVIEW.md`.
+- `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` (shared bark rows
+  and the record-start to ordinal conversion).
+- `u5-decomp/functions/SHOPPES2_OVL/0x0ABC_shipwright_main.md` and
+  `u5-decomp/functions/SHOPPES2_OVL/0x066C_tavern_main.md` (per-flow record
+  ids for the shipwright, horse-trader and tavern flows).
 - `u5-spec/systems/shops.md`.
 - `u5-spec/formats/data-ovl.md`.

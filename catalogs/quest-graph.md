@@ -119,15 +119,28 @@ still simple: Jhelom contains the route to Destard's word. Hassad's Hythloth
 branch is prison- and trust-shaped. Felespar's Wrong branch is explicitly
 Resistance gated.
 
+**What the words actually do.** Each word is bound to one dungeon entrance
+cell. Until that dungeon's word has been spoken, the entrance renders and
+behaves as a collapsed, impassable entrance, so the party cannot stand on the
+cell and therefore cannot use the Enter command there. Speaking the word beside
+the cell restores the entrance to its ordinary passable form. The state is
+per-dungeon, saved, and survives reload; the full predicate, the toggle
+behaviour, and the tile mapping are specified in `systems/commands.md`
+Section 11, and the eight entrance coordinates are published in
+`catalogs/gazetteer.md` Section 5.1. Because the same eight coordinates carry a
+dungeon entrance on both world surfaces, unsealing a dungeon opens it on both.
+
 Doom's final mechanical route is split across systems rather than conversation
-alone. The same Yell Word-of-Power path that handles the seven cardinal dungeon
-words also accepts `VERAMOCOR`, but Doom's exterior entrance is not opened by
-that word. After the Shadowlords are vanquished, the party can enter Doom; once
-inside, `VERAMOCOR` opens the Doom-side chamber seal at its authored target
-cell. The party must then reach the deepest room-id-fifteen trigger and resolve
-the final-room combat absorption handoff described in `systems/endgame.md`. The
-Sandalwood Box remains a separate saved story-item flag checked by the terminal
-overlay's victory branch.
+alone. `VERAMOCOR` behaves exactly like the other seven words: it unseals the
+Doom **entrance**, which sits at the centre of the Underworld surface rather
+than on Britannia. It is not a seal inside the dungeon and it is not spoken from
+a dungeon interior — the word path runs only in outdoor scenes. Doom therefore
+has two independent gates: `VERAMOCOR` must have been spoken to make the
+entrance passable, and all three Shadowlords must be vanquished for the Enter
+command to admit the party rather than ambush it. Inside, the party must reach
+the deepest room-id-fifteen trigger and resolve the final-room combat absorption
+handoff described in `systems/endgame.md`. The Sandalwood Box remains a separate
+saved story-item flag checked by the terminal overlay's victory branch.
 
 ## 5. Shards And Shadowlords
 
@@ -152,15 +165,31 @@ the active named encounter. The Yell/name path supplies that active encounter;
 the shard handler then checks that the Shadowlord marker is immediately north
 of the party and that the active Shadowlord index matches the shard.
 
-| Shard / Shadowlord | Destruction scene | Party floor | Party X | Party Y | Additional gate |
-|---|---|---:|---:|---:|---|
-| Falsehood / Faulinei | The Lycaeum | 2 | 15 | 9 | Active Faulinei encounter immediately north |
-| Hatred / Astaroth | Empath Abbey | 1 | 15 | 3 | Active Astaroth encounter immediately north |
-| Cowardice / Nosfentor | Serpent's Hold | basement marker | 15 | 16 | Active Nosfentor encounter immediately north |
+| Shard / Shadowlord | Destruction scene | Party floor | Party X | Party Y | Eternal Flame cell | Additional gate |
+|---|---|---:|---:|---:|---|---|
+| Falsehood / Faulinei | The Lycaeum | 2 | 15 | 9 | `(15, 8)`, same floor | Active Faulinei encounter immediately north |
+| Hatred / Astaroth | Empath Abbey | 1 | 15 | 3 | `(15, 2)`, same floor | Active Astaroth encounter immediately north |
+| Cowardice / Nosfentor | Serpent's Hold | basement (`0xFF`) | 15 | 16 | `(15, 15)`, same floor | Active Nosfentor encounter immediately north |
+
+The destruction position is one cell **south of** the Eternal Flame in each of
+those three scenes: the flame occupies the cell one row north, and it is that
+cell the summoned Shadowlord stands on. The Eternal Flames are interior fixtures
+of the three keeps. They are not overworld landmarks, they have no surface
+coordinates, and there is no overworld shard-use path.
 
 Therefore a compatible implementation should not allow shard use at the flame
 coordinate alone to retire a Shadowlord slot. The matching Shadowlord must have
-been made active through the name/encounter path first.
+been made active through the name/encounter path first, and the party's scene,
+floor, and cell must match the row exactly.
+
+**A successful destruction consumes the shard.** The shared destruction path
+clears the used shard's carried flag in the same step that it writes the
+vanquished value into the Shadowlord slot and ORs the quest bit. After success
+the party no longer owns that shard, and it will not appear in the U-Use item
+list or the character inventory panel. Nothing else about the party's inventory
+changes: no counter for any other item is touched, and a refused attempt (wrong
+cell, wrong floor, wrong scene, no active Shadowlord, or a mismatched active
+Shadowlord index) leaves the shard in the party's possession.
 
 The three shard-location branches are intentionally different:
 
@@ -185,32 +214,62 @@ Shadowlord in the order above:
 | 1 | Astaroth / Hatred | Current hideout scene while alive; sticky vanquished marker after destruction. |
 | 2 | Nosfentor / Cowardice | Current hideout scene while alive; sticky vanquished marker after destruction. |
 
-While a Shadowlord is alive, its slot holds one of eight compact hideout ids.
-These are not the dungeon-mode scene-byte values used by the dungeon loop; they
-are the values consumed by the Shadowlord view, Yell, and town-entry paths. At
-midnight, the time cleanup rerolls each living Shadowlord's hideout
-so that no living Shadowlord remains in the party's current scene and no two
-living Shadowlords are assigned the same hideout in that pass. When the player
-destroys a Shadowlord through the shared shard/spell destruction path, that
-slot becomes vanquished and is no longer rerolled. The same success path also
-ORs a per-Shadowlord bit into the save-backed quest-progress word:
-Falsehood/Faulinei sets `0x02`, Hatred/Astaroth sets `0x04`, and
-Cowardice/Nosfentor sets `0x08` in the low byte of `SAVED.GAM 0x0624`. The
-three Shadowlord slot bytes remain the authoritative alive/vanquished state for
+A slot takes exactly three kinds of value:
+
+| Slot value | Meaning |
+|---|---|
+| `0` | Not yet placed. This is the value a newly created game starts with for all three slots; the Shadowlord is nowhere until the first midnight pass. It matches no scene. |
+| `1..8` | Alive, hiding in the town whose **town scene byte** equals this value. |
+| `0xFF` | Vanquished. Sticky: no later pass rewrites it. Consumers test the high bit, so any value with the high bit set reads as vanquished. |
+
+**The hideout id is the town scene byte, not a private enumeration.** Id `1` is
+Moonglow, `2` Britain, `3` Jhelom, `4` Yew, `5` Minoc, `6` Trinsic, `7` Skara
+Brae, `8` New Magincia — the eight town rows of `catalogs/gazetteer.md`. Only
+towns are eligible; dwellings, castles, keeps, and the dungeon-mode scene bytes
+are never hideouts. The town-entry consumer literally compares the slot value
+against the scene byte of the town being entered, which is what fixes this
+identity.
+
+**Do not confuse hideout towns with the three Shadowlord confrontation
+scenes.** The scenes where a Shadowlord can be named and destroyed are the three
+fixed Eternal Flame keeps listed in Section 5 — The Lycaeum, Empath Abbey, and
+Serpent's Hold. Those are a separate axis: they are where the endgame of the
+shard chain happens, they never appear in a hideout slot, and entering a town
+that matches a hideout slot does not turn that town into one of them. Town entry
+installs a Shadowlord actor into the town scene the party is already in; the
+scene identity is unchanged.
+
+At midnight, the time cleanup rerolls each living Shadowlord's hideout. The
+exact rejection rule is specified in `systems/time.md` Section 7: the new id is
+drawn uniformly from `1..8` and rejected when it equals the party's current
+scene byte or the value currently held by any of the three slots, including the
+slot being rerolled. When the player destroys a Shadowlord through the shared
+shard/spell destruction path, that slot becomes vanquished and is no longer
+rerolled. The same success path also ORs a per-Shadowlord bit into the
+save-backed quest-progress word: Falsehood/Faulinei sets `0x02`,
+Hatred/Astaroth sets `0x04`, and Cowardice/Nosfentor sets `0x08` in the low byte
+of `SAVED.GAM 0x0624`, and it clears the used shard's carried flag. The three
+Shadowlord slot bytes remain the authoritative alive/vanquished state for
 gameplay gates.
 
 Several user-visible behaviours consume the same state:
 
-- The Sextant/view path can mark or report the current hideout state for each
-  living Shadowlord.
-- Entering a town-family scene that matches a living Shadowlord's current slot
-  can install that Shadowlord into the scene.
+- Entering a town whose scene byte matches a living Shadowlord's slot installs
+  that Shadowlord as an actor in that town's live cast. The town's scene
+  identity, map, and NPC roster are unaffected.
 - Entering Stonegate reads the same three slots as presentation state: every
   non-vanquished slot contributes that Shadowlord's "air of" atmospheric line,
   while vanquished slots are silent.
-- Yelling a Shadowlord's name checks whether that Shadowlord is still alive
-  before creating the summoned encounter state.
-- Doom's entrance requires all three Shadowlord slots to be vanquished.
+- Yelling a Shadowlord's name in one of the three confrontation scenes checks
+  whether that Shadowlord is still alive before creating the summoned encounter
+  state, and records which Shadowlord is now active.
+- Doom's entrance requires all three Shadowlord slots to be vanquished. The
+  entrance check ANDs the three slot bytes together and admits the party only
+  when the result still has the high bit set, which happens only when all three
+  are `0xFF`. Attempting to enter Doom with any Shadowlord still living does not
+  merely refuse: the party is ambushed at the entrance and stays outside.
+- A view/report path marks the current hideout state for each living
+  Shadowlord. The exact readout geometry is not yet published; see Section 12.
 
 This table replaces older wording that treated the midnight table as NPC
 schedule or day-rollover pointer state. NPC schedules are separate per-NPC
@@ -385,6 +444,15 @@ prompts all have public behavioral owners in `systems/conversation.md` and
 - Decoded trailing or embedded records are non-required unless a public
   conversation, roster, or quest edge names them. They should not become
   mandatory graph nodes without a clean reachability proof.
+- **Open: the Shadowlord location readout.** The three hideout slots are
+  consumed by a view-side renderer that walks eight rows and overlays a marker
+  on the row whose index matches a living slot's value. That much is settled.
+  What the eight rows are laid out as on screen, and therefore whether the
+  readout presents as a town list, a coarse world map, or something else, is not
+  established, and no text line is emitted from that loop. Implementations
+  should treat the readout's presentation as unspecified and drive it from the
+  slot values rather than inventing a wording for it. The hideout semantics
+  themselves are not affected: the slot value is a town scene byte.
 
 ## Sources
 

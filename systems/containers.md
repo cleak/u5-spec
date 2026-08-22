@@ -262,9 +262,9 @@ bitmap rule:
 
 | Record family | Extra rule |
 |---|---|
-| Zero-key cache | Requires the party to own no keys and the target tile not to be occupied by an NPC. |
-| Daily cache | Can fire once per in-game day; on success it stores the current day as the cache's cooldown cookie. |
-| Single-use / occupancy-gated cache | Requires its separate save cookie to be clear and no NPC to occupy the searched tile. The grant path does not set that cookie. |
+| Zero-key cache | Requires the party to own no keys and the target tile not to be occupied by an NPC. The gate reads the ordinary Keys counter. |
+| Daily cache | Can fire once per in-game day; on success it stores the current day in its cooldown byte, which lives inside the special/quest-item band rather than being a field of its own. |
+| Single-use / occupancy-gated cache | Requires no NPC on the searched tile and requires the party to carry none of the item the record grants. The gate reads that item's ordinary equipment-inventory counter, so the grant path never writes it — taking the granted item does. It is not a separate cookie. |
 
 These special cases still use the same final pickup-staging and found-object
 narration path once accepted. Implementations should preserve the table's

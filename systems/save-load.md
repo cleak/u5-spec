@@ -161,7 +161,8 @@ existing Ultima V `SAVED.GAM`. Instead, it reads the Ultima V transfer seed,
 reads the Ultima IV player disk's `PARTY.SAV`, validates and translates the
 leading transferable character, and then writes a new Ultima V save pair.
 
-The transfer flow loads the transfer seed pair `BRIT.GAM` / `BRIT.OOL`,
+The transfer flow loads the same fresh-game seed pair the questionnaire uses,
+`INIT.GAM` / `INIT.OOL`,
 paints the character-roster preview screen, and accepts or aborts the player's
 confirmation. Once committed, the transferred Avatar's fields overwrite roster
 slot zero in the seed image and the result is written as `SAVED.GAM` plus
@@ -248,8 +249,11 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
 
 The original save/load contract is fixed at the four-file byte-image level:
 `SAVED.GAM`, `SAVED.OOL`, `BRIT.OOL`, and `UNDER.OOL` are read or overwritten
-in the order described above. `INIT.GAM` / `INIT.OOL` remain the questionnaire
-fresh-game seeds, while `BRIT.GAM` / `BRIT.OOL` are transfer seeds owned by
+in the order described above. `INIT.GAM` / `INIT.OOL` are the fresh-game seeds for both the
+questionnaire and the Ultima IV transfer path. Earlier text here named a
+separate `BRIT.GAM` / `BRIT.OOL` transfer seed pair; that was wrong, and no
+`BRIT.GAM` exists in the shipped data. `BRIT.OOL` is only the surface-plane
+object mirror described above. Transfer specifics are owned by
 `u4-transfer.md`.
 The items below are compatibility boundaries for modern ports or low-level
 floppy UI emulation, not gaps in the save-file layout.

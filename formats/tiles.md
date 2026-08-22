@@ -24,11 +24,12 @@ magic number, no version word, no flag byte, no checksum, and no envelope
 footer. A reader allocates a buffer of exactly the declared size and
 decompresses the remaining bytes into it.
 
-This LZW envelope is not the format used by `PROPORT.PCS`, `TITLE.BIT`,
-`BRITISH.BIT`, or `WD.BIT` in the EGA driver path. Those files use the
-driver-compressed sparse strip resource format specified in `formats/bit.md`,
-`formats/font-pcs.md`, and `systems/display-driver-abi.md`. This document
-specifies only the paired `.16`/`.4` graphics archive family.
+`TITLE.BIT`, `BRITISH.BIT`, and `PROPORT.PCS` use this same LZW envelope, but
+their decompressed payload is a different container: a one-bit-per-pixel
+sub-image list specified in `formats/bit.md` and `formats/font-pcs.md`.
+`WD.BIT` carries that same sub-image list with no envelope at all. This
+document specifies only the paired `.16`/`.4` graphics archive family that sits
+under the envelope.
 
 The LZW dialect is the GIF variant, byte-for-byte identical to the dialect used by the Compuserve GIF87a image format that was contemporary with the game's release. Codes start at nine bits wide and grow by one bit each time the dictionary fills, capping at twelve bits. Bit packing is little-endian: the first emitted code occupies the low nine bits of the first compressed byte, and subsequent codes pack into adjacent bit positions, crossing byte boundaries freely. The dictionary holds up to four thousand ninety-six entries.
 

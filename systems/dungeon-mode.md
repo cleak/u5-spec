@@ -132,9 +132,13 @@ them.
 
 **Active-object setup.** Dungeon view initialisation can either reuse the
 current active dungeon object or roll a fresh one. A fresh roll selects one of
-eight dungeon monster presentation records, installs the matching primary and
-secondary sprite ids, resets the visibility flag, stamps the current Z level,
-and lazily loads the sprite source if placement succeeds. Placement makes up
+eight dungeon monster presentation records, installs that record's display
+sprite byte and its **combat class id**, resets the visibility flag, stamps the
+current Z level, and lazily loads the sprite source if placement succeeds. The
+two per-record bytes are distinct: one is presentation, the other is the combat
+class the wandering-monster combat path consumes directly (§ 14.1). The eight
+classes are Giant Rat, Bat, Giant Spider, Ghost, Slime, Gremlin, Gazer, and
+Reaper. Placement makes up
 to eight random attempts on the current 8-by-8 level, accepting only cells in
 the pit/corridor spawn families (`0x6?` or `0x7?`) and rejecting the party's
 current cell. On success the same X/Y is written to the active-object slot and
@@ -152,11 +156,25 @@ Two underfoot tile classes have *immediate* effects that fire before the player 
 **Room trigger (high nibble `0xF`).** A subset of cells flagged as "room cells" trigger a room encounter when the party walks onto them. The same room-entry helper used by the `0xA?` state loads the appropriate arena from `DUNGEON.CBT`, sets combat-entry state, and hands off to combat. After combat resolves, the player re-emerges in the dungeon at the room cell. The helper patches the loaded dungeon image for that visit by changing `0xF?` to `0xA?`; the on-disk source cell is unchanged.
 
 Cleared room state also has an overlay-side bitmap keyed by dungeon and room
-id. This bitmap is part of the save image. When a level is loaded or reloaded,
-room-marker cells whose clear bit is set are demoted from `0xF?` to `0xA?`,
-preserving the room id low nibble. They are not demoted to `0xE?`. This keeps
-the cleared-room runtime state consistent across save/load without changing
-`DUNGEON.DAT`.
+id. This bitmap is part of the save image. It has one bit per dungeon-room arena
+record - one hundred twelve bits, fourteen bytes - and the bit index is the same
+`arena_bank * 16 + room_id` value used to select the `DUNGEON.CBT` record
+(§ 14). When a level is loaded or reloaded, room-marker cells whose clear bit is
+set are demoted from `0xF?` to `0xA?`, preserving the room id low nibble. They
+are not demoted to `0xE?`. This keeps the cleared-room runtime state consistent
+across save/load without changing `DUNGEON.DAT`.
+
+The bitmap **writer** consults a small resident deny-list before setting a bit.
+The list holds six `(dungeon, room)` pairs; when the room being resolved matches
+one of them, the writer returns without setting anything. In shipped data the
+deny-listed rooms are rooms one, six, eleven, and twelve of the Wrong bank and
+rooms zero and eleven of the Covetous bank - three of which are among the rooms
+that carry randomised `0xEC..0xEF` sources. Those six rooms therefore never
+persist as cleared and re-arm on every visit. The bitmap
+**reader** applies no deny-list, so it simply always reports those rooms as not
+cleared. Note that the deny-list is keyed by the raw dungeon record number,
+while the bit index uses the collapsed arena bank, so an implementation must not
+reuse one for the other.
 
 A third class of effect — **energy fields** (high nibble `0x8` or `0x9`) — fires not from the underfoot reaction but as part of *moving into* the cell. Stepping into a field-bearing cell triggers the effect *before* the move completes, applying status or damage to the moving party member or the whole party. The four sub-types are sleep, poison gas, wall of fire, and electric.
 
@@ -493,15 +511,19 @@ current facing, and compares that coordinate with the single active dungeon
 monster record. If the active monster is not exactly in that forward cell, the
 handler uses the stock refusal response and does not launch combat.
 
-If the active monster is in that forward cell, the handler clears the
-first-person active-object presentation, sets up the dungeon combat arena
-kind, and launches combat using the active monster's sprite id. After combat
-returns, result code five moves the party one level down when possible and
-otherwise exits through the fall/surface path; result code six moves the party
-one level up when possible and otherwise uses the same surface-exit path.
-Other combat results keep the party on the current level. If the scene is
-still a dungeon after this post-combat step, dungeon mode advances time through
-the normal tile reread path and redraws the first-person view.
+If the active monster is in that forward cell, the handler sets the combat kind
+byte to the ambush value, tears down the first-person view, synthesises a combat
+arena and its metadata band in the room buffer, and calls the combat framer on
+its ambush entry mode with the active monster's class byte. Section 14.1 owns
+that contract in full; note in particular that no `DUNGEON.CBT` record is read
+on this path and that the monster's class byte is used directly rather than
+being derived from a sprite id. After combat returns, result code five moves the
+party one level down when possible and otherwise exits through the fall/surface
+path; result code six moves the party one level up when possible and otherwise
+uses the same surface-exit path. Other combat results keep the party on the
+current level. If the scene is still a dungeon after this post-combat step, the
+handler re-initialises the dungeon view, rolls a replacement active monster, and
+redraws the first-person view.
 
 Before letters reach that dispatcher, the dungeon command parser intercepts
 mode-local controls: movement keys, Enter/period as forward movement,
@@ -706,13 +728,25 @@ room-entry facing seed chooses one metadata row, and party slot `i` receives X
 from that row's column `11 + i` and Y from column `17 + i`. The monster/special
 scan then walks sixteen source slots in order. Source slot `i` reads its source
 byte from row 5 column `11 + i`, X from row 6 column `11 + i`, and Y from row 7
-column `11 + i`. Ordinary source bytes become deterministic setup classes;
-special source bytes become special active-object markers or special-derived
-auxiliary values as described in the CBT format spec. There is no separate
-dungeon-room monster-count roll: the scan attempts one placement for each
-nonzero source cell, with only special subtypes adding their own small random
-post-placement choices. Special placements remain on the special active-object
-path; this setup helper does not turn them into ordinary monster setup classes.
+column `11 + i`. Ordinary source bytes become deterministic setup classes and
+produce real combat actors; genuine special source bytes produce active-object
+markers only, with no combat descriptor and no turn in the round loop, plus the
+special-derived auxiliary values described in the CBT format spec. There is no
+separate dungeon-room monster-count roll: the scan attempts one placement for
+each nonzero source cell, with only special subtypes adding their own small
+random post-placement choices.
+
+One family is easy to mis-classify. Sources in the `0xEC..0xEF` family are **not**
+special placements: they pass the ordinary/special test, take the ordinary path,
+and only have their derived setup class replaced by one of four setup ids
+pre-rolled from a small vermin palette (Giant Rat, Bat, Giant Spider, Python,
+Skeleton, Slime, Insect Swarm). They therefore spawn ordinary randomised
+combatants. They receive no auxiliary-byte post-write only because that
+post-write is gated on the special placement path. This family occurs in fifteen
+shipped dungeon-room records, so treating it as an inert marker leaves those
+rooms empty. Genuine special placements do stay on the special active-object
+path and are never converted into ordinary monster setup classes.
+
 That generated actor setup is combat-local; it is not a persistent rewrite of
 the dungeon cell grid.
 
@@ -744,9 +778,92 @@ When that contact flag is set, dungeon mode determines the cardinal direction
 from the party to the active monster using wrapped adjacency, prints the
 approach-direction feedback if the party was not already facing that way,
 commits the new facing, redraws and pauses briefly, then launches a dungeon
-combat encounter using the active monster's sprite id. After combat returns,
-the mode runs the normal post-combat redraw/time/view-initialisation bracket
-and redraws the first-person viewport if the scene is still a dungeon.
+combat encounter through the wandering-monster path below.
+
+### 14.1 Wandering-monster combat: arena, setup, and slot handling
+
+Both wandering-monster triggers - the A-Attack forward probe (§ 10) and the
+post-action contact/auto-face path above - use the same four-step launch, and it
+is **not** the room-trigger `DUNGEON.CBT` path. No arena record is read from disk
+on this path.
+
+1. **Set the combat kind byte to the ambush value.** The contact path also
+   clears the combat result code first.
+2. **Tear down the first-person view resources.**
+3. **Synthesise the arena in the room buffer.** The dungeon room painter is
+   called with the combat kind byte already set to the ambush value. It fills the
+   eleven-by-eleven terrain grid with the current corridor fill byte, stamps the
+   outline, corner markers, the underfoot-class centre icon, and the four
+   passage strokes, and then writes the same metadata band that the room-combat
+   setup helper reads (see `formats/cbt.md` Section 5 for the row/column layout):
+
+   - **Party-entry rows.** Metadata rows one through four receive fixed
+     six-entry X and Y sequences. On this path the entry-facing seed the setup
+     helper later reads is simply the party's current dungeon facing, and the
+     four rows are arranged so that the row that facing selects (facing north
+     picks row three, east row two, south row four, west row one) places the
+     party on the side of the arena *behind* its facing. The published values
+     are `X = [6,7,7,8,8,8]`, `[4,3,3,2,2,2]`, `[5,4,6,3,5,7]`, `[5,4,6,3,5,7]`
+     for rows one through four, and `Y = [5,4,6,3,5,7]`, `[5,4,6,3,5,7]`,
+     `[6,7,7,8,8,8]`, `[4,3,3,2,2,2]` for the same rows.
+   - **Source coordinate rows.** Metadata rows six and seven receive sixteen-entry
+     X and Y sequences chosen by the party's facing, arranged so monsters start
+     on the side the party is facing. Facing north uses
+     `X = [5,4,6,3,7,2,8,5,2,8,3,7,2,4,6,8]` with
+     `Y = [2,2,2,3,3,4,4,1,2,2,1,1,0,0,0,0]`; facing east uses
+     `X = [8,8,8,7,7,6,6,9,8,8,9,9,10,10,10,10]` with
+     `Y = [5,4,6,3,7,2,8,5,2,8,7,3,2,4,6,8]`; facing south swaps the east pair;
+     facing west swaps the north pair. A facing value outside zero through three
+     leaves both rows untouched.
+   - **Source band.** All sixteen source cells are cleared, a shuffled
+     permutation of the sixteen slot indices is built, and then `count` copies of
+     the ordinary source byte `class * 4 + 0x40` are written into the first
+     `count` permuted slots. `class` is the active dungeon monster's stored
+     class byte. `count` is a uniform integer in `[1, spawn_count]` where
+     `spawn_count` is the class's spawn-count stat byte, except that a
+     spawn-count of eight or sixteen is taken as an exact count with no roll.
+
+4. **Call the combat framer with the ambush entry mode**, passing the active
+   monster's class byte. The framer's ambush branch performs no arena load and
+   discards the class argument; it simply invokes the room-combat setup helper
+   with an entry mode that passes the helper's placement gate. The helper then
+   reads the band just synthesised: party slots take their coordinates from the
+   facing-selected party row, and each nonzero source is placed on the ordinary
+   path, recovering the same class the painter encoded.
+
+**Monster class derivation.** The active dungeon monster's class byte is not a
+sprite id and needs no shift arithmetic. Dungeon view initialisation rolls one of
+eight presentation records and copies that record's combat class directly into
+the active-object slot; the eight classes are Giant Rat, Bat, Giant Spider,
+Ghost, Slime, Gremlin, Gazer, and Reaper. Their spawn-count stat bytes are ten,
+sixteen, four, six, sixteen, thirteen, four, and three respectively, so Bat and
+Slime always place the full sixteen while the others roll.
+
+**Active-object slot handling.** The dungeon active-object slot is **not** cleared
+before the framer runs. The framer backs up the whole active-object table on
+entry and restores it on exit, so the dungeon monster's record is byte-identical
+when combat returns. The clearing happens afterwards: the post-combat view
+re-initialisation clears the dungeon active-object slot bytes, and the very next
+step rolls and re-places a brand-new active monster. The practical contract is
+that the monster the party fought is always replaced by a freshly rolled random
+one after a wandering-monster fight, whatever the outcome, rather than being
+preserved or specifically removed.
+
+**Post-combat bracket.** The two triggers differ here. Only the **A-Attack** path
+applies the combat result code: five moves the party one level down when
+possible and otherwise exits through the fall/surface path, six moves the party
+one level up under the same fallback, and any other code keeps the level. The
+**contact** path ignores the result code entirely, so a wandering-monster fight
+that begins by being walked into can never change the party's level. Both paths
+then re-initialise the dungeon view, which is what clears the active-object slot
+bytes, and roll the replacement active monster. The A-Attack path gates both the
+replacement roll and the viewport redraw on the scene byte still reporting a
+dungeon; the contact path rolls unconditionally and gates only the redraw. The
+difference is not observable in normal play, because the scene byte only stops
+reporting a dungeon when the result code has already ejected the party to the
+surface. Neither handler advances the world clock itself and neither
+touches the room-clear bitmap - those belong to the per-turn epilogue and to the
+room-trigger path respectively.
 
 The `DUNGEON.CBT` arena file is much larger than the overworld combat file because each dungeon has many distinct rooms. The arena format is the same eleven-by-eleven terrain-grid-plus-metadata-band format described in the maps spec. The room-entry helper computes the arena index as:
 
@@ -834,6 +951,21 @@ specified, and stock data cannot produce that edge.
 The behaviour described here was derived by reading the private function notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- The wandering-monster combat contract in Section 14.1 -- ambush entry mode,
+  arena and metadata-band synthesis, party-entry and source coordinate tables,
+  source-band construction, class derivation, active-object slot handling, and
+  the post-combat bracket -- derived from private analysis note
+  `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md` and the function notes it
+  cites: `u5-decomp/functions/DUNGEON_OVL/0x1D4A_dungeon_attack_forward.md`,
+  `u5-decomp/functions/DUNGEON_OVL/0x0B7E_dungeon_encounter_face.md`,
+  `u5-decomp/functions/DUNGEON_OVL/0x0134_dungeon_view_init.md`,
+  `u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md`,
+  `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+- The room-clear bitmap's index derivation and the six-pair writer deny-list --
+  derived from `u5-decomp/functions/DNGLOOK_OVL/0x0844_set_room_cleared.md`,
+  `u5-decomp/functions/DNGLOOK_OVL/0x08D4_is_room_cleared.md`, and
+  `u5-decomp/functions/DNGLOOK_OVL/0x093A_demote_cleared_room_markers.md`.
 - The dungeon viewport frame, status row redraw, render-and-poll helper,
   active-object setup and placement, and room-entry state handoff -- derived
   from `u5-decomp/functions/DUNGEON_OVL/0x0332_draw_view_panel.md`,

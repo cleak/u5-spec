@@ -361,36 +361,105 @@ word of up to thirty characters using the same style of line input as the
 conversation keyword path. Empty input prints the nothing-said result and
 returns without a world change. Nonempty input is routed by scene context:
 
-- **Shadowlord-name contexts.** In the Shadowlord arena scene family, the typed
-  word is compared with the three Shadowlord names. A matching name can create
-  the active Shadowlord encounter state only when the corresponding Shadowlord
-  is still eligible for that scene and a monster slot is free. The success path
-  records which Shadowlord is active, places the encounter state near the
-  player, and plays the visible/sound appearance effect. Wrong names, wrong
-  scene, unavailable Shadowlords, or full monster slots produce no effect.
-- **Word-of-Power contexts.** The command scans the eight dungeon Words of
-  Power in their fixed order. A matching word prints the uttered-word result.
-  The match also plays the shared low-rumble / full-viewport flash
-  presentation effect before the location-specific door test. The word
-  transmutes the live dungeon exit/door tile only when the current room's exit
-  metadata and that word's target location agree; speaking a valid word in the
-  wrong place still produces the utterance feedback and presentation effect but
-  no door change. A successful transmutation dirties visibility so the changed
-  tile is redrawn. A nonmatching word produces no effect.
+- **Shadowlord-name contexts.** Only the three Eternal Flame keeps — The
+  Lycaeum, Empath Abbey, and Serpent's Hold — accept Shadowlord names. In one of
+  those three scenes the typed word is compared with the three Shadowlord names.
+  A matching name creates the active Shadowlord encounter state only when that
+  Shadowlord has not been vanquished and a monster slot is free; the party must
+  also be far enough from the scene's northern edge for the encounter to be
+  placed. The success path records which Shadowlord is now active, places the
+  encounter state a short distance north of the party, and plays the
+  visible/sound appearance effect. Any of the three names works in any of the
+  three keeps; the pairing is enforced later by the destruction position, not
+  here. Wrong names, any other scene, vanquished Shadowlords, or full monster
+  slots produce no effect.
+- **Word-of-Power contexts.** Only the outdoor scene accepts Words of Power.
+  Both world surfaces qualify, because both use the outdoor scene with the
+  plane distinguished by the party's floor/depth byte. There is no
+  dungeon-interior, town, or keep Word-of-Power route. The full predicate is
+  given below.
 - **Other contexts.** Non-ship scenes that are not accepted by either
   Shadowlord-name or Word-of-Power routing produce no effect after the prompt.
 
-The traced Word-of-Power transmutation path also flips a per-word scratch
-marker, but no live reader has been identified. Treat that marker as
-non-contractual bookkeeping: it is not a save-backed quest flag, it does not
-gate repeated utterances, and clean implementations should derive
-player-visible state from the live tile change plus the normal visibility-dirty
-path.
+### 11.1 The Word-of-Power seal predicate
 
-The abandoned mantra-style branch present in the private command note is not
-reachable from the shipped Word-of-Power table and is not part of the v1 public
-Yell contract. Shrine meditation is specified under the `M` command and
-`systems/karma.md`.
+The command scans the eight dungeon Words of Power in their fixed order and
+takes the first prefix match. A recognised word immediately prints the
+uttered-word result and plays the shared low-rumble / full-viewport flash
+presentation effect, before any location test. An unrecognised word prints the
+no-effect result and nothing else happens.
+
+After a recognised match the handler picks a direction, then checks a
+coordinate, then mutates one cell:
+
+1. **Direction.** It inspects the four cells cardinally adjacent to the party in
+   the currently visible map, in the order west, south, east, north, and takes
+   the first one whose tile is any of: that word's own dungeon-entrance tile,
+   the sealed collapsed-entrance tile, or the ruined-shrine tile. If no
+   neighbour qualifies, the command additionally prints the no-effect result and
+   stops. **The party stands next to the sealed cell, never on it** — the sealed
+   tile is impassable, so standing on it is not possible anyway.
+2. **Ruined-shrine branch.** If the neighbour selected in step 1 is a ruined
+   shrine, the handler hands off to the shrine restoration/mantra prompt for
+   that word's index instead of doing anything to a dungeon entrance. This
+   branch is reachable in normal play; earlier public wording that called the
+   mantra-style Yell branch unreachable was wrong. `systems/karma.md` owns the
+   restoration contract itself.
+3. **Coordinate.** Otherwise the handler requires the selected neighbour's
+   world coordinate to equal that word's published dungeon entrance coordinate
+   (`catalogs/gazetteer.md` Section 5.1). Speaking a valid word anywhere else
+   still produces the utterance feedback and presentation effect, but changes
+   nothing. Note that the check compares only the horizontal coordinate pair, so
+   the same word works at the same coordinate on either world surface.
+4. **Mutation.** On a coordinate match the handler toggles the cell between the
+   sealed collapsed-entrance tile and that dungeon's own entrance tile, and
+   toggles that word's saved seal flag. The mutation dirties visibility so the
+   changed cell is redrawn.
+
+The per-word entrance tile is fixed data:
+
+| Word | Dungeon | Entrance tile shown when unsealed |
+|---|---|---|
+| `FALLAX` | Deceit | `0x18` dungeon |
+| `VILIS` | Despise | `0x16` dark cave |
+| `INOPIA` | Destard | `0x16` dark cave |
+| `MALUM` | Wrong | `0x18` dungeon |
+| `AVIDUS` | Covetous | `0x18` dungeon |
+| `INFAMA` | Shame | `0x17` abandoned mine |
+| `IGNAVUS` | Hythloth | `0x17` abandoned mine |
+| `VERAMOCOR` | Doom | `0x16` dark cave |
+
+The sealed form is tile `0xDF` for all eight. Equivalently, the mutation in step
+4 flips the cell by the difference between the two ids, which is why a single
+rule covers all eight words.
+
+All three unsealed variants are ordinary passable terrain; the single sealed
+tile shared by all eight is impassable. `catalogs/tile-catalog.md` carries the
+tile identities.
+
+### 11.2 Seal persistence
+
+The per-word marker is **not** scratch. Earlier public wording that called it
+non-contractual bookkeeping with no live reader was wrong and is retracted.
+
+Eight save-backed flags, one per word, record whether that word has been
+spoken. They are durable state in the save image (`formats/saved-gam.md`
+Section 9.1) and start clear on a new game, so **every dungeon entrance begins
+sealed**. The shipped world maps always store the unsealed entrance tile; the
+sealed presentation is re-derived from these flags every time a map region is
+loaded into the live view. Concretely, when a region is loaded, any cell holding
+one of the three dungeon-entrance tiles is rewritten to the collapsed-entrance
+tile if that dungeon's word is still unspoken. The same pass rewrites shrine
+cells to the ruined-shrine tile according to a parallel set of eight saved
+shrine flags.
+
+Two consequences an implementation must honour:
+
+- Unsealing survives save, reload, and leaving and re-entering the region. An
+  engine that mutates only its live tile buffer will silently re-seal the
+  dungeon when the region reloads.
+- The mutation is a genuine toggle. Speaking the same word again while standing
+  beside an already-open entrance clears the flag and re-seals the entrance.
 
 ## 12. Cross-References
 
@@ -457,9 +526,11 @@ reproduced here.
   same-slot self-swap behaviour:
   `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`.
 - The Y-Yell sail toggle, free-text prompt, Shadowlord-name branch,
-  Word-of-Power branch, per-word scratch-marker boundary, and unreachable
-  mantra-style leftover branch:
+  Word-of-Power seal predicate, saved per-word seal flags and the region-load
+  pass that re-applies them, and the ruined-shrine mantra hand-off:
+  `u5-decomp/notes/2026-08-22_quest-world-retrace.md`,
   `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`,
+  `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`,
   `u5-decomp/functions/CMDS_OVL/0x70F2_shrine_effect.md`, and
   `u5-decomp/functions/CMDS_OVL/0x1202_cmds_meditate.md`.
 - The P-Push direction prompt, pushable tile families, push/pull branch

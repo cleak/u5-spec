@@ -111,6 +111,14 @@ Surface visibility uses the ambient light value as an input to the visibility pr
 
 The surface renderer does not have the dungeon's all-or-nothing first-person blackout. Instead, it rebuilds the 11-by-11 visibility grid from the current light value, terrain blockers, and the separate local-light mask maintained by the visibility system. A zero or dark light state leaves cells obscured unless local-light state applies; a positive light state lets the centre-out visibility producer carve visible cells.
 
+The local-light mask is not part of this system: it is owned by
+`systems/visibility.md` section 12, which specifies the source tile set, the
+per-source carve, the squared-distance threshold of ten (a Euclidean disc of
+radius about 3.16, not a Chebyshev box and not the dungeon torch radius), and
+the three points at which the mask is rebuilt. In particular the local-light
+source radius is unrelated to the ambient/torch/spell radii tabulated in this
+document; do not reuse a value from here for it.
+
 ## 8. Commands And Spells
 
 The I-Ignite command is the player-facing torch entry point. It consumes one torch from inventory; with no torches available it refuses and leaves the light state unchanged.

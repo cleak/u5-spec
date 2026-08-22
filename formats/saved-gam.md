@@ -170,14 +170,22 @@ A long band of bytes after the inn-guest registry holds the party's shared inven
 | `0x0207` | 1 byte  | Gems               | Vision gems.                                                                                                  |
 | `0x0208` | 1 byte  | Torches            | Torches.                                                                                                      |
 | `0x0209` | 1 byte  | Grapple / legacy magic-powder byte | Traced gameplay reads this byte as the outdoor Klimb gear gate: Lord Michael's conversation grant sets it, and overworld K-Klimb refuses without it. Older references label the same byte magic powder; no separate magic-powder consumer is currently traced. |
-| `0x020A..0x0219` | 16 bytes | Special / quest items | One-byte counters or flags for carried/useable special items. Confirmed members include Magic Carpet at `0x020A`, skull/special key stock at `0x020B`, Amulet/Crown/Sceptre of Lord British at `0x020D..0x020F`, shard flags at `0x0210..0x0212`, Spyglass at `0x0214`, HMS Cape plans at `0x0215`, Sextant at `0x0216`, Pocket Watch at `0x0217`, Black Badge at `0x0218`, and the Wooden/Sandalwood Box story flag at `0x0219`. The byte at `0x0219` is the save-backed box flag: item acquisition sets it and the endgame reads it. Other individual meanings remain cross-system. |
+| `0x020A..0x0219` | 16 bytes | Special / quest items | One-byte counters or flags for carried/useable special items. Confirmed members include Magic Carpet at `0x020A`, skull/special key stock at `0x020B`, Amulet/Crown/Sceptre of Lord British at `0x020D..0x020F`, shard flags at `0x0210..0x0212`, Spyglass at `0x0214`, HMS Cape plans at `0x0215`, Sextant at `0x0216`, Pocket Watch at `0x0217`, Black Badge at `0x0218`, and the Wooden/Sandalwood Box story flag at `0x0219`. The byte at `0x0219` is the save-backed box flag: item acquisition sets it and the endgame reads it. **`0x020C` is not a carried-item counter**: it is the fixed hidden-treasure daily cooldown cookie described in Section 10, and it happens to live in this band. Other individual meanings remain cross-system. |
 | `0x021A..0x0249` | 48 bytes | Equipment inventory | One byte per equipment item id. Arms shops, Z-stats, and R-Ready use the same id to index the shop stock table, base-price table, display-name row, carried counter, and readied-equipment slot value. The span covers ammunition and carried weapons/armour/helms/shields/rings/amulets. |
 | `0x024A..0x0279` | 48 bytes | Spell-charge stock | One byte per pre-mixed spell charge. See Section 7.1.                                                         |
 | `0x027A..0x0281` | 8 bytes | Scroll counters | One byte per usable scroll row, in the same order as the U-Use scroll dispatch: `LV`, `HR`, `IS`, `AI`, `IQW`, `CKX`, `CIM`, `AT`. |
 | `0x0282..0x0289` | 8 bytes | Potion counters | One byte per potion row, in display order: Blue, Yellow, Red, Green, Orange, Purple, Black, White. |
 | `0x02AA` | 8 bytes | Reagents           | Black pearl, blood moss, garlic, ginseng, mandrake, nightshade, spider silk, sulfurous ash. One byte each.    |
 
-The inventory region holds two-byte words for the two counters that need them (food and gold) and single bytes for everything else. Carry caps are enforced by the gameplay code; the save format places no upper bound, and an editor that sets values past the in-game maximum will produce a save the engine will read but that may behave oddly on display or arithmetic. The arms-shop equipment block is item-id keyed: item id `N` reads or writes byte `0x021A + N`.
+The inventory region holds two-byte words for the two counters that need them (food and gold) and single bytes for everything else. Carry caps are enforced by the gameplay code; the save format places no upper bound, and an editor that sets values past the in-game maximum will produce a save the engine will read but that may behave oddly on display or arithmetic. The arms-shop equipment block is item-id keyed: item id `N` reads or writes byte `0x021A + N`. Ordinary equipment grants increment that byte and cap it at ninety-nine.
+
+Two entries in these two bands are read by systems outside inventory, and an
+implementation that gives them private storage will diverge:
+
+- `0x0206` (Keys) is also the gate for fixed hidden-treasure record 13.
+- `0x0241` — the equipment counter for item id `39`, the Glass Sword — is also
+  the gate for fixed hidden-treasure record 15. It is the same byte, not a
+  parallel cookie. See Section 10.
 
 The reagent block is small enough to enumerate as a fixed eight-byte record at `0x02AA`. The order matches the in-world spell-mixing UI, with black pearl in the first byte and sulfurous ash in the last.
 
@@ -281,10 +289,12 @@ the resident image.
 
 | Offset   | Width  | Field            | Meaning                                                                                                                       |
 |----------|--------|------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| `0x0322..0x0324` | 3 bytes | Shadowlord hideout / vanquished slots | Slot order is Falsehood/Faulinei, Hatred/Astaroth, Cowardice/Nosfentor. A living slot holds the current hideout id `1..8`; successful shard/flame destruction writes `0xFF` to the matching slot. Doom entry and Shadowlord spawn/report paths treat high-bit-set values as vanquished. |
-| `0x0325` | 1 byte | Active Shadowlord id | Runtime handshake set by the Shadowlord-name Yell path and checked by shard/spell destruction. Values `0..2` identify the active named Shadowlord; preserve other values byte-for-byte. |
+| `0x0322..0x0324` | 3 bytes | Shadowlord hideout / vanquished slots | Slot order is Falsehood/Faulinei, Hatred/Astaroth, Cowardice/Nosfentor. `0` means "not yet placed" and is the factory value for all three slots; `1..8` is the **town scene byte** of the town currently hosting that Shadowlord; successful shard/flame destruction writes `0xFF`. Doom entry and Shadowlord spawn/report paths treat high-bit-set values as vanquished. |
+| `0x0325` | 1 byte | Active Shadowlord id | Runtime handshake set by the Shadowlord-name Yell path and checked by shard/spell destruction. Values `0..2` identify the active named Shadowlord. The factory value is `0xFF`, meaning "none active"; preserve other values byte-for-byte. |
 | `0x0326` | 1 byte | Ordained mask    | Bit per virtue: 0 Honesty, 1 Compassion, 2 Valor, 3 Justice, 4 Sacrifice, 5 Honor, 6 Spirituality, 7 Humility. Bit set = "ordained, must visit Codex". |
 | `0x0328` | 1 byte | Codex-visited mask | Same eight-bit layout. Bit set = "Codex page read for this virtue".                                                          |
+| `0x032A..0x0331` | 8 bytes | Word-of-Power seal flags | One byte per Word of Power, in the fixed word order Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, Doom. Zero means the word has not been spoken and that dungeon's entrance is sealed; a successful utterance toggles the byte's high bit. Region loading re-derives the sealed entrance tile from these flags, so they are the durable "dungeon opened" state, not scratch. Factory: all zero. See `systems/commands.md` Section 11. |
+| `0x0332..0x0339` | 8 bytes | Shrine ruin flags | One byte per shrine, in shrine order. A high-bit-set byte makes that shrine render and behave as a ruined shrine when its region is loaded. Factory: all zero. |
 | `0x0624..0x0625` | 2 bytes | Quest-progress flags | Save-backed quest bit word. Successful Shadowlord destruction ORs the low byte with `0x02` for Falsehood/Faulinei, `0x04` for Hatred/Astaroth, and `0x08` for Cowardice/Nosfentor. Preserve other bits. |
 
 The two bitmasks together encode a four-state virtue quest: not started (both zero), ordained (ordained set, codex clear), codex-read (both set), complete (ordained clear, codex set — the ordained bit is cleared on shrine turn-in). All eight virtues use the same encoding, with the same bit-to-virtue map, so the layout is uniform. Ordinary post-completion shrine offerings leave these masks unchanged; they update gold and shrine standing instead.
@@ -295,6 +305,12 @@ reports, Stonegate atmosphere, and Doom entry. The quest-progress word at
 `0x0624` is also written by the same successful destruction path for
 byte-compatible state, but do not use it as a substitute for the three
 Shadowlord slot bytes when deciding whether a Shadowlord is alive.
+
+A successful destruction touches one further field: it clears the matching
+shard's carried flag in the special/quest-item band (`0x0210..0x0212`, Section
+7). The shard is consumed by the act of destroying its Shadowlord. Slot byte,
+quest bit, and shard flag are written together in the same success step, so any
+save produced after a destruction has all three consistent.
 
 ### 9.2 NPC Interaction Boundary
 
@@ -317,10 +333,10 @@ A loosely packed band of bytes before the dungeon/map-cell working buffer holds 
 | Offset       | Field                          | Meaning                                                                                                                                         |
 |--------------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | `0x02E2`     | Moral-standing selector        | One-byte capped standing/progression value used by shrine rewards, Blackthorn rescue/refuge verdict text, the Lord British camp event, and several action penalties. This is not the party food word at `0x0202`. Preserve adjacent unnamed bytes in this band. |
-| `0x02E5`     | Toll-progress counter          | One-byte counter incremented on every successful three-digit conversation gold payment (TLK control byte `0x85`). When the counter reaches `100`, the gold-payment helper resets it to zero and bumps the moral-standing selector at `0x02E2` by one (capped at ninety-nine). See `systems/karma.md` for the milestone-bump rule. New games seed the counter at zero; the reset/bump path is the only traced writer. |
+| `0x02E5`     | Turn-step counter              | One-byte saturating counter. The resident per-turn party-upkeep pass advances it by one on every pass and clamps it at `255`; that pass runs once per turn-consuming action in overworld, town, and dungeon play, and once per ten simulated minutes of town-bed rest. It has exactly one reset anywhere in the game: the conversation gold-payment milestone (`systems/karma.md` section 4.1) zeroes it when it reads at least `100` and the payment's other gates pass. It is therefore a cooldown timer, not a payment tally — earlier revisions of this document called it a "toll-progress counter incremented on every successful gold payment", which was wrong on both counts. New games seed it at zero. |
 | `0x02B6..0x02C4` | Fixed hidden-treasure found bitmap | 15 bytes, 113 bits. Bit `N` (with `byte = N >> 3` and `bit = N & 7`, little-endian within each byte) is set when ordinary fixed hidden-treasure records are recovered by S-Search. Special records 13, 14, and 15 do not use this bitmap as their durable grant state. The 113 records' `(scene, Z, X, Y, code)` coordinates live in `DATA.OVL`. See `systems/hidden-treasures.md` for the search-and-grant flow. New games seed all 15 bytes to zero. |
-| `0x020C`     | Record-14 daily cooldown cookie | One byte. Holds the day-of-month at the last grant of the cycling fixed hidden-treasure record (record index 14). The scan skips record 14 when `current_day == cookie` and writes the current day on grant. Bit 14 of the found bitmap above is NOT used; the cookie fully owns record 14's availability. Factory: `0xFF` (cooldown inactive). |
-| `0x0241`     | Record-15 single-use cookie | One byte (zero or non-zero). Record 15 can grant only when this byte is zero and no NPC is present at the searched tile; the scan skips it when this byte is non-zero OR an NPC is present. The scan does NOT auto-set this cookie on grant, and bitmap bit 15 is not set by the grant path. Factory: `0x00`. |
+| `0x020C`     | Record-14 daily cooldown cookie | One byte. Holds the day-of-month at the last grant of the cycling fixed hidden-treasure record (record index 14). The scan skips record 14 when `current_day == cookie` and writes the current day on grant. Bit 14 of the found bitmap above is NOT used; the cookie fully owns record 14's availability. This byte is **not an independent field of its own**: it sits inside the special/quest-item band of Section 7, at the one offset in `0x020A..0x0219` that no carried item claims. It is not a carried-item counter and must not be displayed or granted as one. Factory: `0x00`. |
+| `0x0241`     | Record-15 gate — the Glass Sword equipment counter | Not a dedicated cookie. This is the **equipment-inventory counter for item id `39` (Glass Sword)** from Section 7, and record 15's granted item is that same Glass Sword. Record 15 grants only when the byte is zero and no NPC is present at the searched tile; the skip predicate is `byte != 0` OR an NPC is present. The scan itself never writes the byte and never sets bitmap bit 15 — the ordinary inventory grant increments the counter, and that is what makes the record single-use. An engine that gives record 15 a separate never-written cookie yields an infinitely repeatable Glass Sword. Factory: `0x00`. |
 | `0x02EE`     | Saved scene / mode scratch     | See Section 6. Adjacent to the location tuple; combat uses it for pre-combat scene restore and mode code may reuse it as transition/redraw scratch. |
 | `0x02F2..0x02FF` | Animation / cached light    | Animation, redraw, and cached ambient-light bytes. The active light-source duration counters start at `0x0300`.                                  |
 | `0x0300`     | Light-spell counter         | Duration counter set by *In Lor* and *Vas Lor*.                                                                                                  |
@@ -332,6 +348,14 @@ The per-turn flags are not part of the format's "stable" surface — different d
 
 Several fields in the band have higher-level meaning:
 
+- **Fixed hidden-treasure special gates.** Only the found bitmap at
+  `0x02B6..0x02C4` is a field created for this system. The three special
+  records reuse bytes that other systems already own: record 13 reads the Keys
+  counter at `0x0206` and grants only when the party holds no keys, record 14
+  uses the unclaimed special/quest-item byte at `0x020C` as its day cookie, and
+  record 15 reads the Glass Sword equipment counter at `0x0241`. None of the
+  three sets a bitmap bit. Treat all three as aliases of the existing fields,
+  never as private copies.
 - **Timing/status and transport/action bytes.** The three-byte control cluster at `0x02D4..0x02D6` is not a single enum. Preserve the timing/status tag, active-player index, and transport/action marker separately.
 - **Active player sentinel.** A byte that is `0xFF` until the player picks a party member (typically inside towns and combat), then holds the slot index. Used by the gameplay loops as "is anyone currently selected to move".
 - **NPC-occupied bitmask.** A byte stamped on town entry that records which of the location's NPCs have an active slot in the active-object table. Used by the town entry helper to decide what slots to allocate; refreshed every town entry, so its saved value matters only for the scene the player is currently in.
@@ -472,6 +496,11 @@ The byte-level layout described here was derived from the project's private save
 
 - The first-pass byte-level survey of the save image, the `.OOL` family, the canonical companion roster, and the offset-by-offset verification of inventory and runtime fields — `u5-decomp/formats/saves.md`.
 - The runtime-state map used to cross-check persistent field positions — `u5-decomp/formats/ds-bss-map.md`.
+- The turn-step counter at `0x02E5` — its single increment site and saturation
+  cap, its single reset site, and the cadence of the pass that advances it —
+  `u5-decomp/notes/talk_group_retrace_2026-08-22.md`,
+  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`, and
+  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`.
 - The fresh-seed counter, reagent, clock, and location values were cross-checked
   against a clean local asset image by reading the named fields documented
   above; this spec does not reproduce the raw seed bytes.
