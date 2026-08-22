@@ -53,7 +53,7 @@ Each tile carries the following properties:
 - A **visibility propagation rule** for a narrow set of tile ids touched by the
   visibility carve helper. This set is separate from movement passability and
   LOOK text; its current public contract lives in `systems/visibility.md`.
-- An **animation state** for the subset of classes that animate (water, lava, fire, certain monsters, certain vehicles). Animated tiles occupy contiguous index runs and are advanced by the per-turn animator.
+- An **animation state** for the subset of ids that animate (five small terrain/fixture ranges, plus certain monsters and vehicles in the actor half). Animated tiles occupy contiguous index runs and are advanced by the per-turn animator; Section 4 lists them.
 - A **special trigger** for the subset that drive scripted handlers (moongates, falls, shrines, ladders, doors, signs, beds, chairs, chests). Encoded as the post-action tile probe matching a hard-coded id or range in the per-mode walk loop.
 
 The complete index-range layout is in Section 3. Class-by-class breakdowns follow in Sections 4 through 11. Sections 12 and 13 record encoding rules; Sections 14 and 16 separate the gameplay-complete catalog contract from optional presentation/catalog QA.
@@ -242,9 +242,9 @@ work.
 
 ## 4. Animation phases
 
-A subset of classes animates. The engine implements animation by reserving a contiguous run of two, four, or eight indices for one animated tile, and stepping the displayed index through the run on each per-turn animator pass.
+A subset of classes animates. The engine implements animation by reserving a contiguous run of two or four indices for one animated tile, and stepping a **selector** through the run on each per-turn animator pass.
 
-The dominant pattern is the **four-frame cycle**: a single conceptual tile (water, lava, fire) reserves four sequential indices `N, N+1, N+2, N+3`, each carrying a sprite for one phase. The animator advances the cell's stored index by one each turn (modulo four within the run). The renderer paints whichever index is currently in the cell.
+The dominant pattern is the **four-frame cycle**: a single conceptual tile reserves four sequential indices `N, N+1, N+2, N+3`, each carrying a sprite for one phase. The map cell keeps its authored index forever; a small resident table holds one selector byte per animated id, and the animator advances those selector bytes. The renderer resolves the cell's authored id through its selector at draw time. `systems/animation.md` Section 6 owns this contract.
 
 Moongate graphics are **not** animated at all. A natural moongate is ordinary
 live terrain: the once-per-turn refresh writes the moon-gate tile onto an
@@ -256,22 +256,42 @@ sixteen-step cycle it described belongs to the night-time light beacon
 (`systems/visibility.md` Section 12.6), which paints light, not gates.
 `systems/overworld.md` owns the gate placement and entry contract.
 
-| Class        | Cycle length    | Animator                                    |
-|--------------|-----------------|---------------------------------------------|
-| Water        | 4               | Per-turn world-tick animator                |
-| Lava         | 4               | Per-turn world-tick animator                |
-| Fire / brazier | 4             | Per-turn world-tick animator                |
-| Wind / gust visuals | 4 | Effect-specific animation; not a confirmed `DUNGEON.DAT` contact class |
-| Moongate     | None            | Not animated; live terrain (see note above) |
-| Vehicles     | 4 per facing    | Active-object animator                      |
-| Monsters     | 2..4 per facing | Active-object animator                      |
-| Effects      | 1..8            | Per-effect handler                          |
+| Tile ids | Family | Cycle length | Animator |
+|---|---|---|---|
+| `0xD4..0xD7` | Waterfall | 4 | Per-turn world-tick tile animator |
+| `0xD8..0xDB` | Fountain | 4 | Per-turn world-tick tile animator |
+| `0xEC..0xEF` | The standard of Britannia | 4 | Per-turn world-tick tile animator |
+| `0x80..0x83` | Pendulum | 2 (paired toggle, half rate) | Per-turn world-tick tile animator |
+| `0xFA..0xFD` | Grandfather clock, bellows | 2 (paired toggle, quarter rate) | Per-turn world-tick tile animator |
+| — | Moongate | None | Not animated; live terrain (see note above) |
+| — | Vehicles | 4 per facing | Active-object animator |
+| — | Monsters | 2..4 per facing | Active-object animator |
+| — | Effects | 1..8 | Per-effect handler |
 
-The active-object animator runs as part of the per-turn epilogue. It walks the table from the highest slot down, classifies each slot's tile id, and for animated classes advances the slot's frame-counter and rewrites the slot's tile id to the next-frame index in the same run.
+**Correction.** Earlier revisions of this table listed water, lava, and
+fire/brazier as four-frame families driven by the per-turn world-tick animator,
+and added a "wind / gust visuals" row. That family list is **withdrawn**: the
+world-tick tile animator touches exactly the five id ranges above and no others,
+and **no water, lava, torch or brazier tile is among them**. `systems/animation.md`
+Section 6 carries the full contract and the same correction.
 
-The per-turn world-tick animator walks the rendered tile buffer (not the persistent map) and, for cells whose tile id falls in an animated-static-class run, advances the displayed id by one. The persistent map cell is *not* modified; the animation is render-only. A saved game loaded mid-cycle re-starts from frame zero — no save data records the animator's phase counter.
+The active-object animator runs as part of the per-turn epilogue. It walks the
+table in **increasing** slot order, classifies each slot's tile id, and for
+animated classes advances the slot's frame-counter and rewrites the slot's tile
+id to the next-frame index in the same run. (An earlier revision said "from the
+highest slot down"; that is withdrawn. Descending order belongs to the
+*compositor*, which walks slot thirty-one down to slot zero so that low-indexed
+slots paint on top — `systems/visibility.md` Section 8.)
 
-Animated-static classes are deliberately rare. Walls, doors, paths, terrain, vegetation, and furniture do not animate.
+The per-turn world-tick tile animator does **not** sweep the rendered tile
+buffer. It advances one selector byte per animated tile id in a small resident
+table, so a single update changes every visible cell of that family at once. The
+persistent map cell is *not* modified; the animation is render-only. A saved game
+loaded mid-cycle re-starts from the selectors' current values — no save data
+records the animator's phase counter.
+
+Animated-static ids are deliberately rare. Walls, doors, paths, terrain,
+vegetation, and the great majority of furniture do not animate.
 
 ## 5. Passability
 
@@ -360,9 +380,21 @@ standing on the tile.
 
 Two further town underfoot tile families are damage tiles rather than cosmetic
 ones: live tile `0x8C` (shipped description "a loose brick"; it also changes
-floor outside the Stonegate scene) and live tiles `0xBC` and `0x8F` (the rune/lever
-family). Both apply an independently rolled `1..8` hit points to every non-Dead
-party slot. Their behavior is specified in `systems/town-mode.md`.
+floor outside the Stonegate scene) and live tiles `0xBC` and `0x8F` — **the
+burning family**, whose shipped descriptions are "a fireplace" and "molten lava"
+and whose handler prints the stored line `Burning!`. Both apply an independently
+rolled `1..8` hit points to every non-Dead party slot. Their behavior is
+specified in `systems/town-mode.md`.
+
+**Correction.** Earlier revisions of this catalog, and `systems/town-mode.md`,
+called `0xBC`/`0x8F` "the rune/lever family". That name is **withdrawn**. It came
+from a working guess in an early overlay note, not from the data: the description
+table names the two ids a fireplace and molten lava, the string the handler
+prints is `Burning!` — sitting in the shipped string pool immediately beside
+`A TRAPDOOR!` and `Poisoned!`, the other two town underfoot lines — and `0xBC`
+is independently confirmed as a light source by the local-light source list in
+`systems/visibility.md` Section 12.3. This document already named `0x8F` molten
+lava in Section 5, so the two sections contradicted each other.
 
 **Falls.** The traced surface chasm trigger is the fixed Britannia coordinate
 `(54, 138)`. Stepping onto that falls cell triggers the
@@ -532,7 +564,29 @@ together with the order in which the dispatcher tests them.
 
 ## 7. Monster tiles
 
-Monster sprites occupy indices `256..383`. Each monster — sea horse, squid, sea serpent, shark, giant rat, bat, giant spider, ghost, slime, gremlin, mimic, reaper, gazer, crawler, gargoyle, insect swarm, orc, skeleton, python, ettin, headless, wisp, daemon, dragon, sand trap, troll, mongbat, corpser, rot worm, shadow lord — owns a small range of indices, typically four sequential frames (one per facing or one per animation phase).
+Monster sprites occupy the **top** of the actor half, indices `384..511`. Each
+monster — sea horse, squid, sea serpent, shark, giant rat, bat, giant spider,
+ghost, slime, gremlin, mimic, reaper, gazer, crawler, gargoyle, insect swarm,
+orc, skeleton, python, ettin, headless, wisp, daemon, dragon, sand trap, troll,
+mongbat, corpser, rot worm, shadow lord — owns four sequential indices, one per
+facing or animation phase.
+
+The band follows from two published rules rather than from the provisional
+range table in Section 3. A combat class's stored actor byte is
+`class * 4 + 0x40` (`catalogs/monster-bestiary.md` sprite-run column), and the
+renderer adds `256` to an actor byte before indexing this catalogue
+(Section 3.1). The bestiary classes are `16..47`, so their actor bytes run
+`0x80..0xFF` and their catalogue indices run `384..511` — Sea Horse (class 16)
+at `384..387` through Shadow Lord (class 47) at `508..511`. The same arithmetic
+reproduces the two ids Section 3.1 confirmed directly from the shipped art:
+the four party classes `0..3` land at `320..335`, and Lord British (class 15)
+lands at `380..383`.
+
+An earlier revision of this section put monsters at `256..383`, matching the
+Section 3 nominal rows. That is withdrawn: it is the same band Section 3.1
+already withdrew for holding person sprites, and it is exactly `128` low, which
+is the signature of reading a monster's actor byte as though the actor half
+began at the monster runs rather than at actor byte zero.
 
 Cross-reference: `catalogs/monster-bestiary.md` for per-monster stats, AI archetype, encounter rate per terrain, and the singular and plural display names from the resident data string tables.
 
@@ -639,7 +693,7 @@ The principal effect families:
 - **Fields.** Fire field, poison field, sleep field, energy field, electric field. Dungeon field placement writes the field terrain bytes documented in `systems/magic.md` into the live dungeon image, optionally preserving the dungeon visit marker bit. Combat arena fields are handled by the arena-field helper instead of direct dungeon terrain writes; contact is checked after a successful step commits, then routes to the per-field status or damage/value helper.
 - **Wind / smoke / sparkle.** Atmospheric and transient effect graphics driven by weather, storm, and spell handlers. The wind/gust graphics are tile-atlas effects; baseline dungeon contact handling does not use them as `DUNGEON.DAT` torch-extinguishing cells.
 
-Several effect tiles double as world-tile sentinels in the special class range, so renderers should keep map-cell field bytes and transient combat-field visuals in the same semantic family even when their storage paths differ. The animator that sweeps live tile buffer for animated-static cells handles dungeon field tiles uniformly: each owns a four-frame run, and the animator advances it.
+Several effect tiles double as world-tile sentinels in the special class range, so renderers should keep map-cell field bytes and transient combat-field visuals in the same semantic family even when their storage paths differ. **Correction:** an earlier revision added that "the animator that sweeps live tile buffer for animated-static cells handles dungeon field tiles uniformly: each owns a four-frame run, and the animator advances it." That is withdrawn on both counts — there is no live-tile-buffer sweep (Section 4), and no field id is in the five families that animator advances. Field frame cycling, where it happens, belongs to the per-effect handlers.
 
 ## 12. Tile-byte encoding
 

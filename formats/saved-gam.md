@@ -166,7 +166,7 @@ A long band of bytes after the inn-guest registry holds the party's shared inven
 
 | Offset   | Width   | Field              | Meaning                                                                                                       |
 |----------|---------|--------------------|---------------------------------------------------------------------------------------------------------------|
-| `0x0202` | 2 bytes | Food               | Little-endian word. Decremented periodically by the per-turn cleanup.                                         |
+| `0x0202` | 2 bytes | Food               | Little-endian word. Not touched by the per-turn clock cleanup: the separate party status/provision pass subtracts the eating-member count from it on an hour change, and only at 06:00, 12:00, and 18:00 (`systems/time.md` Section 5). Grants cap it at 9999.                                         |
 | `0x0204` | 2 bytes | Gold               | Little-endian word. Range `0..9999` in normal play.                                                           |
 | `0x0206` | 1 byte  | Keys               | Skeleton keys carried.                                                                                        |
 | `0x0207` | 1 byte  | Gems               | Vision gems.                                                                                                  |
@@ -430,8 +430,13 @@ The first record is the Avatar:
 
 For a questionnaire-created Avatar, chargen overwrites the entered name,
 gender, STR, DEX, INT, and MP. The class remains Avatar and the status remains
-good from the seed. Current HP remains 60, maximum HP remains 150, experience
-remains 2, and the level byte remains the unset-level sentinel. Equipment-slot
+good from the seed. Current HP remains 60, maximum HP remains 60, experience
+remains 150, and the level byte remains 2. (An earlier revision of this
+paragraph rotated those three values — "maximum HP 150, experience 2, level
+unset" — and is **withdrawn**; the seed's Avatar record carries 60 / 60 / 150
+and a level byte of 2, matching `systems/chargen.md` section 8. The `0xFF`
+unset sentinel in that record sits in the per-character month counter at
+`+0x17`, not in the level byte at `+0x16`.) Equipment-slot
 bytes are preserved from the seed and use the helm, body armour, weapon hand,
 shield/off hand, ring, and amulet/neck order documented in Section 3.1. The
 factory-seed readied equipment for all sixteen roster slots is enumerated in

@@ -35,7 +35,7 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
 5. **Dialog-index dispatch.** Each live NPC carries a one-byte *dialog index* loaded into RAM from the location's `.NPC` file when the scene was entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
 
-The dialog index is a 1-based identifier shared between the `.NPC` and `.TLK` files of the same location class. Index 0 means "no dialogue at all" (the NPC is a non-speaker — a guard, a child too young to talk to, an animal). Index 1 is the universal *sentinel* in shipped data: no live NPC uses it, and the first slot in every `.TLK` file is reserved as a placeholder.
+The dialog index is a 1-based identifier shared between the `.NPC` and `.TLK` files of the same location class. Index 0 means "no dialogue at all" (the NPC is a non-speaker — a guard, a child too young to talk to, an animal). Index 1 is an ordinary dialogue id like any other: each class file's blob 1 is a fully authored NPC, and one occupied roster slot per class file points at it. Earlier revisions of this spec called index 1 a universal sentinel that no live NPC uses; that is withdrawn (`formats/tlk.md` Section 6).
 
 ### 2.1 The reserved "not a real NPC" index
 
@@ -66,42 +66,43 @@ shop-trigger dialog-index values instead, and are owned by `systems/shops.md`.
 
 Conversation data is split across exactly four files, one per location class — `TOWNE.TLK`, `DWELLING.TLK`, `CASTLE.TLK`, `KEEP.TLK`. The class is determined by the current scene byte: it is `(scene_id − 1) >> 3`, mapping scenes `1..8` to towns, `9..16` to dwellings, `17..24` to castles, and `25..32` to keeps. The mapping is fixed; a given NPC's dialog index resolves only against the file matching their location class.
 
-Each `.TLK` file contains a header (a fixed-size index of NPC entries) followed by the variable-size blob data. The file-level layout is:
+Each `.TLK` file contains a header (a count word followed by a fixed-size index of NPC entries) followed by the variable-size blob data. The file-level layout is:
 
 | Region | Width / count | Meaning |
 |--------|---------------|---------|
-| NPC count | 2 bytes | Number of NPC slots in this file, including the sentinel slot. |
-| Sentinel | 2 bytes | Always `0x0001`, the structural "NPC 1" sentinel. |
-| Real NPC entries | 4 bytes each, `npc_count - 1` entries | One entry per real NPC, sorted by id. |
+| NPC count | 2 bytes | Number of NPC entries in this file, and equally the number of blobs. |
+| NPC entries | 4 bytes each, `npc_count` entries | One entry per NPC, ordered by ascending id `1..npc_count`. |
 | Blob data | Remainder of file | Concatenated NPC blobs containing XOR-obfuscated text and control bytes. |
 
-Each real NPC entry is four bytes:
+Each NPC entry is four bytes, **id first**:
 
 | Entry field | Width | Meaning |
 |-------------|-------|---------|
-| Blob offset | 2 bytes | Absolute file offset of this NPC's blob. |
 | NPC id | 2 bytes | One-based identifier matching `dialog_index`. |
+| Blob offset | 2 bytes | Absolute file offset of this NPC's blob. |
 
-The first four bytes of every file are read as the special pair `(npc_count, 0x0001)` — that is, the count occupies the slot a regular entry would use for `blob_offset`, and the sentinel `1` occupies the slot a regular entry would use for `npc_id`. After this leading pair, the remaining `npc_count − 1` entries describe real NPCs, sorted by ascending `npc_id`. The shipped files contain 48 (TOWNE), 15 (DWELLING), 40 (CASTLE), and 32 (KEEP) entries respectively.
+The shipped files declare 48 (TOWNE), 15 (DWELLING), 40 (CASTLE), and 32 (KEEP)
+entries, one hundred thirty-five blobs in all, and every id from `1` to the
+count addresses a real authored NPC. The header occupies `4 × npc_count + 2`
+bytes, which is exactly where the first blob starts in each of the four files.
 
-The leading sentinel exists because dialog index `1` is never a real NPC in
-the shipped rosters; the slot is structural. The runtime dispatcher does not
-special-case index `1`, however. If corrupted or custom roster data assigns
-dialog index `1` to a talkable NPC, the normal loader path matches the leading
-sentinel id and reads the following entry's blob offset, effectively aliasing
-index `1` to the first real NPC blob in that `.TLK` file. Binary-compatible
-implementations should preserve that edge rather than treating index `1` like
-index `0`. Live shipped NPCs use indices `2..npc_count`.
+An earlier revision of this spec described the entries as `(blob_offset, npc_id)`
+pairs behind a leading degenerate pair `(npc_count, 0x0001)`, with index `1` a
+structural sentinel that "no live NPC uses" and a compatibility edge aliasing
+index `1` to the first real blob. All of that is withdrawn: it left two header
+bytes and one whole blob per file unaccounted for, and it bound every id to the
+previous id's blob. `formats/tlk.md` Section 6 owns the corrected contract.
 
-When the engine asks to talk to dialog index `D`, the loader reads the first 512 bytes of the file (enough to cover any class's header) into a working buffer, walks the entries linearly, and finds the entry whose `npc_id == D`. The matched entry's `blob_offset` field is then the file offset of the NPC's blob. The loader issues a second fixed-window read of 1024 bytes at that offset into the same buffer, overwriting the header with the blob. From the engine's perspective, the buffer now begins with the NPC's keyword tree.
+When the engine asks to talk to dialog index `D`, the loader reads the first 512 bytes of the file (enough to cover any class's header) into a working buffer, walks the entries linearly comparing id words, and on the first match takes the word immediately after the matched id as the file offset of the NPC's blob. The loader issues a second fixed-window read of 1024 bytes at that offset into the same buffer, overwriting the header with the blob. From the engine's perspective, the buffer now begins with the NPC's keyword tree.
 
 The loader does not compute a runtime blob length from the next header entry.
 For most shipped entries the fixed window contains the whole nominal blob span
 plus some following file data that is never reached because the current blob's
-own terminators stop the scans. The final `DWELLING.TLK` entry is the important
-edge case: its nominal span to end-of-file is 1139 bytes, so the original engine
-can only see the first 1024 bytes. A binary-compatible implementation should
-preserve that fixed-window behavior rather than reading the full header span.
+own terminators stop the scans. No shipped blob is long enough for the window to
+truncate it — the largest nominal span in any of the four files is 704 bytes —
+so the 1024-byte cap is a compatibility contract rather than an observable
+truncation. A binary-compatible implementation should still preserve the
+fixed-window behavior rather than reading the full header span.
 
 ## 4. NPC blob structure
 
@@ -376,7 +377,7 @@ The shipped idiom guards the `0x88` with an IF-ELSE carrying the reserved `0xFF`
 argument, usually in the NPC's Name or Greeting entry: if the NPC already knows
 the party, the `0x8C 0xFF` ends the entry and drops straight to the keyword
 prompt; if not, execution falls through to the `0x88` prompt, which asks and then
-remembers. Forty-six of the one hundred thirty-one shipped blobs contain an
+remembers. Forty-six of the one hundred thirty-five shipped blobs contain an
 ASK-WHO, and forty-three of those also contain an IF-ELSE; nine use the two codes
 directly adjacent.
 
@@ -592,7 +593,7 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
 5. **Bye sequence.** When the player exits (typed empty input, or a keyword response that ends the stream), the engine emits `BYE\n\n` and runs the Bye entry (entry 5 of the five mandatory leading entries).
 
-6. **Cleanup.** A final per-conversation cleanup pass settles party-state side effects (gold transactions, transient conversation signals, recently-joined party members, mood adjustments), flushes any pending output, and returns to the caller.
+6. **Cleanup.** A final per-conversation cleanup pass runs, then output is flushed and control returns to the caller. That pass is *not* a general side-effect reconciliation: it is the Shadowlord of Falsehood's theft and nothing else, and away from Faulinei's hiding place it returns immediately without touching party state. Section 10 gives its full contract. Any gold movement, party-roster change, or signal-flag write has already happened inline, at the control code that performed it.
 
 The conversation engine itself is therefore single-shot — one Talk command produces one full envelope. The per-conversation state cluster (active multi-byte command, argument buffer, print mask, etc.) is reset at entry, so a previous conversation cannot bleed into a later one.
 
@@ -732,6 +733,7 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md` and
   `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md`.
 - The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
-- The on-disk `.TLK` file structure — header layout, blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`.
+- The on-disk `.TLK` file structure — blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`. That note's header reading is superseded.
+- The corrected `.TLK` header contract of Section 3 — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, dialog index `1` as an ordinary NPC, and the withdrawal of the sentinel/alias reading — re-derived from the shipped `.TLK` and `.NPC` files against the header walk in `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`, and cross-checked against the sprite-class description strings of `LOOK2.DAT`.
 - The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`, with the published word list in `catalogs/common-word-dictionary.md`.
 - The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`, `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.

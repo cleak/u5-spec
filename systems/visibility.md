@@ -332,24 +332,46 @@ Whether a tile affects sight is a property of the tile id, but the visibility
 rule is its own classifier. It is not derived from movement passability, LOOK
 text, or the tile's broad visual family.
 
-The helper members below are expressed as public tile-catalog identities, sorted
-by semantic family rather than by their resident table order.
+The nineteen blocking ids and the five adjacent-only ids are listed below with
+the names the shipped description table (`formats/look2-dat.md`) gives them.
+Every one of them is **terrain or a fixture** — vegetation, rock, walls, doors
+and windows, a fireplace, and the void tile. They are ordered by semantic family
+rather than by their resident table order.
 
 | Tile identity | Visibility propagation rule |
 |---------------|----------------------------|
-| Forest tree tile `0x09` | Stops propagation. |
-| Hill / mountain / lava-rock variants `0x0A`, `0x0C`, `0x0D` | Stop propagation. |
-| Bookshelf / dresser / vanity / trunk variants `0x4D..0x4F` | Stop propagation. |
-| Sign-post tile `0x5A` | Stops propagation. |
-| Bat frame `0x97` | Stops propagation. |
-| Gargoyle frames `0xB8..0xB9` | Stop propagation. |
-| Insect Swarm frame `0xBC` | Stops propagation. |
-| Headless frames `0xD0..0xD3` | Stop propagation. |
-| Rot Worm frame `0xF8` | Stops propagation. |
-| Shadow Lord frames `0xFE..0xFF` | Stop propagation. |
-| Bookshelf / dresser variants `0x4A..0x4B` | Propagate only when orthogonally adjacent to the centre cell. |
-| Giant Spider frame `0x98` | Propagates only when orthogonally adjacent to the centre cell. |
-| Gargoyle frames `0xBA..0xBB` | Propagate only when orthogonally adjacent to the centre cell. |
+| Trees `0x09`, tropical forest `0x0A` | Stop propagation. |
+| Mountains `0x0C`, high peaks `0x0D` | Stop propagation. |
+| Wall variants `0x4D..0x4F` (a stone wall, a wall with a nick, a wall) | Stop propagation. |
+| Window shelf `0x5A` | Stops propagation. |
+| Odd door `0x97` | Stops propagation. |
+| Wooden door `0xB8`, locked door `0xB9` | Stop propagation. |
+| Fireplace `0xBC` | Stops propagation. It is also a local-light source (Section 12.3): a tile can both stop the carve and light its neighbourhood. |
+| Unnamed fixtures `0xD0..0xD3` (shared placeholder description) | Stop propagation. |
+| Sign/poster tile `0xF8` (shared placeholder description) | Stops propagation. |
+| Wall `0xFE`, and the void tile `0xFF` ("darkness!") | Stop propagation. |
+| Arrow slit `0x4A`, window `0x4B` | Propagate only when orthogonally adjacent to the centre cell. |
+| Odd door `0x98` | Propagates only when orthogonally adjacent to the centre cell. |
+| Wooden door with a window `0xBA`, locked door with a window `0xBB` | Propagate only when orthogonally adjacent to the centre cell. |
+
+Read as a set, the rule is legible: solid vegetation, rock, walls and closed
+doors block sight outright, while the four openings you can only see through
+from immediately in front — an arrow slit, a window, and the two windowed doors —
+propagate exactly one cell.
+
+**Correction.** Earlier revisions of this table named these ids after monsters:
+`0x97` a Bat frame, `0xB8..0xBB` Gargoyle frames, `0xBC` an Insect Swarm frame,
+`0xD0..0xD3` Headless frames, `0xF8` a Rot Worm frame, `0xFE..0xFF` Shadow Lord
+frames, `0x4A..0x4B` and `0x4D..0x4F` bookshelf/dresser/vanity/trunk variants,
+and `0x5A` a sign post. All of those names are **withdrawn**. They were read out
+of the nominal index ranges of `catalogs/tile-catalog.md` Sections 2 and 3, which
+that document itself flags as unconfirmed working hypotheses above index 128,
+and they conflicted with ids the same catalog has confirmed from the shipped
+description table. The carve reads a **terrain-layer byte in `0..255`**; an
+actor's stored byte reaches the catalogue only after the renderer adds `256`
+(`catalogs/tile-catalog.md` Section 3.1), so no monster frame can appear in this
+list at all. The **tile-id membership of both groups is unchanged** — only the
+names were wrong.
 
 Tiles not named in either group use the ordinary propagation rule: they may
 extend the centre-out carve.
@@ -574,8 +596,11 @@ graduated brightness inside the disc; ambient brightness is owned by
 ### 12.3 Source tile ids
 
 The candidate source ids proven by the resident lookup are `0xB0..0xB3`,
-`0xBC..0xBF`, `0xDC`, and `0xDE`. Their gameplay names should be sourced from
-the tile catalog rather than from this byte list alone. Note that `0xBC` is
+`0xBC..0xBF`, `0xDC`, and `0xDE`. The shipped description table names them, and
+the set is exactly what one would expect of a light-source list: a flickering
+torch `0xB0` and `0xB1`, a hot brazier `0xB2`, meat roasting on a spit `0xB3`, a
+fireplace `0xBC`, a street lamp `0xBD`, a candelabrum `0xBE`, a hot stove
+`0xBF`, a moon gate `0xDC`, and a shrine flame `0xDE`. Note that `0xBC` is
 also a propagation blocker (Section 6): a tile can both stop the carve and act
 as a light source.
 
@@ -731,6 +756,12 @@ The behaviour described above was derived by reading the function and format not
   adjacent-only propagation rule
   — `u5-decomp/functions/ULTIMA_EXE/0x5A28_visibility_buffer_setup.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x5DFE_visibility_tile_class.md`.
+- Source provenance: the names of the nineteen propagation blockers and the five
+  adjacent-only ids in Section 6, and of the ten local-light source ids in
+  Section 12.3, were re-derived by decoding the shipped description table with
+  the container rules in `u5-spec/formats/look2-dat.md`. That decode also
+  withdraws the monster/furniture names those two lists previously carried; the
+  id membership of every list is unchanged.
 - The local-light mask refresh pass, source-candidate lookup, per-source carve
   radius, its squared-distance semantics, the three trigger points, and the
   final untouched-cell zeroing —

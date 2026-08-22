@@ -97,15 +97,27 @@ There are two distinct non-drawing cases, and they behave differently:
 - **Scenes outside the surface/town family** (combat, intro, and every scene id
   at or above the location range) never reach the renderer at all. Nothing is
   drawn and nothing is cached.
-- **Scene 25 (Ararat, the underworld-only keep) and any below-surface map
-  level** reach the marker painter but make it paint the strip's footprint flat
-  instead of printing it: a filled rectangle from `(40, 0)` to `(152, 6)` in the
-  chrome colour (colour-table slot 2), then a single scanline from `(40, 7)` to
-  `(152, 7)` in the accent colour (slot 1). This erases both end-caps as well as
-  the markers, leaving a plain ribbon. The two glyph bytes are still cached in
-  this case, because the cache is written before the visibility test. The slate
-  painter tests the same two conditions and, when either holds, draws nothing at
-  all rather than erasing — the erase is the marker painter's job.
+- **Scene 25 (Ararat, the underworld-only keep)** reaches the marker painter but
+  makes it paint the strip's footprint flat instead of printing it: a filled
+  rectangle from `(40, 0)` to `(152, 6)` in the chrome colour (colour-table slot
+  2), then a single scanline from `(40, 7)` to `(152, 7)` in the accent colour
+  (slot 1). This erases both end-caps as well as the markers, leaving a plain
+  ribbon. The two glyph bytes are still cached in this case, because the cache is
+  written before the visibility test. The slate painter tests the same
+  conditions and, when either holds, draws nothing at all rather than erasing —
+  the erase is the marker painter's job.
+
+  The marker painter's erase branch also tests for a **below-surface map level**,
+  but that arm is unreachable in the shipped game: the strip's only caller is the
+  hour-change hook of the per-turn cleanup, whose own gate already excludes a
+  party Z with the high bit set (`systems/time.md` Section 5). Earlier wording
+  here listing below-surface levels alongside Ararat as cases that reach the
+  painter is withdrawn — below the surface, nothing is drawn, nothing is erased,
+  and nothing is cached, exactly as for combat and dungeon scenes. Keep the arm
+  as defensive breadth if you reproduce the routine; do not derive behaviour from
+  it. (The *wind banner* in the bottom ribbon is different: its own callers do
+  reach it below the surface, and its erase branch is live — see
+  `systems/weather.md` Section 2.1.)
 
 | Marker | Visible hours | Cell position |
 |--------|---------------|---------------|
@@ -267,9 +279,11 @@ glyph dumps, or private address tables.
 - Source provenance: the separation of moon phase from moongate placement, and
   the withdrawal of the moongate animator, are derived from private analysis
   note `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
-- Calendar bounds (day one through twenty-eight, reset after twenty-eight) and
-  the single hour-change trigger -- the per-turn cleanup note under
-  `u5-decomp/functions/ULTIMA_EXE/` and
+- Calendar bounds (day one through twenty-eight, reset after twenty-eight), the
+  single hour-change trigger, and that trigger's own scene-and-floor gate --
+  which is what makes the painter's below-surface erase arm unreachable -- the
+  per-turn cleanup note under `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 3, and
   `u5-decomp/notes/system-trace_turn-cycle.md`.
 - Source provenance: the strip's location in the top viewport border, the two
   bracket end-cap cells, the stored twelve-space slate, the runic font slot used

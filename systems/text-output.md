@@ -140,7 +140,7 @@ The buffer is sized to hold any window's worth of text (at least 64 characters i
 
 When the per-cell emitter decides to render a glyph, it does so in three conceptual steps. The text system itself is responsible for the first two; the third is delegated to the loaded display driver.
 
-1. **Glyph-bitmap fetch.** The emitter selects the glyph bitmap for the byte being rendered from the driver's font. The font lives inside the driver's loaded image; the text system knows nothing about its internal layout beyond the row stride, which depends on the driver. The bitmap is copied into a small working buffer that the system uses as the cell's pixel pattern.
+1. **Glyph-bitmap fetch.** The emitter selects the glyph bitmap for the byte being rendered from the currently active fixed-cell font. The font is a separately loaded asset held in the resident font-slot table described below, not part of the display driver's image; the text system needs to know only its row stride, which depends on which font pair the selected driver loaded. The bitmap is copied into a small working buffer that the system uses as the cell's pixel pattern. **Correction:** an earlier revision of this step said "the font lives inside the driver's loaded image". That is withdrawn — it contradicted the font-slot paragraph below, `formats/font-ch.md`, and the boot sequence in `systems/intro.md` section 3, which loads the two character files into resident slots before any driver text is drawn.
 
 2. **Style transformations.** The working buffer is then post-processed in place per the active window's style flags. If the underline flag is set, the bottom row of the buffer is forced to all-ones (every pixel of the bottom scan-line lit). If the inverse flag is set, every word of the buffer is bitwise-inverted. The two transformations compose: a cell can be both inverse and underlined, in which case the underline pass runs first and the resulting buffer is then inverted, leaving the bottom row all-zeros. Implementations should follow this order to match the original.
 
@@ -415,8 +415,13 @@ and keeps the full-screen default for the whole session.
 - **Column 39.** The stats window spans columns 24..39, but the panel only ever
   writes columns 24..38, because the roster and counter boxes are fifteen cells
   wide: their right rule sits at pixel `x = 312`, the first pixel of column 39.
-- **Row 24.** Absolute text row 24 (`y = 192..199`) lies inside no window. It is
-  cleared to black when the frame is painted and is never written again.
+- **Row 24.** Absolute text row 24 (`y = 192..199`) is addressable — it is the
+  last row of window 0's full-screen rectangle above — but **no gameplay path
+  writes it**. It is cleared to black when the frame is painted and stays black
+  for the rest of the session. (An earlier revision said it "lies inside no
+  window", which contradicted this section's own window-0 rectangle. Outside
+  gameplay the row is used: the Return-to-View chapter caption is printed on it
+  through the same full-screen window, `systems/intro.md` section 12.)
 
 An earlier revision of section 9 said, on the strength of a shop-overlay
 geometry census, that windows 2 and 3 are never passed to the rectangle setter

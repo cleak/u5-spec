@@ -104,8 +104,13 @@ An engine should use the gazetteer in these places:
    overworld entry record and restore the party to the matching surface
    location. The exit is triggered by stepping off the edge of the interior
    grid, not by any exit tile.
-3. **Dungeon exit.** When dungeon mode exits from the top level or an
-   exit-dungeon cell, resolve the active dungeon to its surface return record.
+3. **Dungeon exit.** When dungeon mode passes the top or the bottom of the
+   level stack, resolve the active dungeon to its Section 5.1 entry row and
+   return the party to that same outdoor cell — on Britannia when they left off
+   the topmost level, in the Underworld when they left through the bottom of
+   the lowest one (Section 6.1). There is no "exit-dungeon cell": earlier
+   wording here named one, and `systems/dungeon-mode.md` Section 13.2 withdraws
+   that class outright.
 4. **Shrine meditation.** Resolve the shrine by fixed overworld coordinate or
    shrine tile, then bind it to one virtue, one mantra, and the shrine
    meditation flow.
@@ -603,8 +608,10 @@ A content loader or audit tool should enforce these rules:
 - The paired `*.NPC` and `*.TLK` sub-map indexes match for a row. Do **not**
   extend this check to the class `*.DAT` file: its floor pages are selected
   through the per-scene base-page table of `formats/location-dat.md`
-  Section 4.1, and for twenty-two of the thirty-two locations that base page
-  is not twice the sub-map index.
+  Section 4.1, and for twenty of the thirty-two locations that base page is
+  not twice the sub-map index (twenty-two locations do not own the page *pair*
+  `2n`/`2n + 1` at all — the two counts are different checks, and Section 5
+  states both).
 - Dungeon rows use dungeon-mode data, not town-mode data.
 - Dungeon indexes are unique and in `0..7`.
 - Shrine rows are exactly the eight virtues, in the karma system's virtue

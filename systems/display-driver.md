@@ -84,23 +84,42 @@ one bit per pixel, so the four table outputs are a blank byte, two opposite
 half-density dither patterns, and a solid byte. Read the "value" column for
 that family as a pen selector, not as a colour.
 
-Known consumers are the Return-to-View caption
-panel (slot 2 for the panel fill, slot 1 for the rule beneath it), the
-Return-to-View fixed wipe command (slot 1), the Ultima IV transfer preview
-screen (slot 2 for its frame glyphs and panel bars, slot 1 for its pixel rules
-and panel titles — `u4-transfer.md` section 6.1), and — the heaviest consumer —
-the whole gameplay screen:
+The table is read all over the program, not only by the frame. The heaviest
+consumer is the gameplay screen itself:
 
-| Slot | Gameplay role |
+| Slot | Gameplay-screen role |
 |---:|---|
 | 1 | Accent pen: every one-pixel rule of the game-screen frame, every bracket end-cap outline, and the standing text foreground. |
 | 2 | Chrome pen: every solid chrome band, the rounded corner glyphs, and the filled body of every bracket end-cap. |
 | 5 | Foreground of the sky strip's fixed hour marker (`moons.md`). |
 | 6 | Foreground of the two moon markers in the sky strip (`moons.md`). |
 
-Slots 0, 3 and 4 have no confirmed gameplay-screen consumer. Because these are
-table entries rather than literals, an implementation should expose all seven
-as configurable indices rather than hard-coding the EGA values.
+Other confirmed consumers, each specified in its own document, are the
+Return-to-View caption panel (slot 2 for the panel fill, slot 1 for the rule
+beneath it), the Return-to-View fixed wipe command (slot 1,
+`formats/location-dat.md` section 11), the Ultima IV transfer preview screen
+(slot 2 for its frame glyphs and panel bars, slot 1 for its pixel rules and
+panel titles — `u4-transfer.md` section 6.1), the character-creation panels
+(slots 2 and 1 — `chargen.md`), several intro surfaces (slots 2 and 1 —
+`intro.md`), the dungeon view's band pens, which take the same slots biased into
+the bright half of the palette by adding eight (`dungeon-mode.md` section 12),
+and the Look command's sky renderer, which uses **slot 0** for its Shadowlord
+markers, slot 1 for the celestial bodies, and slot 2 biased bright for the
+starfield (`view.md` section 4.2.6).
+
+**Correction.** An earlier revision of this section said "slots 0, 3 and 4 have
+no confirmed gameplay-screen consumer" and presented the short list above as the
+complete consumer inventory. Both are withdrawn. The private note that wording
+came from marked slots 0, 3 and 4 as *not used by the game-screen frame*, which
+is a much narrower statement; all three are used elsewhere during ordinary play —
+slot 0 by the sky renderer above, and slots 0, 3 and 4, each biased into the
+bright half, by the projectile and impact effect renderer that draws spell and
+missile bursts over the viewport. Treat this list as "consumers documented so
+far", not as a closed census.
+
+Because these are table entries rather than literals, an implementation should
+expose all seven as configurable indices rather than hard-coding the EGA
+values.
 
 For v1 asset compatibility, an implementation should support the EGA-compatible
 rendering path and the original asset selectors. It may reject or map the
@@ -329,7 +348,12 @@ pixel comparison against the original will show.
 | bottom ribbon `y = 185..191` | not overpainted | `y = 185..191` |
 
 Text row 24 (`y = 192..199`) is left black by the phase-0 clear and is never
-painted again by any gameplay path. It belongs to no text window.
+painted again by any gameplay path. It is not outside the text grid, though: it
+is the last row of the full-screen window 0 that the chrome writers use
+(`text-output.md` section 10.1), and the intro's Return-to-View chapter caption
+is printed on that row through the same window. An earlier revision said it
+"belongs to no text window"; that is withdrawn in favour of the narrower and
+accurate statement that no gameplay path writes it.
 
 #### Resulting zones
 
@@ -590,9 +614,14 @@ selector and fills whichever surface that selector currently names. Any
 statement that it is visible-page-only is withdrawn. The intro depends on this:
 the text system's window-clear control is implemented as a filled rectangle, and
 the intro uses it against the hidden surface to blank the flourish stack before
-the ornament phase, to blank the hidden surface before the four subtitle bands
-are staged, and again to blank the menu window's interior. A renderer that makes
-the fill a no-op on the hidden surface cannot reach the documented frames.
+the ornament phase, and again to blank the hidden surface before the four
+subtitle bands are staged. A renderer that makes the fill a no-op on the hidden
+surface cannot reach the documented frames. The menu window's interior clear is
+the same control code pointed the other way: the start/menu loader has selected
+the **visible** page by the time it runs, so that one lands on screen
+(`intro.md` section 6.1). An earlier revision of this paragraph listed it among
+the hidden-surface clears; that is withdrawn. Between them the two directions
+are why the selector has to be honoured rather than hard-coded either way.
 
 **Ink of the flourish, stated once.** The publisher-flourish playback entry
 (`display-driver-abi.md` section 10) is the only publisher in the whole intro

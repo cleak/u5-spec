@@ -158,7 +158,7 @@ charge or mana.
 | 26 | `EIP` | In Ex Por | Unlock Magic | 5 | Sulfur Ash + Blood Moss | C/I | utility; directed tile helper, the only magic-lock removal: `0x97`→`0xB8` and `0x98`→`0xBA`; works on combat-arena terrain too |
 | 27 | `MV` | Vas Mani | Great Heal | 5 | Ginseng + Spider Silk + Mandrake | C/D/I/O | healing; selected-member current HP restore to maximum, refuses Dead targets and the dungeon combat-active substate |
 | 28 | `IZ` | In Zu | Sleep | 5 | Ginseng + Spider Silk + Nightshade | C | buff/debuff |
-| 29 | `RT` | Rel Tym | Quickness | 5 | Sulfur Ash + Blood Moss + Mandrake | C/D/I/O | buff/debuff; shared timed-effect slot, tag `Q`, 30 turns; halves the per-turn minute increment and gates player and enemy turns |
+| 29 | `RT` | Rel Tym | Quickness | 5 | Sulfur Ash + Blood Moss + Mandrake | C/D/I/O | buff/debuff; shared timed-effect slot, tag `Q`, 30 turns; halves the per-turn minute increment and gates the automatic actor driver, so hostiles act about half as often while the player's own prompt is unaffected |
 | 30 | `IPVY` | In Vas Por Ylem | Tremor | 6 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
 | 31 | `AQW` | Quas An Wis | Mass Charm | 6 | Nightshade + Mandrake | C | buff/debuff; shared timed-effect slot, tag `C`, 20 turns; AI target remap |
 | 32 | `AI` | In An | Negate Magic | 6 | Sulfur Ash + Garlic + Mandrake | C/D/I/O | marquee; shared timed-effect slot, tag `N`, 10 turns; absorbs combat casts |
@@ -176,7 +176,7 @@ charge or mana.
 | 44 | `CGIV` | In Vas Grav Corp | Death Wind | 8 | Sulfur Ash + Nightshade + Mandrake | C | damage |
 | 45 | `FHI` | In Flam Hur | Flame Wind | 8 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
 | 46 | `PRV` | Vas Rel Por | Gate Travel | 8 | Sulfur Ash + Black Pearl + Mandrake | D/I/O | marquee |
-| 47 | `AT` | An Tym | Negate Time | 8 | Garlic + Blood Moss + Mandrake | C/D/I/O | marquee; shared timed-effect slot, tag `T`, 10 turns; freezes the clock and skips enemy turns |
+| 47 | `AT` | An Tym | Negate Time | 8 | Garlic + Blood Moss + Mandrake | C/D/I/O | marquee; shared timed-effect slot, tag `T`, 10 turns; freezes the clock, and in combat makes the automatic actor driver return at once so every self-acting actor's turn is skipped |
 
 ## 6. Notes for Implementers
 
@@ -284,9 +284,16 @@ charge or mana.
   per-item defence total that is unreachable and never read, so Protection
   changes no combat number in the shipped game. The `RT` `Q` tag also halves
   the per-turn game-minute increment outside combat, with a floor of one
-  minute, and gates player-side combat command
-  dispatch with an inclusive 0..1 random roll: zero consumes the ready dispatch
-  without input, while one continues normally.
+  minute, and in combat gates the **automatic actor driver** with an inclusive
+  0..1 random roll: zero consumes that dispatch without acting, while one
+  continues normally. The round walker sends self-acting actors to that driver
+  and the player's turns to the keystroke parser, so the gate slows hostiles
+  and leaves the player's own prompt alone; the `AT` `T` tag makes the same
+  driver return immediately, skipping self-acting turns entirely. Earlier
+  wording here said `Q` gated "player and enemy turns" and that `T` "skips
+  enemy turns" as a separate mechanism from the clock freeze; both are
+  withdrawn in favour of the single pair of tests described in
+  `systems/combat.md` Section 9.
   The `AQW` `C` tag is consumed by monster AI target selection; while active,
   each target pick rolls one uniform byte in `[0, 255]` against the acting
   monster's class charm threshold. A roll strictly greater than that threshold

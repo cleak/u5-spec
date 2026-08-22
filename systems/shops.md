@@ -24,7 +24,7 @@ ordinary inventory loops:
 - **Stationary stock with a fixed inventory** — weaponsmith / armourer, magic-shop guildmaster, healer / sanctum, herbalist (reagent vendor). One overlay handles all four.
 - **Interactive talk/menu shops** — tavern or meal counter, sage rumour lookup,
   and shipwright sale flow. A second overlay handles these flows.
-- **Innkeeper** — three-mode (rest / leave a companion / pick up a companion). A third overlay handles the inn alone, because it is the only shop that maintains persistent multi-NPC state across saves.
+- **Innkeeper** — three-mode (rest / leave a companion / pick up a companion). A third overlay handles the inn alone, because it is the only shop that maintains persistent multi-*character* state across saves. (The shipwright also leaves saved state behind — a queued vessel delivery — but that is a single pending record, not a registry.)
 
 Horse-trader dialogue and purchase barks, while included in the shop bark file,
 are reached through a Talk shop arm. The purchase flow is vehicle-oriented: it
@@ -1368,8 +1368,10 @@ a carried item into a party member record.
 ## 9. Karma effects
 
 The karma system does not directly modulate shop headline pricing or inventory.
-Arms purchases, horse purchases, and inn room quotes can vary with the speaking
-party member's Intelligence, but not with virtue standing. Reagent, treatment,
+The five stat-sensitive paths of Section 6 — arms buy and sell quotes, the
+horse-trader sale, inn room and lodging charges, both shipwright vessel classes,
+and the tavern/meal-counter provision unit price — vary with the speaking party
+member's Intelligence, but not with virtue standing. Reagent, treatment,
 guild, and other decoded headline prices come from their resident tables rather
 than from karma. The random post-transaction surcharge is also not a karma price
 modifier; it is gated by the presence of the Shadowlord of Falsehood in the
@@ -1420,10 +1422,16 @@ Shop overlays do not consume turns themselves; the time the player spends in a s
 
 ### 10.3 Save / load
 
-Two pieces of shop state are part of the save image:
+Three pieces of shop state are part of the save image:
 
 - **The party gold word** is debited by shop purchases and services and is
   persisted with the rest of the resident state.
+- **The queued shipwright delivery** — the pending vehicle-acquisition class
+  byte and the pending delivery coordinate pair of Section 6.1 — sits in the
+  saved band as well, so a vessel bought but not yet delivered survives a save
+  and reload and is placed by the next overworld entry. An earlier revision of
+  this section counted only two saved pieces and omitted it, which contradicted
+  Section 6.1.
 - **The inn registry** lives in the resident save image and is included in save/load. A player can leave a companion, save, reload, and pick the companion up — the registry's per-slot inn marker tells the inn-pickup logic which guest belongs to which inn. Leave clears the guest's stored stay counter to zero; pickup clears the returned slot's marker to zero after moving the guest back into the active roster.
 
 Per-shop inventory tables, per-treatment cost tables, and `SHOPPE.DAT` itself are read-only resources baked into the resident data and the disk file. They do not change between save cycles.

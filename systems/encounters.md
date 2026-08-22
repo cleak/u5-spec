@@ -31,9 +31,11 @@ The probe is an overworld-mode-only routine. The town loop's per-turn block does
 not run it, so towns have no random encounters; a town fight instead starts
 directly, when the party attacks an NPC or an NPC-conflict event fires
 (Section 7). The dungeon mode loop has its own room-trigger logic (Section 8).
-Slow-water `Q` timing and the traced horse/carpet transport-marker pendulum
-pairs therefore reduce the effective random-encounter cadence by skipping some
-probe opportunities; they do not change the threshold formula itself.
+The Quickness (`Q`) alternate-turn gate and the traced horse/carpet
+transport-marker pendulum pairs therefore reduce the effective random-encounter
+cadence by skipping some probe opportunities; they do not change the threshold
+formula itself. `Q` is the Quickness magic effect of `systems/magic.md`, not a
+slow-water or skiff timing state — that earlier reading is withdrawn.
 
 ### 2.2 Scripted encounters
 
@@ -518,7 +520,24 @@ Dungeon **wandering** monsters are a separate trigger from room cells. Attacking
 
 ## 9. The encounter probe and active-object overlap
 
-The encounter spawner places its monster as a new active-object slot (Section 4) — but the active-object table is finite, with thirty-two slots and slot zero reserved for the player. If the table is already full when the spawner fires, the spawn silently fails. This is the engine's natural cap on visible monster density: the player will never see more than thirty-one hostile or neutral entities on the overworld at once.
+The encounter spawner places its monster as a new active-object slot
+(Section 4) — but the active-object table is finite, with thirty-two slots and
+slot zero reserved for the player. A full table does **not** make the spawn
+fail. The spawner asks the shared slot allocator for a record, and that
+allocator's priority cascade evicts a lower-priority object — preferring
+off-screen scenery, then off-screen monsters and effects, and ending in a
+last-resort phase that will take almost any slot — rather than returning
+nothing (`active-objects.md` Section 4). An earlier revision of this section
+said the spawn silently fails when the table is full; that is withdrawn, and
+Section 4 already describes the spawner as acquiring *or evicting* a slot. The
+only silent no-spawn outcome traced in the spawner itself is the coordinate
+loop giving up after one hundred twenty-eight rejected candidate cells
+(Section 4).
+
+The table size is still the natural cap on visible monster density — the player
+never sees more than thirty-one hostile or neutral entities on the overworld at
+once — but the mechanism is eviction of the least interesting existing object,
+not refusal of the new one.
 
 Spawned monsters live in the table the same way as any other active-object: the per-tick animator (see `active-objects.md`) walks them every turn, advancing animation phase and stepping them along their AI path. Off-screen pruning runs at the end of each turn; a monster that wanders far enough from the party's viewport (more than about thirty-two cells from the scroll base) is silently removed from the table. In effect, the engine maintains a sliding window of active monsters around the party — far-distant encounters are forgotten without ceremony.
 

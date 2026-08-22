@@ -53,7 +53,7 @@ In a clean install, `SAVED.GAM` is byte-for-byte identical to `INIT.GAM`. The Or
 
 ### 3.1 The `.OOL` family
 
-Alongside the save image, the engine maintains a smaller buffer for the active-object table — the list of movable objects (skiffs, frigates, horses, magic carpets, free-standing items the player has dropped) currently live on the active map. The on-disk story uses six files because the surface and underworld are two different maps with two different object populations:
+Alongside the save image, the engine maintains a smaller buffer for the active-object table — the list of movable objects (skiffs, frigates, horses, magic carpets, free-standing items the player has dropped) currently live on the active map. The on-disk story uses four files because the surface and underworld are two different maps with two different object populations:
 
 | File | Size | Role |
 |---|---|---|
@@ -140,7 +140,7 @@ The save handler is a callable function, distinct from the inline load flow. The
 
 4. **Refresh object-overlay staging buffers.** The handler reads the underworld and surface per-plane `.OOL` files into the two staging halves that will become the canonical `SAVED.OOL` payload.
 
-5. **Refresh both per-plane mirrors.** The surface staging half is written to `BRIT.OOL`, and the underworld staging half is written to `UNDER.OOL`. The handler then checks the disk-prompt mode it had on entry. If that entry mode was not mode 1, it writes the same underworld staging half to `UNDER.OOL` a second time as a defensive re-flush. If the entry mode was already mode 1, this second underworld write is skipped.
+5. **Refresh both per-plane mirrors.** The underworld staging half is written to `UNDER.OOL` first, then the surface staging half is written to `BRIT.OOL`. (That is the traced order; it matters only for a reader reconstructing the write sequence, since both writes are unconditional.) The handler then checks the disk-prompt mode it had on entry. If that entry mode was not mode 1, it writes the same underworld staging half to `UNDER.OOL` a second time as a defensive re-flush. If the entry mode was already mode 1, this second underworld write is skipped.
 
 6. **Write `SAVED.GAM`.** The full 4192 bytes of the save image are written from memory to disk in one operation.
 

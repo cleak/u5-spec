@@ -147,35 +147,42 @@ frame selectors for animated map tiles. These selectors are not stored in each
 map cell. Instead, a small resident table says, for each animated tile family,
 "which tile id should this family display right now?"
 
-Known animated families include:
+There are exactly **five** such families, and the pass that advances them is
+short and unconditional. Named from the shipped description table:
 
-| Family | Behaviour |
-|---|---|
-| Water | Repeats through a four-frame cycle. |
-| Lava | Repeats through a four-frame cycle. |
-| Torch / fire light | Repeats through a four-frame cycle. |
-| Special effect tiles | Repeat or toggle based on the shared frame counter. |
-| Alternate decorative tiles | Toggle between paired frames on selected counter bits. |
+| Tile ids | Family | Behaviour |
+|---|---|---|
+| `0xD4..0xD7` | Waterfall | Four-frame cycle, advanced every tick. |
+| `0xD8..0xDB` | Fountain | Four-frame cycle, advanced every tick. |
+| `0x80..0x83` | Pendulum | Two-frame toggle in adjacent pairs, gated by bit 0 of the shared phase counter. |
+| `0xEC..0xEF` | The standard of Britannia (a flag) | Four-frame cycle, advanced every tick. |
+| `0xFA..0xFD` | Grandfather clock (`0xFA..0xFB`) and bellows (`0xFC..0xFD`) | Two-frame toggle in adjacent pairs, gated by bit 1 of the shared phase counter. |
 
-The traced resident selector pass updates the displayed state for several
-contiguous tile-id families: two four-frame terrain families in the `0xD4..0xDB`
-range, a two-frame effect family in `0x80..0x83` gated by the low bit of the
-shared phase counter, a four-frame family in `0xEC..0xEF`, and a two-frame
-family in `0xFA..0xFD` gated by the next phase bit. These are render selectors,
-not map edits; the authored map byte remains the phase-zero tile id.
+Each id inside a family owns its own selector byte, so the four ids of a
+four-frame family are permanently a quarter-cycle apart and a wall of waterfall
+cells does not flicker in lockstep. These are render selectors, not map edits;
+the authored map byte remains the phase-zero tile id.
 
-The tile grid itself does not need to be rewritten for every animated water
-cell. A map cell continues to mean "water"; the renderer resolves that semantic
-tile through the current water-frame selector at draw time. This keeps the map
-stable and makes one frame-counter update affect every visible cell in the same
-family.
+**Correction.** Earlier revisions of this section headed the list with "known
+animated families" of water, lava, and torch/fire light, plus unnamed
+"special effect" and "alternate decorative" families, and described the tile grid
+as continuing to "mean water" while the renderer resolved a water-frame selector.
+All of that is withdrawn: **no water, lava, brazier or torch tile animates
+through this pass at all.** The five families above are the complete list, and
+none of them is a water or fire terrain family. `catalogs/tile-catalog.md`
+Section 4 carried the same wrong family list and is corrected there.
+
+The tile grid itself is never rewritten for an animated cell. A map cell
+continues to mean, say, "waterfall"; the renderer resolves that semantic tile
+through the family's current selector at draw time. This keeps the map stable
+and makes one selector update affect every visible cell in the same family.
 
 The global tile-animation step increments a shared frame counter after updating
-the selectors. Some families use every tick; others use only selected bits of
-the counter so they toggle more slowly. The exact private selector table stays
-in the private analysis notes; the public contract is that animated terrain is
-family-wide, deterministic, and driven by the same tick cadence as active
-objects.
+the selectors. Three families advance on every tick; the two toggling families
+read one bit each of the counter, so they change at a half and a quarter of that
+rate. The public contract is that animated terrain is family-wide, selector-based,
+deterministic, and driven by the same tick cadence as active objects — never a
+per-cell sweep of the rendered tile buffer.
 
 ## 7. Presentation Flush
 
@@ -326,6 +333,12 @@ decompiler output, implementation listings, and raw private tables.
 - Per-slot animator, global tile selector update, and display-driver flush -
   `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x44B8_animate_tiles.md`.
+- Source provenance: the five global tile-animation families of Section 6, their
+  cycle lengths and phase gating, and their per-id selector bytes were re-read
+  from the shipped executable for this revision; their names come from decoding
+  the shipped description table (`u5-spec/formats/look2-dat.md`). Both private
+  notes above still carry the older water/lava/torch labels for those ranges;
+  those labels were guesses and are superseded.
 - Caller relationship from the resident world-tick path -
   `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
 - NPC scheduler separation -

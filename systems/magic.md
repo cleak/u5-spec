@@ -112,7 +112,7 @@ The full table:
 | 5      | In Ex Por                 | Unlock Magic        | Unlock magical locks.                                      |
 | 5      | Vas Mani                  | Great Heal          | Strong HP restoration.                                     |
 | 5      | In Zu                     | Sleep               | Single-target sleep.                                       |
-| 5      | Rel Tym                   | Quickness           | Install a `Q`/30 active effect that randomly gates player-side combat dispatch. |
+| 5      | Rel Tym                   | Quickness           | Install a `Q`/30 active effect that halves the clock rate and randomly gates the automatic actor driver. |
 | 6      | In Vas Por Ylem           | Tremor              | Table-wide damage check against eligible combat actors.    |
 | 6      | Quas An Wis               | Mass Charm          | Install a `C`/20 active effect that gates monster target-remap rolls. |
 | 6      | In An                     | Negate Magic        | Install an `N`/10 active effect that absorbs combat casts. |
@@ -456,15 +456,22 @@ the otherwise permanent regalia auras:
 
 - **`Q` Quickness.** Outside combat, the per-turn cleanup halves the
   game-minute increment for the turn, with a floor of one minute, so the clock,
-  NPC schedules, and both light counters all advance at half rate. Inside
-  combat, each actor's turn is additionally subject to a coin flip, so enemies
-  act about half as often. On the player side the same tag gates ready
-  dispatch: each dispatch rolls an inclusive 0..1 value, and a zero consumes
-  that ready dispatch without reading a command while a one continues through
-  the normal command/status path.
+  NPC schedules, and both light counters all advance at half rate; the
+  overworld's active-object and encounter epilogue also runs on alternate turns
+  only (`systems/overworld.md`). Inside combat there is exactly one gate, at
+  the head of the automatic actor driver: that driver rolls an inclusive 0..1
+  value and a zero consumes the dispatch without acting. Because the round
+  walker sends self-acting actors to that driver and the player's own turns to
+  the keystroke parser, the in-combat effect is that hostiles act about half as
+  often while the player is unaffected. Earlier revisions of this document
+  described this as two mechanisms — an every-actor coin flip *and* a
+  player-side ready-dispatch gate — and `systems/combat.md` attributed it to
+  the player command handler; both readings are withdrawn.
 - **`T` Negate Time.** The per-turn cleanup skips the entire time advance, so
-  the clock is frozen and neither torches nor light spells burn down. In combat
-  the affected actor's turn is skipped outright.
+  the clock is frozen and neither torches nor light spells burn down, and the
+  overworld epilogue returns before animating anything. In combat the automatic
+  actor driver returns immediately, so every self-acting actor's turn is
+  skipped outright while the tag lasts; the party is still prompted normally.
 - **`N` Negate Magic.** The enemy-cast gate returns "no spell", and the combat
   C-Cast path absorbs casts before the shared cast dispatcher runs, so the
   premixed charge and MP debit gates are not reached.
@@ -752,7 +759,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
 | Negate Time | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
-This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's player-side dispatch gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-step boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
+This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's automatic-actor-driver gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-step boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
 
 ## 9. Casting in combat
 
@@ -988,7 +995,17 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`
   and the `DATA.OVL` class-flag table; it is summarized here only to separate
   those effects from the player spell dispatcher.
-- Protection's inertness, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Negate Time's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
+- Protection's inertness, Quickness's automatic-actor-driver gate and Negate Time's matching turn skip, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Negate Time's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
+- The correction that the `Q` gate and the `T` skip are a single pair of tests
+  at the head of the automatic actor driver, not an every-actor coin flip plus
+  a separate player-side ready gate -- derived from a 2026-08-22 re-read of
+  `u5-decomp/functions/COMBAT_OVL/0x03F4_actor_action_driver.md` and
+  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md` against the
+  round walker's two-way dispatch in
+  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md`, which together
+  show the keystroke parser reads no active-effect code except Negate Magic's
+  `N`.
 - The single shared timed-effect slot: its code/duration pair, the permanent
   sentinel, the non-stacking replacement rule, the complete constant table for
   the four timed buff spells, Negate Time, the three timed scrolls and the three

@@ -97,7 +97,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 6. **Post-action hook.** If the dispatch did anything, call a post-action helper for end-of-turn cleanup.
 7. **Party-capability check.** The iteration then ends by running the shared party-capability check specified in `systems/main-loop.md` Section 6 — the same check town and overworld mode run, with the same three-way result mapping — before the loop reads another command. The check also runs once on entry, ahead of the first command read, and it runs on every iteration regardless of what the dispatch reported, so a command that took no turn (a refused Klimb, say) skips the post-action helper of step 6 but still passes through the check. If at least one member can act, the loop proceeds to the next iteration. If nobody can act but at least one member is asleep, the loop pauses briefly, prints the sleep line ("Zzzzzz..."), and re-runs the check without reading a command, repeating for as long as that result holds; the dungeon takes this pass without running the post-action helper. If nobody can act and nobody is asleep, the inner loop stops and the epilogue runs the total-party-defeat sequence (§ 13.4). Dungeon mode contributes no condition of its own to the check.
 
-**Epilogue.** Toggle the appropriate visibility flag bit so the next render runs a full repaint, call the per-turn redraw primitive, and call the world-clock advance routine — the same routine town and combat call — with a one-minute increment. Time in dungeons advances at the indoor rate. If the party-capability check of step 7 reported that nobody can act and nobody is asleep, the epilogue's last act is to run the total-party-defeat sequence of `systems/blackthorn.md` Section 7; the per-turn redraw/view-helper pass named above runs immediately before it, as bookkeeping rather than as a condition on it. An earlier revision described this tail call as a dungeon-exit teardown fired by an end-of-stream / quit poll result; that reading is withdrawn.
+**Epilogue.** Toggle the appropriate visibility flag bit so the next render runs a full repaint and call the per-turn redraw primitive. The world-clock advance — the same routine town and combat call, with a one-minute increment — is issued from the head of the *next* iteration rather than from this epilogue, and is not gated on whether the command consumed a turn (Section 15). Time in dungeons advances at the indoor rate. If the party-capability check of step 7 reported that nobody can act and nobody is asleep, the epilogue's last act is to run the total-party-defeat sequence of `systems/blackthorn.md` Section 7; the per-turn redraw/view-helper pass named above runs immediately before it, as bookkeeping rather than as a condition on it. An earlier revision described this tail call as a dungeon-exit teardown fired by an end-of-stream / quit poll result; that reading is withdrawn.
 
 The loop then iterates, checking the scene byte; if it is still in the dungeon range, the next turn begins.
 
@@ -250,7 +250,9 @@ Two underfoot tile classes have *immediate* effects that fire before the player 
 
 Cleared room state also has an overlay-side bitmap keyed by dungeon and room
 id. This bitmap is part of the save image. It has one bit per dungeon-room arena
-record - one hundred twelve bits, fourteen bytes - and the bit index is the same
+record - one hundred twelve bits, which occupy the first fourteen bytes of the
+sixteen-byte save-image field published in `formats/saved-gam.md` Section 10
+(the two trailing bytes are never addressed) - and the bit index is the same
 `arena_bank * 16 + room_id` value used to select the `DUNGEON.CBT` record
 (§ 14). When a level is loaded or reloaded, room-marker cells whose clear bit is
 set are demoted from `0xF?` to `0xA?`, preserving the room id low nibble. They
@@ -848,15 +850,22 @@ shared chest trap-effect resolver.
 
 **Ladders.** Three classes:
 
-- **Up ladder (`0x1`).** K-Klimb moves Z to Z-1 when the current level is above zero.
-- **Down ladder (`0x2`).** K-Klimb moves Z to Z+1 when the current level is below seven.
-- **Two-way (`0x3`).** K-Klimb prompts up or down.
+- **Up ladder (`0x1`).** K-Klimb moves Z to Z-1, or leaves the dungeon when the current level is already zero.
+- **Down ladder (`0x2`).** K-Klimb moves Z to Z+1, or leaves the dungeon when the current level is already seven.
+- **Two-way (`0x3`).** K-Klimb prompts up or down, then behaves as above.
 
-The level cap is seven; the traced K-Klimb apply path rejects attempts to move
-above level zero or below level seven. Ordinary dungeon ladders do not publish
-a deepest-level underworld handoff. The only traced K-command dungeon exit
-outside ordinary ladders is exact pit byte `0x60`, which invokes the
-surface-reset helper.
+Levels run `0..7`, but **a ladder at a level edge is not refused — it is an
+exit.** The traced level-step helper runs its edge test *before* it looks at
+any cell, and reports "edge" rather than "rejected"; the K-Klimb dispatcher
+then hands that result to the shared dungeon exit contract of Section 13.2.
+So **ordinary dungeon ladders do publish a deepest-level underworld handoff**,
+and climbing up off level zero surfaces the party on Britannia. An earlier
+revision of this paragraph said the apply path "rejects attempts to move above
+level zero or below level seven" and that ordinary ladders publish no
+deepest-level handoff; both halves are withdrawn — they contradict Section 1,
+Section 13.2, `systems/doors-and-z-transitions.md` Sections 9 and 12, and
+`catalogs/gazetteer.md` Section 6.1. Exact pit byte `0x60` is a *further*
+non-ladder K-command route into the same exit contract, not the only one.
 
 **Door-like dungeon classes.** High nibbles `0xA`, `0xE`, and `0xF` all have door-like presentation in parts of the dungeon renderer and minimap, but they are not interchangeable storage states. `0xF?` is the stock room-trigger family, with the low nibble selecting the `DUNGEON.CBT` room id. `0xA?` is the runtime room-helper / cleared-room state produced both after room combat and by the save-image room-clear demotion pass on reload. `0xE?` is a separate door-presentation variant used by other runtime wall/search paths; it is not produced by cleared-room replay.
 
@@ -1407,7 +1416,17 @@ returns through the combat framer with the flag still set, the framer calls the
 display-driver tile-graphics restore mode before redrawing the world view. This
 flag is a room-layout/display handoff, not a trap-damage or loot signal.
 
-**Wandering monsters.** Some non-room cells spawn random monsters at intervals — an encounter roll runs in the per-turn epilogue, and on success spawns monsters in adjacent cells. Combat begins on attack.
+**Wandering monsters.** Dungeon mode does **not** run the overworld's
+random-encounter probe: there is no chance-roll in the dungeon per-turn
+epilogue and no spawner that writes monsters into adjacent cells
+(`systems/encounters.md` Section 2.3). What the dungeon has instead is the
+**single active dungeon monster** of Section 4.1, rolled by dungeon view
+initialisation — on entry and again after every wandering-monster fight — and
+placed by that helper's up-to-eight random attempts on the current level.
+The per-turn epilogue only *steps* that one monster toward the party. Combat
+begins on A-Attack or on the contact/auto-face path below. An earlier revision
+of this paragraph described a per-turn encounter roll spawning monsters in
+adjacent cells; that is withdrawn.
 
 After a successful dungeon action, the active monster can step toward the
 party. If that step makes it adjacent, the dungeon post-action hook can rotate
@@ -1546,7 +1565,7 @@ This gives Deceit records `0..15`, Destard `16..31`, Wrong `32..47`, Covetous `4
 
 ## 15. Time integration
 
-Dungeon turns advance the world clock at the indoor rate: one minute per consumed turn. The per-turn epilogue calls the same world-clock advance routine that town turns use. The clock cascades normally: daily Shadowlord hideout maintenance runs at midnight, and month-boundary character counters and long-period flag clears run when the day wraps past 28, even though the player is underground.
+Dungeon turns advance the world clock at the indoor rate: one minute per loop iteration. The loop calls the same world-clock advance routine that town turns use, but — unlike the town and overworld loops — it does **not** gate that call on whether the command consumed a turn. The single call site sits at the head of each iteration, ahead of the render-and-poll step and the command dispatch, so a command the dispatcher reports as "no action" (a digit solo-select, a refused Push, the typeahead toggle) still costs a minute underground. Only the dungeon post-action pass is gated on the status word. Earlier wording here calling the call a per-turn epilogue keyed to a consumed turn is withdrawn; see `systems/commands.md` Section 3. The clock cascades normally: daily Shadowlord hideout maintenance runs at midnight, and month-boundary character counters and long-period flag clears run when the day wraps past 28, even though the player is underground.
 
 Two dungeon-specific consequences: **lighting decay** (the torch and
 light-spell counters tick down each turn — § 7), and **record month counters**
@@ -1617,7 +1636,11 @@ specified, and stock data cannot produce that edge.
   Section 13. The one narrow item left open is which dungeon *room* maps place a
   ladder cell under the party, since an up-or-down request raised inside a room
   feeds the same machinery as K-Klimb.
-- **Random-encounter cadence and monster sets per level** — see `encounters.md`.
+- **Wandering-monster cadence and monster set.** Closed, and not an encounter
+  probe: the dungeon rolls one active monster per view initialisation from the
+  eight presentation records of Section 4.1, and `encounters.md` Section 2.3
+  records that the random-encounter probe is overworld-only. What remains is
+  art naming for those eight records.
 - **Pit-chain off-bottom stock-data boundary.** Chained pit falls that run past
   level seven clear the dungeon scene byte with the off-bottom level byte and
   same X/Y still in resident state. The dungeon-side state mutation is covered,

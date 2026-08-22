@@ -366,7 +366,7 @@ per-slot per-round state used by every consumer:
 | Bit  | Meaning                                                                              |
 |-----:|--------------------------------------------------------------------------------------|
 | `0x80` | **Party-side slot.** Placement stamps this bit only when it writes a party member's descriptor. Monster and object descriptors never carry it. It is the discriminator the damage/death resolver uses to choose the party-death branch over the monster-death branch, so an engine that also sets it for live monsters routes every monster death through the party path. |
-| `0x40` | **Monster-side slot** (self-acting AI actor). Placement stamps this bit when it writes an ordinary monster descriptor, except for the two reserved unnamed classes 8 and 9, which are stamped `0x20` instead. Bits `0x80` and `0x40` are mutually exclusive as written by placement. |
+| `0x40` | **Monster-side slot** (self-acting AI actor). Placement stamps this bit when it writes an ordinary monster descriptor, except for the two passive/neutral classes 8 (Pirate) and 9 (the adjacent reserved row), which are stamped `0x20` instead. Bits `0x80` and `0x40` are mutually exclusive as written by placement. |
 | `0x20` | Marked dead or otherwise non-acting. Monster death overwrites the whole flags byte with this value; party death ORs it in. |
 | `0x10` | Phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). |
 | `0x08` | **Asleep / magically disabled.** Not charm: charm and every other externally-controlled state live in bit `0x01` alone, and no traced path writes `0x08` for a charm or possession effect. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). The stats panel's combat status letter does not consult this bit, so an asleep party member still shows the roster status letter. |
@@ -677,7 +677,17 @@ The phase-counter / base-step structure means actors act at *staggered* paces. T
 
 ## 8. Player commands in combat
 
-When the round walker dispatches a player slot, the player command handler normally reads exactly one keystroke from the input pipeline (using the same input system that drives the rest of the engine). If Quickness's shared `Q` active-effect tag is live, that handler first rolls an inclusive 0..1 random gate: a zero result consumes the ready dispatch without reading input, while a one result continues normally. When input is read, the keystroke is folded to upper case, case-checked against the combat command set, and dispatched.
+When the round walker dispatches a player slot, the player command handler
+reads exactly one keystroke from the input pipeline (using the same input
+system that drives the rest of the engine), folds it to upper case,
+case-checks it against the combat command set, and dispatches it. This handler
+consults exactly one shared active-effect tag, Negate Magic's `N`, and only on
+the `C`-Cast branch (Section 10). An earlier revision of this section said the
+player command handler first rolled an inclusive 0..1 gate whenever Quickness's
+`Q` tag was live; that is withdrawn. The `Q` gate and the corresponding Negate
+Time `T` skip live at the head of the **automatic actor driver** — the other
+half of the round walker's two-way dispatch, described in Section 9 — so they
+suppress self-acting actors' turns, not the player's keystroke prompt.
 
 The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Ctrl-B, Space, digits, direction codes). Every letter and every special input is now pinned, and recognition is not the same as world-mode success. The parser routes its letters through two shared shapes plus a handful of direct calls.
 
@@ -762,14 +772,35 @@ Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Sea
 
 When the round walker dispatches a monster slot, the AI runs as a sequence of three passes that ultimately produce a *synthesised keystroke* — the AI generates the same bytes the player would press if they were controlling this monster, and the synthesised byte runs through the same per-letter dispatcher as a player turn. Monsters and players share the action infrastructure.
 
-**Pass 1 - Dispatch setup.** The per-actor dispatcher clears the actor's
-combat-status presentation area, prepares narration scratch, and checks whether
-the current slot should run a normal turn, yield to a queued animation/effect,
-or continue into AI decision-making. Current evidence does not support a
-general per-class AI script runner. The ordinary monster path is table and
-helper driven: status/flee gates run first, then the class-flag special hook,
-target selection, movement-direction synthesis, optional step/teleport logic,
-and finally the same command parser used by player turns.
+**Pass 1 - Dispatch setup.** The per-actor dispatcher — the **automatic actor
+driver** — clears the actor's combat-status presentation area, prepares
+narration scratch, and checks whether the current slot should run a normal
+turn, yield to a queued animation/effect, or continue into AI decision-making.
+Current evidence does not support a general per-class AI script runner. The
+ordinary monster path is table and helper driven: status/flee gates run first,
+then the class-flag special hook, target selection, movement-direction
+synthesis, optional step/teleport logic, and finally the same command parser
+used by player turns.
+
+**Active-effect gates at the head of the automatic driver.** Before any of
+that, this driver reads the single shared active-effect tag (Section 12) twice,
+and these are the only two combat consumers of that tag outside the `C`-Cast
+absorption check:
+
+- **Negate Time (`T`).** The driver returns immediately. The actor's whole
+  turn is skipped — no status tick, no ability hook, no target pick, no attack,
+  no step — and the round walker moves on to the next slot. Because this driver
+  is the one that runs self-acting actors, the visible effect of Negate Time in
+  an arena is that hostiles stop acting entirely for the tag's duration, while
+  the party keeps being prompted normally.
+- **Quickness (`Q`).** The driver rolls an inclusive `0..1` value. A zero
+  consumes the dispatch and returns without acting; a one continues into the
+  ordinary turn. Self-acting actors therefore act about half as often while
+  Quickness is running. The player's own command prompt is not gated
+  (Section 8).
+
+Both gates precede the invisibility, sleep-wake and flee checks below, so a
+skipped dispatch does not run the wake roll either.
 
 **Pass 2 - Per-class special ability hook and direction.** Before ordinary
 movement is synthesized, monster AI runs a small class-flag hook. It is not a
@@ -1187,12 +1218,20 @@ two ring ids. A party member wearing Ring of Invisibility is marked with the
 same hidden/suppressed combat flag that the target picker rejects, and the
 linked visual/effect byte is changed while the ring is active; removing that
 ring in combat clears the hidden flag. A party member wearing Ring of
-Regeneration participates in a regeneration pass: each living wearer has a
-1-in-8 chance to recover 1 HP, capped by that character's maximum HP. During
-the combat round loop, either Ring of Invisibility or Ring of Regeneration has
-a separate 1-in-16 removal check; on the accepted outcome, the game prints the
-ring-vanish feedback, plays the short timed sound, and clears the first matching
-ring from that character's readied equipment slots.
+Regeneration gets one regeneration tick: a 1-in-8 chance to recover 1 HP,
+capped by that character's maximum HP.
+
+**Both ring behaviours are seating-time, not per-round.** Every one of these
+reads happens inside the per-encounter setup pass that seats the party
+(Section 5), once per member per fight, and nothing in the round loop repeats
+them. The 1-in-16 check that destroys a worn Ring of Invisibility or Ring of
+Regeneration — printing the ring-vanish feedback, playing the short timed
+sound, and clearing the first matching ring from that character's readied
+equipment slots — runs in the same pass, immediately before the member is
+placed, so it can take the ring away before its effect is ever applied. An
+earlier revision of this section described a *separate* removal check inside
+the combat round loop and a per-round regeneration pass; that is withdrawn.
+There is one check and one regeneration tick per fight, both at entry.
 
 **Active-effect display counter.** Protection, Quickness, Mass Charm, and
 Negate Magic install a single shared visible tag/counter rather than writing a
@@ -1203,13 +1242,17 @@ torch/light-spell counter; do not model it as one decrement per minute or per
 full actor-table sweep. The traced combat-side aging endpoint is the
 active-player/selection cleanup path; Negate Time's `T` tag uses the same counter
 shape, while the per-turn clock cleanup only observes `T` to skip minute
-advancement. The tag is not display-only.
+advancement. Inside an arena the `T` tag has one further consumer of its own:
+the automatic actor driver returns immediately when it is set, so every
+self-acting actor's turn is skipped for as long as the tag lasts (Section 9).
+The tag is not display-only.
 Protection's `P` tag has no effective consumer: the defence bonus it was meant
 to add rides on a per-item defence total that is both unreachable and never
 read, so Protection changes no combat number. Combat damage reads the cached
 party defense byte instead.
-Quickness's `Q` tag randomly gates player-side combat command dispatch with a
-0..1 roll; Mass
+Quickness's `Q` tag randomly gates the automatic actor driver with a 0..1 roll,
+so self-acting actors act about half as often while it runs and the player's
+own command prompt is untouched (Sections 8 and 9); Mass
 Charm's `C` tag lets the AI target picker roll against the acting monster's
 class charm threshold and, on success, remap that monster to neutral group 0
 before friend/foe filtering; Negate Magic's `N` tag absorbs combat casts before
@@ -1367,9 +1410,12 @@ without independent behavioral consumers remain opaque metadata.
   shared tag and requests redraw. Negate Time's `T`/10 runtime tag uses the same
   counter shape, but the clock cleanup only observes `T` to suppress minute
   advancement. Confirmed consumers are the equipped-item statistic helper's
-  Protection `P` bonus, Quickness's `Q` player-dispatch random gate, Mass Charm's `C`
+  Protection `P` bonus, Quickness's `Q` 0..1 gate and Negate Time's `T`
+  outright skip at the head of the automatic actor driver, Mass Charm's `C`
   class-threshold AI-target remap, and Negate Magic's `N` combat-cast
-  absorption path.
+  absorption path. The `Q` gate was previously attributed to the player
+  command handler; it is on the automatic driver, which is why it slows
+  hostiles rather than the player (Sections 8 and 9).
 
 - **Flee mechanics.** The monster wound-score morale classifier is the per-turn
   morale writer of the fleeing flag, and Cause Fear is a spell-side writer that
@@ -1518,7 +1564,23 @@ The behaviour described here was derived from the private function and format no
   critical bucket — derived from
   `u5-decomp/functions/COMBAT_OVL/0x1A5C_compute_wound_score.md` and
   `u5-decomp/formats/data-ovl.md`.
-- Protection's equipped-item-statistic bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, Negate Time's `T`/10 runtime tag, and the active-effect counter-aging rule — derived from local ULTIMA.EXE, COMBAT, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
+- Protection's equipped-item-statistic bonus, Negate Magic's combat-cast absorption path, Negate Time's `T`/10 runtime tag, and the active-effect counter-aging rule — derived from local ULTIMA.EXE, COMBAT, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
+- The placement of Quickness's `Q` 0..1 gate and Negate Time's `T` outright
+  turn skip at the head of the automatic actor driver rather than in the player
+  command handler, and the correction of the earlier "player-side dispatch
+  gate" reading — derived from a 2026-08-22 re-read of
+  `u5-decomp/functions/COMBAT_OVL/0x03F4_actor_action_driver.md`,
+  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`,
+  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`, and
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`, with the
+  round walker's two-way dispatch confirmed against
+  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md`.
+- The seating-time placement of both magic-ring behaviours (one regeneration
+  tick, one 1-in-16 vanish check, both inside the per-encounter setup pass and
+  neither repeated by the round loop) -- derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`, whose
+  2026-08-22 retrace identifies that function as the per-encounter setup pass
+  rather than a round engine.
 - Equipped Ring of Invisibility and Ring of Regeneration combat behaviour,
   including hidden-flag marking, wearer healing, and combat-round removal checks
   -- derived from `u5-decomp/functions/ULTIMA_EXE/0x6794_combatant_set_carrier.md`,

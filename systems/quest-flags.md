@@ -10,7 +10,7 @@ separates the stores that are visible from the conversation runtime:
 - durable shrine/Codex progress masks;
 - durable NPC interaction facts, such as met/killed-style state;
 - the TALK overlay's per-scene branch flag bank;
-- transient one-conversation signal fields cleared during conversation exit.
+- transient one-conversation signal fields.
 
 The quest graph names story dependencies and rewards. This system spec defines
 the flag mechanics those stories can use.
@@ -106,10 +106,17 @@ that treats the bank as per-visit scratch turns every such reward into a farm.
 
 The `0x86` action-dispatch control code has two broad families.
 
-Small numeric arguments write into a generic transient conversation flag array.
-The write uses a nonzero marker value rather than a Boolean bit. These generic
-flags are scanned by the final conversation cleanup and are candidates for
-one-shot reconciliation against the theft/covert-action pipeline.
+Small numeric arguments — argument bytes below the letter range — write into a
+generic transient conversation flag array. The write is a saturating add of one
+at the indexed slot rather than a Boolean bit, so a script that emits the same
+index twice leaves the value at two.
+
+Nothing else in the traced runtime reads that array. In particular the final
+conversation cleanup does **not** scan it: an earlier revision of this section
+said the generic flags were scanned there and were candidates for one-shot
+reconciliation against a theft/covert-action pipeline, and that is withdrawn for
+the same reason the rest of the reconciliation reading is (Section 5). The
+cleanup pass walks carried-inventory bands, not signal bands.
 
 Letter arguments use a fixed global action table. The table can write resource
 or special-item fields, redraw the gold panel, or stamp fixed marker bytes.
@@ -120,19 +127,26 @@ been confirmed.
 
 The confirmed public letter effects are:
 
+Every counter letter adds exactly **one** to its target through the shared
+capped-add helper; none of them assigns a fixed final value. A script that wants
+to grant more than one embeds the sequence more than once. The three
+carried-item letters instead write the owned sentinel directly, because those
+items are owned or not owned rather than stocked. `systems/conversation.md`
+section 7.6 owns the same table with its caps.
+
 | Letter | Effect family |
 |--------|---------------|
-| `A` | Food counter raised to the capped grant value. |
-| `B` | Gold counter raised to the capped grant value. |
-| `C` | Ordinary key counter raised to the capped grant value. |
-| `D` | Gem counter raised to the capped grant value. |
-| `E` | Torch counter raised to the capped grant value. |
+| `A` | Food counter, saturating `+1`. |
+| `B` | Gold counter, saturating `+1`. |
+| `C` | Ordinary key counter, saturating `+1`. |
+| `D` | Gem counter, saturating `+1`. |
+| `E` | Torch counter, saturating `+1`. |
 | `F` | Outdoor Klimb gear/Grapple gate set. |
-| `G` | Magic-carpet carried counter raised to the capped grant value. |
+| `G` | Magic-carpet carried counter, saturating `+1`. |
 | `H` | Sextant carried-item flag set. |
 | `I` | Spyglass carried-item flag set. |
 | `J` | Black Badge carried-item flag set. |
-| `K` | Skull/special-key counter raised to the capped grant value. |
+| `K` | Skull/special-key counter, saturating `+1`. |
 
 ## 5. Conversation Exit: The Falsehood Theft
 
