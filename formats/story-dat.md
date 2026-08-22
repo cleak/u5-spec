@@ -133,8 +133,10 @@ meaning and should not be exposed as a twenty-first story page.
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/data-tables.md` (`STORY.DAT` section).
-- `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
-- `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
+- The intro slide-loop note under `u5-decomp/functions/INTRO_OVL/`, which owns
+  the per-step record positions and the step-6 exception.
+- The proportional paragraph-renderer note under
+  `u5-decomp/functions/FONT_OVL/`, which owns the marker handling.
 - `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` sections 2.3, 6.5 and
   6.9 (the indent role of the brace, the pre-authored soft hyphens, and the
   per-step record positions).

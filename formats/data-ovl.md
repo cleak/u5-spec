@@ -151,10 +151,17 @@ The resident image contains metadata that makes the disk map files meaningful:
   table's row for the town being entered (`systems/town-mode.md` Section 13).
   Earlier wording naming it as the *player's* default town-entry row has been
   retracted; see that document's Section 5 step 6 and Section 8.
-- A location floor-base table used by town mode. Each scene's entry is a
-  1,024-byte floor-page index within the selected town/dwelling/castle/keep
-  file; the signed current-floor byte is added to it before loading a floor.
-- Two compact moon glyph tables read by the lower sky/status strip renderer.
+- A location floor-base table used by town mode, indexed by the raw scene byte
+  and one byte wide. Each scene's entry is a 1,024-byte floor-page index within
+  the selected town/dwelling/castle/keep file; the signed current-floor byte is
+  added to it before loading a floor. The complete semantic contents of this
+  table — base page, page run, and floor range for all thirty-two locations —
+  are published in `formats/location-dat.md` Section 4.1. The entry is not
+  derivable from the scene byte: twenty of the thirty-two values are not twice
+  the location's roster index.
+- Two compact moon glyph tables, interleaved and indexed by day of the month,
+  read by the sky-strip renderer in the top viewport border
+  (`systems/moons.md`).
   They are independent day-indexed presentation tables for Trammel and Felucca,
   not the saved-slot natural-moongate live-terrain schedule.
 - A three-slot Shadowlord state table, one slot each for Faulinei, Astaroth,
@@ -203,12 +210,15 @@ DATA.OVL carries lookup data that turns tile bytes into behaviour:
   front of the bit test.
 - The six-level daylight gradient consumed by the time cleanup at dawn and
   dusk. On the original light scale it steps through 2, 5, 10, 20, 34, and
-  49 before the separate full-daylight value of 50 takes over.
+  49 before the separate full-daylight value of 50 takes over. Those values are
+  squared-distance thresholds, not radii; see `systems/lighting.md` Section 3.
 - A thirty-six-byte folded squared-distance lookup for eleven-by-eleven
   viewport coordinates. Consumers fold each coordinate around centre cell five,
   index the resulting 6x6 table, and receive `(5 - folded_x)^2 + (5 -
-  folded_y)^2`. The fog post-pass uses this to choose clear versus dim
-  renderer markers. Combat target scoring uses a separate computed range
+  folded_y)^2`, a value from 0 at the centre to 50 at each corner. The
+  visibility carve uses it to compare a cell against the lighting threshold, and
+  the fog post-pass uses it with its own fixed distance to choose clear versus
+  dim renderer markers. Combat target scoring uses a separate computed range
   primitive, not this lookup.
 - A visibility tile-classifier resource: a small adjacent-only special-case set
   plus a nineteen-entry tile-id propagation-blocker list. Its public owner is
@@ -500,9 +510,11 @@ DATA.OVL also provides reusable runtime buffers:
   marker.
 - A player/avatar active-object mirror refreshed from scene, map-position,
   floor/plane, and avatar-tile state immediately before object compositing.
-- Scroll-origin, dirty/redraw, daylight, effective-light-radius, torch-counter,
-  and spell-light-counter state. The torch and spell-light entries are
-  remaining-duration counters; only the effective-light value is a radius.
+- Scroll-origin, dirty/redraw, daylight, effective-lighting-threshold,
+  torch-counter, and spell-light-counter state. The torch and spell-light
+  entries are remaining-duration counters read only as active/inactive by the
+  daylight recompute; the effective-lighting value is a squared-distance
+  threshold, not a radius (`systems/lighting.md` Section 3).
   The Search/Jimmy/Open/Get command family distinguishes at least two
   redraw-hint roles: tile-map mutations that require the visible map to be
   refreshed, and inventory or party-state changes that require status refresh.
@@ -655,7 +667,7 @@ Current specs that consume DATA.OVL facts:
 | `formats/location-dat.md` | Resident location-name and floor/entry tables needed to interpret per-class map blocks. |
 | `systems/dungeon-mode.md` | Dungeon scene selection, runtime terrain buffers, room/encounter metadata. |
 | `systems/doors-and-z-transitions.md` | Scene byte, floor/plane state, special tile behaviour, quest-gated door state. |
-| `systems/visibility.md` | Visibility grid, terrain band, dirty flag, light radius, map buffer selection. |
+| `systems/visibility.md` | Visibility grid, terrain band, dirty flag, lighting threshold, map buffer selection. |
 | `catalogs/tile-catalog.md` | Base terrain bitset, caller-query tile-class metadata, animation and trigger tables. |
 | `formats/tlk.md` | Common-word dictionary pointer table and vocabulary expansion target. |
 | `systems/conversation.md` | Dictionary expansion, keyword runtime state, conversation bytecode execution. |

@@ -17,7 +17,11 @@ wrong in both directions and has been replaced.
 
 The file holds **91** sub-images, one per glyph, covering byte values `0x20`
 through `0x7A` in order. Every glyph is 8 rows tall and 0 to 8 pixels wide, so
-every glyph record is 12 bytes and the offset table has a flat stride of 12.
+every glyph row occupies exactly one byte, every glyph record is 12 bytes, and
+the offset table has a flat stride of 12. That flat stride holds for the
+zero-width space glyph as well: it reserves its eight row bytes like every other
+record, which is why `formats/bit.md` Section 3 states the row stride as
+`max(1, ceil(width / 8))` rather than `ceil(width / 8)`.
 
 Each glyph record begins with its own width, so the file does carry per-glyph
 widths. The paragraph renderer nevertheless measures from a **resident**
@@ -44,11 +48,15 @@ Read the file as follows:
    802 bytes on disk and declares, and produces, 1276 decoded bytes.
 2. Parse the decoded image as the sub-image list of `formats/bit.md` Section 3:
    a 2-byte count, `count` 2-byte offsets, then contiguous sub-images of
-   `width`, `height`, and `ceil(width / 8) * height` bytes of one-bit-per-pixel
-   rows, most-significant-bit leftmost, a set bit meaning ink.
+   `width`, `height`, and `max(1, ceil(width / 8)) * height` bytes of
+   one-bit-per-pixel rows, most-significant-bit leftmost, a set bit meaning ink.
+   Because no glyph exceeds eight pixels of width, that stride is one byte per
+   row for all 91 records.
 
 For the shipped file that yields `count = 91`, a first offset of 184, and
-offsets rising by 12 to 1264; the last record ends exactly at byte 1276.
+offsets rising by 12 to 1264; the last record ends exactly at byte 1276. Index 0
+is the only record with a width of zero, and it is still 12 bytes: a reader that
+sizes it as four bytes will lose alignment for the whole rest of the file.
 
 Glyph index `n` (0-based) corresponds to character code `0x20 + n`, so index 0
 is the space and index 90 is lowercase `z`. The renderer selects a glyph by
@@ -171,7 +179,10 @@ A strict loader should:
 - Treat the first four bytes as the LZW decoded length, not as a resource entry
   count, and require the decoded byte count to match it.
 - Require the decoded image's sub-image count, offset table, and record sizes to
-  satisfy the checks in `formats/bit.md` Section 6.
+  satisfy the checks in `formats/bit.md` Section 6, taking the row stride as
+  `max(1, ceil(width / 8))` so that the zero-width space glyph is sized at 12
+  bytes and the flat stride check below agrees with the tiling check there.
+- Require the record stride to be a flat 12 bytes for the shipped file.
 - Expect 91 records, every one 8 rows tall with a width of 0 to 8, for the
   shipped file. A replacement font may vary the widths but must keep the record
   order aligned to character codes starting at `0x20`.
@@ -218,9 +229,10 @@ data.
   against the font's own per-glyph widths:
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` sections 1 and 2.
 - Proportional paragraph renderer, layout descriptor field roles, and the
-  advance/justification rules:
-  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
-- Character-creation loader and `PROPORT.PCS` consumer path:
-  `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+  advance/justification rules: the paragraph-renderer note under
+  `u5-decomp/functions/FONT_OVL/`.
+- Character-creation loader and `PROPORT.PCS` consumer path: the
+  character-creation entry note in the same directory, which is also the only
+  writer of the space advance.
 - Withdrawal of the sparse strip reading:
   `u5-decomp/CORRECTIONS.md` "2026-08-22 corrections (bitmap codec re-decode)".

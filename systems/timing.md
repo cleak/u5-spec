@@ -89,9 +89,11 @@ tick" means one ~55 ms BIOS tick produced by the hardware-tick wait helper.
 |---|---|---|
 | Title-tick helper (`display-driver-abi` slot 0x69 entry) | One BIOS tick | Driver-local four-frame title/menu strip frame index advances once; one paint of the destination rectangle. |
 | `TITLE.BIT` title flourish | One calibrated delay unit per presentation step, inside the driver's animation-script entry | One presentation step from `intro.md` section 3 is consumed; the frame's whole band is repainted with the currently visible rows. Eighty-five steps for the whole flourish. **Not** title-tick or BIOS-tick paced. |
+| `Presents` hold (`intro.md` section 3, visible phase 2) | Eighteen BIOS ticks, then a bounded poll of up to twenty more | Nothing is redrawn; the phase simply holds. The first wait is unconditional, the second returns as soon as a key arrives, so the hold is about 1.0 s at minimum and about 2.1 s if the player does not press anything. On a run where the flourish was aborted the hold is skipped entirely and the frame flashes past. |
+| The `a` hold and the finished-composition hold (visible phases 3 and 5) | A bounded poll of up to twenty BIOS ticks each | Nothing is redrawn; each phase holds for about 1.1 s or until a key arrives. |
 | `BRITISH.PTH` signature path | One BIOS tick per 32 consumed path bytes | Thirty-two path bytes (each encoding two nibble-deltas) are walked and painted; a single keyboard poll separates each byte within the chunk. |
-| Start/menu screen animated reveal | Self-paced inside one driver call | The pseudo-random per-pixel dissolve of the inclusive rectangle `(0, 0)..(319, 100)` runs to completion in a single driver call. It is not a per-column, per-tick loop. |
-| Start/menu subtitle ignition | Calibrated busy wait inside the driver | Runs once, on the animated start/menu path only, when the ignition resource is supplied. Self-paced; no BIOS tick. |
+| Start/menu logo reveal | Self-paced inside one driver call, with no delay at all | The pseudo-random per-pixel dissolve of the inclusive rectangle `(0, 0)..(319, 100)` runs to completion in a single driver call. It is not a per-column, per-tick loop, and unlike the two calibrated phases it has no wait of any kind in its inner loop — it transfers one pixel per iteration as fast as the host manages, so on a modern host it is close to instantaneous. |
+| Start/menu subtitle ignition | One calibrated busy wait per restored position, inside the driver | Runs once, on the animated start/menu path only, when the ignition resource is supplied. Self-paced; no BIOS tick. The band is published — and the idle-strip frame counter advanced — once per 128 restored positions, or once per 256 on a host at or below the calibration baseline; the early part of the reveal uses a slightly shorter per-position wait while the speaker effect plays. Two full passes over a `288 x 49` position space. |
 | Story step-1 rectangle reveal | Self-paced inside one driver call | The pseudo-random per-pixel dissolve of the inclusive rectangle `(40, 86)..(75, 120)` runs to completion in a single driver call. It is not a per-column, per-tick loop; see `intro.md` section 10. |
 | Story `U` slide-show inter-slide pacing | Blocking keyboard wait | Bounded by player input; no wall-clock advancement except the cursor blink loop. |
 | Return-to-View preview tick | One BIOS tick per preview tick | One preview tick advances the animated-tile frame table and active-object animation by one step, fires one title tick, rescatters preview actors, repaints the revealed columns, widens the strip reveal on every second tick, and polls the keyboard once. Commands request a fixed number of these; see `formats/location-dat.md` section 11. |
@@ -259,6 +261,11 @@ or private address tables.
   shape).
 - Acknowledgement screen pacing --
   `u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`.
+- The per-phase title holds (eighteen ticks plus a bounded poll before the
+  `Presents` frame, bounded twenty-tick polls after the ornament and the
+  finished composition), the un-paced logo dissolve, and the subtitle
+  ignition's per-position wait and publish cadence --
+  `u5-decomp/notes/intro_title_sequence_2026-08-22.md`.
 - Return-to-View preview tick body, per-command tick counts, strip reveal
   cadence, and the single-cell dissolve poll interval --
   `u5-decomp/functions/FONT_OVL/0x02FC_animate_overworld_tick.md`,

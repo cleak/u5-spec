@@ -4,11 +4,11 @@ Format specification for the four shared per-class location files: `TOWNE.DAT`, 
 
 ## 1. Overview
 
-The world has thirty-two named non-overworld locations. Each is a small interior grid of one-byte tile indices, thirty-two cells wide by thirty-two cells tall, optionally with a second floor of identical dimensions. The grids are stored in four files of identical format and identical size, eight locations per file, partitioned by location class. A separate, small file (`MISCMAPS.DAT`) holds small cutscene maps plus the map strips and command stream for the intro Return-to-View preview.
+The world has thirty-two named non-overworld locations. Each is a small interior grid of one-byte tile indices, thirty-two cells wide by thirty-two cells tall, optionally with further floors of identical dimensions above it, below it, or both. The grids are stored in four files of identical format and identical size, eight locations per file, partitioned by location class. Locations have between one and five floors; the shipped distribution is thirteen one-floor locations, ten two-floor, seven three-floor, and two five-floor. A separate, small file (`MISCMAPS.DAT`) holds small cutscene maps plus the map strips and command stream for the intro Return-to-View preview.
 
 The location files are paired one-for-one with their per-class NPC roster files (`*.NPC`) and per-class dialogue files (`*.TLK`); see the NPC and TLK format specs. The town-mode runtime resolves the active file from a single *scene byte* and reads the location's tile data into a working buffer in resident memory, where it is consumed by the renderer and walked at load time to harvest NPC start positions, spawn coordinates, and conditional map markers.
 
-Each location file is exactly 16,384 bytes — eight per-location blocks of 2,048 bytes each, every block a pair of 1,024-byte floor grids. There is no per-location header, no per-floor header, and no padding or alignment within any of the four files. The tile encoding is uniform across the four files; the four-way split exists for reasons of disk and engine memory layout, not because the file formats differ.
+Each location file is exactly 16,384 bytes — a flat array of sixteen 1,024-byte *floor pages* numbered `0` through `15`, each page one complete thirty-two-by-thirty-two tile grid. There is no per-location header, no per-floor header, and no padding or alignment within any of the four files. The eight-locations-per-file split is a naming and roster convention, not a page-ownership rule: each location owns a *run* of one to five consecutive pages, and those runs do not all begin on an even page. Section 4.1 publishes the complete scene-to-page binding, and Section 4.2 publishes the reachable floor range of every location. The tile encoding is uniform across the four files; the four-way split exists for reasons of disk and engine memory layout, not because the file formats differ.
 
 `MISCMAPS.DAT` is structurally unrelated despite the suggestive name - it carries small fixed-size map records for cutscenes and Return-to-View layouts, plus a command stream consumed by the intro-side preview renderer.
 
@@ -25,61 +25,116 @@ The thirty-two location IDs are partitioned by class:
 
 Scene byte zero is reserved for *overworld* (no per-location file is loaded). Values outside `1..32` do not select one of these per-location files; dungeon-class maps, intro/Return-to-View maps, and combat-class state are owned by other formats.
 
-Within a class, the eight per-class blocks are addressed by `(scene − 1) & 7`. The dwelling at scene byte twelve is the fourth block of `DWELLING.DAT`; the castle at scene byte twenty is the fourth block of `CASTLE.DAT`. The engine resolves the file family by `(scene − 1) >> 3` against a four-entry pointer table; the resulting filename is opened and the per-block data is read.
+Within a class, the location's *roster* index is `(scene − 1) & 7`. That index selects the location's block in the class `.NPC` and `.TLK` files. It does **not** select the location's tile pages in the class `.DAT` file; those come from the per-scene base-page binding of Section 4.1. The engine resolves the file family by `(scene − 1) >> 3` against a four-entry pointer table whose four entries name `TOWNE.DAT`, `DWELLING.DAT`, `CASTLE.DAT`, and `KEEP.DAT` in that order; the resulting filename is opened and exactly one 1,024-byte page is read.
 
 The four-way split is engine-side bookkeeping, not user-facing. The shipping data could equally well live in a single 65,536-byte file; the four files exist because the engine groups its disk I/O and its NPC-loading code by class. From a format-reader's perspective the four files are interchangeable, and a tool that wants to enumerate every interior in the game simply reads all four end-to-end.
 
-The pairing across files is one-for-one: the per-location block in `TOWNE.DAT` at index *k* corresponds to the per-location NPC block at index *k* in `TOWNE.NPC` and the per-location dialogue block at index *k* in `TOWNE.TLK`. The same is true for `DWELLING.*`, `CASTLE.*`, and `KEEP.*`.
+The pairing between the roster files is one-for-one: the NPC block at index *k* in `TOWNE.NPC` corresponds to the dialogue block at index *k* in `TOWNE.TLK`, and the same holds for `DWELLING.*`, `CASTLE.*`, and `KEEP.*`. The `.DAT` file is the exception: its unit is the 1,024-byte page, not the roster index, and the page run belonging to roster index *k* is given by Section 4.1.
 
 ## 3. Per-file structure
 
-Every file is exactly 16,384 bytes and contains exactly eight per-location blocks of 2,048 bytes each, in order:
+Every file is exactly 16,384 bytes and contains exactly sixteen floor pages of 1,024 bytes each, in order:
 
-| Block index | File offset (bytes) | Length (bytes) | Content              |
-|-------------|--------------------:|---------------:|----------------------|
-| 0           |                   0 |          2,048 | Location 0, both floors |
-| 1           |               2,048 |          2,048 | Location 1, both floors |
-| 2           |               4,096 |          2,048 | Location 2, both floors |
-| 3           |               6,144 |          2,048 | Location 3, both floors |
-| 4           |               8,192 |          2,048 | Location 4, both floors |
-| 5           |              10,240 |          2,048 | Location 5, both floors |
-| 6           |              12,288 |          2,048 | Location 6, both floors |
-| 7           |              14,336 |          2,048 | Location 7, both floors |
+| Page index | File offset (bytes) | Length (bytes) | Content                  |
+|-----------:|--------------------:|---------------:|--------------------------|
+| 0          |                   0 |          1,024 | One 32×32 tile grid      |
+| 1          |               1,024 |          1,024 | One 32×32 tile grid      |
+| 2          |               2,048 |          1,024 | One 32×32 tile grid      |
+| …          |                   … |          1,024 | …                        |
+| 15         |              15,360 |          1,024 | One 32×32 tile grid      |
 
-There are no inter-block headers, footers, separators, or padding. The 2,048-byte stride is the physical authoring convention, regardless of how many of the location's floors are populated.
+The page at index *p* begins at file offset `p × 1024`. There are no inter-page headers, footers, separators, or padding, and every one of the sixteen pages of every one of the four files is authored content owned by exactly one location.
 
-A simple viewer that wants the *k*-th location of a given class can open the class file, seek to `k × 2048`, and read the two physically paired floors. A game-compatible loader should instead use the resident floor-page table described in Section 4, because several scenes address a floor page outside the simple two-page pair.
+Older readings of this format — including earlier revisions of this document — described the file as eight 2,048-byte per-location blocks, each block a pair of floors. **That pairing is an authoring artifact and is withdrawn as a runtime model.** No runtime path reads a 2,048-byte unit, and page ownership does not respect the pairing: seven locations own a run of three pages and two own a run of five, nine of the thirty-two runs cross a 2,048-byte boundary, and one town's ground floor is the *second* page of a pair rather than the first. The 2,048-byte figure survives only as an observation about how the shipped data happens to group, and a decoder should not use it.
 
-The mapping from block index to in-game location name lives in the
+A simple viewer that wants to paint every interior of a class can open the class file and paint all sixteen pages end to end. A viewer that wants to present them *as locations* — or any game-compatible loader — must use the per-scene base-page binding in Section 4.1, because the *k*-th location of a class does not in general start at page `2k`.
+
+The mapping from roster index to in-game location name lives in the
 DATA.OVL-derived world-location table; see `catalogs/gazetteer.md` and
 `formats/npc.md` for the public scene-to-key binding. The on-disk format
 preserves only ordering, not naming.
 
 ## 4. Per-location structure
 
-Each physical per-location 2,048-byte block contains two consecutive floor grids:
+A floor page has no header. Its 1,024 bytes are a flat row-major grid of one-byte tile indices, thirty-two columns wide and thirty-two rows tall. Cell `(row, col)` is at page offset `row × 32 + col`. Row indices increase southward; column indices increase eastward.
 
-| Sub-block | Offset within block | Length | Content        |
-|-----------|--------------------:|-------:|----------------|
-| Floor 0   |                   0 |  1,024 | Ground floor   |
-| Floor 1   |               1,024 |  1,024 | Upper or basement |
-
-There is no per-floor header. The 1,024 bytes are a flat row-major grid of one-byte tile indices, thirty-two columns wide and thirty-two rows tall. Cell `(row, col)` is at sub-block offset `row × 32 + col`. Row indices increase southward; column indices increase eastward.
-
-The physical first page is not always the logical ground floor for the scene. At runtime, town mode treats each class file as sixteen consecutive 1,024-byte floor pages and uses a resident per-scene base-page table to choose which page is logical floor zero.
+A location is a *run* of consecutive pages within its class file. The run is one to five pages long. One page of the run is the location's **base page** — the floor the party stands on when it walks in from the overworld — and the rest of the run lies above it, below it, or both.
 
 The active page is selected as:
 
 1. Pick the class file from the scene byte: town, dwelling, castle, or keep.
-2. Read that scene's base floor-page number from the resident location-floor table. The value is a page index within the selected class file, not a byte offset.
-3. Interpret the current floor byte as signed eight-bit: values `0..127` are non-negative floors, values `128..255` mean `value - 256`.
-4. Add signed floor to the base page and read exactly 1,024 bytes starting at `page × 1024`.
+2. Read that scene's base floor-page number from the resident per-scene base-page table. The value is a page index within the selected class file, not a byte offset. The table is published in Section 4.1.
+3. Interpret the current floor byte as signed eight-bit: values `0..127` are non-negative floors, values `128..255` mean `value − 256`.
+4. Add the signed floor to the base page and read exactly 1,024 bytes starting at `page × 1024`.
 
-With the normal floor byte of zero, the base page is the player's ground floor. A floor byte of one reads the next page; a floor byte of `0xFF` reads the previous page and is how basement-style floors are reached. This rule is why an implementation must not derive active-floor pages solely as `location_index × 2 + floor`.
+**Sign convention: a higher page index is a higher floor.** Floor `0` is the base page and the location's entry floor. Floor `+1` is the page immediately after it and is one storey up; floor `0xFF` (signed −1) is the page immediately before it and is a basement. The engine confirms the direction on screen: a transition that increases the floor byte prints `Up!` and a transition that decreases it prints `Down!`. An implementation that inverts this will place every basement above its ground floor.
 
-Locations with only one populated floor still occupy the full 2,048 bytes: the unused floor's 1,024-byte grid is filled with a single repeating tile (often the location class's default wall byte), producing a visible-but-unreachable empty room. A reader cannot distinguish a populated single-cell room from an empty filler floor by inspection alone; the game knows which floors are real because the player can only reach them through stairway tiles laid out in floor zero.
+Nothing in the format constrains the base page to an even index, and it is not derivable from the scene byte. In the shipped data twenty of the thirty-two locations have a base page that is *not* twice their roster index, so `location_index × 2 + floor` is wrong for the majority of locations, not for an exotic minority. The table in Section 4.1 is the only correct source.
 
-A small number of locations encode an extra level by choosing a base page whose neighbouring page belongs physically to another 2,048-byte pair. The mechanism uses the same per-floor stride and the same tile encoding; an implementation that reads only the canonical two floors per block will see a plausible location and miss some reachable floors. Section 9 covers this in more detail.
+### 4.1 Per-scene base floor-page table
+
+The resident table is indexed by the raw scene byte and holds one page index per location. Slot zero corresponds to the overworld and is never consulted by this path. Scene bytes above thirty-two are not part of this table at all; the dungeon scene rows dispatch to dungeon mode and a different file.
+
+The complete binding for the shipped DOS data. "Base page" is the page loaded when the floor byte is zero; "page run" is the set of pages the location owns; "floor range" is the set of signed floor values that address them.
+
+| Scene | Location | Class file | Base page | Page run | Floor range |
+|------:|----------|------------|----------:|----------|-------------|
+| 1  | Moonglow | `TOWNE.DAT` | 0 | 0–1 | 0, +1 |
+| 2  | Britain | `TOWNE.DAT` | 2 | 2–3 | 0, +1 |
+| 3  | Jhelom | `TOWNE.DAT` | 4 | 4–5 | 0, +1 |
+| 4  | Yew | `TOWNE.DAT` | **7** | 6–7 | −1, 0 |
+| 5  | Minoc | `TOWNE.DAT` | 8 | 8–9 | 0, +1 |
+| 6  | Trinsic | `TOWNE.DAT` | 10 | 10–11 | 0, +1 |
+| 7  | Skara Brae | `TOWNE.DAT` | 12 | 12–13 | 0, +1 |
+| 8  | New Magincia | `TOWNE.DAT` | 14 | 14–15 | 0, +1 |
+| 9  | Fogsbane | `DWELLING.DAT` | 0 | 0–2 | 0, +1, +2 |
+| 10 | Stormcrow | `DWELLING.DAT` | 3 | 3–5 | 0, +1, +2 |
+| 11 | Greyhaven | `DWELLING.DAT` | 6 | 6–8 | 0, +1, +2 |
+| 12 | Waveguide | `DWELLING.DAT` | 9 | 9–11 | 0, +1, +2 |
+| 13 | Iolo's Hut | `DWELLING.DAT` | **12** | 12 | 0 |
+| 14 | `DWELLING:5` (blank resident name) | `DWELLING.DAT` | 13 | 13 | 0 |
+| 15 | `DWELLING:6` (blank resident name) | `DWELLING.DAT` | 14 | 14 | 0 |
+| 16 | `DWELLING:7` (blank resident name) | `DWELLING.DAT` | 15 | 15 | 0 |
+| 17 | Lord British's Castle | `CASTLE.DAT` | **1** | 0–4 | −1 … +3 |
+| 18 | Lord Blackthorn's Castle | `CASTLE.DAT` | **6** | 5–9 | −1 … +3 |
+| 19 | West Britanny | `CASTLE.DAT` | 10 | 10 | 0 |
+| 20 | North Britanny | `CASTLE.DAT` | 11 | 11 | 0 |
+| 21 | East Britanny | `CASTLE.DAT` | 12 | 12 | 0 |
+| 22 | Paws | `CASTLE.DAT` | 13 | 13 | 0 |
+| 23 | Cove | `CASTLE.DAT` | 14 | 14 | 0 |
+| 24 | Buccaneer's Den | `CASTLE.DAT` | 15 | 15 | 0 |
+| 25 | Ararat | `KEEP.DAT` | 0 | 0–1 | 0, +1 |
+| 26 | Bordermarch | `KEEP.DAT` | 2 | 2–3 | 0, +1 |
+| 27 | Farthing | `KEEP.DAT` | 4 | 4 | 0 |
+| 28 | Windemere | `KEEP.DAT` | 5 | 5 | 0 |
+| 29 | Stonegate | `KEEP.DAT` | 6 | 6 | 0 |
+| 30 | The Lycaeum | `KEEP.DAT` | 7 | 7–9 | 0, +1, +2 |
+| 31 | Empath Abbey | `KEEP.DAT` | 10 | 10–12 | 0, +1, +2 |
+| 32 | Serpent's Hold | `KEEP.DAT` | **14** | 13–15 | −1, 0, +1 |
+
+Names follow `catalogs/gazetteer.md` Section 5; the three dwellings whose resident name string is blank are listed by their stable storage key.
+
+Two properties of this table are worth relying on as consistency checks:
+
+- **The sixty-four pages partition exactly.** Every page of all four class files is claimed by exactly one location; there are no unowned pages, no shared pages, and no gaps. A decoder that reconstructs page runs from this table and finds a hole or an overlap has made an error.
+- **The base page is not always the lowest page of the run.** Exactly four locations enter above the bottom of their run: Yew, both large castles, and Serpent's Hold. Every other location enters on the lowest page it owns.
+
+The four bold rows are the ones most likely to expose a `2 × index` implementation. With that derivation Yew renders its jail instead of its town, Iolo's Hut renders a lighthouse lantern room belonging to a different dwelling, Lord British's Castle renders its own basement, and Lord Blackthorn's Castle renders a floor of Lord British's Castle entirely.
+
+### 4.2 Reachable floors, and rederiving the page runs from assets
+
+The floor range in Section 4.1 is not an engine constant; it is what the shipped tile data makes reachable. A tool that wants to rederive it from assets alone — or to validate a modified asset set — can do so by walking the transition cells, because a real floor link is authored on *both* pages at the same cell coordinate:
+
+- **Ladder pairs.** Every ascend-link cell (`0xC8`) at `(x, y)` on page *p* is matched by a descend-link cell (`0xC9`) — or, in one keep, a metal grate — at the same `(x, y)` on page *p + 1*. There is no exception anywhere in the shipped data, and this signal alone reconstructs the complete run structure. Run the check in the ascend direction: the converse does not quite hold. Exactly one page in the shipped data breaks it: the top floor of Lord British's Castle (floor `+3`) carries four descend links at its tower corners, and the same four cells one floor down carry a further descend link rather than an ascend link. Those four corner descents are therefore one-way.
+- **Shared staircases.** An identical stairway byte from the `0xC4..0xC7` family at the same `(x, y)` on both *p* and *p + 1* is a two-way flight between them.
+- **One-way descents.** A trapdoor (`0x8C`) or a metal grate (`0x86`) on page *p + 1* paired with an ascend link on page *p* is a drop down plus a way back up. A grate can also stand in for the descend half of a ladder pair — Ararat's upper floor carries a grate at exactly the cell where its lower floor carries the ascend link.
+
+Following those links outward from each base page yields exactly the page runs of Section 4.1, and the runs so derived tile the sixteen pages of each file with no overlap.
+
+Two conventions a reader might mistake for structure:
+
+- **There is no filler page.** Earlier revisions of this document said single-floor locations still occupy 2,048 bytes with one page of repeated filler tile, and that the engine relies on stairways never leading into it. **That is withdrawn.** Every page in the shipped data is authored content owned by a location. The pages that look like filler — a mostly uniform field with a small complex cut into it — are small-footprint basements and secondary levels, and they are reachable: the Yew jail, the level below Blackthorn's castle, and the level below Serpent's Hold all have that shape.
+- **A one-page location has no unreachable second floor.** Locations such as Iolo's Hut own a single page and contain no stairway, ladder, grate, or trapdoor cell at all, so their floor byte never leaves zero.
 
 ## 5. Tile encoding
 
@@ -172,19 +227,29 @@ Marker handling is in-memory only. The original on-disk file is unchanged. Imple
 
 ## 7. Multi-floor handling
 
-Floor changes within a location are mediated by stairway tiles, ladders, and trapdoors. The facing-sensitive town stair family is `0xC4..0xC7`: the low two bits identify the stair facing in the same normalized facing space used by the town movement wrapper. The renderer paints these as ordinary terrain tiles, but the movement handler intercepts an attempt to walk onto them. Entering along the authored facing moves up, entering from the opposite facing moves down, and side crossings do not change floors.
+Floor changes within a location are mediated by five authored cell families. All five are ordinary tile bytes in the location grid; none of them is a separate per-location record, and none of them carries a destination — the destination is always the adjacent page in the same location's run.
+
+| Cell family | Trigger | Floor change |
+|---|---|---|
+| Stairway `0xC4..0xC7` | Walking onto the cell | ±1, direction from the approach |
+| Ascend link `0xC8` | The climb command, while standing on it | +1 |
+| Descend link `0xC9` | The climb command, while standing on it | −1 |
+| Metal grate `0x86` | The climb command, while standing on it | −1 |
+| Trapdoor `0x8C` | Stepping onto the cell | −1 |
+
+The stairway family is facing-sensitive: the low two bits identify the stair's axis in the same normalized facing space the town movement wrapper uses. Entering along the authored facing moves up, entering from the opposite facing moves down, and side crossings do not change floors. Because the same stairway byte is authored at the same cell coordinate on both connected pages, a flight is two-way.
+
+`systems/town-mode.md` Section 3 owns the player-facing contract for all five, including the on-screen text and the one location where the trapdoor is not a floor transition.
 
 The floor-change pass updates the resident floor byte, reloads the tile buffer using the signed floor-page rule from Section 4, runs the marker harvest and dawn/dusk gate-normalization passes against the new buffer, partially resets the active-object table (NPCs not on the new floor are unlinked, NPCs on the new floor are linked), and updates the player's slot with the new Z. The schedule processor handles its own per-floor consistency through its Z-mismatch state machine described in the schedules spec.
 
-Other floor-transition sub-types, such as K-Klimb ladders and trapdoors, are also authored as tile ids in the location grid. Their command behavior is encoded in the shared tile-class/runtime tables, not in a separate per-location record.
-
-A location with only one populated floor has stair tiles, if any, leading to its filler floor — visually the player can step onto the stair, but the destination floor is empty filler. Such cases are content errors in the source data; the engine does not detect them.
+A transition cell always has a real destination in the shipped data: the page it leads to belongs to the same location's page run, and the authored links form a single chain per location with no branch and no dead end. See Section 4.2.
 
 ## 8. Worked example — `TOWNE.DAT`, location zero
 
 This example walks the first cell-row of the first location of `TOWNE.DAT` to illustrate the on-disk layout.
 
-The file begins at byte zero of `TOWNE.DAT`. The first 2,048 bytes are the per-location block for the first town. Within that block, bytes 0 through 1,023 are floor zero of that town, laid out row-major.
+The file begins at byte zero of `TOWNE.DAT`. The first 1,024 bytes are page 0, which the base-page table of Section 4.1 assigns to the first town as its floor zero. The page is laid out row-major.
 
 Bytes 0 through 31 (decimal) are the first row of the ground floor — the row at row index zero, columns zero through thirty-one. The bytes are tile indices, each encoding one of:
 
@@ -197,28 +262,33 @@ Bytes 0 through 31 (decimal) are the first row of the ground floor — the row a
 
 A typical first row of an outdoor town is dominated by city-wall tiles (the town's perimeter) interspersed with a single gate tile (the entrance) and possibly an NPC start marker representing a guard standing at the gate. The asterisk is usually placed at the cell immediately inside the gate, so that the player arrives directly on the threshold.
 
-Continuing past byte 31, the next thirty-two bytes (bytes 32 through 63) are the second row, and so on. After 1,024 bytes (the last cell of row 31, column 31), floor one of the same town begins at byte 1,024 of the file. After 2,048 bytes the next town's per-location block begins.
+Continuing past byte 31, the next thirty-two bytes (bytes 32 through 63) are the second row, and so on. After 1,024 bytes (the last cell of row 31, column 31) page 1 begins, which for this file is the same town's floor `+1`. Page 2, at byte 2,048, is the *next* town's floor zero — but only because this class file happens to pair its towns that way. In `DWELLING.DAT` and `CASTLE.DAT` the location boundaries fall elsewhere, so a reader must consult Section 4.1 rather than counting in 2,048-byte steps.
 
 A reader writing a viewer can sanity-check its decoding by:
 
-1. Reading the first 2,048 bytes of `TOWNE.DAT`.
+1. Reading the first 2,048 bytes of `TOWNE.DAT`, which for this class file is the whole of the first town.
 2. Splitting into floor-zero and floor-one halves.
 3. Painting both as 32×32 grids using the global tile catalogue.
 4. Checking that the result is a recognisable rendering of the first town with internal buildings and roads.
 
 The on-disk layout is thus simple enough that no decoder is needed — only the tile catalogue and the marker-handling rules.
 
-## 9. Re-purposed floor pages
+## 9. Entry floors above the bottom of a page run
 
-A small number of locations have a floor layout that is not simply "the two pages physically paired under this scene's block." Typical cases are a basement reached from the ground floor via a trapdoor while the upper level is reached from the same ground floor via a staircase, or a scene whose ground floor is authored in the second page of one physical block.
+Most locations enter on the lowest page they own, so their floor byte only ever climbs. Four do not, and they are the reason the base page has to be published rather than derived.
 
-The mechanism is the signed floor-page rule from Section 4. Each scene's resident table entry names the class-file page for logical floor zero. The current floor byte is signed and added to that base. Therefore:
+The mechanism is the signed floor-page rule of Section 4: the resident table names the page for logical floor zero, and the signed floor byte is added to it. Floor `0` is the base page, floor `+1` the page after it, floor `0xFF` the page before it. When the base page is not the lowest page of the run, the pages below it are addressed with negative floor values.
 
-- Floor `0` means the resident base page.
-- Floor `1` means the page immediately after the base page.
-- Floor `0xFF` means the page immediately before the base page.
+| Location | Base page | Pages below the base | Pages above the base | What the lower page is |
+|---|---:|---:|---:|---|
+| Yew | 7 | 1 | 0 | The town jail, reached by trapdoor and grate from the town above and by the two ladder pairs back up |
+| Lord British's Castle | 1 | 1 | 3 | The castle basement |
+| Lord Blackthorn's Castle | 6 | 1 | 3 | A smaller-footprint level below the entry floor |
+| Serpent's Hold | 14 | 1 | 1 | A small complex below the keep |
 
-The class file is a flat array of sixteen floor pages numbered `0..15`; the table values in the shipped DOS data all fall within that range. Reachability is still content-driven by stairway tiles and command handlers. A tool that wants to enumerate every reachable floor must combine the resident base-page table with the location's stair/ladder/trapdoor layout rather than assuming every scene has exactly two floors.
+Yew is the only town-class location with a basement and the only town whose base page is odd. Both large castles are the only five-floor locations in the game, spanning floors `−1` through `+3`. Lord Blackthorn's Castle also carries the densest trapdoor layout in the game: its entry floor and the three floors above it (floors `0`, `+1`, `+2`, `+3`) hold forty-five, thirty-six, thirty, and thirty-six trapdoor cells respectively, while its basement holds none — the trapdoors all drop *into* the tower and there is nothing below the bottom. Falling a floor there is routine rather than exceptional.
+
+Reachability remains content-driven by the transition cells of Section 7. A tool that wants to enumerate every reachable floor should combine the base-page table of Section 4.1 with the link-walking procedure of Section 4.2 rather than assuming any fixed floor count per location.
 
 ## 10. The dawn/dusk substitution pass
 
@@ -244,7 +314,7 @@ Town mode also runs the same XOR pass against the already-loaded buffer when the
 
 ### Cutscene maps
 
-Four small 11-tile-wide-by-11-tile-tall grids used as background frames during cutscenes. Two runtime load paths are traced at v1 depth: the Blackthorn audience loads record 0, and the endgame sequence loads record 3. The middle two records share the same verified layout, but their exact scene bindings remain unnamed in this spec. The Blackthorn cutscene consumer is specified in `systems/blackthorn.md`.
+Four small 11-tile-wide-by-11-tile-tall grids used as background frames during cutscenes. Two runtime load paths are traced at v1 depth: the Blackthorn audience loads record 0, and the endgame sequence loads record 3 — the Lord British throne-room chamber, with a brick floor, shelved walls, a table, a chest and torches, and its four corner cells marked as outside the playable square. The middle two records share the same verified layout, but their exact scene bindings remain unnamed in this spec. The Blackthorn cutscene consumer is specified in `systems/blackthorn.md`; the endgame consumer, including the re-stride into the combat-arena terrain buffer that both cutscene consumers perform, is specified in `systems/endgame.md` section 3.1.
 
 Each cell is a one-byte tile index drawn from the same global tile catalogue used by the location files. The on-disk row stride is sixteen bytes, with the trailing five bytes per row zero-padded — the data is laid out as if for a 16-tile-wide grid, but only the leftmost eleven columns carry tile data.
 
@@ -259,6 +329,8 @@ Four short, wide grids - **4 rows by 19 columns** - are used by the intro menu's
 Each Return-to-View map occupies `32 x 4 = 128` bytes, totalling 512 bytes for the four. Extraction skips `record_index x 128`, then for rows `0..3` reads a 32-byte row and uses only columns `0..18`.
 
 Corroborating evidence in the shipped data: the command stream's own coordinate arguments span `x = 0..15` and `y = 0..3`, and it contains runs of five to eight consecutive eastward actor steps, which no four-cell-wide strip could hold.
+
+**How much the preview actually reads.** The Return-to-View path seeks to this section's offset, 704, and requests a fixed 2,000-byte window into its scratch buffer. The shipped file has only 1,167 bytes from that offset onward — the 512 bytes of map strips plus the 655-byte command stream — so the request is short by design and satisfied in full by the file's remaining bytes. A loader must treat the short read as normal and must not require 2,000 bytes to be present. The interpreter's own command pointer is bounded by that same 2,000-byte window: reaching the bound ends the preview. The shipped stream never gets there, because it ends with the restart command.
 
 ### Return-to-View command stream
 
@@ -325,7 +397,7 @@ Several visually complex commands have fixed script-level schedules:
 - `0x04` writes the sentinel tile `0xFE` to the target cell in both tile buffers, then runs the local cell-effect renderer at screen tile `(x, y + 7)` for steps 1 through 15. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0xDC` to the cell in both buffers and runs a two-tick preview update.
 - `0x05` reuses the coordinate cached by `0x04`, writes `0xFE` to the cell in both buffers, and runs the same local cell-effect renderer at `(x, y + 7)` for steps 15 down through 1. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0x05` to the cell in both buffers and runs a two-tick preview update.
 - `0x07` and `0x08` temporarily replace the actor slot's two tile bytes with the `0x16` suppression sentinel so the ordinary repaint leaves the cell alone, draw the actor's cell through the **single-cell dissolve helper** at screen tile `(actor.x, actor.y + 7)`, then restore the original actor tile bytes. The helper is the driver's pseudo-random pixel-dissolve entry driven one cell at a time: it converges the cell to the requested tile over a fixed run of small steps, polling the keyboard roughly every eighth step, and reports an abort that ends the preview. `0x07` passes the actor's own sprite, which is an overlay-plane value and so selects tile index `256 + byte`; `0x08` passes the backing-plane terrain byte at the actor's current cell instead, used as an ordinary terrain value, which is how an actor is dissolved away rather than in.
-- `0x0B` runs five rectangle-effect steps. Step `n` from 0 through 4 begins with a one-tick preview update, then sets the drawing colour to user-interface colour slot 1 (see `systems/display-driver.md` section 2) and emits two inclusive pixel-rectangle operations: `(128 + 9n, 152 + 3n)` to `(137 + 9n, 155 + 3n)`, followed by `(128 + 9n, 153 + 3n)` to `(137 + 9n, 156 + 3n)`. These are **absolute framebuffer pixel rectangles** on the same visible page the preview strip occupies, not cell indices; the five steps together sweep a small diagonal band across the middle of the strip. After the five steps, the command skips two reserved argument bytes, reads the actor slot byte, draws that actor's cell at screen tile `(actor.x, actor.y + 7)` with tile/control value zero, plays a short percussive speaker effect, and then runs a three-tick preview update. Earlier revisions described that speaker call as a short fixed resident wait; it is a sound effect whose duration is incidental, and an engine that renders silently should not model it as a timed pause.
+- `0x0B` runs five rectangle-effect steps. Step `n` from 0 through 4 begins with a one-tick preview update, then sets the drawing colour to user-interface colour slot 1 (see `systems/display-driver.md` section 2) and emits two inclusive pixel-rectangle operations: `(128 + 9n, 152 + 3n)` to `(137 + 9n, 155 + 3n)`, followed by `(128 + 9n, 153 + 3n)` to `(137 + 9n, 156 + 3n)`. These are **absolute framebuffer pixel rectangles** on the same visible page the preview strip occupies, not cell indices; the five steps together sweep a small diagonal band across the middle of the strip. Over the five steps the two rectangles together cover `x = 128` through `x = 173` and `y = 152` through `y = 168` inclusive — note the bottom edge is `168`, from the second rectangle of the last step, not `167`. Neither rectangle aligns to a cell boundary: the pair straddles the cell edge at `x = 136` and sits inside the strip's second cell row. After the five steps, the command skips two reserved argument bytes, reads the actor slot byte, draws that actor's cell at screen tile `(actor.x, actor.y + 7)` with tile/control value zero, plays a short percussive speaker effect, and then runs a three-tick preview update. Earlier revisions described that speaker call as a short fixed resident wait; it is a sound effect whose duration is incidental, and an engine that renders silently should not model it as a timed pause.
 
 Command bytes above `0x0F` are treated as one-byte no-ops by the traced interpreter: they are skipped after the normal input poll. There is no separate caption opcode and no length-prefixed caption payload in the shipped stream.
 
@@ -376,6 +448,24 @@ One iteration does the following, in order:
 7. Wait one hardware tick, per `systems/timing.md` section 5.
 8. Run the current strip's ambient sound step, if that strip has one.
 
+The keyboard poll of step 6 happens **before** the one-tick wait, and an abort
+returns from the whole tick request immediately, so the remaining iterations of
+a multi-tick command are not run.
+
+Step 8 depends only on the current strip index:
+
+| Strip | Ambient sound per preview tick |
+|---:|---|
+| `0` | none |
+| `1` | none |
+| `2` | a random-pitch percussive speaker effect, emitted on every tick |
+| `3` | a two-tone chime driven by a private counter that cycles through eight tick positions: a lower tone at position `0` and a higher tone at position `4`, silence at the other six |
+
+The counter for strip `3` is the preview's own and advances once per preview
+tick, so the chime repeats every eight ticks for as long as strip `3` is
+current. An engine that renders silently can skip step 8 entirely; nothing in
+the step changes the picture or the pacing.
+
 There is **no clear of the preview area and no full-rectangle repaint**. Step 4
 is a cell-granular repaint over preserved backing, so an engine that clears the
 strip each frame will not match: cells outside the revealed span, and cells
@@ -387,8 +477,10 @@ Loading a strip with command `0x06` does not make the whole strip visible at
 once. It resets a reveal cursor whose left and right bounds both start at
 **column 9**, and step 5 of each preview tick widens that span by one column on
 each side on **every second tick**, stopping when the left bound reaches column
-0. The full `0..18` span is therefore exposed after **eighteen preview ticks**
-and stays exposed until the next `0x06`.
+0. Because the widen happens **after** the tick's repaint, the span reaches its
+full `0..18` extent at the end of the **eighteenth** preview tick, and columns
+`0` and `18` are first painted on the **nineteenth**. The span then stays open
+until the next `0x06`.
 
 | Preview ticks elapsed | Columns painted |
 |---:|---|
@@ -431,7 +523,8 @@ A reader that consumes only maps can still extract every tile record described a
 ## 13. Format Boundary And Runtime Work
 
 The per-class location file contract is complete at byte-layout depth: file
-partition, block stride, floor-page rule, row-major tile grids, marker harvest,
+partition, page stride, per-scene base-page binding, signed floor-page rule,
+row-major tile grids, marker harvest,
 dawn/dusk substitution, and `MISCMAPS.DAT` sectioning are fixed. Remaining
 items belong to runtime interpretation, catalog inventory, content validation,
 or visual parity.
@@ -442,16 +535,15 @@ or visual parity.
   the exact marker byte while treating both values as the same placement marker
   for load-time harvest.
 
-- **Filler floor convention.** Single-floor locations encode their unused upper
-  or basement as a 1,024-byte filler grid; the convention varies between
-  repeated walls, repeated grass, and repeated empty-floor tiles. A reader
-  cannot distinguish filler from authored content by inspection. Reachability
-  is determined by stairway content and by the resident base-page table.
+- **Filler floor convention.** Closed, and the premise was wrong. There is no
+  filler page: all sixty-four pages of the four class files are authored
+  content, each owned by exactly one location, and the pages that look like
+  filler are small-footprint basements. Section 4.2 states the correction.
 
-- **Reachable floor enumeration.** The floor-page selection rule is known, but
-  the exact set of floors reachable in shipped content is catalog work best
-  derived by walking each location's transition tiles rather than by trusting
-  physical block pairs.
+- **Reachable floor enumeration.** Closed. Section 4.1 publishes the base page,
+  page run, and floor range of every one of the thirty-two locations, and
+  Section 4.2 gives the link-walking procedure that rederives them from assets
+  for a modified data set.
 
 - **Secret-room tile encoding.** A few locations have rooms accessible only
   through a Push-revealed trapdoor or a quest-flag-gated stairway. The gating
@@ -488,6 +580,17 @@ The format described above was derived from the analysis notes listed below. Non
 - The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
+  complete per-scene base floor-page binding of Section 4.1, the sign convention
+  and the on-screen text that confirms it, the exact page run and floor range of
+  every location, the exhaustive sixty-four-page partition check, the inventory
+  of floor-transition cell families in Section 7, the four entry-above-the-bottom
+  cases of Section 9, and the withdrawal of both the two-floors-per-block runtime
+  model and the filler-page convention. One reading in that note is superseded
+  here: the vehicle state that suppresses the trapdoor is the magic carpet, not
+  a skiff, per the closed transport-marker set in `systems/vehicles.md`
+  Section 2.
 - Source provenance: derived from private analysis notes
   `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` and
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
@@ -501,6 +604,6 @@ The format described above was derived from the analysis notes listed below. Non
 - The facing-sensitive town stair family and floor-change reload path -
   `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, cross-checked
   against `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
-- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, their ascend/descend identity, and the town step handler's separate `0x8C` trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, `u5-decomp/functions/NPC_OVL/0x0A4A_npc_floor_transition_gate.md`, `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`, and `u5-decomp/formats/maps.md`.
+- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, their ascend/descend identity, and the town step handler's separate `0x8C` trigger — the path-probe, flood-fill workspace and floor-transition-gate notes under `u5-decomp/functions/NPC_OVL/`, the town step-interaction note under `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, and `u5-decomp/formats/maps.md`.
 - The overworld main loop providing the cross-mode contract under which the location loader is invoked, including the scene-byte-driven mode switch — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
 - The overworld chunk loader establishing the convention that per-class files are addressed by filename pointer through a small resident table — `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`.

@@ -107,7 +107,7 @@ The Underworld dispatches into the location files far more sparsely than the sur
 
 The Underworld uses the same 2-by-2 live chunk window and 11-by-11 viewport model as Britannia. The renderer receives tile indices from the live chunk buffer, not directly from disk on every frame.
 
-Visibility is not stored in `UNDER.DAT`. The visibility producer reads terrain tiles from the chunk buffer, applies the centre-out visibility carve, light-radius rules, and local-light mask state, and writes a separate viewport grid for the renderer. The Underworld differs from Britannia because its ambient light is forced to the dark model. Torches, spells, and special light sources can affect the visible region, but the map bytes remain unchanged.
+Visibility is not stored in `UNDER.DAT`. The visibility producer reads terrain tiles from the chunk buffer, applies the centre-out visibility carve, the inclusive squared-distance lighting threshold, and local-light mask state, and writes a separate viewport grid for the renderer. The Underworld differs from Britannia because its ambient light is forced to the dark model. Torches, spells, and special light sources can affect the visible region, but the map bytes remain unchanged.
 
 Active objects are composited after terrain visibility. Monsters, vehicles, items, effects, and the party do not live in `UNDER.DAT`.
 

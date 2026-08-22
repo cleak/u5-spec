@@ -60,6 +60,49 @@ exception of `WD.BIT`, which ships uncompressed. The intro orchestrates file
 selection, loading, placement, and draw calls; the data formats themselves
 belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
 
+### Visible phase order
+
+The construction list above is the intro's internal work order. What the player
+actually sees, from launch to a settled menu, is the six-phase sequence below.
+Each phase owns the screen exclusively until it ends or a keystroke interrupts
+it. "Ink" is the palette index the pixels have **on the visible page**, which
+for the publisher flourish is not the index the artwork was composed at — see
+the two-surface discussion later in this section.
+
+| # | Visible phase | Ink | What is on screen at the end of the phase | Pacing |
+|---:|---|---:|---|---|
+| 1 | Publisher flourish | `9` (bright blue) | the publisher wordmark, zoomed up through seven nested sizes, resting as the `280 x 61` mark at `(20, 46)` | 85 presentation steps, each one CPU-calibrated busy wait inside the driver; no timer tick at all |
+| 2 | `Presents` | `15` (white), over the still-blue mark | the blue publisher mark **plus** the white `Presents` wordmark at `(108, 140)` | eighteen timer ticks, then a bounded poll of up to twenty more |
+| 3 | The `a` ornament | `15` | a black screen carrying only the `16 x 15` ornament at `(152, 0)` | bounded poll of up to twenty ticks |
+| 4 | Signature stroking | `15` | the ornament plus the `Lord British` signature being pen-drawn stroke by stroke | one timer tick per thirty-two path bytes, with the slow-CPU skip suppressed |
+| 5 | Finished composition | `15` | the ornament at `(152, 0)`, the finished signature at `(24, 66)`, `Production` at `(104, 160)` | two publishes, then a bounded poll of up to twenty ticks |
+| 6 | Start screen and menu | artwork palette | the `Ultima V` logo on rows `0..60`, the burning subtitle band on rows `65..113`, the menu window on rows `120..199` | see "Start/menu screen composition" below and section 5 |
+
+Four properties of that list are load-bearing and were previously mis-stated:
+
+- **The publisher flourish always runs.** There is no display-mode branch, no
+  driver-capability branch and no slow-CPU short-circuit that skips it. The only
+  way to miss it is the early `J` shortcut of the pre-flourish phase, which
+  leaves the title sequence entirely. It is, however, *fast*: because it is
+  paced by a calibrated busy loop with no timer floor, it can finish in well
+  under a second on a quick host, and together with phase 2 the whole publisher
+  block can fall between two samples of a two-second capture grid. Absence from
+  a coarse capture is not evidence that it does not render.
+- **Phase 2 is deliberately two-coloured.** The `Presents` publish is an
+  ordinary all-plane rectangle copy of the lower band only, so the publisher
+  mark above it survives *in its own ink*. The frame therefore carries a blue
+  mark over white lettering. A renderer that draws both in one colour does not
+  match.
+- **The intro's ink is never yellow.** Phases 2 through 5 — the ornament, the
+  live pen strokes, the finished signature bitmap, `Presents` and `Production` —
+  are all palette index `15`, plain white. Phase 1 alone is index `9`. Nothing
+  in the intro reprograms the palette registers, so these are the stock EGA
+  colours for those indices. Any description of the title ink as a pale or light
+  yellow, or as a distinct "signature colour", is withdrawn; a yellow cast in a
+  capture comes from the host's scaler or colour management, not from the game.
+- **One keystroke collapses the rest.** The abort contract is stated once, for
+  the whole list, under "Keystroke abort" below.
+
 ### Pre-flourish phase (step 2)
 
 The pre-flourish phase is a non-visual preparation pass. The intro
@@ -526,6 +569,26 @@ The first frame after driver initialisation is frame `0`; the frame index is
 not reset merely because the start/menu screen is redrawn, a menu row is
 re-highlighted, or a non-play submenu returns.
 
+**Slot-to-frame order and starting frame.** The mapping is ascending and
+one-to-one: `ULTIMA` record `1` is frame `0`, record `2` is frame `1`, record
+`3` is frame `2`, record `4` is frame `3`. Frame `N` is sourced from hidden row
+`50 x N`, which is exactly where record `N + 1` was staged, so the mapping is a
+consequence of the staging layout rather than an independent convention. The
+counter is zero when the driver image is loaded and the entry draws before it
+advances, so the very first tick of a session shows record `1`.
+
+That is *not* the same as saying the menu starts on record `1`. The counter is
+**free-running driver state**: nothing in the intro resets it, and the subtitle
+ignition transition on the animated path ticks it many times before the menu is
+ever polled. On an animated start the first menu-idle frame is therefore
+wherever the counter happened to land, and on a skipped start it is frame `1`
+(the loader runs exactly one tick after staging, which shows frame `0` and
+leaves the counter at `1`). An engine must model the index as a single
+long-lived counter, not as "restart at zero for each screen". The one place the
+band's contents are decoupled from the counter is the return from
+Acknowledgements, which repaints the band statically from record `1` while the
+counter keeps its own position (section 11.2, step 6).
+
 #### The four frames are shipped art, not driver-internal pixels
 
 Earlier revisions of this section said the frame pixels are produced at runtime
@@ -594,14 +657,57 @@ Do not alpha-blend, scale, dither against the previous screen, or treat any
 palette index as transparent. Palette index `0` pixels overwrite the
 destination as black.
 
+#### Subtitle ignition: the two-pass masked band reveal
+
 The carry-set title helper is a different operation and is not the public
 frame-advance. It takes a loaded one-bit-per-pixel resource as its argument and
-plays the subtitle ignition transition described in section 3: it saves the
-hidden surface, clears it, runs a pseudo-random pixel reveal that interleaves
-idle-strip steps with a percussive sound effect, and then restores the hidden
-surface. Its only intro caller passes `WD.BIT`, and it runs exactly once, on
-the animated start/menu path. Only the clear-carry title tick advances the
-four-frame idle strip.
+plays the subtitle ignition transition. Its only intro caller passes `WD.BIT`,
+and it runs exactly once, on the animated start/menu path. Only the clear-carry
+title tick advances the four-frame idle strip.
+
+The effect is what makes the burning subtitle appear to catch light rather than
+simply switch on, and its structure is part of the contract:
+
+1. The whole hidden surface — which at this point holds the four staged bands —
+   is copied aside into scratch storage, and the hidden surface is blanked.
+2. The reveal then runs **two passes** over the same `288 x 49` position space.
+   Each pass walks that space in the driver's deterministic pseudo-random order
+   and visits every position exactly once **except position `(0, 0)`**, which
+   the generator never emits. Unlike the logo dissolve of section 3's loader
+   step 4, this reveal does **not** append a fixup for that one position, so the
+   band's top-left pixel is never restored during the passes; the scratch
+   write-back in step 7 restores it, which is why the omission is invisible. Do
+   not add a fixup here to make the two effects symmetrical. Restoring a
+   position means copying that pixel back
+   from the scratch copy into the hidden surface **at all four band origins at
+   once** — vertical offsets `0`, `50`, `100` and `150`, horizontally shifted to
+   the bands' `x = 16` origin.
+3. `WD.BIT`'s single `288 x 49` record is the mask that separates the two
+   passes. Pass one restores only the positions where the mask bit is **clear**
+   — every pixel *around* the `Warriors of Destiny` lettering, that is, the
+   flames. Pass two restores the rest, so the lettering fills in last. One mask
+   suffices because the lettering is effectively static across the four frames:
+   of the `1624` positions the mask marks as lettering, `1623` hold the same
+   palette index in all four band records, while `7871` of the band's `14112`
+   positions vary between frames. The single exception is a lone pixel and has
+   no bearing on the effect; treat the lettering as frame-invariant.
+4. Every 128 restored positions (256 on a host below the calibration baseline)
+   the entry publishes the current band to visible rows `65..113` and advances
+   the frame counter. Those publishes are what make the reveal visible as a
+   stipple; between them nothing reaches the screen.
+5. While the reveal is in its early portion the driver pulses the PC speaker,
+   producing a crackle that thins out as the reveal proceeds, and uses a
+   slightly shorter per-position wait during that portion.
+6. Any keystroke aborts the reveal.
+7. On exit the scratch copy is written back over the hidden surface, so the four
+   clean bands survive intact for the idle strip, and the scratch storage is
+   released.
+
+The reveal covers only the band footprint. It is a different effect from the
+logo dissolve in section 3's loader step 4, which is an ordinary pseudo-random
+rectangle transfer over `(0, 0)..(319, 100)` with no timing gate, no mask and no
+second pass. The logo does not stipple in at band cadence, and the band is not
+revealed by the rectangle-dissolve entry.
 
 The menu and message timing rules are:
 
@@ -622,100 +728,216 @@ restores the preserved title/menu surface before returning to menu polling.
 
 ## 6. Intro menu model
 
-The intro menu is a six-entry key menu. It is rendered after the title/start screen is ready and remains the controlling loop until a valid Journey Onward load returns to the main loop or the process exits by another path. Keys are folded to uppercase before dispatch, matching the input-system contract in `input.md`.
+The intro menu is a six-entry menu with a moving highlight. It is rendered after the title/start screen is ready and remains the controlling loop until a valid Journey Onward load returns to the main loop or the process exits by another path. Keys are folded to uppercase before dispatch, matching the input-system contract in `input.md`.
 
-The accepted keys are:
+The six entries, in row order, with the label each one shows on screen:
 
-| Key | Menu action | Result |
-|---|---|---|
-| `J` | Journey Onward | Load the active save and return to the main loop if valid. |
-| `C` | Create New Character | Enter character creation through the proportional-font/chargen flow. |
-| `T` | Transfer from Ultima IV | Enter the transfer/roster path and commit or abort from there. |
-| `U` | Ultima V Introduction | Play the story slide sequence, then return to the intro menu. |
-| `A` | Acknowledgements | Show credits/acknowledgements, then return to the intro menu. |
-| `R` | Return to View | Run the non-interactive Return-to-View preview, restore the menu surface, then remain in intro mode. |
-
-### 6.1 Lower text-window frame
-
-The lower intro text-window frame is drawn after the one clear-carry title tick
-and before the six menu labels. It is a single-line rectangle composed of the
-intro's fixed-cell box-drawing glyphs (the five-glyph corner/edge set the font
-file reserves for that purpose) and a thin horizontal rule beneath the top
-border row.
-
-| Property | Value |
-|---|---|
-| Anchor cell | column `0`, row `15` |
-| Width | 40 text cells (full screen width, columns `0..39`) |
-| Height | 10 text cells (rows `15..24`, inclusive), giving pixel rows `120..199` |
-| Top border row | row `15`: top-left corner glyph, 38 top-edge glyphs, top-right corner glyph |
-| Side rows | rows `16..23`: left-edge glyph at column `0`, right-edge glyph at column `39`, interior preserved for menu and message text |
-| Bottom border row | row `24`: bottom-left corner glyph, 38 bottom-edge glyphs, bottom-right corner glyph |
-| Glyph colour | the intro's bright foreground palette index, applied as the current text attribute |
-| Glyph set | the fixed-cell font's reserved corner-and-edge codes for the menu window; the same five-glyph set used elsewhere in the intro for boxed text |
-
-The bottom-right corner glyph is emitted with the text-attribute "inverse" flag
-briefly cleared so that the corner is drawn in plain foreground colour even
-when the surrounding cells are inverse-video. The flag is restored immediately
-after the corner glyph.
-
-After the corner-and-edge pass completes, the intro emits one thin horizontal
-rule through the display driver's line primitive at pixel `y = 127`, spanning
-columns `7..312` in the current intro foreground colour. The rule lies inside
-the top border row's eight-pixel cell, immediately under the top-edge glyph
-row; the intro then issues two short horizontal fills below that rule to
-finish the underline detail.
-
-The frame does not clear the interior cells. The preceding intro display
-clear, the start/menu screen paint, and the title tick are the steps that establish
-the interior pixels; the frame's job is the border and underline, not the
-fill.
-
-For the no-active-save message, the intro reuses the same window. The message
-is written into the interior cells through the normal text-output path
-(which clears each output cell as it draws), waits for one keystroke, and
-returns to the menu polling loop. The frame itself is not redrawn between the
-message and the menu labels; the rectangle established here remains visible
-through the entire intro menu lifetime.
-
-### 6.2 Menu labels
-
-The menu labels are rendered as fixed-cell text inside the intro menu window,
-after the start/menu screen and the lower window frame have been drawn. The
-labels appear
-in this order and at these text-cell origins:
-
-| Row | Key | Label | Text-cell origin |
+| Row | Key | On-screen label | Result |
 |---:|---|---|---|
-| 0 | `J` | Journey Onward | column 12, row 17 |
-| 1 | `C` | Create New Char. | column 9, row 18 |
-| 2 | `T` | Transfer from U4 | column 8, row 19 |
-| 3 | `U` | Ultima V Intro. | column 9, row 20 |
-| 4 | `A` | Acknowledgements | column 11, row 21 |
-| 5 | `R` | Return to View | column 10, row 22 |
+| 0 | `J` | `Journey Onward` | Load the active save and return to the main loop if valid. |
+| 1 | `C` | `Create New Character` | Enter character creation through the proportional-font/chargen flow. |
+| 2 | `T` | `Transfer from Ultima IV` | Enter the transfer/roster path and commit or abort from there. |
+| 3 | `U` | `Ultima V Introduction` | Play the story slide sequence, then return to the intro menu. |
+| 4 | `A` | `Acknowledgements` | Show credits/acknowledgements, then return to the intro menu. |
+| 5 | `R` | `Return to the View` | Run the non-interactive Return-to-View preview, restore the menu surface, then remain in intro mode. |
 
-Each label is emitted with one leading and one trailing blank around the
-label text at that origin. When a row is highlighted, the text output layer's
-inverse-video toggle is emitted before that line and again after it, so the
-highlight is a text-attribute effect over the same label placement. Dispatch
-is still by key, not by row index; the row number only controls presentation.
+The letter keys are only one of the three ways to reach those results; the
+arrow keys, Enter/Space and the idle timeout are specified in section 6.2.
 
-Invalid keys are ignored and the menu continues polling. An invalid nonzero
-key does not run the title-strip tick for that key pass; the menu highlight is
-redrawn and polling resumes. The menu also keeps a short recent-selection cache
-for repeat-by-Enter behaviour; pressing Enter can reuse a cached menu
-selection while the intro menu remains active. If there is no cached
-selection, Enter behaves like any other ignored key.
+### 6.1 Lower menu window
 
-Behaviourally, the player sees a stable six-option menu that waits for one of
-the accepted keys and returns to that same menu after non-play sub-screens
-finish.
+The lower menu window is drawn as the last act of the start/menu loader, after
+the loader's one clear-carry title tick and before the six menu labels. It is
+**not** a single-line rectangle of five box-drawing glyphs. That description was
+wrong and is withdrawn: the window is a thick frame band of solid and rounded
+character cells, with a separate one-pixel rectangle stroked inside it and the
+interior blanked by a text-window clear.
 
-While the menu waits, the intro continues to run its lightweight title tick
-only on no-key poll passes, and after two hundred consecutive no-key passes it
-enters the Return-to-View preview as if `R` had been selected. This is separate
-from the gameplay world tick. No gameplay time advances while the intro menu is
-active because no gameplay mode has started.
+It is built in three passes.
+
+**Pass 1 — the frame band, in the frame colour.** These are ordinary fixed-cell
+glyph writes in the intro's frame colour — slot 2 of the boot-time UI colour
+table (`display-driver.md` section 2), which is palette index `1`, blue, on the
+sixteen-colour drivers:
+
+| Text row | Cells written |
+|---:|---|
+| 15 | column `0`: top-left rounded corner; columns `1..38`: 38 solid cells; column `39`: top-right rounded corner |
+| 16 through 23 | column `0` and column `39`: one solid cell each; the interior is not written by this pass |
+| 24 | column `0`: bottom-left rounded corner; columns `1..38`: 38 solid cells; column `39`: bottom-right rounded corner |
+
+The corners are **font content, not generated geometry**. In the fixed-cell font
+(`IBM.CH`, or its Hercules equivalent) the solid cell is glyph code `0x7F` —
+all sixty-four pixels set — and the four corners are glyph codes `0x7B`
+(top-left), `0x7C` (top-right), `0x7D` (bottom-left) and `0x7E`
+(bottom-right). These are the same bevel glyphs the gameplay screen's frame uses
+for three of its corners (`display-driver.md` section 7, "Shared game-screen
+frame"); the menu window is the one caller that uses all four. The top-left corner's ink begins at column `5` on
+its first row and then at columns `3`, `2`, `1`, `1`, `0`, `0`, `0` on the
+remaining seven; the other three corners are its horizontal, vertical and
+diagonal mirrors. Because the frame band starts at text row 15, that profile
+lands on pixel rows `120..127`, which is exactly the rounded-corner run a
+capture of the running game measures.
+
+The last cell of row 24 is the bottom-right cell of the full-screen text window,
+so writing it would normally scroll the window. The intro suppresses the
+window's auto-scroll for that one write and restores it immediately afterwards.
+An earlier revision of this section attributed that suppression to the
+inverse-video attribute; that was wrong and is withdrawn — the flag being
+toggled is the scroll suppressor.
+
+**Pass 2 — the inner rectangle, in the bright colour.** With the drawing colour
+set to slot 1 of the UI colour table — palette index `15`, white, on the
+sixteen-colour drivers — the intro strokes one closed four-segment
+path with the driver's line primitive: from `(7, 127)` to `(312, 127)`, down to
+`(312, 192)`, back to `(7, 192)`, and up to `(7, 127)`. The result is a
+one-pixel white rectangle: horizontal rules on pixel rows `127` and `192`
+spanning columns `7..312`, and verticals in columns `7` and `312` spanning rows
+`128..191`. An earlier revision described only the top rule plus "two short
+horizontal fills below it"; that is withdrawn — the top rule is one of four
+segments of a closed rectangle, and the short fills belong to the bottom caption
+described below.
+
+**Pass 3 — the interior clear.** The intro narrows the active text window to
+cells `1..38` by rows `16..23`, issues the text system's window-clear control
+(`text-output.md` section 3), and restores the full 40-by-25 window. The clear
+converts the narrowed window to its pixel rectangle and fills it with the
+window's background colour, so pixel columns `8..311` of rows `128..191` become
+black. This clear lands on the visible page, because the loader selected it
+before returning; the same control code is used against the hidden surface
+elsewhere in the intro, which is why the driver's filled-rectangle entry must
+honour the render target rather than being visible-page-only
+(`display-driver.md` section 8).
+
+Net geometry, which is what a renderer should be checked against:
+
+- a frame band in palette index `1` covering pixel rows `120..199` across the
+  full width, rounded at all four corners by the profile above;
+- a one-pixel palette-index-`15` rectangle with rules at `y = 127` and `y = 192`
+  over `x = 7..312`, and verticals at `x = 7` and `x = 312` over `y = 128..191`;
+- an interior of `x = 8..311`, `y = 128..191` in the text background (black).
+
+#### Captions on the border band
+
+Both captions are written as ordinary text cells in the text window's own
+attribute — white foreground on background `0` — so they punch black cells
+straight through the blue band. Each caption is flanked on both sides by the
+**triangular bracket end-cap** composite that the gameplay screen reuses so
+heavily: the right-pointing cap (`IBM.CH` glyph code `0x02`) on the left of the
+caption and the left-pointing cap (code `0x01`) on the right, each drawn as a
+solid triangle in the frame colour on background `0` with two accent-coloured
+lines stroked along its hypotenuse, and the window attribute restored
+afterwards. `display-driver.md` section 7 owns that composite's construction and
+its two stroke pairs; the intro is simply another caller, so the caps are **not**
+`>` and `<` characters and must not be typeset as such.
+
+| Caption | Row | Literal text | Cells occupied |
+|---|---:|---|---|
+| Select prompt | 15 | `Select: ` (eight characters, including the trailing space) | `15` right-pointing cap, `16..23` text, `24` left-pointing cap |
+| Copyright | 24 | `Copyright 1988 Lord British` (twenty-seven characters) | `5` right-pointing cap, `6..32` text, `33` left-pointing cap |
+
+After printing the select prompt the intro parks the cursor at cell `23` of row
+15 — the blank that ends `Select: `, immediately before the closing cap.
+That is where the animated cursor cell described below appears.
+
+The copyright caption is placed by the shared centred-caption helper specified
+in section 12.1 — the same helper the Return-to-View chapter captions use — so
+its geometry is not restated here beyond the instance. For a twenty-seven
+character string the helper's rule `start_col = 18 - floor(len / 2)` gives
+column `5`, so the caption group runs `5` (opening cap), `6..32` (text), `33`
+(closing cap), and the helper's `end_col` — the first cell past the group — is
+`34`. Drawing the caption also **repaints the border band either side of it**,
+because the caption cells would otherwise leave the white bottom rule broken
+beyond the caption's ends: the helper fills pixel rows `193..199` in the frame
+colour from `x = 8` to `x = start_col * 8` and from `x = end_col * 8` to
+`x = 311`, then draws a single row at `y = 192` in the bright colour over the
+same two spans.
+
+The top caption is placed differently: it is not centred by that helper at all.
+The intro sets the cursor directly to column `15` of row 15 and emits cap,
+string, cap, then repositions to column `23`. There is no border repaint around
+it, because the top rule at `y = 127` sits inside the frame band's *first* cell
+row and the caption cells sit in that same row — the caption interrupts the rule
+and nothing restores it.
+
+#### The cursor cell
+
+The cell parked at row 15, column 23 is not an on/off blink. It cycles the same
+four consecutive fixed-cell glyph codes `0x05` through `0x08` that the gameplay
+message window's input cursor uses (`text-output.md` section 10.6), one phase
+per menu poll pass. Each
+of the four is a diagonal hatch of two-pixel steps, and the four are the same
+hatch shifted two pixels along, so the cell reads as a diagonal pattern marching
+steadily across it. The instant a poll returns a key the cell is overwritten
+with a space.
+
+#### Window lifetime and messages
+
+The frame is drawn once and stays for the whole intro-menu lifetime. It is not
+redrawn between the menu labels and a message. For the no-active-save message
+the intro reuses the same interior: the message is written into the interior
+cells through the normal text-output path (which clears each output cell as it
+draws), waits for one keystroke, and returns to the menu poll loop.
+
+### 6.2 Menu labels and input model
+
+The six labels are rendered as fixed-cell text inside the window interior after
+the frame is drawn. Each is emitted as one leading blank, the label string, and
+one trailing blank, starting at the row's column origin.
+
+The labels are the **full names**. The abbreviated forms `Create New Char.`,
+`Transfer from U4`, `Ultima V Intro.` and `Return to View` that earlier
+revisions of this table published do not exist in the shipped data; they were
+invented. The column origins were right and are unchanged.
+
+| Row index | Text row | Column origin | Label | Cells occupied, blanks included |
+|---:|---:|---:|---|---|
+| 0 | 17 | 12 | `Journey Onward` | 12..27 |
+| 1 | 18 | 9 | `Create New Character` | 9..30 |
+| 2 | 19 | 8 | `Transfer from Ultima IV` | 8..32 |
+| 3 | 20 | 9 | `Ultima V Introduction` | 9..31 |
+| 4 | 21 | 11 | `Acknowledgements` | 11..28 |
+| 5 | 22 | 10 | `Return to the View` | 10..29 |
+
+The highlight is the text layer's inverse-video attribute, toggled on
+immediately before the leading blank and off immediately after the trailing
+blank, so the highlighted row shows a solid bar over the whole cell span in the
+table's last column — including both blanks. **The initial highlight is row 0,
+`Journey Onward`**, and the highlight index survives across poll passes.
+
+#### Input
+
+The menu has one input model with three entry points, all of which operate on
+that same highlight index. An earlier revision of this section said dispatch was
+purely by key and that "the row number only controls presentation"; that is
+withdrawn — the row index is load-bearing, because Enter, Space and the idle
+timeout all resolve through it. The claim that the menu keeps a
+"recent-selection cache" that Enter replays is withdrawn as well; there is no
+such cache. What exists is a fixed six-entry row-to-letter table: rows `0`
+through `5` map to `J`, `C`, `T`, `U`, `A`, `R`.
+
+| Input | Effect |
+|---|---|
+| `J`, `C`, `T`, `U`, `A`, `R` (folded to uppercase) | Move the highlight to that row **and** commit it in the same pass. |
+| Up arrow, left arrow | Move the highlight one row toward row 0, wrapping from row 0 to row 5; repaint the labels; keep polling. |
+| Down arrow, right arrow | Move the highlight one row toward row 5, wrapping from row 5 to row 0; repaint the labels; keep polling. |
+| Enter, Space | Commit whichever row is currently highlighted, resolved through the row-to-letter table. |
+| Any other key | Discarded. The caption is redrawn and polling resumes; no idle title tick runs for that pass. |
+| Two hundred consecutive no-key passes | Commit `Return to the View` exactly as though `R` had been pressed. |
+
+Letter hotkeys and the highlight model therefore coexist rather than competing:
+a letter both moves the bar and activates the row, so the bar always reflects
+the last selection made.
+
+Each no-key poll pass costs two BIOS ticks — one in the cursor poll, one in the
+title tick — so the two-hundred-pass timeout is roughly twenty-two seconds of
+unattended menu (`timing.md` section 5.1). No gameplay time advances while the
+intro menu is active, because no gameplay mode has started.
+
+Behaviourally, the player sees a stable six-option menu with a moving highlight
+bar, a marching cursor cell after the `Select: ` prompt, and a burning subtitle
+band that keeps ticking above the window; the menu waits for one of the accepted
+inputs and returns to the same state after every non-play sub-screen finishes.
 
 ## 7. Journey Onward (`J`)
 
@@ -736,7 +958,7 @@ The load path does the following at a behavioural level:
 11. If the loaded state resumes on the underworld surface, prompt/probe for the underworld data disk and refresh the underworld object overlay once the disk is available.
 12. Mark the display/gameplay transition as ready and return from the intro overlay.
 
-Steps 1 through 5 prepare the display for gameplay before any save data is read. The game-screen frame is drawn first so the player sees the gameplay viewport appear while the save loads. The frame consists of the left viewport area, the right stats panel with horizontal subdividers, and the bottom command-prompt area, formed by filled rectangles and box-drawing corner glyphs. This is the same screen layout used by overworld, town, dungeon, and combat modes.
+Steps 1 through 5 prepare the display for gameplay before any save data is read. The game-screen frame is drawn first so the player sees the gameplay viewport appear while the save loads. The frame consists of the left viewport area, the right stats panel with horizontal subdividers, and the bottom command-prompt area, formed by filled rectangles, three rounded corner glyph cells, and four rule outlines. This is the same screen layout used by overworld, town, dungeon, and combat modes. The complete rectangle list, glyph cells, outline paths, colours and paint order are published in `systems/display-driver.md` section 7, and the three text windows the same step installs are in `systems/text-output.md` section 10.1.
 
 After the intro returns, the main loop reads the scene state that came from the loaded save and dispatches to overworld, town, or dungeon as appropriate. The intro does not load map files such as world data, location data, NPC files, or talk files during this path. Those are loaded by the gameplay mode that the main loop selects.
 
@@ -1073,8 +1295,8 @@ non-automatic path: flush the keyboard type-ahead buffer, wait for any key,
 then present the page. There is no extra delay, no additional transition, and
 no post-reveal effect on this step.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+Source provenance: derived from the intro-overlay function notes under
+`../u5-decomp/functions/INTRO_OVL/`.
 
 ### 10.2 Boundaries
 
@@ -1272,10 +1494,9 @@ atlas, which is what the title tick expects to find (section 5).
 
 After the acknowledgement screen finishes, the intro returns to its menu loop with intro state still active. A later `J`, `C`, or `T` selection is required to leave the intro.
 
-Source provenance: derived from private analysis notes
-`../u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`,
-`../u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, and
-`../u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`.
+Source provenance: derived from the private intro-overlay analysis notes under
+`../u5-decomp/functions/INTRO_OVL/` and from the private analysis note
+`../u5-decomp/notes/intro_title_sequence_2026-08-22.md`.
 
 ## 12. Return to View (`R`)
 
@@ -1335,9 +1556,12 @@ outside that span keep whatever is already on screen.
 
 A strip load does not expose the whole strip at once. The reveal cursor starts
 on column 9 alone and widens by one column on each side on every second preview
-tick, so the full nineteen columns are visible after eighteen preview ticks and
-stay visible until the next strip load. All four rows of a revealed column
-appear together.
+tick. The widening happens at the end of a tick, after that tick's repaint, so
+the span reaches its full `0..18` extent at the end of the **eighteenth**
+preview tick and the outermost columns `0` and `18` are first painted on the
+**nineteenth**. The span then stays open until the next strip load. All four
+rows of a revealed column appear together. The per-tick table is in
+`formats/location-dat.md` section 11.
 
 **Correction.** A previous revision of this section retracted the outward
 reveal as "stale, non-normative prose" and told engines that no reveal was
@@ -1362,6 +1586,13 @@ the absence of trailing punctuation, are:
 | `2` | `The Arrival` |
 | `3` | `The Welcoming` |
 
+The strip index also selects the preview's ambient sound: strips `0` and `1`
+are silent, strip `2` emits a random-pitch percussive speaker effect on every
+preview tick, and strip `3` emits a two-tone chime on an eight-tick cycle. The
+sound is the only per-strip difference in the tick; it changes nothing visible
+and can be omitted by an engine that renders silently. See
+`formats/location-dat.md` section 11.
+
 ### 12.1 The centered-caption helper
 
 The caption does **not** use the proportional font or the proportional
@@ -1385,8 +1616,35 @@ title-screen credit line, so the two share one geometry:
   over the same two horizontal spans. These are the rules that flank the
   caption; the caption interrupts them.
 - Then the cursor is placed at column `start_col`, row `24`, the shared
-  text-window top border chrome is drawn, the caption is printed with the
-  ordinary string printer, and the bottom border chrome is drawn.
+  text-window border chrome is drawn, the caption is printed with the
+  ordinary string printer, and the closing border chrome is drawn.
+
+Those two chrome calls are what produce the wedges the caption sits between,
+and they fix the caption's exact cells:
+
+| Element | Column |
+|---|---|
+| Opening wedge (solid, pointing right) | `start_col` |
+| Caption characters | `start_col + 1` through `start_col + len` |
+| Closing wedge (the mirrored form, pointing left) | `start_col + len + 1` |
+| First column past the caption group | `end_col = start_col + len + 2` |
+
+So `end_col` is not the last caption cell; it is the first cell beyond the
+closing wedge, which is why the right-hand repaint rectangle starts at
+`end_col * 8` and the wedge cell is left untouched. For `The Summoning`
+(`len = 13`) that gives an opening wedge at column `12`, caption text in
+columns `13..25`, a closing wedge at column `26`, and a repaint rectangle
+beginning at column `27` (`x = 216`). The two wedge cells are the shared
+triangular bracket end-cap composite, not a rule and not a text character: an
+opaque solid-triangle glyph followed by two **diagonal** accent strokes tracing
+that triangle's hypotenuse, whose endpoints land on the cell's outer column at
+its top and bottom rows. Because those rows are the rows the flanking rules
+occupy, the rule appears to run continuously into the wedge; nothing horizontal
+is drawn inside the wedge cell to achieve that. `display-driver.md` section 7
+("Bracket end-caps") owns the composite and gives both stroke pairs; the
+caption helper is only another caller. An alternative reading of the same
+geometry, `start_col = (40 - (len + 2)) / 2`, produces identical columns for
+every shipped caption; both forms are correct.
 
 There is no shadow pass, so nothing about shadow pixels affects centering.
 Because the caption is printed by the fixed-cell printer it uses that printer's
@@ -1414,11 +1672,14 @@ the same timing family even though gameplay time is not advancing.
 The loaded command stream is interpreted as a compact sixteen-command bytecode
 for this cinematic only. Its commands create, delete, move, teleport, and clear
 preview actors; switch to a new strip section and its fixed caption; run short
-sprite-walk and cell-effect loops; run a fixed wipe/actor-draw beat; wait for
-keypress; and repeat blocks of commands. Any keypress observed by the wait/tick
-path exits the preview and restores the title/menu surface. A command-stream
-end or restart command remains local to the preview and never resumes a saved
-game.
+sprite-walk and cell-effect loops; run a fixed wipe/actor-draw beat; run a
+requested number of preview ticks; and repeat blocks of commands. There is no
+wait-for-keypress command: waiting is a side effect of running preview ticks,
+and every tick polls the keyboard once. Any pending key aborts the preview at
+that poll, immediately, abandoning the rest of the tick count the current
+command asked for; the caller then restores the title/menu surface. There is no
+uninterruptible phase and no key with a special meaning. A command-stream
+restart command remains local to the preview and never resumes a saved game.
 
 The control-flow contract is clear: run the preview as an intro-local screen, keep the intro scene active, do not load or resume a save, and continue polling the six-option menu afterward. The preview command-byte table, argument shapes, loop rule, actor/map side effects, and fixed script-level helper schedules are specified in `formats/location-dat.md`. Asset-compatible tooling that does not implement the preview interpreter should still preserve the command stream unchanged.
 
@@ -1525,95 +1786,34 @@ historical-renderer parity work.
 
 ## 16. Sources
 
-The behaviour described here was derived by reading the function and format notes listed below. None of those notes' assembly excerpts, decompiled code, private addresses, or binary text dumps appear in this spec; this document is a cleanroom prose re-derivation of the observed behaviour.
+The behaviour described here was derived by reading the private function and
+format notes for the modules listed below. Those notes' assembly excerpts,
+decompiled code, private addresses, private function labels, and binary text
+dumps do not appear in this spec; this document is a cleanroom prose
+re-derivation of the observed behaviour, and provenance is cited by note
+directory rather than by individual note, so that nothing here doubles as an
+index into private analysis.
 
-- Boot initialisation, title-screen orchestration, asset-depth selection, intro menu rendering, key dispatch, and the high-level hand-off to the main loop: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
-- Pre-flourish phase composition (driver-ready probe, IBM/RUNES glyph
-  asset loading by driver, active-font selection, text-window descriptor
-  reset, driver-descriptor selection, and the early Journey Onward
-  single-poll shortcut): `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x1D02_load_font_into_slot.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x1C9E_select_active_font.md`.
-- Start/menu screen loading, `ULTIMA` banner composition, the dissolve reveal, the idle-band staging layout, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`, and `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
-- Acknowledgement/credits page asset, record roles and sizes, four-phase wipe
-  geometry, any-key advance, menu rebuild on the hidden surface, and the
-  untouched upper band: `u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`.
-- Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, the resident
-  width/height tables behind the hidden-source stack, the seven-frame
-  presentation script with its per-frame source/destination/height triples and
-  its eight row groups per frame — of which seven are ever presented, in
-  reverse order, as the reveal steps published in section 3 — the
-  packed-and-centred band repaint, the alternating fill direction, the
-  keystroke-abort snap to the finished mark, the two-plane palette-index-9
-  rule, the lower-band clear, the skip flag the flourish's own result feeds,
-  and the explicit slot `7`, slot `8`, `BRITISH.BIT` slot `0`, and slot `9`
-  overlay order with its whole-page publishes:
-  `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`,
-  `u5-decomp/functions/EGA_DRV/0x1DE8_delay_with_animation_step.md`,
-  `u5-decomp/functions/EGA_DRV/0x190E_silhouette_stamp_back_buffer.md`,
-  `u5-decomp/functions/EGA_DRV/0x098A_back_buffer_invalidate.md`,
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
-  `u5-decomp/formats/ega-driver.md`,
-  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`, and
-  `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`.
-- Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and `u5-decomp/functions/EGA_DRV/0x256B_lfsr_pixel_dissolve.md`.
-- Whole-program caller census of the rectangle-dissolve entry, confirming the intro's two sites and finding four others outside the intro: `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md`.
-- Per-step paragraph box (both margin pairs, band bounds, pen origin), the
-  twenty-one-step loop bound, the unchanged space advance, the fixed nine-pixel
-  line stride, the justification rule, and the pre-authored soft-hyphen source:
-  `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`,
-  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`, and
-  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` sections 2.3 and 6.5.
-- Return-to-View chapter caption strings, the centered-caption helper's column
-  arithmetic, flanking-rule rectangles, caption row, and draw order relative to
-  the strip copy and per-frame ticks:
-  `u5-decomp/functions/INTRO_OVL/0x043E_print_centered_credit.md`,
-  `u5-decomp/functions/FONT_OVL/0x0418_load_world_section.md`, and
-  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 2.4.
-- Return-to-View entry point, preview bytecode runtime, preview map-strip
-  loader, per-frame active-object animation bridge, per-cell tile rendering,
-  helper schedules, and screen save/restore behaviour:
-  `u5-decomp/functions/FONT_OVL/_OVERVIEW.md`,
-  `u5-decomp/functions/FONT_OVL/0x04A4_return_to_view.md`,
-  `u5-decomp/functions/FONT_OVL/0x0418_load_world_section.md`,
-  `u5-decomp/functions/FONT_OVL/0x02FC_animate_overworld_tick.md`,
-  `u5-decomp/functions/FONT_OVL/0x02A2_render_entity_tile.md`,
-  `u5-decomp/functions/FONT_OVL/0x0E52_screen_save.md`, and
-  `u5-decomp/functions/FONT_OVL/0x0E7B_screen_restore.md`.
-- Return-to-View strip orientation, framebuffer origin and cell size, the
-  terrain/overlay/backing plane split, the per-command preview-tick counts, the
-  per-tick repaint policy, and the centre-outward column reveal:
-  `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and
-  `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
-- Title tick ownership, EGA destination rectangle, four-frame cadence, the
-  `ULTIMA` record `1..4` frame source and its 50-row staging pitch, the
-  carry-set subtitle-ignition variant, signature delay/poll separation, and the
-  clarification that `FLAMES.OVL` is a scratch-buffer thunk, not the flame
-  renderer: `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`,
-  `u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`,
-  `u5-decomp/functions/EGA_DRV/0x282D_animate_flames_strip.md`,
-  `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`,
-  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`,
-  `u5-decomp/formats/ega-driver.md`, and
-  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
-- Filled-rectangle dispatch, corrected driver-compressed bitmap dispatch, and
-  driver-side title/bitmap rendering relationship:
-  `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`,
-  `u5-decomp/functions/EGA_DRV/0x1180_fill_rect_v2.md`, and
-  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
-- Journey Onward load path, pre-load game-screen-frame draw, empty-save guard, `SAVED.GAM` and `SAVED.OOL` reads, object-overlay mirror writes, underworld disk-swap branch, and final return to the main loop: `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md` and `u5-decomp/functions/ULTIMA_EXE/0x637E_combat_screen_layout.md` (renamed to `draw_game_screen_frame` 2026-05-24).
-- Character-creation chain verification: the `C` key enters `chargen_main` in the proportional-font overlay and returns directly to the intro menu. The chargen routine is self-contained and does not chain through the spell-casting overlay. Verified via `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` callee list (2026-05-24).
-- Transfer/continue roster path, transfer disk-state setup, seed loads, roster/status screen rendering, and commit/abort behaviour: `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
-- Outer main-loop boot context, scene dispatch after intro return, and overlay call model: `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
-- Display-driver loading and initial mode setup: `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
-- Text-window descriptor initialisation and text output primitives used by intro screens: `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`, `u5-decomp/functions/ULTIMA_EXE/0x1850_print_string.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1B38_poll_with_blink_cursor.md`.
-- `BRITISH.PTH` file structure and its confirmation as a title-screen path stream rather than an NPC schedule file: `u5-decomp/formats/npc-tlk-pth.md`.
-- Title, start-screen, and story-panel graphics container format: `u5-decomp/formats/tile-graphics.md`.
-- Story text data observations used to identify the intro slide text source: `u5-decomp/formats/data-tables.md`.
-- The visible title sequencing and the four `BRITISH.PTH` pen origins were
-  re-derived and recorded in
-  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`; no code,
-  disassembly, or raw data is reproduced here. That note supersedes the
-  unrecorded "fresh local verification" attributions that earlier revisions of
-  this section used.
+Private analysis directories consulted:
+
+| Area | Provenance directory |
+|---|---|
+| Boot, title orchestration, start/menu screen loading and composition, menu rendering, key dispatch, acknowledgements page, story slide loop, Journey Onward load path, transfer/continue path | `u5-decomp/functions/INTRO_OVL/` |
+| Resident title-mark flourish presenter, display-driver loading and mode setup, font loading and active-font selection, text-window descriptor initialisation, text output and cursor-poll primitives, compressed-bitmap draw, game-screen frame, outer main loop | `u5-decomp/functions/ULTIMA_EXE/` |
+| Driver-side presentation: the calibrated delay-with-animation-step entry, the one-bit silhouette stamp, back-buffer publish and invalidate, filled rectangle, compressed-bitmap draw, and the pseudo-random pixel dissolve in both its plain and carry-set forms | `u5-decomp/functions/EGA_DRV/` |
+| Proportional-font paragraph renderer, character creation, Return-to-View preview runtime and its map-strip loader | `u5-decomp/functions/FONT_OVL/` |
+| Cross-cutting retraces: the visible phase order and per-phase ink, the flourish's presentation script and its verification, the four `BRITISH.PTH` pen origins, the free-running band-frame counter, the two-pass masked subtitle reveal, the menu window's drawing passes, the dissolve-entry caller census, the Return-to-View pixel geometry and command schedule, and the paragraph-box retrace | `u5-decomp/notes/` |
+| Container and data-file formats: the paired graphics archives, the one-bit bitmap family, `BRITISH.PTH` as a title-screen path stream rather than an NPC schedule, the EGA driver's own layout, and the shared data overlay's string tables | `u5-decomp/formats/` |
+
+Two conclusions in this document rest on a caller census rather than on a single
+note, and are recorded as such: the rectangle-dissolve entry has exactly two
+intro call sites and four outside the intro; and the `C` key enters character
+creation in the proportional-font overlay and returns directly to the intro
+menu without chaining through the spell-casting overlay.
+
+Every literal string, column origin, cell span, corner-glyph ink profile,
+record dimension and record count published above was re-checked directly
+against the shipped data files before publication, independently of the notes.
+Earlier revisions of this section attributed some findings to unrecorded "fresh
+local verification"; those attributions are withdrawn in favour of the recorded
+retraces above.

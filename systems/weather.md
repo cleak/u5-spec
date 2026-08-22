@@ -26,16 +26,75 @@ and five saved/runtime values:
 | `3` | East | A cardinal wind state. |
 | `4` | West | A cardinal wind state. |
 
-The presentation labels are stored in DATA.OVL in the order Calm, North, South, East, and West, followed by the shared "Winds" suffix. The UI helper prints the current wind state as a short transition/status message when entering the world flow. The helper is presentation-only: it reads the wind state and displays the corresponding label, then returns to the normal mode dispatch.
+The presentation labels are stored in DATA.OVL in the order Calm, North, South,
+East, and West, followed by the shared wind suffix. Wind labels name the
+direction the wind blows **from**.
 
 `SAVED.GAM` carries this wind state byte. Values 0 through 4 should round-trip
 as the states above. A byte-compatible loader should still preserve any
 unrecognised value for round-trip writes rather than normalising it, because
-variant or corrupted saves may contain out-of-range state. When the world-entry
-wind banner is asked to display such a preserved out-of-range value on the
-surface, it emits no direction label and still emits the shared wind suffix.
-This makes the corrupted-state presentation visibly incomplete rather than
-clamping to Calm or another valid direction.
+variant or corrupted saves may contain out-of-range state. Section 2.1 specifies
+what the banner does with such a value.
+
+### 2.1 The Wind Banner
+
+**The wind banner is persistent border chrome, not a message-log line.** It is
+written into a gap in the game-screen frame's bottom chrome ribbon, through the
+full-screen text window, and it stays on screen until something repaints it.
+Earlier revisions of this document described it as a "transition/status message"
+printed on entering the world flow; that wording is withdrawn. It never enters
+the message window and never scrolls.
+
+**Cell layout.** The banner starts at a fixed cell — absolute column 6, row 23 —
+and there is no centring arithmetic anywhere in it. Every direction label is
+padded to exactly five characters in storage, so the banner is a constant
+thirteen cells wide:
+
+| Absolute column | Content |
+|---:|---|
+| 6 | Right-pointing bracket end-cap (`display-driver.md` section 7) |
+| 7..11 | Direction label, five characters, left-aligned within its own padding |
+| 12 | Space — the leading space of the stored suffix |
+| 13..17 | `Winds` |
+| 18 | Left-pointing bracket end-cap |
+
+**The five labels**, exactly as stored and exactly as they render:
+
+| Value | Stored label | Banner reads |
+|---:|---|---|
+| `0` | `Calm ` | `Calm  Winds` |
+| `1` | `North` | `North Winds` |
+| `2` | `South` | `South Winds` |
+| `3` | `East ` | `East  Winds` |
+| `4` | `West ` | `West  Winds` |
+
+`Calm`, `East` and `West` are four letters padded to five, and the shared suffix
+contributes its own leading space, so those three render with a **double space**
+between the direction and `Winds`. `North` and `South` are five letters and
+render with a single space. This is a visible difference, not a rounding
+artefact, and an implementation that formats the banner as
+`direction + " Winds"` without the pad will get three of the five states wrong.
+
+**Out-of-range values.** A preserved value above 4 falls out of the label
+selection entirely: the right cap is still drawn at column 6, the suffix is
+printed at columns 7 through 12, and the closing cap lands at column 13 instead
+of 18. Columns 14 through 18 keep whatever was previously there. The result is a
+visibly short, visibly wrong banner rather than a clamp to Calm or to any valid
+direction.
+
+**Suppression and erase.** The banner is not drawn in combat-class scenes, in
+the underworld scene, or on below-surface map levels. Combat and the underworld
+simply skip it. A below-surface level actively **erases** it: it strokes the rule
+`(48, 184)` to `(152, 184)` in the accent colour and then fills
+`(48, 185) - (152, 191)` in the chrome colour, restoring the plain ribbon. Stale
+text is never left behind. The dungeon view then writes its own bracketed facing
+label into the same gap.
+
+**Repaint triggers.** The banner is repainted, without changing the stored state,
+on mode entry for the overworld and town loops and on loading a save. It is
+repainted **with** a new state by the Wind Change spell and by the idle-redraw
+random wind selector. Setting a new state also clears the cached wind-cadence
+byte used by sailing and by wind-driven actors.
 
 ### Autonomous Wind Drift
 
@@ -52,13 +111,13 @@ candidate selection repeats. The result is that a successful outer event always
 eventually changes or re-announces a wind state, but Calm is much rarer than any
 cardinal direction.
 
-The accepted value routes through the same resident wind display/setter helper
-used by world-entry wind presentation. Supplying a new value stores it as the
-current wind state and clears the cached wind-cadence byte used by sailing and
-wind-driven actors. The helper does not run in dungeon-class scenes or the
-special no-weather scene; if the party is on the underworld plane while still
-in overworld mode, the state can still be stored but the helper uses its
-non-surface presentation branch instead of printing the ordinary wind label.
+The accepted value routes through the same resident wind set-and-repaint helper
+used by world entry. Supplying a new value stores it as the current wind state
+and clears the cached wind-cadence byte used by sailing and wind-driven actors.
+The store happens before any scene test, so the state is always updated; only
+the banner repaint is conditional. The helper draws nothing in combat-class or
+underworld scenes, and on a below-surface map level it takes the erase branch in
+section 2.1 instead of writing a label.
 
 ## 3. Rel Hur
 
@@ -196,8 +255,8 @@ gate and cadence table.
 
 Weather presentation is deliberately small:
 
-- The transition/status display can show current winds.
-- Idle redraws can occasionally choose and display a new wind state.
+- The wind banner in the bottom border shows the current wind at all times on the surface (section 2.1).
+- Idle redraws can occasionally choose a new wind state and repaint the banner.
 - Wind gates hoisted-sail player ship movement.
 - Wind does gate non-player water-creature / pirate active-object cadence.
 - Wind does not darken the map, spawn clouds, change the dawn/dusk curve, alter the night-time beacon's light gate, or affect moongate placement.
@@ -259,4 +318,13 @@ The behavior described here was derived from cleanroom reading of the following 
   rule, wind sound trigger, and saved/runtime wind values -
   `u5-decomp/functions/CAST2_OVL/0x0306_prompt_direction.md` and
   `u5-decomp/functions/CAST2_OVL/0x040A_set_wind.md`.
+- Source provenance: the wind banner's fixed cell layout, its bracket end-caps,
+  the five stored five-character direction labels and the shared suffix's leading
+  space, the resulting double-space rendering for Calm, East and West, the
+  short-banner behaviour for out-of-range values, the erase rectangles used
+  below the surface, and the correction that the banner is persistent chrome
+  rather than a message-log line are derived from private analysis note
+  `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked
+  against a fresh local re-read of the shipped executable and shared data
+  overlay.
 - Existing cleanroom descriptions of time, magic, and overworld integration - `u5-spec/systems/time.md`, `u5-spec/systems/magic.md`, and `u5-spec/systems/overworld.md`.

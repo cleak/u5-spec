@@ -74,7 +74,7 @@ The wraparound segment — the night band that crosses midnight from `time[3]` b
 
 **Selection rule: "most recent past boundary".** The scheduler asks "which boundary's hour is closest to the current hour, looking backward in time, with twenty-four-hour wraparound?" and returns the waypoint that segment maps to. All four boundary values are distinct in well-formed schedules.
 
-**Z is unsigned at runtime.** The runtime treats Z as unsigned when comparing against the location's current floor. Treat Z as a flat unsigned floor index.
+**Z is compared as a raw byte, but it is a signed floor number.** The waypoint's `Z` and the player's floor byte use one encoding, so the runtime's floor test is a byte-for-byte equality and needs no conversion. That is *not* a licence to treat `Z` as a flat unsigned index: `0xFF` is the storey **below** the entry floor, not floor 255. Four shipped locations — Yew, both large castles, and Serpent's Hold — schedule NPCs onto `0xFF`, forty-one waypoints in all. Any code that *orders* floors rather than merely comparing them (choosing whether a floor link goes up or down, deciding which link cell to route to) must read `Z` as signed eight-bit. `formats/npc.md` Section 5.2 and `formats/location-dat.md` Section 4 own the convention.
 
 ## 4. Per-NPC runtime state
 
@@ -135,7 +135,9 @@ The boundary trigger is the sub-step the processor calls on idle NPCs. It detect
 | above            | equal               | 4         | NPC upstairs; target on this floor.                  |
 | neither          | neither             | 8         | Neither end on this floor; replan-needed.            |
 
-The floor index grows upward: "above" means a numerically larger floor byte than the location's current floor, and "below" means a numerically smaller one. This is the same orientation the player-facing climb commands use, where climbing an ascend link raises the floor byte and a descend link lowers it.
+The floor index grows upward, and the two tests are not the same width. The **equality** test ("is this floor the displayed floor?") is a plain match on the stored byte value, so no conversion is needed on either side. The **ordering** test that separates "above" from "below" is a **signed eight-bit** comparison: `0xFF` orders below `0x00`, not above it. That is what puts a basement NPC into state 5 (below, surfaces at a descend link) rather than state 4 (above, surfaces at an ascend link). An implementation that orders the two floors as unsigned bytes sends every basement NPC in Yew, both large castles, and Serpent's Hold to the wrong link cell.
+
+This is the same orientation the player-facing climb commands use, where climbing an ascend link raises the floor byte and a descend link lowers it. `formats/location-dat.md` Section 4 owns the convention; `formats/npc.md` Section 5.2 lists the shipped floor values per location.
 
 After classifying, the trigger does one extra check: if the NPC's runtime `(target_x, target_y, current_z)` already equals the new waypoint's `(x, y, z)`, the NPC is already on the waypoint and state is reset to "idle".
 
@@ -728,7 +730,12 @@ The behaviour described above was derived by reading the function and format not
 - The hour-to-waypoint selection rule and the wraparound-to-waypoint-1 behaviour — `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
 - The per-tick walker, the eight-state machine, the runtime block, the move queue, the stuck counter, and the per-tick scratch flags — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
 - The location-entry initialisation pass — `u5-decomp/functions/NPC_OVL/0x00D6_npc_init_runtime_state.md`.
-- The boundary-trigger sub-step and the floor-classification table — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
+- The boundary-trigger sub-step and the floor-classification table, including
+  the signed width of the above/below ordering test and the plain-equality width
+  of the on-this-floor test — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
+- The signed floor convention the classification rests on, and the shipped
+  per-location floor values. Source provenance: derived from private analysis
+  note `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`.
 - The flood-fill BFS, the workspace cell encoding, and the high-nibble inbound-direction trail — `u5-decomp/functions/NPC_OVL/0x032C_npc_pathfinder.md`.
 - The tile-ID floor-link variant's two-marker dispatch, the per-state marker
   selection, and the up/down identity of the two markers — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`

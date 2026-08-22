@@ -87,7 +87,7 @@ The fourteen classes split into three super-categories:
   furniture, door, decoration, special, indices roughly `0..159`) live in the
   top-down map and arena terrain grids. They do not describe packed
   `DUNGEON.DAT` cells.
-- **Actor-and-item classes** (vehicle, NPC, monster, item, effect, avatar, indices `160..511`) live in *active-object records* — the dynamic sprite layer drawn over terrain. Records carry the tile id directly; the renderer composites them on top of the underlying cell.
+- **Actor-and-item classes** — the dynamic sprite layer drawn over terrain, living in *active-object records*. An active-object record does **not** carry the drawn tile id: it carries an actor byte in `0..255`, and the renderer adds `256` before indexing this catalogue, so every actor drawn through the world compositor resolves into the `256..511` half. See Section 3.1 for the rule and its one reserved value, and `systems/active-objects.md` section 12 for the compositor path.
 - **Transient effects** are written into the rendered tile buffer by the projectile animator and certain spell handlers, but are not stored in any persistent map. Moongates are *not* in this group: a natural gate is live terrain written into the map buffer by the once-per-turn refresh, not a transient render effect.
 
 Storage discipline is rigorous: a chair in a town map is a furniture-class index in the tile grid; a horse the player can mount is a vehicle-class index in the active-object table; a fireball mid-flight is an effect-class index temporarily in a slot; a dungeon wall or fountain cell is instead a packed dungeon class/variant byte interpreted by dungeon-mode systems. The same five-hundred-and-twelve-entry sprite sheet serves top-down terrain, actors, items, and effects, while dungeon cell geometry is specified by `formats/dungeon-dat.md` and `systems/dungeon-mode.md`.
@@ -156,6 +156,62 @@ The full breakdown by contiguous index range. The ranges below correspond to run
 | 496..511    | avatar          | Player and party-member sprites; per-vehicle and per-mode frames         |
 
 The ranges above are the working partition. Gameplay systems should rely on the class, storage, passability, animator, and special-trigger contracts here and in the cross-referenced system specs. Some precise visual names within the upper actor/item/effect ranges remain presentation/catalog QA rather than unresolved gameplay behavior.
+
+### 3.1 The upper half is the actor bank, and its nominal names are provisional
+
+Indices `0..255` are the **terrain half**: the values that appear in map grids,
+arena grids and scene records. Indices `256..511` are the **actor half**: the
+values a live or cinematic actor resolves to. The two halves are reached by
+different renderer paths, which is why the same byte can be a floor tile in one
+and a person in the other. An actor's stored byte is a value in `0..255` and the
+renderer adds **256** to it before indexing this catalogue; the sole reserved
+actor byte is `0x16`, which means "draw nothing". `systems/endgame.md` section 4
+publishes that rule in full, and `systems/active-objects.md` owns it for live
+gameplay actors.
+
+That indexing rule resolves a reported contradiction: actor byte `0x44` is not
+the floor tile whose *terrain* index is `0x44`, it is tile 324; actor byte
+`0x0E` is not furniture, it is tile 270. An engine reading actor bytes straight
+into this catalogue will render furniture and floor where people should be.
+
+**The nominal names given above for the actor half are provisional and at least
+two of them are wrong.** Decoding the shipped tile atlas directly shows the
+upper half is laid out coarsely as objects and vehicles, then people, then
+monsters — not as one long monster run followed by items. Individual ids
+confirmed from the shipped art, which take precedence over the range names
+above:
+
+| Tile index | Confirmed from the shipped atlas |
+|---:|---|
+| 264 | A small blue radiant spark — the Orb of the Moons flash used by the endgame |
+| 270 | A red-and-white lidded chest — the sandalwood box as an actor |
+| 320..323 | A blue-robed figure with a staff, four walk frames — the Mage class sprite |
+| 324..327 | A green-clad figure, four walk frames — the Bard class sprite |
+| 328..331 | A mailed figure with shield and sword, four frames — the Fighter class sprite |
+| 332..335 | A green-tunic figure with sword, four frames — the Avatar class sprite, also used by every class outside the three above |
+| 380..383 | A crowned, bearded figure in a red-and-purple robe seated between two banners — Lord British on his throne |
+
+The nominal rows "320..335 Daemon, dragon (greater)" and
+"368..383 Reserved / boss-monster slots" are therefore **withdrawn**: both of
+those bands are person sprites. Decoding the atlas shows the actor half runs
+roughly as objects and vehicles, then people, then monsters, rather than as one
+long monster run followed by items — but the exact seams have not been fixed,
+so no replacement range table is published here.
+
+The same caveat applies to the terrain half above index 128, and this document
+already contradicts itself there: the nominal row "192..255 NPC — Townspeople,
+guards, ... named NPCs" is inconsistent with the shipped-description list later
+in this section, which names `0xC4..0xC7` as the stairway family, `0xCA..0xCB`
+as wooden fence, `0xD4..0xD7` as the waterfall family, `0xDC` as the moon gate,
+`0xF0..0xF7` as shop signs and `0xFA..0xFB` as the grandfather clock — all of
+them inside that band, and none of them a person. Decoding the atlas agrees
+with the confirmed list: `192..255` is scenery and fixtures.
+
+**Precedence rule.** Where an index has been confirmed from the shipped
+description table or from the shipped art, that confirmation wins. The Section 2
+class table and the Section 3 range table are working hypotheses for the bands
+nobody has confirmed yet; re-cataloguing both halves index by index is open
+catalogue work and is tracked in Section 16.
 
 Where an individual id has been confirmed directly against the shipped
 description table (`formats/look2-dat.md`), that confirmation takes precedence
@@ -407,12 +463,19 @@ No `world_waterfalls.tsv` runtime sidecar is part of the promoted baseline.
 
 **Beds.** A bed tile in an inn enables H-Hole-up. Outside an inn or off a bed, H prints "Not here!" and consumes no turn. The hours/rest contract is in `systems/rest-and-camp.md`.
 
-**Town step trigger `0x8C`.** Stepping onto live town tile `0x8C` runs the town
-step-interaction handler's scripted branch, which in Stonegate plays a special
-scene effect. The shipped description table names `0x8C` a loose brick, not a
-chair; ordinary seat tiles are `0x90..0x93` and carry no step trigger. Do not
-conflate `0x8C` with the paired NPC floor-link markers `0xC8` and `0xC9`
-either.
+**Trapdoor / town step trigger `0x8C`.** Stepping onto live town tile `0x8C`
+runs the town step-interaction handler. Its **general** arm prints
+"A TRAPDOOR!" and drops the party one floor, and that is what happens in every
+location but one; the arm is skipped entirely while the party is on the magic
+carpet. Stonegate is the single exception, keyed on that scene byte alone: its
+trapdoor ring runs a scripted party-death sequence instead of a floor change.
+Earlier wording here presented the scripted arm as the general behaviour and
+the descent as the special case; that is backwards and is withdrawn. See
+`systems/town-mode.md` Section 3.
+
+The shipped description table names `0x8C` a loose brick, not a chair; ordinary
+seat tiles are `0x90..0x93` and carry no step trigger. Do not conflate `0x8C`
+with the paired NPC floor-link markers `0xC8` and `0xC9` either.
 
 **Floor-link markers `0xC8` and `0xC9`.** Two marker bytes appear in town tile
 grids as authored floor links. They share one description string in the shipped
@@ -424,7 +487,10 @@ directional and are not interchangeable:
 | `0xC8` | Ascend link | Floor index increases by one. |
 | `0xC9` | Descend link | Floor index decreases by one. |
 
-Tile `0x86` shares the descend behaviour under the player's climb command. The
+Tile `0x86`, the metal grate, shares the descend behaviour under the player's
+climb command, and in one keep it stands in for the descend link at the exact
+cell where the floor below carries the ascend link. There is no two-way link
+cell in town mode: the climb command never prompts up-or-down there. The
 NPC scheduler consumes the same two bytes: when schedule movement must bridge
 floors it searches the live tile buffer for cells carrying whichever marker
 points toward the floor that is not currently displayed, and uses those cells as
@@ -595,7 +661,7 @@ The relevant facts for the catalog are:
 
 Some class-specific encodings layer on top:
 
-- **Dungeon tiles.** Dungeon `.DAT` cells pack two four-bit fields: high nibble is a strict dungeon tile class (open, wall, door, ladder, chest, trap, fountain, field), low nibble is class-specific attribute. Dungeon tile bytes are *not* indices into the unified five-hundred-and-twelve-tile space and do not share the world/town high-nibble buckets — they are a separate dungeon tile-class encoding rendered by the sparse first-person dungeon renderer.
+- **Dungeon tiles.** Dungeon `.DAT` cells pack two four-bit fields: high nibble is a strict dungeon tile class (open, wall, door, ladder, chest, trap, fountain, field), low nibble is class-specific attribute. Dungeon tile bytes are *not* indices into the unified five-hundred-and-twelve-tile space and do not share the world/town high-nibble buckets — they are a separate dungeon tile-class encoding rendered by the billboard first-person dungeon renderer.
 - **Combat arenas.** Combat `.CBT` terrain cells use standard one-byte tile ids in an eleven-by-eleven grid with a thirty-two-byte row stride. The twenty-one bytes after each terrain row are arena metadata and must be preserved. For `BRIT.CBT`, traced setup copies the party-entry and placement-slot coordinate slices from that metadata into resident tables; spawn counts and companion-class rolls still come from resident per-class combat tables, keyed by combat class id rather than by arena index.
 - **Markers in town maps.** Marker bytes — NPC start markers `0x48`/`0x49`, spawn marker `0x2A`, dawn/dusk archway marker `0x87`, and the NPC floor-link markers `0xC8`/`0xC9` — appear in on-disk tile grids and are consumed by location-load or NPC-scheduler passes. Some are harvested into runtime state, some are conditionally rewritten in the runtime tile buffer, and `0xC8`/`0xC9` remain queryable as runtime tile-ID goals. They should not be treated as ordinary terrain. The standing-crop and fruit-tree terrain values `0x2D`/`0x2E` were previously listed here as markers; they are not. They are ordinary named terrain. In the one settlement that is currently hiding a living Shadowlord — and nowhere else — a load-time blight pass thins them into their plowed-patch and hollow-stump counterparts (`0x2C` and `0x2B`) seven times in eight, on a stream keyed to the calendar day; see `systems/town-mode.md` section 3 for the gate. For the dawn/dusk pass, `0x87` marks the south-adjacent gate cell; shipped maps pair it with `0x44` cobble, which toggles to `0x99` portcullis via XOR `0xDD` at night.
 
@@ -632,7 +698,18 @@ The data here is drawn from four sources. Each tile's position in the partition 
   caller-query tile-class dispatcher and the corrected `0x90..0x93`
   force-reject edge.
 - The active-object animator's class-range tests.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md` - the
+  companion-band compositor write, the renderer's zero-grid-cell branch, the
+  `+256` actor index rule and its one reserved transparent value, together
+  with the seven actor-half sprite identities confirmed by decoding the
+  shipped atlas with this document's own container rules.
 - The special-trigger comparisons in the per-mode walk loops.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md` - the trapdoor
+  `0x8C` step handler's general descend arm with its single scripted
+  exception, the magic-carpet suppression, and the metal grate `0x86`
+  standing in for a descend link opposite an ascend link on the floor below.
 - The marker-byte consumers (NPC start markers, waypoint markers, dawn/dusk archway marker `0x87`, and the NPC floor-link markers `0xC8` and `0xC9`).
 - The two-nibble dungeon tile encoding and its separate tile-class space.
 - Source provenance: the telescope identity of tile `0x59`, its three shipped
@@ -677,6 +754,12 @@ All five hundred and twelve indices have a class assignment and storage-domain
 contract. The tile catalog is complete for passability, LOOK2 ownership,
 special-trigger routing, active-object classing, and file-format boundaries.
 
+**Qualification.** The three bullets above describe the *class assignment*, not
+the per-range visual names. Section 3.1 withdraws several of those names and
+publishes the actor-half indexing rule that governs how an actor's stored byte
+reaches this catalogue; read it before using any range label above index 128 as
+a predicate.
+
 ## 15. Cross-references
 
 - `systems/movement.md` - Shared movement and passability predicate, including
@@ -684,7 +767,7 @@ special-trigger routing, active-object classing, and file-format boundaries.
   occupancy, and commit rules.
 - `systems/overworld.md` — Overworld mode specification, including the active-object animator, the per-turn tile probe, and the once-per-turn moongate terrain refresh. Section 8 lists the special tile classes the per-turn block recognises.
 - `systems/town-mode.md` — Town-mode specification, including marker harvest/runtime marker handling (Section 3 / Section 6), the dawn/dusk gate substitution (Section 6), and the per-tile interaction commands (Section 9).
-- `systems/dungeon-mode.md` — Dungeon-mode specification, including the two-nibble dungeon tile encoding (Section 4) and the sparse renderer's wall checks (Section 6).
+- `systems/dungeon-mode.md` — Dungeon-mode specification, including the two-nibble dungeon tile encoding (Section 4) and the first-person renderer's cell-class-to-image mapping (Section 6.4).
 - `systems/active-objects.md` — Active-object table specification, including the per-slot record format and the animator pass.
 - `systems/vehicles.md` — Boarding, exiting, parked-vehicle persistence, and ship-fire behaviour.
 - `systems/visibility.md` — Visibility producer, including the queue-based carve, propagation-blocker set, and adjacent-only special cases.
@@ -705,6 +788,13 @@ optional presentation/catalog QA or source-free reauthored-data aids; they
 should not be treated as blockers for implementing the runtime behavior already
 specified by this catalog and the linked system specs.
 
+0. **Re-catalogue the nominal index ranges of Sections 2 and 3 against the
+   shipped atlas.** Section 3.1 shows both halves' nominal names are wrong in
+   places — the actor half's `320..335` and `368..383` bands are person sprites
+   rather than monsters, and the terrain half's `192..255` band is scenery and
+   fixtures rather than NPCs. This is the highest-value item in this queue,
+   because engine code that resolves a tile id by range rather than by
+   confirmed id will mislabel actors.
 1. Refine the per-tile id within each monster's frame run by walking `MON0.16` through `MON7.16` against the manual's monster list and the resident data monster-name pool.
 2. Refine the per-NPC tile-id labels against the role-name string pool ("Avatar", "Villager", ..., "Lord British") and the named-NPC list.
 3. Refine the per-item tile-id labels against the item-name pool and the Z-stats inventory panel.

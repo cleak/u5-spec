@@ -154,17 +154,220 @@ successful one costs.
 
 ## 5. Verb Prefixes And Prompts
 
-Each command block prints a resident verb prefix before it invokes the handler
-or refusal path. Examples include the familiar command names such as Attack,
-Board, Cast, Open, Quit, and Z-stats. The prefix is part of the original text UI:
-commands that immediately prompt for a direction, party member, item, spell, or
-yes/no answer do so after the prefix has been emitted.
+Every dispatcher arm prints a **verb echo** into the message window before it
+invokes its handler or its refusal path. The echo is a fixed literal per letter,
+and the literal's trailing punctuation is part of the contract rather than
+decoration. This section publishes the rendered literals, the punctuation rule,
+the line prompt, the direction prompt, the shared selection prompts, and the
+entry narration.
+
+Throughout this section an underscore stands for a literal space and `\n` for a
+newline. Spaces at the start or end of a literal are load-bearing; they are the
+reason the original's spacing looks uneven in places.
+
+### 5.1 The line prompt is a glyph, not a character
+
+Observers commonly transcribe the marker at the head of each echoed line as a
+greater-than sign. **There is no greater-than character anywhere in the game's
+output.** The marker is a *glyph*: the right-pointing solid triangle of the
+fixed eight-by-eight text font - the same glyph the framed border labels use as
+their **right** end cap - drawn on its own with no closing cap.
+
+Every mode's turn loop opens its input line with the same two steps: emit a
+newline into the message window, then draw that one triangle. The rule has
+consequences an implementation must reproduce:
+
+- The marker belongs to the turn loop, not to any verb literal. **No verb
+  literal contains it.**
+- It is emitted exactly once per input line, so it persists in the
+  message-window scrollback exactly where it was drawn.
+- The wrap-aware string printer emits no prefix of its own, so wrapped
+  continuation lines carry no marker.
+- A second line printed by the same command - a refusal, a follow-up prompt -
+  also carries no marker. `Z-stats...` already ends in a newline, so the
+  `Player:_` prompt that follows it starts a fresh **unmarked** line. A renderer
+  that prefixes every message-window line with the triangle renders that case
+  wrongly.
+
+The **input cursor is a separate mechanism and is not the prompt marker.** It is
+a four-frame animation over four consecutive text-font glyphs - a diagonal
+barber-pole pattern shifted two pixels per frame - painted in the cell
+immediately to the right of the prompt triangle, and erased with a space the
+moment a key arrives. Neither the blink draw nor the erase advances the cursor
+cell, so the verb echo begins in the cell the cursor occupied, one cell right of
+the triangle. The animation's start glyph and its frame count are fixed data
+that no code ever rewrites; an implementation may treat both as constants. The
+blink loop itself is specified in `input.md`; the message-window echo cycle is
+specified in `text-output.md` section 10.2, and the end-cap composite itself in
+`display-driver.md` section 7.
+
+### 5.2 Verb echo literals
+
+The resident dispatcher owns one literal per letter. Each arm loads its own
+literal; there is no key-indexed pointer array, and the literals are stored as a
+plain block of text rather than as a table addressed by the key code.
+
+| Key | Rendered echo | Notes |
+|---|---|---|
+| `Space` / `Esc` | `Pass\n` | Also the direction-prompt cancel word. |
+| `A` | `Attack-` outside dungeons; `Attack\n` in a dungeon | Dungeon attacks are always straight ahead, so the dungeon form takes no direction and needs no hyphen. Each mode overlay carries its own copy of this literal. |
+| `B` | `Board_` | Becalmed refusal: `Sheets_in_irons!\n` |
+| `C` | `Cast...\n` | |
+| `D` | `D-What?\n` | |
+| `E` | `Enter_` followed by a place noun (section 5.5) | Off the overworld: `Enter_what?\n` |
+| `F` | `Fire-` | |
+| `G` | `Get-` | |
+| `H` | `Hole_up-_` | Hyphen **then** a space. Bed refusal: `Only_in_bed!\n`. Shipboard and camp forms in section 5.5. |
+| `I` | `Ignite_torch!\n` | |
+| `J` | `Jimmy-` | |
+| `K` | `Klimb-` | Dungeon form `Klimb-U/D-`, then `Up!\n`, `Down!\n` or `Failed!\n`. Gearless dungeon form: `Klimb-\nWith_What?\n` |
+| `L` | `Look` then either `-` or `...\n` | See section 5.3. |
+| `M` | `Mix_Reagents\n\n` | |
+| `N` | `New_Order` | **No** trailing newline. |
+| `O` | `Open-` | |
+| `P` | `Push-` | Refusal form replaces the echo entirely: `Push\nNot_here!\n` |
+| `Q` | `Quit:` | |
+| `R` | `Ready...\n\n` | |
+| `S` | `Search-` (direction form) or `Search...\n` (in-place form) | |
+| `T` | `Talk-` | Refusal tail `Funny,_no_response!\n`; one arm uses the combined literal `Talk-Funny,_no_response!\n` |
+| `U` | `Use_item\n\n` | |
+| `V` | `View_a_gem!\n` | Refusal on the **next** line: `You_have_none!\n` |
+| `W` | `W-What?\n` | |
+| `X` | `X-it_` | |
+| `Y` | `Yell_` | |
+| `Z` | `Z-stats...\n` | |
+| `0` | `Set_Active_Plr:\n` | Cancelled: `None!\n`; rejected: `Invalid!\n` |
+| buffer toggle | `Buffer_O` followed by `ff\n` or `n\n` | Prefix and suffix are separate literals. |
+| any unmapped key | `What?\n` | The same text answers a key that is recognised but meaningless in the current mode. |
+
+Two ordering details are easy to get wrong and are part of the contract:
+
+- The echo is printed **before** the handler's precondition check. `V` prints
+  `View_a_gem!\n` and only then discovers the party has no gem, so the refusal
+  always appears as a *second* line rather than replacing the echo. The same
+  shape applies to every other verb-then-refusal pair except the ones whose
+  refusal literal folds the verb in.
+- Refusal literals that begin with a verb word (`Push\nNot_here!\n`,
+  `Talk-Funny,_no_response!\n`) replace the echo entirely; the ordinary echo is
+  not printed first in those arms.
+
+### 5.3 The trailing-punctuation contract
+
+| Suffix | Meaning | Verbs |
+|---|---|---|
+| `-` | A **direction** is awaited. The chosen direction's name is appended on the same line. | Attack (outside dungeons), Fire, Get, Jimmy, Klimb, Open, Push, Search (direction form), Talk, Look (surface and town) |
+| `...` | A **sub-selection** is awaited on another surface - a party member, an item, a spell, a page. | Cast, Ready, Z-stats, Search (in-place form), Look (dungeon) |
+| trailing space | A further keystroke or a typed argument continues the **same** line. | Board, X-it, Yell, Hole up (hyphen then space) |
+| newline, or nothing | The command completes immediately. | Pass, Ignite torch, Mix Reagents (two newlines), New Order (no newline at all), Use item (two newlines) |
+
+**`Look` is the one dynamic case.** The stored literal is the bare word with no
+punctuation. The dispatcher prints it and then takes one of two arms: in a
+dungeon scene it prints the three-dot suffix and hands off to the dungeon look
+overlay; everywhere else it emits a single hyphen **character** directly and
+runs the direction prompt. That hyphen is the only echo punctuation in the game
+produced dynamically rather than baked into a literal.
+
+### 5.4 The direction prompt has no text
+
+The shared direction prompt prints **nothing** before waiting. The hyphen at the
+end of the verb echo *is* the prompt. The prompt loop ignores every key except
+the four directions, Space and Escape:
+
+| Key | Printed | Effect | Result to the caller |
+|---|---|---|---|
+| West | `West\n` | target X decreases by one | direction chosen |
+| East | `East\n` | target X increases by one | direction chosen |
+| North | `North\n` | target Y decreases by one | direction chosen |
+| South | `South\n` | target Y increases by one | direction chosen |
+| `Space` or `Esc` | `Pass\n` | none | cancelled |
+
+The cancel word is the same word the Pass command echoes. A cancelled Look
+therefore renders as the verb, the hyphen and the cancel word on one line.
+
+**Movement keys echo the same four words.** On the overworld and in town-family
+scenes, a movement key prints the direction's name followed by a newline, on its
+own prompted line - the same four words the direction prompt appends. Several
+mode overlays carry their own copy of the four-word block; they are identical.
+Dungeon movement is the exception and uses its own verb set instead: `Advance`,
+`Turn left`, `Turn right`, `Back up`, `Turn around.` and the refusal `Blocked!`,
+each followed by a newline. See `dungeon-mode.md` section 9.
+
+### 5.5 Entry narration and the location line
+
+The original **does** print a line on entering a location from the overworld,
+but it is not a name-and-coordinates line. `E`nter prints the word `Enter`, a
+space, and a noun naming the **kind** of place, then a newline:
+
+| Underfoot location class | Printed after `Enter_` |
+|---|---|
+| hut | `hut` |
+| keep | `keep` |
+| village | `village` |
+| towne | `towne` |
+| castle | `castle` |
+| cave | `cave` |
+| mine | `mine` |
+| dungeon | `dungeon` |
+| ruins | `ruins` |
+| lighthouse | `lighthouse` |
+| Codex shrine | `the_Shrine_of_the_Codex!\n` |
+| virtue shrine | `the_shrine_of\n` followed by the virtue's name, chosen by matching the party's overworld coordinates: Honesty, Compassion, Valour, Justice, Sacrifice, Honor, Spirituality, Humility |
+| Blackthorn's palace | `the_palace_of_Blackthorn!` |
+| Lord British's castle | `the_Castle_of_Lord_British!` |
+| anything else | `What?\n`, and the command consumes no turn |
+
+**The town's proper name is never printed, the dungeon level is never printed,
+and coordinates are never printed.** An engine line of the form
+`Entered <name> level N at (x, y).` has **no counterpart in the original** and
+should be dropped or moved behind a debug flag. Descending or climbing inside a
+dungeon prints only the climb echo and a one-word result; the only thing that
+reflects the new level is the level label in the dungeon frame's top border
+band, specified in `dungeon-mode.md` section 4.1.
+
+Two dungeon-specific narration lines do exist:
+
+- Stepping onto a room-trigger cell prints `Entering_room...\n`.
+- Leaving the level stack prints `\nExit_to_` followed by `Britannia!\n\n` or
+  `Underworld!\n\n`.
+
+The `H`-Hole-up family carries its own literals: `Hole_up_&_` plus
+`\nrepair...\n\n` and `Hull_now_` plus `!\n\n` at sea, `camp!\n\n` on
+land, `Sails_must_be\n` plus `lowered!\n\n` and `On_land_or_ship!\n\n` for
+its refusals, and the prompts `For_how_many_hours?_(1-9)_`,
+`\nWilt_thou_set_a_watch?_` (answered `Yes\n\n` or `No\n\n`),
+`Who_will_stand_guard?_` and `None_posted!\n\n`. `On_foot!\n` is the
+Attack-family on-foot refusal.
+
+### 5.6 Selection prompts and the cancel word
+
+| Literal | Where it goes | Notes |
+|---|---|---|
+| `Player:_` | message window | Colon then exactly one trailing space. |
+| `Item:_` | message window | Colon then exactly one trailing space. One caller uses a variant preceded by two newlines. |
+| `None!\n` | message window | The universal cancel response. |
+| `Nothing!\n` | message window | The empty-selection variant used where there was nothing to choose from. |
+| `Invalid!\n` | message window | A selection outside the valid range. |
+| `Done\n` | message window | Leaving an inventory page. |
+
+Several independent copies of the cancel word exist and one of them omits the
+newline, so a compatible implementation should treat the newline as belonging to
+the surrounding flow rather than to the word itself.
+
+There is **no** `Player`, `Item` or `Select` heading string in the data that
+carries angle-bracket characters. Where a panel's top border shows a framed
+label, the brackets are the two end-cap glyphs drawn around a plain literal; see
+`text-output.md` section 10.7 and `inventory.md` sections 4 and 5.
+
+### 5.7 Prompt reentrancy
 
 Handlers are allowed to re-enter the input system for follow-up prompts. The
 input spec owns the cursor, prompt-character, typeahead, and reentrancy rules.
 The command spec's contract is simply that prompts are synchronous: a handler
 does not return to the mode loop until its prompt sequence has completed or been
 cancelled.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 
 ## 6. N-New Order Party Command
 

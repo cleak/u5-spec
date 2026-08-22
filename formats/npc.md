@@ -105,9 +105,20 @@ The four boundary values are not required to be sorted ascending. The engine com
 
 `X[i]` and `Y[i]` are zero-based map cell coordinates within the location's thirty-two-by-thirty-two tile grid, with X increasing eastward and Y increasing southward. Both are unsigned eight-bit values; valid range is `0..31`. Coordinates outside that range are not validated by the engine and would produce out-of-bounds reads on the location's tile buffer.
 
-`Z[i]` is the location's floor index for waypoint *i*, matching the per-location floor convention used by the location data file: floor zero is the ground floor, floor one is upper or basement, occasional higher values address re-purposed extra floors. Treat it as an unsigned byte. Runtime initialisation widens the selected schedule Z byte into the per-NPC runtime state without preserving a signed sentinel, and the schedule processor compares the resulting value against the player's current floor byte. An NPC whose active waypoint is on a different floor from the player's view enters a Z-mismatch movement state. It leaves that state either by routing to a floor-link or stairway cell on the displayed floor and surfacing there, or by being placed directly at its waypoint when neither end of the transition is on the displayed floor. `systems/npc-schedules.md` Sections 7 and 8.5 own the state set and the marker-selection rule.
+`Z[i]` is the location's floor index for waypoint *i*, stored in exactly the same encoding as the player's floor byte and read the same way: signed eight-bit, floor zero is the location's entry floor, positive values are storeys above it, and `0xFF` (signed −1) is the storey below it. `formats/location-dat.md` Section 4 owns that convention and Section 4.1 gives each location's legal floor range. Because the two fields use one encoding, the runtime's floor test is a plain byte-for-byte equality between the waypoint's `Z` and the player's floor byte — `0xFF` matches `0xFF`. Do **not** sign-extend one side of that comparison and not the other, and do not normalise `0xFF` to zero on load; either error silently relocates every basement NPC. The schedule processor performs that comparison every tick. An NPC whose active waypoint is on a different floor from the player's view enters a Z-mismatch movement state. It leaves that state either by routing to a floor-link or stairway cell on the displayed floor and surfacing there, or by being placed directly at its waypoint when neither end of the transition is on the displayed floor. `systems/npc-schedules.md` Sections 7 and 8.5 own the state set and the marker-selection rule.
 
-Shipped content uses only small unsigned floor values in the range `0x00..0x07`. Values above the shipped range are not validated by the engine; a compatible content tool should preserve them, but a gameplay implementation should not interpret `0x80..0xFF` as negative floor numbers for the stock DOS baseline.
+The shipped waypoint `Z` alphabet is exactly five values: `0x00`, `0x01`, `0x02`, `0x03`, and `0xFF`. `0xFF` is not a sentinel, not padding, and not an out-of-range artifact — it is the basement floor and it is used by forty-one waypoints across four locations:
+
+| Class file | Sub-map (roster index) | Location | Waypoint `Z` values present | Waypoints at `0xFF` |
+|---|---:|---|---|---:|
+| `TOWNE.NPC` | 3 | Yew | `0x00`, `0xFF` | 14 |
+| `CASTLE.NPC` | 0 | Lord British's Castle | `0x00`, `0x01`, `0x02`, `0xFF` | 18 |
+| `CASTLE.NPC` | 1 | Lord Blackthorn's Castle | `0x00`, `0x01`, `0x02`, `0x03`, `0xFF` | 8 |
+| `KEEP.NPC` | 7 | Serpent's Hold | `0x00`, `0x01`, `0xFF` | 1 |
+
+Those are precisely the four locations whose floor range starts below zero in `formats/location-dat.md` Section 4.1, which is an independent confirmation of the signed reading. Every other shipped sub-map uses only non-negative values, and no sub-map's `Z` alphabet exceeds its location's published floor range: the four lighthouse dwellings use `0x00` and `0x02` (they have no scheduled activity on their middle floor), Iolo's Hut and the other single-floor rows use `0x00` only, and the Lycaeum and Empath Abbey use `0x00` through `0x02`. The highest value that appears anywhere is `0x03`, in Lord Blackthorn's Castle.
+
+Values outside the location's own floor range are not validated by the engine and would address a page belonging to a different location. A content tool should preserve whatever it finds; a gameplay implementation should treat any `Z` outside the range Section 4.1 gives for that scene as authored error rather than as a new floor.
 
 ### 5.3 The AI byte
 
@@ -222,7 +233,9 @@ A non-zero ordinary dialog index that does not resolve to any header entry in th
 
 ## 8. Sub-map ordering
 
-The on-disk file format preserves only the sub-map *index* (zero through seven). The mapping from sub-map index to the overworld entry and resident location-name string lives in the DATA.OVL-derived world-location table, not in the per-class file. The mapping is parallel between the `.DAT`, `.NPC`, and `.TLK` files: the *k*-th sub-map of `TOWNE.NPC` corresponds to the *k*-th block of `TOWNE.DAT` and the *k*-th block of `TOWNE.TLK`.
+The on-disk file format preserves only the sub-map *index* (zero through seven). The mapping from sub-map index to the overworld entry and resident location-name string lives in the DATA.OVL-derived world-location table, not in the per-class file. The mapping is parallel between the `.NPC` and `.TLK` files: the *k*-th sub-map of `TOWNE.NPC` corresponds to the *k*-th block of `TOWNE.TLK`, and likewise for the other three classes. Both files use the same fixed per-sub-map stride, so index *k* alone locates the block.
+
+**The sub-map index does not index the class `.DAT` file the same way.** A location's tile pages are found through the per-scene base floor-page table in `formats/location-dat.md` Section 4.1, never by computing `2k` and `2k + 1`. The `.DAT` class file is a flat array of sixteen 1,024-byte floor pages, and a location owns a *run* of one to five consecutive pages whose length and starting page are authored per scene: for twenty-two of the thirty-two locations the page run is not `{2k, 2k + 1}`, and for twenty of them the entry floor's page is not `2k`. Sub-map index *k* is a roster index for the `.NPC` and `.TLK` files and nothing more.
 
 The resident world-location table confirms the scene/sub-map order below. The class names here are storage families, not necessarily the in-world type of the place; for example Paws and Cove live in the `CASTLE.*` storage family.
 
@@ -367,4 +380,10 @@ The format described above was derived from the analysis notes listed below. Non
 - The waypoint selection routine — four-boundary, three-waypoint, wraparound-through-waypoint-one rule — `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
 - Runtime schedule field semantics confirmed against the schedule processor's read sites — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
 - Runtime initialisation that snapshots schedule waypoints to per-NPC runtime fields — `u5-decomp/functions/NPC_OVL/0x00D6_npc_init_runtime_state.md`.
+- The waypoint `Z` floor convention of Section 5.2 — the signed reading, the
+  shipped five-value alphabet, the forty-one basement waypoints, and the
+  correction that sub-map index is not a `.DAT` page index. Source provenance:
+  derived from private analysis note
+  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`, cross-checked by
+  re-scanning the shipped `.NPC` files.
 - The schedules systems spec covering the runtime semantics this format spec only references — `u5-spec/systems/npc-schedules.md`.

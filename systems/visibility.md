@@ -2,12 +2,12 @@
 
 ## 1. Overview
 
-The visibility system answers the rendering pipeline's central question: *which of the cells around the player should the screen actually show this frame, and how?* Ultima V's two-dimensional scenes — overworld, underworld, towns, dwellings, castles, and keeps — all draw the world through an eleven-by-eleven viewport centred on the party. For each of those one hundred twenty-one cells, the engine decides one of three things on every redraw: the cell is fully visible (paint the underlying tile), the cell is dim periphery (paint the tile with a dimmed-edge marker), or the cell is hidden (paint nothing — the cell is dark, blocked, or outside the active light radius).
+The visibility system answers the rendering pipeline's central question: *which of the cells around the player should the screen actually show this frame, and how?* Ultima V's two-dimensional scenes — overworld, underworld, towns, dwellings, castles, and keeps — all draw the world through an eleven-by-eleven viewport centred on the party. For each of those one hundred twenty-one cells, the engine decides one of three things on every redraw: the cell is fully visible (paint the underlying tile), the cell is dim periphery (paint the tile with a dimmed-edge marker), or the cell is hidden (paint nothing — the cell is dark, blocked, or outside the current lighting threshold).
 
 The decision is made by a producer that runs once per redraw, runs a
 centre-out visibility carve over the viewport, takes account of the current
-light radius, and writes a one-byte verdict into a fixed-size scratch grid in
-the data segment. A second pass refines the edges of the visible region and
+lighting threshold, and writes a one-byte verdict into a fixed-size scratch grid
+in the data segment. A second pass refines the edges of the visible region and
 stamps active objects (NPCs, monsters, vehicles, the player avatar) into the
 same grid on top of the terrain. The renderer then walks the grid one cell at a
 time, consulting both the visibility verdict and a parallel terrain band, and
@@ -48,10 +48,10 @@ Each byte in the visibility grid encodes one of several things at end-of-frame:
 
 | Byte value      | Meaning                                                              |
 |-----------------|----------------------------------------------------------------------|
-| `0xFF`          | Hidden — fully obscured. The cell is outside the light radius, blocked by a sight-blocker, or off-map. The renderer paints nothing here; the previous frame's pixels stay. |
+| `0xFF`          | Hidden — fully obscured. The cell is outside the lighting threshold, blocked by a sight-blocker, or off-map. The renderer paints nothing here; the previous frame's pixels stay. |
 | `0x00`          | "Use companion buffer." The cell is visible but the terrain band holds the tile to paint. This is the normal successful active-object compositor output, including water-bound, water-creature, vehicle/avatar-family, and default-helper stamps. |
-| `0xDD`          | Clear visible (in-radius). A marker indicating "this cell is fully lit." The renderer treats it as a terrain-tile-from-companion-buffer cue with full brightness. |
-| `0x1C`          | Dim periphery. Same as `0xDD` but the cell is on the visibility-radius boundary; the renderer dims the painted tile. |
+| `0xDD`          | Clear visible (inside the near/far distance of Section 7). A marker indicating "this cell is fully lit." The renderer treats it as a terrain-tile-from-companion-buffer cue with full brightness. |
+| `0x1C`          | Dim periphery. Same as `0xDD` but the cell is beyond the fixed near/far distance of Section 7; the renderer dims the painted tile. |
 | `0x87`          | "Already rendered." A guard the active-object compositor checks to avoid double-stamping. Higher-priority sprite already in this cell. |
 | any other byte  | A direct tile id or renderer marker. The renderer paints or interprets this byte directly. Used by terrain producers, the negative-light full-fill path, and a few terrain-aware compositor marker writes. |
 
@@ -67,15 +67,130 @@ The producer reads several pieces of resident state on every dirty-frame call.
 
 **Scene identity.** A single byte distinguishes between mode families: zero for the overworld stream, one through some dozens for towns / dwellings / castles / keeps, a higher range for dungeon-explore, and an even higher range (at and above the high bit set) for combat. The producer mostly does not care which 2D scene type it is in — the visibility carve and the grid format are identical for all 2D scenes — but the choice of map buffer (Section 4) does depend on scene.
 
-**Light radius.** A single byte that the lighting subsystem maintains, holding the player's current effective sight radius. The radius is large during outdoor daylight, smaller at night, smaller still in dungeons and at indoor scenes after dark, and clamped upward by a torch or a light spell. The producer treats the radius as a *signed* quantity:
+**Lighting threshold.** A single byte that the lighting subsystem maintains and
+that the producer forwards, unaltered, to the visibility carve. This value is
+**not a sight radius**. It is a **squared-distance threshold**, compared
+directly against each viewport cell's squared distance from the centre. Nothing
+between the lighting subsystem and that comparison squares it, halves it,
+shifts it, scales it, or maps it through a table, and this document's Section 5
+comparison is the *only* place in the engine that uses the value **as a
+distance threshold**. Exactly one other site reads the byte, and not as a
+distance: the night-time beacon of Section 12.6 tests it against the
+full-daylight value as a day/night gate before it runs
+(`systems/lighting.md` Sections 3 and 7.2). No third reader exists.
 
-| Sign            | Producer behaviour                                                  |
+Earlier revisions of this section described the byte as "the player's current
+effective sight radius". That wording is withdrawn in full; it contradicted
+Section 5, and it is the reading this section now explicitly forbids.
+
+Define the distance measure once, because the rest of this document and
+`systems/lighting.md` both use it. The viewport is eleven by eleven with the
+player at the centre cell, row five and column five. A cell's *centre distance*
+is the sum of the squares of its signed offsets from that centre:
+
+```text
+d2 = dx * dx + dy * dy       with dx, dy each in -5 .. +5
+```
+
+`d2` runs from zero at the player's own tile to fifty at each of the four
+corners; it is never a linear tile count. A cell is **inside the lighting
+threshold** when
+
+```text
+d2 <= L
+```
+
+for the threshold value `L`. The comparison is **inclusive**, and the inclusive
+sense matters at both ends of the usable range: it is what makes the corners lit
+at the full-daylight value of fifty, and what makes the four diagonal
+neighbours lit at the full-dark value of two.
+
+The lighting subsystem owns the rules that decide what value goes into this byte
+(`systems/lighting.md` Sections 3, 4 and 7); the producer reads it once per
+dirty frame and hands it down unchanged.
+
+Producer behaviour by value:
+
+| Value           | Producer behaviour                                                  |
 |-----------------|---------------------------------------------------------------------|
-| Positive        | Normal case — run the visibility carve with the radius value.        |
-| Zero            | Total darkness — leave the grid fully obscured. The player sees nothing.   |
-| Negative        | Full-fill path — populate every cell from the world map regardless of visibility carve or radius. Reserved/debug-style compatibility branch; no normal shipped scene is known to drive it. |
+| Positive        | Normal case — run the visibility carve with the value as the inclusive squared-distance threshold. |
+| Zero            | Total blackout — the carve is skipped outright and the grid is left fully obscured, including the player's own cell. Reachable only through the void-tile override in `systems/lighting.md` Section 7; it is *not* the ordinary night-time state. |
+| Negative        | Full-fill path — populate every cell from the world map with no carve and no threshold. Structurally unreachable in the shipped 2D pipeline: the redraw orchestrator zero-extends the unsigned byte before the call, so the value handed to the producer is always in the range zero to two hundred fifty-five. Preserve the branch for compatibility, but no shipped scene drives it. |
 
-The lighting subsystem owns the rules that decide what value goes into this byte; from the producer's point of view, the byte is read once per frame and passed down to the visibility carve helper.
+**The threshold's cell set.** Before line of sight is applied, the set of cells
+that clear the distance gate is fixed by `L` alone. These are the values the
+lighting subsystem can actually produce, and the resulting counts are the
+cheapest conformance test available for a reimplementation:
+
+| Threshold `L`  | Where it comes from                              | Cells inside the gate (of 121) | Farthest cell along a row or column |
+|---------------:|--------------------------------------------------|-------------------------------:|------------------------------------:|
+| 0              | Void-tile blackout override                       | 0 (the carve never runs)       | —                                   |
+| 2              | Full dark: night, the Underworld, below-entry floors, Ararat | 9 (the player's cell and all eight neighbours) | 1              |
+| 5              | Dawn/dusk gradient step                           | 21                             | 2                                   |
+| 10             | Dawn/dusk gradient step; torch floor              | 37                             | 3                                   |
+| 18             | Light-spell floor                                 | 61                             | 4                                   |
+| 20             | Dawn/dusk gradient step                           | 69                             | 4                                   |
+| 34             | Dawn/dusk gradient step                           | 109                            | 5                                   |
+| 49             | Dawn/dusk gradient step                           | 117 (every cell but the four corners) | 5                            |
+| 50             | Full daylight, clock hours six through eighteen   | 121 (the whole viewport)       | 5                                   |
+
+Because `d2` only takes thirty-six distinct values, the cell count is a step
+function of `L`. The complete set of plateaus over the whole byte range that the
+carve can meaningfully see is:
+
+```text
+L = 0      ->   0 cells      L = 16      ->  49 cells
+L = 1      ->   5 cells      L = 17      ->  57 cells
+L = 2..3   ->   9 cells      L = 18..19  ->  61 cells
+L = 4      ->  13 cells      L = 20..24  ->  69 cells
+L = 5..7   ->  21 cells      L = 25      ->  81 cells
+L = 8      ->  25 cells      L = 26..28  ->  89 cells
+L = 9      ->  29 cells      L = 29..31  ->  97 cells
+L = 10..12 ->  37 cells      L = 32..33  -> 101 cells
+L = 13..15 ->  45 cells      L = 34..40  -> 109 cells
+                             L = 41..49  -> 117 cells
+                             L >= 50     -> 121 cells
+```
+
+Two rules complete the gate's contract, and both are stated again with their
+mechanism in Section 5:
+
+- **The player's own cell is seeded unconditionally**, before any distance
+  comparison, so it is visible at every nonzero threshold. Only the zero-value
+  blackout hides it.
+- **A cell inside the threshold is made visible regardless of whether its
+  terrain blocks sight.** Opacity governs whether the carve *continues past* a
+  cell, never whether that cell itself is seen. A mountain one tile from the
+  party is drawn; the ground behind it is not.
+
+**Do not convert the threshold to a radius.** Treating the byte as a linear
+radius and squaring it before the comparison over-lights every value on the
+scale, and the error grows quickly because the comparison is against a squared
+quantity. Side by side, with `L` used as the threshold (correct) versus `L` used
+as a radius whose square becomes the threshold (wrong):
+
+| Value | Correct: cells at `d2 <= L` | Wrong: cells at `d2 <= L * L` |
+|---:|---:|---:|
+| 2 (full dark) | 9 | 13 |
+| 5 (gradient step) | 21 | 81 |
+| 10 (torch) | 37 | 121 |
+| 18 (light spell) | 61 | 121 |
+| 50 (full daylight) | 121 | 121 |
+
+The bug is invisible in daytime outdoor testing, because at the full-daylight
+value of fifty both readings light all one hundred twenty-one cells. Test the
+distinction with a torch or a light spell in the dark, or at full dark with no
+personal light at all — those are the cases where the two readings differ
+visibly, and all three are directly observable in play.
+
+**A conformance trap worth recording.** A scene walled by sight-blocking terrain
+can produce a visible-cell count that coincides with a small threshold's disc
+size. A daytime interior whose flood is cut short by blocker tiles can settle at
+sixty-nine visible cells, which is also exactly the disc size for thresholds
+twenty through twenty-four — but at that hour the threshold is fifty and all one
+hundred twenty-one cells clear the distance gate, with the reduction coming
+entirely from blockers. Never infer the threshold from a visible-cell count in a
+scene that contains blockers; use an open outdoor scene instead.
 
 **Visibility-dirty flag.** A single byte that other systems set when the visibility state must be recomputed: the player moved, the lighting changed, the night-time beacon lit or cleared a local-light cell, or a new scene was entered. The redraw orchestrator reads this byte to choose between the expensive path (run the producer) and the cheap path (lazy refill of consumed cells). The producer's caller clears the flag immediately after the producer returns.
 
@@ -89,11 +204,11 @@ A leaf helper, the *world-tile getter*, encapsulates the three branches: given a
 
 **Local-light mask.** Non-combat scenes also maintain a separate thirty-two by
 thirty-two local-light mask. A light-source refresh pass scans the active map
-window for a narrow set of candidate tile ids, carves a fixed-radius region
+window for a narrow set of candidate tile ids, carves a fixed-threshold region
 around each source into the mask, and finalizes untouched mask cells to zero.
-The visibility carve consults this mask in its boundary and out-of-radius
-branches; do not model special light as only an inflation of the single global
-light-radius byte.
+The visibility carve consults this mask for candidates that fall outside the
+lighting threshold; do not model special light as only an inflation of the
+single global lighting-threshold byte.
 
 ## 4. The producer's three stages
 
@@ -101,23 +216,24 @@ The producer runs in three stages.
 
 **Stage 1 — paint everything obscured.** The eleven-by-eleven active window is filled with the hidden marker (`0xFF`). Each row writes eleven `0xFF` bytes into the first eleven columns; the remaining twenty-one bytes per row are left untouched. After this stage, the entire grid says "nothing is visible."
 
-**Stage 2 — branch on the light-radius sign.**
+**Stage 2 — branch on the lighting threshold.**
 
-- **Light radius zero.** The producer skips both the visibility carve helper and the full-fill path. The grid stays fully obscured. This is the "pitch dark" case: night in the overworld with no torch, an unlit dungeon level, an extinguished town scene.
-- **Light radius positive.** The producer hands the grid over to the visibility carve helper (Section 5) along with the player's local-window position and the radius. The helper starts from the centre cell and expands through candidate neighbours, writing tile bytes for cells it resolves as visible and writing a working all-zero marker for cells it has considered but not resolved as visible. After the helper returns, a post-pass walks the grid and converts every `0x00` byte back to `0xFF` (the hidden marker), so unresolved cells do not trigger the cheap terrain-refill path on the next frame.
-- **Light radius negative.** The producer takes a debug-style full-fill path: every cell is populated from the world map directly, without any visibility carve or radius clamp. The grid ends up holding exactly the underlying terrain in every cell, no fog applied. No normal shipped scene is known to write the negative light value; a compatibility implementation can preserve the branch without treating it as ordinary gameplay visibility.
+- **Threshold zero.** The producer skips both the visibility carve helper and the full-fill path. The grid stays fully obscured, the player's own cell included. This is the total-blackout state, and it is *not* the ordinary night-time state: night in the overworld with no light source, the Underworld at any hour, and a dark interior all run at the full-dark threshold of two, which lights a three-by-three neighbourhood. Zero is reached only through the void-tile override described in `systems/lighting.md` Section 7.
+- **Threshold positive.** The producer hands the grid over to the visibility carve helper (Section 5) along with the player's local-window position and the threshold value. The helper starts from the centre cell and expands through candidate neighbours, writing tile bytes for cells it resolves as visible and writing a working all-zero marker for cells it has considered but not resolved as visible. After the helper returns, a post-pass walks the grid and converts every `0x00` byte back to `0xFF` (the hidden marker), so unresolved cells do not trigger the cheap terrain-refill path on the next frame.
+- **Threshold negative.** The producer takes a full-fill path: every cell is populated from the world map directly, without any visibility carve or distance gate. The grid ends up holding exactly the underlying terrain in every cell, no fog applied. This branch is structurally unreachable in the shipped 2D pipeline, because the redraw orchestrator zero-extends the unsigned lighting byte before the call and can therefore never present a negative value. A compatibility implementation can preserve the branch without treating it as ordinary gameplay visibility.
 
 **Stage 3 — return.** The producer does not clear or flip any flags itself; the redraw orchestrator handles the dirty-flag reset.
 
 End-of-stage state, per case:
 
 ```text
-positive light:  grid cells resolved by the carve = real tile bytes;
-                 grid cells not resolved by the carve = 0xFF.
+positive threshold:  grid cells resolved by the carve = real tile bytes;
+                     grid cells not resolved by the carve = 0xFF.
 
-zero light:      every cell = 0xFF.
+zero threshold:      every cell = 0xFF, the player's own cell included.
 
-negative light:  every cell = real tile byte (no fog).
+negative threshold:  every cell = real tile byte (no fog). Unreachable in the
+                     shipped 2D pipeline.
 ```
 
 The grid bytes leaving the producer are then handed to the fog post-pass
@@ -130,10 +246,10 @@ case. It is queue-based rather than a simple "cast one independent ray to every
 cell" algorithm.
 
 The helper receives the grid base address, row stride, centre-cell position,
-world-coordinate origin, and light-radius value. It seeds a work queue with the
-player's centre cell, writes that centre cell from the world-tile getter, then
-repeatedly pops a coordinate and examines its eight neighbours in a fixed ring
-order:
+world-coordinate origin, and the lighting threshold value. It seeds a work queue
+with the player's centre cell, writes that centre cell from the world-tile
+getter, then repeatedly pops a coordinate and examines its eight neighbours in a
+fixed ring order:
 
 The neighbour expansion order is west, southwest, south, southeast, east,
 northeast, north, northwest.
@@ -147,15 +263,30 @@ the candidate for further expansion.
 
 The settled external contract is:
 
-- The player's centre cell is always seeded first and is visible when the
-  positive-light producer runs.
+- The player's centre cell is always seeded first, **before any distance
+  comparison**, and is therefore visible for every positive threshold. Nothing
+  gates the seed on the threshold value.
 - The helper expands through neighbouring cells from the centre rather than
   scanning the viewport row by row.
 - The helper uses the same squared-distance primitive as the fog post-pass for
-  centre-relative distance checks.
-- The caller-provided light value is a squared-distance threshold: cells whose
-  squared distance from the centre is less than or equal to that value are
-  inside the main light radius.
+  centre-relative distance checks: the folded lookup that returns exactly
+  `dx * dx + dy * dy` for offsets in minus five to plus five, with values from
+  zero at the centre to fifty at the corners.
+- **The caller-provided lighting value is the squared-distance threshold
+  itself.** A cell is inside the threshold when its centre distance is **less
+  than or equal to** that value. The inclusive sense is deliberate and is the
+  only adjustment the value receives anywhere between the lighting subsystem and
+  this test: no squaring, no scaling, no shifting, no table mapping.
+- This comparison and the gate described in Section 3 are **the same single
+  comparison**, and it is the only place in the engine that uses the lighting
+  value as a distance threshold. Nothing downstream re-applies it: the fog
+  refinement pass of Section 7 uses its own fixed distance, and the
+  active-object compositor of Section 8 reads only the finished grid. The one
+  other site that reads the lighting value at all is the night-time beacon of
+  Section 12.6, which uses it as a day/night gate rather than as a distance.
+- A cell that is inside the threshold is painted with its world tile **whether
+  or not that tile blocks sight**. Opacity is a propagation predicate, not a
+  visibility predicate for the blocker's own cell.
 - A zero byte written by this helper is not a renderer-visible result. The
   producer converts helper-written zeros back to the hidden marker before the
   fog post-pass runs.
@@ -166,20 +297,34 @@ visibility propagation-blocker set in Section 6. Five special-case tile ids use
 a stricter rule: they propagate only when they are orthogonally adjacent to the
 centre cell, which is the case where the squared-distance helper returns `1`.
 
-Inside the main light threshold, accepted candidates are written as their
-world tile. Outside that threshold, the helper consults the separate local-light
-mask:
+Inside the lighting threshold, accepted candidates are written as their world
+tile. **Cells that fail the distance gate are not automatically dark.** The
+helper consults the separate local-light mask (Section 12) and applies a rule
+that depends on whether the candidate's terrain propagates sight:
 
-- A propagating candidate can still extend the queue through dark space. It is
-  painted only if its local-light mask cell is nonzero; otherwise it is left as
-  a zero working marker and may still propagate onward.
-- A non-propagating candidate outside the main radius is painted only when it is
-  reached from a nonzero parent cell and both the parent and candidate cells
-  are locally lit. Otherwise it remains hidden and does not extend the queue.
+- A **sight-propagating** candidate beyond the threshold is painted with its
+  world tile when its own local-light mask cell is nonzero; when the mask cell
+  is zero it is left as a zero working marker that the producer later collapses
+  to hidden. Either way **the candidate is still enqueued**, so the carve
+  continues expanding through unlit transparent ground and can reach lit ground
+  further out.
+- A **sight-blocking** candidate beyond the threshold is painted only when the
+  cell the carve arrived from was itself visible *and* both that parent cell and
+  the candidate have nonzero local-light mask coverage. Otherwise it is hidden.
+  In neither case does the carve expand past it.
+
+This rule is what makes torch-lit streets, lamp-lit rooms and lighthouse beams
+visible at night from outside the ambient threshold. A port that treats
+"outside the threshold" as "hidden" will black out lit areas the original shows.
 
 Do not implement this as a Bresenham line caster, a shadow-caster, or a
 movement-passability rule. It is a centre-out neighbour carve with a separate
 propagation-blocker set and local-light mask.
+
+Section 12.2 specifies the companion rule for the mask itself: each individual
+local light source contributes through the same inclusive squared-distance test
+with a **fixed threshold of ten**, giving a thirty-seven-cell disc that reaches
+at most three cells along a row or column, and overlapping sources union.
 
 ## 6. Sight-affecting tiles
 
@@ -224,16 +369,16 @@ inferred from visual family names.
 
 After the producer returns, a post-pass walks the grid and refines the fog edges. The pass runs in non-combat scenes only — combat materialises terrain through a separate path (Section 11) and skips the refinement.
 
-The refinement uses a small squared-distance lookup centred on viewport cell `(5, 5)`, distinct from the producer's light radius. The helper folds each coordinate around the centre (`folded = min(coord, 10 - coord)`), indexes a resident 6×6 table, and returns `(5 - folded_x)^2 + (5 - folded_y)^2`. The post-pass compares that squared distance to the literal threshold `5` and toggles two specific marker bytes:
+The refinement uses a small squared-distance lookup centred on viewport cell `(5, 5)`, distinct from the lighting threshold and never derived from it. The helper folds each coordinate around the centre (`folded = min(coord, 10 - coord)`), indexes a resident 6×6 table, and returns `(5 - folded_x)^2 + (5 - folded_y)^2`. The post-pass compares that squared distance to the literal threshold `5` and toggles two specific marker bytes:
 
 - A cell currently holding the *clear-visible* marker (`0xDD`) whose squared distance is greater than `5` is downgraded to the *dim-periphery* marker (`0x1C`). It is still visible, but the renderer will dim it.
 - A cell currently holding the *dim-periphery* marker (`0x1C`) whose squared distance is at most `5` is upgraded back to the *clear-visible* marker (`0xDD`).
 
-This is not a five-cell radius. The clear-marker core covers the centre cell and cells within squared Euclidean distance `5` of it; marker cells farther out in the eleven-by-eleven viewport are dimmed. The lookup is reflection-symmetric across the viewport centre and avoids computing a square root at runtime.
+This is not a five-cell radius. `5` is a squared distance on exactly the same scale as the lighting threshold of Section 3, applied with the same inclusive sense, and the clear-marker core is therefore **twenty-one cells**: the centre cell, its eight neighbours, the four cells two tiles away on a row or column, and the eight cells at offsets `(±1, ±2)` and `(±2, ±1)`. Marker cells farther out in the eleven-by-eleven viewport are dimmed. The lookup is reflection-symmetric across the viewport centre and avoids computing a square root at runtime.
 
-This marker refinement is independent of the producer's light radius. The producer decides which terrain cells are visible at all; the post-pass only adjusts cells already carrying the two renderer marker bytes. It is a no-op for grids where the visibility carve helper has emitted real tile bytes instead of `0xDD` / `0x1C` markers.
+This refinement is a **cosmetic near/far variant selector**: it swaps between the clear and dim renderer markers and never changes which cells are visible. It is also **independent of the lighting threshold** — the threshold value is never read here, and the fixed `5` never varies with time of day, torch, or spell. The producer decides which terrain cells are visible at all; the post-pass only adjusts cells already carrying the two renderer marker bytes. It is a no-op for grids where the visibility carve helper has emitted real tile bytes instead of `0xDD` / `0x1C` markers.
 
-The refinement only toggles between the two marker bytes; cells holding any other value (a real tile byte, the hidden marker, the use-companion marker, the already-rendered marker) are left unchanged. The pass is a no-op for grids where the visibility carve helper has not emitted those markers — most ordinary frames have a visible-region full of *real tile bytes* rather than markers, so the toggle does nothing. The markers are written only by the active-object compositor (Section 8) and by certain mode-entry handlers; the refinement is what keeps them consistent with the player's current radius.
+The refinement only toggles between the two marker bytes; cells holding any other value (a real tile byte, the hidden marker, the use-companion marker, the already-rendered marker) are left unchanged. The pass is a no-op for grids where the visibility carve helper has not emitted those markers — most ordinary frames have a visible-region full of *real tile bytes* rather than markers, so the toggle does nothing. The markers are written only by the active-object compositor (Section 8) and by certain mode-entry handlers; the refinement is what keeps them consistent with the fixed near/far distance.
 
 ## 8. Active-object compositing
 
@@ -344,7 +489,7 @@ The interpretation: zero cells are "marked by the compositor as needing a fresh
 tile this frame." Cells left nonzero are still valid; they retain their fog
 markers and active-object stamps from the previous expensive recompute.
 
-The cheap path *does not* recompute the visibility carve, does not consult the light radius, and does not touch fog markers. It is a pure terrain-refill, intended to keep the screen showing the current map without redoing the visibility math. The fog post-pass and active-object compositor still run after the cheap path each frame, so on-screen sprites and dim-periphery markers stay accurate.
+The cheap path *does not* recompute the visibility carve, does not consult the lighting threshold, and does not touch fog markers. It is a pure terrain-refill, intended to keep the screen showing the current map without redoing the visibility math. The fog post-pass and active-object compositor still run after the cheap path each frame, so on-screen sprites and dim-periphery markers stay accurate.
 
 The cost of the cheap path is roughly one tile-fetch per consumed cell — a small fraction of the producer's full-grid visibility carve. The engine is built around this asymmetry: the producer is an expensive once-per-event recompute, the cheap path is a per-frame topping-up.
 
@@ -352,19 +497,19 @@ The cost of the cheap path is roughly one tile-fetch per consumed cell — a sma
 
 **Overworld and underworld.** Use the full producer pipeline as described above. The active map buffer is the streamed 2×2 chunk window. The producer is called when the visibility-dirty flag is set, which happens on every player step (the step handler dirties the flag), on lighting changes (the per-turn cleanup dirties the flag if the daylight value changed), and when the night-time beacon of Section 12.6 changes a lit cell.
 
-**Town, dwelling, castle, keep.** Use the same producer pipeline with the active map buffer interpreted as a single 32×32 grid (no chunk streaming). Indoor lighting is computed against the local scene's lighting context, which may be different from the surrounding outdoor light. Some interiors are lit at night by candles and lamps; others are dark. The producer doesn't care which — it just consumes whatever light radius the lighting subsystem hands it.
+**Town, dwelling, castle, keep.** Use the same producer pipeline with the active map buffer interpreted as a single 32×32 grid (no chunk streaming). These scenes read **the same single lighting-threshold value** the outdoor world reads, produced by the same per-turn computation; there is no per-location ambient override and no second lighting source anywhere in the 2D modes. Interiors that appear lit at night are lit by the local-light mask of Section 12 (candles, lamps, hearths), not by a different ambient value. Two upstream rules in `systems/lighting.md` Section 3 are the only exceptions, and neither is a per-location table: scene twenty-five, Ararat, is pinned to the full-dark value regardless of the hour, and a party Z value with its high bit set — a below-entry (basement) floor, as well as the Underworld plane outdoors — is pinned the same way.
 
 **Dungeon-explore.** Uses a different visibility model entirely. There is no eleven-by-eleven viewport grid; the dungeon view is a first-person three-dimensional projection drawn by a dedicated renderer. The light gate is binary: if neither torch nor light-spell counter is active, the panel is black; otherwise the renderer walks the current eight-by-eight dungeon geometry until blocked. Live dungeon-cell bytes do not store persistent visibility memory, and V-View's visited map is temporary scratch state owned by the dungeon view overlay.
 
-**Combat.** Uses a fully materialised terrain grid in a separate buffer, pre-composited by the combat setup helper. The combat producer initialises this buffer to the hidden marker and fills it through the same visibility carve helper family the 2D-scene producer uses, but combat does not consult the global light radius — combat scenes have their own lighting context, and the encoding does not include fog markers. The post-pass (fog refinement plus active-object compositing) skips combat scenes entirely; combat manages active-object compositing through its own round walker.
+**Combat.** Uses a fully materialised terrain grid in a separate buffer, pre-composited by the combat setup helper. The combat producer initialises this buffer to the hidden marker and fills it through the same visibility carve helper family the 2D-scene producer uses, but combat does not consult the global lighting threshold — combat scenes have their own lighting context, and the encoding does not include fog markers. The post-pass (fog refinement plus active-object compositing) skips combat scenes entirely; combat manages active-object compositing through its own round walker.
 
 The mode boundary is enforced by the redraw orchestrator: it inspects the scene byte before choosing a path. Combat-class scenes use the high-range reader branch, and the traced gameplay writer uses `0xFF` for that state. That branch takes a *blat-copy* path that copies the pre-composited combat terrain grid byte-for-byte into the visibility grid, then runs the renderer. The producer is not called.
 
 ## 12. Local Light Sources
 
 A handful of map and runtime tiles can make nearby cells visible independently
-of the player's ambient/personal light radius. The mechanism is a separate
-local-light mask, not a rewrite of the one light-radius byte.
+of the ambient lighting threshold. The mechanism is a separate local-light
+mask, not a rewrite of the one lighting-threshold byte.
 
 ### 12.1 The refresh pass
 
@@ -418,7 +563,7 @@ even though its disc would reach past one.
 squared distance exceeds the threshold is neither painted nor expanded further,
 so the flood never leaves the disc even though the per-source visited grid is
 larger. This differs from the ordinary producer's carve, which does keep
-expanding through dark space beyond its own radius and consults this mask to
+expanding through dark space beyond its own threshold and consults this mask to
 decide what to paint out there (Section 5). Do not carry that behaviour over
 into the local-light pass; the mask is write-only while it is being built.
 
@@ -459,7 +604,7 @@ The **night-time beacon** of Section 12.6 is the mask's one other non-combat
 writer: it lights and clears individual cells of the same thirty-two-by-
 thirty-two mask and sets the visibility-dirty flag. Those writes are transient
 visibility state, not durable map edits and not replacements for the ambient
-light-radius byte. An earlier revision of this section called that writer a
+lighting-threshold byte. An earlier revision of this section called that writer a
 "moongate animator" stamping moongate frames; that attribution is withdrawn in
 full — it is a light source, it never draws a gate, and natural moongates are
 ordinary live terrain owned by `systems/overworld.md`.
@@ -501,11 +646,16 @@ map loader is active rather than by the light pass itself:
 The shipped data image starts with both positions at the "no beacon" sentinel,
 so nothing is lit until a loader finds a source.
 
-**Light gate.** The beacon runs only when the ambient light value is **below**
-the daylight threshold — that is, after dark. At or above it, the pass clears
-its state and draws nothing, and the rotation restarts from its initial bearing
-the next time darkness falls. An earlier revision of this spec set had this gate
-inverted, describing a daylight-only effect; that is withdrawn.
+**Light gate.** The very first thing the pass does is compare the ambient
+lighting value against the full-daylight value of fifty. It runs only while the
+value is **strictly below** fifty — that is, from the first step of the dusk ramp
+until the last step of the dawn ramp. At or above fifty the pass clears its
+state and draws nothing, and the rotation restarts from its initial bearing the
+next time darkness falls. This comparison is the **only** read of the lighting
+value anywhere outside the visibility carve of Section 5, and it is a day/night
+test, not a distance threshold (`systems/lighting.md` Section 7.2). An earlier
+revision of this spec set had this gate inverted, describing a daylight-only
+effect; that is withdrawn.
 
 **Beam shape.** The beam is a cone of lit cells reaching up to seven tiles from
 the source. There are sixteen bearings evenly spaced around the compass:
@@ -522,9 +672,10 @@ revolution every sixteen turns. The bearing counter wraps at sixteen.
 
 **Effect.** Lit cells are written straight into the local-light mask, so they
 become visible exactly as any other locally lit cell does, and the pass sets the
-visibility-dirty flag when it changes anything. The beacon does not read or
-write the ambient light-radius byte, does not create an active object, and does
-not modify map data.
+visibility-dirty flag when it changes anything. Apart from the day/night gate
+above, the beacon never touches the ambient lighting value — it never writes it
+and never uses it as a distance — and it does not create an active object or
+modify map data.
 
 An implementation that omits the beacon loses only night-time illumination
 around lighthouses and indoor lamps; one that draws a moongate here is
@@ -560,8 +711,20 @@ gameplay visibility behavior.
 The behaviour described above was derived by reading the function and format notes listed below. None of those notes' assembly excerpts, byte offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The visibility producer's three-stage shape (hidden-fill, visibility-carve
-  delegation, post-pass), the negative-light full-fill path, and the
-  radius-sign branching — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
+  delegation, post-pass), the negative-light full-fill path, and the branching
+  on the lighting value's sign — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
+- Source provenance: the finding that the lighting byte is the squared-distance
+  threshold itself rather than a sight radius, the unaltered four-hop chain of
+  custody from the per-turn ambient computation to the carve's comparison, the
+  inclusive sense of that comparison, the per-threshold cell counts and reach
+  values, the unconditional centre-cell seed, the local-light rule for
+  candidates beyond the threshold, the fixed near/far distance of the fog
+  refinement and its twenty-one-cell core, the zero-extension that makes the
+  negative-value branch unreachable, and the whole-binary census showing a
+  single lighting-value consumer — derived from private analysis note
+  `u5-decomp/notes/light_threshold_semantics_2026-08-22.md`. That note also
+  withdraws the "light radius in tiles" and ray-walk descriptions carried by the
+  older private lighting/visibility system trace.
 - The queue-based visibility carve, propagation-blocker set, and special-case
   adjacent-only propagation rule
   — `u5-decomp/functions/ULTIMA_EXE/0x5A28_visibility_buffer_setup.md` and

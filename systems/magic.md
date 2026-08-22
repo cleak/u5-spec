@@ -478,9 +478,12 @@ the otherwise permanent regalia auras:
 - **Crown of Lord British.** Shares the enemy-cast gate with `N`: while the
   Crown occupies the slot it acts as a permanent Negate Magic aura.
 - **Amulet of Lord British.** Read by the overworld loop's void-tile handler,
-  which forces the effective light radius to zero on that tile unless the
-  Amulet's code is in the slot. The Amulet is what lets the party keep a light
-  radius in the void.
+  which forces the effective lighting threshold to zero on that tile unless the
+  Amulet's code is in the slot. The Amulet is what lets the party keep any
+  lighting at all in the void: with it, the lighting value stays at whatever the
+  clock and scene produce; without it, the value is forced to zero every loop
+  iteration, which is the total-blackout state of `systems/lighting.md`
+  Section 7.1 rather than an ordinary darkening.
 - **Black Badge.** Read only by the conversation system's non-NPC guard
   handler, where it is the disguise that unlocks the Blackthorn palace-gate
   password exchange; see `systems/blackthorn.md`.

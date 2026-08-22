@@ -126,10 +126,22 @@ this family:
 
 - has one class/sub-map key;
 - has a town-mode scene byte in `1..32`;
-- uses one block in the matching `*.DAT` file;
+- uses a run of one to five 1,024-byte floor pages in the matching `*.DAT` file;
 - uses the matching block in the matching `*.NPC` and `*.TLK` files;
-- may have one or more floors;
+- has between one and five floors;
 - may have special tile, NPC, dialogue, or quest behaviour encoded by data.
+
+**The sub-map index in a `FAMILY:n` key is a roster index, not a map-page
+index.** It selects the location's block in the `.NPC` and `.TLK` files
+correctly, but it does not select the location's tile pages. For twenty-two of
+these thirty-two rows the location's map pages are *not* the pair `2n` and
+`2n + 1` of the class `.DAT` file, and for twenty rows the page that is the
+location's entry floor is not page `2n`. The two counts differ because a
+location can own the expected pair of pages while entering on the *second* of
+them: Yew is `TOWNE:3` and does own pages 6 and 7, but page 7 is its entry
+floor and page 6 is the jail below. Section 5.2 summarises the consequence and
+`formats/location-dat.md` Section 4.1 carries the authoritative per-scene page
+binding.
 
 The location file format does not carry the display name. Names and overworld
 entrance coordinates are resident metadata. The DATA.OVL-derived world-location
@@ -199,8 +211,9 @@ every row is an in-world castle. The resident order is:
 | 24 | `CASTLE:7` | Buccaneer's Den |
 
 `CASTLE:0` carries one authored puzzle worth noting here: a harpsichord on its
-logical floor two, which opens a walled-off passage when a fixed thirteen-note
-tune is played from the chair beside it. `systems/town-mode.md` Section 13 owns
+floor `+2` — two storeys above the entry floor, the fourth of its five pages —
+which opens a walled-off passage when a fixed thirteen-note tune is played from
+the chair beside it. `systems/town-mode.md` Section 13 owns
 that contract. Source provenance: derived from private analysis note
 `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q31.
 
@@ -301,6 +314,46 @@ placement state itself - which moongates are currently lit, where a moonstone
 has since been buried - which is save state owned by `systems/overworld.md`,
 not a fixed landmark.
 
+### 5.2 Floors per location
+
+Every town-family location owns a run of consecutive 1,024-byte floor pages in
+its class file. The run length is the location's floor count, and the location's
+*entry* floor — the one the party arrives on — is not always the lowest page of
+the run. `formats/location-dat.md` Section 4.1 is authoritative for the page
+numbers; this table is the gazetteer-side view of how many floors each named
+place actually has and which floor indices address them.
+
+| Floors | Locations | Floor indices in play |
+|---:|---|---|
+| 1 | Iolo's Hut and the three unnamed dwellings, West Britanny, North Britanny, East Britanny, Paws, Cove, Buccaneer's Den, Farthing, Windemere, Stonegate | `0` only |
+| 2 | Moonglow, Britain, Jhelom, Minoc, Trinsic, Skara Brae, New Magincia, Ararat, Bordermarch | `0`, `+1` |
+| 2 | Yew | `−1`, `0` |
+| 3 | Fogsbane, Stormcrow, Greyhaven, Waveguide, The Lycaeum, Empath Abbey | `0`, `+1`, `+2` |
+| 3 | Serpent's Hold | `−1`, `0`, `+1` |
+| 5 | Lord British's Castle, Lord Blackthorn's Castle | `−1` through `+3` |
+
+That is thirteen one-floor locations, ten two-floor, seven three-floor, and two
+five-floor. Higher floor indices are higher storeys; a negative index is a
+basement.
+
+Four rows deserve a note for UI and tooling:
+
+- **Yew** is the only town with a basement, and its lower floor is the town
+  jail.
+- **Lord British's Castle** enters on floor `0` with a basement below and three
+  storeys above. Its harpsichord puzzle sits on floor `+2` — two storeys above
+  the entry floor, which earlier wording described as a basement. That is
+  retracted; the passage it opens is upstairs.
+- **Lord Blackthorn's Castle** has the same five-floor shape and the densest
+  trapdoor layout in the game: its entry floor and the three floors above it
+  carry forty-five, thirty-six, thirty, and thirty-six trapdoor cells
+  respectively, while its basement carries none.
+- **Serpent's Hold** is the only keep with a basement.
+
+`formats/location-dat.md` Section 4.2 gives the procedure for rederiving these
+runs from the shipped tile data, which is what a content tool should do if the
+asset set has been modified.
+
 ## 6. Dungeons
 
 There are eight named dungeons. Dungeon mode, `DUNGEON.DAT`, and the DATA.OVL
@@ -325,7 +378,10 @@ and any special exit or scripted transition behaviour.
 The standard dungeon-mode entry seed is `(Z=0, X=1, Y=1)` facing east when
 entered from Britannia. When entered from the underworld, non-Doom dungeons use
 `(Z=7, X=7, Y=7)` facing west; Doom is the exception and still uses the
-surface-style seed. Only a party travelling on foot may enter a dungeon;
+surface-style seed. **The seed applies to walk-in entry only.** Loading a saved
+game never runs it, so a party resuming a save inside a dungeon keeps the level,
+position and facing the save recorded; a save whose facing field is zero resumes
+facing north, not east. See `systems/dungeon-mode.md` section 4.1. Only a party travelling on foot may enter a dungeon;
 mounted, sailing, and flying parties are refused at the mouth.
 
 ### 6.1 Leaving a dungeon
@@ -618,7 +674,8 @@ Public specs used:
 - `u5-spec/formats/under-dat.md` - Underworld map shape and plane-transition
   relationship.
 - `u5-spec/formats/location-dat.md` - four per-class location files, sub-map
-  partition, floor layout, markers, and resident name/floor table dependency.
+  partition, floor-page layout, markers, and the authoritative per-scene base
+  floor-page table that Section 5.2 summarises.
 - `u5-spec/formats/npc.md` - `.NPC` scene partition, scene-to-storage-key
   order, and blank resident-name rows.
 - `u5-spec/catalogs/npc-roster.md` - current named NPC rows and roster-based
@@ -633,6 +690,12 @@ Public specs used:
 
 Private analysis provenance:
 
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md` - the per-location
+  floor counts and floor ranges of Section 5.2, the four locations that enter
+  above the bottom of their page run, and the correction placing the Lord
+  British's Castle harpsichord two storeys above the entry floor rather than in
+  a basement.
 - `u5-decomp/formats/data-ovl.md` - confirms the resident image contains
   location coordinate tables, shrine coordinate tables, location/name
   vocabulary, and map metadata. This catalog cites only those semantic facts.
