@@ -412,6 +412,8 @@ blocked-openable case as the too-heavy tile refusal, then delegates unmatched
 object-table outcomes to the chest helper; ship fire is described as a separate
 door/wall mutation path outside the Open/Jimmy refusal cascade.
 
+**Superseded 2026-08-22:** the stationary-display purchase reading below is retracted; `systems/shops.md` section 8.10 now specifies the helper as the horse-trader sale placement arm (adjacent-cell probe, accepted placement tiles, horse active-object write) with no display-stock row. See issue #28.
+
 **Current stationary-display shop cleanup:** 2026-05-13 -
 `systems/shops.md` now promotes the misnamed SHOPPES `find_shopkeeper` helper
 as a stationary-display purchase flow rather than a shopkeeper-recognition or

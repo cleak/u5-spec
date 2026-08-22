@@ -182,7 +182,12 @@ one that draws a record from an already-decoded one. The intro hands the loaded
 resource, a record index, and a destination pixel position to the driver's
 one-bit stamp entry (`systems/display-driver-abi.md`, dispatch offset `0x4E`),
 which bounds-checks the index, reads that record's own width and height, and
-stamps its set bits into the hidden surface. The dispatch slot that earlier
+stamps its set bits into the hidden surface. Record indices are zero-based and
+the whole range `0` through `count - 1` is addressable: the entry reads the
+two-byte directory slot for the requested index and rejects only indices at or
+above the count, returning without drawing. `TITLE.BIT` record `9` of its ten
+records is a live intro draw, which settles the point; any implementation that
+treats index `0` as a header slot or reserves the last record is wrong. The dispatch slot that earlier
 revisions of this document assigned the decode role (`0x42`) belongs to the
 packed-to-planar preparation step for the `.16`/`.4` archives and never touches
 this family.
@@ -228,9 +233,18 @@ checks above is corrupt or is not a member of this family.
 
 ## 8. Boundaries And Residuals
 
-**Ink colour.** The records carry no colour. Which palette index each caller
-selects before drawing is presentation state owned by `systems/intro.md` and
-`systems/display-driver.md`, not by this format.
+**Ink colour.** The records carry no colour. Which palette index a record ends
+up wearing is presentation state owned by `systems/intro.md` and
+`systems/display-driver.md`, not by this format. For the EGA intro the answer
+is not uniform, so it is worth stating where it lands: the stamp entry sets ink
+bits in every colour plane of the hidden surface, so a record stamped and then
+published by a whole-surface copy appears as palette index `15`. That covers
+`TITLE.BIT` records `7`, `8` and `9` and the `BRITISH.BIT` signature. The seven
+flourish records `0..6` are the exception, because they are never published by
+a whole-surface copy: the animation-script entry reads one plane of the hidden
+surface and writes it under a two-plane mask, so the flourish appears as
+palette index `9`. Nothing in the intro reprograms the palette registers, so
+those indices are the stock EGA colours.
 
 **Non-EGA backends.** The analyzed CGA, Hercules, and Tandy drivers do not
 provide an equivalent one-bit stamping path at the same fidelity. Rendering
@@ -270,3 +284,7 @@ data.
   `u5-decomp/functions/EGA_DRV/0x190E_silhouette_stamp_back_buffer.md`,
   `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`, and
   `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
+- Which palette index each drawn record ends up wearing on the EGA path, and
+  why the seven flourish records differ from the rest:
+  `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`
+  sections 4 and 6.

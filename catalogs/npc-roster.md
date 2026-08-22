@@ -81,8 +81,12 @@ listed here.
 `Tag` is the roster type byte shown as two hexadecimal digits. It is the
 engine's occupancy and sprite-class byte, not the schedule AI. Zero means an
 empty slot; nonzero means occupied. Ordinary visible NPCs derive their sprite
-from this value. `01` forces the default human/person sprite, and `FC` is also
-used by the runtime player mirror in town mode.
+from this value. `01` forces the default human/person sprite. `FC` appears in no shipped
+roster slot: it is the Shadow Lord actor class, written into a live NPC slot
+only by the town-entry Shadowlord install (`systems/town-mode.md` Section 13).
+An earlier revision of this catalog called `FC` a runtime player mirror; that
+is retracted, and the spec no longer gives the player any NPC-slot
+representation.
 
 The schedule column uses the roster's three-waypoint model:
 
@@ -322,7 +326,7 @@ starts at slot one.
 | `94` | Animal, pet, or livestock-style actor class. |
 | `B5`, `B6`, `B8` | Monster-variant actor classes. |
 | `D8` | Lich, wizard, or death-mage style actor class. |
-| `FC` | Avatar/player-mirror class. Town entry can also allocate this class dynamically for the player slot. |
+| `FC` | Shadow Lord actor class (`catalogs/monster-bestiary.md`, class 47). Never shipped in a roster; allocated dynamically by the town-entry Shadowlord install. |
 
 The tag byte is a sprite and occupancy class, not the schedule AI byte and not
 the dialogue id. A compatible engine should preserve the byte value even when a

@@ -159,7 +159,10 @@ NUL-terminated text buffer plus the active proportional-font resource segment.
 
 The renderer owns layout and glyph emission. The caller owns which text record
 is loaded, where the paragraph starts, and whether the player must press a key
-before the next record is drawn.
+before the next record is drawn. The concrete per-screen values one caller
+supplies — the intro story sequence's twenty-one margin/band/pen sets — are
+published in `systems/intro.md` section 10 under "Per-step paragraph box"; that
+is also the worked example of how the band makes text flow around artwork.
 
 ### 8.1 Layout descriptor
 
@@ -211,10 +214,17 @@ Neither the advance table nor the font gives the space a width of its own; both
 record zero. The space advance comes from the descriptor. An engine that
 measures spaces from the font will collapse every space to nothing.
 
-Left brace is a paragraph/page marker owned by the caller's record loop: the
-renderer does not wait for input on it, it just leaves a 15-pixel gap.
+Left brace is a **first-line indent marker**: the renderer draws nothing and
+leaves a 15-pixel gap. It is not a page break and it does not make the renderer
+wait for input; the caller's record loop owns the wait. Every shipped story and
+question record opens with one, and a record with several paragraphs has
+several.
+
 Underscore is a soft hyphen: invisible and weightless, but a legal break point
-(section 8.3).
+(section 8.3). **The renderer never hyphenates on its own.** Mid-word breaks in
+the original come only from soft hyphens the author placed in the text data, so
+a compatible implementation must preserve them through loading and must not run
+its own hyphenator.
 
 Control bytes other than NUL and line feed do not appear in shipped text. The
 renderer would measure and advance them as spaces, so that is the safe

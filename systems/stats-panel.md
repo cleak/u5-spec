@@ -63,13 +63,25 @@ The overlay rules are:
 - A matched current action/effect descriptor renders the row's main fields in
   inverse video. The refresh emits the text system's inverse-video control
   before the name when the current combat slot selector is not the none
-  sentinel, that selected descriptor is active, and the descriptor's
+  sentinel, that selected descriptor is party-side, and the descriptor's
   target/owner field names this party row.
-- The status glyph can be replaced by `C` when the row's own combat descriptor
-  marks the party member as casting and self-targeted. This is combat casting
-  presentation; it is separate from the persistent character status byte and
-  from the shared Mass Charm active-effect tag, which also displays `C` in the
-  bottom block.
+- The status glyph is replaced by `C` when combat is active and the row's own
+  combat descriptor has the party-side marker set, the monster-side marker
+  clear, is not marked dead, carries the controlled/charmed bit, and names this
+  same party row in its owner/character field. All five conditions are
+  required, and only those five: the asleep/magically-disabled bit is not part
+  of the test, so a sleeping party member still shows the ordinary roster
+  status letter. Placement makes the party-side and monster-side markers
+  mutually exclusive, so the monster-side term never changes the outcome for a
+  well-formed descriptor, but it is part of the condition the panel actually
+  evaluates and is listed here to match `systems/combat.md` Section 6.1a.
+  Earlier revisions of this document described the glyph as marking a party
+  member "casting and self-targeted"; that reading of the bit is withdrawn — it
+  is the controlled/charmed state specified in `systems/combat.md`
+  Section 6.1a, set by monster possession, by the Charm spell, and by the Sword
+  of Chaos compulsion. This overlay is separate from the persistent character
+  status byte and from the shared Mass Charm active-effect tag, which also
+  displays `C` in the bottom block.
 - Under the same selected-descriptor match, the refresh emits the inverse-video
   control again after the status glyph, restoring the following output to the
   previous style. The two controls do not consume visible cells; they bracket
@@ -123,8 +135,12 @@ hull byte.
 Common refresh triggers include:
 
 - startup or mode-entry UI assembly;
-- party damage, trap damage, poison, disease, cure, heal, resurrection, camp
-  recovery, and hourly ring regeneration;
+- party damage, trap damage, poison, disease, cure, heal, resurrection,
+  completed-camp recovery, and the Ring of Regeneration tick. None of these is
+  an hourly effect: the poison point and the ring roll both fire once per shared
+  party status pass, as specified in `systems/time.md` section 5, while camp
+  recovery fires once at the end of a completed long camp, as specified in
+  `systems/rest-and-camp.md` section 5;
 - active-player selection changes;
 - torch or light-spell counter updates;
 - combat entry/exit and combat action presentation;
@@ -161,6 +177,8 @@ private address tables, or implementation listings.
 
 - Full-panel refresh and bottom-block behavior:
   `u5-decomp/functions/ULTIMA_EXE/0x2900_redraw_full_stats.md`.
+- Cadence of the poison, ring-regeneration, and camp-recovery refresh triggers
+  in Section 6: `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - Per-row rendering and combat row overlays:
   `u5-decomp/functions/ULTIMA_EXE/0x2726_draw_stats_row.md`.
 - Middle value block helper:
@@ -171,6 +189,11 @@ private address tables, or implementation listings.
   `u5-decomp/functions/ULTIMA_EXE/0x4C2A_draw_text_window_top.md`,
   `u5-decomp/functions/ULTIMA_EXE/0x4CCE_draw_text_window_bottom.md`, and
   `u5-decomp/functions/ULTIMA_EXE/0x4F3C_draw_glyph_corners.md`.
+- The exact condition behind the combat `C` status override (party-side set,
+  monster-side clear, dead clear, controlled/charmed bit set, descriptor owner
+  field matching the drawn row) and the withdrawal of the earlier "casting and
+  self-targeted" reading:
+  `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`.
 - Text-window primitives used by the panel: `systems/text-output.md`.
 - Saved calendar, food, gold, transport/action, and character-record fields:
   `formats/saved-gam.md`.

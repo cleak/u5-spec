@@ -62,8 +62,10 @@ The framing function bridges the world-mode loop and the combat round loop. It m
 - **Snapshot the entire 32-record dynamic-objects table** into a backup region. The table holds the world's monsters, NPCs, ships, horses, and other moveable entities; combat will overwrite it with its own actors.
 - Run one of the three setup paths (terrain / ambush / rest/camp alternate) to
   populate the table with combat actors or decide that no combat round should
-  run. The dispatch tests the rest/camp-alternate flag first, then the ambush
-  flag, and treats a zero entry mode as terrain. The rest/camp helper returns a
+  run. The dispatch order is: an entry mode of **exactly zero** selects terrain
+  setup; otherwise the rest/camp-alternate flag is tested before the ambush
+  flag; and a nonzero entry mode with neither flag set runs **no setup at all**
+  and falls straight through to the common tail. The rest/camp helper returns a
   predicate: a **zero** return skips the round loop entirely, while a nonzero
   return continues into combat.
 - The **ambush** branch loads no arena of its own. It calls the same room-combat
@@ -118,8 +120,11 @@ The ordinary terrain setup helper also contains an optional placement-shuffle br
 
 **Order of operations.** Ordinary terrain combat setup is strictly:
 
-1. Clear all thirty-two combat descriptors and the renderer-facing bytes of all
-   thirty-two combat-instance active-object records.
+1. Clear all thirty-two combat descriptors (every field) and the first seven
+   bytes of all thirty-two combat-instance active-object records. The eighth
+   byte of an active-object record — its descriptor back-link — is not touched
+   by this clear; it is set to the "no linked descriptor" sentinel when the
+   record is allocated.
 2. Seat the party from the per-arena party entry coordinates.
 3. Print the combat banner.
 4. Choose the monster count.
@@ -154,13 +159,39 @@ never depend on the monster count and never consume a placement slot.
   faces a one-in-sixteen check at combat entry that destroys the ring with the
   "a ring has vanished" message.
 
-Party descriptors are allocated from index zero upward and monster descriptors
-from index six upward, so the two ranges cannot collide even when several party
-members are dead. The renderer-facing active-object records are allocated from
-index zero by a separate scan, so a party member's descriptor index and
-active-object index coincide only when no earlier member was skipped; the
-descriptor's active-object link byte is the authoritative connection between
-them.
+**How the two tables are indexed.** Each seated actor gets one combat
+descriptor and one renderer-facing active-object record, allocated by two
+independent first-free scans:
+
+- Descriptors are scanned from index zero for party members and from index six
+  for monsters, taking the first descriptor whose flags byte is zero. The two
+  ranges therefore cannot collide even when several party members are dead.
+- Active-object records are scanned from index zero for *everyone*, taking the
+  first record whose tile byte is zero.
+
+For party members the two scans run in lockstep — both start at zero, and each
+seated member consumes exactly one entry from each table — so **a party
+member's descriptor index and its active-object index are always equal**.
+Skipping a dead member packs both sequences identically: if the character in
+roster slot zero is dead, the next living member takes descriptor zero and
+active-object record zero.
+
+The indexes do diverge for monsters, because their descriptors start at index
+six while their active-object records continue from the first record left free
+by the seated party. With a live party of four, the first monster is descriptor
+six paired with active-object record four, the second is descriptor seven
+paired with active-object record five, and so on.
+
+Because of that, the descriptor's active-object link byte is the authoritative
+pairing in both directions; an engine should follow the link rather than assume
+the two indexes are equal.
+
+One consequence of allocating active-object records by "tile byte is zero":
+a party member whose class letter falls outside the recognised set leaves both
+tile bytes at zero, so its record still reads as free and the next seated
+member would be allocated the same record. No shipped class letter reaches
+that case, but an engine that invents new class letters must give each one a
+nonzero combat tile.
 
 **Party descriptor seeding.** For each seated party member the descriptor
 receives:
@@ -169,7 +200,7 @@ receives:
 |---|---|
 | HP/wound counter | Not written; party health is read from the character record, not from the descriptor. |
 | Base-step | The character's dexterity. |
-| Flags/faction | The party/self-acting tag; the disabled bit is additionally set when the status byte is neither `'G'` (good) nor `'P'` (poisoned). |
+| Flags/faction | The party-side marker (bit `0x80`, Section 6.1); the asleep/magically-disabled bit is additionally set when the status byte is neither `'G'` (good) nor `'P'` (poisoned). |
 | Owner/target/class | The character's roster slot index. |
 | Active-object link | The allocated combat-instance active-object index. |
 | Phase counter | Thirty-six minus the base-step. |
@@ -298,7 +329,7 @@ Each slot is a compact combat descriptor. At semantic level it carries:
   Higher base-step values produce shorter refreshed countdowns, so they act
   sooner after randomization and clamping.
 - **Phase counter**, decremented each round; the actor acts when it reaches zero.
-- **Flags/faction byte** describing party, hostile, or passive/neutral faction and per-turn state such as alive, marked dead, casting, fleeing, hidden/not-yet-revealed, and disabled/status side effects.
+- **Flags/faction byte** describing party, hostile, or passive/neutral faction and per-turn state such as alive, marked dead, controlled/charmed, fleeing, hidden/not-yet-revealed, and asleep/magically disabled. Section 6.1 gives the exact bit layout; the low bit is the controlled/charmed state, not a "casting" state.
 - **Owner/target/class byte.** Overloaded by caller: party slots use it to link
   to a character record, while monster and object slots use it for placement,
   target selection, and class-table lookup.
@@ -323,9 +354,9 @@ per-slot per-round state used by every consumer:
 | `0x40` | **Monster-side slot** (self-acting AI actor). Placement stamps this bit when it writes an ordinary monster descriptor, except for the two reserved unnamed classes 8 and 9, which are stamped `0x20` instead. Bits `0x80` and `0x40` are mutually exclusive as written by placement. |
 | `0x20` | Marked dead or otherwise non-acting. Monster death overwrites the whole flags byte with this value; party death ORs it in. |
 | `0x10` | Phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). |
-| `0x08` | Asleep / charmed / disabled. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). |
+| `0x08` | **Asleep / magically disabled.** Not charm: charm and every other externally-controlled state live in bit `0x01` alone, and no traced path writes `0x08` for a charm or possession effect. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). The stats panel's combat status letter does not consult this bit, so an asleep party member still shows the roster status letter. |
 | `0x04` | Hidden / not-yet-revealed (invisible).                                            |
-| `0x02` | Fleeing. Set by the no-target centre fallback and by the wound-morale writer; consumed by the step-vector synthesizer. |
+| `0x02` | Fleeing. Set by the wound-morale writer, by the no-target centre fallback, and directly by the Cause Fear and Repel Undead sweeps (Section 9); consumed by the step-vector synthesizer. |
 | `0x01` | **Charmed / under external control.** Set by monster possession, by the Charm spell, by summon/conjure placement, and by the Sword of Chaos compulsion path; see Section 6.1a for the full writer/reader contract. It is *not* a dispatch gate for the round walker. |
 
 A descriptor whose flags byte is entirely zero is a free slot. Placement uses
@@ -344,13 +375,26 @@ on a timer.
    bit on the accepted *target*.
 2. **The Charm spell** toggles the bit on its accepted target: casting Charm on
    an actor that already carries it clears it. This is the only traced clear
-   short of the actor leaving the table.
-3. **Summon, Conjure, and Swarm placement** set the bit on each freshly placed
-   creature, so summoned creatures start life in the same controlled state a
-   charmed monster is in. See `systems/magic.md`, Summoning and conjuration.
-4. **The Sword of Chaos compulsion.** When the round walker reaches a party
-   member's slot whose turn the active-player sentinel has selected, and that
-   character has item id 35 (Sword of Chaos) readied in either the weapon-hand
+   short of the actor leaving the table. When the accepted target is a
+   party-side slot, Charm also writes the Good status letter into that
+   character's roster status byte and refreshes the stats panel — in both
+   toggle directions, so Charm on a Sleeping or Poisoned party member restores
+   the roster status letter to Good as a side effect. The spell prints its own
+   charmed line and suppresses the dispatcher's success/failure epilogue.
+3. **Conjure and Swarm placement** set the bit on each freshly placed creature,
+   and **Summon** sets it on its placed Daemon whenever its caster self-check
+   succeeds, so a freshly summoned creature normally starts life in the same
+   controlled state a charmed monster is in. Summon's rebound branch is the one
+   exception: it leaves the Daemon on the arena with the bit clear. They are still placed through the ordinary monster
+   placement path, so their faction byte is the monster-side one and monster AI
+   drives their turns; the bit changes their attack, not their allegiance or
+   who commands them. See `systems/magic.md`, Summoning and conjuration. The
+   monster AI's own summon-daemon ability does *not* set this bit (Section 9).
+4. **The Sword of Chaos compulsion.** The round walker sends a slot down the
+   player-driven path when the active-player sentinel is unset, or when the slot
+   is party-side and its owner/character byte equals the sentinel. On that path,
+   if the slot is party-side and its character has item id 35 (Sword of Chaos)
+   readied in either the weapon-hand
    or shield-hand slot, the engine sets this bit on that party descriptor,
    clears the active-player sentinel, and runs the turn through the automatic
    actor driver instead of reading a command from the player. Any other readied
@@ -359,10 +403,22 @@ on a timer.
 **Readers.** There are exactly three.
 
 - **The attack driver.** When an actor whose bit `0x01` is set takes an attack
-  action, the action resolves through the magical/projectile branch — the
-  action-tile marker is set and the missile-effect dispatcher runs — instead of
-  the ordinary weapon-attack cascade. This is the bit's only gameplay
-  consumption inside attack resolution.
+  action, the attack resolves as a fixed magic strike instead of running the
+  ordinary weapon cascade. The driver still picks a target the normal way, and
+  then applies one extra requirement that has no counterpart on the ordinary
+  path: the chosen target must be at straight-line distance exactly one — that
+  is, one of the eight cells surrounding the actor, diagonals included, since
+  the distance function truncates. If the target is further away the actor's
+  turn produces **no action at all**: the driver does not fall through to the
+  ranged branch, does not consult the class's maximum-attack-range byte, and
+  does not step. When the target is adjacent, the renderer's action-tile marker
+  is set to the fixed magic-strike id and the strike is resolved by the shared
+  attack-application primitive, which plays the hit sound, runs the ordinary
+  to-hit roll and damage feeder with that same fixed id as the attack flavour,
+  and narrates hit or miss. The pre-attack animation, the attacker back-link,
+  the class-specific attack overrides and the monster ranged-spell branch are
+  all skipped. This is the bit's only gameplay consumption inside attack
+  resolution.
 - **The possession eligibility filter,** which rejects a target that already
   carries the bit, so a controlled actor cannot be possessed a second time.
 - **The stats panel.** A party member whose combat descriptor is party-side,
@@ -371,12 +427,21 @@ on a timer.
   descriptor still points back at the same roster slot.
 
 **Not a dispatch gate.** The round walker chooses the player-driven path from
-the active-player sentinel compared against the slot's owner/character byte
-plus the equipment test above; it never reads bit `0x01` to decide who acts.
+the active-player sentinel — unset, or matching the slot's owner/character byte
+— plus the equipment test above; it never reads bit `0x01` to decide who acts.
 Earlier drafts of this spec said the walker dispatched any slot with the bit set
 through the player command parser. That is withdrawn: a possessed party member
 keeps taking turns in slot order, and the visible consequences are the `C`
 status letter and the redirected attack branch, not a change of who is prompted.
+
+**Sleep is a different bit.** Bit `0x08` is the asleep/magically-disabled
+state and has nothing to do with charm, possession, or any other external
+control. Nothing in the engine writes `0x08` for a charm or possess effect, and
+nothing reads it when deciding whether an actor is controlled. An implementer
+that stores the charmed state in `0x08` will skip the controlled actor's turn
+instead of redirecting its attack, and will never draw the `C` status letter:
+the panel's test is "party-side set, monster-side clear, dead clear,
+controlled `0x01` set", and `0x08` is not part of it.
 
 **Faction is a different byte.** The friend/foe resolver reads bit `0x40` to
 recognise a monster-side slot, and the team-override flag it consults lives in
@@ -396,9 +461,13 @@ status flag byte. Death-marker writers, movement synchronization, and loot/drop
 presentation all use this byte to locate the active-object record that mirrors
 the combat descriptor.
 
-Do not store sleep, charm, casting, or other status bits in byte 4. The
-sleep/charm/disabled flag is byte 2 bit `0x08` of that slot's eight-byte combat descriptor.
-Using byte 4 as a bitfield will collide with ordinary active-object slot ids.
+Do not store sleep, charm, casting, or other status bits in byte 4. Every
+per-slot status bit lives in byte 2 of that slot's eight-byte combat
+descriptor: the asleep/magically-disabled flag is byte 2 bit `0x08`, and the
+controlled/charmed flag is the separate byte 2 bit `0x01` described in
+Section 6.1a. Those two are different states with different writers, different
+readers, and different in-game effects; do not merge them. Using byte 4 as a
+bitfield will collide with ordinary active-object slot ids.
 
 The combat sleep/disabled bit has no traced per-slot duration counter. Player
 Sleep, Sleep Field contact, and any other combat path that marks a non-party
@@ -445,7 +514,7 @@ general terrain/drop path.
 | Party member | Descriptor carries the party-side bit and the damage meets or exceeds current HP, or the damage is the instant-kill sentinel `99` | `0x1E` (corpse) | Character HP forced to zero, roster status byte set to `'D'`, marked-dead bit ORed in, death audio played, active-player sentinel set to `0xFF` if the dead character was active | No |
 | Vanish-on-death class | Monster whose class-flag word has the vanish bit set — Wanderer, Blackthorn, Lord British, Shadow Lord | `0x16` (vanish marker) | Prints `<name> vanishes!`, sets the per-combat status byte to `2`, runs the fade animation on the terrain under the actor, then the post-turn flush | **Yes** |
 | Incorporeal class | Monster whose class-flag word has the low bit set but **not** the vanish bit — Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon | **none** | none | **Yes** |
-| Gazer | Monster of the Gazer class | `0x1F` (eye-burst special) | Spawns the tile effect at the death coordinate with the same `0x1F` tile, then redraws the screen | No |
+| Gazer | Monster of the Gazer class | `0x1F` (eye-burst special) | **Places a live Insect Swarm combatant (class 31) at the death coordinate** through the ordinary monster-placement primitive, then redraws the arena. See "The Gazer death spawns a real combatant" below | No |
 | Gargoyle | Monster of the Gargoyle class | **none** | Writes `0x4C` (lava pool) into the combat-arena **terrain** cell under the actor; that terrain edit persists for the rest of the combat instance | **Yes** |
 | Ordinary monster, terrain rejects | Any other monster whose underlying arena terrain byte is `0x87`, or is numerically below `4` | **none** | none | **Yes** |
 | Ordinary monster, drop roll rejected | Terrain accepted, and the first roll exceeds the class drop-cap byte | `0x1F` | none — byte 5 keeps whatever the per-encounter reset left there | No |
@@ -457,6 +526,18 @@ Notes that an implementation must not get wrong:
   the gate comparand; the stored value is the class's drop-cap stat byte. This
   matches `catalogs/monster-bestiary.md` Section 1, which is the authoritative
   wording for the drop-cap field.
+- **The accepted-drop marker is a chest object, and its byte-5 high bit is the
+  ordinary lock/trap flag.** The marker values in this table are ids in the
+  shared searchable-object class space, the same space the Search/Get narration
+  uses: `0x01` is a **chest**, `0x1E` a rotting body, `0x1F` a moldy corpse.
+  So the accepted drop branch leaves a chest object standing on the dead
+  monster's cell, and the high bit of that record's byte 5 is the same
+  lock/trap flag the Jimmy and Search command family reads (its low seven bits
+  carry the contents/difficulty value). That is why the Open spell has a real
+  effect in combat: its object arm matches a chest-class object at the target
+  cell and clears exactly this bit (`systems/magic.md`, Directed utility tile
+  helpers). The G-Get command does not pick these records up; its accepted
+  object classes are a different, narrower set.
 - **Both rolls use the same helper**, which returns a near-uniform integer in
   `1..30` (the underlying draw is a uniform `0..60` halved with truncation, with
   a zero result promoted to one). Since the roll can never be zero, a class
@@ -469,6 +550,28 @@ Notes that an implementation must not get wrong:
 - **Gargoyle does not fall through to the ordinary path.** After stamping the
   lava terrain byte it goes directly to the slot-clear helper, so a Gargoyle
   death produces no corpse marker and no drop.
+- **The Gazer death spawns a real combatant, not a cosmetic effect.** After
+  writing `0x1F` into its own record's bytes 0 and 1, the Gazer branch calls the
+  same monster-placement primitive that per-encounter setup and dungeon-room
+  setup call, in its ordinary place-a-monster mode, with class id 31 and the
+  dying Gazer's arena coordinates and Z plane. That allocates a **new**
+  descriptor and a **new** active-object record and seeds them exactly as any
+  other monster placement would (§ 5): HP/wound counter from class 31's maximum
+  HP (`5`), base-step from class 31's speed seed (`30`) with the standard
+  uniform `[-4, +3]` adjustment reverted whenever the sum would exceed thirty,
+  phase counter of thirty-six minus the base-step, the hostile faction tag,
+  class id `31`, and active-object tile bytes `31 * 4 + 0x40 = 0xBC`. Class 31
+  is the **Insect Swarm**, and `0xBC..0xBF` is
+  the Insect Swarm sprite run published in `catalogs/monster-bestiary.md`.
+  The engine must therefore add a live, self-acting, five-hit-point hostile
+  actor to the arena when a Gazer dies; implementing a particle effect instead
+  silently drops a combatant. The dead Gazer's own record keeps its `0x1F`
+  marker and its slot is not released, so the marker and the new swarm coexist.
+  The spawn is skipped with no other side effect when the arena has no free
+  descriptor (all thirty-two allocated) or no free active-object record — the
+  same allocation failure any other placement can hit. Note that class 31 is
+  itself a member of the incorporeal family in the table above, so the spawned
+  swarm's own death releases its slot and leaves nothing behind.
 - **Monster death overwrites the flags byte** with the marked-dead value rather
   than ORing it, so all other per-round flag state on that descriptor is lost.
 - The reward unit returned to the caller (`floor(max_HP / 4) + 1`) is computed
@@ -490,7 +593,8 @@ The combat actor table is the authoritative combat-instance descriptor, not the 
 The stats panel also reads this table during combat refreshes. Its row overlay
 uses the current combat slot selector plus the selected descriptor's target or
 owner field to inverse-video highlight the matching party row, and uses the
-row's own descriptor to show the combat-casting `C` status override. The panel
+row's own descriptor to show the `C` status override, which is driven by the
+controlled/charmed bit described in Section 6.1a and not by any casting state. The panel
 is a read-side consumer only; combat setup, actor dispatch, spell/action
 handlers, and actor cleanup own descriptor mutation.
 
@@ -647,9 +751,18 @@ three ability bits in fixed order.
   chance per AI turn, toggles the actor's phase/hidden flag and linked visual
   tile between visible and hidden, and narrates the disappearance or return.
 - `0x0400` is the summon-daemon ability. It has the same approximately
-  one-in-eight chance gate, requires the combat-side live-target and placement
-  helpers to accept, then attempts to place a Daemon-class actor near the
-  current AI step direction with a brief visual transition and sound.
+  one-in-eight chance gate and then makes **exactly one** attempt, using the
+  same shared random arena probe and spawn-cell validator the player's Summon
+  spell uses (`systems/magic.md`, Summoning and conjuration). No direction of
+  any kind is consulted: the candidate cell is random, and if the probe lands
+  off the arena, if the validator rejects the cell, or if the actor table is
+  full, the ability simply ends for that turn with nothing placed — there is no
+  retry budget. On success a Daemon-class actor (class 38) is placed at that
+  cell, the acting monster's name and a short summoning line are printed with a
+  sound, and the new actor's linked sprite plays the brief flame transition
+  before settling on the Daemon tile. Unlike the player's Summon spell, this
+  branch does **not** stamp the controlled bit (Section 6.1a) on the placed
+  Daemon: a monster-summoned Daemon is an ordinary hostile.
 
 The branches are tested in the order above; a class with multiple bits would
 attempt possess first, then blink, then summon-daemon. The analyzed v1 data set
@@ -727,24 +840,28 @@ actor/effect record and the linked renderer-facing active-object record before
 the post-step terrain/effect check runs. If no tested direction is legal, the
 actor's move is blocked for that turn.
 
-The confirmed morale writer for the fleeing flag is the monster wound-score
-classifier. Cause Fear and related fear/panic spell handlers instead force
-accepted hostile combat actors into the critical-HP state that feeds that
-classifier. The classifier compares the acting monster's current HP against its
+The per-turn morale writer for the fleeing flag is the monster wound-score
+classifier. Cause Fear and Repel Undead are the two spell-side writers: each
+accepted actor has its combat HP counter driven to one *and* its fleeing bit set
+directly by the spell, so the flag is already up before the classifier next runs,
+and the critical HP keeps the classifier re-asserting it. The classifier compares the acting monster's current HP against its
 class maximum: below one quarter sets fleeing, one-quarter through just under
 one-half rolls a morale check that sets fleeing on 252 of 256 possible
 random-byte results, and one-half or higher clears fleeing. It also returns a
 four-bucket wound score for other AI consumers.
 
-Repel Undead is the second spell-side writer of that critical-HP state. It
-sweeps the whole actor table, accepts only non-humanoid monster-side actors
-whose class carries the undead class-flag bit and that fail the shared
-resistance check, and drives each accepted actor's combat HP counter to one and
-sets the fleeing flag directly — the same critical-HP flee setup Cause Fear
-applies, narrowed to undead classes. Earlier drafts described this helper as a
-"lower-tier summon/tame" effect that wrote the controlled bit `0x01`; that is
-withdrawn. It writes the HP counter and the fleeing bit `0x02` only, and it
-creates and repurposes nothing. The no-target centre fallback described above is
+Cause Fear sweeps all thirty-two combat slots and accepts every monster-side
+actor that is not one of the three protected special classes (14 Blackthorn,
+15 Lord British, 47 Shadow Lord) and that fails the shared resistance check. For
+each accepted actor it writes the combat HP counter to one and ORs in the
+fleeing bit `0x02`.
+
+Repel Undead is exactly the same sweep with one extra condition: the actor's
+class must also carry the undead class-flag bit. It writes the same two values
+and nothing else. Neither spell places, re-types, tames, or repurposes an actor,
+and neither touches the controlled/charmed bit `0x01`. Earlier drafts described
+Repel Undead as a "lower-tier summon/tame" effect that wrote `0x01`; that is
+withdrawn. The no-target centre fallback described above is
 the third traced direct flee writer: it marks eligible monster-side slots with
 the flee flag while forcing their critical-HP marker. The
 possess/blink/summon-daemon hook does not write the fleeing flag.
@@ -932,7 +1049,7 @@ Gremlin cast-like branch row, and the Mimic pre-gate bypass row.
 
 The damage-and-status handler bundles "apply damage, update status, narrate the result, and handle special-class death effects" into one function. It takes a damage amount and a target slot.
 
-**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill reaches it with the instant-kill sentinel and skips that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not the Intelligence byte at `+0x0D`. A separate resident equipped-item statistic helper can sum readied equipment values and add 3 when Protection's shared `P` tag is active, but the only identified caller discards its return value and no traced combat path recomputes the character-defense byte from readied armour. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
+**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill reaches it with the instant-kill sentinel and skips that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. A separate resident equipped-item statistic helper can sum readied equipment values and add 3 when Protection's shared `P` tag is active, but the only identified caller discards its return value and no traced combat path recomputes the character-defense byte from readied armour. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
 
 **Monster status/effect attacks.** The attack resolver checks monster-only
 status branches before ordinary melee damage. Classes with the poison/status
@@ -957,7 +1074,7 @@ damage.
 
 - **Vanish on death** (vanish bit set; Wanderer, Blackthorn, Lord British, Shadow Lord in the analyzed baseline) prints `<monster name> vanishes!`, changes the active-object tile to the vanish marker, sets the per-combat status byte, plays the fade-out animation, and releases the slot.
 - **Incorporeal death** (low bit set, vanish bit clear; Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon) releases the slot immediately and leaves **no tile marker and no drop at all**. This is a distinct branch, not a variant of the default kill.
-- **Special tile transitions** for the Gazer (eye-burst tile plus a spawned tile effect and a redraw, slot kept) and the Gargoyle (lava-pool byte written into the arena terrain under the corpse, then the slot released with no corpse marker and no drop) are hand-written class exceptions taken only when neither class-flag bit above is set.
+- **Special death transitions** for the Gazer (eye-burst tile on its own record, slot kept, and a **live class-31 Insect Swarm placed at the death cell** through the ordinary monster-placement mode, then a redraw) and the Gargoyle (lava-pool byte written into the arena terrain under the corpse, then the slot released with no corpse marker and no drop) are hand-written class exceptions taken only when neither class-flag bit above is set. The Gazer case is a real combatant, not a visual effect; § 6.3 carries the seeded values.
 - **Default kill** applies to every other monster and is gated first on the arena terrain under the actor: the excluded terrain values release the slot with no marker. On accepted terrain the path runs two independent rolls against the class's drop-cap byte. If the first roll is within the cap, the active-object tile becomes the dead-monster/drop marker and byte five of that record stores **the class drop-cap value itself** (not a random amount); a second roll strictly within the cap ORs bit `0x80` into that byte as a special-drop marker. If the first roll exceeds the cap, the tile becomes the alternate no-drop death marker and byte five is left alone. Neither outcome releases the slot.
 
 Section 6.3 carries the concrete tile bytes, the roll range, and the terrain gate. These markers live in the temporary combat-instance active-object table. The enter/exit framer restores the pre-combat world active-object table after the round loop, and the traced post-combat object reconciler edits only the original caller-supplied trigger slot. A compatible implementation must not turn arbitrary default death markers into automatic world loot.
@@ -1024,12 +1141,18 @@ Quickness's `Q` tag randomly gates player-side combat command dispatch with a
 Charm's `C` tag lets the AI target picker roll against the acting monster's
 class charm threshold and, on success, remap that monster to neutral group 0
 before friend/foe filtering; Negate Magic's `N` tag absorbs combat casts before
-the shared spell dispatcher spends charge or MP. The character status byte `C`
-for "casting" is separate from the shared active-effect `C` tag. The exact
+the shared spell dispatcher spends charge or MP. Three different things can put
+a `C` on screen and none of them is a "casting" state: the character status
+byte's `C` letter means *charmed* (see the status-byte paragraph below), the
+shared active-effect `C` tag above is Mass Charm's timed tag, and the stats
+panel's in-combat `C` is a presentation override driven by the
+controlled/charmed descriptor bit (Section 6.1a). Earlier revisions of this
+document glossed the status-byte `C` as "casting"; that reading is withdrawn.
+The exact
 number of decrements per full actor-table pass depends on which command/AI
 paths run, so per-round parity remains tied to actor dispatch.
 
-The character status byte is the load-bearing summary value: `'G'` good, `'P'` poisoned, `'D'` dead, `'S'` asleep, `'C'` casting, plus other state-specific letters. Other systems read the byte to decide whether the character can act, can be selected as active player, or counts toward the party-defeat check.
+The character status byte is the load-bearing summary value: `'G'` good, `'P'` poisoned, `'D'` dead, `'S'` asleep, `'C'` charmed, `'A'` ashes, plus other state-specific letters. The `C` the stats panel shows during combat is not read from this byte: it is a presentation override driven by the controlled/charmed descriptor bit (Section 6.1a), and the Charm spell writes `'G'`, never `'C'`, into a party target's status byte. Other systems read the byte to decide whether the character can act, can be selected as active player, or counts toward the party-defeat check.
 
 ## 13. Per-monster-class data
 
@@ -1169,12 +1292,12 @@ without independent behavioral consumers remain opaque metadata.
   class-threshold AI-target remap, and Negate Magic's `N` combat-cast
   absorption path.
 
-- **Flee mechanics.** The monster wound-score morale classifier is the confirmed
-  morale writer of the fleeing flag, and Cause Fear/fear-panic spell handlers
-  are confirmed upstream routes that force hostile targets into the critical-HP
-  state consumed by that classifier. Repel Undead is the same critical-HP flee
-  setup restricted to non-humanoid monster-side actors whose class carries the
-  undead flag; it writes the HP counter and the flee bit `0x02` and does not
+- **Flee mechanics.** The monster wound-score morale classifier is the per-turn
+  morale writer of the fleeing flag, and Cause Fear is a spell-side writer that
+  drives accepted hostile targets to combat HP one and sets the flee bit itself,
+  after which the classifier keeps re-asserting it from that critical-HP state. Repel Undead is the same critical-HP flee
+  setup restricted to monster-side actors whose class carries the undead flag,
+  excluding the three protected special classes 14, 15 and 47; it writes the HP counter and the flee bit `0x02` and does not
   touch the controlled bit `0x01`. The no-target centre fallback also
   writes the flee flag and critical-HP marker for eligible monster-side slots.
   Section 9 specifies how the flag reverses movement. The out-of-arena leave
@@ -1277,8 +1400,15 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` and
   `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`.
 - The controlled/charmed bit contract in Section 6.1a — its four writers, its
-  three readers, the Charm toggle as the only in-combat clear, and the fact that
-  the round walker does not dispatch on it — derived from
+  three readers, the Charm toggle as the only in-combat clear, the fact that the
+  round walker does not dispatch on it, and the separation of the
+  asleep/magically-disabled bit from the controlled/charmed bit (including the
+  exact five-term condition the stats panel uses to draw the `C` override:
+  party-side set, monster-side clear, dead clear, controlled bit set, owner
+  field equal to the drawn row), together with the withdrawal of the earlier
+  reading of the roster status letter `C` as "casting" (it means charmed) —
+  derived from
+  `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`,
   `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
   `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`,
   `u5-decomp/functions/COMBAT_OVL/0x0226_actor_attack_target.md`, and

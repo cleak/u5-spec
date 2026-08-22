@@ -166,8 +166,19 @@ used as behavioural predicates elsewhere in this spec set, are: crystal sphere
 bed `0xAB`; stairway family `0xC4..0xC7`; ascend/descend floor links `0xC8` and
 `0xC9`; wooden fence `0xCA..0xCB`; moon gate `0xDC`; shrine flame `0xDE`;
 collapsed dungeon entrance `0xDF`; shop-sign family `0xF0..0xF7` and `0xF9`;
-grandfather clock `0xFA..0xFB`. Reconciling the remaining nominal ranges against
-that table is open catalogue work.
+grandfather clock `0xFA..0xFB`. A further group is confirmed as *sentinel* rows
+— ids whose description record is the shared placeholder string because a
+command handler produces their output instead: `0x59` (night sky), the
+sign/poster ids `0x89`, `0x8A`, `0xA0`, `0xA4` and `0xF8`, and the fountain band
+`0xD8..0xDB`. Those ids are used as Look predicates in `systems/view.md`
+Section 3 and are therefore fixed even though they carry no name. The two
+groups are not complements: the wishing well `0xA1` is a Look predicate
+handled entirely by a command handler, yet it appears in the *named* list
+above because it does carry a real description record — one the Look path
+never reaches. Sentinel status corroborates handler ownership where it
+applies, but it does not define the predicate set. Reconciling
+the remaining nominal ranges against the description table is open catalogue
+work.
 
 ## 4. Animation phases
 
@@ -399,11 +410,13 @@ NPC scheduler consumes the same two bytes: when schedule movement must bridge
 floors it searches the live tile buffer for cells carrying whichever marker
 points toward the floor that is not currently displayed, and uses those cells as
 pathfinding goals. `systems/npc-schedules.md` Section 8.5 owns that selection
-rule. These ids are not ordinary passable terrain for NPC routing (they are
-blocked as intermediate cells and stamped only as goals), and they are distinct
-from the visible stairway family `0xC4..0xC7`.
+rule. For NPC routing these ids are ordinary open ground, exactly like the
+stairway family they sit beside; what is special about them is only that the
+scheduler's tile-ID search mode additionally stamps them as goal cells. They
+remain distinct ids from the visible stairway family `0xC4..0xC7` and must not
+be folded into it.
 
-**Wishing-wells, springs, caves.** Wishing-wells run the wish-for-a-vehicle handler (the Easter-egg "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse" dialogue); in the granting scenes, all accepted well words create the same horse-family active object. Springs restore MP; caves drop a chest.
+**Wishing-wells, springs, caves.** The deep-well tile `0xA1` is a Look trigger, not a step trigger: looking at it runs the coin-and-wish handler whose six accepted words are the Easter-egg list "Corvette / Ferrari / Lamborghini / Lotus / Porsche / Horse". In the two granting scenes every accepted word creates the same horse-family active object, so the older "wish for a vehicle" framing is a misnomer. `systems/view.md` Section 3 owns the full contract. Springs restore MP; caves drop a chest.
 
 **Camp / fire.** Camp tiles and brazier tiles trigger the camp-and-rest handler when H-Hole-up is invoked on them. Outdoor rest and the rare camp-event level-up live in `systems/rest-and-camp.md`.
 
@@ -424,9 +437,14 @@ Cross-reference: `catalogs/monster-bestiary.md` for per-monster stats, AI archet
 Monsters appear in two contexts:
 
 - **Wandering encounters.** The encounter spawner picks a monster class based on the current world-tile class and party state, and writes a fresh active-object slot.
-- **Combat arenas.** When combat starts, the encounter base class and the
-  separate replacement-tile table choose starting tile ids; the combat actor
-  table tracks frame state per actor.
+- **Combat arenas.** When combat starts, each spawned actor's starting tile id
+  follows from its combat class (tile id `class * 4 + 0x40` in the
+  active-object sprite domain); the combat actor table tracks frame state per
+  actor. Early spawn slots may roll the base class's **companion class** —
+  another class id, from the per-class companion table in
+  `catalogs/monster-bestiary.md` — and the substituted class then determines the
+  tile. There is no per-arena replacement-*tile* table; earlier drafts that
+  described one were wrong.
 
 Hostile humans (brigands, pirates, hostile guards) sit in the *NPC* range, not the monster range. The combat system distinguishes them for damage and loot, but the tile space treats them as NPC-class.
 
@@ -539,7 +557,7 @@ The relevant facts for the catalog are:
 Some class-specific encodings layer on top:
 
 - **Dungeon tiles.** Dungeon `.DAT` cells pack two four-bit fields: high nibble is a strict dungeon tile class (open, wall, door, ladder, chest, trap, fountain, field), low nibble is class-specific attribute. Dungeon tile bytes are *not* indices into the unified five-hundred-and-twelve-tile space and do not share the world/town high-nibble buckets — they are a separate dungeon tile-class encoding rendered by the sparse first-person dungeon renderer.
-- **Combat arenas.** Combat `.CBT` terrain cells use standard one-byte tile ids in an eleven-by-eleven grid with a thirty-two-byte row stride. The twenty-one bytes after each terrain row are arena metadata and must be preserved. For `BRIT.CBT`, traced setup copies the placement-slot coordinate slices from that metadata into resident tables; spawn counts and replacement-tile rolls still come from resident combat tables.
+- **Combat arenas.** Combat `.CBT` terrain cells use standard one-byte tile ids in an eleven-by-eleven grid with a thirty-two-byte row stride. The twenty-one bytes after each terrain row are arena metadata and must be preserved. For `BRIT.CBT`, traced setup copies the party-entry and placement-slot coordinate slices from that metadata into resident tables; spawn counts and companion-class rolls still come from resident per-class combat tables, keyed by combat class id rather than by arena index.
 - **Markers in town maps.** Marker bytes — NPC start markers `0x48`/`0x49`, spawn marker `0x2A`, dash/period conditional markers `0x2D`/`0x2E`, dawn/dusk archway marker `0x87`, and the NPC floor-link markers `0xC8`/`0xC9` — appear in on-disk tile grids and are consumed by location-load or NPC-scheduler passes. Some are harvested into runtime state, some are conditionally rewritten in the runtime tile buffer, and `0xC8`/`0xC9` remain queryable as runtime tile-ID goals. They should not be treated as ordinary terrain. For the dawn/dusk pass, `0x87` marks the south-adjacent gate cell; shipped maps pair it with `0x44` cobble, which toggles to `0x99` portcullis via XOR `0xDD` at night.
 
 ## 13. Graphics-asset encoding

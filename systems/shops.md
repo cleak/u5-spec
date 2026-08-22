@@ -64,16 +64,27 @@ A shopkeeper NPC carries one shop kind at a time — weaponsmith *or* tavernkeep
 multiple commerce types; players who want a weapon and a drink must talk to two
 different NPCs.
 
-Shop entry includes a transport gate. If the party is already mounted on a
-horse, ordinary shop arms refuse before opening their menu; the horse-trader
-vehicle-sale arm remains available.
+Shop entry includes a transport gate, and it is the only precondition between
+the Talk dispatch and the shop arm. If the party's transport marker is either of
+the two horse values, the dispatcher prints a fixed two-line refusal and returns
+without entering any shop:
+
+```text
+A merchant says:
+"GET THAT HORSE OUT OF HERE!"
+```
+
+The horse-trader trigger is exempt, so a mounted party can still buy another
+horse. No other transport state is blocked: on foot and magic carpet both pass,
+and the watercraft markers cannot occur in a scene that has shopkeepers.
 
 Every Talk shop arm receives the same one-word caller context. Decoded
 member-sensitive price paths use it as the speaking party member's roster slot;
 other shop kinds receive the word even when their own flow does not need it. The
 shopkeeper's name (for `$` substitution), the shop's display name (for `#`), and
 the current shop-instance selectors are already resident work state by the time
-the overlay renders text or lists stock.
+the overlay renders text or lists stock — the dispatcher resolves all three from
+the active scene, as described in Section 8.0.
 
 ## 3. Shop-kind dispatch
 
@@ -121,9 +132,10 @@ The stock horse-trader sale rows are:
 | `22` | Paws | `Wishing Well Horses` | Horse active object | 160 |
 
 The shipped resident horse-trader tables carry a **fourth** row: scene `30`
-(The Lycaeum), base price `190`, with a vendor name but an *empty* shop-name
-string. No `0x83` horse-trader trigger exists in that scene's shipped NPC
-roster, so the row is unreachable in ordinary play. Treat the three triggered
+(The Lycaeum), base price `190`, with a vendor name but a null shop-name
+reference — the row has no shop name at all. No `0x83` horse-trader trigger
+exists in that scene's shipped NPC roster, so the row is unreachable in ordinary
+play. Treat the three triggered
 rows above as the public horse-trader contract, and do not treat scene `30` as
 a fourth stable; the scene-byte table in Section 8.0 lists only the three
 reachable rows for the same reason.
@@ -151,7 +163,8 @@ Records are not labelled in the file; the engine's per-shop-kind tables hardcode
 | 8–48         | Weapon and armour item descriptions.                                                   |
 | 49–56        | Arms `S`-menu sell-back haggle and confirmation barks.                                 |
 | 57–88        | Tavern, meal-counter, and related interactive menus, prompts, and barks.               |
-| 84–91        | Sage rumour records (an overlap sub-cluster).                                          |
+| 84–88, 91    | Sage rumour records (an overlap sub-cluster inside the tavern range: fee quote, four success templates, and the paying-customers refusal). |
+| 89–90        | Tavern branch refusals that sit between the sage records: a secondary-branch stock refusal and the provision branch's table-scraps brush-off. |
 | 92–104       | Horse-trader barks.                                                                    |
 | 105–126      | Ship-broker barks.                                                                     |
 | 127–146      | Reagent (herbalist) menu and barks.                                                    |
@@ -175,7 +188,14 @@ Within a record, certain printable-ASCII bytes are reserved as placeholders the 
 | `#`  | shop name   | The shop's display name (e.g. "The Paladin's Protectorate").                |
 | `@`  | time of day | "morning" if hour < 12, "afternoon" if hour < 18, otherwise "evening".      |
 
-The substitution buffers are populated by the shop overlay before any records are rendered. Shopkeeper-name and shop-name come from the per-shopkeeper NPC data and the per-scene shop-name table; gold-amount, quantity, and item-name are filled mid-loop as the player picks items; the time-of-day byte is read fresh from the world clock on every render.
+The substitution buffers are populated before any records are rendered.
+Shop name (`#`) and vendor name (`$`) are set by the Talk shop dispatcher, not
+by the shop overlay and not from the NPC being spoken to: both are read from
+resident per-kind name tables using the shop-instance row resolved from the
+active scene, and both are published per row in Section 8.0. Gold-amount,
+quantity, and item-name are filled mid-loop by the shop arm as the player picks
+items and prices are computed; the time-of-day byte is read fresh from the world
+clock on every render.
 
 A literal `&`, `%`, `*`, `$`, `#`, or `@` cannot be emitted as itself — none of the shipped record text uses these as literal punctuation, so the renderer always expands.
 
@@ -210,11 +230,13 @@ The `%` substitution prints decimal digits with no thousands separator. The `@` 
 
 Shop headline prices come from resident asset tables and small deterministic
 adjustments. They are *not* karma-modulated, *not* time-of-day-modulated, and
-not haggled. The arms equipment paths, horse-trader sale path, and inn
-room-rate paths are the notable stat-sensitive cases: the speaking party
-member's Intelligence changes the quoted equipment, horse, or room price. Other
-decoded shop headline prices are fixed by the relevant shop, commodity, or
-treatment table.
+not haggled. Five paths are stat-sensitive: arms buy and sell quotes, the
+horse-trader sale, inn room rates, both shipwright vessel classes, and the
+tavern/meal-counter provision unit price. In each of those the speaking party
+member's Intelligence changes the quoted price, so the same purchase costs
+different amounts depending on who is doing the talking. Every other decoded
+shop headline price is fixed by the relevant shop, commodity, or treatment
+table.
 
 Several read-only pricing tables live in the resident data segment:
 
@@ -277,7 +299,14 @@ The stock reagent price matrix is:
 | Mysticism | — | — | — | 6 | 8 | 8 | 10 | 15 |
 | The Sharper Mage | — | — | — | — | 50 | — | 30 | 40 |
 
-The stock tavern/meal-counter provision base prices are:
+The stock tavern/meal-counter provision base prices are listed below. One
+provision *unit* is a twenty-five-serving pack: a purchased unit raises the
+shared food counter by `25`. The quoted per-unit price is **not** a flat table
+read — it is Intelligence-adjusted from the speaking party member with the same
+shape used by inn charges, horse sales, and shipwright sales:
+`adjusted(base, Intelligence) = base + trunc(base * (100 - 3 * Intelligence) / 100)`,
+truncating toward zero. The adjusted value is what the quote text shows and what
+each unit costs in the pay loop.
 
 | Tavern or meal counter | Provision unit base |
 |---|---:|
@@ -332,21 +361,36 @@ The shared `0x82` tavern/meal-counter/sage arm selects one of four menu states
 per tavern row. These states choose the visible letters for round drinks,
 secondary tavern actions, provisions, and sage lore:
 
-| Tavern or meal counter | State | Round/meal letter | Secondary tavern letter | Provision letter | Sage/lore letter |
-|---|---:|---|---|---|---|
-| The Honest Meal | 0 | `M` | `A` | `R` | `C` |
-| The Wayfarer Tavern | 0 | `M` | `A` | `R` | `C` |
-| The Sword and Keg | 0 | `M` | `A` | `R` | `C` |
-| The Slaughtered Lamb | 2 | `B` | `R` | none | `H` |
-| The Humble Palate | 3 | `F` | `S` | `P` | `A` |
-| The Blue Boar Tavern | 1 | `C` | `W` | none | `T` |
-| The Cat's Lair | 0 | `M` | `A` | `R` | `C` |
-| The Fallen Virgin | 2 | `B` | `R` | none | `H` |
-| The Folley Tap | 0 | `M` | `A` | `R` | `C` |
+| Scene | Tavern or meal counter | State | Round/meal letter | Secondary tavern letter | Provision letter | Sage/lore letter |
+|---:|---|---:|---|---|---|---|
+| `1` | The Honest Meal | 0 | `M` | `A` | `R` | `C` |
+| `2` | The Wayfarer Tavern | 0 | `M` | `A` | `R` | `C` |
+| `3` | The Sword and Keg | 0 | `M` | `A` | `R` | `C` |
+| `4` | The Slaughtered Lamb | 2 | `B` | `R` | none | `H` |
+| `8` | The Humble Palate | 3 | `F` | `S` | `P` | `A` |
+| `19` | The Blue Boar Tavern | 1 | `C` | `W` | none | `T` |
+| `22` | The Cat's Lair | 0 | `M` | `A` | `R` | `C` |
+| `24` | The Fallen Virgin | 2 | `B` | `R` | none | `H` |
+| `30` | The Folley Tap | 0 | `M` | `A` | `R` | `C` |
+
+Only four distinct letter sets exist, one per state, and every letter is the
+initial of the menu item the state's shipped list text advertises. That is the
+easiest way to remember which is which:
+
+| State | Round/meal | Secondary | Provision | Sage/lore |
+|---:|---|---|---|---|
+| 0 | `M` Mutton | `A` Ale | `R` Rations | `C` Chat |
+| 1 | `C` Cheese | `W` Wines | none | `T` Talk |
+| 2 | `B` Boar | `R` Rum | none | `H` Help |
+| 3 | `F` Fruits | `S` Stout | `P` Provisions | `A` Advice |
 
 The Blue Boar's fixed six-choice drink list is the state-1 secondary tavern
-letter `W`. Other secondary tavern letters remain in the tavern service family;
-they are not provisions and do not enter sage lore.
+letter `W`, so at that one tavern the drinks are on the secondary letter and
+the per-head round is the food letter `C`. Other secondary tavern letters
+remain in the tavern service family; they are not provisions and do not enter
+sage lore. There is no fixed `A`-for-drinks, `F`-for-food, `M`-for-provisions,
+or `B`-for-bye key: the four letters above are the whole visible key set for a
+given tavern, plus the exit keys.
 
 Post-list dispatch checks exit keys first, then the round/meal letter, then the
 secondary tavern letter, then the provision letter, and finally the sage/lore
@@ -356,6 +400,13 @@ branch has established continuation, it is ignored and the menu waits for
 another post-list key. Blue Boar therefore has no `C` lore conflict: `C` is its
 round/meal letter, while its lore letter is `T`.
 
+The gate matches what the player is shown. The post-`Y` list text advertises
+only the round/meal, secondary, and provision items; the sage/lore letter is
+advertised only by the follow-up text that appears after a branch has been
+accepted, which is the same moment continuation is established. An
+implementation that renders the shipped list and follow-up records therefore
+never offers the lore letter before it works.
+
 ### 6.1 The affordability check
 
 Most purchases are gated by an affordability check against the gold word. If
@@ -364,12 +415,23 @@ the tavern, "Highwaymen!" at an upmarket inn, "Thou canst afford only N" at a
 vehicle broker) and returns to the main menu without deducting.
 
 The tavern/meal-counter provision branch is the exception: it processes a
-requested quantity one unit at a time. Each affordable unit debits gold and
-adds to the shared food counter before the next unit is checked. If the party
-runs out of gold partway through the requested quantity, the already-served
-units remain purchased and the shop reports the smaller affordable quantity.
-Compatible implementations must not roll this branch back as an all-or-nothing
-purchase.
+requested quantity one unit at a time. Each pass compares party gold against
+the adjusted per-unit price; if it is affordable, gold is reduced by that price
+with the ordinary zero floor and the shared food counter is raised by `25` with
+the ordinary `9999` ceiling, and only then is the next unit considered. If the
+party runs out of gold partway through the requested quantity, the
+already-served units remain purchased and the shop reports the smaller
+affordable quantity. Compatible implementations must not roll this branch back
+as an all-or-nothing purchase.
+
+Two loop terminations are worth stating exactly:
+
+- If the food counter reaches `9999` mid-loop, the branch stops immediately and
+  takes the completed-purchase exit even though units remain owed. The party is
+  not refunded for the unserved remainder, because no gold was taken for it.
+- The random post-transaction surcharge of Section 6.2 runs on the
+  completed-purchase exit only. A partially served purchase — one that ended
+  because gold ran out — returns without charging it.
 
 The shipwright sale flow has a second gate before the ordinary gold check. It
 tests the outdoor pending-action / vehicle-acquisition queue, which is consumed
@@ -490,6 +552,7 @@ a later dispatcher call draws again.
 | Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
 | Horse-trader sale | Shared non-arms preamble, deterministic horse quote record, resident confirmation/refusal text | Preamble draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the silent farewell mode. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote. Short funds prints resident refusal text and exits | Successful payment deducts gold, charges tax, and places a horse active object adjacent to the player |
 | Tavern drink flow | Tavern entry bark and list `SHOPPE.DAT` records selected by the active tavern state | Entry/list records are deterministic from the current tavern state; sage-style success records draw only in the sage subflow described below | The tavern clears the conversation text window before its greeting. `N` or Space prints the resident pardon/refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
+| Tavern provision branch | Six-record quote pool, `SHOPPE.DAT` ordinals `77..82`, plus resident quantity prompt, refusal, and partial-purchase literals; the table-scraps outcome renders ordinal `90` | Uniform `0..5` draw when the quote is rendered, once per entry into the branch. The quantity prompt, the pay loop, and every outcome line are deterministic | The quote and quantity prompt append to the tavern text already on screen. The typed-quantity prompt waits for the number; the outcome line does not wait for a key before the branch returns | Gold and food move one unit at a time inside the pay loop. The surcharge runs only on the completed-purchase exit. The two nothing-served outcomes end the visit |
 | Sage rumour flow | `SHOPPE.DAT` record `84` for fee quote, records `85..88` for paid success, record `91` for short funds | Record `84` is deterministic after topic match. Paid success draws uniform `0..3` across records `85..88` only after confirmation and successful debit. Short funds deterministically uses record `91` | Refusal does not consume a success draw. Short funds does not consume a success draw | Gold is deducted before the success rumour record is drawn and rendered |
 | Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, charges tax, and queues the pending watercraft placement |
 | Inn flow | Resident innkeeper text and `SHOPPE.DAT` records from the inn record table | Room quote and registry text are deterministic from the current inn and branch | Room, leave-companion, and pickup-companion branches use branch-local prompts and registry screens; failed eligibility checks print resident refusal text and return without a fresh room quote | Rest charges and registry mutations occur only after the corresponding branch validation and accepted payment/selection |
@@ -524,6 +587,7 @@ The short resident literal pools that affect prompt parity are:
 | Arms no-credit barks | One no-credit bark is selected uniformly from the four-entry resident pool listed below, wrapped in the shopkeeper-attribution tail; this exits the shop flow without changing gold or inventory. |
 | Arms successful sale tail | Prints the fixed sold line, then the post-item "anything else" prompt addressed by the speaking member's gender field, or a neutral variant when no transaction has completed. |
 | Arms no-credit bark pool (verbatim) | `Can't pay?! Out with ye, orc-face!`, `What be ye trying to pull? OUT!`, `OUT, SLIME!`, `BEAT IT!` — one chosen uniformly, wrapped by the attribution tail `yells <shopkeeper>.` |
+| Arms stock-call pool (verbatim) | Printed once above the stock list, chosen uniformly from: `What may I show thee?`, `Which wouldst thou like to see?`, `What is thine interest?`, `Which would ye see?` |
 | Arms carry-cap refusal (verbatim) | `"Thou canst not carry any more!"` followed by the attribution tail `says <shopkeeper>.` |
 | Shipwright post-sale tail | Renders the post-sale record, then addresses the buyer. The gender test in this branch compares a field against a value that field never holds, so the feminine form is unreachable and the shipped build always prints the masculine form. Implementations targeting frame parity should always print the masculine form here; the arms tail, by contrast, selects correctly. |
 
@@ -575,7 +639,8 @@ the inn register and the arms sell browser). Window `2` is never passed to it,
 and neither is window `3`.
 
 Window `2` therefore still holds the boot-time descriptor described in
-`systems/text-output.md`: the full-screen cell rectangle `(0, 0)..(39, 24)`,
+`systems/text-output.md` Section 9, which now carries the whole-build
+window-configuration census this paragraph summarises: the full-screen cell rectangle `(0, 0)..(39, 24)`,
 the bright-white-on-black colour attribute, and cleared descriptor flags. Its
 cursor is whatever previous output in window `2` left behind, advanced by the
 Talk entry newline; no shop or conversation path homes it. The colour setters
@@ -610,9 +675,9 @@ addressed by record ordinal and never transcribed here: the shipped asset
 supplies the wording, and an engine that reads the asset reproduces it exactly.
 Resident literals are not in that asset, so the ones an engine must reproduce
 to match a frame are published verbatim in this document — the shared `Yes`/`No`
-echoes, the four arms confirmation prompts, the arms carry-cap refusal, the
-four arms no-credit barks, `Sold!`, and the arms "anything else" tail with its
-gendered suffixes. Any other resident literal is described behaviourally
+echoes, the four arms confirmation prompts, the four arms stock-call lines, the
+arms carry-cap refusal, the four arms no-credit barks, `Sold!`, and the arms
+"anything else" tail with its gendered suffixes. Any other resident literal is described behaviourally
 because its exact wording does not change engine behaviour or menu geometry.
 Where the same wording is needed in a future flow, publish it here rather than
 inventing an ordinal for it.
@@ -624,101 +689,129 @@ therefore greets and says goodbye from one pool.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
-Every Talk-triggered shop kind resolves its per-location row through the active scene byte (`SAVED.GAM 0x02ED`) by indexing a per-kind scene-byte lookup table in the resident shop-data region. The eight per-kind tables, in their full byte-traced form, are:
+Every Talk-triggered shop kind resolves its per-location row through the active
+scene byte (`SAVED.GAM 0x02ED`) by searching a per-kind scene-byte lookup table
+in the resident shop-data region. The search is a plain forward scan of that
+kind's list, and the **index of the matching entry** is the shop-instance row
+used by every other per-shop table in this document: prices, stock rows,
+delivery cells, menu states, shop names, and vendor names all share it.
+
+Two resident name tables are indexed by the same row and filled in before the
+shop overlay runs: the shop's display name, which fills the `#` substitution,
+and the vendor's name, which fills the `$` substitution and the
+`says <shopkeeper>.` / `yells <shopkeeper>.` attribution tails. Both are
+published as columns below. Neither name is read from the NPC roster or the
+conversation blob, so the shopkeeper an implementation names in shop text is a
+property of the location, not of the NPC the player happened to talk to.
+
+The eight per-kind tables, in their full byte-traced form, are:
 
 **Arms shops** (9 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `2` | Britain | `Iolo's Bows` |
-| `3` | Jhelom | `Naughty Nomaan's` |
-| `4` | Yew | `Arms of Justice` |
-| `5` | Minoc | `Darkwatch Armoury` |
-| `6` | Trinsic | `The Paladin's Protectorate!` |
-| `17` | Lord British's Castle | `North Star Armoury` |
-| `24` | Buccaneer's Den | `Buccaneers Booty` |
-| `26` | Bordermarch | `The Shattered Shield` |
-| `32` | Serpent's Hold | `Siege Crafters` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `2` | Britain | `Iolo's Bows` | Gwenneth |
+| `3` | Jhelom | `Naughty Nomaan's` | Nomaan |
+| `4` | Yew | `Arms of Justice` | Ronan |
+| `5` | Minoc | `Darkwatch Armoury` | Shenstone |
+| `6` | Trinsic | `The Paladin's Protectorate!` | Paul |
+| `17` | Lord British's Castle | `North Star Armoury` | Max |
+| `24` | Buccaneer's Den | `Buccaneers Booty` | Kitiara |
+| `26` | Bordermarch | `The Shattered Shield` | Steve |
+| `32` | Serpent's Hold | `Siege Crafters` | Thol |
 
 **Taverns / meal counters** (9 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `1` | Moonglow | `The Honest Meal` |
-| `2` | Britain | `The Wayfarer Tavern` |
-| `3` | Jhelom | `The Sword and Keg` |
-| `4` | Yew | `The Slaughtered Lamb` |
-| `8` | New Magincia | `The Humble Palate` |
-| `19` | West Britanny | `The Blue Boar Tavern` |
-| `22` | Paws | `The Cat's Lair` |
-| `24` | Buccaneer's Den | `The Fallen Virgin` |
-| `30` | The Lycaeum | `The Folley Tap` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `1` | Moonglow | `The Honest Meal` | Sam |
+| `2` | Britain | `The Wayfarer Tavern` | Tika |
+| `3` | Jhelom | `The Sword and Keg` | Nicole |
+| `4` | Yew | `The Slaughtered Lamb` | Duclas |
+| `8` | New Magincia | `The Humble Palate` | Felicity |
+| `19` | West Britanny | `The Blue Boar Tavern` | Jaymes |
+| `22` | Paws | `The Cat's Lair` | Dr. Cat |
+| `24` | Buccaneer's Den | `The Fallen Virgin` | Nikki |
+| `30` | The Lycaeum | `The Folley Tap` | Rob |
 
 **Horse traders** (3 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `6` | Trinsic | `Horse & Rider` |
-| `20` | North Britanny | `The Stablehouse` |
-| `22` | Paws | `Wishing Well Horses` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `6` | Trinsic | `Horse & Rider` | Hettar |
+| `20` | North Britanny | `The Stablehouse` | Theoan |
+| `22` | Paws | `Wishing Well Horses` | Ferru |
 
-The shipped horse-trader scene table actually holds four entries — `6`, `20`,
-`22`, and `30` — but the scene-`30` row has an empty shop-name string and no
-`0x83` trigger anywhere in the shipped rosters. It is listed here for
-completeness only; implementations should publish and reach the three rows
-above.
+The shipped horse-trader tables actually hold four rows. The fourth is scene
+`30` (The Lycaeum): its shop-name entry is a null reference — there is no shop
+name at all, not an empty one — while its vendor name (`Simplon`) and its base
+price (`190`) are both present. No `0x83` trigger exists anywhere in the shipped
+rosters for scene `30`, so the row is unreachable in ordinary play. It is
+mentioned here for completeness only; implementations should publish and reach
+the three rows above and must not treat scene `30` as a fourth stable.
 
 **Shipwrights** (4 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `3` | Jhelom | `Island Shipwrights` |
-| `5` | Minoc | `The Crow's Nest` |
-| `21` | East Britanny | `The Oaken Oar` |
-| `24` | Buccaneer's Den | `The Rusty Bucket` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `3` | Jhelom | `Island Shipwrights` | Bantral |
+| `5` | Minoc | `The Crow's Nest` | Captain Blyth |
+| `21` | East Britanny | `The Oaken Oar` | Master Hawkins |
+| `24` | Buccaneer's Den | `The Rusty Bucket` | Jones |
 
 **Reagent vendors** (5 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `1` | Moonglow | `The Herbalist` |
-| `4` | Yew | `Healers Herbs` |
-| `7` | Skara Brae | `The Alchemist` |
-| `23` | Cove | `Mysticism` |
-| `30` | The Lycaeum | `The Sharper Mage` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `1` | Moonglow | `The Herbalist` | Nilrem |
+| `4` | Yew | `Healers Herbs` | Madam Pendra |
+| `7` | Skara Brae | `The Alchemist` | Toama |
+| `23` | Cove | `Mysticism` | Enlor |
+| `30` | The Lycaeum | `The Sharper Mage` | Virden |
 
 **Guildmasters** (3 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `8` | New Magincia | `The Den` |
-| `22` | Paws | `The Guild` |
-| `24` | Buccaneer's Den | `The Nemesis` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `8` | New Magincia | `The Den` | Braunam |
+| `22` | Paws | `The Guild` | Danfits |
+| `24` | Buccaneer's Den | `The Nemesis` | Daem |
 
 **Healers / sanctums** (7 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `5` | Minoc | `The Healers Mission` |
-| `6` | Trinsic | `Wounds of Honour` |
-| `7` | Skara Brae | `The Spirit Healers` |
-| `21` | East Britanny | `Healers' Sanctum` |
-| `23` | Cove | `Sanctuary` |
-| `30` | The Lycaeum | `The Shield of Truth` |
-| `31` | Empath Abbey | `The Empath` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `5` | Minoc | `The Healers Mission` | Regina |
+| `6` | Trinsic | `Wounds of Honour` | Leila |
+| `7` | Skara Brae | `The Spirit Healers` | Temptious |
+| `21` | East Britanny | `Healers' Sanctum` | Milan |
+| `23` | Cove | `Sanctuary` | Jessica |
+| `30` | The Lycaeum | `The Shield of Truth` | Faye |
+| `31` | Empath Abbey | `The Empath` | Jessip |
 
 **Inns** (6 rows):
 
-| Scene | Location | Row |
-|---:|---|---|
-| `2` | Britain | `The Wayfarer Inn` |
-| `3` | Jhelom | `The Warrior's Stead` |
-| `7` | Skara Brae | `The Haunting Inn` |
-| `20` | North Britanny | `Hotel Brittany` |
-| `22` | Paws | `The Smugglers' Inn` |
-| `24` | Buccaneer's Den | `The King's Ransom Inn` |
+| Scene | Location | Shop name | Vendor |
+|---:|---|---|---|
+| `2` | Britain | `The Wayfarer Inn` | Donya |
+| `3` | Jhelom | `The Warrior's Stead` | Gremnor |
+| `7` | Skara Brae | `The Haunting Inn` | Rogi |
+| `20` | North Britanny | `Hotel Brittany` | Terbor |
+| `22` | Paws | `The Smugglers' Inn` | Lorien |
+| `24` | Buccaneer's Den | `The King's Ransom Inn` | Ransack |
 
-Each scene-byte appears in exactly one shop kind's table — there is no scene that hosts two shops of the same kind. When the Talk shop trigger fires for a kind whose table does not include the active scene, the shop overlay falls through to the standard "no shop here" feedback rather than defaulting to row zero.
+Each scene-byte appears at most once inside a single shop kind's table, so a
+scene never hosts two shops of the same kind, and the search result is
+unambiguous.
+
+There is no graceful path for the opposite case. If a shop trigger ever fires
+for a kind whose table does not list the active scene, the shipped search does
+not refuse and does not fall back to row zero: it leaves the row index one past
+the end of the kind's list, and every per-row table then reads a neighbouring
+kind's data. The shipped rosters never produce that state — every shop NPC sits
+in a scene its kind's table lists — so it is an error case rather than a
+behaviour to reproduce. A clean implementation should reject the trigger and
+leave the conversation alone.
 
 ### 8.1 Weaponsmith and armourer
 
@@ -786,7 +879,14 @@ canonical name of thirteen characters or more is replaced by that item's
 shorter panel label, so the entry fits the shop's list column. The affected
 equipment ids and their shorter labels are published in `catalogs/item-list.md`
 Section 5.1.2. The list is preceded by a heading line and one of four resident
-"what we have" call lines chosen with a uniform `0..3` draw.
+"what we have" call lines chosen with a uniform `0..3` draw:
+
+| Draw | Stock-call line |
+|---:|---|
+| 0 | `What may I show thee?` |
+| 1 | `Which wouldst thou like to see?` |
+| 2 | `What is thine interest?` |
+| 3 | `Which would ye see?` |
 
 After the item description, the buy path chooses one of four literal
 confirmation prompts uniformly: `Wouldst thou buy one?`, `Wilt thou take it?`,
@@ -987,7 +1087,10 @@ prints the resident decline echo, prints the beg-thy-pardon continuation, and
 leaves. `Y` renders the state's follow-up record and returns to the post-list
 key wait. Completing a branch also sets the tavern continuation state, which is
 what makes the sage/lore letter reachable; before that, pressing the sage/lore
-letter is ignored.
+letter is ignored. One branch outcome is deliberately excluded: a branch that
+reports "nothing was bought" — such as a provision purchase with a quantity of
+zero — still runs the "anything else" tail but does not establish continuation,
+so the lore letter stays inert until something is actually bought.
 
 One state-specific letter buys a round for each
 living party member using the stock per-person table in Section 6. The Blue
@@ -997,17 +1100,37 @@ itself has no traced persistent effect on party state. Failed payment returns
 to the menu without changing gold.
 
 One tavern/meal-counter menu branch sells provisions rather than flavour
-drinks. It is reached through the state's *provision* letter, which is `R` at
-the five state-`0` taverns and `P` at The Humble Palate; states `1` and `2` have
-no provision letter, so the provision branch is unreachable at The Blue Boar
-Tavern, The Slaughtered Lamb, and The Fallen Virgin. It quotes a per-unit food
-price, asks for a quantity, and processes the
-requested units sequentially. For every affordable unit, the party gold counter
-is debited and the shared food/provisions counter is adjusted under the normal
-food floor and cap. If gold runs out before the requested quantity is complete,
-the already-afforded units remain purchased and the shop reports the quantity
-the party could afford. A zero quantity or "no need" case takes the refusal
-text path instead of changing gold or food.
+drinks. It is reached through the state's *provision* letter, which is `R`
+(Rations) at the five state-`0` taverns and `P` (Provisions) at The Humble
+Palate; states `1` and `2` have no provision letter, so the provision branch is
+unreachable at The Blue Boar Tavern, The Slaughtered Lamb, and The Fallen
+Virgin. Those three sell only their round/meal and secondary items.
+
+The branch runs in this order:
+
+1. Echo the pressed provision letter, then compute the Intelligence-adjusted
+   per-unit price from the tavern's provision base in Section 6.
+2. Render one quote record drawn uniformly from a six-record pool — `SHOPPE.DAT`
+   ordinals `77` through `82` — with the adjusted price filling the `%`
+   substitution. All six say the same thing in different words: one pack is
+   twenty-five servings and costs that much gold. The draw happens once, when
+   the quote is rendered.
+3. Prompt for a quantity as a typed number.
+4. Run the per-unit pay loop of Section 6.1.
+
+The outcomes, and what each does to the visit, are:
+
+| Outcome | Text | Effect on the tavern visit |
+|---|---|---|
+| Quantity of zero | A short resident dismissal | Stays in the tavern; the "anything else" tail runs but **continuation is not established**, so the sage/lore letter stays inert |
+| At least one unit served, full quantity | Blank-line tail, then the post-transaction surcharge | Stays in the tavern; continuation established |
+| At least one unit served, gold ran out | A resident line reporting the number actually afforded | Stays in the tavern; continuation established; no surcharge |
+| Nothing served, party food is `3` or more | A resident refusal accusing the party of having neither gold nor need, attributed to the shopkeeper | **Ends the visit** — control leaves the tavern through the farewell path |
+| Nothing served, party food is below `3` | The shopkeeper adds `1` to the food counter and renders `SHOPPE.DAT` ordinal `90`, a table-scraps brush-off | **Ends the visit** |
+
+That last row is the only charitable food source in the shop family, and it is
+one unit of food, not one pack. It fires only when the party could not afford a
+single pack *and* is nearly out of food, so it cannot be farmed for provisions.
 
 ### 8.6 Food and provisions boundary
 
@@ -1093,7 +1216,11 @@ the shipwright menu:
 - Selecting **Frigate** while any shipwright delivery is already pending shows a
   limited-dock-space / special-delivery quote and asks for confirmation. A Yes
   answer runs only the affordability/refusal gate for that quote; it does not
-  debit gold, queue a second Frigate, or alter the pending watercraft.
+  debit gold, queue a second Frigate, or alter the pending watercraft. The
+  amount that gate tests is a fixed `10000`, not the shipwright's Frigate price
+  and not an Intelligence-adjusted value, and the gold counter's ordinary
+  ceiling is `9999`. The check therefore always fails, and the visible result
+  is always the shortfall refusal that names what the party can afford.
 - Selecting **Skiff** while a Frigate is pending treats the Skiff as ship cargo:
   after the ordinary confirmation and affordability check, gold is debited, no
   second active object is queued, and the pending Frigate's skiff count is
@@ -1367,9 +1494,14 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/SHOPPES_OVL/0x0026_format_record_with_tokens.md`
   location, byte-range bias, shop-kind trigger table, and SHOPPES2 shipwright
   dispatch correction.
-- `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md` and
+- `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`,
+  `u5-decomp/functions/TALK_OVL/0x00E6_shop_dispatch.md`, and
   `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md` -- conversation-side
   shop dispatch, current shop selector, and shared caller context.
+- `u5-decomp/notes/shop_instance_binding_2026-08-22.md` -- the mounted-party
+  entry gate and its literal, the scene-to-row search and its out-of-range
+  behaviour, and the two resident per-kind name tables that supply the shop-name
+  and vendor-name substitutions published in Section 8.0.
 - `u5-decomp/formats/ds-bss-map.md`,
   `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`, and
   `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md` --
@@ -1395,5 +1527,11 @@ The behaviour described here was derived from the private function and format no
 - `u5-decomp/functions/SHOPPES2_OVL/0x0ABC_shipwright_main.md` -- shipwright
   menu, per-row Frigate/Skiff prices, per-row delivery coordinates, pending
   acquisition encoding, and the post-sale tail.
+- `u5-decomp/functions/SHOPPES2_OVL/0x0380_tavern_provision_quote.md` --
+  tavern/meal-counter provision branch: state-indexed provision letter, the
+  Intelligence-adjusted per-unit quote, the six-record quote pool, the
+  twenty-five-serving pack size, the per-unit pay loop with its gold floor and
+  food ceiling, surcharge timing, and the five outcome cases including the
+  table-scraps gift.
 - `u5-decomp/functions/SHOPPES_OVL/0x0F64_arms_sell_inventory.md` -- arms sell
   browser and its side-panel geometry.

@@ -123,12 +123,40 @@ When combat starts from a surface active object, the tactical arena is loaded fr
 
 Runtime tile substitutions, animation-frame changes, moongate stamps, open-object overlays, and encounter spawns operate on live buffers or active-object records. They should not be written back into `BRIT.DAT`.
 
-The chunk loader's fixed live-buffer substitution pass is part of that runtime
-layer. After a stored or all-water chunk is copied into memory, tile ids
-`0x16..0x18` cause the loader to write tile `0xDF` through the live world-tile
-accessor, while tile id `0x19` writes tile `0x1A` only when the current chunk
-descriptor passes the chunk high-byte classifier. These rewrites are not file
-contents and do not change the sparse chunk-index mapping.
+### 9.1 The chunk loader's quest-gated substitution pass
+
+The chunk loader applies a substitution pass to the live copy of every chunk it
+loads or synthesizes. **Both substitutions are conditional on save-backed quest
+state. Neither is unconditional**, and an engine that applies either one
+unconditionally breaks the game: every dungeon entrance stays permanently
+sealed and every shrine permanently ruined.
+
+After the 16-by-16 chunk is in memory, the loader walks it cell by cell:
+
+- A cell holding a **dungeon-entrance tile** (`0x16` dark cave, `0x17`
+  abandoned mine, `0x18` dungeon) is rewritten to the **collapsed-entrance tile
+  `0xDF`** only while the Word of Power that belongs to this chunk is still
+  unspoken. Each of the eight Words of Power owns exactly one chunk of the
+  256-chunk grid — the chunk containing that dungeon's entrance cell — and the
+  eight owning chunks are all distinct. The rule is: if the chunk being loaded
+  is a word's chunk, seal when that word's saved flag is clear and leave the
+  cell alone when it is set; if the chunk belongs to no word, seal.
+- A cell holding the **shrine tile `0x19`** is rewritten to the **ruined-shrine
+  tile `0x1A`** only when the shrine belonging to this chunk is currently
+  marked ruined. Shrine ownership uses a parallel eight-chunk list. The default
+  is the opposite of the entrance case: if the chunk belongs to no shrine, the
+  cell is left alone.
+
+The two flag sets live in the save image (`formats/saved-gam.md` Section 9.1),
+so the sealed and ruined presentations are re-derived on every chunk load and
+survive save, reload, and leaving and re-entering the region. The controlling
+command contract is in `systems/commands.md` Section 11.1 and 11.2.
+
+These rewrites are runtime-only. They are not file contents, they do not change
+the sparse chunk-index mapping, and they must never be written back to disk.
+The shipped file stores only the *unsealed* and *intact* forms: it contains
+exactly seven dungeon-entrance cells and seven shrine cells, and zero cells of
+either `0xDF` or `0x1A`.
 
 ## 10. Validation
 
@@ -151,6 +179,12 @@ For an audit tool with access to the chunk-index table, stronger checks are usef
 - Duplicate stored-block references should be treated as suspicious unless independently explained by table analysis.
 - A rendered world should not have seams at chunk boundaries except where the authored terrain changes.
 - Viewports crossing world edges should wrap cleanly.
+- The decoded grid should hold exactly seven dungeon-entrance cells
+  (`0x16..0x18`), one per surface dungeon, and no collapsed-entrance (`0xDF`)
+  cell; and exactly seven shrine cells (`0x19`) and no ruined-shrine (`0x1A`)
+  cell. A decoder that finds these counts anywhere else has almost certainly
+  mis-applied the chunk-index table, since the file is sparse and a linear
+  scan assigns the wrong coordinates.
 
 ## 11. Implementation Notes
 
@@ -194,4 +228,6 @@ This spec is a cleanroom prose rewrite derived from the project notes and existi
 - `u5-spec/formats/tiles.md`
 - `u5-spec/catalogs/tile-catalog.md`
 - `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`
-- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md`
+- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md` (retargeted as the shrine-ruin gate)
+- `u5-decomp/functions/OUTSUBS_OVL/0x0000_outsubs_water_check.md` (retargeted as the Word-of-Power seal gate)
+- `u5-decomp/notes/2026-08-22_quest-world-retrace.md`

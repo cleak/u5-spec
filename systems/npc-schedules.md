@@ -203,6 +203,16 @@ floor is above or below the displayed floor. That is how an NPC that has just
 walked onto a link tile gets re-offered to the floor-transition gate on the next
 tick.
 
+That one transition also ends the tick. It is the only path in the walker that
+leaves the per-slot loop early: after rewriting the state to 6 or 7 the walker
+returns immediately, so every slot after the one that triggered it is skipped
+for that tick and resumes on the next one. Nothing else in the pass short-cuts
+the loop this way — every other arm falls through to the loop tail and the next
+slot. An implementation that instead continues iterating will let other NPCs
+take an extra step on exactly the ticks where one NPC finishes a route toward a
+floor link, which is observable as a one-tick timing difference in busy
+locations.
+
 ## 8. Pathfinding
 
 When an NPC needs to move and the next cardinal direction is blocked, the walker invokes a flood-fill pathfinder. The pathfinder operates on a 32×32 byte scratch workspace separate from the live world-tile array, and returns either a target cell coordinate (plus a queued sequence of direction codes that re-traces the path) or "no route within budget".
@@ -251,9 +261,31 @@ The two tile-ID shapes are the floor-link variant of Section 8.5. They are
 selected by the caller, never inferred from map content, and the builder never
 mixes them: one call hunts `0xC8` cells or `0xC9` cells, never both.
 
-**Phase 2: per-cell walkability fill.** The builder iterates every cell. For each, it asks an NPC-specific predicate "is this cell open for this NPC pathfinding workspace, given the NPC's active schedule waypoint and the location's current floor?". This predicate is separate from the shared foot/vehicle terrain-query dispatcher in `systems/movement.md`. It handles out-of-bounds cells, schedule-waypoint matches, floor-link marker replay guards, and then tests the tile id against a dedicated NPC pathfinding bitmap. Accepted cells are stamped open; rejected cells and waypoint matches become obstacles until later goal-stamping phases overwrite specific goal cells.
+**Phase 2: per-cell walkability fill.** The builder iterates every cell. For
+each, it asks an NPC-specific predicate "is this cell open for this NPC
+pathfinding workspace, given the NPC's active schedule waypoint and the
+location's current floor?". This predicate is separate from the shared
+foot/vehicle terrain-query dispatcher in `systems/movement.md`. It answers in
+three ways — *blocked*, *open*, and *open because this cell is the NPC's own
+active waypoint* — and the builder treats both open answers identically,
+stamping the cell open. Only the blocked answer produces an obstacle. Section 10
+gives the rules the predicate applies, in order, and the tile-id set behind
+them.
 
-**Phase 3: tile-ID goal markers.** When the mode flag is one of the two tile-ID modes, the builder walks the live world-tile array; every cell whose live tile equals the selected marker becomes a goal sentinel. Goal stamping overwrites whatever phase 2 decided about that cell, so a floor-link cell is reachable as a destination even though phase 2 blocks it as an ordinary intermediate cell.
+The waypoint-match answer matters: an NPC's authored waypoint routinely sits on
+a tile that the pathfinding tile set otherwise treats as an obstacle — a bed, a
+mirror, a well, a counter — and the match rule is the only reason the NPC can
+ever route onto its own destination. It is an escape hatch for one specific
+cell, not a general relaxation.
+
+**Phase 3: tile-ID goal markers.** When the mode flag is one of the two tile-ID
+modes, the builder walks the live world-tile array; every cell whose live tile
+equals the selected marker becomes a goal sentinel. The stamp is applied after
+phase 2 has already written that cell, so goal status always wins over whatever
+the walkability answer was. In practice both floor-link ids are already open
+under the tile set, so this ordering does not rescue an otherwise-blocked cell
+for them; it does guarantee that a goal cell is a goal even if a future map or
+tile-set change made it an obstacle.
 
 **Phase 4: dynamic-obstacle overlay.** The builder walks the active-object
 table and, for each occupied slot whose Manhattan distance from the NPC's
@@ -391,43 +423,83 @@ Several rules govern whether a candidate cell is a legal step. All are consulted
 
 **Tile passability.** NPC pathfinding does not reuse the foot/avatar or vehicle
 terrain-query families from `systems/movement.md`. Its workspace builder uses a
-dedicated one-bit-per-tile-id resource: a set bit marks the tile id open for
-NPC pathfinding, and a clear bit marks it as an obstacle. This is a pathfinding
-workspace rule, not a general claim about which tiles are physically walkable
-by the player.
+dedicated one-bit-per-tile-id resource covering the full `0x00..0xFF` terrain
+id space. **A set bit marks the tile id as an obstacle for NPC pathfinding; a
+clear bit marks it open.** This is a pathfinding workspace rule, not a general
+claim about which tiles are physically walkable by the player, and it is not
+the same set as any of the player transport sets.
 
-The predicate has three non-bitmap rules:
+The predicate resolves in this order:
 
-- A candidate whose `(x, y, z)` equals the selected schedule waypoint returns a
-  special "waypoint match" result. The workspace builder initially treats that
-  result as non-open; coordinate-goal stamping can later replace the explicit
-  target cell with the goal sentinel.
-- Out-of-bounds X/Y coordinates use the engine's out-of-bounds sentinel tile
-  and are blocked in normal maps.
-- While an NPC is replaying a cached path, floor-link marker ids `0xC8` and
-  `0xC9` are blocked as ordinary intermediate cells. The tile-ID goal mode
-  stamps those same ids as explicit goals instead.
+1. **Waypoint match.** A candidate whose `(x, y, z)` equals the selected
+   schedule waypoint is reported open regardless of its tile id, and is
+   distinguished from an ordinary open cell so a caller can tell the two apart.
+   The workspace builder does not distinguish them: it stamps both open.
+2. **Out-of-bounds.** X or Y outside `0..31` does not fault. The analysed
+   baseline resolves such a probe to the byte that sits at the very end of the
+   live tile grid — that is, to the grid's own last cell — and then applies the
+   tile-set test to it. Passability of an out-of-bounds probe therefore depends
+   on whatever tile the current map happens to carry in its final cell rather
+   than on a dedicated constant. An implementation that simply rejects
+   out-of-bounds candidates matches shipped behaviour on every map whose final
+   cell is an obstacle tile, which is the usual case, but the two are not the
+   same rule.
+3. **Floor-link fast path.** While an NPC is replaying a cached path, the two
+   floor-link ids `0xC8` and `0xC9` short-circuit to open without consulting the
+   tile set. Both ids are already clear in the tile set, so this path changes
+   nothing about the result; it is a shortcut, not a special case, and it must
+   not be read as "floor links are blocked as intermediate cells".
+4. **Tile-set test.** Otherwise, the tile id's bit decides: set means obstacle,
+   clear means open.
 
-For the analyzed DOS baseline, the NPC pathfinding bitmap opens these static
-tile-id ranges:
+For the analyzed DOS baseline the tile set marks these ranges as **obstacles**
+for NPC pathfinding:
 
-| Tile ids | LOOK2-derived description families |
+| Tile ids | Shipped description families |
 |---|---|
 | `0x01..0x03` | Deep water, water, and shoals. |
 | `0x0C..0x0D` | Mountains and high peaks. |
-| `0x10..0x1C` | Huts, shrines, keeps, settlements, cave/mine/dungeon entrances, lighthouse, and bridge. |
+| `0x10..0x1C` | Huts, shrines, keeps, settlements, cave/mine/dungeon entrances, lighthouse, and the world-map bridge run. |
 | `0x27..0x2B` | Roof, crystal sphere, bright light, and hollow stump. |
-| `0x2E..0x3F` | Fruit tree, cactus, grass, gargoyle, and mighty castle. |
+| `0x2E..0x3F` | Fruit tree, cactus, the world-map grass art run `0x30..0x37`, gargoyle, and the mighty-castle run. |
 | `0x41..0x43` | Codex, mast, and rail. |
 | `0x46` | Pillar. |
-| `0x4A..0x69` | Structure, wall, window, rock, shelf, furniture, river, and bridge variants. |
+| `0x4A..0x69` | Arrow slit, window, pile of rocks, stone/nicked/plain walls, crenellations, anvil, window shelf, potted plant, crowded bookshelf, the Guardian tile, and river variants. |
 | `0x6C..0x86` | River variants, strange walls, pendulum, stocks, manacles, and metal grate. |
 | `0x88..0x8F` | Cannonballs, torture rack, loose brick, harpsichord, guillotine, and molten lava. |
-| `0x94..0xA9` | Tables, odd door, portcullis, food, mirrors, furniture, well, hitching post, logs, and desk. |
-| `0xAB..0xB7` | Bed, drawers, end table, footlocker, torch, brazier, meat roasting, and cannon. |
+| `0x94..0xA9` | Tables, odd door, portcullis, table with food, the three mirror ids, deep well, hitching post, stack of logs, desk, barrel, wine cask, vanity, and pitcher. |
+| `0xAB..0xB7` | Bed, chest of drawers, end table, heavy footlocker, flickering torch, hot brazier, meat on a spit, and cannon. |
 | `0xB9` | Locked door. |
-| `0xBB..0xC3` | Locked door with window, fireplace, street lamp, candelabrum, hot stove, and sentinel. |
-| `0xCA..0xFF` | Fence, waterfall, moon gate, desert, Flame-family tiles, collapsed dungeon entrance, flagpole, water, hourglass, standards, signs, and late catalog entries. |
+| `0xBB..0xC3` | Locked door with a window, fireplace, street lamp, candelabrum, hot stove, and the unnamed ids up to the stairway family. |
+| `0xCA..0xFF` | Wooden fence, waterfall, moon gate, desert, the Flame family, collapsed dungeon entrance, flagpole, water, hourglass, the Britannia standard, the shop signs, the grandfather clock, bellows, wall, and darkness. |
+
+Everything not listed above is open. Written out, the open ids are `0x00`,
+`0x04..0x0B`, `0x0E..0x0F`, `0x1D..0x26`, `0x2C..0x2D`, `0x40`, `0x44..0x45`,
+`0x47..0x49`, `0x6A..0x6B`, `0x87`, `0x90..0x93`, `0xAA`, `0xB8`, `0xBA`, and
+`0xC4..0xC9`: swamp, grass, brush, desert, trees, tropical forest and foothills;
+bridges, desert and the road run; wooden planks and cobble; pier and the two
+bridge/NPC-marker ids; carpet; the archway; the chair family `0x90..0x93`; the
+two unlocked door ids `0xB8` and `0xBA`; and the stairway family `0xC4..0xC7`
+together with both floor links `0xC8` and `0xC9`.
+
+The door ids are the sharpest confirmation that the polarity above is the right
+way round: the plain wooden door `0xB8` and the wooden door with a window `0xBA`
+are open for NPC routing, while the locked door `0xB9` and the locked door with
+a window `0xBB` are obstacles. NPCs walk through unlocked doors and are stopped
+by locked ones.
+
+Two consequences fall straight out of that split and are easy to get backwards:
+
+- **Chairs are walkable for NPC routing and beds are not.** An NPC whose
+  schedule seats it in a chair reaches that chair as ordinary open ground; an
+  NPC whose schedule beds it down reaches the bed only through the
+  waypoint-match rule above, because the bed id is an obstacle. The same is true
+  of the mirror and well ids. This is exactly why an NPC parked on a bed or a
+  mirror is the thing the Talk status gate detects (`systems/conversation.md`
+  Section 2).
+- **Both floor links are ordinary open ground.** They are never obstacles at
+  any point in the pass. What makes them special is only that the tile-ID search
+  mode additionally stamps them as goals.
 
 **Active-object collisions.** Other NPCs and the player occupy cells in the
 active-object table. Occupied cells are reported as "blocked" only when the
@@ -560,7 +632,12 @@ low-visibility presentation parity outside the scheduler contract.
   actors are outside the scheduler by ownership, not a missing scheduler
   variant.
 
-- **Multi-NPC tick ordering.** The walker iterates slots `1..31` in slot-order; lower-indexed NPCs move first within a tick. This is observable but is not a gameplay-visible bug.
+- **Multi-NPC tick ordering.** The walker iterates slots `1..31` in slot-order;
+  lower-indexed NPCs move first within a tick. This is observable but is not a
+  gameplay-visible bug. One arm cuts the iteration short: the state-3 drain that
+  re-enters a floor-transition state returns from the whole pass rather than
+  continuing to the next slot (Section 7), so higher-numbered slots lose that
+  tick.
 
 - **Floor-link selection.** When a floor mismatch forces an NPC to change
   floors, the pathfinder picks the nearest reachable cell carrying the selected
@@ -611,7 +688,16 @@ The behaviour described above was derived by reading the function and format not
 - The on-floor floor-transition gate, its direction-matching acceptance test,
   and its wider stairway band — `u5-decomp/functions/NPC_OVL/0x0A4A_npc_floor_transition_gate.md`.
 - The five-phase workspace builder, the walkability predicate, and the dynamic-obstacle overlay — `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
-- The dedicated NPC pathfinding predicate and bitmap-derived open tile ranges — `u5-decomp/functions/NPC_OVL/0x0ADC_is_tile_walkable_for_npc.md`.
+- The dedicated NPC pathfinding predicate, its three-way answer, the
+  out-of-bounds resolution, and the tile-set polarity (set bit means obstacle) —
+  `u5-decomp/functions/NPC_OVL/0x0ADC_is_tile_walkable_for_npc.md`,
+  `u5-decomp/functions/NPC_OVL/0x0B9E_npc_can_enter_cell.md`, and
+  `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md` section 5, which
+  re-derives the tile set directly and reconciles two private notes that stated
+  the polarity in opposite directions.
+- The early return that ends a whole walker pass when a drained route re-enters
+  a floor-transition state — `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`
+  sections 1.6 and 5.
 - The world-mutation helper, the hidden-NPC bitmask, and the default-human tile sentinel — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
 - The shipped hidden-mask scene/slot catalogue was cross-checked against local
   `DATA.OVL` table reads, the public roster keys in `catalogs/gazetteer.md`,

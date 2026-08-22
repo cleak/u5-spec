@@ -85,6 +85,18 @@ gate an immediate follow-up inside the active scene's conversation set. Do not
 model them as global quest completion flags unless a separate durable writer is
 also traced.
 
+**Lifetime.** "Per-scene" describes the bank's *indexing*, not its durability.
+The whole thirty-two-slot bank lives inside the flat save image and is written
+and restored with everything else in it; the factory seed has all slots zero, and
+no traced path clears a slot on scene exit, mode change, save, or reload. A bit,
+once set, stays set for the rest of that savegame. This matters beyond
+line-skipping: shipped dialogue also uses the bank to make a reward
+non-repeatable, with two IF-ELSE tests around one ASK-WHO selecting between a
+plain record and a near-duplicate bonus record (`systems/conversation.md`, "The
+introduce-yourself idiom", and `systems/karma.md` section 4). An implementation
+that treats the bank as per-visit scratch turns every such reward into a farm.
+`formats/saved-gam.md` gives the band the bank occupies.
+
 ## 4. Generic Conversation Action Flags
 
 The `0x86` action-dispatch control code has two broad families.

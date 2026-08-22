@@ -17,7 +17,9 @@ The files have no header, no arena table, no compression, and no per-record name
 
 ## 2. The Two Files
 
-`BRIT.CBT` contains the outdoor arena bank. It has sixteen records, matching the sixteen outdoor terrain or encounter classes selected by the terrain-combat setup path. When a hostile overworld object triggers combat, the engine derives an arena index from the object's tile class and loads the matching record from this bank. The selected record begins at `arena_index * 352`.
+`BRIT.CBT` contains the outdoor arena bank of sixteen records. The record index is chosen by the terrain-combat entry step from the **ground the fight starts on** and the party's transport state — the world terrain tile under the hostile object, a water/river predicate, whether the party is aboard a ship, and one test on the triggering object itself: whether it belongs to the ship family. Apart from that single ship-family test, the object's own sprite byte is not an input to the arena choice, and the arena is never derived from the object's class. Section 6 summarises the selection and `systems/encounters.md` Section 4 carries the full ordered table. The selected record begins at `arena_index * 352`.
+
+An earlier revision of this document said the engine "derives an arena index from the object's tile class". That is wrong and is withdrawn: the quantity computed from the object's sprite byte is the encounter's **combat class id**, which drives spawn count, spawn stats, banner text, and spawned sprites, and is independent of the arena index. Two of the sixteen records (index 0, used by the scripted duel entry, and index 9) are never produced by the terrain selector at all.
 
 `DUNGEON.CBT` contains the dungeon-room arena bank. It is much larger, with seven dungeon banks of sixteen records each: one arena slot for every possible low nibble of a room-trigger cell in the dungeons that have authored room triggers. The file size is exactly one hundred twelve records. Older third-party summaries sometimes say one hundred eleven; the room-entry lookup reaches the final record as Doom slot fifteen, so treat all one hundred twelve records as real.
 
@@ -109,7 +111,7 @@ arena record is the authoritative placement source; a fixed resident coordinate
 array is only a cached copy of the last loaded arena record, not independent
 global placement data.
 
-Do not treat the metadata band as the complete actor-placement model. Terrain combat also consults resident class/encounter tables outside the `.CBT` file for spawn counts and leader monster replacement. Placement-slot coordinates are arena-local metadata copied from the selected record into resident tables before placement. That means not every placement detail is encoded in `.CBT`; the file provides arena-local terrain and placement geometry, while resident tables provide global class and spawning parameters.
+Do not treat the metadata band as the complete actor-placement model. Terrain combat also consults resident per-class tables outside the `.CBT` file for spawn counts and for the companion-class substitution applied to early spawn slots. Placement-slot coordinates are arena-local metadata copied from the selected record into resident tables before placement. That means not every placement detail is encoded in `.CBT`; the file provides arena-local terrain and placement geometry, while resident tables provide global class and spawning parameters.
 
 The `DUNGEON.CBT` room loader is confirmed to load the same complete record
 shape into the combat terrain buffer. Dungeon-room setup then performs its own
@@ -254,8 +256,10 @@ A clean implementation should preserve all metadata bytes even if it only consum
 
 Outdoor combat enters through a terrain-combat entry step that runs *before* the
 combat framer. That step chooses the `BRIT.CBT` record from the world terrain
-tile under the triggering active object, a water/river predicate, and whether
-the party is aboard a ship - not from the triggering object's own type byte.
+tile under the triggering active object, a water/river predicate, whether the
+party is aboard a ship, and whether the triggering object belongs to the ship
+family. Apart from that one ship-family test, the triggering object's own sprite
+byte is not an input to the arena choice.
 The full selection table is published in `systems/encounters.md` Section 4; in
 outline, ship-versus-ship and party-aboard-ship cases take dedicated arenas,
 water takes a water arena, the Shadow Lord takes his own arena, and everything
@@ -265,7 +269,9 @@ forest, hills, bridge, cobble), with a scene-dependent fallback.
 The triggering object's own sprite byte selects something different: the
 encounter's **combat class id**, which drives the spawn count, spawn stats, and
 spawned sprites. Arena index and class id are independent; do not derive either
-from the other.
+from the other. The ship family is the single point of contact between the two
+selections - it forces combat class 1, and it also steers the arena choice to
+index 14 when the party is itself aboard a ship, or index 12 otherwise.
 
 The selected `BRIT.CBT` record supplies the arena terrain, the six party entry
 coordinate pairs, and the sixteen monster placement-slot coordinate pairs from
@@ -401,7 +407,7 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 - First-pass map and arena survey, including `.CBT` record size, terrain-grid dimensions, row stride, outdoor record count, and dungeon record count: `u5-decomp/formats/maps.md`.
 - Outdoor combat arena loader analysis, including the four metadata slices copied from each selected `BRIT.CBT` record into resident combat setup tables: `u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`.
 - Internal combat enter/exit framer and arena setup analysis.
-- Internal terrain-combat setup analysis, including outdoor arena selection, monster-count lookup, placement-slot tables, and replacement-tile roll rules.
+- Internal terrain-combat setup analysis, including outdoor arena selection, per-class monster-count lookup, party-entry and placement-slot tables, and companion-class roll rules.
 - Internal combat round-loop analysis, including runtime terrain-grid consumption.
 - Internal combat actor-command, AI, and target-selection analyses in the eleven-by-eleven arena coordinate space.
 - Internal dungeon-mode room-trigger analysis for the exact scene/low-nibble relationship to `DUNGEON.CBT`.

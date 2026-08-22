@@ -13,7 +13,7 @@ town-specific command hooks around that shared movement layer.
 
 One set of code, one set of file formats, one tile encoding, and one schedule format serve four superficially different location classes — towns, dwellings, castles, and keeps. The differences are entirely encoded in data: a castle can have throne rooms, guards, healers, or other special residents; a keep is barracked and patrolled; a dwelling is a single small house with a few NPCs; a town is everything between. From the engine's perspective they are identical.
 
-This spec describes how town mode is entered, how the location's map and NPCs are loaded, how the per-turn loop dispatches commands and runs the scheduler, what role the player's second representation in the NPC table plays, how multi-floor locations are navigated, what the special interactions do at the town-mode level, and how the player exits.
+This spec describes how town mode is entered, how the location's map and NPCs are loaded, how the per-turn loop dispatches commands and runs the scheduler, how the player is represented while in a location, how multi-floor locations are navigated, what the special interactions do at the town-mode level, and how the player exits.
 
 ## 2. The four location classes and the scene byte
 
@@ -40,12 +40,12 @@ The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID 
 
 - **NPC start markers** (`0x48` or `0x49`) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and exact marker byte.
 - **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). Locations with no asterisk inherit a default per-scene spawn coordinate.
-- **Dash/period markers** (the dash and period tile values) are processed by a secondary pass that runs after the player has been placed. When the runtime predicate accepts them, they rewrite to nearby ordinary tile-detail values; they are not currently proven to be per-NPC route hints.
+- **Dash/period markers** (the dash and period tile values) are processed by a secondary pass that runs at the end of the map load. When the runtime predicate accepts them, they rewrite to nearby ordinary tile-detail values; they are not currently proven to be per-NPC route hints.
 - **NPC floor-link markers** (`0xC8` and `0xC9`) are consumed by the NPC scheduler's tile-ID pathfinder after map load. They must remain distinguishable in the live tile buffer for the schedule processor.
 
 Marker processing is in-memory only: the on-disk `.DAT` floor is unchanged. By the time normal play begins, runtime passes have harvested the markers needed for spawn/NPC state and may have rewritten selected marker cells, while visible actors are represented through the dynamic sprite layer. Some markers, notably the `0xC8`/`0xC9` floor-link pair, remain meaningful to runtime consumers after the initial load pass.
 
-After the player has been attached, a cosmetic variation pass may rewrite selected live floor cells that were authored as dash or period terrain into neighbouring visual variants. This is not an NPC waypoint load. It is a deterministic per-location texture pass: it is seeded from location state, saves and restores the gameplay PRNG around the pass, and exists only to break up large uniform stretches of path/ground in the loaded tile buffer.
+At the end of the map load, a cosmetic variation pass may rewrite selected live floor cells that were authored as dash or period terrain into neighbouring visual variants. This is not an NPC waypoint load. It is a deterministic per-location texture pass: it is seeded from location state, saves and restores the gameplay PRNG around the pass, and exists only to break up large uniform stretches of path/ground in the loaded tile buffer.
 
 The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a scene place its ground floor in the middle of nearby authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
 
@@ -68,7 +68,7 @@ Dialogue lives in the per-class `.TLK` file, indexed by the per-NPC dialogue ind
 
 Town mode's contract with the schedule system is one call per consumed turn: each turn-taking action calls the per-tick walker once, with the current hour byte. The walker iterates all thirty-one NPC slots and advances each NPC's state machine. Town mode reads the walker's "any NPC moved" scratch flag to decide whether the screen needs a repaint.
 
-## 5. Entry: map load, NPC load, player attach
+## 5. Entry: map load, NPC load, Shadowlord install
 
 Entering a town is a single setup pass that runs once per entry, before the per-turn loop starts spinning. Six things happen, in order:
 
@@ -82,35 +82,69 @@ Entering a town is a single setup pass that runs once per entry, before the per-
 
 5. **NPC roster load.** For each occupied NPC slot in the location's `.NPC` block, the schedule and type are loaded into the resident schedule and type tables, the dialogue index is unpacked into the per-NPC runtime block, and the NPC's runtime state is initialised by sampling the schedule for the current hour. NPCs whose initial waypoint floor matches the current floor are linked into the active-object table; off-floor NPCs exist only in the schedule tables.
 
-6. **Player attach.** The player is added to the active-object table at slot zero (the avatar) and given a phantom NPC entry — a high-indexed NPC slot whose schedule is three identical waypoints fixed at the location's per-scene entry coordinate. Section 8 describes the dual representation. The player's default spawn cell is `(15, entry_y, 0)`: X is fixed at fifteen, Y is read from the DATA.OVL-derived `LocationEntryYTable`, and Z is the ground floor. If the map-load pass found explicit asterisk spawn markers, command handlers may use those marker slots for stair/alternate landing paths, but the player-as-NPC attach contract uses the resident entry-Y table.
+6. **Shadowlord install.** The last step of the pass compares the town's scene
+   byte against the three Shadowlord hideout slots and, on a match, installs a
+   live Shadowlord actor in the town. In a town that hosts no Shadowlord — the
+   ordinary case — this step does nothing at all. Section 13 gives the guard,
+   the one-at-a-time reject, the actor-index choice, and the placement. The
+   player is present in this mode as slot zero of the active-object table, kept
+   in step with the world-state globals by the compositor; the entry pass does
+   not write a player entry anywhere else. If the map-load pass found explicit
+   asterisk spawn markers, command handlers may use those marker slots for
+   stair/alternate landing paths.
+
+   **Retraction, and an open item.** This step was previously called "player
+   attach" and was said to give the player a phantom NPC entry — a high-indexed
+   NPC slot with a stationary three-identical-waypoint schedule — spawned at
+   `(15, per-scene row, 0)`. All of that is withdrawn. Every detail came from
+   the helper that installs a resident **Shadowlord**, which runs only when one
+   of the three Shadowlord hideout slots equals the town being entered, takes
+   its record from the ordinary monster-slot allocator (which never returns
+   slot zero), and stamps the Shadow Lord actor tile. Section 13 now owns those
+   coordinates, and Section 8 records the withdrawal of the phantom NPC itself.
+   The player's own default town-entry cell — the fallback used when the map's
+   asterisk markers supply none — is therefore **not currently established** by
+   this spec and must be treated as an open item rather than implemented from
+   the old wording.
 
 After these six steps return, the entry pass calls a final screen redraw and hands off to the per-turn loop. The player is in town mode until the loop's per-turn epilogue notices that the scene byte has been cleared (Section 15).
 
 A *preserving re-entry* runs the same pass with the setup argument clear. In
-that mode the active-object table tail is not zero-cleared and the
-player-attach step can short-circuit if it finds an existing player slot in
-place. Preserving re-entry is used when the top-level dispatcher is already in
+that mode the active-object table tail is not zero-cleared, so a Shadowlord
+already standing in the table survives the re-entry and, by the one-at-a-time
+reject of Section 13, suppresses a second install. Preserving re-entry is used when the top-level dispatcher is already in
 a town-family scene and is re-running setup without having just returned from
 the overworld or the dungeon wrapper.
 
 Fresh entry paths pass the nonzero setup argument. This path clears active
 object slots one through thirty-one, resets the town-entry scratch flags, runs
 the entry-time service hooks, and then proceeds through the same map load,
-player attach, NPC setup, and presentation sequence. The traced fresh-entry
+Shadowlord install, NPC setup, and presentation sequence. The traced fresh-entry
 callers are the main loop after an overworld-to-town scene change, the main
 loop after a dungeon-wrapper return that leaves a town-family scene active, and
 the resident NPC-location warp helper when it changes from one town-family
 scene to another. The direct save/load or already-in-town dispatch path reaches
 town setup with the preserving argument.
 
-One traced coordinate edge intentionally bypasses the normal phantom-player
-attachment path. When the town arrest sequence accepts surrender, it sends the
-party to Yew jail at local position `(25, 4, 0)` and advances time until 08:00.
-On the following town-entry setup, the player-attach helper treats local
-`Y == 4` as a special case: it skips the permanent-location queue lookup and
-returns before allocating a fresh phantom NPC if no active player queue entry is
-already selected. Do not generalize this into an ordinary re-entry rule; it is
-the jail-wakeup coordinate path currently traced from the arrest handler.
+One traced coordinate edge suppresses the Shadowlord install outright. When the
+town arrest sequence accepts surrender, it sends the party to Yew jail at local
+position `(25, 4, 0)` and advances time until 08:00. On the following
+town-entry setup, a party Y coordinate of exactly `4` skips the hideout
+comparison entirely, and because the host selector is reset to its no-host
+marker immediately before that test, the install then returns having done
+nothing — the skip is unconditional, not contingent on any other state. A town
+entered on that row therefore never receives its resident Shadowlord and never
+runs the associated NPC sweep (Section 13). This is a coordinate test, not a
+jail test: any entry with the party on row `4` behaves the same way. Do not
+generalize it into an ordinary re-entry rule, and do not read it as a
+player-placement rule — the retraction in Section 5 step 6 applies.
+
+**Retraction.** This paragraph previously described the same edge as a bypass
+of a "phantom-player attachment path", with the helper skipping a
+permanent-location queue lookup and returning before allocating a phantom NPC
+"if no active player queue entry is already selected". Both halves are
+withdrawn: the helper is the Shadowlord install, and the trailing condition
+does not exist.
 
 ## 6. The dawn/dusk substitution
 
@@ -148,23 +182,47 @@ hours are simulated. In the traced town-hours path, each requested rest hour can
 run up to sixteen walker/world-tick passes, so NPCs can move substantially more
 than once per requested hour if the rest is not interrupted.
 
-## 8. The player as NPC
+## 8. The player in town mode: one representation, not two
 
-Town mode keeps two parallel views of the player. The first is slot zero of the active-object table — the avatar sprite — owned by every world-mode renderer and updated each turn from the world-state globals. The second is an entry in the high end of the NPC slot table — a *phantom NPC* — whose schedule is three identical waypoints pinned to the player's spawn coordinate, whose AI byte is set to a stationary mode, and whose type byte is a player-sentinel distinct from any real NPC type.
+Town mode keeps exactly one view of the player: slot zero of the active-object
+table — the avatar sprite — owned by every world-mode renderer and refreshed
+each turn from the world-state globals, which remain the authoritative source
+for the party's position and floor. The player has no entry in the NPC type
+array, no per-NPC runtime descriptor, and no schedule.
 
-The phantom exists because some town-mode helpers walk the NPC table when they
-need the player to have an NPC-table identity. Without the phantom, those
-helpers would be blind to the player. NPC movement collision and pathfinding
-are not purely NPC-table scans, though: the pathfinding workspace marks nearby
-active-object cells as dynamic obstacles and separately marks the player's
-current cell, so NPCs refuse the live player position even after the phantom
-entry has remained at its spawn coordinate.
+**Retraction — the phantom NPC is withdrawn.** Earlier revisions of this
+section described a second representation: a *phantom NPC* at the high end of
+the NPC slot table, with a stationary three-waypoint schedule and a
+player-sentinel type byte, allocated on town entry, short-circuited on
+re-entry, and freed on exit. That contract is withdrawn in full, not merely
+narrowed to "details unestablished". Its sole traced source was the town-entry
+helper re-derived in Section 13: the helper installs a resident **Shadowlord**,
+runs only in a town whose scene byte matches one of the three hideout slots,
+and stamps the Shadow Lord actor tile — the value formerly read as a player
+sentinel — into both the active-object record and the NPC type byte. The
+apparent "an existing phantom is found, so skip allocation" short-circuit is
+that install's one-at-a-time reject against an already-standing Shadowlord.
+Nothing in the traced entry path writes a player entry into the NPC tables, so
+the phantom's existence, purpose, slot index, spawn cell and waypoints are all
+withdrawn together. `formats/npc.md` Section 6 and `systems/active-objects.md`
+Section 5 carry the same retraction; `catalogs/npc-roster.md` no longer lists a
+player-mirror tag.
 
-The phantom has zero effect on the schedule walker. Its three identical waypoints make every transition trivial; its AI byte routes to a stationary behaviour; the player's current floor matches the location's current floor on every tick. The walker's per-NPC pass for the phantom slot completes in essentially constant time.
+**What an implementation still needs.** The concern the phantom was invented to
+explain — that NPCs must not walk through the player — is met without it, and
+that mechanism is independently traced. The NPC pathfinding workspace marks
+nearby occupied active-object cells as dynamic obstacles and then separately
+marks the player's *current* cell, so NPCs refuse the live player position on
+every tick. Collision therefore uses the live player coordinate, and no
+stationary mirror coordinate exists to consult. Likewise, the render-order
+convention that mattered here is unchanged and independent of the retraction:
+the renderer walks slots from thirty-one down to zero, so slot zero paints last
+and the avatar is drawn on top of any actor sharing its cell — including a
+Shadowlord installed on the same cell.
 
-The active-object slot zero and the phantom's linked-object slot are different: the avatar's active-object slot is hard-coded as zero (the renderer relies on this); the phantom's linked-object slot is allocated like any other NPC's. Both might paint at the same cell. The system avoids double-painting by leaning on slot zero's "always last" render-order convention: the renderer walks slots from thirty-one down to zero, so slot zero (the canonical avatar) paints on top of any phantom-NPC sprite at the same cell.
-
-The phantom is allocated on town entry and freed on town exit. Re-entries to the same town find the existing phantom and short-circuit allocation. Cross-location re-entries clear NPC slots and create a fresh phantom for the new location.
+If a town-mode helper genuinely needs to find the player while walking the NPC
+table, this spec does not currently describe one; treat any such requirement as
+unestablished and read the player's position from the world-state globals.
 
 ## 9. Conversation: the Talk command
 
@@ -262,6 +320,17 @@ fails this save, and the failure chance is `(29 - Dexterity) / 30` otherwise.
 Each eligible slot rolls independently, so several members can be poisoned in
 the same turn, and the messages appear in slot order.
 
+The predicate has no further conditions, and the list of ways it can fail to
+fire is short and complete: the tile under the party is not `0x04`; the party's
+transport marker is anything other than on-foot `0x1C`, which is how every
+vehicle and mount suppresses the effect; the slot is Dead or already Poisoned;
+or the member's Dexterity save succeeds. There is no scene, floor, coordinate,
+authored-cell, or per-tile-attribute component to look up, no daytime or
+schedule component, and no cell-consumption state — the same cell keeps working
+forever. The effect is reachable only in town-family scenes because it lives in
+the town underfoot handler; overworld and dungeon modes have their own
+underfoot handlers and their own hazard sets.
+
 Two consequences follow from the per-turn cadence that a step-only reading would
 miss. First, standing on a gas tile is not safe: every turn spent on it is a
 fresh save for every eligible member, so a party that lingers will eventually be
@@ -354,11 +423,56 @@ the town's cast without the player doing anything. The town's scene identity,
 map, and NPC roster are unaffected — entry never rewrites the scene byte to a
 different location. Only the eight town scenes can match, because the slot value
 is itself a town scene byte (`catalogs/quest-graph.md`, Runtime Shadowlord
-State). One guard applies: the whole check is skipped when the party's Y
-coordinate at that moment is `4`, in which case no host is recorded and no
-Shadowlord is installed. When a host is recorded but no free actor slot is
-available, the install is abandoned and the scene proceeds without the
-Shadowlord.
+State). One guard applies before anything else: the whole check is skipped when
+the party's Y coordinate at that moment is `4`, in which case no host is
+recorded and no Shadowlord is installed.
+
+Once a host is recorded, exactly one condition can still cancel the install.
+The entry path walks the whole 32-record active-object table and abandons the
+install if any live record already carries the Shadow Lord actor tile `0xFC`.
+**This is a one-at-a-time rule, not a "the table is full" rule.** It is the same
+mechanism as the Y-Yell summon gate in `systems/commands.md` Section 11, and it
+has the same two consequences: a town whose active-object table is merely
+crowded still receives its Shadowlord, and a town entered while a Shadowlord
+summoned elsewhere is still standing in the table receives none. An engine that
+substitutes a free-slot test here lets the player stack Shadowlords, and an
+engine that omits the check entirely does the same.
+
+The install itself has no failure outcome. After the one-at-a-time check
+passes, the path reserves an actor record and then chooses a scene-actor index
+by taking the highest-numbered free index, searching downward from `31`. If no
+index is free it proceeds with index `31` regardless, overwriting whatever
+occupied it. There is no "no room, skip the Shadowlord" path.
+
+The installed record is a Shadowlord actor: both identity bytes of the
+active-object record carry the Shadow Lord actor tile `0xFC`, the auxiliary and
+phase bytes are cleared, the floor byte is `0`, and the position is column `15`
+of the town's thirty-two-by-thirty-two grid at a fixed per-town row:
+
+| Town (scene byte) | Shadowlord row |
+|---|---:|
+| Moonglow (`1`) | 4 |
+| Britain (`2`) | 9 |
+| Jhelom (`3`) | 15 |
+| Yew (`4`) | 8 |
+| Minoc (`5`) | 17 |
+| Trinsic (`6`) | 10 |
+| Skara Brae (`7`) | 11 |
+| New Magincia (`8`) | 10 |
+
+The actor is also given a stationary three-waypoint schedule pinned to that same
+cell, so it does not wander away from its install position on its own.
+
+Which of the three is hosted also selects a one-shot, town-wide NPC state
+sweep that runs at the end of the same entry pass. This paragraph is the only
+statement of that mapping in this spec — nothing earlier describes it. Hatred
+puts every eligible NPC into the fortified/alert state, Cowardice puts every
+eligible NPC into the pacified state, and Falsehood changes no NPC state at all
+(its effects are the shop surcharge and the conversation theft). Eligibility is
+the same per-NPC predicate the alarm sweeps of Section 14 use, and the two
+resulting states are the same fortified and pacified states described there;
+the difference is only the trigger. In a town hosting no Shadowlord, and in a
+town whose install was skipped by the row-`4` guard, the sweep does not run.
 
 Stonegate has a separate entry-time presentation surface. On entry, the town
 setup path can play a Sceptre-gated prelude row when the party carries the
@@ -375,13 +489,13 @@ are skipped, while any living value selects that Shadowlord's atmospheric row.
 
 Some named locations contain hostile NPCs. A guard in Blackthorn's keep, for example, is a normal NPC for most of the game but turns hostile under specific quest conditions; the type byte encodes "hostile when flag X is set". When an NPC's hostile predicate is true, the walker stamps the NPC's current sprite with a hostile tile.
 
-A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). A-Attack directed at a town NPC stays inside town mode: it plays the attack presentation, can smash a small prop, can mark or clear the targeted NPC through the town death flow, and can trigger the town-wide alarm sweep. It does not call the combat framer or swap to a `.CBT` arena in the traced town overlay.
+A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). A-Attack directed at a town NPC plays the attack presentation, can smash a small prop, can mark or clear the targeted NPC through the town death flow, and can trigger the town-wide alarm sweep. An earlier revision of this section also said the town overlay "does not call the combat framer or swap to a `.CBT` arena"; that is withdrawn. The town overlay has a live NPC-conflict chain, entered both from A-Attack and from post-action cleanup, that hands the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses, so a town fight is an ordinary arena fight: ordinary town ground resolves to the cobble arena, and the scene-keyed town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). On exit the town chain clears the NPC slot, reloads the town map, and re-runs the Shadowlord install pass of Section 13 (which, in a hideout town whose Shadowlord is still standing in the active-object table, is rejected by the one-at-a-time check and does nothing). The full contract is in `systems/encounters.md` Section 7.
 
-NPCs whose hostile predicate is always true remain schedule-driven town actors. When the scheduler reports an attack/catch event, town post-action cleanup handles the event through alarm, arrest, pacify, death, or slot-clear paths rather than through arena combat.
+NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an attack/catch event, town post-action cleanup routes it through the alarm, arrest, pacify, death, or slot-clear paths described below, or into the NPC-conflict chain above; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
 
-Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, eligible NPCs are forced into a fortified/alert schedule state or into a pacified/fleeing schedule state; some special classes, including the player proxy and corpse/guard-like classes, are fortified instead of fleeing. Other eligible townsfolk use a random half-chance before switching into the fleeing state. The schedule walker consumes these state changes on later ticks.
+Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, eligible NPCs are forced into a fortified/alert schedule state or into a pacified/fleeing schedule state; some special classes — the Shadow Lord actor class, the lich/death-mage class, and the guard class — are fortified instead of fleeing. Other eligible townsfolk use a random half-chance before switching into the fleeing state. The schedule walker consumes these state changes on later ticks.
 
-After each schedule tick, town mode interprets the walker's event bytes. A non-attack/flee event from an alarmed NPC can print the associated message and pacify that NPC. A guard-catch event can run the arrest sequence: surrendering moves the party to the Yew jail scene, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing triggers the alarm sweep and consumes the turn. If that same arrest handler is reached while the party is already in the Blackthorn captive scene, it enters the Blackthorn audience/capture cinematic instead of the ordinary Yew-arrest prompt. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and reattaches the player.
+After each schedule tick, town mode interprets the walker's event bytes. A non-attack/flee event from an alarmed NPC can print the associated message and pacify that NPC. A guard-catch event can run the arrest sequence: surrendering moves the party to the Yew jail scene, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing triggers the alarm sweep and consumes the turn. If that same arrest handler is reached while the party is already in the Blackthorn captive scene, it enters the Blackthorn audience/capture cinematic instead of the ordinary Yew-arrest prompt. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
 
 ## 15. Exit
 
@@ -434,7 +548,7 @@ The exact free-roaming object contract is:
 | Step | Rule |
 |---|---|
 | Slot scan | Walk all 32 active-object slots in ascending slot order. Eligibility is based on active-object byte `+0`, not the rendered tile buffer. |
-| Eligible object bytes | `(byte0 & 0xFE) == 0x10`; in the traced data this is the animal/horse/cow style pair `0x10` and `0x11`. Empty slots, linked NPC sprite classes, player/phantom slot bytes, and all other object families are skipped. |
+| Eligible object bytes | `(byte0 & 0xFE) == 0x10`; in the traced data this is the animal/horse/cow style pair `0x10` and `0x11`. Empty slots, the avatar's slot-zero record, linked NPC sprite classes, and all other object families are skipped. |
 | Floor gate | Active-object byte `+4` must equal the current floor/Z byte exactly as a byte. Off-floor objects are skipped and are not moved toward the current floor. |
 | Chance gate | After the byte and floor gates pass, draw one uniform bit through the shared PRNG range helper. Nonzero skips the object for this tick; zero proceeds, so each eligible on-floor object has a 50% movement-attempt chance. No PRNG value is consumed for ineligible or off-floor slots. |
 | Pen gate | Before selecting a destination, test all four cardinal neighbours with the walker-local `0xA2`/`0x43` blocker predicate. If any cardinal neighbour is exactly `0xA2` or exactly `0x43`, the object makes no movement attempt this tick. |
@@ -492,7 +606,7 @@ town-loop mechanism.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and attaches the player — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
+- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and calls the Shadowlord install — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md` (its own step describing the coordinate guard is stated inverted there and is superseded by the 2026-08-22 repair-round correction in the install's note).
 - The top-level dispatcher and resident NPC-location warp helper that supply
   the traced fresh-versus-preserving town setup arguments -
   `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md` and
@@ -500,7 +614,12 @@ The behaviour described above was derived by reading the function and format not
 - The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
 - The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md` and `u5-decomp/functions/TOWN_OVL/0x0170_town_dawn_dusk_pass.md`.
 - The per-location cosmetic terrain variation pass - `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md`.
-- The player-as-NPC attachment helper and the phantom-NPC schedule synthesis — `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`.
+- The town-entry Shadowlord install — its hideout-slot match, its
+  one-at-a-time reject, its actor-index choice, and its placement and schedule —
+  `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md` (see that
+  note's 2026-08-22 repair-round correction, which supersedes its original
+  "player attach" framing) and
+  `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
 - The per-scene NPC activation mask reader/writer and runtime slot free helper - `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`, `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`, and `u5-decomp/functions/TOWN_OVL/0x00B0_npc_clear_slot.md`.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/0x011E_npc_find_idle.md`.
 - The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md`, `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
@@ -524,6 +643,10 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`,
   `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`, and
   `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
+- Independent second-pass re-derivation of the poison-gas predicate, the
+  Dexterity save comparison, the absence of any further gating condition, and
+  the caller-side per-turn placement:
+  `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - The location tile-grid file format and the two-floor-per-location layout — `u5-decomp/formats/maps.md`.
 - The NPC roster and dialogue file formats — `u5-decomp/formats/npc-tlk-pth.md`.
 - The clean verification summary for Lord British's castle scene binding and

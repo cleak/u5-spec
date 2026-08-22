@@ -249,13 +249,60 @@ its target before advancing to the next scripted actor or message beat.
 
 The display effects are palette/display operations and full-screen rectangle transitions driven by resident helpers. The exact helper names are implementation details. The compatibility requirement is the order and blocking nature of the presentation: messages pause, movement settles before the next beat, and the final certificate is reached only after the fade/transition sequence completes.
 
-The late orb/certificate path includes one traced full-screen rectangle
-operation after the pulse/fade and panel-transition sequence and before the
-certificate setup. Its bounds are the full inclusive 320-by-200 surface:
-`(0, 0)..(319, 199)`. The immediate caller does not sample input around that
-operation. Current evidence is sufficient to preserve its ordering and
-full-screen bounds, but not to model it as the intro-style column reveal or to
-assign a per-column tick cadence.
+### 7.1 The full-screen fade to black
+
+Between the pulse/fade and panel-transition sequence and the final narrative
+presentation, the endgame performs a full-screen **fade to black**. It is one
+beat with two halves, and the two halves live in different routines, which is
+why earlier revisions of this section got it wrong.
+
+The first half, in the victory sequence itself, is a full-screen opaque fill:
+
+- **Primitive.** A filled rectangle in the driver's current drawing colour. It
+  is not a copy, not a mask, and not a palette operation.
+- **Bounds.** Inclusive `(0, 0)..(319, 199)` — the whole surface.
+- **Colour.** The drawing colour is set to palette index `0` immediately
+  before, so the fill is black.
+- **Surface.** The render target is pointed at the **hidden** surface before
+  the fill and back at the visible page immediately afterwards, so the fill
+  itself changes no visible pixel. It also releases the active graphics asset
+  segment just before filling.
+
+The second half is the first thing the final narrative presentation helper
+(section 8) does. After it has acquired its three presentation resources, and
+before it draws anything else, it issues a **full-screen rectangle dissolve**
+of the inclusive rectangle `(0, 0)..(319, 199)` from the hidden surface to the
+visible page — the entry specified in `display-driver-abi.md` section 9.6. That
+path is unconditional and straight-line; there is no branch that skips it.
+
+Because the hidden surface was just filled black, the visible result is that
+the whole screen dissolves to black in the driver's deterministic pseudo-random
+per-pixel order, and only then does the narrative presentation begin.
+
+**Retraction.** Earlier revisions of this section described the fill as
+producing "no visible change at all" and told implementers they could "omit it
+entirely if the compositor already starts the certificate page from a known
+state". Both statements are withdrawn. The fill is invisible only when
+considered in isolation; the dissolve one call later is what puts it on screen.
+The clear is therefore load-bearing: an engine that skips it, and then runs the
+dissolve, will dissolve the stale contents of its offscreen surface onto the
+screen instead of fading to black. If an engine chooses to model neither half,
+it must model the net effect — the screen going black — some other way.
+
+**Timing and input.** Two blocking calls, in that order. Neither is paced by a
+tick, neither has a per-column or per-pixel schedule the caller controls, and
+the title tick does not run during either, because nothing calls it. The
+dissolve is self-paced: it visits every pixel of the rectangle exactly once and
+returns. There is no keyboard poll in the surrounding code, and by this point
+in a session the dissolve entry's own abort gate has long been cleared by
+earlier text drawing (`display-driver-abi.md` section 9.6), so this dissolve is
+silent and cannot be interrupted. No input is sampled or consumed across the
+whole beat.
+
+**Rectangle census.** This is the only rectangle dissolve anywhere in the
+endgame, and the only full-screen one in the program. The complete list of
+dissolve rectangles and their callers is in `display-driver-abi.md`
+section 9.6.
 
 ## 8. Final narrative presentation
 
@@ -269,6 +316,10 @@ uses blocking waits between presentation beats.
 The helper's presentation role is:
 
 - retry required endgame graphics and text resources until they are available;
+- once they are available, and before drawing anything, dissolve the whole
+  screen from the hidden surface to the visible page, which lands as a
+  full-screen fade to black because the caller has just filled the hidden
+  surface with palette index `0` (section 7.1);
 - keep the proportional font and endgame scene graphics resident while the
   presentation runs;
 - select one of six fixed `END.DAT` windows from presentation control records;
@@ -291,16 +342,18 @@ renderer. A clean implementation should keep the six window selections
 data-driven, but their semantic role is fixed narrative presentation, not
 party-slot retirement data.
 
-The exact page-in transition rectangles and reveal rates for the six fixed
-`END.DAT` narrative windows are not promoted into this baseline because the
-current endgame entry trace does not expose a six-per-window page-in rectangle
-table. The traced endgame entry surface identifies one full-screen rectangle
-operation in the late orb/certificate transition path, but that is not evidence
-for six distinct `END.DAT` page wipes, and that full-screen operation belongs
-after the final transition sequence rather than to the ordinary fixed-window
-narrative helper. Do not inherit the intro step-1 rectangle or
-one-column-per-title-tick rate for these endgame windows unless a caller-specific
-trace supplies the endgame bounds and rate.
+The six fixed `END.DAT` narrative windows have **no** page-in transition of
+their own. There is no per-window rectangle, no caller-owned clear, no border
+redraw, and no wait timing beyond the window setup's own drawing and the input
+wait between windows. Each window is a fixed window selection plus a
+proportional-text presentation, and an engine should model it that way.
+
+There is exactly one full-screen rectangle operation on this path, and it is
+not a per-window transition: it is the fade to black that opens the whole
+narrative presentation (section 7.1), before the first window is selected. It
+happens once, not once per window, and it is not evidence for six `END.DAT`
+page wipes. Do not inherit the intro step-1 rectangle dissolve for these
+windows either; the intro step-1 contract is specific to that caller.
 
 ## 9. Certificate scroll
 
@@ -382,11 +435,15 @@ The original uses the active-object renderer for cinematic movement. A modern en
   sprite ids, movement order, and local wander rule are specified here. Exact
   per-frame display-helper internals for every fade/palette transition remain
   presentation-parity work.
-- **Final narrative page-in transitions.** The six fixed `END.DAT` windows and
-  their narrative roles are specified. The traced endgame entry surface has one
-  late full-screen rectangle operation, not a six-entry page-in rectangle table;
-  per-window transition rectangles and reveal rates therefore remain
-  unspecified unless a more specific caller trace identifies them.
+- **Final narrative page-in transitions.** Closed for the purposes of the
+  transition question. The six fixed `END.DAT` windows and their narrative
+  roles are specified, and the traced endgame entry surface has no per-window
+  page-in rectangle, clear, border redraw, or wait timing beyond what the
+  window setup itself draws. They are direct fixed-window text presentations
+  with input waits between them, and an engine should model them that way. The
+  one late full-screen rectangle operation happens once, before the first
+  window, and is a fade of the whole screen to black (section 7.1); it is not a
+  per-window page-in transition and must not be modelled as one.
 - **Display helper taxonomy.** The visual sequence uses resident display, palette, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
 - **Asset variant mapping.** The paired graphics archive family and bitmap formats are specified, but exact endgame resource-slot-to-panel selection should be cross-checked if pixel-perfect presentation parity becomes required.
 
@@ -395,7 +452,10 @@ The original uses the active-object renderer for cinematic movement. A modern en
 This document is a cleanroom prose rewrite from the following source notes. It intentionally omits assembly, decompiled code, private offsets, and copied binary text dumps.
 
 - `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x0000_endgame_load_party_roster.md`
+- `u5-decomp/functions/ENDGAME_OVL/0x0000_endgame_load_party_roster.md` — the
+  final narrative presentation helper, including the full-screen dissolve it
+  issues before its first draw. Its filename records a superseded reading; the
+  function is not a party-roster retirement lookup.
 - `u5-decomp/functions/ENDGAME_OVL/0x023A_fn_buffer_print.md`
 - `u5-decomp/functions/ENDGAME_OVL/0x028C_print_number_word.md`
 - `u5-decomp/functions/ENDGAME_OVL/0x02D6_print_day_ord.md`
@@ -414,6 +474,12 @@ This document is a cleanroom prose rewrite from the following source notes. It i
 - local binary checks against `C:\Games\U5-Clean\DATA.OVL` and `END.DAT`
   for the fixed final-presentation asset table and six text-window starts.
 - `u5-decomp/notes/system-trace_quest-endgame.md`
+- `u5-decomp/notes/endgame_late_fullscreen_rect_2026-08-22.md` — the primitive,
+  colour, target surface, timing, and input behaviour of the late full-screen
+  fill, plus the absence of any per-window page-in rectangle.
+- `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md` — the follow-on
+  full-screen rectangle dissolve that consumes that fill, the complete caller
+  census of the dissolve entry, and the fill-then-dissolve fade idiom.
 - `u5-decomp/notes/lord_british_dialogue.md`
 
 Local spec cross-references used for terminology and integration:

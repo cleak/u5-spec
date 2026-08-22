@@ -518,12 +518,17 @@ its ambush entry mode with the active monster's class byte. Section 14.1 owns
 that contract in full; note in particular that no `DUNGEON.CBT` record is read
 on this path and that the monster's class byte is used directly rather than
 being derived from a sprite id. After combat returns, result code five moves the
-party one level down when possible and otherwise exits through the fall/surface
-path; result code six moves the party one level up when possible and otherwise
-uses the same surface-exit path. Other combat results keep the party on the
-current level. If the scene is still a dungeon after this post-combat step, the
-handler re-initialises the dungeon view, rolls a replacement active monster, and
-redraws the first-person view.
+party one level **up** — it decrements the level byte, and when the party is
+already on the topmost level it instead takes the surface-exit path out to
+Britannia; result code six moves the party one level **down** — it increments
+the level byte, and when the party is already on the bottom level it takes the
+same surface-exit helper, which in that case drops them into the Underworld.
+Other combat results keep the party on the current level. This is the same
+polarity as K-Klimb in Section 13: a smaller level byte is nearer the surface.
+If the scene is still a dungeon after this post-combat step, the handler
+re-initialises the dungeon view, rolls a replacement active monster, and
+redraws the first-person view. Both surface-exit arms clear the dungeon scene,
+which is exactly why that gate exists.
 
 Before letters reach that dispatcher, the dungeon command parser intercepts
 mode-local controls: movement keys, Enter/period as forward movement,
@@ -538,9 +543,21 @@ H in dungeons follows the overworld code path (the resident "rest with watch"
 wrapper) rather than the town's inn-tile hours-prompt. The wrapper:
 
 1. Prompts for a rest duration in hours.
-2. For each hour, runs the world-clock advance routine multiple times to accumulate sixty minutes per hour.
-3. Runs HP regeneration logic that gives a small random HP gain to each living,
-   eligible party member, capped at that member's maximum HP.
+2. Elapses the accepted duration by calling the world-clock advance routine
+   repeatedly in five-minute steps, twelve steps per simulated hour. This loop
+   does **not** enter the shared party status pass, so no poison damage,
+   provision spend, or starvation accrues while it runs. It does issue one Ring
+   of Regeneration roll per five-minute step, directly rather than through the
+   status pass. See `systems/time.md` section 5 and `systems/rest-and-camp.md`
+   section 5.
+3. Applies recovery only on the completed long-camp path, and only once at the
+   end of the rest rather than once per hour. The dungeon H path reaches the
+   same shared hole-up handler as the overworld, so the guard set, the `1..63`
+   hit-point roll, the class-keyed magic-point write, and the fourteen-game-hour
+   camp cooldown specified in `systems/rest-and-camp.md` section 5 apply here
+   unchanged. An earlier revision of this section described step 3 as a per-hour
+   "small random HP gain" applied to every living member; that was wrong on both
+   cadence and guards and is withdrawn.
 4. Watches for a rest-interruption event; in dungeons, an interruption can
    replace the camp with a combat arena (the dungeon-camp arena, loaded through
    the same combat framing family as room triggers).
@@ -682,7 +699,14 @@ Dungeon-to-overworld exits are split across two contracts:
 
 - The surface-reset helper clears the dungeon scene and restores the party to
   the dungeon's exterior coordinate for exact `0x60` K-Klimb pit exits,
-  explicit reset/edge paths, and combat-result level-change boundary paths.
+  explicit reset/edge paths, and combat-result level-change boundary paths. It
+  has two arms, selected by the level byte it finds on entry. Entered with a
+  **nonzero** level byte - the party was pushed below the bottom floor - it
+  narrates an exit to the Underworld and leaves the level byte at the all-ones
+  sentinel. Entered with a **zero** level byte - the party was pushed above the
+  top floor - it narrates an exit to Britannia and leaves the level byte at
+  zero. Both arms write the exterior X and Y from the per-dungeon exterior
+  tables before clearing the scene.
 - The pit-chain off-bottom path clears the scene after the chain increments the
   level past seven. It preserves the current X/Y and leaves the level byte at
   the incremented off-bottom value; it does not call the surface-reset helper
@@ -842,28 +866,47 @@ Slime always place the full sixteen while the others roll.
 **Active-object slot handling.** The dungeon active-object slot is **not** cleared
 before the framer runs. The framer backs up the whole active-object table on
 entry and restores it on exit, so the dungeon monster's record is byte-identical
-when combat returns. The clearing happens afterwards: the post-combat view
-re-initialisation clears the dungeon active-object slot bytes, and the very next
-step rolls and re-places a brand-new active monster. The practical contract is
-that the monster the party fought is always replaced by a freshly rolled random
-one after a wandering-monster fight, whatever the outcome, rather than being
-preserved or specifically removed.
+when combat returns. The replacement happens afterwards, in the post-combat view
+re-initialisation, and the order matters: it rolls a new presentation record
+first and **overwrites** the slot with the new monster's class, sprite, and
+level bytes, then attempts a random placement. Only if that placement fails are
+the slot's tile bytes zeroed and its link byte set to the all-ones sentinel. The
+slot is never blanked on the success path, and the previous monster's class byte
+is read during re-initialisation - before it is overwritten - to decide whether
+the old sprite source needs releasing, so an implementation that clears the slot
+first loses information it still needs. The practical contract is that the
+monster the party fought is always replaced by a freshly rolled random one after
+a wandering-monster fight, whatever the outcome, rather than being preserved or
+specifically removed.
 
 **Post-combat bracket.** The two triggers differ here. Only the **A-Attack** path
-applies the combat result code: five moves the party one level down when
-possible and otherwise exits through the fall/surface path, six moves the party
-one level up under the same fallback, and any other code keeps the level. The
-**contact** path ignores the result code entirely, so a wandering-monster fight
-that begins by being walked into can never change the party's level. Both paths
-then re-initialise the dungeon view, which is what clears the active-object slot
-bytes, and roll the replacement active monster. The A-Attack path gates both the
-replacement roll and the viewport redraw on the scene byte still reporting a
-dungeon; the contact path rolls unconditionally and gates only the redraw. The
-difference is not observable in normal play, because the scene byte only stops
-reporting a dungeon when the result code has already ejected the party to the
-surface. Neither handler advances the world clock itself and neither
-touches the room-clear bitmap - those belong to the per-turn epilogue and to the
-room-trigger path respectively.
+applies the combat result code, and it applies it in the same polarity K-Klimb
+uses (Section 13): a smaller level byte is nearer the surface.
+
+- **Result code five - go up one level.** Decrement the level byte. If the
+  party is already on the topmost level, do not decrement; take the
+  surface-exit helper instead, which restores the dungeon's exterior
+  coordinates, clears the dungeon scene, and leaves the party on the Britannia
+  overworld.
+- **Result code six - go down one level.** Increment the level byte. If the
+  party is already on the bottom (eighth) level, do not increment; take the
+  same surface-exit helper, which in this case leaves the party in the
+  Underworld rather than on the Britannia surface. The helper distinguishes the
+  two cases by whether the level byte was zero when it was entered.
+- **Any other result code** leaves the level byte alone.
+
+The **contact** path clears the combat result code *before* launching the fight
+and never reads it afterwards, so a wandering-monster fight that begins by being
+walked into can never change the party's level.
+
+Both paths then re-initialise the dungeon view and roll the replacement active
+monster. The A-Attack path gates both the replacement roll and the viewport
+redraw on the scene byte still reporting a dungeon; the contact path rolls
+unconditionally and gates only the redraw. The difference is not observable in
+normal play, because the scene byte only stops reporting a dungeon when a
+surface-exit arm has already ejected the party. Neither handler advances the
+world clock itself and neither touches the room-clear bitmap - those belong to
+the per-turn epilogue and to the room-trigger path respectively.
 
 The `DUNGEON.CBT` arena file is much larger than the overworld combat file because each dungeon has many distinct rooms. The arena format is the same eleven-by-eleven terrain-grid-plus-metadata-band format described in the maps spec. The room-entry helper computes the arena index as:
 
@@ -949,6 +992,8 @@ specified, and stock data cannot produce that edge.
 ## 18. Sources
 
 The behaviour described here was derived by reading the private function notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
+
+- The withdrawal of the per-hour "HP regeneration" step in Section 11, and the confirmation that the dungeon H path converges on the same shared hole-up handler as the overworld, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 
 - The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 - The wandering-monster combat contract in Section 14.1 -- ambush entry mode,

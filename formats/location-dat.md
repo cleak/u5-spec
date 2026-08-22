@@ -116,7 +116,9 @@ A single tile value — the ASCII byte for the asterisk character (`0x2A`, decim
 
 The primary spawn is typically the cell directly inside the location's main entrance from the overworld — the gate cell, the doorway cell, the threshold the player crosses to enter. The secondary spawn is typically the cell where the player lands after climbing a stairway from a floor above or below — i.e., the floor's stair-landing cell.
 
-Both slots are initialised to a sentinel "no spawn" value before the walk. The default per-scene town-entry coordinate is not stored in the `.DAT` file: X is fixed at fifteen, Y is read from the DATA.OVL-derived `LocationEntryYTable`, and floor is zero.
+Both slots are initialised to a sentinel "no spawn" value before the walk. Whatever default the engine uses when no asterisk was harvested is not stored in the `.DAT` file.
+
+Earlier wording here named that default as "column fifteen, a per-scene row from the resident entry-row table, floor zero". That rule has been retracted: it is traced from the helper that installs a resident Shadowlord in a hideout town, not from any player placement (`systems/town-mode.md` Section 5 step 6 and Section 13). The player's fallback town-entry cell is currently an open item, and no part of the withdrawn rule should be implemented for the player.
 
 The marker is harvested into runtime spawn coordinates. Any visual replacement is handled by the broader town load pipeline, not by the spawn-coordinate harvest itself.
 
@@ -217,7 +219,7 @@ Town mode also runs the same XOR pass against the already-loaded buffer when the
 | Section offset | Length (bytes) | Content                                               |
 |---------------:|---------------:|-------------------------------------------------------|
 |              0 |            704 | Four cutscene maps, each 11x11, padded to 16-byte rows |
-|            704 |            512 | Four Return-to-View maps, each 4 columns by 19 rows, padded to 32-byte columns |
+|            704 |            512 | Four Return-to-View map strips, each 4 rows by 19 columns, stored as four 32-byte rows |
 |          1,216 |            655 | Return-to-View command stream                          |
 
 ### Cutscene maps
@@ -230,9 +232,13 @@ The four cutscene maps are stored back-to-back in this section: each map occupie
 
 ### Return-to-View maps
 
-Four tall, narrow grids - 4 columns by 19 rows - are used by the intro menu's Return-to-View preview. The Return-to-View path loads `MISCMAPS.DAT` starting at this section and treats the first 512 bytes of the loaded buffer as four padded map strips. A helper selects one of the four records and copies the first nineteen row cells from each of its four columns into the preview's working tile buffers. The on-disk column stride is thirty-two bytes, with the trailing thirteen bytes per column unused padding; the data is laid out as four 32-byte columns per record.
+Four short, wide grids - **4 rows by 19 columns** - are used by the intro menu's Return-to-View preview. The Return-to-View path loads `MISCMAPS.DAT` starting at this section and treats the first 512 bytes of the loaded buffer as four padded map strips.
 
-Each Return-to-View map occupies `32 x 4 = 128` bytes, totalling 512 bytes for the four. Extraction skips `record_index x 128`, then for columns `0..3` reads a 32-byte column and uses only rows `0..18`.
+**Orientation correction.** Earlier revisions of this document, and the answer originally posted on the Return-to-View issue, described each record as 4 columns by 19 rows stored as four 32-byte columns. That is transposed and is withdrawn. Each record is **four 32-byte rows**; within a row the first nineteen bytes carry tile data and the trailing thirteen bytes are unused padding. The strip is therefore wide and short, which is also what the preview displays: nineteen tiles across by four tiles down. A reader that transposes the record will place every cell wrongly and will compute a preview that cannot fit the screen.
+
+Each Return-to-View map occupies `32 x 4 = 128` bytes, totalling 512 bytes for the four. Extraction skips `record_index x 128`, then for rows `0..3` reads a 32-byte row and uses only columns `0..18`.
+
+Corroborating evidence in the shipped data: the command stream's own coordinate arguments span `x = 0..15` and `y = 0..3`, and it contains runs of five to eight consecutive eastward actor steps, which no four-cell-wide strip could hold.
 
 ### Return-to-View command stream
 
@@ -241,10 +247,26 @@ The remaining 655 bytes are not tile data. They form the command stream that dri
 The interpreter maintains:
 
 - a 32-slot preview actor table using the same eight-byte record shape as the normal active-object table;
-- a visible 32-by-32 tile buffer;
-- a backing 32-by-32 tile buffer used to restore terrain under actors;
-- the current Return-to-View map-strip index; and
+- a **terrain plane** covering the strip's `19 x 4` cells, holding the currently displayed terrain byte for each cell;
+- an **overlay plane** of the same shape, holding the actor sprite byte for each cell;
+- a **backing plane** of the same shape, holding the untouched terrain byte so a cell can be restored after an actor leaves it;
+- the current Return-to-View map-strip index;
+- the reveal cursor (a left and a right column bound plus an alternating gate); and
 - a single loop counter plus loop-start pointer.
+
+A cell is drawn from its terrain byte when that byte is non-zero, and from its
+overlay byte otherwise. The two planes are read with different conventions:
+
+- A non-zero **terrain** byte is not a tile id directly. It is an index into the
+  engine's animated-tile frame table, the same table the world renderer uses to
+  cycle water, flags, mirrors and similar cells; the table's current entry for
+  that byte is the tile actually drawn. This is why preview terrain animates on
+  its own without the command stream touching it.
+- An **overlay** byte selects a tile from the upper half of the tile catalogue:
+  the drawn tile index is `256 + byte`.
+- The reserved overlay value `0x16` means "another helper owns this cell this
+  frame"; the ordinary repaint skips it. The reserved terrain value `0xFE` has
+  the same meaning on the terrain plane and is used by the cell-effect commands.
 
 Preview coordinates use the same tile coordinate convention as other 2D maps: X increases eastward and Y increases southward. Direction bytes in this stream use the dungeon-facing cardinal order: `0` north, `1` east, `2` south, `3` west.
 
@@ -254,16 +276,16 @@ Preview coordinates use the same tile coordinate convention as other 2D maps: X 
 | `0x01` | `slot` | Hide actor | Clear the actor's tile bytes and drawability flag, then restore the backing-map tile at the actor's current cell into the visible buffer. |
 | `0x02` | `slot, direction` | Move actor | Restore the backing tile at the actor's old cell, then move the actor one cardinal step. This command updates state only; later draw/tick commands make the new position visible. |
 | `0x03` | `ticks` | Run preview tick | Run the Return-to-View animation/input tick with the supplied timing value. If the tick reports a keypress or abort condition, the preview exits. |
-| `0x04` | `x, y` | Open cell effect | Cache the cell coordinate, temporarily hide that cell in both buffers, run a forward 15-step local cell effect, then leave a fixed effect tile in both buffers and run a short preview tick. |
-| `0x05` | none | Close cell effect | Reuse the coordinate cached by `0x04`, run the same local cell effect in reverse, then leave the cell as the fixed post-effect floor/detail tile. |
-| `0x06` | `strip` | Load map strip and caption | Copy one of the four 4-column by 19-row Return-to-View maps into the preview tile buffers, remember that strip index as current, and render that strip's fixed chapter caption. |
+| `0x04` | `x, y` | Open cell effect | Cache the cell coordinate, mark that cell skipped on the terrain and backing planes, run a forward 15-step local cell effect, then write the fixed post-open tile to both planes and run a two-tick preview update. |
+| `0x05` | none | Close cell effect | Reuse the coordinate cached by `0x04`, run the same local cell effect in reverse, then write the fixed post-close tile to both planes and run a two-tick preview update. |
+| `0x06` | `strip` | Load map strip and caption | Render that strip's fixed chapter caption, copy one of the four 4-row by 19-column Return-to-View maps into the terrain and backing planes, remember that strip index as current, and reset the reveal cursor to the centre column. |
 | `0x07` | `slot` | Temporary actor draw | Temporarily draw the actor slot through the preview actor renderer using an alternate marker tile, then restore the actor's original tile byte. |
 | `0x08` | `slot` | Temporary actor draw over backing | Variant of `0x07` that draws the temporary actor over the backing-map tile at its current cell, then restores the actor's original tile byte. |
 | `0x09` | none | Restart stream | Reset the command pointer to the first byte of the command stream. The shipped stream ends with this command, so the Return-to-View scene loops until interrupted. |
 | `0x0A` | `tile, x, y` | Set map cell | Write a tile byte to one preview map cell in both the visible and backing buffers. |
-| `0x0B` | `reserved0, reserved1, slot` | Fixed wipe and actor draw | Run a fixed five-step rectangle/wipe effect, skip two reserved bytes, draw the named actor slot at its current position, wait briefly, then run a short preview tick. The first two argument bytes are present in the shipped stream but are not consumed by the traced interpreter. |
+| `0x0B` | `reserved0, reserved1, slot` | Fixed wipe and actor draw | Run a fixed five-step rectangle/wipe effect, skip two reserved bytes, draw the named actor slot's cell at its current position, play a short percussive sound effect, then run a three-tick preview update. The first two argument bytes are present in the shipped stream but are not consumed by the traced interpreter. |
 | `0x0C` | none | Clear actors | Clear tile and drawability bytes for all thirty-two preview actor slots. |
-| `0x0D` | `slot, direction` | Move actor and tick | Restore the backing tile at the actor's old cell, move the actor one cardinal step, then run a short preview tick. If the tick reports a keypress or abort condition, the preview exits. |
+| `0x0D` | `slot, direction` | Move actor and tick | Restore the backing tile at the actor's old cell, move the actor one cardinal step, then run a **seven-tick** preview update. If the tick reports a keypress or abort condition, the preview exits. |
 | `0x0E` | `count` | Loop start | Store a loop count and remember the command immediately after this one as the loop body start. |
 | `0x0F` | none | Loop end | Decrement the active loop count. If it is still non-zero, continue from the saved loop-body start; otherwise continue after this command. |
 
@@ -282,14 +304,98 @@ Several visually complex commands have fixed script-level schedules:
 
 - `0x04` writes the sentinel tile `0xFE` to the target cell in both tile buffers, then runs the local cell-effect renderer at screen tile `(x, y + 7)` for steps 1 through 15. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0xDC` to the cell in both buffers and runs a two-tick preview update.
 - `0x05` reuses the coordinate cached by `0x04`, writes `0xFE` to the cell in both buffers, and runs the same local cell-effect renderer at `(x, y + 7)` for steps 15 down through 1. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0x05` to the cell in both buffers and runs a two-tick preview update.
-- `0x07` and `0x08` temporarily replace the actor slot's two tile bytes with `0x16`, draw the actor through the special preview draw helper at screen tile `(actor.x, actor.y + 7)`, then restore the original actor tile bytes. `0x07` supplies the actor's original tile as the draw helper's underlay/control value; `0x08` supplies the backing-map tile at the actor's current cell instead. Either helper call may abort the preview.
-- `0x0B` runs five rectangle-effect steps. Step `n` from 0 through 4 begins with a one-tick preview update, then emits two inclusive pixel-rectangle operations: `(128 + 9n, 152 + 3n)` to `(137 + 9n, 155 + 3n)`, followed by `(128 + 9n, 153 + 3n)` to `(137 + 9n, 156 + 3n)`. After the five steps, the command skips two reserved argument bytes, reads the actor slot byte, draws that actor directly at screen tile `(actor.x, actor.y + 7)` with tile/control value zero, runs a short fixed resident wait, and then runs a three-tick preview update.
+- `0x07` and `0x08` temporarily replace the actor slot's two tile bytes with the `0x16` suppression sentinel so the ordinary repaint leaves the cell alone, draw the actor's cell through the **single-cell dissolve helper** at screen tile `(actor.x, actor.y + 7)`, then restore the original actor tile bytes. The helper is the driver's pseudo-random pixel-dissolve entry driven one cell at a time: it converges the cell to the requested tile over a fixed run of small steps, polling the keyboard roughly every eighth step, and reports an abort that ends the preview. `0x07` passes the actor's own sprite, which is an overlay-plane value and so selects tile index `256 + byte`; `0x08` passes the backing-plane terrain byte at the actor's current cell instead, used as an ordinary terrain value, which is how an actor is dissolved away rather than in.
+- `0x0B` runs five rectangle-effect steps. Step `n` from 0 through 4 begins with a one-tick preview update, then sets the drawing colour to user-interface colour slot 1 (see `systems/display-driver.md` section 2) and emits two inclusive pixel-rectangle operations: `(128 + 9n, 152 + 3n)` to `(137 + 9n, 155 + 3n)`, followed by `(128 + 9n, 153 + 3n)` to `(137 + 9n, 156 + 3n)`. These are **absolute framebuffer pixel rectangles** on the same visible page the preview strip occupies, not cell indices; the five steps together sweep a small diagonal band across the middle of the strip. After the five steps, the command skips two reserved argument bytes, reads the actor slot byte, draws that actor's cell at screen tile `(actor.x, actor.y + 7)` with tile/control value zero, plays a short percussive speaker effect, and then runs a three-tick preview update. Earlier revisions described that speaker call as a short fixed resident wait; it is a sound effect whose duration is incidental, and an engine that renders silently should not model it as a timed pause.
 
 Command bytes above `0x0F` are treated as one-byte no-ops by the traced interpreter: they are skipped after the normal input poll. There is no separate caption opcode and no length-prefixed caption payload in the shipped stream.
 
+### Return-to-View preview geometry
+
+The preview is drawn with the ordinary 16-by-16 viewport tile blitter, on the
+same visible page as the intro menu, with the viewport's pixel origin
+temporarily moved. There is no miniature raster, no scaled cell path, no
+cropping and no clipping.
+
+| Quantity | Value |
+|---|---|
+| Cell size | 16 x 16 pixels, from the shared tile archive |
+| Viewport pixel origin during the preview | `(8, 16)` |
+| Screen tile row for strip row `y` | `y + 7`, giving rows `7..10` |
+| Screen tile column for strip column `x` | `x`, giving columns `0..18` |
+| Pixel position of a cell | `(8 + 16x, 16 + 16(y + 7))` |
+| Occupied rectangle | inclusive `(8, 128)..(311, 191)`, i.e. 304 x 64 pixels |
+
+That rectangle is exactly the interior of the intro menu's lower text window,
+so the preview replaces the menu labels while it runs and the window frame
+stays visible around it. The upper part of the screen, the banner logo and the
+idle animation band, is untouched.
+
+The `+ 7` in the published `(x, y + 7)` rule is therefore an offset on the
+**row** axis, applied to the 0..3 axis of the strip. It is not an offset on the
+19-wide axis. Outside the preview the viewport origin is `(8, 8)`; the preview
+lowers the strip by one cell row and the intro restores the origin on exit.
+
+### Return-to-View preview tick
+
+Every preview tick mentioned in the command table is one iteration of a single
+shared routine, and commands differ only in how many iterations they request.
+One iteration does the following, in order:
+
+1. Advance the engine's animated-tile frame table and active-object animation
+   by one step. This is what makes preview terrain cycle.
+2. Fire one intro title tick, so the menu's idle animation band keeps moving
+   while the preview owns the lower window.
+3. Scatter the preview actor table into the planes: for every drawable actor,
+   clear the terrain byte at its cell and write its sprite byte into the
+   overlay byte at that cell.
+4. Repaint the cells inside the currently revealed column span, four rows at a
+   time, skipping any cell whose terrain byte is the `0xFE` sentinel.
+5. Advance the reveal cursor, as described below.
+6. Poll the keyboard once. Any pending key aborts the preview immediately; the
+   caller restores the saved title/menu image and returns to the menu.
+7. Wait one hardware tick, per `systems/timing.md` section 5.
+8. Run the current strip's ambient sound step, if that strip has one.
+
+There is **no clear of the preview area and no full-rectangle repaint**. Step 4
+is a cell-granular repaint over preserved backing, so an engine that clears the
+strip each frame will not match: cells outside the revealed span, and cells
+marked with the sentinel, must keep whatever is already on screen.
+
+### Return-to-View strip reveal
+
+Loading a strip with command `0x06` does not make the whole strip visible at
+once. It resets a reveal cursor whose left and right bounds both start at
+**column 9**, and step 5 of each preview tick widens that span by one column on
+each side on **every second tick**, stopping when the left bound reaches column
+0. The full `0..18` span is therefore exposed after **eighteen preview ticks**
+and stays exposed until the next `0x06`.
+
+| Preview ticks elapsed | Columns painted |
+|---:|---|
+| 1-2 | 9 |
+| 3-4 | 8..10 |
+| 5-6 | 7..11 |
+| ... | widening one column on each side every second tick |
+| 17-18 | 1..17 |
+| 19 and later | 0..18 |
+
+**Correction.** An earlier revision of the public spec retracted the outward
+reveal as stale, non-normative prose. That retraction was wrong in substance
+and is itself withdrawn: the reveal exists and is normative. What was wrong in
+the original prose was only its axis. The strip opens outward from its centre
+**column**, not from a middle row, and all four rows of a revealed column
+appear together. The reveal is a property of the repaint cursor, not of the
+plane contents: command `0x06` fills the planes completely and immediately, and
+the cursor controls only which columns are repainted onto the screen.
+
+Because the reveal advances only inside a preview tick, a strip load followed
+by commands that request few ticks will still be part-way revealed when the
+next beat starts. That is the original behaviour and should not be corrected by
+revealing the strip eagerly.
+
 A reader that consumes only maps can still extract every tile record described above, but an asset-compatible intro preview needs both the four map strips and this command stream. Tools that do not implement the preview script should preserve the entire stream byte-for-byte when unpacking or repacking `MISCMAPS.DAT`.
 
-`MISCMAPS.DAT` is structurally unrelated to the four per-class location files despite carrying small tile grids — its frame sizes are different (11x11 and 4-by-19 versus 32x32), its strides include padding, and it has no per-frame two-floor pairing. The shared element is only the global tile catalogue.
+`MISCMAPS.DAT` is structurally unrelated to the four per-class location files despite carrying small tile grids — its frame sizes are different (11 by 11, and 19 columns by 4 rows, versus 32 by 32), its strides include padding, and it has no per-frame two-floor pairing. The shared element is only the global tile catalogue.
 
 ## 12. Cross-references
 
@@ -333,12 +439,17 @@ or visual parity.
   no engine-level "hidden room" feature. The exact tile values that participate
   belong to the tile catalog and quest/runtime specs.
 
-- **Return-to-View resident helper internals.** The command-byte table, argument
-  shapes, actor/map side effects, local cell-effect step loops, fixed rectangle
-  sequence, and preview tick counts are now public. The remaining low-level gap
-  is the resident display helper implementation behind the special actor draw,
-  local cell-effect raster, and short wait if exact scanline/pacing parity
-  becomes required.
+- **Return-to-View resident helper internals.** Closed. The command-byte table,
+  argument shapes, actor/map side effects, local cell-effect step loops, fixed
+  rectangle sequence, preview tick counts, strip orientation, framebuffer
+  geometry, per-frame repaint policy, and column reveal are all specified in
+  section 11. The three helpers the commands call are ordinary published driver
+  entries: the 16-by-16 viewport tile blitter for cells and actors, the
+  animated-terrain shimmer entry for the local cell effect, and the
+  pixel-dissolve entry driven one cell at a time for the temporary actor draws.
+  The only residual is the shimmer entry's exact per-step pixel pattern, which
+  is a driver-internal raster question tracked in
+  `systems/display-driver-abi.md`, not a format question.
 
 - **Marker-roster cross-validation.** When a location's NPC start markers and
   its NPC roster do not agree on count, the load pass does not detect the
@@ -353,7 +464,8 @@ The format described above was derived from the analysis notes listed below. Non
 - The first-pass survey of every map and arena file shipped with the game, including per-file size verification, the four-class location partition, the two-floor-per-block reading, the verified `MISCMAPS.DAT` section sizes, and cross-file consistency checks — `u5-decomp/formats/maps.md`.
 - The Blackthorn audience cutscene note that verifies the first cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/BLCKTHRN_OVL/0x060E_blackthorn_audience.md`.
 - The endgame entry note that verifies a later cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`.
-- The FONT overlay overview and Return-to-View trace that bind the four 4-column by 19-row maps plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
+- The FONT overlay overview and Return-to-View trace that bind the four 4-row by 19-column map strips plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
+- The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
 - The town-mode cosmetic terrain-variation pass for dash/period bytes -

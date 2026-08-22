@@ -201,9 +201,11 @@ is out of 256.
 The bucket payload is an **overworld active-object sprite byte**, not a combat
 class id and not a town-map marker byte. Interpret it in the active-object
 sprite domain before starting combat. This matters for byte values that have
-different meanings in other domains: for example, `0xC8` is a town chair marker
-inside town tile grids, but an overworld random-spawn payload in the monster
-sprite run for Python-class outdoor actors.
+different meanings in other domains: for example, in a town tile grid `0xC8` is
+the ascend floor-link marker the NPC scheduler routes to (`catalogs/tile-catalog.md`
+Section 6), while the same byte in the overworld active-object sprite domain is a
+random-spawn payload in the Python sprite run. Earlier drafts called `0xC8` a
+chair marker; that is wrong, and chairs are `0x90..0x93`.
 
 The currently named payload families are:
 
@@ -255,8 +257,10 @@ bestiary range 16..47 (`0x80` gives Sea Horse 16, `0xC0` gives Orc 32, `0xD8`
 gives Daemon 38, `0xFC` gives Shadow Lord 47). Sprite bytes `0x40..0x7F` give
 the human and NPC classes 0..15. The special case is the ship family: a masked
 sprite byte of `0x2C` (that is, any raw byte in `0x2C..0x2F`) selects **combat
-class 1**, the nine-strong human crew row used for pirate-ship boarding
-actions. This quantity is the encounter's class id, and it is what drives the
+class 1** — the row `catalogs/monster-bestiary.md` lists as Bard, carrying a
+default spawn count of nine and fifteen maximum HP, which is what gives a
+boarded ship its crew. The banner for this case prints a fixed pirate plural
+literal rather than the class-1 plural name. This quantity is the encounter's class id, and it is what drives the
 plural encounter banner, the spawn count, the spawn HP, the speed seed, the
 companion-class lookup, and each spawned actor's sprite. It is **not** an arena
 index.
@@ -273,6 +277,12 @@ combat terrain grid at that point. The inputs are:
 - `aboard_ship` - true when the party's transport marker is in the frigate
   family (the same predicate that gates Yell FURL/HOIST). A skiff, horse, or
   carpet does not satisfy it.
+- `ship_target` - true when the hostile active object belongs to the **ship
+  family**: its sprite byte masked with `0xFC` equals `0x2C`, that is, any raw
+  byte in `0x2C..0x2F`. This is the same family that forces base combat class 1
+  above, so the ship family is the one sprite family that feeds *both*
+  selections; for every other family the arena selector ignores the object's
+  sprite byte entirely.
 - The scene byte, used only by the fallback.
 
 The selection order is:
@@ -280,10 +290,10 @@ The selection order is:
 | Order | Condition | Outdoor arena |
 |---:|---|---:|
 | 1 | Base class is 47 (Shadow Lord) | 10 |
-| 2 | `aboard_ship` and the target is the ship family | 14 |
+| 2 | `aboard_ship` and `ship_target` | 14 |
 | 3 | `aboard_ship` and `water` | 11 |
 | 4 | `aboard_ship` | 13 |
-| 5 | Target is the ship family | 12 |
+| 5 | `ship_target` | 12 |
 | 6 | `water` | 15 |
 | 7 | otherwise, by terrain tile | see below |
 
@@ -467,11 +477,11 @@ status-restoration ordering.
 
 ## 7. Town hostility boundary
 
-Towns and other location-mode maps do not run the random-encounter probe. They **do** reach arena combat, though, and an earlier draft of this section said otherwise. The town overlay has a live NPC-conflict chain, reached both from the A-Attack handler and from post-action cleanup, that passes the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses. The arena selector then resolves to the cobble arena for ordinary town ground, and the terrain setup's town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). When the fight ends, the town chain clears the NPC slot, reloads the town map, and re-attaches the player.
+Towns and other location-mode maps do not run the random-encounter probe. They **do** reach arena combat, though, and an earlier draft of this section said otherwise. The town overlay has a live NPC-conflict chain, reached both from the A-Attack handler and from post-action cleanup, that passes the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses. The arena selector then resolves to the cobble arena for ordinary town ground, and the terrain setup's town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). When the fight ends, the town chain clears the NPC slot, reloads the town map, and re-runs the town-entry Shadowlord install (`systems/town-mode.md` Section 13), which is normally rejected as a no-op because the town's resident Shadowlord, if any, is still standing in the table. It does not re-place the player: the player's position comes from the world-state globals throughout.
 
 The rest of town hostility remains a town/NPC-system behavior: the alarm sweep, guard-catch and attack event reporting, and the arrest, pacify, death, and slot-clear routing all live in `systems/town-mode.md`.
 
-The combat framer's ambush entry branch is real, and its setup target is now fully traced: it is the room-NPC setup entry used by dungeon room setup, invoked with an entry mode that runs both the party readback and the sixteen-source scan against the resident arena buffer. That resolution is not proof that town hostile-NPC events swap to an outdoor or town-derived `.CBT` arena; the only traced live ambush callers are the two dungeon wandering-monster triggers. Keep town hostility specified in `systems/town-mode.md` unless a separate live combat-framer caller is traced.
+The combat framer's ambush entry branch is real, and its setup target is now fully traced: it is the room-NPC setup entry used by dungeon room setup, invoked with an entry mode that runs both the party readback and the sixteen-source scan against the resident arena buffer. The only traced live callers of that *ambush* entry mode are the two dungeon wandering-monster triggers; the town chain described above does not use it, and reaches combat through the ordinary terrain-combat entry instead. So the boundary is: town-triggered fights are ordinary terrain-arena fights and are specified here, while the remaining town hostility bookkeeping stays in `systems/town-mode.md`.
 
 ## 8. Dungeon room encounters
 
@@ -498,16 +508,24 @@ Spawned monsters live in the table the same way as any other active-object: the 
 
 ## 10. Encounter difficulty scaling
 
-The exact per-arena monster count and per-arena leader tile are *static* — they do not scale with the party's level or the in-world calendar. The only dynamic-adjustment knobs are:
+Both of the quantities that decide how big and how varied a terrain fight is are
+keyed to the encounter's **base combat class id**, never to the arena, and both
+are *static* — they do not scale with the party's level or the in-world
+calendar. The class's default spawn count and the class's companion class are
+fixed table entries for that class (Section 4). An earlier revision of this
+section described them as a "per-arena monster count" and a "per-arena leader
+tile"; that framing is withdrawn. The arena chooses the battlefield only. The
+only dynamic-adjustment knobs are:
 
-- The base spawn count gets re-rolled into `[1, max]` for non-sentinel max values (Section 4), so a "max twenty" arena produces fights from one to twenty monsters.
+- The base spawn count gets re-rolled into `[1, max]` for non-sentinel max values (Section 4), so a class whose default spawn count is thirteen produces fights of one to thirteen monsters, while the sentinel counts 1, 8, and 16 are taken verbatim. No shipped class row carries a non-sentinel value above thirteen.
 - The "fortunes of war" doubler re-rolls the count (Section 5).
-- The terrain setup helper has an indoor-scene count-one override, but traced
-  town hostile-NPC handling stays in town/NPC alarm paths rather than arena
-  combat (Section 7).
+- The terrain setup helper's town-style count-one override applies whenever the
+  pre-combat scene was a town, dwelling, castle, or keep and the base class is
+  not Guard, which is the ordinary outcome for town-triggered arena fights
+  (Section 7). It is a scene-keyed override, not an arena-keyed one.
 - The per-class flag table is class-specific, not difficulty-specific, so a slime's split-on-damage behaviour is the same on every arena. Terrain does not pick the monster mix either: the class comes from whichever creature the party engaged, and the only in-fight variation is the companion-class substitution, which is keyed off that class. Terrain picks the battlefield, not the bestiary.
 
-The result is a difficulty curve that emerges from *what kinds of monsters appear in what kinds of terrain*, rather than from explicit level scaling. The Underworld is harder than Britannia because its arenas are seeded with tougher monster classes, not because the engine adjusts numbers based on the avatar's stats.
+The result is a difficulty curve that emerges from *what kinds of monsters appear in what kinds of terrain*, rather than from explicit level scaling. Arenas seed no classes at all: the class comes from the active object the party engaged, and that object was placed by the plane-selected random-spawn buckets of Section 3. The Underworld is harder than Britannia because of how its plane-selected spawn buckets are weighted, not because the engine adjusts numbers based on the avatar's stats and not because of anything stored in the arena records: the underworld land bucket draws Daemon or Dragon roughly five times as often as the surface land bucket does, and two of its heaviest draws (Bat and Mongbat) carry the sentinel default spawn count of sixteen, so a routine underworld fight is both bigger and more likely to be lethal than a routine surface fight on the same terrain.
 
 The probe's threshold formula does not inspect party level or conscious-party
 count. There is no "monsters get tougher at higher level" mechanic; the player's
@@ -670,4 +688,4 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`, and
   `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
 - The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion roll, the town-style single-attacker override, and the "fortunes of war" double-roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
-- The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the surface/underworld variant model — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
+- The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the single-plane arena model (one outdoor bank serving both the surface and the underworld, with no plane-specific variant records) — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.

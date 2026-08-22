@@ -194,15 +194,21 @@ otherwise it is not.** Nothing about this test aborts or diverts the transfer:
 both outcomes produce the normal preview, and the flag only selects a class
 override and some wording (Section 6.6 and Section 7).
 
-The first four of those eight values cover the eight virtue/karma standing
-bytes for Honesty, Compassion, Valor, Justice, Sacrifice, Honor, Spirituality,
-and Humility — Ultima IV zeroes a virtue's standing once that virtue is fully
-attained, so "all eight standings zero" is Ultima IV's own full-Avatar
-condition. The remaining four values are the counters that follow the standings
-in the block. The shipped test requires **all sixteen bytes** to be zero, so a
-character who has attained all eight virtues but still carries any of those
-counters is not marked an Avatar. An implementation should reproduce the
-sixteen-byte test rather than the intuitive eight-byte one.
+Those eight values are the predecessor's eight virtue standings — one unsigned
+16-bit value per virtue, in the Ultima IV virtue order of Honesty, Compassion,
+Valor, Justice, Sacrifice, Honor, Spirituality, and Humility — laid out
+consecutively after the block's food and gold fields. Ultima IV zeroes a
+virtue's standing once that virtue has been fully attained, so "every standing
+is zero" is the predecessor's own full-Avatar condition, and the transfer is
+simply asking whether the imported character finished all eight virtue quests.
+Item counters such as gems, torches, keys, and sextants sit *after* the
+standings and are not part of the test; a completed Avatar who is still
+carrying equipment is still recognised as an Avatar.
+
+Implementations should key on the geometry rather than on the labels: read the
+sixteen bytes that begin six bytes into the party-wide block and require every
+one of them to be zero. That is the shipped test, and it produces the correct
+result regardless of how a particular predecessor save spells the standings.
 
 Earlier revisions of this document described this as a "no-transferable-data
 gate" in which all-zero values reject the transfer. That is withdrawn and was
@@ -257,28 +263,56 @@ is: at cell `(0, 19)` the top-left corner glyph, thirty-eight horizontal-bar
 glyphs, the top-right corner glyph; on rows `20`, `21` and `22` a vertical-bar
 glyph in column `0` and another in column `39`; on row `23` the bottom-left
 corner glyph, thirty-eight horizontal bars, and the bottom-right corner glyph.
-A four-segment line rectangle is then drawn in the frame colour through the
-pixel corners `(7, 159)`, `(312, 159)`, `(312, 184)`, `(7, 184)` and back to
-`(7, 159)`.
+The frame glyphs are emitted in the panel colour — user-interface colour
+slot 2 of `display-driver.md` section 2. A four-segment line rectangle is then
+drawn in the accent colour — slot 1 — through the pixel corners `(7, 159)`,
+`(312, 159)`, `(312, 184)`, `(7, 184)` and back to `(7, 159)`.
 
 **Character-information panels.** Each panel is drawn by the same routine with
 a different pixel origin: the left panel at `x = 0`, the right panel at
 `x = 168`. For an origin `x0` the panel is:
 
-- three filled bars in the panel colour: `(x0, 0)..(x0 + 6, 143)`,
+- three filled bars in the panel colour — user-interface colour slot 2 of
+  `display-driver.md` section 2: `(x0, 0)..(x0 + 6, 143)`,
   `(x0 + 143, 0)..(x0 + 151, 137)`, and `(x0 + 7, 137)..(x0 + 150, 143)`;
-- a broken-top rule polyline in the accent colour through `(x0 + 24, 7)`,
-  `(x0 + 7, 7)`, `(x0 + 7, 136)`, `(x0 + 143, 136)`, `(x0 + 143, 7)`,
-  `(x0 + 128, 7)`. The deliberate gap between `x0 + 24` and `x0 + 128` is where
-  the panel title sits;
-- in the panel's own text window: at cell `(0, 0)` a top-left corner glyph and
-  two horizontal bars, then the title text ` Ultima IV `, then two more
-  horizontal bars and a top-right corner glyph; at cell `(0, 17)` a bottom-left
-  corner glyph; at cell `(18, 17)` a bottom-right corner glyph.
+- a broken-top rule polyline in the accent colour — user-interface colour
+  slot 1 — through `(x0 + 24, 7)`, `(x0 + 7, 7)`, `(x0 + 7, 136)`,
+  `(x0 + 143, 136)`, `(x0 + 143, 7)`, `(x0 + 128, 7)`. The deliberate gap
+  between `x0 + 24` and `x0 + 128` is where the panel title plate sits;
+- the panel's own text window then paints a nineteen-cell title row, a
+  bottom-left corner and a bottom-right corner. Every cell of the title row is
+  written, left to right, starting from cell `(0, 0)`:
 
-Both panels carry the same ` Ultima IV ` title in the shipped data — the title
-string is never rewritten, so the right-hand panel is titled "Ultima IV" even
-though it shows the converted Ultima V values. Reproduce it as shipped.
+| Panel cell(s) on row 0 | Content | Colour |
+|---|---|---|
+| 0 | top-left corner glyph | panel colour |
+| 1, 2 | horizontal-bar glyph | panel colour |
+| 3 | left title-plate cap: one cap glyph, plus two short angled rules drawn through the cell's pixel box from `(px, py)` to `(px + 5, py + 3)` and from `(px + 5, py + 4)` to `(px, py + 7)` | cap glyph in panel colour, rules in accent colour |
+| 4..14 | the eleven characters of the title text ` Ultima IV ` (leading and trailing space included) | accent colour |
+| 15 | right title-plate cap: one cap glyph, plus the mirrored rules from `(px + 7, py)` to `(px + 2, py + 3)` and from `(px + 2, py + 4)` to `(px + 7, py + 7)` | cap glyph in panel colour, rules in accent colour |
+| 16, 17 | horizontal-bar glyph | panel colour |
+| 18 | top-right corner glyph | panel colour |
+
+  where `px` and `py` are the pixel coordinates of the cap cell's upper-left
+  corner (cell column times eight, cell row times eight, in absolute screen
+  terms). The cap cells are what make the polyline's break exact: cell 3 begins
+  at pixel `x0 + 24` and cell 15 ends at pixel `x0 + 127`, meeting the rule
+  again at `x0 + 128`. Finally, at cell `(0, 17)` a bottom-left corner glyph
+  and at cell `(18, 17)` a bottom-right corner glyph.
+
+**The two panels are titled differently.** Both are painted from the same
+` Ultima IV ` string, but immediately after the second panel is drawn the path
+selects the right panel and writes a single space over its title cell `12` —
+the `I` of `IV`. The right panel therefore reads ` Ultima  V ` (with the
+doubled inner space left behind) and the left panel keeps ` Ultima IV `. That
+one-cell edit is the only difference between the two panel frames, and an
+implementation must reproduce it: the left panel is the Ultima IV source and
+the right panel is the Ultima V result.
+
+Earlier revisions of this document said that "both panels carry the same
+` Ultima IV ` title" and that "the title string is never rewritten, so the
+right-hand panel is titled Ultima IV". The second half of that is true of the
+*string* and false of the *screen*; the claim is withdrawn.
 
 ### 6.2 Field-label strip
 
@@ -417,7 +451,13 @@ simply ignored, and there is no cancel path back to the menu.
 After the Intellect stage the path writes `Avatar` or `Non-Avatar`, centred, to
 right-panel cell `(0, 15)`, widens the message-line window to columns `2..37`
 and rows `21..22`, clears it, requests the Ultima V save media, and prints
-`Conversion complete, saving...` preceded by two blank lines. The save files
+` Conversion complete, saving...`. The message is emitted as one string that
+begins with two line breaks, then a single leading space, then the words, then
+one more line break. Because the widened window is only two rows tall, the
+second and fourth line breaks each scroll it by one row under the standard
+text-window overflow rule (`text-output.md`), so the settled result is the
+message on screen row `21`, its leading space at column `2` and its first
+letter at column `3`, with row `22` left blank. The save files
 are then written (Section 8).
 
 **Commit timing.** The commit is issued immediately after the last stage's
@@ -625,10 +665,13 @@ commit ordering are all in Section 6.
   - the exact behaviour of the shared typed-entry helper used by the
     replacement-name field (backspace, padding and terminator handling) is
     owned by `text-output.md`, not by this document;
-  - the finding that the on-screen insert-disk instructions are dead code, and
-    the observation that both character-info panels carry the same
-    `Ultima IV` title, are static-analysis results. A captured run would
-    confirm both, but nothing in the reachable control flow contradicts them.
+  - the finding that the on-screen insert-disk instructions are dead code is a
+    static-analysis result. A captured run would confirm it, but nothing in
+    the reachable control flow contradicts it.
+
+  The former residual "both character-info panels carry the same `Ultima IV`
+  title" is closed and was wrong: the right panel is retitled in place to
+  ` Ultima  V ` by a single-cell blank write, which Section 6.1 now specifies.
 
   Static control-flow analysis fixes the post-commit path as menu redraw rather
   than direct gameplay entry.
@@ -660,6 +703,10 @@ private offsets, or binary text dumps are reproduced.
 - File-read parameter contract used to establish the two read regions
   (seek position and read length per read):
   `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
+- Independent second-pass re-derivation of the validated field set, the record
+  stride, the derived-level source field, and the identity of the eight tested
+  party-wide values as the virtue standings:
+  `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - U4-to-U5 primary-attribute translator:
   `u5-decomp/functions/INTRO_OVL/0x12EA_u4_attr_to_u5.md`.
 - Intro menu entry and return-to-menu context:

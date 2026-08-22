@@ -243,6 +243,29 @@ moral-standing selector; `systems/karma.md` section 4 lists them alongside the
 other traced standing writers. Scripts stack them to move standing by more than
 one — a run of five consecutive `0x89` bytes is a `+5` reward.
 
+How shipped content uses them is worth stating, because neither code sits on a
+path every conversation takes:
+
+- Both shipped `0x89` runs are five bytes long and both sit on the **bonus arm
+  of the introduce-yourself branch** described later in this section, so each is
+  reachable only until the speaking NPC's branch-flag bit is set — once per NPC
+  per savegame. Neither is a per-visit or per-payment reward. In one of the two
+  the bonus arm is a duplicate of a gold-payment record: the plain arm has the
+  payment code and no standing bytes, the bonus arm has the payment code
+  followed by the five raise bytes.
+- All eight shipped `0x8A` bytes are reaction records. Five head the "no" arm of
+  a scoped prompt that asks the party for something (including two gold
+  requests), two head `"y"` answer records where "yes" is the boastful answer to
+  a virtue question, and one follows the `0x8B` curse-check inside a
+  caught-stealing line.
+
+The practical rule for an implementation: standing movement from dialogue is a
+property of *which record ran*, not of which keyword was typed or which
+transaction succeeded. Reproduce the label transfers, the branch-flag test, and
+the scoped prompt's default arm exactly, and the standing deltas follow.
+Declining a gold request can cost standing even though paying it never grants
+any by itself.
+
 Earlier revisions of this spec described `0x8A` as a newline that also flushed
 the party panel, and omitted `0x89` entirely. That was a misreading. The
 literal-newline code is `0x8D` and only `0x8D`; the value `0x8A` acquires its
@@ -274,13 +297,21 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 
 #### The keyword-alias idiom (`0x87`)
 
-In shipped content `0x87` is almost always the *entire body* of a response
-record. Because a response record is preceded by its keyword record, skipping one
-record forward from a lone `0x87` lands on the next keyword's response. The
-observable meaning is therefore "this keyword is an alias for the next keyword's
-response". Aliases chain: three keywords in a row whose responses are each a lone
-`0x87` all resolve to the fourth keyword's response, because each nested run
-re-enters the same handler.
+In shipped content `0x87` is *always* the entire body of a response record —
+across the four dialogue files there are six hundred forty-one occurrences of the
+code and every one of them is a one-byte record standing alone between two
+keyword records. Because a response record is preceded by its keyword record,
+skipping one record forward from a lone `0x87` lands on the next keyword's
+response. The observable meaning is therefore "this keyword is an alias for the
+next keyword's response". Aliases chain: three keywords in a row whose responses
+are each a lone `0x87` all resolve to the fourth keyword's response, because each
+nested run re-enters the same handler.
+
+An implementation may therefore treat the alias reading as the whole of the
+shipped contract, but it should still implement the skip rule literally — skip
+one byte, skip any run of terminators, skip past the next record terminator, run
+from there — because that is what decides the outcome for custom content in which
+`0x87` is not the last byte of its record.
 
 The historical mnemonic for `0x87` was SET-FLAG, and earlier revisions of this
 spec described it as a recursive keyword *scan*. Both are wrong. `0x87` does no
@@ -317,6 +348,31 @@ prompt; if not, execution falls through to the `0x88` prompt, which asks and the
 remembers. Forty-six of the one hundred thirty-one shipped blobs contain an
 ASK-WHO, and forty-three of those also contain an IF-ELSE; nine use the two codes
 directly adjacent.
+
+A second, richer shipped form uses **two** IF-ELSE tests around one ASK-WHO to
+make a one-time reward. Reached by a GOTO from a keyword response, the routing
+record is:
+
+1. IF-ELSE with a *plain* target label — if the bit is already set, transfer
+   there immediately and the rest of this record never runs;
+2. otherwise print a welcome line, optionally PAUSE, then ASK-WHO;
+3. IF-ELSE with a *bonus* target label — if the bit is set now (that is, the
+   prompt just matched a party member), transfer to the bonus record;
+4. otherwise GOTO the plain target label.
+
+The plain and bonus records are near-duplicates of each other; the bonus record
+carries whatever the reward is. Both shipped uses put a five-byte run of
+raise-standing codes there (`systems/karma.md` section 4). Because a failed
+prompt leaves the bit clear, step 4 is a retry path, not a permanent loss: the
+bonus stays reachable on a later attempt. Once the prompt succeeds, step 1
+routes every later visit to the plain record forever.
+
+"Forever" is exact. The branch-flag bank is part of the durable save image, not
+per-visit scratch: nothing clears it on scene exit, mode change, or reload, and
+a new game starts with every bit clear. An implementation that rebuilds the bank
+on entering a location will make every one-time introduction reward repeatable.
+`systems/quest-flags.md` section 3 owns the bank; `formats/saved-gam.md` gives
+the band it occupies.
 
 Consequently a clean implementation must not model `0x8C`'s argument as a flag
 id, and must not conclude that the bank has no setter. Both errors were present

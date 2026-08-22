@@ -91,6 +91,40 @@ Confirmed non-shrine scalar changes:
 | Conversation standing-down control code | A dialogue script emits the lower-standing control byte | Shared moral-standing selector -1, floored at zero. Emits no text; scripts stack the byte to deduct more than one |
 | Almsgiving milestone | A three-digit conversation gold payment that the party can afford, made to an NPC of the qualifying sprite class, when the shared step counter has reached one hundred | Shared moral-standing selector +1, capped at ninety-nine; and, only on that same qualifying call, a further +2 if the debit left party gold at exactly zero |
 
+The two conversation control codes are the byte runner's only direct writers of
+the selector. `systems/conversation.md` section 7.4 owns the control-code side
+of the same contract. Shipped dialogue uses them sparingly, and the *shape* of
+that usage matters more than the raw counts, because both codes always sit
+inside a routed record rather than on a path every conversation takes:
+
+- The **raise** byte occurs ten times across the four dialogue files, as two
+  runs of five. Both runs are the bonus arm of the introduce-yourself idiom
+  (`systems/conversation.md`, "The introduce-yourself idiom"): the NPC's script
+  branches on the durable per-NPC "has been told the party's name" bit, prompts
+  for the name if it is clear, and only then reaches a duplicated record that
+  carries the five raise bytes. Because the successful name prompt is what sets
+  that bit, each of the two `+5` grants is reachable **once per NPC per
+  savegame**. One of the two (a Minoc NPC) has no payment in it at all; the
+  other (the Cove NPC of Section 4.1) puts the five raise bytes immediately
+  after a five-gold demand inside the bonus record only, so a repeat payment to
+  that NPC goes down the plain record and gets nothing from the script (the
+  separately gated milestone below is then its only possible source of standing).
+- The **lower** byte occurs eight times across five NPCs, and every occurrence
+  is a *reaction* record rather than a reward: five bytes sit at the head of the
+  "no" arm of a request prompt (a run of three ahead of a "Scoundrel!" rebuke
+  when a fifty-gold request for keys is declined, plus one each for two other
+  declined requests, one of which is a five-crown request), two sit at the head
+  of `"y"` answer records where "yes" is the boastful answer to a virtue
+  question, and one follows the curse-check code in a caught-stealing line.
+
+Two consequences an implementation should carry. First, **declining** a
+conversation gold request can lower standing even though accepting it never
+raises standing by itself — the demand record and the refusal record are
+independent, and shipped content puts the penalty on the refusal. Second,
+neither control code is idempotent-by-design: correctness depends on
+reproducing the branch routing (labels, the branch-flag test, the scoped
+prompt's default arm) exactly, not on counting the bytes in a blob.
+
 ### 4.1 The gold-payment milestone in detail
 
 Earlier revisions of this document described this row as a "toll-progress
@@ -122,8 +156,9 @@ increment is in the resident per-turn party-upkeep pass — the same pass that
 applies poison damage and runs the hourly provision cadence — which advances it
 by one and saturates it at two hundred fifty-five. That pass runs once per
 turn-consuming action in overworld, town, and dungeon play, and once per ten
-simulated minutes of town-bed rest. The gold-payment path is its only reset
-anywhere in the game. The counter is therefore a **cooldown measured in turns**:
+simulated minutes of town-bed rest. The gold-payment path is its only known
+reset (see the confidence note at the end of this section). The counter is
+therefore a **cooldown measured in turns**:
 a qualifying payment can raise standing at most once per one hundred
 turn-consuming actions, and a second qualifying payment on the following turn
 grants nothing.
@@ -133,8 +168,56 @@ only a three-digit amount; nothing marks a payment as toll, bribe, or donation.
 The narrowing that makes the milestone feel like almsgiving comes from the
 sprite-class gate, not from any intent field.
 
+**Scale check.** An earlier revision of this section said that the qualifying
+NPC's own script grants `+5` on *every* affordable payment with no cooldown.
+That is wrong and is withdrawn. Her blob carries **two** five-gold payment
+records, and the introduce-yourself branch decides which one runs:
+
+- the **plain** record — the gold-payment code, the amount, and a thank-you
+  line, with no standing bytes at all;
+- the **bonus** record — the same code and amount followed by five raise-standing
+  bytes and the same thank-you line.
+
+The routing block tests the durable per-NPC "has been told the party's name" bit
+first: if it is already set, control transfers straight to the plain record. If
+it is clear, the NPC prints a welcome, pauses, runs the name prompt (which sets
+the bit on a successful match against a live party member), and tests the bit
+again — reaching the bonus record only if the prompt just succeeded, and
+otherwise falling through to the plain record. So the `+5` is a **one-time
+introduction reward**, needs an affordable payment on the same visit (an
+over-budget demand aborts before the raise bytes), and is unreachable on every
+later visit. A returning party's affordable payment gets nothing from the
+script.
+
+That leaves the milestone as the only standing movement an ordinary repeat
+payment can produce: `+1`, or `+3` when the purse is emptied, at most once per
+one hundred turn-consuming actions, and only for the qualifying sprite class.
+
+Three implementation consequences follow:
+
+1. An implementation that grants the `+5` on every affordable payment to that
+   NPC lets a player farm standing to the cap for five gold a visit. This is the
+   most damaging way to get this section wrong.
+2. An implementation that applies the milestone to every gold payment will be
+   wrong on eight of the nine gold-demanding NPCs, and wrong on cadence for the
+   ninth.
+3. The introduce-yourself routing must be implemented before either grant is
+   meaningful, because both shipped raise-byte runs sit behind it. Treat
+   `systems/conversation.md`'s introduce-yourself idiom and
+   `systems/quest-flags.md` section 3 as prerequisites for this section, not as
+   independent features.
+
 `formats/saved-gam.md` section 10 gives the counter's save slot. New games seed
 it at zero from the factory image.
+
+**Confidence note on the counter's writers.** The statements that the upkeep
+pass holds the counter's only increment and the gold-payment path its only reset
+come from an exhaustive static census of every place in the shipped code that
+names that byte directly. Such a census cannot observe a write made through an
+address computed at run time. No such write is known, and the counter's observed
+behaviour is consistent with the census, but an implementation should read these
+as "the only directly-referenced sites in the shipped code" rather than as a
+proof of exclusivity. No live-execution probe has been run against this path.
 
 Negative boundaries for unpromoted action families:
 
@@ -408,8 +491,10 @@ negative boundary are covered.
   found in a different action path.
 - **Step-counter ownership.** The one-byte counter the milestone tests is not
   owned by karma: it is advanced by the resident per-turn party-upkeep pass and
-  reset only by the milestone. Treat it as shared per-turn state that karma
-  reads, and see `formats/saved-gam.md` section 10 for its save slot.
+  reset, so far as the shipped code's direct references show, only by the
+  milestone. Treat it as shared per-turn state that karma reads, and see
+  `formats/saved-gam.md` section 10 for its save slot and Section 4.1's
+  confidence note for the limits of that census.
 - **Stolen-action warning boundary.** Conversation entry can recognize a
   previously stolen-action state for the addressed NPC and print the warning
   before the normal greeting. Final conversation cleanup can also print the
@@ -427,9 +512,12 @@ negative boundary are covered.
   command and exit coverage does not promote a scalar or per-virtue standing
   writer for ordinary attack, victory, or flee outcomes.
 - **Initial standing seed.** The scalar selector is seeded by the factory save
-  image and preserved by character creation except for normal gameplay
-  mutations. No character-creation path derives a new scalar or per-virtue
-  standing layout from the questionnaire in the traced baseline.
+  image to the value **seventy-five** — the fourth of the five Blackthorn
+  verdict bands, and the same value the Blackthorn rescue path floors the
+  selector to — and is preserved by character creation except for normal
+  gameplay mutations. The step counter in the same band is seeded to zero. No
+  character-creation path derives a new scalar or per-virtue standing layout
+  from the questionnaire in the traced baseline.
 
 ## 13. Sources
 
@@ -443,6 +531,15 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`,
   `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and
   `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
+- The record-level routing of the two shipped raise-standing runs (both on the
+  bonus arm of the introduce-yourself branch, hence once per NPC per savegame),
+  the record framing of all eight lower-standing bytes, the factory seed values
+  for the standing selector and the step counter, and the census caveat that
+  replaced the earlier "only writer in the game" absolutes — derived from
+  `u5-decomp/notes/talk_group_retrace_2026-08-22.md` section 8,
+  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`,
+  `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and
+  `u5-decomp/formats/saves.md`.
 
 - The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md` and the local CAST2 shrine-handler trace.
 - The shared shrine/word presentation effect boundary -- low randomized rumble

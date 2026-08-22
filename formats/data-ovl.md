@@ -133,8 +133,12 @@ The resident image contains metadata that makes the disk map files meaningful:
 - Per-scene entry data used when entering or leaving town-mode locations. The
   town-mode spec treats this as semantic entry-position data rather than a raw
   byte table. The required entry-position resource for named locations is a
-  `LocationEntryYTable`: one Y coordinate per town/dwelling/castle/keep scene.
-  Town-mode entry fixes X at fifteen and Z at zero when using this default.
+  `LocationEntryYTable`: one row coordinate per town/dwelling/castle/keep
+  scene. Its one confirmed consumer is the Shadowlord install on town entry,
+  which places the Shadowlord actor at column fifteen, floor zero, and this
+  table's row for the town being entered (`systems/town-mode.md` Section 13).
+  Earlier wording naming it as the *player's* default town-entry row has been
+  retracted; see that document's Section 5 step 6 and Section 8.
 - A location floor-base table used by town mode. Each scene's entry is a
   1,024-byte floor-page index within the selected town/dwelling/castle/keep
   file; the signed current-floor byte is added to it before loading a floor.
@@ -172,12 +176,13 @@ DATA.OVL carries lookup data that turns tile bytes into behaviour:
   interaction callers remain data-driven until their consumers are fully
   promoted. These tables are used by movement, rendering, active-object
   animation, special trigger checks, and town dawn/dusk substitution.
-- A separate NPC pathfinding bitmap used by the town schedule flood-fill
-  workspace. It is one bit per tile id: a set bit marks a tile open for NPC
-  pathfinding, and a clear bit marks it as an obstacle. This resource is
-  distinct from both the base terrain bitset and the caller-query dispatcher;
-  `systems/npc-schedules.md` owns the public pathfinding ranges and special
-  waypoint/chair-marker rules.
+- A separate NPC pathfinding tile set used by the town schedule flood-fill
+  workspace. It is one bit per tile id across `0x00..0xFF`: a **set** bit marks
+  the tile id an **obstacle** for NPC pathfinding, and a clear bit marks it
+  open. This resource is distinct from both the base terrain bitset and the
+  caller-query dispatcher; `systems/npc-schedules.md` Section 10 owns the public
+  obstacle/open id lists and the waypoint-match and floor-link rules that sit in
+  front of the bit test.
 - The six-level daylight gradient consumed by the time cleanup at dawn and
   dusk. On the original light scale it steps through 2, 5, 10, 20, 34, and
   49 before the separate full-daylight value of 50 takes over.
@@ -301,11 +306,12 @@ global combat metadata that is not stored in arena files:
   the raw reward-unit input. A separate per-class flag table immediately
   follows the class records and should be modeled as class traits, not as
   executable scripts.
-  Terrain-combat setup indexes the default spawn-count field with the outdoor
-  arena/base-class id, which can make the field look like byte zero of a
-  per-arena row when viewed from that helper alone. The row owner remains this
-  combat-class stat table; the other seven bytes are class stats, not
-  terrain-combat monster-type weights.
+  Terrain-combat setup indexes the default spawn-count field with the
+  encounter's **base combat class id** — never with the arena index, which is a
+  separate and independent selection. Reading that one field in isolation can
+  make it look like byte zero of a per-arena row; it is not. The row owner
+  remains this combat-class stat table, and the other seven bytes are class
+  stats, not terrain-combat monster-type weights.
 - Class-name pointers for the same actor-class namespace.
 - Decoded damage/death flags. The analyzed baseline's class-flag table confirms
   split-on-damage, halve-physical-damage, physical immunity, faction override,

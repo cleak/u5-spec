@@ -147,6 +147,16 @@ once per action, repeated rest or wait steps naturally apply the branch once for
 each crossed hour, while several ordinary turns inside the same hour spend food
 only once.
 
+*The shared party-damage path.* Both the poison point and each starvation roll
+are applied through one common routine, and it behaves identically for both. It
+plays the standard damage feedback — a brief highlight of the affected member's
+roster row and a short noise burst — subtracts the amount from that member's
+current hit points, and, if the result is zero or below, stores zero, sets that
+member's status to Dead, and clears the active-member selector when the selector
+pointed at that member. It then marks the stats panel for repaint. A poisoned,
+starving member can therefore be killed by either effect in the same pass, and
+no separate "death check" step is needed anywhere else in the pass.
+
 *Trailing part, every invocation.* The pass advances its own two counters — a
 step counter that saturates at 255, and a countdown that, on reaching zero,
 clears a temporary state byte and forces a stats-panel repaint — and then runs
@@ -267,11 +277,21 @@ runs.
 
 When the day field advances past 28, cleanup resets it to 1 and runs a small month-boundary bundle before incrementing the month.
 
-**Long-period flag clears.** A small set of saved byte flags is cleared at the
-month boundary, including the fortunes-of-war encounter reroll flag documented
-in `systems/encounters.md` and `formats/saved-gam.md`. These flags are consumed
-by other gameplay systems, so the time system's contract is only that they are
-reset when the day wraps from 28 to 1, not at ordinary midnight.
+**Long-period flag clears.** A small, fixed set of saved bytes is zeroed at the
+month boundary. The traced set is exactly:
+
+- the three rare-reagent harvest cooldown cookies (one per fixed harvest point,
+  `systems/containers.md`);
+- the cycling fixed hidden-treasure record's daily cooldown cookie
+  (`systems/hidden-treasures.md`, record 14);
+- the fortunes-of-war encounter reroll flag (`systems/encounters.md`).
+
+All five are day-of-month cookies or one-shot flags owned by other gameplay
+systems, so the time system's contract is only that they are zeroed when the day
+wraps from 28 to 1, never at ordinary midnight. Zeroing matters because zero
+matches no calendar day (days run `1..28`), so every once-per-day gate that
+compares against one of these cookies is guaranteed open on the first day of a
+new month. `formats/saved-gam.md` Section 10 carries the field offsets.
 
 **Per-character month counter.** Each of the sixteen character record slots
 carries a one-byte counter. The month rollover increments it, capped at 25.
@@ -436,9 +456,11 @@ The behaviour described here was derived from the private function notes listed 
 - The starvation roll's range, per-slot independence, six-slot bound, and
   Dead-only exclusion - derived from
   `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`.
-- The shared party-damage path's zero-clamp, Dead-status write, active-member
-  clear, and stats repaint - derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x2A52_party_take_damage.md`.
+- The shared party-damage path's damage feedback, zero-clamp, Dead-status
+  write, active-member clear, and stats repaint - derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x2A52_party_take_damage.md` and
+  re-verified in
+  `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - The Ring of Regeneration predicate and +1 HP capped-add effect - derived from
   `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
 - The corrected cadence of the party status pass, its four call sites, and the
