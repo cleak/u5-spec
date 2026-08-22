@@ -623,25 +623,9 @@ Cleanroom prose derived from these private analysis notes:
 - `u5-decomp/formats/ega-driver.md`.
 - `u5-decomp/functions/EGA_DRV/_OVERVIEW.md` (full per-slot index, 38 slots
   plus helper-routine notes, completed during the 2026-05-26 follow-up pass).
-- Per-slot notes for every dispatch entry the engine reaches, including
-  `0x0868_set_video_mode.md`, `0x08E4_alloc_back_buffer.md`,
-  `0x093C_set_descriptor_render_target.md`,
-  `0x0958_set_es_to_back_buffer.md`, `0x098A_back_buffer_invalidate.md`,
-  `0x09AE_back_to_front_full_transfer.md`, `0x0A78_get_pixel.md`,
-  `0x0AEA_scroll_screen_up_8.md`, `0x0E66_set_color.md`,
-  `0x0E6C_plot_pixel.md`, `0x0F8E_draw_line_bresenham.md`,
-  `0x1072_fill_horizontal_to_back.md`, `0x10FE_fill_rect_v1.md`,
-  `0x1180_fill_rect_v2.md`, `0x1226_draw_compressed_bitmap.md`,
-  `0x12B4_tile_blit_general.md`, `0x162E_tile_blit_general_flagged.md`,
-  `0x1637_tile_blit_16x16.md`, `0x17A9_pack_to_back_buffer.md`,
-  `0x18F6_free_asset_segment.md`, `0x190E_silhouette_stamp_back_buffer.md`,
-  `0x19D2_glyph_8x8.md`, `0x1DE8_delay_with_animation_step.md`,
-  `0x1F98_tile_pixel_randomize.md`, `0x256B_lfsr_pixel_dissolve.md`,
-  `0x282D_animate_flames_strip.md`,
-  `0x2AB3_tile_palette_swap_save_restore.md`.
-- Load-bearing helper notes: `0x045C_compute_edge_masks.md`,
-  `0x04F6_front_buffer_scanline_fill.md`,
-  `0x263A_lfsr_pixel_copy_helper.md`.
+- Per-slot notes for every dispatch entry the engine reaches, and the
+  load-bearing helper notes behind them, under
+  `u5-decomp/functions/EGA_DRV/` (indexed by that folder's overview note).
 - `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
