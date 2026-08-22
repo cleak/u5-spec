@@ -12,7 +12,7 @@ Doors live in two parallel encodings — one for the surface and town tile maps,
 
 In the surface and town encoding, the relevant tile codes form four small ranges of adjacent bytes:
 
-- **Closed door pair.** Two adjacent codes; the lower byte is magic-locked, the next is regular locked. A successful Jimmy decrements the byte by one, walking the cell down the lock-state ladder until it reaches an unlocked-and-openable form that Open then writes through to the open variant.
+- **Closed door pair.** Each door orientation has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the north-south pair and `0xBA`/`0xBB` the east-west pair. The magic-locked forms live outside that pair, at `0x97` for north-south and `0x98` for east-west; Jimmy refuses them and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write the standing open-door code below; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
 - **Open door.** A single code drawn as the open-door sprite. Both Jimmy and Open recognise this as already-open and consume the turn without acting. The renderer paints it identically to a passage.
 - **Chest-on-floor pair.** Closeable-versus-locked, structurally identical to the door pair. Open success writes a fixed "open container" tile; Jimmy success rolls a key-pick check.
 - **Pickpocketable NPC marker.** A non-rendered occupancy marker returned by the tile-probe path when the target cell is occupied by an NPC.
@@ -134,20 +134,25 @@ Some doors carry a magical lock that no key can pick — the lower byte of the d
 
 J-Jimmy on a magic-locked door rejects with "Magic lock!" and consumes neither a key nor a turn. The paths through are:
 
-- **Unlock Magic** cast on the door rewrites the cell from magic-locked to plain locked; Jimmy can then pick it normally.
+- **Unlock Magic** cast on the door rewrites the cell from magic-locked straight to the closed-and-*unlocked* form for that orientation (`0x97` becomes `0xB8`, `0x98` becomes `0xBA`), so O-Open works on it immediately and no Jimmy roll is needed.
+- **Magic Lock** is the inverse and the only writer of the magic-locked forms. It collapses both the unlocked and the ordinary-locked byte of an orientation onto that orientation's magic-locked byte (`0xB8` or `0xB9` becomes `0x97`, `0xBA` or `0xBB` becomes `0x98`), so magic-locking an ordinary locked door and then unlocking it magically leaves the door merely closed.
+- **Open** (the *An Sanct* spell, not the O-Open command) steps a door one rung *down* the ordinary lock ladder: `0xB9` becomes `0xB8` and `0xBB` becomes `0xBA`. It does not recognise the magic-locked bytes, so it cannot substitute for Unlock Magic.
 - **Blink** can place the caster on the cell on the far side when the destination is legal, bypassing the lock; the door stays locked but the party is past it.
 - **Cannon fire** (§ 6) destroys magic-locked doors as readily as regular ones.
 
 Magic-lock clears are sticky for the visit but revert on location reload. Plot progress that opens such a door permanently is encoded outside the tile grid — in the per-character flag table or the world flag table — and consulted on location load to walk the door's tile byte down a slot before painting.
 
-A separate magic Open/Unlock helper handles ordinary surface/town wooden doors.
-It is not the O-Open command and not the Word-of-Power dungeon-door path. After
-the shared spell direction prompt, Space/Pass is a no-effect result. A cardinal
-target opens only the ordinary closed wooden-door variants, rewriting `0x97`
-to `0xB8` and `0x98` to `0xBA`, then marking the tile dirty. It bypasses keys
-but is narrower than O-Open: it does not check chests, does not invoke traps,
-does not use per-map guarded-container metadata, and does not install the
-auto-close tracker. Other target tiles are failure/no-op.
+The three door-facing spells share one shape and none of them is the O-Open
+command or the Word-of-Power dungeon-door path. Each runs the shared spell
+direction prompt, resolves the single adjacent cell, and rewrites its tile as
+listed in § 7; Space/Pass is a silent no-effect result, a match marks the tile
+dirty, and any other target tile is a failure/no-op. All three bypass keys but
+are narrower than O-Open: they do not check chests, do not invoke traps, do not
+use per-map guarded-container metadata, and do not install the auto-close
+tracker — none of them produces an *open* door, only a different lock state.
+The full spell-side contract, including their behaviour in combat scenes where
+the same helpers act on combat-arena terrain, lives in `systems/magic.md`
+under *Directed utility tile helpers*.
 
 ## 8. Secret doors
 
@@ -301,11 +306,15 @@ The transitions across the major boundaries are:
 - **Per-turn epilogue.** Door auto-close runs from the tile-effect pass. Pit triggers, chasm triggers, and energy-field triggers run from the same pass.
 - **Visibility.** Door state changes mark the dirty flag so the renderer rebuilds the visibility set. Z transitions reset visibility entirely — the new floor or level paints from scratch.
 - **Save image.** Scene byte, floor or level index, party chunk-X / chunk-Y, the four-byte door-close-tracker block, and the per-character class fields that drive the lockpick roll are all persisted. Loaded saves resume mid-floor, mid-dungeon, mid-vehicle, or mid-combat.
-- **Spells.** Unlock Magic clears magic locks; the separate magic Open/Unlock
-  helper can directly open ordinary closed wooden doors without keys or
-  O-Open's auto-close tracker; Blink can bypass doors by movement when its
-  destination is legal. The spell handlers live in a different overlay but
-  write into or consult the same tile grid the door commands read.
+- **Spells.** Unlock Magic clears magic locks, Magic Lock applies them, and the
+  Open spell steps an ordinary locked door down to its unlocked form — all three
+  change lock state without keys and without arming O-Open's auto-close tracker,
+  and none of them leaves an open door behind. Blink can bypass doors by
+  movement when its destination is legal. The spell handlers live in a different
+  overlay but write into or consult the same tile grid the door commands read,
+  and in combat scenes that same lookup addresses the combat-arena terrain grid,
+  so the door-facing spells can rewrite arena door tiles during a fight; see
+  `systems/magic.md`.
 - **Inventory.** Non-dungeon Jimmy checks key stock before ordinary door,
   visible-chest, and NPC pocket rolls. Failed ordinary door, visible-chest, and
   NPC pocket rolls decrement the key counter. Per-map object chest picks have

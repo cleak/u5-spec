@@ -16,9 +16,9 @@ markers:
 
 - A fixed marker derived directly from the current hour.
 - Trammel's glyph, read from the first resident moon table for the current
-  hour.
+  calendar day.
 - Felucca's glyph, read from the second resident moon table for the current
-  hour.
+  calendar day.
 
 The hour determines whether a marker is visible in the twelve-cell horizon and,
 if so, which cell receives it. The fixed marker uses an hour-derived position
@@ -43,40 +43,66 @@ refresh.
 At all other hours, the corresponding marker is below the strip's visible
 horizon and leaves the blank cell contents unchanged.
 
-The glyph identity for each moon is table-driven, **indexed by the current hour of day** (not by the calendar day as earlier wording suggested). The renderer reads the two parallel byte tables and writes the resulting ASCII glyph digit to the corresponding cell.
+The glyph identity for each moon is table-driven, **indexed by the calendar
+day of the month, one through twenty-eight**. It is not indexed by the hour.
+Two earlier statements in this document were wrong and are retracted: the
+tables are not twenty-four-entry hour tables, and they contain no off-horizon
+sentinel entries at all.
 
-**Table contents** (extracted from shipped `DATA.OVL` resident bytes, 24 entries each, indexed by `hour ∈ 0..23`):
+Hour and day play distinct roles, and both are needed:
 
-| Hour | Trammel | Felucca |
-|---:|:---:|:---:|
-| 0 | `0xF0` (off-horizon) | `0x80` (off-horizon) |
-| 1 | `'0'` | `'0'` |
-| 2 | `'1'` | `'0'` |
-| 3 | `'1'` | `'1'` |
-| 4 | `'2'` | `'2'` |
-| 5 | `'2'` | `'3'` |
-| 6 | `'3'` | `'4'` |
-| 7 | `'3'` | `'5'` |
-| 8 | `'4'` | `'6'` |
-| 9 | `'5'` | `'7'` |
-| 10 | `'5'` | `'0'` |
-| 11 | `'6'` | `'0'` |
-| 12 | `'6'` | `'1'` |
-| 13 | `'7'` | `'2'` |
-| 14 | `'7'` | `'3'` |
-| 15 | `'0'` | `'4'` |
-| 16 | `'1'` | `'5'` |
-| 17 | `'1'` | `'6'` |
-| 18 | `'2'` | `'7'` |
-| 19 | `'2'` | `'0'` |
-| 20 | `'3'` | `'0'` |
-| 21 | `'3'` | `'1'` |
-| 22 | `'4'` | `'2'` |
-| 23 | `'5'` | `'3'` |
+- The **hour** decides whether each marker is on the visible horizon and, if
+  so, which of the twelve cells it lands in. That is the table above, and it is
+  correct.
+- The **day of the month** decides which phase glyph each moon shows. That is
+  the table below.
 
-Each phase digit `'0'..'7'` corresponds to a Moonstone slot index `0..7`, which the natural-moongate entry hook uses (after stripping `'0'`) to look up the saved Moonstone destination. The table's high-bit entries (`0xF0` for Trammel at hour 0, `0x80` for Felucca at hour 0) are sentinel bytes rather than phase digits. Literal `'0'` is always phase/slot 0, including Felucca hours 10, 11, 19, and 20.
+**Table contents.** Two parallel byte tables, twenty-eight entries each, read
+with the day of the month as the index. Every entry is an ASCII digit in the
+range `'0'` through `'7'`.
 
-Trammel cycles through all eight phases roughly twice per day. Felucca cycles once per day. Whether a cached phase digit is actually drawn in the twelve-cell status strip is controlled by the separate visible-hour/cell-position rule above; do not reinterpret an undrawn literal digit as an off-horizon sentinel.
+| Day | Trammel | Felucca | Day | Trammel | Felucca |
+|---:|:---:|:---:|---:|:---:|:---:|
+| 1 | `'0'` | `'0'` | 15 | `'0'` | `'4'` |
+| 2 | `'1'` | `'0'` | 16 | `'1'` | `'5'` |
+| 3 | `'1'` | `'1'` | 17 | `'1'` | `'6'` |
+| 4 | `'2'` | `'2'` | 18 | `'2'` | `'7'` |
+| 5 | `'2'` | `'3'` | 19 | `'2'` | `'0'` |
+| 6 | `'3'` | `'4'` | 20 | `'3'` | `'0'` |
+| 7 | `'3'` | `'5'` | 21 | `'3'` | `'1'` |
+| 8 | `'4'` | `'6'` | 22 | `'4'` | `'2'` |
+| 9 | `'5'` | `'7'` | 23 | `'5'` | `'3'` |
+| 10 | `'5'` | `'0'` | 24 | `'5'` | `'4'` |
+| 11 | `'6'` | `'0'` | 25 | `'6'` | `'5'` |
+| 12 | `'6'` | `'1'` | 26 | `'6'` | `'6'` |
+| 13 | `'7'` | `'2'` | 27 | `'7'` | `'7'` |
+| 14 | `'7'` | `'3'` | 28 | `'7'` | `'0'` |
+
+Each phase digit `'0'` through `'7'` corresponds to a Moonstone slot index zero
+through seven, obtained by subtracting `'0'`. **There is no sentinel byte in
+either table.** An implementation that reserves a high-bit value for
+"off horizon" is modelling something the tables do not contain; whether a moon
+is drawn is decided solely by the hour-driven visibility rule above.
+
+The two sequences are exactly periodic within the twenty-eight-day month:
+
+- **Trammel** repeats every fourteen days, so it runs the full eight-phase
+  cycle twice per month. Its fourteen-day pattern is
+  `0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7`.
+- **Felucca** repeats every nine days with the pattern
+  `0, 0, 1, 2, 3, 4, 5, 6, 7`. Twenty-eight is not a multiple of nine, so the
+  month ends part-way through the fourth repetition and day twenty-eight is
+  `'0'`, the first entry of the next repetition.
+
+Because the calendar wraps day twenty-eight back to day one, the Felucca
+sequence is not continuous across a month boundary; the original does not
+smooth that discontinuity and neither should an implementation.
+
+The day index is the saved day-of-month byte, which the per-turn clock keeps in
+the range one through twenty-eight and resets to one after it passes
+twenty-eight. There is no day zero, so an implementation should treat a
+zero or out-of-range day as a save-data error rather than looking up a
+twenty-ninth entry.
 
 The strip is presentation only. It caches the selected moon glyph bytes for the
 current render pass, but those cached bytes are not gameplay state and are not
@@ -92,9 +118,25 @@ and entry are specified in `overworld.md`.
 ## 3. Integration
 
 The moon glyphs and fixed hour marker are display state. They do not, by
-themselves, advance time, place moongates, or mutate save data. They should be
-refreshed whenever the stats panel is redrawn and whenever the per-turn cleanup
-observes an hour change in a scene that shows the surface/town status strip.
+themselves, advance time, place moongates, or mutate save data.
+
+**Refresh cadence.** The strip renderer runs from exactly one place: the
+per-turn cleanup pass, and only when that pass observes the hour changing, and
+only in a scene that shows the surface/town status strip. It is **not** driven
+by ordinary stats-panel redraws, and an earlier statement in this document that
+it should be refreshed on every stats-panel redraw is retracted.
+
+The two cadences are different, and both matter:
+
+- The **cell position** of each marker changes every hour, which is why an
+  hour change is the trigger.
+- The **glyph identity** changes only when the day rolls over. Between day
+  rollovers, every hourly refresh reads the same two glyph bytes.
+
+Each refresh caches the two glyph bytes for the current day *before* it tests
+whether either marker is on the visible horizon, so the cache holds the current
+day's phase for both moons even when neither marker is drawn. Consumers of the
+cache must not infer "no phase" from "not drawn".
 
 Natural moongates remain separate from the sky/status renderer: the overworld
 moongate animator paints any currently active gate, the saved Moonstone slots
@@ -113,5 +155,11 @@ This public description is a cleanroom prose rewrite from private status-panel
 analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
 glyph dumps, or private address tables.
 
-- Status-panel moon glyph lookup and phase cadence --
-  `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`.
+- Status-panel moon glyph lookup, day-of-month indexing, and the published
+  twenty-eight-day table --
+  `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md` and
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 3.
+- Calendar bounds (day one through twenty-eight, reset after twenty-eight) and
+  the single hour-change trigger --
+  `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md` and
+  `u5-decomp/notes/system-trace_turn-cycle.md`.

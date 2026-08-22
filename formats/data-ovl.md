@@ -104,9 +104,14 @@ Important vocabulary families:
   `SHOPPE.DAT` shop text. The dictionary is addressed by token byte through a
   resident pointer table and expanded inline during text emission.
 
-The actual words at each dictionary index are data content, not bytecode.
-Conversation and shop specs describe how token bytes expand; this spec only
-identifies DATA.OVL as the resident owner of the dictionary and pointer table.
+The actual words at each dictionary index are data content, not bytecode. They
+are published as `catalogs/common-word-dictionary.md`, which also records the
+two token biases, the ten empty entries, and the loader invariants. Conversation
+and shop specs describe how token bytes expand; this spec only identifies
+DATA.OVL as the resident owner of the dictionary and pointer table. The
+dictionary occupies one hundred twenty-eight consecutive addressable indices and
+is immediately followed in the same pointer run by unrelated asset-filename
+strings, so a reader must stop at the published entry count.
 
 ### 5.2 Map and Location Metadata
 
@@ -333,9 +338,11 @@ global combat metadata that is not stored in arena files:
   default/aquatic, surface land, and underworld land. `systems/encounters.md`
   owns the public row weights and active-object payload families; this spec
   records DATA.OVL as the resident owner of the tables.
-- Terrain encounter spawn-count and leader-replacement data. The count seed is
-  the combat-class stat row's default spawn-count field for the selected base
-  class; the leader/follower replacement tile is a separate encounter table.
+- Terrain encounter spawn-count and companion-class data. The count seed is
+  the combat-class stat row's default spawn-count field for the encounter's base
+  class. The companion table is a separate forty-eight-byte resident table,
+  indexed by class id, whose values are class ids; it supplies the substitute
+  class for early spawn indexes that pass the one-in-nine roll.
 - Combat placement coordinate tables populated from the selected arena record's
   metadata, plus placement-shuffle support state.
 - Ambush/camp reveal records. This resident table has eight logical records

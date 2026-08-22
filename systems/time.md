@@ -95,32 +95,74 @@ duration, the interruption checks, and any repeated cleanup/world-tick calls.
 
 The hour-change check is made *after* the cascade has had its chance to bump the hour, and uses the pre-cascade snapshot from Section 2 as its baseline. So a turn that increments minutes from 55 to 5 will fire the bundle once (hour changed); a turn from 30 to 31 will not.
 
-**A separate hourly status/provision pass also observes hour changes.** The
-party-status tick keeps its own previous-hour snapshot and only runs its food
-and starvation branch when the current hour differs from that snapshot. This
-means repeated rest/wait cleanup calls naturally apply the branch once for each
-crossed hour, while ordinary turns inside the same hour do not spend food.
+**A separate party status/provision pass runs alongside the cleanup.** This
+pass is a distinct routine from the per-turn cleanup described above, and its
+cadence is different from what earlier drafts of this section claimed. Only the
+food and starvation branch is gated on an hour change; everything else in the
+pass runs on every invocation.
 
-The pass counts provision consumers as active party members who are neither
-Dead nor Sleeping. Poisoned members take a small poison tick during the same
-pass, but they still count as provision consumers unless their status is Dead
-or Sleeping.
+*When the pass runs.* Once per turn-consuming action in overworld mode, town
+mode, and dungeon mode, invoked from each mode's per-turn epilogue after the
+cleanup call has already advanced the clock. It also runs once per ten-minute
+step of the town-bed rest loop. It does **not** run in combat mode, and it does
+not run inside the wilderness camp loop, which advances the clock in
+five-minute steps without entering this pass. Actions that do not consume a
+turn, such as Look, do not trigger it.
 
-If the food/provision counter is already zero when an hour change is observed,
-the party receives the starvation warning and living members can take random
-starvation damage. If the counter is nonzero, provisions are decremented only
-at 06:00, 12:00, and 18:00. The decrement amount is the consumer count from
-the active party scan, and the counter floors at zero rather than wrapping. No
-food is spent at other hour changes. After the branch is handled, the
-status/provision pass updates its previous-hour snapshot so the branch cannot
-repeat until the clock crosses another hour.
+*Unconditional part, every invocation.* The pass walks the active party in slot
+order and, per member:
 
-After the food/starvation/status work, the same hourly party pass runs the
-Ring of Regeneration check. For each active party member who is not Dead and
-whose ring equipment slot contains Ring of Regeneration, the engine rolls a
-1-in-8 chance; on success, that member gains exactly 1 current HP capped at
-maximum HP. This check is tied to hour crossings, not to a rest state. Rest,
-wait, movement, and town-bed sleeps can all expose it by advancing the clock.
+- If the member is Dead and is also the currently selected active member, the
+  active-member selector is cleared to its no-selection sentinel.
+- Dead and Sleeping members are skipped entirely: they take no poison damage
+  and are not counted as provision consumers.
+- A member whose status is exactly Poisoned loses **exactly 1 current hit
+  point**, applied through the shared party-damage path. This is per member per
+  turn, independently, not a shared roll and not an hourly effect. Poison
+  damage that brings a member to zero sets that member's status to Dead and
+  clears the active-member selector if it pointed at that member.
+- Every member that was neither Dead nor Sleeping increments the
+  provision-consumer count, Poisoned members included.
+
+*Hour-gated part.* The pass keeps its own previous-hour snapshot and compares it
+with the current hour. The two branches below are mutually exclusive, and
+neither runs when the hour has not changed:
+
+- **Provision counter already zero.** The party receives the starvation
+  warning, and then each party slot below the active party count, capped at six
+  slots, that is not Dead takes an independently rolled uniform `1..8` hit
+  points of damage through the same shared party-damage path. Different members
+  can therefore take different amounts in the same hour. Sleeping and Poisoned
+  members are eligible starvation targets; only Dead members are skipped. Note
+  the asymmetry with the consumer count above: Sleeping members do not eat, but
+  they do starve.
+- **Provision counter nonzero.** Provisions are decremented only at 06:00,
+  12:00, and 18:00. The decrement amount is the consumer count from the
+  unconditional walk, and the counter floors at zero rather than wrapping. No
+  food is spent at other hour changes.
+
+After the branch is handled, the pass updates its previous-hour snapshot so the
+branch cannot repeat until the clock crosses another hour. Because the pass runs
+once per action, repeated rest or wait steps naturally apply the branch once for
+each crossed hour, while several ordinary turns inside the same hour spend food
+only once.
+
+*Trailing part, every invocation.* The pass advances its own two counters — a
+step counter that saturates at 255, and a countdown that, on reaching zero,
+clears a temporary state byte and forces a stats-panel repaint — and then runs
+the Ring of Regeneration check. For each active party member who is not Dead and
+whose ring equipment slot holds Ring of Regeneration, roll a 1-in-8 chance; on
+success that member gains exactly 1 current hit point, capped at maximum hit
+points. Like the poison tick, this is per invocation, not per hour: a wearer
+gets one roll per turn-consuming action, one roll per ten-minute town-bed rest
+step, and one roll per five-minute wilderness camp step, the last of these
+issued directly by the camp loop rather than through this pass.
+
+*Worked consequence.* A poisoned member walking through town loses one hit point
+per turn, so poison is a strong pressure on movement rather than a slow hourly
+drip. A poisoned member in a town bed loses six hit points per simulated hour,
+because the rest loop steps every ten minutes. A poisoned member in a wilderness
+camp loses nothing from poison while the camp loop runs.
 
 ## 6. Daylight
 
@@ -176,19 +218,41 @@ runs the midnight Shadowlord-location maintenance before the normal end-of-pass
 daylight recompute and before any month rollover side effects.
 
 **Shadowlord hideout maintenance.** Three persistent one-byte slots track the
-current hideout scene for Faulinei, Astaroth, and Nosfentor. A living slot holds
-a compact hideout id in the range `1..8`. These values are not the dungeon-mode
-scene-byte range `33..40`; consumers interpret them as the Shadowlord hideout
-ids used by the Yell, town-entry, and view/sextant paths. A vanquished slot
-holds `0xFF`; the daily walker skips those high-bit-set values, so vanquishing a
-Shadowlord is sticky across future days.
+current hideout for Faulinei, Astaroth, and Nosfentor. A living slot holds a
+hideout id in the range `1..8`, and that id **is the town scene byte** of the
+town hosting the Shadowlord: `1` Moonglow, `2` Britain, `3` Jhelom, `4` Yew,
+`5` Minoc, `6` Trinsic, `7` Skara Brae, `8` New Magincia. The eight rows are
+therefore the town rows of `catalogs/gazetteer.md`; dwellings, castles, keeps,
+and the dungeon-mode scene bytes `33..40` are never hideouts. A vanquished slot
+holds `0xFF`; the daily walker skips any slot whose high bit is set, so
+vanquishing a Shadowlord is sticky across future days.
 
-For each living Shadowlord, the midnight pass chooses a new hideout in `1..8`.
-The choice is rejection-sampled until it is distinct from the party's current
-scene and distinct from the other living Shadowlord slots already assigned for
-that pass. This is the state read by the Sextant Shadowlord report, town-entry
-Shadowlord spawning, and the Doom-entrance gate described in
-`catalogs/quest-graph.md`.
+A slot value of `0` means "not yet placed". A newly created game starts with
+all three slots at `0`, so no Shadowlord is anywhere until the first midnight
+pass assigns hideouts. Implementations should treat `0` as neither "in a town"
+nor "vanquished": it matches no town scene, and the reroll walker rewrites it on
+the first day rollover.
+
+For each slot whose high bit is clear, the midnight pass draws a candidate id
+uniformly from `1..8` inclusive and rejects it when either of these holds, then
+draws again:
+
+- the candidate equals the party's current scene byte, or
+- the candidate equals the value currently stored in **any** of the three slots,
+  including the slot being rerolled and any slot already rewritten earlier in
+  the same pass.
+
+Because a slot's own previous value participates in the rejection test, a living
+Shadowlord never stays in the same town two days running, and no two living
+Shadowlords share a town. Vanquished slots hold `0xFF` and never collide with a
+`1..8` candidate, so they do not constrain the draw. The party-scene exclusion
+only bites when the party is standing inside one of the eight towns at midnight;
+outdoors, in a dungeon, or in any other interior the party's scene byte is
+outside `1..8` and the exclusion never fires.
+
+This is the state read by the Shadowlord view/report path, town-entry Shadowlord
+installation, the Shadowlord-name Yell gate, Stonegate atmosphere, and the
+Doom-entrance gate described in `catalogs/quest-graph.md`.
 
 This table is not NPC schedule state. Ordinary NPC schedules are driven by each
 NPC's own schedule record and the current hour byte; they do not receive a
@@ -315,6 +379,16 @@ boundaries that are already fixed for engine behavior.
   adds the ordinary town arrest wait-to-morning loop as a twenty-minute
   advancing caller, not as a zero-minute recompute caller.
 
+- **Party status pass caller census.** The status/provision pass of Section 5 is
+  invoked from exactly four places: the overworld per-turn epilogue, the town
+  per-turn underfoot handler, the dungeon post-action handler, and the town-bed
+  rest loop's ten-minute step. All four sit after the clock advance for that
+  step. Combat mode and the wilderness camp elapse loop never invoke it, so
+  poison damage and provision consumption do not accrue there. Treating the
+  pass as an hourly timer instead of a per-action pass is the single most
+  common way to get poison, starvation, and ring regeneration all wrong at
+  once.
+
 - **Thirteen-month calendar.** Britannia's calendar has thirteen 28-day months,
   totalling 364 days per year. This is authored game-calendar structure, not an
   engine uncertainty. Implementations must not normalize it to twelve months.
@@ -354,12 +428,22 @@ The behaviour described here was derived from the private function notes listed 
 - The resolved hour-change presentation call - formerly suspected as
   overworld gameplay logic, now identified as the sky/status row renderer -
   derived from `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`.
-- The hourly party-status and provision cadence - including the Dead/Sleeping
-  consumer exclusion, poison tick, starvation branch, and 06:00/12:00/18:00
-  food decrement - derived from
+- The party status and provision pass - including the per-invocation walk, the
+  Dead/Sleeping consumer exclusion, the one-point poison tick, the hour-gated
+  starvation and 06:00/12:00/18:00 food branches, and the pass's own trailing
+  counters - derived from
   `u5-decomp/functions/ULTIMA_EXE/0x2AE8_per_turn_party_damage.md`.
-- The hourly Ring of Regeneration predicate and +1 HP capped-add effect -
-  derived from `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
+- The starvation roll's range, per-slot independence, six-slot bound, and
+  Dead-only exclusion - derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`.
+- The shared party-damage path's zero-clamp, Dead-status write, active-member
+  clear, and stats repaint - derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x2A52_party_take_damage.md`.
+- The Ring of Regeneration predicate and +1 HP capped-add effect - derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
+- The corrected cadence of the party status pass, its four call sites, and the
+  combat and wilderness-camp exclusions - derived from
+  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
 - The Shadowlord-location table consumed by the day-rollover bundle — derived from `u5-decomp/formats/data-ovl.md` and cross-checked against `u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`.
 - The distinction between the timing/state tag byte and the boarded vehicle/transport byte — derived from `u5-decomp/formats/ds-bss-map.md` and `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The selection of an NPC's active waypoint from the four-byte time field, including the wrap-back-to-waypoint-1 behaviour — derived from `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.

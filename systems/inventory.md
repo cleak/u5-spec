@@ -96,7 +96,7 @@ hand-equipment tag, and ammunition rows have no readied-equipment tag.
 | `0x40` | Body armour | Uses the body-armour slot and participates in the combat armour lock. |
 | `0x20` | One-hand hand equipment | Covers shields and one-handed weapons. The hand branch resolves whether the weapon hand or off hand can accept the item. |
 | `0x30` | Two-hand hand equipment | Requires both hands to be free when selected; a currently readied item with this tag blocks shield/off-hand readiness. |
-| `0x02` | Ring equipment | Uses the ring slot. Ring of Invisibility and Ring of Regeneration also have random vanish checks after a successful ready action; Ring of Regeneration is also read by the hourly non-combat regeneration tick. |
+| `0x02` | Ring equipment | Uses the ring slot. Ring of Invisibility and Ring of Regeneration also have random vanish checks after a successful ready action; Ring of Regeneration is also read by the non-combat regeneration check in the shared party status pass, which runs once per turn-consuming action rather than hourly. |
 | `0x04` | Amulet / neck equipment | Uses the amulet/neck slot. |
 | `0x00` | Ammunition stock | Not an ordinary readied-equipment class; used as carried ammunition for compatible weapons. |
 
@@ -262,9 +262,9 @@ Confirmed U-Use families:
 | Magic Carpet | Usable outside dungeon/combat scenes when the party is on foot and the current tile accepts carpet boarding. On success it changes the party transport marker to a carpet state and decrements the carried carpet counter. If the party is aboard a ship or otherwise not on foot, it prints the matching refusal instead. |
 | Skull Key | Decrements the skull-key/special-key counter, then runs the adjacent-lock helper in non-combat scenes that support it. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. |
 | Regalia | Amulet of Lord British and Crown of Lord British toggle through a shared worn-regalia state: using the item while it is already active removes it; otherwise the handler prints the wearing message and installs the corresponding state. The Black Badge uses the same remove-if-active helper and can install its own worn state. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
-| Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. |
+| Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only outside dungeon/combat scenes and only on accepted terrain; Search/Get recovery later invalidates the slot. |
-| Spyglass | Surface-only utility. It refuses in unsupported scenes and when the sky-state check says there are no stars; the successful path prints the looking message and enters the same LOOKOBJ full Britannia chunk-map renderer specified in `systems/view.md`. |
+| Spyglass | Surface-only utility. It refuses in unsupported scenes and when the sky-state check says there are no stars; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
 | HMS Cape plans | Shipboard-only utility. When used aboard ship, it marks the ship-rigging flag so the ship is rigged for double speed; otherwise it refuses. `weather.md` owns the resulting hoisted-sail wait-pass timing change. |
 | Sextant | Outdoor night-only utility. It refuses outside the overworld or during the daytime interval, and otherwise prints the party position. |
 | Pocket Watch | Prints the current hour as a twelve-hour AM/PM time. |
@@ -309,15 +309,20 @@ object pickup visuals, combat-side equipment consumers, dialogue reactions, and
 opaque save/runtime bytes are delegated to their own specs.
 
 - **Magic ring and Amulet/Turning boundary.** Ring of Invisibility and Ring of
-  Regeneration have confirmed equip-time and combat-time checks. No non-combat
-  periodic timer or effect-state writer is traced for either ring outside the
+  Regeneration both have confirmed equip-time and combat-time checks. The two
+  rings differ outside combat. Ring of Regeneration is read by the shared party
+  status/provision pass specified in `systems/time.md`: each time that pass
+  runs, every non-Dead wearer gets a 1-in-8 chance of exactly 1 hit point,
+  capped at maximum hit points. That pass runs once per turn-consuming action in
+  world, town, and dungeon modes, not once per hour. For Ring of Invisibility,
+  no non-combat periodic timer or effect-state writer is traced outside the
   readied slot; do not invent one for world-mode parity. Amulet/Turning is a
   combat-passive amulet/neck item: its target-side turning branch is documented
   in `systems/combat.md`; no R-Ready activation, U-Use activation, countdown,
   or non-combat timer is traced.
 - **U-Use ownership.** Scroll gates, potion colour/effect order,
   broad regalia toggles, the Sceptre's exact top-down barrier/field family,
-  Spyglass routing to the full Britannia chunk-map renderer, Sextant coordinate
+  Spyglass routing to the LOOKOBJ sky renderer, Sextant coordinate
   formatting, and Pocket Watch hour formatting are documented in
   `catalogs/item-list.md` and `systems/view.md`. Story-item acquisition
   mechanics are owned by Search/Get/container, conversation action-letter,

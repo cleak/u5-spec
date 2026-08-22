@@ -16,9 +16,22 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
 2. **Player position and facing.** The handler reads the party's tile coordinates and the current facing direction (a signed `dx, dy` pair written by the most recent movement command).
 
-3. **NPC lookup at the facing tile.** The party's facing tile is `(player_x + dx, player_y + dy)`. The resident NPC-occupancy structure is consulted to find an NPC whose live tile matches. If no NPC is at that tile, the handler tests whether the tile is a *talk-through* tile — a small white-list of tile types representing shop counters, low fences, and similar pass-through barriers. If the tile is talk-through, the handler advances `(dx, dy)` once more and queries again. If still no NPC is found, the handler prints a "Nobody's here!" message and returns.
+3. **NPC lookup at the facing tile.** The party's facing tile is `(player_x + dx, player_y + dy)`. The resident NPC-occupancy structure is consulted to find an NPC whose live tile matches. If no NPC is at that tile, the handler tests whether the tile is a *talk-through* tile — a fixed white-list of counter-height and waist-height furniture. The shipped white-list is the tile ids `0x29`, `0x94..0x9C`, `0xA5`, `0xAE`, `0xBA..0xBB`, `0xBE` and `0xCA..0xCB`; every other tile id is opaque to Talk. If the tile is talk-through, the handler advances `(dx, dy)` once more and queries again. If still no NPC is found, the handler prints a "Nobody's here!" message and returns. Note that the mirror tile `0x9D` sits immediately outside this range, so Talk never reaches past a mirror — it can only resolve *onto* one.
 
-4. **Stub-state filter on the NPC's tile byte.** With an NPC located, the handler reads the NPC's current tile byte to detect two transient states. A "sleeping" tile prints a "Zzzzzz..." message and returns without entering the conversation engine. A "no response" tile (the NPC is praying, meditating, or otherwise unavailable) prints a "No response!" message and returns. Any other tile falls through.
+4. **Status-tile gate.** With an NPC located, the handler reads the **live map tile occupying the resolved cell** and compares it against exactly two values:
+
+   | Live map tile | Shipped description of that tile | Result |
+   |---|---|---|
+   | `0x9D` | a mirror | Print the "No response!" line and return. |
+   | `0xAB` | a bed | Print the "Zzzzzz..." line and return. |
+
+   Every other value falls through to step 5. The comparison is a single byte test with no ranges: only these two ids divert the command, and neighbouring ids such as the mirror-with-reflection and broken-mirror tiles do not.
+
+   Three points that are easy to get wrong:
+
+   - **The test object is a map tile, not an NPC sprite.** Both ids are furniture ids in the terrain-description domain of `LOOK2.DAT`, and the byte comes from the same live-map tile query that movement and Look use. The gate fires because the NPC's schedule has parked it on a bed cell or a mirror cell, not because the NPC has a distinct sleeping or praying appearance. An implementation that stores a per-NPC "asleep" flag and tests that instead will diverge.
+   - **The cell tested is the resolved cell**, which may be the faced cell or, when the faced cell is a talk-through tile, the cell one step further along the same direction.
+   - **Both branches abort before dispatch.** Neither branch enters the conversation engine, uses the NPC's dialogue index, or reaches shop-trigger dispatch, and both report "no conversation happened" to the caller. This holds in every town, dwelling, castle and keep scene; the gate has no scene-specific behaviour. Turn accounting is not part of the gate: the town loop runs its per-turn scheduler pass after dispatching the command without consulting the Talk result, so an aborted Talk is not a free action. `systems/town-mode.md` and `systems/time.md` own the exact clock accounting.
 
 5. **Dialog-index dispatch.** Each live NPC carries a one-byte *dialog index* loaded into RAM from the location's `.NPC` file when the scene was entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
 
@@ -169,14 +182,14 @@ Every byte of every text stream — the five mandatory leading entries, every ke
 
 The dispatcher's classification, in order:
 
-- **Nonzero high-bit-clear dictionary tokens.** These are *common-word dictionary tokens*. The byte is normalized into an index into the shared 128-entry common-word pointer table; the pointer targets a NUL-terminated word in the engine's common-word vocabulary, which is expanded inline into the output. See Section 8.
-- **Bytes `0x9E..0x9F`.** These are GOTO-LABEL codes; their high bit is set and they participate in label dispatch. See Section 7.7.
-- **Bytes `0xA0..0xFD` (high bit set, in the printable range).** These bytes enter the printable text path. The word-buffer flush strips the high bit before glyph output, with the `0x8E` print-mask toggle controlling whether the queued byte keeps that high bit long enough to act as a soft-break marker. See Section 7.1.
+- **Bytes `0x01..0x80`.** These are *common-word dictionary tokens*. The byte is itself the index into the shared one-hundred-twenty-eight-entry dictionary published in `catalogs/common-word-dictionary.md`, and the word is expanded inline into the output. The classifier is a single comparison — anything below `0x81` takes this path — so the top token, `0x80`, has its high bit set and is still a dictionary token. See Section 8.
+- **Bytes `0x91..0x9F`.** These are GOTO-LABEL codes; they participate in label dispatch. See Section 7.7.
+- **Bytes `0xA0..0xFD` (high bit set, in the printable range).** These bytes enter the printable text path. The word-buffer flush strips the high bit before glyph output; whether the queued byte still carries that bit is what the `0x8E` toggle controls, and it decides both which font the character renders in and whether it acts as a word-buffer break marker. See Section 7.1.
 - **Bytes `0x80..0x9F` (with the exception of the GOTO range above).** Engine control codes. The dispatch table is in Sections 7.2–7.6.
 - **Byte `0xFE`.** A multi-byte command introducer that behaves as an alias for `0x8C` (IF/ELSE).
 - **Byte `0xFF`.** End-of-response. The byte runner flushes any pending word buffer and signals the keyword input loop to start a new iteration.
 
-The byte runner has a small amount of per-conversation state: a "multi-byte command in progress" flag (set by `0x85`, `0x86`, `0x8C`, and `0xFE`), an argument-collection buffer for the multi-byte arguments, a print mask that may be toggled mid-stream, a few sentinel bytes used to suppress accidental double-quote artefacts, and a leading-space flag set by certain dictionary expansions. All of this state is reset at the start of each conversation.
+The byte runner has a small amount of per-conversation state: a "multi-byte command in progress" flag (set by `0x85`, `0x86`, `0x8C`, and `0xFE`), an argument-collection buffer for the multi-byte arguments, a print mask that may be toggled mid-stream, a record of the last printable byte emitted (used to suppress a doubled double-quote), and a pending-space flag armed by successful dictionary expansions. All of this state is reset at the start of each conversation.
 
 ### 7.1. Printable text emission
 
@@ -184,18 +197,20 @@ Bytes that classify as printable text (`0xA0..0xFD` with bit 7 stripped) are pas
 
 The intermediate buffer exists for two reasons. First, the output respects the active text window's word-wrap rules — long sentences wrap at word boundaries rather than mid-word, even though the byte runner emits one byte at a time. Second, dictionary expansions (Section 8) need to merge with surrounding text *as a single word*; without the buffer, "the" expanded between two letters would be three separate writes that the wrap engine could not coalesce.
 
-A leading-space flag may be set when an empty dictionary entry was encountered; the flag forces a single space to precede the next emitted character. This is how the dictionary handles word boundaries when the dictionary itself supplies a multi-word phrase.
+A pending-space flag is armed after a *successful* dictionary expansion — never by an empty entry — and it forces a single space to precede the next printable text byte, after which it is cleared. Only the printable-text path reads and clears it; a following dictionary token neither consumes nor clears it, which is why adjacent tokens produce exactly one space between words. Section 8 gives the full emission order.
 
-The print mask is a one-byte output-mode flag. In its default state it preserves
-the high bit on queued printable bytes until the word buffer flushes; this lets
-encoded spaces and literal-newline bytes act as the buffer's soft-break and
-forced-break sentinels. The `0x8E` toggle flips the mask's high bit. While the
-mask is flipped, printable bytes are queued without the high bit, so they render
-the same after flush but spaces and literal-newline characters inside the run do
-not trigger the normal immediate flush. Shipped dialogue uses matched `0x8E`
-pairs around short protected uppercase strings such as mantras, spell syllables,
-Words of Power, passwords, and coordinate-letter notations so those runs are not
-split by ordinary word-boundary handling.
+The print mask is a one-byte output-mode flag that selects which of two fonts a
+queued character renders in, and as a side effect whether the word buffer breaks
+inside a run. In its default state it preserves the high bit on queued printable
+bytes; at flush time a queued byte whose high bit is set renders in the ordinary
+font, and the encoded space and literal-newline values still match the buffer's
+soft-break and forced-break sentinels. The `0x8E` toggle flips the mask's high
+bit. While the mask is flipped, printable bytes are queued without their high
+bit, and at flush time such bytes render in the **alternate (runic) font**;
+because the queued values no longer match the space and newline sentinels, the
+run is also never split at its internal spaces. Shipped dialogue uses matched
+`0x8E` pairs around mantras and Words of Power, which the original displays in
+runic script.
 
 ### 7.2. Player-name and stream-control codes
 
@@ -215,21 +230,33 @@ split by ordinary word-boundary handling.
 
 Both codes are used to chunk long responses into reader-friendly pages. The conventional use is to insert one `0x8F` after every screen-full of text, and one `0x83` after a more substantial transition (such as just before announcing a quest reward).
 
-### 7.4. Newline and panel-flush codes
+### 7.4. Newline and moral-standing codes
 
 | Code  | Mnemonic           | Effect                                                                                                                          |
 |-------|--------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| 0x8A  | PANEL-NEWLINE      | Mark a newline boundary that also flushes the party-panel state. The most likely use is to ensure the panel is up to date after multi-line content has scrolled. |
+| 0x89  | STANDING-UP        | Raise the shared moral-standing selector by one through the ordinary capped-add writer, clamped at ninety-nine. Emits no text and does not touch the word buffer. |
+| 0x8A  | STANDING-DOWN      | Lower the shared moral-standing selector by one through the ordinary capped-subtract writer, floored at zero. Emits no text and does not touch the word buffer. |
 | 0x8D  | LITERAL-NEWLINE    | Force-emit a literal newline through the text-output system. Used to end a line when no natural break would fall there. |
+
+`0x89` and `0x8A` are the byte runner's only direct writers of the shared
+moral-standing selector; `systems/karma.md` section 4 lists them alongside the
+other traced standing writers. Scripts stack them to move standing by more than
+one — a run of five consecutive `0x89` bytes is a `+5` reward.
+
+Earlier revisions of this spec described `0x8A` as a newline that also flushed
+the party panel, and omitted `0x89` entirely. That was a misreading. The
+literal-newline code is `0x8D` and only `0x8D`; the value `0x8A` acquires its
+newline meaning only *inside* the word buffer, because the printable-text path
+rewrites a `0x8D` to `0x8A` after control-code dispatch has already been passed.
 
 ### 7.5. Print-mask and curse codes
 
 | Code  | Mnemonic        | Effect                                                                                                                          |
 |-------|-----------------|---------------------------------------------------------------------------------------------------------------------------------|
 | 0x8B  | CURSE-CHECK     | Run the resident curse-check routine. Used in dialog with cursed-item NPCs (e.g. the snake in Despise) to tick the curse state. |
-| 0x8E  | PROTECT-RUN     | Toggle the print mask's high bit. Used in matched pairs around short literal runs whose spaces should not act as ordinary word-buffer breakpoints. |
+| 0x8E  | ALTERNATE-FONT  | Toggle the print mask's high bit, switching queued printable bytes between the ordinary font and the alternate (runic) font and, as a side effect, suppressing word-buffer breaks inside the run. Used in matched pairs around mantras and Words of Power. |
 
-`0x8B` does not directly affect the stream; it is a side-effect-only code that ensures the player's curse state is updated at a specific narrative beat. `0x8E` is the only code that mutates the byte runner's print-mask state, and is typically used in matched pairs (one to enter protected-run mode, one to leave it).
+`0x8B` does not directly affect the stream; it is a side-effect-only code that ensures the player's curse state is updated at a specific narrative beat. `0x8E` is the only code that mutates the byte runner's print-mask state, and is used in matched pairs (one to enter the alternate font, one to leave it). Every occurrence in shipped dialogue wraps a mantra or a Word of Power.
 
 ### 7.6. Branching, recruitment, and transactional codes
 
@@ -240,12 +267,62 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 | 0x84  | ASK-PARTY-NAME  | none                    | Prompt the player to type a party member's name. The typed name is matched against each live member with a case-insensitive, bit-7-stripping compare; the match index (0 if no match) is available to the surrounding response. Used by the JOIN sequence and any "name a companion" prompt. |
 | 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes, mask each to seven bits, interpret them as ASCII decimal digits, and run the gold-payment routine against that three-digit amount. Used for tolls, bribes, and donations. |
 | 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
-| 0x87  | SET-FLAG        | none (consumes follow-up) | Save the current stream pointer, walk the same keyword scan the input loop would walk against the next stream segment, run any matched response, and on no-match restore the saved pointer and continue. This is how an NPC inserts a conditional side-clause that recurses into another keyword's response. |
-| 0x88  | ASK-WHO         | none                    | Variant of `0x84` used for "who is the X?" replies that produce a name. |
-| 0x8C  | IF-ELSE         | one                     | Collect one argument byte (a flag identifier) and test the active scene's TALK branch flag for that bit. If set, branch into the *else* arm; if clear, fall through to the *then* arm. Arms are delimited by label codes (Section 7.7) so the runner skips the not-taken arm. |
+| 0x87  | KEYWORD-ALIAS   | none                    | Save the current stream position; skip forward past the remainder of the current record, past any run of terminators, and past the whole record that follows; run the record after that as a nested stream. If the nested stream signals stop, the outer stream stops too; otherwise the saved position is restored and the outer stream continues where it left off. No keyword matching, no player input, no flag write. |
+| 0x88  | ASK-WHO         | none                    | Prompt the player for a name and read a typed line. On a match against a live party member, **set the active scene's branch-flag bit for the NPC currently speaking** and print the affirmative acknowledgement; on empty input or no match, print the dismissive one. This is the in-stream setter for the bank that `0x8C` tests. |
+| 0x8C  | IF-ELSE         | one                     | Collect one argument byte, which is the **branch target label**, then test the active scene's branch-flag bit for the NPC currently speaking. If the bit is clear, fall through in-stream with the byte after the argument. If it is set, transfer to the labelled record named by the argument — or, for the reserved argument `0xFF`, end the response and return to the keyword prompt. The tested bit is chosen by the engine, never by the script. |
 | 0xFE  | IF-ELSE-ALT     | two                     | Multi-byte alternative branch form. Collects a moral-standing threshold byte and a target-label byte; if the shared moral-standing selector is at or above the threshold, the runner branches to the target label. |
 
-The gold-payment introducer (`0x85`) interacts with conversation flow, not just emission: depending on whether the player can pay, the surrounding response may take different paths, so implementations need to model it as a re-entrant prompt that returns a result code.
+#### The keyword-alias idiom (`0x87`)
+
+In shipped content `0x87` is almost always the *entire body* of a response
+record. Because a response record is preceded by its keyword record, skipping one
+record forward from a lone `0x87` lands on the next keyword's response. The
+observable meaning is therefore "this keyword is an alias for the next keyword's
+response". Aliases chain: three keywords in a row whose responses are each a lone
+`0x87` all resolve to the fourth keyword's response, because each nested run
+re-enters the same handler.
+
+The historical mnemonic for `0x87` was SET-FLAG, and earlier revisions of this
+spec described it as a recursive keyword *scan*. Both are wrong. `0x87` does no
+string comparison, reads no player input, consumes no argument byte, and writes
+no flag. An implementation that models it as a keyword search will produce the
+right answer for the common alias case by accident and the wrong answer whenever
+the aliased keyword is not the immediately following record.
+
+#### The introduce-yourself idiom (`0x88` with `0x8C`)
+
+`0x88` and `0x8C` are two halves of one mechanism. The bank they share is the
+per-scene branch-flag bank described in `systems/quest-flags.md` section 3: one
+thirty-two-bit word per scene, one bit per NPC roster slot in that scene. The
+bit index is always supplied by the engine — it is the slot of the NPC currently
+being spoken to — so a script can neither choose nor forge it.
+
+- `0x88` **sets** the current NPC's bit, but only after the player types a line
+  that names a live party member.
+- `0x8C` **tests** the current NPC's bit and branches on it.
+
+The `0x88` match rule is worth stating exactly, because it is looser than the
+top-level keyword match. For each active party slot in order, the engine takes
+the **first four characters** of that member's name and searches for them as a
+substring of the typed line. A hit counts only at the start of the line or
+immediately after a literal space; a hit in the middle of a longer word is
+rejected and the scan continues with the next member. The first accepted hit ends
+the scan, sets the bit, and prints the affirmative line. Empty input is its own
+early exit and never sets the bit.
+
+The shipped idiom guards the `0x88` with an IF-ELSE carrying the reserved `0xFF`
+argument, usually in the NPC's Name or Greeting entry: if the NPC already knows
+the party, the `0x8C 0xFF` ends the entry and drops straight to the keyword
+prompt; if not, execution falls through to the `0x88` prompt, which asks and then
+remembers. Forty-six of the one hundred thirty-one shipped blobs contain an
+ASK-WHO, and forty-three of those also contain an IF-ELSE; nine use the two codes
+directly adjacent.
+
+Consequently a clean implementation must not model `0x8C`'s argument as a flag
+id, and must not conclude that the bank has no setter. Both errors were present
+in earlier public answers and are withdrawn.
+
+The gold-payment introducer (`0x85`) interacts with conversation flow, not just emission: depending on whether the player can pay, the surrounding response may take different paths, so implementations need to model it as a re-entrant prompt that returns a result code. On an affordable demand the amount is debited from party gold and the panel is refreshed; on an unaffordable one the runner prints the refusal line, clears its multi-byte state, and re-enters the keyword prompt rather than continuing the response. The rare moral-standing side effect that a successful payment can trigger is gated on the speaking NPC's sprite class and on a turn-based cooldown; `systems/karma.md` section 4 owns that contract, and `0x85` itself is not a karma writer.
 
 The action-dispatch handler (`0x86`) is the engine's main extension point. The
 letter verbs cover joining the party, refusing to talk, granting items, and
@@ -290,12 +367,16 @@ the runner records the label byte, rewinds the stream pointer to the start of
 the loaded NPC blob, and enters the label handler.
 
 The label handler searches byte-for-byte for records associated with the active
-label. It does not compare text, fold case, or normalize label ids. Labelled
+label. A label is *declared* by the two-byte marker `0x90 <label>`: the scan
+looks for `0x90`, checks whether the byte after it equals the active label, and
+on a match resumes the stream immediately past the label byte; otherwise it keeps
+scanning. It does not compare text, fold case, or normalize label ids. Labelled
 records are part of the blob data, and shipped blobs commonly reuse the same
 label byte multiple times: once as the control transfer and again as one or more
 records inside the labelled block. Implementations must therefore preserve the
 engine's scan discipline rather than treating label values as unique symbols in
-a map.
+a map. In shipped content the value `0x9F` is conventionally the blob's final
+record marker.
 
 Labelled blocks can do more than skip an IF/ELSE arm. They may open a scoped
 sub-prompt, print a prompt such as "Your interest?", read another free-text
@@ -324,25 +405,60 @@ reports no-stop. After an unmatched scoped keyword or a NUL-ended nested
 response, the handler opens the ordinary top-level keyword loop as the fallback
 path rather than treating the scoped prompt as a permanent terminal state.
 
-IF/ELSE branches use the same machinery for ordinary branch skips. The
-IF-ELSE introducer chooses, based on the flag test, whether to fall through (the
-*then* arm) or enter a labelled block that opens the *else* arm. The *then* arm
-can end with its own label transfer past the else arm so that the runner does
-not also execute it. The fifteen-label range is per blob, but labels are
-byte-level flow markers, not globally unique names.
+IF/ELSE branches reuse the same machinery. The IF-ELSE introducer falls through
+in-stream when the tested flag is clear, and transfers to the labelled record
+named by its argument byte when the flag is set; the reserved argument `0xFF`
+ends the response instead of transferring. The fall-through arm can end with its
+own label transfer past the taken arm so that the runner does not also execute
+it. The fifteen-label range is per blob, but labels are byte-level flow markers,
+not globally unique names.
 
 ## 8. The common-word dictionary
 
-A 128-entry pointer table targets a vocabulary of common English words shared across `.TLK` dialogue and the shop renderer. Dialogue dictionary tokens and shop phrase tokens apply different byte-range biases to the same logical table; the first dialogue token and shop token `0x80` both resolve to the first entry. Matching tokens are replaced *inline* by the corresponding word during emission.
+A one-hundred-twenty-eight-entry table of common English words is shared by
+`.TLK` dialogue and the shop bark renderer. Its full contents, the two token
+biases, its empty slots, and its validation invariants are published in
+`catalogs/common-word-dictionary.md`; the vocabulary itself is a resident data
+resource, not part of the `.TLK` files.
 
-The vocabulary is fixed and shipped with the engine (in the resident data segment, not the `.TLK` files). It contains common articles, pronouns, and connectives — `the`, `thou`, `of`, `and`, `you`, etc. — plus Britannian proper nouns such as `Blackthorn`, `Britannia`, `Lord British`, and the major-city names. Proper nouns in the table let many NPCs share canonical references without restating the full string in each blob.
+On the dialogue side the token byte *is* the catalog index: `0x01` through
+`0x80`, with `0x01` mapping to entry one and `0x80` to entry one hundred
+twenty-eight. The shop renderer reaches the same entries from the byte range
+`0x80`..`0xFF`. Tokens are replaced *inline* during emission, character by
+character through the same word buffer that carries ordinary text, so an
+expansion wraps and breaks exactly as if the word had been spelled out in the
+blob. There is no pre-pass that flattens a blob into a string.
 
-Some dictionary entries are intentionally empty. An empty entry does not expand
-to visible text; instead, it sets a "leading space needed" flag for the next
-emission, which is the encoder's way of hinting at a word boundary without an
-explicit space byte.
+### 8.1 Emission order
 
-The exact word at each index belongs in a data spec, not here.
+For each dictionary token the runner does three things, in this order:
+
+1. **Emit one space**, unconditionally — before every token, populated or not.
+2. **Emit the entry's characters**, if the entry is populated.
+3. **Arm the pending-space flag**, but only if the entry was populated.
+
+The pending-space flag is read and cleared by the next *printable text byte*,
+which emits one space ahead of itself (Section 7.1). Nothing else consumes it. So:
+
+- `token token` renders as ` word1 word2` and leaves the flag armed.
+- `token letter` renders as ` word1 letter`, with the single space coming from
+  the flag.
+- A token followed by punctuation gets the same leading space and no special
+  handling; content that needs punctuation tight against a dictionary word uses
+  one of the vocabulary's punctuation-bearing entries instead.
+
+### 8.2 Empty entries
+
+Ten catalog indices are empty. They are **not** word-boundary sentinels, and
+they do **not** arm the pending-space flag — earlier revisions of this spec said
+both, and both are withdrawn. An empty entry emits the leading space from step 1
+and then queues the raw token byte itself as a literal character; because that
+byte has its high bit clear, it renders in the alternate font (Section 7.1).
+
+No shipped `.TLK` blob or shop record references an empty entry: across all four
+dialogue files the set of tokens used is exactly the one hundred eighteen
+populated indices. The behaviour above is stated for completeness and for custom
+content, not because the original ever exercises it.
 
 ## 9. Conversation flow
 
@@ -393,26 +509,30 @@ conversation-to-shop window setup layer.
 party member name and then run action-dispatch side effects. The gold-payment
 routine (triggered by `0x85`) and the action-dispatch handler (triggered by
 `0x86`) also mutate party state. The gold-payment path decodes a three-digit
-demand, debits party gold when affordable, and can run toll-style side effects
-including a capped shared moral-standing selector increase when the
-toll-progress counter reaches its milestone; it is not a confirmed per-virtue
-standing writer. The action-dispatch path owns item grants, member changes,
+demand and debits party gold when affordable. It can also raise the shared
+moral-standing selector, but only through the narrowly gated milestone described
+in `systems/karma.md` section 4.1 — the speaking NPC must belong to one specific
+sprite class and a shared per-turn counter must have reached one hundred — and it
+is not a per-virtue standing writer. The action-dispatch path owns item grants, member changes,
 generic signals, and mood-style side effects. These operations update the
 party state described by the save-image, roster, item, karma, and chargen
 specs. The conversation engine itself does not manage the party roster; it
 only invokes those party operations.
 
-**Quest flags and karma branches.** The `0x8C` IF-ELSE branch tests a bit in
-the active scene's TALK branch-flag slot. The `0xFE` branch is different: it
-consumes a moral-standing threshold and a target label, then branches when the
-shared moral-standing selector is at or above that threshold. The
-action-dispatch path can also set generic one-conversation signal flags or
-fixed durable resource/item fields. Implementations should keep the per-scene
-TALK branch bank, generic transient signals, durable save-backed flags, and
-karma-threshold branch semantics separate. Branch bit indices `32` and above
-build a zero mask rather than wrapping, so such tests read as clear and such
-setters are no-ops. `quest-flags.md` owns the non-karma branch flag boundary,
-while `karma.md` owns the moral-standing selector.
+**Quest flags and karma branches.** The `0x8C` IF-ELSE branch tests the active
+scene's TALK branch-flag bit for the NPC currently speaking, and the ASK-WHO
+code (`0x88`) is what sets that bit. The `0xFE` branch is different: it consumes
+a moral-standing threshold and a target label, then branches when the shared
+moral-standing selector is at or above that threshold. The action-dispatch path
+can also set generic one-conversation signal flags or fixed durable
+resource/item fields. Implementations should keep the per-scene TALK branch
+bank, generic transient signals, durable save-backed flags, and karma-threshold
+branch semantics separate. The branch-flag bit index is engine-supplied from the
+NPC roster slot and so is always within the thirty-two-bit slot; an
+implementation that can nonetheless produce an out-of-range index should make it
+build a zero mask, so such tests read as clear and such setters are no-ops.
+`quest-flags.md` owns the non-karma branch flag boundary, while `karma.md` owns
+the moral-standing selector.
 
 **Conversation cleanup sentinel.** Final conversation cleanup also consults a
 shared town/conversation sentinel before running its stolen-action cleanup
@@ -441,7 +561,8 @@ quest-state specs.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, sleeping/no-response stubs, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
+- The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, status-tile gate, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
+- The two concrete status-tile ids, their message assignment, the fact that the gate reads a live map tile rather than an NPC sprite, and the talk-through tile set — derived from `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, which re-derives both from the shipped binaries and reconciles an internal inconsistency in the earlier handler note.
 - The byte runner's full dispatch table, the multi-byte-command machinery, the GOTO-label semantics, the printable-text path, and the per-conversation state cluster — derived from `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.
 - The gold-payment, action-dispatch, and karma-threshold branch handlers -- derived from `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`, `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`, and `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
 - The Spyglass, Sextant, and Black Badge action-letter identities --
@@ -465,4 +586,5 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/ULTIMA_EXE/0x43AE_pc_speaker_glissando.md`.
 - The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
 - The on-disk `.TLK` file structure — header layout, blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`.
-- The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`.
+- The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`, with the published word list in `catalogs/common-word-dictionary.md`.
+- The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`, `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.

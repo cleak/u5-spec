@@ -12,7 +12,7 @@ This spec describes the combat trigger framing, the arena format and monster pla
 
 Combat enters from one entry point - a single function call from a mode or scripted setup path that takes three parameters: a flags word, an actor-slot index, and an entry-mode bitfield. The entry-mode bitfield distinguishes three setup families:
 
-**Terrain combat.** The default. Reached when the player walks into (or attacks) a hostile creature on the overworld. The dynamic-objects-table slot of the offending creature is passed along; its tile class picks one of sixteen outdoor arenas via a small linear formula in the tile-class range. The terrain-combat setup chooses the arena, sets up the monster spawn count, and places each monster at one of a fixed set of arrival positions.
+**Terrain combat.** The default. Reached when the player walks into (or attacks) a hostile creature on the overworld or in a town. The dynamic-objects-table slot of the offending creature is passed along. Two independent selections happen before the round loop: the **outdoor arena** is chosen from the world terrain under that creature plus the party's vehicle state, and the encounter's **base combat class** is derived from the creature's own sprite byte by a small linear formula. The arena is loaded first; the terrain-combat setup then seats the party, rolls the monster spawn count from the base class's stat row, and places each monster at one of the arena's sixteen arrival positions. `encounters.md` Section 4 publishes both selectors.
 
 **Ambush combat.** A separate setup branch from ordinary terrain combat. The current resolved setup target is the DNGLOOK room-NPC setup entry used by dungeon/rest-style room setup, not the ordinary terrain helper and not the town hostile-NPC alarm path. Do not infer its arena choice, monster count, or placement order from the dormant shuffle branch inside the terrain setup helper unless a live caller is identified.
 **Rest/camp "alternate" setup.** Reached by H-Hole-up rest/camp callers. The
@@ -33,7 +33,7 @@ Section 4.
 
 A combat arena is a rectangle of terrain tiles plus a band of metadata describing where actors enter and which terrain pieces hold special meaning (spawn points, hazards, ladders). Two on-disk files hold the engine's full set of arenas: a bank of sixteen outdoor arenas keyed by overworld terrain class (each tied to a tile family — grass, forest, hills, swamp), and a much larger bank of dungeon-encounter arenas (one hundred twelve records).
 
-Each arena occupies a fixed-size record. The first part is the **terrain grid** — an eleven-by-eleven array of tile bytes describing the arena floor. The remainder is the **metadata band** — a flat run of bytes per row that the engine reads at setup. The confirmed outdoor slices provide two small per-arena setup tables and sixteen placement-slot coordinate pairs. Hazard, edge, and other special-cell semantics must stay with their traced runtime consumers until a direct metadata reader is identified. The arena format spec covers the byte-by-byte layout; from combat's perspective the contract is "given an arena ID, the on-disk record tells us a 121-cell terrain grid and the confirmed setup slices."
+Each arena occupies a fixed-size record. The first part is the **terrain grid** — an eleven-by-eleven array of tile bytes describing the arena floor. The remainder is the **metadata band** — a flat run of bytes per row that the engine reads at setup. The confirmed outdoor slices provide six party entry coordinate pairs and sixteen monster placement-slot coordinate pairs. Hazard, edge, and other special-cell semantics must stay with their traced runtime consumers until a direct metadata reader is identified. The arena format spec covers the byte-by-byte layout; from combat's perspective the contract is "given an arena ID, the on-disk record tells us a 121-cell terrain grid and the confirmed setup slices."
 
 When the arena loads, its terrain grid is copied into a runtime grid in the data segment with a row stride padded out to thirty-two bytes (a power-of-two stride that lets the renderer index by `(row << 5) + col`). Movement and visibility consult this runtime grid; the on-disk record is not touched again until the next combat enters.
 
@@ -62,7 +62,19 @@ The framing function bridges the world-mode loop and the combat round loop. It m
 - **Snapshot the entire 32-record dynamic-objects table** into a backup region. The table holds the world's monsters, NPCs, ships, horses, and other moveable entities; combat will overwrite it with its own actors.
 - Run one of the three setup paths (terrain / ambush / rest/camp alternate) to
   populate the table with combat actors or decide that no combat round should
-  run.
+  run. The dispatch tests the rest/camp-alternate flag first, then the ambush
+  flag, and treats a zero entry mode as terrain. The rest/camp helper returns a
+  predicate: a **zero** return skips the round loop entirely, while a nonzero
+  return continues into combat.
+- The **ambush** branch loads no arena of its own. It calls the same room-combat
+  setup helper the dungeon room path uses, with an entry mode that passes that
+  helper's placement gate and a zero tile argument, and it **discards** the slot
+  or class argument its caller supplied. Consequently the ambush branch operates
+  on whatever arena terrain and metadata band are already resident in the arena
+  buffer, so its callers are responsible for having put a usable arena there
+  first. For dungeon wandering-monster combat the dungeon room painter
+  synthesises both the terrain and the metadata band immediately beforehand
+  (`systems/dungeon-mode.md` Section 14.1).
 - Clear the combat-state bytes the round loop expects on entry.
 
 **Round loop.** Section 7 describes what runs inside.
@@ -91,31 +103,125 @@ combat exit-message state was set. This is the proved durable trigger-removal
 path for ordinary active-object combat triggers. It is not a COMBAT-round-loop
 loot sweep and it does not consume the temporary combat death/drop markers.
 
-## 5. Monster placement
+## 5. Party seating and monster placement
 
-Once the framer has decided which arena to load, the setup helper picks a monster count, picks a tile per monster, and writes one record per spawned monster into the actor table. The ordinary terrain setup helper also contains an optional placement-shuffle branch, but the only traced terrain caller passes flags that leave that branch inactive. Live ambush and rest/camp alternate setup use separate entry-mode helpers, so do not model those paths as the dormant terrain-helper shuffle unless a caller is found.
+The arena record is selected and loaded **before** the framer runs, by the
+terrain-combat entry step described in `encounters.md` Section 4. By the time
+the setup helper runs, the arena's terrain grid and its four metadata slices —
+six party entry X values, six party entry Y values, sixteen placement-slot X
+values, sixteen placement-slot Y values — are already resident. The setup
+helper then runs a per-encounter pass that clears both combat tables and seats
+the party, and only afterwards picks a monster count, picks a class per
+monster, and writes one record per spawned monster.
+
+The ordinary terrain setup helper also contains an optional placement-shuffle branch, but the only traced terrain caller passes flags that leave that branch inactive. Live ambush and rest/camp alternate setup use separate entry-mode helpers, so do not model those paths as the dormant terrain-helper shuffle unless a caller is found. Specifically, the ambush helper is the room-combat setup helper specified in `formats/cbt.md` Section 5: it runs its own party-entry readback and its own sixteen-source scan over the resident arena metadata band, and it never touches the terrain helper's count roll, companion-class roll, or shuffle.
+
+**Order of operations.** Ordinary terrain combat setup is strictly:
+
+1. Clear all thirty-two combat descriptors and the renderer-facing bytes of all
+   thirty-two combat-instance active-object records.
+2. Seat the party from the per-arena party entry coordinates.
+3. Print the combat banner.
+4. Choose the monster count.
+5. Place the monsters into the sixteen placement slots.
+
+Because seating happens first and reads its own coordinate table, party seats
+never depend on the monster count and never consume a placement slot.
+
+**Seating the party.** The engine walks party slots zero through
+`party_size - 1` in roster order. For each slot:
+
+- A character whose status byte is `'D'` (dead) is skipped entirely: no
+  descriptor, no active-object record, no arena presence. The remaining members
+  therefore pack into the low descriptor indexes rather than keeping their
+  roster index.
+- Otherwise the member is placed at arena `(X, Y)` taken from the selected
+  arena's party entry coordinate slices, indexed by *party slot* (the roster
+  index, not the packed descriptor index).
+- The member's renderer-facing tile is derived from the character's class
+  letter, mapping onto the four human combat classes: Avatar to class 3,
+  Bard/Shepherd/Tinker to class 1, Fighter/Paladin/Ranger to class 2,
+  Druid/Mage to class 0. A class letter outside that set leaves the
+  presentation byte at zero.
+- A member whose status byte is `'S'` (asleep) is seated and then immediately
+  marked asleep: status stays `'S'`, the descriptor's disabled bit is set, the
+  presentation record shows the prone marker, and the active-player sentinel is
+  cleared if that member was the active player.
+- A member wearing a Ring of Invisibility is marked hidden and its presentation
+  byte switched to the suppressed-sprite value; a member wearing a Ring of
+  Regeneration runs the regeneration tick once at entry.
+- Independently of the above, each member wearing either of those two rings
+  faces a one-in-sixteen check at combat entry that destroys the ring with the
+  "a ring has vanished" message.
+
+Party descriptors are allocated from index zero upward and monster descriptors
+from index six upward, so the two ranges cannot collide even when several party
+members are dead. The renderer-facing active-object records are allocated from
+index zero by a separate scan, so a party member's descriptor index and
+active-object index coincide only when no earlier member was skipped; the
+descriptor's active-object link byte is the authoritative connection between
+them.
+
+**Party descriptor seeding.** For each seated party member the descriptor
+receives:
+
+| Descriptor field | Seeded value |
+|---|---|
+| HP/wound counter | Not written; party health is read from the character record, not from the descriptor. |
+| Base-step | The character's dexterity. |
+| Flags/faction | The party/self-acting tag; the disabled bit is additionally set when the status byte is neither `'G'` (good) nor `'P'` (poisoned). |
+| Owner/target/class | The character's roster slot index. |
+| Active-object link | The allocated combat-instance active-object index. |
+| Phase counter | Thirty-six minus the base-step. |
+| Arena X, arena Y | The per-arena party entry coordinates for that roster slot. |
+
+The matching active-object record receives the class-derived tile in both its
+tile and tile-mirror bytes, the same arena coordinates, the current Z plane, the
+roster slot index in its auxiliary byte, and the "no linked descriptor yet"
+sentinel in its last byte.
+
+**Arena-centre special.** If the loaded arena's centre cell (row five, column
+five) holds the magic-field marker tile `0xDC`, the setup pass converts that
+cell into a special active object with setup id one, using the same
+auxiliary-byte rule the dungeon-room loader applies to that id. No shipped
+outdoor arena carries that tile at that cell, so this is inert for stock
+`BRIT.CBT` data and is documented only so a custom arena behaves the same way.
 
 **Counting monsters.** The engine consults the default spawn-count byte in the
-combat-class stat row for the encounter's base class. In ordinary terrain
-combat, the outdoor arena index also names the base combat class for the first
-spawn, so older notes may describe this as a per-arena count table. It is not a
-separate eight-byte arena row: the surrounding seven bytes are the class stat
-fields specified in `formats/data-ovl.md`, not terrain-combat weights. Three
-count values are treated as exact counts and used unchanged: one, eight, and
-sixteen. Any other value is treated as a maximum: the actual count is rolled to
-a uniform integer in `[1, max]`. A "double-encounter" runtime flag, when set,
-re-rolls the count once more and takes the second roll. The effect is not a
-guaranteed size increase; it changes the encounter's random count by replacing
-the first roll. The flag is save-backed resident state and is cleared by the
-28-day month-boundary bundle. Current static sweeps found no gameplay setter.
-The final count is capped at twenty-six.
+combat-class stat row for the encounter's base class. That base class is the
+class id derived from the triggering active object, not the arena index — the
+two are independent selections (see `encounters.md` Section 4). The count byte
+is one field of the eight-byte class stat row specified in
+`formats/data-ovl.md`; the surrounding bytes are the other class stat fields,
+not terrain-combat weights. Three count values are treated as exact counts and
+used unchanged: one, eight, and sixteen. Any other value is treated as a
+maximum: the actual count is rolled to a uniform integer in `[1, max]`. A
+"double-encounter" runtime flag, when set, re-rolls the count once more and
+takes the second roll. The effect is not a guaranteed size increase; it changes
+the encounter's random count by replacing the first roll. The flag is
+save-backed resident state and is cleared by the 28-day month-boundary bundle.
+Current static sweeps found no gameplay setter. The reroll arm ends with a
+defensive cap at twenty-six.
 
-A "town-style override" applies before the lookup inside the terrain setup
-helper: if that helper is reached while the saved scene is a
-town/dwelling/castle/keep and the arena is a regular surface arena, the count
-is forced to one. The traced town hostile-NPC logic does not call this path, so
-the override is a bounded terrain-helper behavior rather than proof that town
-hostility uses arena combat.
+**Reachable-count invariant.** With shipped class data the count can never
+exceed sixteen. The largest default spawn count in the forty-eight-row class
+stat table is sixteen, and sixteen is one of the three exact-count sentinels,
+so it is used verbatim; every non-sentinel value is re-rolled down into
+`[1, max]` and the largest non-sentinel value in the table is thirteen. The
+twenty-six cap is therefore unreachable defensive code, placement slot indexes
+sixteen through twenty-five are never used, and a conforming engine may treat
+the sixteen placement slots as sufficient for every terrain encounter. A count
+of exactly sixteen is also not a conflict with party seating, because party
+seats come from a different per-arena table and are written before any monster
+is placed.
+
+A **town-style single-attacker override** applies before the lookup: if the
+pre-combat scene was a town, dwelling, castle, or keep, the party is on the
+surface, and the base class is not 12 (Guard), the count is forced to one. This
+path is live — the town mode loop reaches the same terrain-combat entry the
+overworld uses — so attacking an ordinary townsperson produces one attacker,
+while attacking a guard falls through to the Guard row's sentinel count of
+eight.
 
 A short combat banner ("CONFLICT") is printed at the start of setup, before any monsters are placed.
 
@@ -129,9 +235,9 @@ coordinates from the record metadata band into two resident scratch tables, and
 the placement helper then reads the resident copies. A clean engine should
 therefore treat a hard-coded resident coordinate list as only the values from
 whatever record was most recently loaded, not as global fixed placement data.
-The same arena-load step also copies two six-byte setup tables used by
-combat-local resident state; their per-entry meanings remain format-level open
-work.
+The same arena-load step also copies the two six-byte party entry coordinate
+slices consumed by the seating pass above; those four slices are the whole of
+the arena record's placement metadata.
 
 **Ambush and camp reveal slots.** Ambush-style and camp-attack combats can
 carry a small reveal table for hidden arena features. The reveal helper is
@@ -144,9 +250,42 @@ the arena coordinate range are sentinels for "no stamp" rather than map
 coordinates. The clean record shape is specified in `formats/data-ovl.md`;
 the shipped coordinates and reveal tiles are asset data.
 
-**Picking tiles per monster.** The first monster always uses the arena's base tile class, derived from the triggering creature's tile. Subsequent monsters normally reuse that same base tile. For early spawn indexes below the `count / 4 + 1` threshold, each monster rolls a one-in-nine replacement check; only a zero result uses the per-arena replacement tile from the separate table. Later spawn indexes never roll for that replacement.
+**Picking a class per monster.** The first monster always uses the encounter's
+base combat class, derived from the triggering creature. Subsequent monsters
+normally reuse that same class. For early spawn indexes below the
+`count / 4 + 1` threshold, each monster rolls a one-in-nine check; only a zero
+result substitutes the base class's **companion class** from the per-class
+companion table. Later spawn indexes never roll for that substitution. The
+companion table is forty-eight entries indexed by class id, and its values are
+class ids, not tile ids — it is the "and a few of something else showed up"
+table (for example Orc bands mix in Trolls, Ghost bands mix in Skeletons,
+Daemon bands mix in Dragons). The full mapping is published in
+`catalogs/monster-bestiary.md`. A spawned actor's renderer-facing tile is then
+derived from whichever class was chosen.
 
-Placement initialises two linked records per monster. The renderer-facing active-object record receives the chosen tile and arena coordinates. The parallel combat-effect descriptor receives the class-derived base-step, phase counter, target/owner field, coordinates used by the round walker, and the appropriate flag bits. The placement helper returns when all monsters are written.
+Placement initialises two linked records per monster. The renderer-facing
+active-object record receives the class-derived tile in both its tile and
+tile-mirror bytes, the arena coordinates, and the current Z plane. The parallel
+combat-effect descriptor receives: the class's maximum HP as its HP/wound
+counter; a base-step of the class speed seed randomised by a uniform `[-4, +3]`
+adjustment, reverted to the unadjusted seed whenever the adjusted value would
+exceed thirty; a phase counter of thirty-six minus the base-step; the class id
+in its owner/target/class field; the active-object link; and the hostile
+faction tag — except for class ids eight and nine, which get the
+passive/neutral tag instead so they render and can be interacted with but are
+never targeted. The placement helper returns when all monsters are written.
+
+**Marker-only placements.** The shared placement primitive has a third mode
+besides party seeding and monster seeding. In marker mode it allocates **no**
+combat descriptor at all: only a renderer-facing active-object record is
+written, with the caller's raw id in both tile bytes and in the auxiliary byte,
+plus the placement coordinates, the plane value, and the same last-byte
+sentinel. Because no descriptor exists, a marker never takes a turn, never
+appears to the target picker, and has no descriptor link pointing back at it.
+Dungeon-room special sources use this mode; see `formats/cbt.md` Section 5.
+Descriptor slots are considered free when their flags byte is zero, so an
+implementation that leaves stale nonzero flags on a released slot makes that
+slot permanently unallocatable.
 
 ## 6. The actor table
 
@@ -180,14 +319,74 @@ per-slot per-round state used by every consumer:
 
 | Bit  | Meaning                                                                              |
 |-----:|--------------------------------------------------------------------------------------|
-| `0x80` | Slot is active / self-acting (set for live party slots and for live monsters).    |
-| `0x40` | Recently-acted / animation pending.                                               |
-| `0x20` | Marked dead.                                                                      |
+| `0x80` | **Party-side slot.** Placement stamps this bit only when it writes a party member's descriptor. Monster and object descriptors never carry it. It is the discriminator the damage/death resolver uses to choose the party-death branch over the monster-death branch, so an engine that also sets it for live monsters routes every monster death through the party path. |
+| `0x40` | **Monster-side slot** (self-acting AI actor). Placement stamps this bit when it writes an ordinary monster descriptor, except for the two reserved unnamed classes 8 and 9, which are stamped `0x20` instead. Bits `0x80` and `0x40` are mutually exclusive as written by placement. |
+| `0x20` | Marked dead or otherwise non-acting. Monster death overwrites the whole flags byte with this value; party death ORs it in. |
 | `0x10` | Phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). |
-| `0x08` | Asleep / charmed / disabled. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. |
+| `0x08` | Asleep / charmed / disabled. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). |
 | `0x04` | Hidden / not-yet-revealed (invisible).                                            |
 | `0x02` | Fleeing. Set by the no-target centre fallback and by the wound-morale writer; consumed by the step-vector synthesizer. |
-| `0x01` | Controlled / casting / active-player gate. The combat round walker dispatches a slot with bit `0x01` set through the player command parser; possession/charm also uses this bit so the controlled non-party slot takes turns through the player path. Daemon-class casters that successfully possess a target self-clear through the slot-clear helper. |
+| `0x01` | **Charmed / under external control.** Set by monster possession, by the Charm spell, by summon/conjure placement, and by the Sword of Chaos compulsion path; see Section 6.1a for the full writer/reader contract. It is *not* a dispatch gate for the round walker. |
+
+A descriptor whose flags byte is entirely zero is a free slot. Placement uses
+exactly that test when it looks for somewhere to write a new actor, so an
+engine must not leave residual bits on a released slot.
+
+### 6.1a The controlled/charmed bit
+
+Bit `0x01` records that an actor is acting under external control rather than
+its own volition. Four traced paths set it and one clears it; nothing decays it
+on a timer.
+
+**Writers.**
+
+1. **Monster possession** (the per-class possess ability, Section 9) sets the
+   bit on the accepted *target*.
+2. **The Charm spell** toggles the bit on its accepted target: casting Charm on
+   an actor that already carries it clears it. This is the only traced clear
+   short of the actor leaving the table.
+3. **Summon, Conjure, and Swarm placement** set the bit on each freshly placed
+   creature, so summoned creatures start life in the same controlled state a
+   charmed monster is in. See `systems/magic.md`, Summoning and conjuration.
+4. **The Sword of Chaos compulsion.** When the round walker reaches a party
+   member's slot whose turn the active-player sentinel has selected, and that
+   character has item id 35 (Sword of Chaos) readied in either the weapon-hand
+   or shield-hand slot, the engine sets this bit on that party descriptor,
+   clears the active-player sentinel, and runs the turn through the automatic
+   actor driver instead of reading a command from the player. Any other readied
+   equipment takes the ordinary interactive path and never sets the bit.
+
+**Readers.** There are exactly three.
+
+- **The attack driver.** When an actor whose bit `0x01` is set takes an attack
+  action, the action resolves through the magical/projectile branch — the
+  action-tile marker is set and the missile-effect dispatcher runs — instead of
+  the ordinary weapon-attack cascade. This is the bit's only gameplay
+  consumption inside attack resolution.
+- **The possession eligibility filter,** which rejects a target that already
+  carries the bit, so a controlled actor cannot be possessed a second time.
+- **The stats panel.** A party member whose combat descriptor is party-side,
+  not monster-side, not marked dead, and carries bit `0x01` is drawn with the
+  status letter `C` in place of the roster status letter, for as long as that
+  descriptor still points back at the same roster slot.
+
+**Not a dispatch gate.** The round walker chooses the player-driven path from
+the active-player sentinel compared against the slot's owner/character byte
+plus the equipment test above; it never reads bit `0x01` to decide who acts.
+Earlier drafts of this spec said the walker dispatched any slot with the bit set
+through the player command parser. That is withdrawn: a possessed party member
+keeps taking turns in slot order, and the visible consequences are the `C`
+status letter and the redirected attack branch, not a change of who is prompted.
+
+**Faction is a different byte.** The friend/foe resolver reads bit `0x40` to
+recognise a monster-side slot, and the team-override flag it consults lives in
+the per-monster-class flag word, not in this descriptor byte. Do not reuse
+`0x80` or `0x01` as a faction toggle.
+
+**Lifetime.** The bit lives only in the combat-instance descriptor table. It
+survives rounds, is cleared by a second successful Charm, by the slot-clear path
+when the actor dies or de-spawns, and by the wholesale descriptor-table reset
+performed on the next combat entry. Nothing writes it into the save image.
 
 ### 6.2 Active-object link (byte 4)
 
@@ -223,29 +422,70 @@ gate, continue to reject it until the own-turn wake helper clears the bit.
 
 ### 6.3 Death-marker tile bytes
 
-When a slot dies, the death path writes a tile byte into the combat-instance
-active-object record at the slot linked from descriptor byte 4. The values are:
+When a slot dies, the death resolver may write a tile byte into the
+combat-instance active-object record at the slot linked from descriptor byte 4.
+Not every death branch writes a marker, and the branches that do not write one
+are exactly the branches that release the slot.
 
-| Death branch                                  | Tile byte         | Notes                                                                                                 |
-|-----------------------------------------------|-------------------|-------------------------------------------------------------------------------------------------------|
-| Party member death                            | `0x1E` (corpse)   | Sets the active-player sentinel to `0xFF` if the dead character was active.                          |
-| Vanish-on-death class (Wanderer, Blackthorn, Lord British, Shadowlord) | `0x16` (gravestone marker) | Plays the fade animation; clears the entire combat descriptor and active-object record; sets per-combat status byte to `2`. |
-| Gazer (type `0x1C`) death                     | `0x1F` (eye-burst special) | Calls the tile-effect spawn helper, then screen redraw.                                         |
-| Gargoyle (type `0x1E`) death                  | `0x4C` then default | First writes `0x4C` (`'L'` lava-pool tile) to the underlying combat-arena terrain at the death `(X, Y)`; then falls through to the default monster-killed path. |
-| Default monster killed, drop-roll accepted    | `0x01` (generic dead-monster / drop marker) | Writes a random `[0, max_HP]` into the active-object record's byte 5 (loot quantity); on a second random-byte acceptance, ORs bit `0x80` into byte 5 as a special-drop marker. |
-| Default monster killed, drop-roll rejected    | `0x01`            | Same tile but byte 5 is not promoted to a loot value; the slot is released through the slot-clear helper.                  |
+Three inputs decide the branch:
 
-All death markers live in the **temporary** combat-instance active-object
-table. The combat framer (`combat_enter_exit`) snapshots the world active-object
-table to a backup before combat and restores it on exit, so default-kill markers
-do not leak as world loot. A compatible implementation must not promote
-combat-instance drop markers into automatic world loot.
+- whether the descriptor's flags byte carries the party-side bit (§ 6.1);
+- the dying class's sixteen-bit class-flag word, specifically its low bit
+  (call it the *incorporeal* bit) and its *vanish-on-death* bit;
+- for ordinary monsters only, the arena terrain byte under the dying actor and
+  two independent rolls against the class's drop-cap stat byte.
+
+The branch order is: party-side bit first; then the pair test "incorporeal bit
+or vanish bit set"; inside that pair, vanish wins over incorporeal; outside it,
+the two hand-written class exceptions (Gazer, then Gargoyle) win over the
+general terrain/drop path.
+
+| Death branch | Selected when | Tile byte written into active-object bytes 0 and 1 | Other writes | Slot released? |
+|---|---|---|---|---|
+| Party member | Descriptor carries the party-side bit and the damage meets or exceeds current HP, or the damage is the instant-kill sentinel `99` | `0x1E` (corpse) | Character HP forced to zero, roster status byte set to `'D'`, marked-dead bit ORed in, death audio played, active-player sentinel set to `0xFF` if the dead character was active | No |
+| Vanish-on-death class | Monster whose class-flag word has the vanish bit set — Wanderer, Blackthorn, Lord British, Shadow Lord | `0x16` (vanish marker) | Prints `<name> vanishes!`, sets the per-combat status byte to `2`, runs the fade animation on the terrain under the actor, then the post-turn flush | **Yes** |
+| Incorporeal class | Monster whose class-flag word has the low bit set but **not** the vanish bit — Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon | **none** | none | **Yes** |
+| Gazer | Monster of the Gazer class | `0x1F` (eye-burst special) | Spawns the tile effect at the death coordinate with the same `0x1F` tile, then redraws the screen | No |
+| Gargoyle | Monster of the Gargoyle class | **none** | Writes `0x4C` (lava pool) into the combat-arena **terrain** cell under the actor; that terrain edit persists for the rest of the combat instance | **Yes** |
+| Ordinary monster, terrain rejects | Any other monster whose underlying arena terrain byte is `0x87`, or is numerically below `4` | **none** | none | **Yes** |
+| Ordinary monster, drop roll rejected | Terrain accepted, and the first roll exceeds the class drop-cap byte | `0x1F` | none — byte 5 keeps whatever the per-encounter reset left there | No |
+| Ordinary monster, drop roll accepted | Terrain accepted, and the first roll is less than or equal to the class drop-cap byte | `0x01` (dead-monster / drop marker) | Byte 5 of the active-object record receives **the class drop-cap byte itself**. A second independent roll strictly below the same drop cap ORs bit `0x80` into byte 5 as the special-drop marker | No |
+
+Notes that an implementation must not get wrong:
+
+- **Byte 5 is the drop-cap value, not a random amount.** The random draw is only
+  the gate comparand; the stored value is the class's drop-cap stat byte. This
+  matches `catalogs/monster-bestiary.md` Section 1, which is the authoritative
+  wording for the drop-cap field.
+- **Both rolls use the same helper**, which returns a near-uniform integer in
+  `1..30` (the underlying draw is a uniform `0..60` halved with truncation, with
+  a zero result promoted to one). Since the roll can never be zero, a class
+  whose drop-cap byte is zero can never take the accepted branch. Most stock
+  monster classes have a zero drop cap, so `0x1F` is by far the most common
+  ordinary corpse marker in play.
+- **The drop gate never releases the slot.** Neither the accepted nor the
+  rejected branch calls the slot-clear helper; the marker and its descriptor
+  stay in place for the rest of the combat instance.
+- **Gargoyle does not fall through to the ordinary path.** After stamping the
+  lava terrain byte it goes directly to the slot-clear helper, so a Gargoyle
+  death produces no corpse marker and no drop.
+- **Monster death overwrites the flags byte** with the marked-dead value rather
+  than ORing it, so all other per-round flag state on that descriptor is lost.
+- The reward unit returned to the caller (`floor(max_HP / 4) + 1`) is computed
+  before the branch and is returned from every monster branch, including the
+  ones that leave no marker.
+
+All death markers live in the **temporary** combat-instance active-object table.
+The combat framer snapshots the world active-object table to a backup before
+combat and restores it on exit, so default-kill markers do not leak as world
+loot. A compatible implementation must not promote combat-instance drop markers
+into automatic world loot.
 
 When an actor dies, the "marked dead" bit is set; when a slot is freed completely (a vanishing monster or a fled character), the record is cleared to all zeros and the slot becomes available for re-allocation.
 
 A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the step-or-attack primitive (Section 11): when an actor moves, its (X, Y) is written into both.
 
-The combat actor table is the authoritative combat-instance descriptor, not the persistent world active-object table. Its first byte is the current monster HP or wound counter for non-party actors, while another byte links the descriptor back to the renderer-facing active-object slot. Friend/foe classification also lives in this combat-instance descriptor: party slots are tagged as the party faction, ordinary monster slots as the hostile faction, and a passive/neutral tag is used for non-combatant combat props. The passive override is keyed by the placed tile class, not by the arena id. Public specs should not model the persistent active-object table as the owner of the combat faction byte.
+The combat actor table is the authoritative combat-instance descriptor, not the persistent world active-object table. Its first byte is the current monster HP or wound counter for non-party actors, while another byte links the descriptor back to the renderer-facing active-object slot. Friend/foe classification also lives in this combat-instance descriptor: party slots are tagged as the party faction, ordinary monster slots as the hostile faction, and a passive/neutral tag is used for non-combatant combat props. The passive override is keyed by the placed actor's class id — classes eight and nine — not by the arena index. Public specs should not model the persistent active-object table as the owner of the combat faction byte.
 
 The stats panel also reads this table during combat refreshes. Its row overlay
 uses the current combat slot selector plus the selected descriptor's target or
@@ -279,7 +519,7 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 2. **Sweep deaths from prior rounds.** If the slot is alive but its linked character record's status byte is now `'D'`, mark the slot dead, fire a death-narration effect, and advance to the next slot. This catches party members who died between rounds (poison, ongoing spells).
 3. **Skip wall-cell slots.** A defensive guard against bad placement.
 4. **Decrement the actor's phase counter.** While non-zero, the slot does not act this round. When it reaches zero, the actor *does* act.
-5. **On zero, refresh the counter and act.** The counter is reset to `(constant − base_step)`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine fires a tile-render pass for animation.
+5. **On zero, refresh the counter and act.** The counter is reset to `36 - base_step`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine fires a tile-render pass for animation.
 6. **Dispatch the actor's turn.** A single function asks "is this slot a player or a monster?" — for a player, control passes to the player command handler (Section 8); for a monster, to the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch (Section 9).
 7. **Mark the slot acted, run the post-action render.** Redraws changed cells and runs any post-action sound or particle effect. Death narration runs here when relevant.
 
@@ -385,15 +625,24 @@ movement is synthesized, monster AI runs a small class-flag hook. It is not a
 general script runner: it reads the acting monster's class flag word and tests
 three ability bits in fixed order.
 
-- `0x0040` is the possess/charm-on-turn ability. It chooses a random combat
-  slot, accepts only a living party member that is not dead/passive, blinking,
-  status-disabled, invisible, or already in the active command state, then runs
-  the normal resistance check. On a failed resistance roll the target is marked
-  controlled for the current combat state, the active-player sentinel is cleared
-  if needed, the stats panel is redrawn, and a short possession narration and
-  sound play. If the caster is a Daemon-class actor, the caster then clears
-  itself from combat. Once a valid target reaches the resistance path, the hook
-  returns handled whether the resistance blocks or the effect lands.
+- `0x0040` is the possess/charm-on-turn ability. It draws one uniform slot index
+  in `[0, 31]` — a single draw, with no retry if the draw lands on an ineligible
+  slot. The drawn slot is accepted only if it is party-side and none of
+  marked-dead, phased/blinked, asleep-or-disabled, hidden/not-yet-revealed, or
+  already controlled is set; because the ability hook itself only runs on
+  monster-side actors, a monster can possess party members and never another
+  monster. An accepted target then runs the normal resistance check, and the
+  effect lands only when that check does not block. On landing: the target's
+  controlled bit (`0x01`, Section 6.1a) is set; the active-player sentinel is
+  cleared to "none" **if the sentinel currently names the possessed character** —
+  it is compared against the target's own owner/character byte, never against the
+  caster's slot; the stats panel is redrawn, so the possessed member immediately
+  shows the `C` status letter; and the target's name plus a short possession line
+  and sound play. If the *caster's* class is Daemon, the caster's own descriptor
+  is then released through the slot-clear path, so a Daemon that possesses
+  someone removes itself from the fight. Once a valid target reaches the
+  resistance path, the hook returns handled whether the resistance blocks or the
+  effect lands.
 - `0x0800` is the blink/phase ability. It has an approximately one-in-eight
   chance per AI turn, toggles the actor's phase/hidden flag and linked visual
   tile between visible and hidden, and narrates the disappearance or return.
@@ -416,8 +665,12 @@ After this hook, the AI target picker and direction synthesis run as normal.
 - Not on the same *faction* - friend/foe is decided by a "slot-to-group"
   helper that maps each slot to a small group id.
 - Grouping note: ordinary placed party actors and ordinary placed monsters
-  start in opposite combat groups, and a low team-toggle flag can invert that
-  default for charm-like effects. A party-class actor whose referenced roster
+  start in opposite combat groups. The resolver recognises a monster-side actor
+  from descriptor flags bit `0x40`, and the team-override that can invert a
+  monster's default group lives in that monster's **per-class flag word**, not
+  in the descriptor byte. The controlled bit `0x01` is not consulted here at
+  all, so charming or possessing an actor does not by itself move it between
+  factions. A party-class actor whose referenced roster
   name has lowercase `j` as its fifth character is forced into the monster-side
   group for this comparison. In the stock initial roster this matches the
   Saduj template, but the rule is literal roster-name data: a compatible engine
@@ -483,15 +736,18 @@ one-half rolls a morale check that sets fleeing on 252 of 256 possible
 random-byte results, and one-half or higher clears fleeing. It also returns a
 four-bucket wound score for other AI consumers.
 
-A separate lower-tier summon/tame-style spell helper repurposes eligible live
-non-party, non-humanoid actors into a summoned-creature state and uses the
-descriptor low bit `0x01`, the same team/control bit used by charm/controlled
-actor dispatch. Treat that as a spell-side actor repurpose / activation side
-effect, not as the fear spell and not as wound morale. The no-target centre
-fallback described above is the other traced direct flee writer: it marks
-eligible monster-side slots with the flee flag while forcing their critical-HP
-marker. The decoded possess/blink/summon-daemon hook does not write the fleeing
-flag.
+Repel Undead is the second spell-side writer of that critical-HP state. It
+sweeps the whole actor table, accepts only non-humanoid monster-side actors
+whose class carries the undead class-flag bit and that fail the shared
+resistance check, and drives each accepted actor's combat HP counter to one and
+sets the fleeing flag directly — the same critical-HP flee setup Cause Fear
+applies, narrowed to undead classes. Earlier drafts described this helper as a
+"lower-tier summon/tame" effect that wrote the controlled bit `0x01`; that is
+withdrawn. It writes the HP counter and the fleeing bit `0x02` only, and it
+creates and repurposes nothing. The no-target centre fallback described above is
+the third traced direct flee writer: it marks eligible monster-side slots with
+the flee flag while forcing their critical-HP marker. The
+possess/blink/summon-daemon hook does not write the fleeing flag.
 
 **Pass 3 — Synthesise.** A combat-specific input gate reads the synthesised byte from the actor's record. The AI's chosen direction is encoded as the byte the player would press if they wanted to walk the same way (`'N'`, `'S'`, `'E'`, `'W'` direction codes), or the byte for "Attack" if the chosen direction puts the target adjacent. The byte falls into the same per-letter dispatcher as the player command handler. Before the command runs, the AI assembles a one-line narration string — for example `<monster name> attacks <target name>, armed with <weapon>!` — by stitching together a short verb composer.
 
@@ -697,7 +953,14 @@ damage.
 
 **Apply to HP.** For party members, damage is subtracted from the character record's HP word using the engine's saturating counter arithmetic; on death, the status byte is set to `'D'`, the active-player byte is cleared if this character was the active one, and a death-tile is written to the dynamic-objects table. For monsters, damage is subtracted from the slot's HP byte without wrapping through underflow; on death, control passes to the class-specific death paths.
 
-**Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. The **vanish on death** branch prints `<monster name> vanishes!`, changes the dynamic-object tile to a gravestone-style marker, clears the actor record, plays the fade-out animation, and bypasses the default drop-marker path. In the analyzed baseline this branch is assigned to Wanderer, Blackthorn, Lord British, and Shadow Lord. **Special tile transitions** for the Gazer (eye-burst tile + particle effect) and the Gargoyle (lava pool left under the corpse) are hand-tweaked deaths encoded as conditional branches on the class byte. **Default** kill: the death path runs two random checks against the class's drop-cap byte. If the first check accepts, the combat-instance active-object tile becomes the generic dead-monster/drop marker, and byte five of that record stores the class drop-cap value; if the second check also accepts, bit `0x80` is ORed into that same byte as a special-drop marker. If the first check rejects, the active-object tile becomes the alternate no-drop death marker and byte five is not promoted into a loot marker. These markers live in the temporary combat-instance active-object table. The enter/exit framer restores the pre-combat world active-object table after the round loop, and the traced post-combat object reconciler edits only the original caller-supplied trigger slot. A compatible implementation must not turn arbitrary default death markers into automatic world loot.
+**Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. Two of its bits gate the death branch: the low *incorporeal* bit and the *vanish-on-death* bit. When either is set, the death leaves the ordinary path entirely.
+
+- **Vanish on death** (vanish bit set; Wanderer, Blackthorn, Lord British, Shadow Lord in the analyzed baseline) prints `<monster name> vanishes!`, changes the active-object tile to the vanish marker, sets the per-combat status byte, plays the fade-out animation, and releases the slot.
+- **Incorporeal death** (low bit set, vanish bit clear; Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon) releases the slot immediately and leaves **no tile marker and no drop at all**. This is a distinct branch, not a variant of the default kill.
+- **Special tile transitions** for the Gazer (eye-burst tile plus a spawned tile effect and a redraw, slot kept) and the Gargoyle (lava-pool byte written into the arena terrain under the corpse, then the slot released with no corpse marker and no drop) are hand-written class exceptions taken only when neither class-flag bit above is set.
+- **Default kill** applies to every other monster and is gated first on the arena terrain under the actor: the excluded terrain values release the slot with no marker. On accepted terrain the path runs two independent rolls against the class's drop-cap byte. If the first roll is within the cap, the active-object tile becomes the dead-monster/drop marker and byte five of that record stores **the class drop-cap value itself** (not a random amount); a second roll strictly within the cap ORs bit `0x80` into that byte as a special-drop marker. If the first roll exceeds the cap, the tile becomes the alternate no-drop death marker and byte five is left alone. Neither outcome releases the slot.
+
+Section 6.3 carries the concrete tile bytes, the roll range, and the terrain gate. These markers live in the temporary combat-instance active-object table. The enter/exit framer restores the pre-combat world active-object table after the round loop, and the traced post-combat object reconciler edits only the original caller-supplied trigger slot. A compatible implementation must not turn arbitrary default death markers into automatic world loot.
 
 Each monster killed computes a small raw reward unit (roughly a quarter of max-HP plus one). Combat-local attack and status/damage callers consume the damage handler's return immediately when the attacker is a living party actor: the returned value is added to the attacker's experience word with the normal `9999` cap. For non-kill hits, that returned value is the applied damage result; for a monster kill, it is the class reward unit. Hazard calls with no party attacker, poison-only status applications, and field-contact poison fallthrough do not grant this credit. Spell-side multi-target callers can also consume the returned unit immediately: Tremor adds it to the caster's experience word after each accepted actor, capped at `9999`.
 
@@ -774,24 +1037,25 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 
 | Table                            | Purpose                                                                                                                                          |
 |----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
-| Combat-class spawn-count byte    | Field `+6` of the eight-byte class stat row. Ordinary terrain combat indexes it with the arena/base-class id, so it behaves like a per-arena count for stock outdoor arena ids but is stored with class stats. Combined with the random reroll, it decides how many monsters spawn. |
-| Per-arena replacement tile       | One byte per arena. Early spawned monsters roll a one-in-nine chance to use this tile instead of the base arena tile.                              |
+| Combat-class spawn-count byte    | The default spawn count field of the eight-byte class stat row, indexed by the encounter's base class id (never by the arena index). Combined with the random reroll it decides how many monsters spawn; the largest shipped value is sixteen. |
+| Per-class companion class        | Forty-eight entries indexed by class id, values are class ids. Early spawned monsters roll a one-in-nine chance to be created as the base class's companion class instead of the base class. Published in `catalogs/monster-bestiary.md`. |
 | Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, vanish-on-death, special death checks, the turnable-attack flag consumed by Amulet/Turning, ranged/effect branch selection, the magic-immune ranged/effect gate, teleport-capable movement, and the turn special bits for possess, blink/phase, and summon-daemon. |
 | Ordinary AI helper state         | Not a class script table. Ordinary monster decisions use the combat actor/effect records, target-selection scratch, per-class flag/stat tables, and shared helper outputs such as the AI step vector. Slot-local position, target, phase, flee, and visibility data remain in the combat actor/effect tables. |
 | Per-class display/narration data | Pointer data used by combat narration and class labels; this is not an AI behavior table.                                                        |
 | Per-class stat record            | Eight bytes per class: combat tier, speed seed/base-step input, HP-comparison byte for chest/encounter team-flip checks, defense rating, attack-damage cap, maximum HP, default spawn count, and default kill/drop cap. Maximum HP initializes monster HP and supplies the reward-unit input. The attack and defense bytes are consumed by the computed attack resolver; this row is not a flat damage/hit lookup matrix. |
 | Per-class name pointers          | Sixteen-bit pointers per class to the printable monster name strings.                                                                            |
 
-The class byte is set at spawn time and never changes (death may cause a tile swap, but the class byte stays). The same class index is used for party members (classes 0–15, one per character record slot) and monsters (classes 16+); the AI's friend/foe filter relies on the slot index range to distinguish them.
+A monster's class id is set at spawn time and never changes (death may cause a tile swap, but the class stays). The forty-eight-row class space is shared: classes 0-3 are the four human party sprites (Mage, Bard, Fighter, Avatar), classes 4-15 are townsfolk and special NPC actors, and classes 16-47 are the bestiary. Note that the descriptor's owner/target/class field is overloaded: for a seated party member it holds the character's roster slot index, and only for monsters and objects does it hold a class id. The AI's friend/foe filter relies on the descriptor faction tag and the slot index range rather than on that field alone.
 
 The 48-row stat table boundary is part of the public combat contract: party
 combat classes, special NPC classes, and monsters share the same eight-byte row
 shape. The ordinary friend/foe filter uses the combat slot index range and
 descriptor faction tag rather than a separate class-family table.
 
-The grouping helper therefore combines actor-family defaults, the low
-team-toggle flag, and the Saduj-linked roster override rather than consulting a
-separate faction table.
+The grouping helper therefore combines actor-family defaults (descriptor flags
+bit `0x40` identifies the monster side), the per-class team-override flag from
+the monster's class flag word, and the Saduj-linked roster override, rather than
+consulting a separate faction table.
 
 ## 14. Victory, defeat, and escape
 
@@ -908,9 +1172,10 @@ without independent behavioral consumers remain opaque metadata.
 - **Flee mechanics.** The monster wound-score morale classifier is the confirmed
   morale writer of the fleeing flag, and Cause Fear/fear-panic spell handlers
   are confirmed upstream routes that force hostile targets into the critical-HP
-  state consumed by that classifier. The lower-tier summon/tame-style helper is
-  separate: it repurposes eligible live non-party, non-humanoid actors and uses
-  descriptor bit `0x01`, not the flee bit. The no-target centre fallback also
+  state consumed by that classifier. Repel Undead is the same critical-HP flee
+  setup restricted to non-humanoid monster-side actors whose class carries the
+  undead flag; it writes the HP counter and the flee bit `0x02` and does not
+  touch the controlled bit `0x01`. The no-target centre fallback also
   writes the flee flag and critical-HP marker for eligible monster-side slots.
   Section 9 specifies how the flag reverses movement. The out-of-arena leave
   helper is specified above. The decoded possess/blink/summon-daemon hook does
@@ -940,11 +1205,22 @@ without independent behavioral consumers remain opaque metadata.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
+- Terrain-combat entry chain retrace of 2026-08-22 - outdoor arena selection from
+  world terrain plus ship state, the class-id derivation and its separation from
+  the arena index, the reachable spawn-count invariant, the forty-eight-entry
+  companion-class table, and the party-seating pass that runs before monster
+  placement. Source provenance: derived from private analysis notes
+  `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
+  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
 - The combat enter/exit framer with its three-way entry-mode dispatch, save-and-restore of player position and the dynamic-objects table, the scene-byte sentinel, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
 - The combat-exit tile-graphics restoration dispatch reached from the framer's
   sampled restoration flag -- derived from
   `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
-- The terrain-combat setup, the class-row spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn replacement-tile roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+- The terrain-combat setup, the class-row spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion-class roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
 - The combat monster-placement writer that initializes renderer-facing and combat descriptor records -- derived from `u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
 - The ambush/camp-attack reveal-slot helper, including mode gating, one-shot
   reveal-coordinate consumption, arena terrain stamping, and redraw ordering --
@@ -996,8 +1272,17 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the sibling
   COMBAT damage/death note that identifies the same random-byte helper.
 - The combat slot-to-group helper, including party/monster default inversion,
-  the low team-toggle flag, and the Saduj-linked roster override, derived from
-  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md`.
+  the monster-side descriptor bit `0x40` test, the per-class team-override flag,
+  and the Saduj-linked roster override, derived from
+  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` and
+  `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`.
+- The controlled/charmed bit contract in Section 6.1a — its four writers, its
+  three readers, the Charm toggle as the only in-combat clear, and the fact that
+  the round walker does not dispatch on it — derived from
+  `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
+  `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`,
+  `u5-decomp/functions/COMBAT_OVL/0x0226_actor_attack_target.md`, and
+  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
 - The HP-bucket wound-score classifier, low-HP morale writer for the fleeing
   flag, and fear/panic spell route that forces combat current HP into the
   critical bucket — derived from
@@ -1054,3 +1339,17 @@ The behaviour described here was derived from the private function and format no
 - The data-region correction that rules out a combat damage/hit-chance matrix and identifies the combat-instance faction tagging and per-class stat-record shape — derived from `u5-decomp/formats/data-ovl.md`.
 - The combat-arena file layout — 352-byte record stride, 11×11 terrain grid, metadata band, outdoor and dungeon-encounter banks — derived from `u5-decomp/formats/maps.md`.
 - The character-record layout consulted by damage application and the active-player restore — derived from `u5-decomp/formats/saves.md`.
+- The death-branch contract in Section 6.3 -- branch ordering, the incorporeal
+  and vanish class-flag arms, the Gazer and Gargoyle exceptions, the arena
+  terrain gate, which branches release the slot, and the drop-cap byte written
+  into the active-object auxiliary byte -- derived from the 2026-08-22 retrace in
+  `u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`.
+- The `1..30` range of the roll helper used by both drop gates -- derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_roll_1_to_30.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x2092_random_byte_in_range.md`.
+- The three placement modes, the party-side versus monster-side flag-bit
+  assignment, and the marker-only mode -- derived from the 2026-08-22 retrace in
+  `u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+- The framer's ambush entry branch, its setup target, and its discarded slot
+  argument -- derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`
+  and `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.

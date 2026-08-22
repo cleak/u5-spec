@@ -235,21 +235,65 @@ The forty-eight spell effects fall into seven broad categories. Each handler tak
 
 **Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. Most utility effects have a short narration message and finish in a single handler call.
 
-Direction-targeted utility spells use the shared spell direction prompt
-specified in `systems/input.md`: cardinal choices cache an adjacent target cell,
-Space prints `Pass` and returns the no-direction branch, and other keys
-re-prompt.
+**Directed utility tile helpers.** Four utility spells — Vanish (*An Ylem*),
+Open (*An Sanct*), Magic Lock (*An Ex Por*) and Unlock Magic (*In Ex Por*) —
+share one shape: prompt for a direction, resolve the single cell one step away
+in that direction, test that cell's live tile against a fixed set, rewrite it,
+and mark the view dirty. They are the reason those four spells carry the combat
+bit in their scene masks, and their combat behaviour is described in
+Section 9's *Directed utility tile spells in combat*.
 
-The world-door Open/Unlock helper is narrower than the ordinary O-Open command.
-It uses the same direction prompt, reads the cached adjacent map cell, and only
-acts on the ordinary closed wooden-door variants: north/south closed doors
-change from tile `0x97` to `0xB8`, and east/west closed doors change from tile
-`0x98` to `0xBA`. Space/Pass exits through the no-effect branch without success
-narration. A recognized door marks the map tile dirty and returns success; any
-other target returns failure/no-op. This helper does not consume keys, does not
-run chest or trap handling, does not arm O-Open's auto-close tracker, and is
-separate from Y-Yell's Word-of-Power dungeon-door path. The separate
-magic-locked-door demotion rule is owned by `systems/doors-and-z-transitions.md`.
+The direction prompt is the shared spell direction prompt specified in
+`systems/input.md`. Its origin cell depends on scene class: outside combat it is
+the party's map cell; **inside combat it is the acting combat actor's arena
+cell**. A cardinal choice caches the orthogonally adjacent cell as the target
+and echoes the direction name; Space echoes `Pass` and returns the no-direction
+branch; any other key re-prompts, and the prompt cannot be escaped except by a
+cardinal or Space.
+
+Each helper reports one of three results, and the dispatcher's shared epilogue
+turns them into narration: a *handled-silently* result prints neither `Success!`
+nor `Failed!` (the helper has already said whatever there is to say), a
+*success* result prints `Success!`, and a *no-match* result prints `Failed!`
+with the failure sound. Space/Pass always yields the handled-silently result, so
+declining the prompt is quiet — but the premixed charge and mana were already
+spent by the dispatcher and are **not** refunded.
+
+- **Vanish.** On a matching cell the helper overwrites the tile with the shared
+  cleared-cell tile `0x44` — the same value O-Open writes when it opens a door —
+  prints `POOF!`, marks the view dirty, forces a redraw, and plays a sound. It
+  returns handled-silently, so `POOF!` is the only line. The removable-object
+  tile set is exactly thirteen ids: `0x5B`, `0x90`, `0x91`, `0x92`, `0x93`,
+  `0x9D`, `0xA5`, `0xA6`, `0xA8`, `0xA9`, `0xAD`, `0xAE`, `0xAF`. Any other tile
+  is a no-match and prints `Failed!`.
+- **Open.** Outside dungeon scenes (and therefore in combat, see Section 9) it
+  first tests the target tile for the two ordinary *locked* door forms `0xB9`
+  and `0xBB` and, on a match, steps each down one rung to its unlocked form
+  `0xB8` or `0xBA`, marks the view dirty, plays a sound and returns success. If
+  the tile is not a locked door it scans the dynamic-object table for a record
+  of object kind 1 whose stored X and Y equal the target cell, and clears that
+  record's lock/trap high bit. Outside combat the scan also requires the
+  object's stored Z to match the party's; in combat-class scenes the Z test is
+  skipped, so any matching kind-1 object at that cell qualifies. No match at all
+  returns `Failed!`. Inside a dungeon scene Open takes a different arm entirely:
+  it acts on the party's own dungeon cell when that cell is a door/urn-class
+  cell, otherwise on the direction-biased neighbour, prints a disarm line when
+  the cell carries the trapped variant bit, rewrites the cell to the opened form
+  while preserving its visited marker, prints the chest-opened line and returns
+  handled-silently.
+- **Magic Lock.** Applies a magic lock to a surface-style door. Both the
+  unlocked and the ordinary-locked forms of an orientation collapse onto that
+  orientation's magic-locked form: `0xB8` or `0xB9` becomes `0x97`, and `0xBA`
+  or `0xBB` becomes `0x98`. Success marks the view dirty and prints `Success!`.
+  Any other tile prints `Failed!`.
+- **Unlock Magic.** The exact inverse, and the only path that removes a magic
+  lock: `0x97` becomes `0xB8` and `0x98` becomes `0xBA`, leaving an ordinary
+  *unlocked* closed door that O-Open can then open. Success plays its effect
+  sound and prints `Success!`; any other tile prints `Failed!`.
+
+None of the four consumes keys, runs chest or trap handling, arms O-Open's
+auto-close tracker, or touches Y-Yell's Word-of-Power dungeon-door path. The
+door lock-state ladder itself is owned by `systems/doors-and-z-transitions.md`.
 
 Locate uses the shared sextant-style coordinate printer. It reads the party's
 current map coordinates, splits each coordinate byte into high and low nibbles,
@@ -443,25 +487,57 @@ unchanged and returns failure/no-effect. Broader Negate Magic is handled by its
 own active-effect path and is not a field-removal spell.
 
 **Summoning and conjuration.** Conjure, Swarm, Clone, and Summon use distinct
-helper families rather than one shared spell effect. Conjure plays its summon
-effect, rolls one of fifteen weighted outcomes, and selects Giant Rat for six
-outcomes, Giant Spider for five, Bat for three, and Python for one. It then
-tries up to eight random arena placements. Each attempt rolls X and Y
-independently in the inclusive `0..10` arena range; the first empty/walkable
-cell accepts, and all-eight failure reports ordinary spell failure after
-resource consumption. Swarm plays a stronger effect and walks the eight cells
-in the Chebyshev-distance-one ring around the caster. For each target cell, it
-tests that cell first and then allows up to three small random jitter retries
-around it before advancing to the next ring cell. Both spells therefore create
-or activate temporary combat actors through legal-cell placement; neither uses
-the shrine/urn presentation pattern.
+helper families rather than one shared spell effect.
 
-One traced lower-tier summon/tame-style helper sweeps eligible live non-party,
-non-humanoid combat actors, repurposes accepted actors into the summoned-
-creature state, and sets the descriptor low bit `0x01`, the same team/control
-bit used by charm/controlled actor dispatch. This is a spell-side actor
-repurpose / activation effect, distinct from Cause Fear's critical-HP setup and
-from the fleeing bit `0x02`. Clone is
+*The shared random arena probe.* Conjure, Swarm, and Summon all place through
+one common probe, and its exact shape matters for compatibility. A single probe
+draws a candidate X and a candidate Y **independently and uniformly from the
+inclusive range `0..15`** — a four-bit draw, not a draw over the arena's
+`0..10` range — and then rejects the whole candidate unless *both* coordinates
+are at most 10. A rejected candidate is not re-rolled: it consumes one of the
+caller's attempts. The per-probe acceptance chance is therefore `(11/16)^2`,
+about 47 percent, before the cell is even inspected. An accepted candidate is
+then put to the shared combat spawn-cell validator, which requires terrain that
+the placed creature's movement family can occupy, rejects the arena's
+impassable void byte, and rejects any cell already holding a combat actor or a
+dynamic object. Only a candidate that clears both steps is a legal placement
+cell.
+
+*Conjure* plays its summon effect, then rolls **one uniform value in the
+inclusive range `0..15` — sixteen outcomes, not fifteen** — and maps it to a
+creature class: six outcomes select Giant Rat (class 20), five select Giant
+Spider (class 22), three select Bat (class 21), and the remaining **two**
+select Python (class 34). It then makes up to eight probes as described above;
+the first legal cell receives one actor of the rolled class, with a brief
+placement flash before the creature's own tile settles. All-eight failure
+reports ordinary spell failure after resource consumption. One quirk is
+load-bearing for exact compatibility: the terrain-suitability question is always
+asked using the Giant Rat movement family, whichever creature the roll actually
+selected.
+
+*Swarm* plays a stronger effect and then searches for **one** cell, not eight.
+It makes up to eight probes and stops at the first legal cell; if all eight
+probes fail it reports ordinary spell failure. Having found that one cell, it
+places up to **four** Insect Swarm actors (class 31) **at that same
+coordinate**, stopping early if the actor table runs out of free slots, and
+succeeds if at least one actor was placed. There is no caster-centred ring and
+no jitter retry; earlier drafts of this spec described both, and both are
+withdrawn.
+
+Every actor placed by Conjure, Swarm, or Summon is stamped with the controlled
+bit described in `systems/combat.md` Section 6.1a, so a freshly summoned
+creature starts in the same controlled state a charmed monster occupies.
+
+Repel Undead is not a summoning effect and does not create or repurpose
+anything. It sweeps the whole combat actor table and, for each non-humanoid
+monster-side actor whose class carries the undead class flag and that fails the
+shared resistance check, drives that actor's combat HP counter to one and sets
+the **fleeing** bit. That is the same critical-HP flee setup Cause Fear applies,
+narrowed to undead classes; it never touches the controlled bit. Earlier drafts
+called this a "lower-tier summon/tame-style helper" that set the controlled bit;
+that description is withdrawn.
+
+Clone is
 target-derived: after the `Creature:` target is accepted, it searches for one
 free combat actor slot and one free dynamic-object slot, copies the target's
 paired records only after both slots exist, relinks the new combat record to the
@@ -473,22 +549,29 @@ unpredictable success/failure narration; deterministic engines should model it
 as a no-op failure. Clone is not an adjacency-based spell.
 
 Summon uses the per-tile placement/impact helper, not the shrine/urn helper and
-not the shared direction prompt. The helper makes up to eight independent random
-arena-coordinate probes. Each probe rolls a candidate X and Y in a wider
-four-bit range, rejects candidates outside the eleven-by-eleven arena, then runs
-the normal spawn-cell validation. The first accepted cell receives a
-Daemon-class combat actor, plays the temporary flame/daemon impact animation,
-and, on ordinary success, marks the placed slot as having taken effect. There is
-no cached adjacent target coordinate, ordered eight-cell ring, or off-arena
-direction case for this player spell path.
+not the shared direction prompt. It makes up to eight of the shared random arena
+probes described above, and adds one further per-probe condition of its own: the
+candidate cell's terrain byte must not be the arena's impassable void byte. The
+first accepted cell receives a Daemon-class combat actor (class 38), plays the
+temporary flame/daemon impact animation, and, on ordinary success, stamps the
+placed slot with the controlled bit. There is no cached adjacent target
+coordinate, ordered eight-cell ring, or off-arena direction case for this player
+spell path.
 
 This spell path uses the helper's self-checking mode after a Daemon has been
-placed and animated. It computes the active caster's resistance threshold and
-compares it with a random value in `1..30`; the Oops branch fires when the roll
-is greater than or equal to that threshold. That branch prints `Oops...`,
-returns the special nonzero failure result, does not set the placed slot's
-took-effect flag, and does not print the ordinary `Success!` or `Failed!`
-epilogue message. The placed Daemon record is not suppressed by this branch.
+placed and animated. The threshold it checks against is a concrete stat: the
+**Intelligence** value of the acting caster's character record when the caster
+is a party member, or the second stat field of the caster's class row when the
+caster is a monster. The roll it compares is formed the same way the game forms
+its other small rolls — a uniform inclusive `0..60` value halved with the
+fraction discarded and floored to a minimum of one, giving `1..30`. The `Oops...`
+branch fires when `roll >= threshold`, so a caster with Intelligence at or above
+31 can never trigger it and a caster with Intelligence 1 always does. That branch
+prints `Oops...`, returns the special silent-failure result, does **not** stamp
+the placed slot with the controlled bit, and does not print the ordinary
+`Success!` or `Failed!` epilogue message. The placed Daemon record is not
+suppressed by this branch — a rebounded Summon still leaves a live, *uncontrolled*
+Daemon on the arena, which is the point of the rebound.
 Summoned or cloned combat actors then run through the standard combat
 actor-table machinery. The traced summon, clone, combat tick, and
 death/record-clear paths do not expose an independent per-spell duration
@@ -513,6 +596,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Active-target attack wrapper | Grav Por, Vas Flam, Xen Corp | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage, Vas Flam rolls 1..30 raw damage, and Xen Corp passes the decimal 99 instant-kill sentinel. Non-instant rolls subtract target defense before the shared damage/status path. |
 | Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu scans the roster and wakes the first Sleeping member to Good status; it has no selected-member prompt. An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires Dead status, rejects Ashes and other non-Dead statuses, changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
 | Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind plus active target slot to the arena-field helper. Player combat C-Cast uses the arena cursor followed by the ordinary projectile/impact resolver, not an adjacent direction prompt. Cursor moves outside the eleven-by-eleven arena or beyond range are ignored, Escape cancels after charge/mana debit but before marker placement, and the cursor does not reject empty or occupied cells. Combat marker placement requires a confirmed impact cell, but no Fire/Sleep/Energy random acceptance gate exists for marker materialization. The helper places the matching temporary active-object field marker, then separately reports a hit/contact target from the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Arena contact skips the current active actor but does not run the friend/foe lookup, and contact does not consume the marker. Poison Field skips linked active-object classes `>= 0x80`; for accepted targets it poisons Good party members and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members, otherwise sleeps party targets or marks non-party targets with the combat sleep/disabled bit; it does not seed a separate combat sleep countdown. Fire Field rolls raw 1..21 before defense, and Energy Field supplies raw zero to the same damage/value path. The traced placement/contact/redraw path and generic active-object tick show no field countdown/decrement; placed markers persist until combat exit restores the pre-combat active-object table. |
+| Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock bit on a co-located dynamic object, and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
 | Field removal helper | An Grav | Uses a separate Dispel Field path. Dungeon scenes inspect the faced adjacent live cell and turn recognized field cells back into open/visited-live-cell state while preserving only the visit marker. Combat/non-dungeon spell scenes use the shared direction prompt and remove a matching active-object field marker at the cached target coordinate. Failure leaves the map image or active-object table unchanged. |
 | Directional Blink | In Por | Outside combat, prompts for a cardinal direction, scans that ray through the active 32-by-32 loaded world window, and moves the party to the farthest grass tile (`0x05`) found. No random target, retry budget, occupancy check, or generic passability query is used; no matching grass tile reports ordinary spell failure after the shared charge/mana spend. |
 | Directed wind-cone effects | In Zu, In Nox Hur, In Vas Grav Corp, In Flam Hur | Prompt for a cardinal direction, build the widening clipped cone described in Section 8, and scan the combat actor table for actors whose arena coordinates match those cells. The normal cone starts one cell forward from the caster, widens by one cell on both sides per forward step, de-duplicates selected cells, and writes up to 63 coordinates. The common application layer skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common wind-cone layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors are eligible if their cells are in the directed area and they pass the non-faction gates. In Zu applies the sleep-status branch, In Nox Hur applies a resistance/random gate before the poison-status branch, In Vas Grav Corp uses the decimal `99` instant-kill sentinel through the shared damage/status path, and In Flam Hur rolls raw `[1, 30]` damage through that same damage/status path. The two damage winds credit returned monster-kill reward units to the caster's experience with the 9999 cap. |
@@ -539,6 +623,48 @@ interfering adjacent target skips the dispatcher entirely.
 **Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. The combat target map used by the interference gate is not a replacement for spell-specific targeting. Several spells still take an explicit target separately from the caster, and active-target combat spells still use their own aiming/targeting path.
 
 **Scene gate selects spells.** The four-bit scene allow-mask uses `0x01` for dungeon scenes, `0x02` for combat-class scenes, `0x04` for indoor/town-mode scenes, and `0x08` for overworld. Spells without the active scene bit are rejected with `Not here!`; for example, combat-only attack spells reject outside combat, while overworld-only utility such as Wind Change rejects inside combat.
+
+**Directed utility tile spells in combat.** Vanish, Open, Magic Lock and Unlock
+Magic all carry the combat scene bit, and in combat they run their real handlers
+rather than falling through to an unmodelled no-op. An earlier answer published
+against this spec claimed the four were silent, prompt-free, always printed
+`Failed!`, and could not touch arena state; every part of that is withdrawn.
+What actually happens:
+
+- **They prompt.** Each one runs the shared spell direction prompt, and in a
+  combat scene the prompt's origin is the *acting combat actor's* arena cell, so
+  the target is the cell one orthogonal step from the caster. Space answers the
+  prompt with `Pass`, which ends the cast silently; the premixed charge and mana
+  are already spent by then and are not refunded.
+- **They read and write arena terrain.** The engine's live-tile lookup resolves
+  to the combat-arena terrain grid whenever the scene is combat-class, so the
+  tile these helpers test and rewrite is the arena's own terrain cell. The write
+  marks the view dirty and is visible for the rest of the fight. It is *not*
+  persistent: the arena terrain grid is refilled from the arena definition on the
+  next combat entry, and the arena files themselves are never written.
+- **Matches genuinely exist.** Outdoor combat arenas contain no door tiles at
+  all, so in outdoor combat Open, Magic Lock and Unlock Magic can only reach
+  their non-door branch or `Failed!`. Exactly one shipped outdoor arena carries
+  tiles from Vanish's removable-object set. Dungeon-room arenas are different:
+  eighteen of them contain door tiles — including magic-locked, ordinary-locked
+  and unlocked forms — and seven contain Vanish-family object tiles, so all four
+  spells have reachable success cases in dungeon-room combat.
+- **Off-arena targets are undefined and should be treated as failures.** The
+  direction prompt does not clamp its result to the arena, and the combat
+  live-tile lookup does not bounds-check. A direction that steps off the eleven
+  by eleven playfield addresses storage that is not arena terrain at all. A
+  clean engine should treat any target outside the arena as a non-matching tile
+  and report `Failed!`, rather than reproducing the original's out-of-range
+  addressing.
+- **Combat Open cannot reach the dungeon chest arm.** The dungeon arm of Open is
+  selected only for dungeon-*exploration* scenes; the combat scene class routes
+  to the non-dungeon arm even when the fight is a dungeon-room encounter. The
+  earlier caveat suggesting combat Open might route through the dungeon trapped
+  chest helper is withdrawn.
+
+Section 8's *Directed utility tile helpers* carries the exact tile-id mappings
+and result/narration rules; nothing about them changes between scenes except the
+prompt origin and which grid the live-tile lookup addresses.
 
 **Monster spell-like effects.** The traced dispatcher contract above is the
 player/party C-Cast path. Monster turns use the combat AI path first: a
@@ -621,10 +747,11 @@ forty-eight player spell definitions.
 
 - **Summon placement and clone lifetime.** The traced summon/conjuration
   helpers place, activate, repurpose, or clone actor records, but they do not
-  install an independent per-spell duration counter. Conjure uses a fixed
-  weighted animal selector before independent `0..10` X/Y arena placement
-  attempts, Swarm uses a fixed eight-cell scan with short per-cell placement
-  retries, Clone performs paired
+  install an independent per-spell duration counter. Conjure uses a sixteen-outcome
+  weighted animal selector before up to eight shared random arena probes
+  (four-bit per-axis draw, off-arena candidates rejected without a re-roll),
+  Swarm uses up to eight of the same probes to find one cell and then stacks up
+  to four Insect Swarm actors on it, Clone performs paired
   actor/object copying after a `Creature:` target is accepted, and Summon uses
   the self-checking per-tile placement helper's eight random arena-coordinate
   probes to create a Daemon-class combat actor. The CAST2 shrine/urn active-object
@@ -673,7 +800,7 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/CAST_OVL/0x1C36_spell_target_walk.md` and the clean
   semantic trace of the related COMBAT/COMSUBS helper calls.
 - The local handlers for Tremor, Charm, Polymorph, Conjure, Swarm, Clone,
-  Summon, Cause Fear, the summon/tame-style actor repurpose helper, Gate Travel,
+  Summon, Cause Fear, Repel Undead, Gate Travel,
   Negate Time, and Invisibility are derived from fresh local CAST.OVL and CAST2
   helper analysis summarized here without copying assembly or source. Cause
   Fear's critical-HP flee setup is cross-checked against the combat current-HP
@@ -721,11 +848,31 @@ The behaviour described here was derived by reading the private function and for
   farthest-grass landing rule, no random/retry/passability/occupancy checks,
   and no refund from handler failure -- is derived from
   `u5-decomp/functions/CAST_OVL/0x05DC_cast_in_por_blink.md`.
-- The world-door Open/Unlock helper -- direction prompt, Space/Pass no-effect
-  branch, ordinary closed-door tile rewrites, dirty marking, and its separation
-  from O-Open auto-close/chest handling -- is derived from
-  `u5-decomp/functions/CAST2_OVL/0x0768_open_door.md` and the CAST spell map in
-  `u5-decomp/functions/CAST_OVL/all_spells.md`.
+- The directed utility tile helpers -- Vanish, Open, Magic Lock and Unlock
+  Magic: their shared direction prompt, the combat-versus-world prompt origin,
+  the combat-arena terrain resolution, the exact accepted tile sets and
+  rewrites, the Space/Pass silent branch, the Success/Failed narration split,
+  and the arena tile census that shows which shipped arenas contain eligible
+  tiles -- are derived from
+  `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
+  `u5-decomp/functions/CAST_OVL/0x0230_cast_vanish.md`,
+  `u5-decomp/functions/CAST_OVL/0x02D2_cast_open.md`,
+  `u5-decomp/functions/CAST_OVL/0x0846_cast_magic_lock.md`,
+  `u5-decomp/functions/CAST2_OVL/0x0768_open_door.md`,
+  `u5-decomp/functions/CAST2_OVL/0x0306_prompt_direction.md`,
+  `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`, and
+  `u5-decomp/formats/maps.md`.
+- The shared random arena probe, the sixteen-outcome Conjure selector, Swarm's
+  single-cell-then-stack placement, the controlled-bit stamp on placed actors,
+  the Summon self-check threshold and roll, and the correction that spell id 7
+  is Repel Undead rather than a summon/tame helper are derived from
+  `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
+  `u5-decomp/functions/CAST_OVL/all_spells.md`,
+  `u5-decomp/functions/CAST2_OVL/0x04C2_spell_target_animate.md`,
+  `u5-decomp/functions/COMBAT_OVL/0x120E_pick_random_arena_coord.md`,
+  `u5-decomp/functions/COMBAT_OVL/0x0000_combat_damage_test_at_coord.md`,
+  `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_random_short_delay.md`.
 - The resurrection helper used by In Mani Corp and paid healer resurrection
   side effects -- dead-status gating, current-HP result, class-based mana
   rebuild, conditional experience rescale, level recomputation, and maximum-HP

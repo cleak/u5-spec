@@ -14,14 +14,23 @@ paragraph markers as the character-creation question text.
 ## 2. File Structure
 
 The shipped file is 11,679 bytes and contains twenty non-empty text records.
-Records are stored sequentially, with no header and no offset table.
+Records are stored back to back, with no header and no offset table **inside
+the file**. The reader does not scan for them: the intro carries a fixed table
+of byte positions, one entry per text-consuming story step, and seeks straight
+to the position it needs.
 
 | Element | Meaning |
 |---|---|
 | Text record | A NUL-terminated low-ASCII paragraph/page stream |
 | End of record | NUL byte |
 | End of file | Two NUL bytes after the final non-empty record in the shipped data |
-| Record order | Intro story order, selected by the intro slide loop |
+| Record addressing | Absolute byte position, supplied per story step by the intro |
+
+For the shipped asset the twenty positions are exactly the twenty records in
+file order, so a reader that simply splits the file on NUL bytes and indexes
+the resulting list produces identical results. The distinction matters only for
+the bookkeeping question: because each step names its own position, a step that
+consumes no record cannot desynchronise the steps that follow it.
 
 The file does not carry per-slide filenames, art ids, rectangles, colours, or
 wait durations. The intro system supplies those from its fixed story-step
@@ -46,19 +55,29 @@ advance behavior.
 
 The intro menu's Introduction option plays a twenty-one-step story sequence.
 For each text-consuming step, the intro path loads or selects the
-corresponding art panel, selects the next `STORY.DAT` text record, renders the
-art, renders the proportional text, and then advances according to the intro
-system's step rules.
+corresponding art panel, seeks to that step's fixed byte position in
+`STORY.DAT`, reads a fixed-size window of two kilobytes into a shared scratch
+buffer, renders the art, renders the proportional text up to the first NUL, and
+then advances according to the intro system's step rules. The two-kilobyte read
+is larger than any record and smaller than the scratch buffer; the terminator,
+not the read length, ends the record.
 
-The sequence contains one visual step that does not consume `STORY.DAT`: step 6
-uses two inline doorway-transition lines owned by the intro code. The remaining
-twenty steps consume the twenty non-empty `STORY.DAT` records in order. Step 0
-consumes the first record but advances automatically; the later text-consuming
-steps wait for a key in the intro system before advancing.
+The sequence contains one visual step that does not read `STORY.DAT` at all:
+step 6 uses two inline doorway-transition lines owned by the intro code and
+specified in `systems/intro.md` section 10.1. The remaining twenty steps read
+the twenty non-empty `STORY.DAT` records, and in the shipped data those
+positions are the records in file order. Step 0 reads the first record but
+advances automatically; the later text-consuming steps wait for a key in the
+intro system before advancing.
 
-The complete step-to-art mapping, secondary art draws, and transition effects
-belong to `systems/intro.md`. This file's contract is only that the twenty
-records are consumed sequentially by the twenty text-consuming story steps.
+Because addressing is by fixed per-step position rather than by a running
+cursor, an implementation needs no "next record" state. Step 6 leaves nothing
+to skip, and a missing or reordered record affects only the step that names it.
+
+The complete step-to-art mapping, secondary art draws, transition effects, and
+the exact text and placement of the non-consuming step-6 lines belong to
+`systems/intro.md`. This file's contract is only that the twenty records are
+read, one per text-consuming story step, by absolute byte position.
 
 `STORY.DAT` does not mutate game state. Playing the sequence returns to the
 intro menu afterward. No save file is created or modified.
@@ -82,9 +101,9 @@ No file-layout work remains for the shipped DOS data set. The twenty-record
 sequential layout, supported text markers, non-consuming doorway step, and
 record order are public.
 
-The story sequence has one remaining exact-visual parity issue in the intro
-system: the internal wipe pattern and pacing of the step-1 rectangle
-transition helper. It does not affect `STORY.DAT` parsing or record order.
+The step-1 transition is no longer an open item: it is a pseudo-random
+per-pixel dissolve of a fixed rectangle, specified in `systems/intro.md`
+section 10. Nothing about it affects `STORY.DAT` parsing or record order.
 
 The empty final trailer is padding or a sentinel. It has no known gameplay
 meaning and should not be exposed as a twenty-first story page.

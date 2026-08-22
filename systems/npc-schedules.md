@@ -135,7 +135,7 @@ The boundary trigger is the sub-step the processor calls on idle NPCs. It detect
 | above            | equal               | 4         | NPC upstairs; target on this floor.                  |
 | neither          | neither             | 8         | Neither end on this floor; replan-needed.            |
 
-"Above"/"below" is on the unsigned floor index; "below" means floor index numerically greater than the map's current floor.
+The floor index grows upward: "above" means a numerically larger floor byte than the location's current floor, and "below" means a numerically smaller one. This is the same orientation the player-facing climb commands use, where climbing an ascend link raises the floor byte and a descend link lowers it.
 
 After classifying, the trigger does one extra check: if the NPC's runtime `(target_x, target_y, current_z)` already equals the new waypoint's `(x, y, z)`, the NPC is already on the waypoint and state is reset to "idle".
 
@@ -158,25 +158,50 @@ The state byte takes values in `0..8`:
 | 1     | idle / settled                 | NPC is at its currently-active waypoint with nothing to do. The boundary trigger may upgrade it.                 |
 | 2     | in-plane move                  | Both NPC and target are on the player's floor; probe cardinal directions, run the pathfinder, commit a step.     |
 | 3     | replaying cached path          | A pathfinder run earlier produced a queued route; pop the next direction byte and apply it.                      |
-| 4     | descending toward target floor | NPC is upstairs of the target; steer toward a down-stairway tile on this floor.                                  |
-| 5     | ascending toward target floor  | NPC is downstairs of the target; steer toward an up-stairway tile.                                               |
-| 6     | climbing up off this floor     | NPC is on this floor and target is above; steer toward an up-stairway. Floor change happens via state 4/5.       |
-| 7     | climbing down off this floor   | Mirror of state 6.                                                                                                |
-| 8     | parked off-floor               | Set when neither end of the move is on the player's floor. The walker has no movement arm for this state.        |
+| 4     | off this floor, above          | NPC's floor is above the displayed floor and the active waypoint is on the displayed floor. Search the displayed floor for an **ascend-link** cell (`0xC8`), route to it, then surface there. |
+| 5     | off this floor, below          | NPC's floor is below the displayed floor and the active waypoint is on the displayed floor. Search the displayed floor for a **descend-link** cell (`0xC9`), route to it, then surface there. |
+| 6     | on this floor, waypoint above  | Ask the floor-transition gate whether the NPC already stands on an **ascend link** (`0xC8`) or a stairway tile. If it does, hand the NPC off to the waypoint's floor. If not, route toward the nearest `0xC8` cell.                |
+| 7     | on this floor, waypoint below  | Mirror of state 6 using the **descend link** (`0xC9`).                                                            |
+| 8     | neither end on this floor      | The NPC is placed directly at the active waypoint's `(x, y, z)` with no gate; the cached waypoint is updated, the move queue is deactivated, and the state returns to idle. |
 
-A few observations: state 3 is the queue-replay path — once the pathfinder produces a route, subsequent ticks dequeue and apply, and the pathfinder is not re-invoked until the queue drains or resets. States 2, 4, 5, 6, 7 all do "probe and step"; the structural difference is the target (waypoint coords, a stairway tile, an alternate-floor mirror coord) and which directions are tried first. State 8 is rarely observed: most ticks where neither end is on the player's floor are short-circuited at the boundary trigger, and a slot already in state 8 has no movement dispatch arm.
+A few observations. State 3 is the queue-replay path: once the pathfinder
+produces a route, subsequent ticks dequeue and apply, and the pathfinder is not
+re-invoked until the queue drains or resets. States 2, 4, 5, 6 and 7 all run
+"search, route, step"; the structural difference is *what the search is hunting*
+— the waypoint coordinate for the in-plane state, and a floor-link tile for the
+four floor-transition states. There is no per-direction sweep and no
+direction-priority ordering in these states; the only per-state input to the
+search is which of the two floor-link markers it looks for (Section 8.5).
 
-State 8 is observable as a parked, no-visible-step state. It represents an NPC
-whose stored floor and active waypoint floor are both away from the player's
-current floor. The per-tick walker does not probe directions, run the
-pathfinder, place a sprite, or mutate the NPC's coordinates while the state
-remains 8. Later schedule-boundary checks may classify the NPC into another
-movement state if either endpoint comes back onto the player's floor; otherwise
-the NPC remains off-floor and invisible. The generic stuck-counter bookkeeping
-can still run during this parked interval, but with no active state-8 move queue
-that bookkeeping has no visible pathing effect.
+At most one NPC per tick may start a fresh search. The walker latches a
+"someone already moved" flag on the first slot that enters a search arm, and
+every later slot in the same tick that would have searched is skipped until the
+next tick. Queue replay is not affected by the latch.
 
-The state byte is written by initialisation (1 for occupied, 0 for empty), by the boundary trigger (1, 2, 4, 5, 6, 7, or 8), by the pathfinder-success path (3), and by the world-mutation primitive (1 — "settled" — on every successful move). The "settled" write at the end of every successful move is what eventually drains a state-3 queue back to state 1.
+State 8 covers an NPC whose stored floor and active waypoint floor are both away
+from the location's current floor. It is *not* a parked state: the walker
+resolves it immediately by writing the active waypoint's `(x, y, z)` straight
+into the NPC's runtime position, caching the waypoint, deactivating the move
+queue and returning the state to idle. Because neither the old nor the new
+position is on the displayed floor, no sprite is allocated and nothing is
+visible; the NPC simply teleports off-screen to where its schedule says it
+should be. The same ungated placement is what happens if any unexpected state
+value reaches the floor-transition arm.
+
+The state byte is written by initialisation (1 for occupied, 0 for empty), by
+the boundary trigger (1, 2, 4, 5, 6, 7, or 8), by the pathfinder-success path
+(3), by the off-floor arrival path (2, once the NPC has surfaced on the
+displayed floor), by the floor hand-off and ungated placement paths (1), and by
+the world-mutation primitive (1 — "settled" — on every successful move). The
+"settled" write at the end of every successful move is what eventually drains a
+state-3 queue back to state 1.
+
+One further transition closes the loop for the on-floor transition states: when
+a queued route drains while the NPC is still in state 3, the walker re-reads the
+active waypoint and re-enters state 6 or 7 according to whether that waypoint's
+floor is above or below the displayed floor. That is how an NPC that has just
+walked onto a link tile gets re-offered to the floor-transition gate on the next
+tick.
 
 ## 8. Pathfinding
 
@@ -219,11 +244,16 @@ The builder constructs the workspace in five phases.
 **Phase 1: marker selection.** A mode byte from the caller selects one of three search shapes:
 
 - *Coordinate goal* — caller supplied an explicit (x, y) target. No tile-ID search; goal stamped at the supplied cell in phase 5.
-- *Tile-ID goal A* / *Tile-ID goal B* — find the nearest tile whose live tile byte is one of the two paired NPC floor-link marker IDs, `0xC8` or `0xC9` (the tile-ID floor-link variant; Section 8.5).
+- *Ascend-link goal* — every cell on the displayed floor whose live tile byte is the ascend floor-link marker `0xC8` becomes a goal.
+- *Descend-link goal* — every cell on the displayed floor whose live tile byte is the descend floor-link marker `0xC9` becomes a goal.
+
+The two tile-ID shapes are the floor-link variant of Section 8.5. They are
+selected by the caller, never inferred from map content, and the builder never
+mixes them: one call hunts `0xC8` cells or `0xC9` cells, never both.
 
 **Phase 2: per-cell walkability fill.** The builder iterates every cell. For each, it asks an NPC-specific predicate "is this cell open for this NPC pathfinding workspace, given the NPC's active schedule waypoint and the location's current floor?". This predicate is separate from the shared foot/vehicle terrain-query dispatcher in `systems/movement.md`. It handles out-of-bounds cells, schedule-waypoint matches, floor-link marker replay guards, and then tests the tile id against a dedicated NPC pathfinding bitmap. Accepted cells are stamped open; rejected cells and waypoint matches become obstacles until later goal-stamping phases overwrite specific goal cells.
 
-**Phase 3: tile-ID goal markers.** When the mode flag is one of the two tile-ID modes, the builder walks the live world-tile array; cells whose live tile equals the selected marker become goal sentinels. For the floor-link variant, the selected marker is either `0xC8` or `0xC9`.
+**Phase 3: tile-ID goal markers.** When the mode flag is one of the two tile-ID modes, the builder walks the live world-tile array; every cell whose live tile equals the selected marker becomes a goal sentinel. Goal stamping overwrites whatever phase 2 decided about that cell, so a floor-link cell is reachable as a destination even though phase 2 blocks it as an ordinary intermediate cell.
 
 **Phase 4: dynamic-obstacle overlay.** The builder walks the active-object
 table and, for each occupied slot whose Manhattan distance from the NPC's
@@ -253,11 +283,84 @@ Once BFS succeeds, the walker traces the high-nibble trail from goal back to sta
 
 ### 8.5 The tile-ID floor-link variant
 
-When a schedule transition forces an NPC to bridge floors, the walker may need a map-authored link point rather than the final schedule coordinate. The tile-ID floor-link variant bridges that gap.
+When a schedule transition forces an NPC to bridge floors, the walker needs a
+map-authored link point rather than the final schedule coordinate. The tile-ID
+floor-link variant supplies it.
 
-The variant runs the pathfinder in tile-ID search mode with the marker set to one of the two paired floor-link marker IDs: `0xC8` or `0xC9`. The workspace builder searches the live tile buffer for cells whose byte equals the selected marker, stamps those cells as BFS goals, and starts the search from the caller-supplied start cell. Shipped location data uses these bytes as floor-link annotations; the visible chair trigger is a separate town tile (`0x8C`).
+**The two markers.** Two tile ids act as authored floor links in location tile
+grids:
 
-The walker selects between the two marker IDs from the movement state and direction setup. The pathfinder returns the coordinates of the nearest matching marker cell, and the walker queues a route toward it. A compatible implementation should preserve the two marker IDs distinctly because the original pathfinder does, but should not expose them as ordinary visible chair tiles.
+| Tile id | Role | Player-facing meaning |
+|---|---|---|
+| `0xC8` | **Ascend link** | Standing on it and climbing raises the floor index by one. |
+| `0xC9` | **Descend link** | Standing on it and climbing lowers the floor index by one. |
+
+Both share the same shipped description text, so a Look at either reports the
+same thing; only their behaviour distinguishes them. They are ordinary members
+of the tile-id space and are not the visible stairway family `0xC4..0xC7`, nor
+the Stonegate step-trigger tile `0x8C`.
+
+**Which marker a state selects.** The live tile grid only ever holds the floor
+the player is on, so the search always runs on the displayed floor. The rule is
+a single sentence: *the walker hunts the link that points toward whichever floor
+is not the displayed one.*
+
+| State | NPC's floor | Active waypoint's floor | Marker searched |
+|------:|-------------|-------------------------|-----------------|
+| 4 | above the displayed floor | the displayed floor | `0xC8` (ascend link) |
+| 5 | below the displayed floor | the displayed floor | `0xC9` (descend link) |
+| 6 | the displayed floor | above the displayed floor | `0xC8` (ascend link) |
+| 7 | the displayed floor | below the displayed floor | `0xC9` (descend link) |
+
+For states 4 and 5 the "other floor" is where the NPC currently stands, so the
+NPC is hunting the displayed floor's link *up to itself* (state 4) or *down to
+itself* (state 5). For states 6 and 7 the "other floor" is where the waypoint
+is, so the NPC hunts the link that leads there.
+
+**How each pair of states uses the result.** The two halves of the table do
+different things with the cell the search returns.
+
+*States 4 and 5 — the NPC is off the displayed floor.* The search runs first;
+if no link cell is reachable within the search budget the NPC does nothing this
+tick. On success the walker plans a route from that link cell toward the
+waypoint, records one step of it, and then re-reads the live tile at the link
+cell. If that tile is the state's own marker, or any tile in the stairway family
+`0xC4..0xC7`, the NPC is placed on the displayed floor at that cell and switched
+to the ordinary in-plane movement state. This is the moment an off-floor NPC
+becomes visible: it appears standing on the link, then walks the rest of the way
+normally.
+
+*States 6 and 7 — the NPC is on the displayed floor.* A gate runs **before** any
+search. The gate reads the live tile under the NPC's own cell and accepts only
+if that tile is the direction-matching link — `0xC8` when the waypoint floor is
+above, `0xC9` when it is below — or a stairway-family tile. When the gate
+accepts, the walker writes the NPC's position directly to the active waypoint's
+own `(x, y, z)`, caches the waypoint, deactivates the move queue and returns the
+state to idle; the NPC leaves the displayed floor and its sprite is released.
+When the gate refuses, the walker falls back to the tile-ID search for the
+matching marker, routes toward it and enters the queue-replay state, so the NPC
+walks onto the link and passes the gate on a later tick.
+
+Two consequences worth stating explicitly, because they are easy to get wrong:
+
+- There is no "paired marker cell on the destination floor". Nothing matches a
+  link cell on one floor against a link cell on another. An off-floor NPC lands
+  on the link cell the search found on the *displayed* floor; an on-floor NPC
+  lands on its schedule waypoint's own coordinates, wherever they are.
+- The schedule never says which link to use. Route selection is entirely
+  "nearest reachable cell carrying the selected marker", measured by the same
+  breadth-first search used for ordinary movement, so an authored map with
+  several links routes the NPC through whichever one the search reaches first.
+
+**Stairway acceptance.** Both halves also accept the visible stairway family in
+place of a link marker, which is what lets NPCs use a stairwell where the map
+author placed one instead of a ladder. The two acceptance tests are not
+identical in the analysed baseline: the on-floor gate accepts a slightly wider
+band of tile ids than the off-floor arrival test does, additionally treating
+`0xCC..0xCF` as stairway-like. Those four ids carry no description text and do
+not appear as authored floor links in shipped location data, so the widening has
+no observed effect on shipped maps; an implementation aiming at byte-level
+parity should still reproduce it.
 
 ## 9. AI behaviours
 
@@ -334,7 +437,15 @@ treated as walkable by the pathfinding workspace.
 
 **Player collision.** The player is an entry in the active-object table and is blocked by the dynamic-obstacle overlay. NPCs never step into the player's cell, even if the schedule's waypoint coordinate happens to match.
 
-**Z-level transitions.** Floor changes happen via stairway tiles. When an NPC needs to change floors, the state machine routes through states 4–7 to steer toward a stairway, the world-mutation primitive detaches the NPC from the active-object table, and the NPC re-emerges on the new floor at the matching stairway. The schedule does not encode "which stairway"; the pathfinder picks whichever is reachable.
+**Z-level transitions.** Floor changes happen through the two authored
+floor-link markers `0xC8` and `0xC9`, or through a visible stairway tile.
+States 4 and 5 bring an off-floor NPC onto the displayed floor by routing to a
+link cell and placing the NPC there; states 6 and 7 send an on-floor NPC away by
+requiring it to stand on the direction-matching link and then writing its
+position to the schedule waypoint's own coordinates. The world-mutation
+primitive is what releases or allocates the sprite as the NPC leaves or arrives.
+The schedule does not encode "which link"; the pathfinder picks whichever
+carrying cell is nearest and reachable. Section 8.5 has the full contract.
 
 **Out-of-bounds.** The 32×32 cell grid is hard-bounded.
 
@@ -403,7 +514,7 @@ A special-case rule covers the "default human" NPC type: when the type byte is a
 
 **World tiles.** The schedule system reads the live world-tile array for the tile-ID floor-link variant (Section 8.5). It does not modify the array directly; tile changes that happen as a side effect of NPC movement (e.g. a door tile being walked through) are owned by other code paths.
 
-**Look / inspect.** The paired floor-link marker IDs share the global tile-ID space with the look/inspect tables. The schedule system writes nothing to look/inspect tables; it only consumes the live tile bytes for pathfinding goals.
+**Look / inspect.** The two floor-link marker IDs share the global tile-ID space with the look/inspect tables. The schedule system writes nothing to look/inspect tables; it only consumes the live tile bytes for pathfinding goals.
 
 The scheduler does *not* talk to the dialogue system. The `dialog_index` byte loaded with the schedule is consumed by the dialogue overlay when the player initiates a conversation.
 
@@ -451,7 +562,13 @@ low-visibility presentation parity outside the scheduler contract.
 
 - **Multi-NPC tick ordering.** The walker iterates slots `1..31` in slot-order; lower-indexed NPCs move first within a tick. This is observable but is not a gameplay-visible bug.
 
-- **Stairway selection.** When a Z-mismatch forces an NPC to climb floors, the pathfinder picks the nearest matching floor-link marker via the tile-ID search. The scheduler owns route selection to the floor-link marker; town movement and the location/tile catalogues own the visible `0xC4..0xC7` stairway facing contract and player-facing floor-change presentation.
+- **Floor-link selection.** When a floor mismatch forces an NPC to change
+  floors, the pathfinder picks the nearest reachable cell carrying the selected
+  floor-link marker: the ascend link `0xC8` when the other floor is above the
+  displayed floor, the descend link `0xC9` when it is below (Section 8.5). The
+  scheduler owns route selection and the on-floor gate; town movement and the
+  location/tile catalogues own the visible `0xC4..0xC7` stairway facing contract
+  and the player-facing floor-change presentation.
 
 - **Dynamic-obstacle radius.** The active-object/player obstacle overlay uses
   a hardcoded destination-relative Manhattan cutoff: distances less than four
@@ -485,7 +602,14 @@ The behaviour described above was derived by reading the function and format not
 - The location-entry initialisation pass — `u5-decomp/functions/NPC_OVL/0x00D6_npc_init_runtime_state.md`.
 - The boundary-trigger sub-step and the floor-classification table — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
 - The flood-fill BFS, the workspace cell encoding, and the high-nibble inbound-direction trail — `u5-decomp/functions/NPC_OVL/0x032C_npc_pathfinder.md`.
-- The tile-ID floor-link variant's two-marker dispatch — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, cross-checked against shipped location data and the town step handler's separate `0x8C` chair trigger in `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
+- The tile-ID floor-link variant's two-marker dispatch, the per-state marker
+  selection, and the up/down identity of the two markers — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`
+  and `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, the latter
+  cross-checking the markers against the shipped tile-description table and
+  against the town climb handler's floor-index change, and against the town step
+  handler's separate `0x8C` trigger in `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
+- The on-floor floor-transition gate, its direction-matching acceptance test,
+  and its wider stairway band — `u5-decomp/functions/NPC_OVL/0x0A4A_npc_floor_transition_gate.md`.
 - The five-phase workspace builder, the walkability predicate, and the dynamic-obstacle overlay — `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
 - The dedicated NPC pathfinding predicate and bitmap-derived open tile ranges — `u5-decomp/functions/NPC_OVL/0x0ADC_is_tile_walkable_for_npc.md`.
 - The world-mutation helper, the hidden-NPC bitmask, and the default-human tile sentinel — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.

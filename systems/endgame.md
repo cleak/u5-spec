@@ -21,9 +21,14 @@ The endgame is reached from the main-quest completion path, not from ordinary
 scene dispatch. The public prerequisite chain is:
 
 1. The three Shadowlords have been vanquished, which opens the Doom entrance.
-2. The Doom Word of Power participates in the Doom-side seal route. Its target
-   coordinate in the resident word table is the centered Underworld/Doom-side
-   coordinate, not a Lord British throne-room conversation target.
+2. The Doom Word of Power has been spoken beside the Doom entrance. That
+   entrance is the centred coordinate on the Underworld surface, and the word is
+   spoken from an adjacent outdoor cell there; it is not a seal inside the
+   dungeon, not a Lord British throne-room target, and there is no
+   dungeon-interior route that accepts it. Until the word is spoken the entrance
+   is sealed and impassable, so this gate and the Shadowlord gate above are
+   independent and both must pass. `systems/commands.md` Section 11 owns the
+   predicate.
 3. The party has obtained the Sandalwood Box story item, which sets the
    save-backed box flag used by the ending.
 4. The party reaches Doom's deepest final room trigger. In stock data this is

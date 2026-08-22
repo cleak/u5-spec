@@ -36,11 +36,70 @@ entry:
 1. Runs a preflight visibility/reach gate. A failed gate exits quietly.
 2. Computes the target coordinate from the party position plus the chosen
    direction step.
-3. Resolves the visible active-object class at that coordinate.
+3. Reads the live map tile id at that coordinate through the shared
+   live-map tile query.
 4. Checks whether a per-map object entry also matches the target coordinate and
    active floor.
-5. Dispatches to an object, sign/poster, special vision, or terrain
-   description path.
+5. Dispatches to a special vision, object, sign/poster, or terrain
+   description path, in that order of precedence.
+
+### Top-down Look special cases
+
+Every special case below is selected by the **live map tile id** at the
+resolved target cell, or by a per-map object entry matching that cell. There is
+no scene or floor gate on the dispatcher itself: the same predicates apply on
+the overworld and in every town-family scene, and the two special cases that do
+have a location condition carry it inside their own handler, not in the
+dispatch. Dungeon Look is a different command path (Section 5) and shares none
+of these predicates.
+
+The tile id tested comes from the shared live-map tile query, the same one
+movement and Talk use, and it is a single terrain-layer byte. It is therefore
+always an id in the terrain-description domain of `LOOK2.DAT`, never an
+active-object or creature descriptor. This matters for one band in particular.
+Live tile band `0xD8..0xDB` is the fountain trigger below, while the identically
+numbered entries in the **object-description domain** are the Daemon frame run
+named in `catalogs/monster-bestiary.md` and `systems/active-objects.md`. Same
+four numbers, two different lookup domains, no relationship between them; a
+Daemon standing in front of the party does not make Look offer a drink.
+
+**Entry dispatch, in the order the command tests it.** The order is
+load-bearing: the vision case is decided before anything is printed, and the
+per-map object case wins over the sign case when both would match.
+
+| Order | Predicate | Result |
+|---:|---|---|
+| 1 | Preflight visibility/reach gate refuses | Abort silently. No prompt output, no description, no state change. |
+| 2 | Live tile `0x29` (the crystal-sphere tile) | Death-vision case. Prompts for a party member; cancelling returns with nothing printed. Otherwise rolls `1..30` against that member's Intelligence as described below. Nothing else in this table is consulted. |
+| 3 | *(the shared "thou dost see" preamble is printed here)* | Applies to rows 4, 5 and 6 alike. |
+| 4 | A per-map object entry matches the target coordinate and active floor | Object description from the upper `LOOK2.DAT` object-description domain. |
+| 5 | Live tile `0x89`, `0x8A`, `0xA0`, `0xA4` or `0xF8` | Sign/poster path: emit a line break, then render the sign or poster (including the fixed Yew wanted-poster exception described below). |
+| 6 | Otherwise | Terrain description path, dispatched again by the table that follows. |
+
+**Terrain description path, in the order it tests.**
+
+| Order | Predicate | Result |
+|---:|---|---|
+| 1 | Live tile `0xE0`, `0xE1` or `0xE2` | Redirect: move the target cell one step and re-read it, then start this table over. `0xE0` moves one cell north, `0xE1` one cell east, `0xE2` one cell west. The redirect can chain, so a run of redirect tiles resolves to one final cell. |
+| 2 | Live tile `0x59` | Enter the sky renderer of Section 4.2 instead of printing any description text. |
+| 3 | Live tile `0xA1` | Wishing-well handler. |
+| 4 | Live tile `0xD8`, `0xD9`, `0xDA` or `0xDB` | Fountain handler. |
+| 5 | Any other tile | Print that tile's base `LOOK2.DAT` description, then apply at most one appender from the rows below. |
+| 5a | Live tile `0xFA` or `0xFB` | Append the current clock time: hour reduced to a twelve-hour value (zero displayed as twelve), a colon, two-digit minutes, then an `AM` suffix for hours zero through eleven and a `PM` suffix otherwise. |
+| 5b | Live tile `0xDE` | Append a virtue word chosen by the current scene: scene `30` appends Truth, scene `31` appends Love, scene `32` appends Courage. In any other scene the base description is printed with no appended word. |
+| 5c | Live tile `0xDF` | Append a dungeon name chosen by the target cell's map X coordinate: `58` Shame, `72` Destard, `91` Despise, `126` Wrong, `128` Doom, `156` Covetous, `239` Hythloth, `240` Deceit. Any other X appends nothing. |
+
+Rows 2, 3 and 4 replace the base description entirely; those four tile ids
+carry no usable description record of their own, which is consistent with the
+handler owning their output.
+
+The wishing well's granting condition and the fixed wanted poster's coordinate
+are handler-internal, not dispatch predicates: the well runs its coin and wish
+prompts in every scene and only checks the scene when deciding whether to grant,
+and the sign path checks the fixed poster coordinate only after it has already
+been selected by the tile test in row 5 of the entry table.
+
+### Description lookup and special-case outcomes
 
 The ordinary terrain description uses `LOOK2.DAT`: the raw tile id selects a
 description record. The format of that table is specified in
@@ -55,7 +114,7 @@ Special LOOKOBJ look cases include:
   LOOK2.DAT object-description range. The object branch appends the same
   line-spacing cleanup as terrain descriptions so object and terrain look text
   remain visually consistent.
-- **Signs and wanted posters.** Prints the sign/poster heading, then renders
+- **Signs and wanted posters** (live tile `0x89`, `0x8A`, `0xA0`, `0xA4`, `0xF8`). Prints a line break, then renders
   the sign or poster text through the sign/poster helper. One fixed exception
   in Yew, floor `0`, at local coordinate `(x=17, y=21)` renders the
   resident wanted-poster presentation; that poster is not read from
@@ -72,17 +131,17 @@ Special LOOKOBJ look cases include:
   does not filter a listed slot. Each printed name starts at column
   `7 - floor(name_length / 2)` within the poster row, then the right border is
   emitted at column `14`.
-- **Clock tiles.** Prints the tile description and appends the current game
+- **Clock tiles** (live tile `0xFA`, `0xFB`). Prints the tile description and appends the current game
   time using the normal twelve-hour AM/PM presentation.
-- **Shrine and dungeon-entrance tiles.** Prints the generic tile description
-  and appends the shrine or dungeon name selected by scene/tile context.
-- **Fountains.** Prompt for the drinking party member; cancelling prints the
+- **Shrine and dungeon-entrance tiles** (live tile `0xDE` and `0xDF`). Prints the generic tile description
+  and appends the virtue or dungeon name selected as tabulated above.
+- **Fountains** (live tile `0xD8..0xDB`). Prompt for the drinking party member; cancelling prints the
   no-one result. Dead or asleep members refuse as incapacitated. Any other
   selected member receives the refresh message. The overworld/town fountain
   result is presentation-only: this LOOKOBJ path does not restore HP, cure
   status, wake sleepers, or otherwise write party state. Dungeon fountains are
   the state-changing fountain family and are specified in `dungeon-mode.md`.
-- **Wishing wells.** Prompt for a coin and a wish, then run the well-specific
+- **Wishing wells** (live tile `0xA1`). Prompt for a coin and a wish, then run the well-specific
   object-spawn branch when the wish matches one of the accepted names in an
   accepted scene. The accepted wish keywords are Corvette, Ferrari,
   Lamborghini, Lotus, Porsche, and Horse. A coin is consumed only after the
@@ -93,7 +152,7 @@ Special LOOKOBJ look cases include:
   placed one cell east of the well caller's X coordinate at the caller's Y and
   floor, with the first auxiliary field cleared. There is no per-word vehicle
   mapping.
-- **Death-vision tile.** Prompts for a party member and rolls `1..30` against
+- **Death-vision tile** (live tile `0x29`, the crystal-sphere tile). Prompts for a party member and rolls `1..30` against
   that member's Intelligence. If Intelligence is greater than the roll, the
   command reports a strange vision and paints the local thirty-two-by-thirty-
   two view overlay. If the roll is greater than or equal to Intelligence, it
@@ -133,16 +192,16 @@ The local view overlay is modal:
 - It waits for a keypress.
 - It restores the prior view region before returning.
 
-LOOKOBJ also contains a full Britannia chunk-map renderer used by a special
-look path and related view contexts. That renderer paints an eight-row by
-twenty-two-column shorthand map of Britannia chunks, wraps the chunk walk at
-the world edges, marks the party's current chunk with a crosshair-style marker,
-prints a day/night flavour line, waits for input, and leaves the underlying
-world state unchanged. A view-restore flag causes the ordinary world view to be
-repainted after the overlay closes. The traced LOOKOBJ path that enters this
-renderer from ordinary Look is keyed by tile id `0x59`; the final catalog name
-for that tile remains a tile/LOOK2 reconciliation issue and should not change
-the renderer contract.
+LOOKOBJ also contains a second, completely separate renderer, described in
+Section 4.2. Earlier revisions of this document called it "the full Britannia
+chunk-map renderer" and said it paints an eight-row by twenty-two-column
+shorthand map of Britannia chunks with the party's chunk marked. **That
+description is withdrawn in full.** It is a sky renderer: it draws a starfield
+and eight moving celestial bodies whose positions are driven by the calendar
+date, and its overlay marker tracks the Shadowlords, not the party. The traced
+LOOKOBJ path that enters it from ordinary Look is keyed by tile id `0x59`; the
+final catalog name for that tile remains a tile/LOOK2 reconciliation issue and
+should not change the renderer contract.
 
 The local 32-by-32 overlay renders at a four-pixel cell scale inside the
 message-panel region. A cell anchor is:
@@ -208,41 +267,173 @@ addresses. The renderer uses these families consistently:
 
 | Source family | Used by |
 |---|---|
-| Frame fill | Class `3`, the center fill in class `0x10`, and the full-map party marker layer. |
+| Frame fill | Class `3` and the center fill in class `0x10`. |
 | Frame line / structure outline | Classes `4`, `5`, `6`, `7`, `0xE`, and compatibility class `0x5A`. |
 | Normal terrain | Class `0xF` and the normal-mode branches of `0xA`, `0xB`, and `0xD`. |
 | Secondary terrain | Classes `1`, `2`, `9`, the fixed top layer of class `0xD`, and one class-`0xA` branch. |
 | Peer/blue terrain | Peer/gem-view branches of classes `0xA`, `0xB`, and `0xD`. |
 | Dedicated rough terrain | Class `8` only. |
 
-The full Britannia chunk-map renderer is a separate overlay from the local
-32-by-32 view. Its base chunk-cell painter uses the world-map glyph family,
-places each shorthand cell on an eight-pixel grid, then overlays the party
-marker from the frame-fill family after the base glyph. Let
-`base_x = chunk_col * 8` and `base_y = chunk_row * 8`. The marker is an
-opaque overlay made of these horizontal strips, with coordinates inclusive:
+### 4.2 The Sky Renderer
 
-| Visibility gate | Strip |
+The second LOOKOBJ renderer is a separate overlay from the local
+thirty-two-by-thirty-two view. It has two mutually exclusive presentation
+paths, selected by the current hour.
+
+Retractions, because earlier revisions of this document published the wrong
+model and engine work may have been built on it:
+
+- It does **not** draw an eight-by-twenty-two grid of chunk cells. It draws
+  **eight** cells in total, one per row.
+- Its cell positions are **not** derived from the party's chunk position. The
+  party's position is never read. The inputs are the saved year, month, and day.
+- The overlay marker is **not** a party marker. It is drawn only for rows that
+  a Shadowlord currently occupies.
+- The marker strips published previously had `x` and `y` transposed and put the
+  clip gates on the wrong axis. The corrected geometry is below.
+- There is no chunk-map "edge wrapping"; the wrap is a column cursor wrapping
+  around a twenty-two-slot ring.
+
+#### 4.2.1 Daylight path
+
+When the hour is in `6..17` inclusive, the renderer:
+
+1. Prints `the sun!` followed by a newline.
+2. Ensures an active party member is selected. If there is none, it scans the
+   roster in slot order for the first member whose status is healthy or
+   poisoned and makes that member active.
+3. Applies **one point of damage** to the active member, with the ordinary
+   damage presentation and death handling that damage normally carries.
+4. Redraws the stats panel and returns.
+
+Nothing is painted on this path. An implementation that draws a picture during
+the day does not match the original, and one that omits the damage will drift
+from the original's party state.
+
+#### 4.2.2 Night path
+
+At every other hour the renderer paints into the main viewport region and then
+waits for input:
+
+1. Set the visibility-dirty flag so the ordinary world view is repainted after
+   the overlay closes.
+2. Fill the eleven-by-eleven viewport visibility grid with the hidden marker.
+3. Run the overlay capture/setup step that the modal view paths share.
+4. Select the starfield colour, then plot **eighty** single points at
+   pseudo-random coordinates: `x` uniform in `9..182` inclusive and `y` uniform
+   in `9..172` inclusive, drawn from the shared engine random-number generator
+   in that order (`x` first, then `y`, one draw each per point). The generator,
+   its state, and its sequence are specified in `systems/prng.md`; the
+   starfield consumes exactly one hundred and sixty draws.
+5. Draw the eight rows (Section 4.2.3).
+6. Print `the night sky! ` — note the trailing space and the absence of a
+   newline — then busy-wait until any key is available.
+
+The renderer leaves world state unchanged apart from the visibility-dirty flag
+and the active-member selection on the daylight path.
+
+#### 4.2.3 The eight rows and the column rule
+
+There are eight rows. Row `k` has a fixed pixel `y` origin and a fixed
+twenty-two-slot ring of columns, of which only some slots are permitted. Column
+`c` has pixel `x` origin `c * 8`.
+
+| Row | `y` origin | Start column | Permitted columns | Slots |
+|---:|---:|---:|---|---:|
+| `0` | 144 | 18 | 4, 11, 18 | 3 |
+| `1` | 136 | 2 | 2, 7, 11, 15, 20 | 5 |
+| `2` | 120 | 8 | 2, 5, 8, 11, 14, 17, 20 | 7 |
+| `3` | 104 | 15 | 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21 | 11 |
+| `4` | 88 | 11 | 0, 2, 4, 6, 8, 9, 11, 13, 14, 16, 18, 19, 21 | 13 |
+| `5` | 64 | 6 | 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21 | 17 |
+| `6` | 40 | 4 | 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21 | 19 |
+| `7` | 8 | 2 | 0 through 21 (all) | 22 |
+
+Every start column is itself a permitted column of its row.
+
+The column actually used is found by counting days:
+
+```text
+elapsed = number of days from the campaign epoch to the current saved date
+column  = start_column[k] stepped backwards through the permitted columns of
+          row k, `elapsed` times, wrapping from column 0 round to column 21
+```
+
+The campaign epoch is the game's start date: the year whose last two decimal
+digits are `39`, month `4`, day `5`. The comparison that drives the count uses
+the year modulo one hundred, so a campaign that runs past year `199` would wrap;
+no shipped campaign reaches that. The walk decrements the date one day at a
+time on the same twenty-eight-day-month, thirteen-month calendar the turn clock
+maintains (`systems/time.md`), so `elapsed` is
+`(years * 364) + (months * 28) + days` measured from the epoch.
+
+Because each row has a different number of permitted slots, the eight rows
+return to their start columns on different periods: 3, 5, 7, 11, 13, 17, 19 and
+22 days respectively.
+
+#### 4.2.4 Per-row body glyph
+
+Each row draws exactly one body, at column `c + 1` where `c` is the column
+computed above. Let `X = (c + 1) * 8` and `Y = row_y_origin`. The body is
+eleven single points in the body colour:
+
+| Point | Clip gate |
 |---|---|
-| `base_y > 2` | `x = base_x + 10..base_x + 12`, `y = base_y + 5` |
-| `base_y > 2` | `x = base_x + 10..base_x + 12`, `y = base_y + 6` |
-| `base_y > 2` | `x = base_x + 8..base_x + 12`, `y = base_y + 7` |
-| `base_y <= 175` | `x = base_x + 8..base_x + 12`, `y = base_y + 8` |
-| `base_y <= 174` | `x = base_x + 6..base_x + 10`, `y = base_y + 9` |
-| `base_y <= 173` | `x = base_x + 6..base_x + 10`, `y = base_y + 10` |
-| `base_y <= 172` | `x = base_x + 5..base_x + 8`, `y = base_y + 11` |
-| `base_y <= 171` | `x = base_x + 5..base_x + 7`, `y = base_y + 12` |
+| `(X + 6, Y + 8)` | none |
+| `(X + 7 + i, Y + 7 + j)` for `i` and `j` each in `0..2` | each point is skipped when `X + i > 176` |
+| `(X + 10, Y + 8)` | skipped when `X > 173` |
 
-The marker is not a replacement tile: it is composed after the base world-map
-glyph and before the renderer's final text/key-wait path. The map grid is
-eight rows by twenty-two columns and wraps at the world edges as it walks the
-chunk index.
+That is a three-by-three square with one extra pixel on the left and one on the
+right at mid-height — a small round disc.
 
-The traced renderer has two presentation paths. During the daylight interval
-`6 <= hour < 18`, it prints `the sun!` followed by a newline, flushes the
-coordinate text path, and returns before painting the full chunk map. Outside
-that daylight interval, it paints the full grid, overlays the party marker,
-then prints `the night sky! ` before busy-waiting until any key is available.
+#### 4.2.5 The Shadowlord marker
+
+For each of the three Shadowlords, if that Shadowlord's current location value
+equals `row + 1`, a marker is drawn on that row. The location values are the
+scene ids `1..8` used by the Shadowlord tracking described in
+`catalogs/quest-graph.md`; a vanquished Shadowlord holds the vanquished
+sentinel and never matches. Two or three Shadowlords in the same scene draw the
+marker two or three times on the same row, which is idempotent.
+
+The marker is drawn at column `c` — one column left of its body — so it trails
+the body. Let `X = c * 8` and `Y = row_y_origin`. It is eight **vertical**
+runs in the marker colour, inclusive at both ends:
+
+| Run | Clip gate |
+|---|---|
+| `x = X + 5`, `y = Y + 10 .. Y + 12` | `X > 2` |
+| `x = X + 6`, `y = Y + 10 .. Y + 12` | `X > 2` |
+| `x = X + 7`, `y = Y + 8 .. Y + 12` | `X > 2` |
+| `x = X + 8`, `y = Y + 8 .. Y + 12` | `X <= 175` |
+| `x = X + 9`, `y = Y + 6 .. Y + 10` | `X <= 174` |
+| `x = X + 10`, `y = Y + 6 .. Y + 10` | `X <= 173` |
+| `x = X + 11`, `y = Y + 5 .. Y + 8` | `X <= 172` |
+| `x = X + 12`, `y = Y + 5 .. Y + 7` | `X <= 171` |
+
+The runs step up and to the right, so the shape reads as a short diagonal
+streak leaning away from the body. With column values in `0..21` the upper
+gates never fire; the `X > 2` gate suppresses the first three runs when the
+marker lands in column `0`.
+
+The marker composites over whatever is already in those pixels; it is not a
+replacement cell, and the body is drawn first.
+
+#### 4.2.6 Colours
+
+Three distinct colour slots are used, all taken from the resident per-driver
+chrome table rather than being literals in the renderer: one for the starfield
+(offset into the bright half of the palette), one for the bodies, and one for
+the Shadowlord markers. A clean implementation should expose them as three
+configurable indices rather than hard-coding EGA numbers, because the shipped
+values are per-display-mode.
+
+#### 4.2.7 What is still open
+
+Static analysis fixes the geometry and the selection rule but not the visual
+identity of the eight rows. They key to scene ids `1..8`, the eight towns,
+through the Shadowlord comparison. Whether they read on screen as
+constellations, planets, or something else is a question for a screenshot
+comparison, not for this contract.
 
 ## 5. Dungeon Look
 
@@ -336,9 +527,12 @@ state or persistence behavior.
   are specified above. Remaining visual parity work is empirical screenshot QA
   against DOS output and catalog naming for source-family palettes, not unknown
   gameplay or renderer control flow.
-- **Tile special cases.** Tile id `0x59` is the traced ordinary-Look trigger
-  for the full Britannia map renderer. Its final in-world catalog label still
-  needs reconciliation with the tile catalog and `LOOK2.DAT` description.
+- **Tile special cases.** The full trigger set for top-down Look is published
+  in Section 3, including the dispatch order and the redirect tiles. Tile id
+  `0x59` is the trigger for the full Britannia map renderer and, like the
+  wishing-well, fountain and sign tiles, carries no usable base description
+  record; naming those ids in the in-world tile catalog is presentation
+  cataloguing, not an open behaviour question.
 
 ## 9. Sources
 
@@ -356,7 +550,11 @@ private address maps.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x06A4_lookobj_print_object_string.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x06F8_signs_dat_print.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x07E4_wanted_poster_render.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0366_gem_world_map_renderer.md`.
+- The sky renderer's two presentation paths, the eight rows, the calendar-driven
+  column rule, the per-row body and Shadowlord-marker geometry, and the
+  retraction of the chunk-map/party-marker reading —
+  `u5-decomp/functions/LOOKOBJ_OVL/0x0366_gem_world_map_renderer.md` and
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 5.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x01AC_view_blit_tile.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x024C_view_party_marker.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x0A9C_set_view_origin.md`.
@@ -376,3 +574,7 @@ private address maps.
 - `u5-decomp/functions/DNGLOOK_OVL/_OVERVIEW.md`.
 - `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
 - `u5-decomp/functions/DNGLOOK_OVL/0x06A8_dnglook_v_view.md`.
+- The complete top-down trigger set, the dispatch order, the redirect tiles,
+  the clock/shrine/dungeon appenders, and the confirmation that the tested
+  byte is a live terrain tile rather than an active-object class —
+  `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`.

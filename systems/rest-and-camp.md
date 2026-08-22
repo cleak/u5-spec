@@ -100,8 +100,12 @@ path, active party members who are in Good status are temporarily marked
 Sleeping for the elapsed-rest loop. Cleanup changes any Sleeping member back to
 Good and restores the input mode. This path does not contain its own HP or MP
 restore block. Any HP change observed during a town-bed sleep comes from other
-time-driven systems, such as poison/starvation damage or the hourly Ring of
-Regeneration check.
+time-driven systems. Concretely, the town-bed loop invokes the shared party
+status/provision pass specified in `systems/time.md` once per ten-minute step,
+so during town-bed sleep a poisoned member loses one hit point every ten
+simulated minutes (six per hour), a Ring of Regeneration wearer gets one
+1-in-8 roll every ten simulated minutes, and any hour the loop crosses applies
+the provision or starvation branch.
 
 **Rest-with-watch is a prompt and delegation wrapper.** The resident
 overworld/dungeon H handler prompts for a duration, counts Good and Poisoned
@@ -114,17 +118,32 @@ slot byte used by Ring of Regeneration.
 camp path, after the "Party rested!" result, the handler can walk active party
 records and apply recovery if all of these guards pass:
 
-- The rest is not in the suppressed active-camp state.
-- The accepted duration is greater than five hours.
-- The member was not marked poisoned in the rest-local snapshot.
+- The camp cooldown counter is zero. That counter is set to 14 whenever a camp
+  completes and is reduced by one, floored at zero, at every hour rollover. A
+  second camp begun inside fourteen game hours of the previous one therefore
+  prints the no-effect line and recovers nothing.
+- The accepted duration is greater than five hours. Five or fewer never
+  recovers.
+- The member was not marked Poisoned in the rest-local snapshot taken when the
+  camp began. A member poisoned during the camp is still eligible; a member
+  already poisoned at entry is not.
 - The member is not Dead.
-- The member is not the selected watch/target slot.
+- The member is not the selected watch/target slot. The watcher recovers
+  neither HP nor MP.
 
 For each member that passes those guards, the handler adds a uniform random
-`1..63` HP and caps current HP at maximum HP. It then restores MP only for
-specific class rows: Avatar and Mage set current MP to Intelligence, Bard sets
-current MP to half Intelligence, and other classes receive no MP write from this
-block. Poisoned members keep Poisoned status; rest does not cure poison.
+`1..63` HP, rolled independently per member, and caps current HP at maximum HP.
+It then restores MP only for specific class rows: Avatar and Mage set current MP
+to Intelligence, Bard sets current MP to half Intelligence rounded down, and
+other classes receive no MP write from this block. The MP write is an
+assignment, not an addition, so a class row on this list can have its magic
+points reduced by camping if its current MP was already above the target value.
+Poisoned members keep Poisoned status; rest does not cure poison.
+
+After the recovery walk, the handler arms the cooldown counter at 14 and, on a
+25-percent roll, remembers the tile under the party and stamps the camp marker
+tile. The cooldown is armed whether or not the marker is stamped, and whether
+or not any member actually recovered.
 
 Statuses outside the rest-participating set, including Charmed or Ashes if
 present in the party record, have no dedicated H-Hole-up status transition in
@@ -133,16 +152,28 @@ healers, or other status-specific systems. The stats panel is marked for
 refresh after visible HP, MP, or status changes.
 
 Rest does not own a separate food/provision cadence. The rest loop advances
-time, and the hourly status/provision cadence in `systems/time.md` observes any
-hour crossings caused by those cleanup calls. Town bed rest's repeated
-ten-minute cleanup calls can therefore cross 06:00, 12:00, or 18:00 and spend
-provisions through the shared hourly rule; if the counter is already zero on an
-hour crossing, the shared starvation branch applies. Shop food purchase
-semantics remain outside H-Hole-up.
+time, and the status/provision pass in `systems/time.md` observes any hour
+crossings caused by those cleanup calls. Town bed rest's repeated ten-minute
+cleanup calls can therefore cross 06:00, 12:00, or 18:00 and spend provisions
+through the shared hourly rule; if the counter is already zero on an hour
+crossing, the shared starvation branch applies. Shop food purchase semantics
+remain outside H-Hole-up.
 
-The hourly Ring of Regeneration tick is also time-owned rather than rest-owned.
-It checks the member's ring equipment slot for the Ring of Regeneration item id
-and can add exactly 1 HP on a 1-in-8 roll. H-Hole-up does not set that byte.
+The wilderness camp elapse loop behaves differently and the difference is
+observable. That loop advances the clock in five-minute steps and never enters
+the shared party status/provision pass, so while a camp is elapsing no poison
+damage is taken, no provisions are spent, and no starvation damage is applied,
+regardless of how many hours the camp covers. Only the town-bed loop runs that
+pass. An implementation that routes both rest paths through one per-hour status
+tick will make camping far more punishing than the original.
+
+The Ring of Regeneration tick is time-owned rather than rest-owned, and it is
+per pass rather than per hour. It checks the member's ring equipment slot for
+the Ring of Regeneration item id and can add exactly 1 HP on a 1-in-8 roll.
+During town-bed rest it is reached once per ten-minute step through the shared
+status pass; during a wilderness camp the camp loop calls the same check
+directly, once per five-minute step. H-Hole-up does not set or clear the ring
+slot byte.
 
 ## 6. Interruption And Ambush
 
@@ -269,6 +300,11 @@ status restoration, and selected-row handoff is public here. The dormant
 placement-shuffle branch in the ordinary terrain setup helper is not evidence
 for this live rest/camp path.
 
+The camp cooldown counter, the greater-than-five-hours duration gate, the
+per-member `1..63` roll, the class-keyed magic-point assignment, and the
+absence of any status/provision pass inside the wilderness camp loop are all
+public behavior here.
+
 The remaining residual is presentation parity around the same public mechanics:
 exact low-level string-window boundaries, audio/delay helper timing, and
 screen-refresh helper identity. The duration prompt, optional watch prompt,
@@ -298,6 +334,9 @@ tables, or implementation-specific addresses.
   (superseded identity note; structural observations only).
 - `u5-decomp/notes/lord_british_dialogue.md`.
 - `u5-decomp/notes/npc_walker_callers_2026-05-08.md`.
+- `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`
+  (cadence of the shared status/provision pass, and the town-bed versus
+  wilderness-camp difference).
 - `systems/time.md`.
 - `systems/encounters.md`.
 - `systems/town-mode.md`.

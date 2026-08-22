@@ -140,9 +140,9 @@ route-hint table.
 
 ### NPC floor-link markers
 
-Two paired marker values, `0xC8` and `0xC9`, participate in NPC floor-transition routing. Unlike the purely harvested placement markers above, these bytes are also consumed after map load: when an NPC needs to route between floors, the NPC pathfinder can search the live tile buffer for cells containing one selected marker ID and use matching cells as goals.
+Two marker values, `0xC8` and `0xC9`, participate in NPC floor-transition routing. Unlike the purely harvested placement markers above, these bytes are also consumed after map load: when an NPC needs to route between floors, the NPC pathfinder searches the live tile buffer for cells containing one selected marker ID and uses matching cells as goals.
 
-The pair is distinct from the visible chair tile: town step effects use tile `0x8C` for chair interactions. Shipped location data places `0xC8` and `0xC9` as paired floor-link annotations in the location grids, and the NPC pathfinder treats them as tile-ID goals rather than ordinary passable terrain. A location decoder should preserve the two byte values distinctly in the working tile grid until the schedule processor has had a chance to consume them.
+The two values are directional and not interchangeable. `0xC8` is the ascend link (climbing while on it raises the floor index) and `0xC9` is the descend link (climbing while on it lowers the floor index); `systems/npc-schedules.md` Section 8.5 gives the scheduler's selection rule and `catalogs/tile-catalog.md` Section 6 gives the player-facing contract. They are distinct both from the visible stairway family `0xC4..0xC7` and from the town step-trigger tile `0x8C`. A location decoder should preserve the two byte values distinctly in the working tile grid until the schedule processor has had a chance to consume them.
 
 ### Runtime marker handling
 
@@ -363,6 +363,6 @@ The format described above was derived from the analysis notes listed below. Non
 - The facing-sensitive town stair family and floor-change reload path -
   `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, cross-checked
   against `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
-- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, combined with shipped map-data cross-checks and the town step handler's separate `0x8C` chair trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`, and `u5-decomp/formats/maps.md`.
+- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, their ascend/descend identity, and the town step handler's separate `0x8C` trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, `u5-decomp/functions/NPC_OVL/0x0A4A_npc_floor_transition_gate.md`, `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`, and `u5-decomp/formats/maps.md`.
 - The overworld main loop providing the cross-mode contract under which the location loader is invoked, including the scene-byte-driven mode switch — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
 - The overworld chunk loader establishing the convention that per-class files are addressed by filename pointer through a small resident table — `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`.

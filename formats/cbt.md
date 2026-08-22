@@ -80,12 +80,27 @@ The twenty-one metadata bytes after each terrain row are combat-specific annotat
 
 | Record row | Metadata columns | Known role |
 |---:|---:|---|
-| 3 | 11-16 | Six-byte per-arena combat setup table A copied into resident runtime state. |
-| 3 | 17-22 | Six-byte per-arena combat setup table B copied into resident runtime state. |
-| 6 | 11-26 | Sixteen placement-slot X coordinates. |
-| 7 | 11-26 | Sixteen placement-slot Y coordinates. |
+| 3 | 11-16 | Six party entry X coordinates, indexed by party slot. |
+| 3 | 17-22 | Six party entry Y coordinates, indexed by party slot. |
+| 6 | 11-26 | Sixteen monster placement-slot X coordinates. |
+| 7 | 11-26 | Sixteen monster placement-slot Y coordinates. |
 
-Rows and columns in this table are zero-based within the arena record. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a placement-slot shuffle branch, but the traced ordinary terrain caller does not set it; live ambush and rest/camp setup must be specified from their own helpers rather than inferred from this dormant branch. The two six-byte slices are copied beside the placement coordinates as per-arena runtime setup data. Current resident consumers prove they are combat-local tables, but their per-entry meanings are not yet public-spec-ready.
+Rows and columns in this table are zero-based within the arena record. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a placement-slot shuffle branch, but the traced ordinary terrain caller does not set it; live ambush and rest/camp setup must be specified from their own helpers rather than inferred from this dormant branch.
+
+The two six-byte slices are the outdoor arena's **party entry coordinates**, and
+they use exactly the convention the `DUNGEON.CBT` party rows use below: for
+party slot `i`, X comes from column `11 + i` and Y from column `17 + i`.
+Outdoor combat always reads them from record row 3, with no facing seed. The
+terrain setup pass seats the party from these coordinates before it places any
+monster, so party seats never consume a monster placement slot and never move
+when the monster count changes. In the shipped wilderness arenas the six party
+seats sit on the southern rows (typically rows 7-10) while the sixteen monster
+placement slots occupy the northern rows (typically rows 0-5). Three shipped
+records are worth knowing about when validating a loader: the scripted-duel
+arena 0 seats the party in the middle with monster slots in the four corners,
+arena 10 puts every one of its sixteen monster slots on the single centre cell
+(5, 5), and arena 9 has all-zero monster placement rows because no live selector
+chooses it.
 
 The resident placement-coordinate tables are load-time scratch. A selected
 `BRIT.CBT` record overwrites them before ordinary terrain setup places actors,
@@ -125,15 +140,34 @@ bytes are converted as follows:
 
 - Ordinary source: if the source is at least `0x40`, and its masked family is
   neither `0xB4` nor `0xE8`, the setup class is `(source - 0x40) / 4` and the
-  actor is placed through the ordinary room-combat path.
+  actor is placed through the ordinary room-combat path. **The `0xEC..0xEF`
+  family is not excluded by this test and therefore takes this path.**
 - Special source: all lower values and the excluded `0xB4`/`0xE8` families use
   the special room-placement path with the source value as the setup id.
-- Random-special family: source values whose masked family is `0xEC` first
-  select one of four pre-rolled room-special setup ids using the source low two
-  bits.
+- Random-special family: source values whose masked family is `0xEC` are
+  reclassified *after* the ordinary/special decision above. They keep the
+  **ordinary** placement path, and only their derived setup class is replaced
+  by one of four pre-rolled room-special setup ids, chosen by the source's low
+  two bits.
 
-Special setup ids have one additional post-placement rule that writes the
-placed active object's auxiliary byte:
+The two placement paths differ in what they create, and this is the difference
+an engine must reproduce:
+
+- **Ordinary path.** Allocates a combat actor descriptor (from the first free
+  monster slot, above the six party slots) *and* a renderer-facing active-object
+  record, links them, and sets the active-object tile pair to
+  `setup_class * 4 + 0x40`. Its auxiliary byte receives the class's starting HP.
+  These are real, actable combatants.
+- **Special path.** Allocates only the renderer-facing active-object record. No
+  combat descriptor is created and no descriptor back-link is written, so the
+  round loop never gives these placements a turn. The active-object tile pair
+  and auxiliary byte both receive the raw setup id.
+
+Both paths write the source-owned X and Y into the active-object record and
+stamp the current dungeon level into it.
+
+Special setup ids have one additional post-placement rule that overwrites the
+placed active object's auxiliary byte (byte five of the record):
 
 | Setup id | Auxiliary-byte rule |
 |---:|---|
@@ -154,20 +188,59 @@ placed active object's auxiliary byte:
 | `15` | Write `1 + random_range(0, 7)`. |
 | `16+` | No auxiliary-byte post-write in this helper. |
 
-The random-special family `0xEC..0xEF` does not use those source bytes directly
-as setup ids. Before the scan, the helper rolls four setup ids by sampling this
-eight-entry palette with `random_range(0, 7)`: `[20, 21, 22, 34, 33, 24, 31,
-24]`. Source low bits `0..3` select one of those four pre-rolled ids. Those
-palette ids are all in the `16+` category above, so this helper places them as
-special active-object markers and performs no auxiliary-byte post-write for
-them.
+The auxiliary-byte post-write above applies **only to special placements**. It
+is gated on the placement path, not on the numeric value of the id, and it is
+the only write this helper performs after the placer returns. A special
+placement whose id is `16` or higher therefore keeps whatever the placer itself
+stored in that byte, which for the special path is the setup id.
 
-The final Doom marker is also in the `16+` category: source `0x3C` is placed as
-a special active-object family whose masked class is the `0x3C`
-absorbable-field family recognized by the combat post-step hook, not as an
-ordinary monster kind. Special placements use the special active-object path;
-this helper does not convert them into ordinary monster setup classes or party
-slot descriptors.
+**The random-special family `0xEC..0xEF` is an ordinary placement, not a
+marker.** Before the sixteen-source scan, the helper pre-rolls four setup ids by
+sampling this eight-entry palette four times with `random_range(0, 7)`:
+`[20, 21, 22, 34, 33, 24, 31, 24]`. All four draws happen once per setup call,
+before any source is examined. During the scan, a source in this family is
+classified as ordinary (it is at least `0x40` and its masked family is neither
+`0xB4` nor `0xE8`), and then its setup class is overwritten with the pre-rolled
+id selected by the source's low two bits. It is placed on the ordinary path with
+a full combat actor and the tile derived from the substituted class, exactly
+like any other ordinary source. It receives no auxiliary-byte post-write because
+that post-write is gated on the special path, **not** because it is inert.
+
+Reading a `0xEC..0xEF` source with the ordinary class rule would yield setup
+class forty-three, which is one of the two reserved all-zero identity gaps in the
+class table (`catalogs/monster-bestiary.md` Section 1). That is the point of the
+substitution: the family exists precisely so a room author can ask for "some
+random vermin" instead of naming a class. The excluded `0xE8..0xEB` family
+decodes to the other reserved gap, class forty-two, and is handled by sending it
+to the special path instead.
+
+The palette entries are ordinary monster classes: `20` Giant Rat, `21` Bat,
+`22` Giant Spider, `34` Python, `33` Skeleton, `24` Slime (twice), and `31`
+Insect Swarm. Because the four ids are rolled once per setup and then indexed by
+the source's low two bits, all sources sharing a low-bit value in one room draw
+the same class, while the four low-bit values can draw four different classes.
+
+This family is present in shipped content: across the one hundred twelve stock
+dungeon-room records it accounts for one hundred forty-four source bytes spread
+over fifteen records - rooms one through six of the Wrong bank and rooms zero
+through six, eight, and ten of the Covetous bank.
+Modelling it as an inert marker leaves those fifteen stock rooms empty of the
+randomised vermin they are supposed to spawn.
+
+The final Doom marker is a genuine special placement in the `16+` category:
+source `0x3C` is placed on the special active-object path, whose class is the
+`0x3C` absorbable-field family recognized by the combat post-step hook, and it
+is not converted into an ordinary monster kind. Genuine special placements do
+stay on the special active-object path and never become ordinary monster setup
+classes or party slot descriptors; only the `0xEC..0xEF` family, which is not a
+special placement at all, appears to contradict that rule.
+
+**Special ids present in shipped rooms.** Every id from `1` through `15` except
+`14` occurs in the stock records, so their auxiliary post-writes are all
+behavior-visible: `1` and `8` are the most common (roughly seventy occurrences
+each), `2` and `4` next, and `6`, `7`, `9`, `13` are rare. Ids `0x1E`, `0x1F`,
+the single Doom `0x3C`, and the excluded `0xE8` family (`0xE8` and `0xEB`) also
+occur and fall in the `16+` no-post-write category.
 
 The placement scan runs for stock room-trigger bytes `0xF0..0xFF` in the
 dungeon room-enter path. Runtime `0xA?` room-helper cells use the same arena
@@ -179,16 +252,30 @@ A clean implementation should preserve all metadata bytes even if it only consum
 
 ## 6. Outdoor Arena Selection
 
-Outdoor combat enters through the terrain-combat setup path. The triggering active object's tile class is reduced to one of sixteen outdoor arena indices. The selected `BRIT.CBT` record supplies the arena terrain. Separate resident tables determine:
+Outdoor combat enters through a terrain-combat entry step that runs *before* the
+combat framer. That step chooses the `BRIT.CBT` record from the world terrain
+tile under the triggering active object, a water/river predicate, and whether
+the party is aboard a ship - not from the triggering object's own type byte.
+The full selection table is published in `systems/encounters.md` Section 4; in
+outline, ship-versus-ship and party-aboard-ship cases take dedicated arenas,
+water takes a water arena, the Shadow Lord takes his own arena, and everything
+else takes the arena matching the ground type (swamp, grass, brush, desert,
+forest, hills, bridge, cobble), with a scene-dependent fallback.
 
-- The maximum or exact monster count for that arena.
-- Whether the monster count is randomised.
-- Which replacement tile eligible early-spawn monsters can roll to use.
+The triggering object's own sprite byte selects something different: the
+encounter's **combat class id**, which drives the spawn count, spawn stats, and
+spawned sprites. Arena index and class id are independent; do not derive either
+from the other.
 
-The selected arena record also supplies the sixteen placement-slot coordinates
-from its metadata band, as described above.
+The selected `BRIT.CBT` record supplies the arena terrain, the six party entry
+coordinate pairs, and the sixteen monster placement-slot coordinate pairs from
+its metadata band, as described above. Separate resident class tables determine:
 
-The arena record and those resident tables are therefore a pair. `BRIT.CBT` answers "what does the battlefield look like, and where are this arena's placement slots?" The resident class and encounter tables answer "how many things appear, and which tile class should represent them?"
+- The maximum or exact monster count for the encounter's class.
+- Whether that count is randomised.
+- Which companion class eligible early-spawn monsters can roll into.
+
+The arena record and those resident tables are therefore a pair. `BRIT.CBT` answers "what does the battlefield look like, and where does everyone start?" The resident class tables answer "how many things appear, and what are they?"
 
 ## 7. Dungeon Arena Selection
 
@@ -230,7 +317,7 @@ Dungeon mode itself does not run the combat round loop. It loads or selects the 
 
 On combat entry, the selected arena is copied into a combat terrain grid with the same thirty-two-byte row stride. The round loop and AI then read the runtime grid. The original `.CBT` file is not touched again until the next combat.
 
-Actors are not stored in `.CBT`. They are placed into combat's active-object and combat-effect tables by setup helpers after the arena is loaded. The actor tables hold party members, monsters, summons, and transient effects; the arena record only supplies the battlefield.
+Actors are not stored in `.CBT`. They are placed into combat's active-object and combat-effect tables by setup helpers after the arena is loaded. Because that runtime grid and its metadata band are just a resident buffer, a caller can also **synthesise** a record there without reading either `.CBT` file. Dungeon wandering-monster combat does exactly that: the dungeon room painter writes an eleven-by-eleven terrain grid plus a full party-entry and source metadata band into the buffer, then the framer's ambush entry mode runs the same room-combat setup helper over it. The layouts in Section 5 therefore describe both on-disk records and synthesised ones; see `systems/dungeon-mode.md` Section 14.1. The actor tables hold party members, monsters, summons, and transient effects; the arena record only supplies the battlefield.
 
 ## 9. Validation And Invariants
 
@@ -256,7 +343,7 @@ A minimal `.CBT` decoder should:
 4. Expose the first eleven bytes of each row as terrain.
 5. Preserve the twenty-one metadata bytes per row as opaque data until the full sub-layout is decoded.
 
-A renderer can display an arena using only the terrain grid and the global tile catalogue. A gameplay engine must additionally interpret metadata, resident per-arena spawn tables, and active-object placement rules.
+A renderer can display an arena using only the terrain grid and the global tile catalogue. A gameplay engine must additionally interpret the metadata band, the resident per-class spawn tables, and the active-object placement rules.
 
 ## 11. Cross-References
 
@@ -300,6 +387,17 @@ band and to caller discovery.
 
 This spec is a cleanroom prose rewrite derived from the project notes below. It intentionally omits decompiled code, assembly, implementation addresses, and raw private offset tables.
 
+- Terrain-combat entry chain retrace of 2026-08-22 - outdoor arena selection from
+  world terrain plus ship state, the class-id derivation and its separation from
+  the arena index, the reachable spawn-count invariant, the forty-eight-entry
+  companion-class table, and the party-seating pass that runs before monster
+  placement. Source provenance: derived from private analysis notes
+  `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
+  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
 - First-pass map and arena survey, including `.CBT` record size, terrain-grid dimensions, row stride, outdoor record count, and dungeon record count: `u5-decomp/formats/maps.md`.
 - Outdoor combat arena loader analysis, including the four metadata slices copied from each selected `BRIT.CBT` record into resident combat setup tables: `u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`.
 - Internal combat enter/exit framer and arena setup analysis.
@@ -308,7 +406,18 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 - Internal combat actor-command, AI, and target-selection analyses in the eleven-by-eleven arena coordinate space.
 - Internal dungeon-mode room-trigger analysis for the exact scene/low-nibble relationship to `DUNGEON.CBT`.
 - Internal DNGLOOK room setup analysis for the dungeon-room metadata scan and
-  special active-object placement path.
+  special active-object placement path. Source provenance: derived from private
+  analysis notes `../u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`
+  and `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`, whose
+  2026-08-22 retraces establish that the `0xEC..0xEF` family stays on the
+  ordinary placement path and that the special path allocates an active-object
+  record without a combat descriptor.
+- Arena synthesis for the ambush entry mode: derived from private analysis notes
+  `../u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md` and
+  `../u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
+- Stock-content census of the dungeon-room source band, counting the
+  `0xEC..0xEF` family and each special setup id across all one hundred twelve
+  shipped records, performed against the local clean install.
 - Local binary verification against `C:\Games\U5-Clean\DUNGEON.CBT` for the
   final Doom record's absorbable-field setup marker.
 - Existing combat-system prose used for cross-checking runtime semantics: `u5-spec/systems/combat.md`.

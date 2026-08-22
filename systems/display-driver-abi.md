@@ -138,7 +138,7 @@ without visible effect.
 | `0x45` | 23 | No-op. |
 | `0x48` | 24 | Register a loaded asset segment as the active tile/sprite asset and prepare it for blitting by converting its embedded pixel payload from packed to planar layout in place. Despite the historical working name "pack to back buffer", this entry does not touch the back buffer; it operates on the asset segment. |
 | `0x4B` | 25 | General tile or sprite blit. Accepts a render-flags word whose low bits choose between an opaque blit and a transparency-mask blit. |
-| `0x4E` | 26 | Stamp a one-bit silhouette sprite into the back buffer. |
+| `0x4E` | 26 | Stamp one record of a one-bit-per-pixel record archive into the back buffer. Takes the archive segment, the record index, and a destination pixel `(x, y)`. The index is bounds-checked against the archive's record count and an out-of-range index returns without drawing. Set source bits are written into all four planes, so the stamped shape reads as the brightest palette index in the back buffer; clear source bits leave the destination untouched, so the stamp is an overlay rather than a rectangle overwrite. This is the entry the intro uses for every `TITLE.BIT` and `BRITISH.BIT` draw. |
 | `0x51` | 27 | Draw one 16-by-16 tile directly to the front buffer. |
 | `0x54` | 28 | No-op. |
 | `0x57` | 29 | No-op. |
@@ -147,9 +147,9 @@ without visible effect.
 | `0x60` | 32 | Mutate loaded tile graphics for animated shimmer effects. The mutation phase is followed by a propagation/composite phase, so the body of this entry is substantially larger than just the noise step. |
 | `0x63` | 33 | Tile blit with the transparency-mask flag forced on. Equivalent to dispatch offset `0x4B` with the caller-supplied flag word bitwise-ORed with the transparency bit. |
 | `0x66` | 34 | Copy a rectangle from back buffer to front buffer in pseudo-random dissolve order. The visit order is driven by a Galois-style LFSR; see section 9.6 for the public visit-order contract. |
-| `0x69` | 35 | Advance and draw the title/menu flame-style animation strip. |
+| `0x69` | 35 | Two entries selected by the carry flag on entry. Carry clear: advance and draw the title/menu idle animation strip. Carry set: play the subtitle ignition transition using the one-bit resource segment passed in the primary register. |
 | `0x6C` | 36 | Loaded-tile graphics palette-plane mutation, save, restore, byte-parameterized substitution, and an extended mode reached only by alternate paths. The combat framer reaches this entry with mode value `1` when the resident tile-restoration flag is set. |
-| `0x6F` | 37 | CPU-calibrated delay with byte-stream animation playback. |
+| `0x6F` | 37 | Play a driver-resident byte-stream animation script, pacing each presentation step with a CPU-calibrated busy wait. This is the entry that plays the title flourish. |
 
 The most important correction from the full driver pass is that dispatch
 offset `0x3F` is the filled-rectangle entry, not the compressed-bitmap entry.
@@ -178,56 +178,51 @@ offset `0x3F`. Compatibility tests should therefore treat `0x3F` as the
 clipped front-buffer rectangle fill even though the broader descriptor state has
 a back-buffer selector used by other entries.
 
-## 7. Driver-Compressed Bitmap Resources
+## 7. Packed-To-Planar Graphics Preparation
 
-Dispatch offset `0x42` consumes a loaded bitmap/font resource segment. This
-format is used by `TITLE.BIT`, `BRITISH.BIT`, `WD.BIT`, and `PROPORT.PCS`; it
-is not the shared LZW envelope used by the paired `.16`/`.4` graphics files.
-This compressed-bitmap entry is implemented by the EGA baseline driver. The
-corresponding CGA, Hercules, and Tandy driver entries are no-op stubs in the
-analyzed baseline, so those historical backends do not draw these resources
-through this codec.
+Dispatch offset `0x42` is **not** a bitmap decoder, not a decompressor, and not
+a blitter. Earlier revisions of this document described it as the driver entry
+that decoded `TITLE.BIT`, `BRITISH.BIT`, `WD.BIT`, and `PROPORT.PCS` from a
+sparse pointer table. That description is withdrawn in full: no driver entry
+consumes those files, and they carry no pointer table. Their real container is
+specified in `formats/bit.md` and `formats/font-pcs.md`, and it is read by the
+caller, not by the driver.
 
-The resource begins with a sparse pointer table:
+What `0x42` actually does is an **in-place, size-preserving** conversion of an
+already-decompressed paired `.16`/`.4` graphics container, from packed
+four-bits-per-pixel storage into the per-row planar layout the blitters want.
+It receives only the segment holding that container. It touches no video
+memory, takes no destination rectangle, reads no screen descriptor, does not
+consult the front/back render-target selector, and changes no buffer's size.
 
-| Field | Width | Meaning |
-|---|---:|---|
-| Entry count | 2 bytes | Number of pointer-table entries to scan. |
-| Pointer-table entries | 4 bytes each | A body pointer word followed by one metadata word. |
-
-For each entry, a zero pointer means "skip". A nonzero pointer is a byte offset
-within the same loaded resource segment. The metadata word is not consumed as
-part of the pointer-table scan. If a pointer targets that byte range, as in a
-compact single-strip resource, the strip decoder simply treats the pointed
-bytes as the strip body.
-
-Each pointed-to strip has this shape:
-
-| Field | Width | Meaning |
-|---|---:|---|
-| Width-related word | 2 bytes | Converted by the driver into the packed bytes-per-row value. |
-| Row count | 2 bytes | Number of rows in the strip. |
-| Pixel payload | variable | Packed 4-bit source data in byte-interleaved plane order for the strip. |
-
-For the EGA baseline, the strip decoder rounds the packed bytes-per-row up to a
-multiple of four, converts the strip data into planar form, and emits it to the
-active driver destination. The exact source-to-screen placement is owned by
-the caller's current draw state and the resource's strip ordering; callers do
-not use the `.16`/`.4` LZW archive container for these files.
+The container it walks is the one specified in `formats/tiles.md`: an image
+count followed by that many 32-bit image offsets, then image records of
+`width`, `height`, and `stride * height` bytes, where `stride` is half the width
+rounded up to a multiple of four. Records are stored back to back.
 
 Compatibility requirements:
 
-- Read the entry count as a count, not as a decoded-length field.
-- Process pointer entries in order.
-- Skip zero pointers.
-- Treat nonzero pointers as byte offsets inside the loaded resource image.
-- Treat the second word in each pointer-table entry as table metadata unless a
-  strip pointer explicitly targets it.
-- Stop each strip after its declared row count.
-- Do not reject a resource solely because the entry count is much larger than
-  the number of populated strips. Known resources rely on long runs of zero
-  pointer entries, and original heap-load semantics can leave zero-filled space
-  beyond the byte-exact file image for over-allocated tables.
+- Treat this entry as a preparation pass over a decompressed `.16`/`.4`
+  container, not as a codec and not as a draw call.
+- Read the directory offsets as 32-bit values. The high half is zero in every
+  shipped archive, which is why an earlier reading mistook the pair for a
+  pointer word plus a metadata word.
+- The conversion is a pure permutation of the bytes already present; total size
+  is unchanged.
+- A driver-internal scratch buffer caps the maximum convertible image width at
+  320 pixels.
+- A modern renderer that stores decoded images in its own form does not need
+  this entry at all. It exists to serve the original blitters' plane-major
+  expectations, and it is an implementation convenience of the original driver
+  rather than a property of any on-disk data.
+- The CGA, Hercules, and Tandy drivers stub this entry in the analyzed
+  baseline.
+
+Because no driver entry reads them, `TITLE.BIT`, `BRITISH.BIT`, `WD.BIT`, and
+`PROPORT.PCS` are decoded entirely on the caller side: unwrap the shared LZW
+envelope where present, parse the one-bit-per-pixel sub-image list, then draw
+records with the ordinary point, span, and blit entries in the caller's
+currently selected colour.
 
 ## 8. Tile And Glyph Rendering
 
@@ -411,8 +406,21 @@ above.
 
 The EGA driver owns several visual effects that are not gameplay systems:
 
-- Title/menu idle animation: a four-frame driver-local strip drawn at
-  `(0, 65)` with size `320 x 49`, advanced by dispatch offset `0x69`.
+- Title/menu idle animation: a four-frame strip drawn at `(0, 65)` with size
+  `320 x 49`, advanced by dispatch offset `0x69` with carry clear. The entry
+  owns only the frame counter and the copy; the frame pixels are staged into
+  the back buffer beforehand by the caller (see `intro.md` section 5). Each
+  call copies 49 rows at full 320-pixel width from back-buffer row
+  `50 x frame_index`, then advances the counter modulo four. Correction: an
+  earlier revision described the frames as produced inside the driver and
+  unavailable to a clean engine; they are ordinary shipped archive records.
+- Subtitle ignition transition: dispatch offset `0x69` with carry set and a
+  loaded one-bit resource segment in the primary register. The entry saves the
+  back buffer to a scratch allocation, clears it, runs a pseudo-random
+  per-pixel reveal that interleaves idle-strip steps and a percussive sound
+  effect, then restores the back buffer and releases the scratch. It is paced
+  by the same CPU-calibrated busy wait as dispatch offset `0x6F`, not by a
+  timer tick, and it is not a cursor-blink entry.
 - Rectangle dissolve: copies pixels from the back buffer to the front buffer
   in pseudo-random order until the rectangle matches. The EGA implementation
   uses a deterministic LFSR-style visit order; after the entry completes, the
@@ -427,9 +435,19 @@ The EGA driver owns several visual effects that are not gameplay systems:
   plane-swap mode used for combat-style terrain coloration. The combat framer's
   reached call uses mode value `1`, so it is a restoration step before ordinary
   world redraw rather than an independent presentation effect.
-- Credits/death animation delay: uses a calibrated delay value and byte-stream
-  animation playback so the effect runs at a stable apparent speed on different
-  CPUs.
+- Animation-script playback: dispatch offset `0x6F` takes the boot CPU
+  calibration value in its primary register, holds the plane write mask at the
+  blue-plus-intensity pair for the whole call, and walks a driver-resident byte
+  stream. The script is a frame count followed by per-frame records of
+  `(source top row, destination top row, row count, row-group list)`, where the
+  group list is a separator-delimited sequence of source-row indices. Per
+  presentation step the entry performs one calibrated wait and then repaints
+  the frame's whole destination band: the currently selected source rows are
+  copied from the back buffer packed contiguously and centred in the band, and
+  the rest of the band is blanked. Any keystroke aborts and is reported through
+  the return value. Correction: this is the title-flourish player, not a
+  credits or death-screen player; `intro.md` section 3 publishes the shipped
+  script's frame table and group sets.
 
 These effects do not advance saved-game time, NPC schedules, combat rounds, or
 active-object simulation.
@@ -460,6 +478,12 @@ Remaining work is historical hardware and exact visual parity:
 ## 12. Sources
 
 Cleanroom prose derived from these private analysis notes:
+
+- `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md` — the trace
+  that identified the animation-script entry's real caller, located and parsed
+  the shipped script, resolved the idle-strip frame source, and separated the
+  two carry paths of dispatch offset `0x69`.
+- `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`.
 
 - `u5-decomp/formats/ega-driver.md`.
 - `u5-decomp/functions/EGA_DRV/_OVERVIEW.md` (full per-slot index, 38 slots

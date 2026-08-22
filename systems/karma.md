@@ -87,13 +87,54 @@ Confirmed non-shrine scalar changes:
 | Crop or table-food taking | Picking crop cells or eating reachable table food | Shared moral-standing selector -1 when nonzero |
 | Town-family cannon hit | F-Fire local cannon path after a successful active-object hit | Shared moral-standing selector -5, floored at zero |
 | Helped/pickpocket-style NPC thank-you path | Jimmy/NPC path that reaches the thankful response | Shared moral-standing selector +2, capped at ninety-nine |
-| Toll-style gold-payment milestone | Three-digit conversation gold payment when the toll-progress counter has reached its milestone | Shared moral-standing selector +1, capped at ninety-nine; if the payment leaves the party with zero gold, add another +2 under the same cap |
+| Conversation standing-up control code | A dialogue script emits the raise-standing control byte | Shared moral-standing selector +1, capped at ninety-nine. Emits no text; scripts stack the byte to grant more than one |
+| Conversation standing-down control code | A dialogue script emits the lower-standing control byte | Shared moral-standing selector -1, floored at zero. Emits no text; scripts stack the byte to deduct more than one |
+| Almsgiving milestone | A three-digit conversation gold payment that the party can afford, made to an NPC of the qualifying sprite class, when the shared step counter has reached one hundred | Shared moral-standing selector +1, capped at ninety-nine; and, only on that same qualifying call, a further +2 if the debit left party gold at exactly zero |
 
-The toll-progress counter is a single saved byte adjacent to the shared moral-standing selector (`SAVED.GAM 0x02E5`, in the same per-turn cluster as the selector at `0x02E2`). Every successful three-digit `0x85` gold payment increments this counter by one. When the counter reaches `100`, the gold-payment helper resets it to zero and applies the standing bump above. This means the milestone fires once per hundred successful payments rather than once per payment.
+### 4.1 The gold-payment milestone in detail
 
-The counter is not specific to "tolls" versus "bribes" or "donations": the public TLK control byte family does not distinguish payment intent, and every accepted three-digit `0x85` payment routes through the same helper and the same counter. The semantic naming as "toll" reflects the most common shipped use of the byte; bribes and donations also count toward the milestone. The reset/bump path is the only traced writer for the counter. New games seed the counter at zero from the factory save image; nothing else writes it.
+Earlier revisions of this document described this row as a "toll-progress
+counter" that every accepted conversation gold payment advanced. That
+description was wrong in three ways and is withdrawn. The corrected contract has
+three independent gates, all of which must pass on the same payment:
 
-The "if the payment leaves the party with zero gold, add another +2" leg is a separate post-debit test inside the same helper. It fires on every paid `0x85` whose debit clears party gold to zero, regardless of whether the milestone reset also fired on the same call. Both clamps share the same ninety-nine cap on the shared selector.
+1. **Affordability.** The demanded amount must be less than or equal to party
+   gold. The amount is then debited. An unaffordable demand prints the refusal
+   line and never reaches any standing logic.
+2. **Sprite-class gate.** The NPC being spoken to must belong to one specific
+   sprite class — the class whose four-tile run begins at the type value one
+   hundred eight. The engine reads this from the speaking NPC's live
+   active-object entry, not from anything in the dialogue script. Only three
+   NPCs in shipped content carry that class. Nine NPCs across the four dialogue
+   files demand gold; exactly one of them — the Cove NPC who asks for a
+   five-gold offering — also carries the qualifying class. The other eight gold
+   demands cannot move standing at all.
+3. **Step-counter threshold.** A shared one-byte counter must have reached one
+   hundred. On success the counter is reset to zero and the selector is raised by
+   one under the ninety-nine cap.
+
+The zero-gold bonus is **nested inside gate 3**, not independent of it. It is
+tested only after the reset and the +1 have already run, so a payment that
+empties the purse but fails the class gate or the threshold grants nothing.
+
+**What the counter actually counts.** It is not a payment tally. Its only
+increment is in the resident per-turn party-upkeep pass — the same pass that
+applies poison damage and runs the hourly provision cadence — which advances it
+by one and saturates it at two hundred fifty-five. That pass runs once per
+turn-consuming action in overworld, town, and dungeon play, and once per ten
+simulated minutes of town-bed rest. The gold-payment path is its only reset
+anywhere in the game. The counter is therefore a **cooldown measured in turns**:
+a qualifying payment can raise standing at most once per one hundred
+turn-consuming actions, and a second qualifying payment on the following turn
+grants nothing.
+
+**Payment intent is still not distinguished.** The dialogue control byte carries
+only a three-digit amount; nothing marks a payment as toll, bribe, or donation.
+The narrowing that makes the milestone feel like almsgiving comes from the
+sprite-class gate, not from any intent field.
+
+`formats/saved-gam.md` section 10 gives the counter's save slot. New games seed
+it at zero from the factory image.
 
 Negative boundaries for unpromoted action families:
 
@@ -103,7 +144,7 @@ Negative boundaries for unpromoted action families:
 | False dialogue answer | Conversation keyword path with a known-false answer | No traced direct scalar or per-virtue writer is promoted from the decoded conversation runner. |
 | Profanity at the conversation prompt | Conversation reserved-keyword table default/rebuke branch | Rebuke and bounded pause/timing behavior confirmed; no direct virtue-standing write confirmed in the decoded branch |
 | Refusing requested aid | Conversation refusal branch | No separate traced writer is promoted. Branch text may express virtue judgement without proving a runtime standing delta. |
-| Giving to a needy NPC | Conversation "give" path with gold or food | The traced three-digit conversation gold-payment control byte debits party gold and has a toll-milestone scalar selector bump, but it is not itself a per-virtue Compassion writer. Do not turn every conversation gold debit into a charity-karma delta. |
+| Giving to a needy NPC | Conversation "give" path with gold or food | The traced three-digit conversation gold-payment control byte debits party gold and carries the narrowly gated milestone bump described in Section 4.1, but it is not a per-virtue Compassion writer. Do not turn every conversation gold debit into a charity-karma delta. |
 | Third-party healing | Healer shop or dialogue path for curing a stranger | Shop treatment costs and no-price exceptions are shop/town-scene rules. No karma-owned healer price or standing writer is promoted. |
 | Attacking a non-hostile NPC | Combat-mode strike on a peaceful or friendly actor | No combat-overlay write to the scalar selector or a per-virtue standing byte is promoted in the current census. Town-family cannon hits are the covered hostile/destructive scalar penalty. |
 | Initiating or refusing combat | Combat engagement or combat-end stay-and-fight branch | Combat framer, ordinary combat exit, reward, and flee paths have no traced post-combat virtue delta. |
@@ -121,12 +162,13 @@ Characteristics that are firm even where non-shrine magnitudes are not:
   beyond the confirmed cannon-hit scalar penalty.
 - **Profanity is not currently a confirmed karma mutator.** The reserved-keyword default branch prints its chastisement and repeatedly invokes a resident timing/presentation helper after a pause. The wrapped helper target is not a stats-panel or virtue-standing writer, so the public contract should not model profanity as a standing change unless a separate producer is traced.
 - **Conversation gold demands are not automatically Compassion changes.** The
-  traced three-digit gold-payment control byte decodes a demanded amount,
-  debits party gold on success, and can raise the shared moral-standing
-  selector when the toll-progress counter has reached its milestone. It does
-  not write a per-virtue Compassion standing in that helper. Any positive
-  Compassion effect for charitable giving must be traced in a separate action
-  branch rather than inferred from every conversation gold debit.
+  traced three-digit gold-payment control byte decodes a demanded amount and
+  debits party gold on success. It can raise the shared moral-standing selector
+  only when all three gates in Section 4.1 pass, which in shipped content means
+  one NPC and a one-hundred-turn cooldown. It does not write a per-virtue
+  Compassion standing. Any positive Compassion effect for charitable giving must
+  be traced in a separate action branch rather than inferred from a conversation
+  gold debit.
 - **Stolen-action warnings are not themselves the Honesty delta.** TALK entry
   can print a stolen-action warning when the active scene/NPC and shared
   stolen-action status match, and final cleanup can print a matching warning,
@@ -226,8 +268,12 @@ The shrine/word presentation primitive is a visual-and-audio effect, not a
 quest-state mutator by itself. The traced resident helper produces a turbulent
 full-viewport flash paired with a low, randomized PC-speaker rumble, then
 returns with no direct save-state writes. It is confirmed as the feedback used
-by the Word-of-Power path in `commands.md` and by the older unreachable
-CMDS-side shrine-restoration branch. The live CAST2 shrine meditation handler
+by the Word-of-Power path in `commands.md` and by the CMDS-side
+shrine-restoration branch that path can hand off to. That hand-off is
+reachable: yelling any Word of Power while standing beside a ruined shrine
+enters the CMDS-side mantra prompt for that word's index, as specified in
+`systems/commands.md` Section 11.1. Earlier wording calling it unreachable is
+retracted. The live CAST2 shrine meditation handler
 owns the actual shrine quest-state changes above; whether every successful
 live shrine branch also calls this exact resident presentation helper remains a
 presentation-parity verification item, not a different shrine-state machine.
@@ -318,8 +364,10 @@ negative boundaries:
 
 - **Healer service.** Healers do not modulate prices on karma; the treatment tables determine ordinary costs, and the Minoc / The Healers Mission Cure/Heal no-price branch is keyed to town-scene identity rather than virtue standing. Current shop evidence does not show a karma-owned healer price or treatment-text branch.
 - **Begging or gift responses.** Conversation text can vary by moral-standing
-  threshold, and gold-payment control bytes can debit party gold. Only the
-  toll-milestone scalar bump is promoted as a traced standing write.
+  threshold, and gold-payment control bytes can debit party gold. The only
+  traced standing writes on this family are the two conversation control codes
+  that raise and lower the selector directly and the three-gate almsgiving
+  milestone in Section 4.1.
 - **NPC service refusal.** Certain NPCs can refuse to deal with low-standing
   avatars through dialogue labels. The refusal is dialogue-only; no guard alarm
   or criminal flag is set by the threshold branch itself.
@@ -354,10 +402,14 @@ negative boundary are covered.
   helper call.
 - **Conversation gold-payment boundary.** The traced three-digit
   gold-payment control byte belongs to conversation/quest payment handling:
-  it debits party gold and can raise the shared moral-standing selector on a
-  toll-progress milestone, but no per-virtue standing write is present in that
-  helper. Charitable-giving karma, if any, must be found in a different action
-  path.
+  it debits party gold and can raise the shared moral-standing selector only
+  through the three-gate milestone in Section 4.1, and no per-virtue standing
+  write is present in that helper. Charitable-giving karma, if any, must be
+  found in a different action path.
+- **Step-counter ownership.** The one-byte counter the milestone tests is not
+  owned by karma: it is advanced by the resident per-turn party-upkeep pass and
+  reset only by the milestone. Treat it as shared per-turn state that karma
+  reads, and see `formats/saved-gam.md` section 10 for its save slot.
 - **Stolen-action warning boundary.** Conversation entry can recognize a
   previously stolen-action state for the addressed NPC and print the warning
   before the normal greeting. Final conversation cleanup can also print the
@@ -382,6 +434,15 @@ negative boundary are covered.
 ## 13. Sources
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
+
+- The corrected gold-payment milestone (sprite-class gate, step-counter
+  threshold, nested zero-gold bonus, and the counter's real increment site and
+  cadence) and the two conversation control codes that raise and lower the
+  shared selector directly — derived from
+  `u5-decomp/notes/talk_group_retrace_2026-08-22.md`,
+  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`,
+  `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and
+  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
 
 - The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md` and the local CAST2 shrine-handler trace.
 - The shared shrine/word presentation effect boundary -- low randomized rumble
@@ -408,7 +469,7 @@ The behaviour described here was derived from the private function and format no
 - The shop pricing model (not karma-modulated, with arms Intelligence adjustment handled in the shop spec) — derived from `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md` (Karma / reputation interactions section).
 - The sage topic/fee/destination/template path, and the absence of a confirmed sage-shop karma selector — derived from `u5-decomp/functions/SHOPPES2_OVL/0x0508_sage_main.md`.
 - The conversation profanity/default reserved-keyword rebuke and negative karma-write boundary -- derived from `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and `u5-decomp/functions/ULTIMA_EXE/0x20FA_delay_with_int1c.md`, and cross-checked against `u5-decomp/CORRECTIONS.md`.
-- The conversation gold-payment toll/scalar boundary -- derived from
+- The conversation gold-payment scalar boundary -- derived from
   `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md` and
   `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
 - The TALK moral-standing threshold branch -- derived from

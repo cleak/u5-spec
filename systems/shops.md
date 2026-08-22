@@ -35,7 +35,7 @@ Ship-broker dialogue records are reached through their own Talk shop arm; a
 paid sale queues a pending vehicle acquisition that the next overworld entry
 turns into a placed watercraft active object.
 
-A single shared dialogue resource — `SHOPPE.DAT`, a 10-kilobyte file holding 196 token-compressed records — provides every bark, item description, room-rate quote, and farewell flourish any overlay prints. It shares a 128-entry phrase-token dictionary with the conversation engine, but its records are addressed by integer record id rather than by keyword.
+A single shared dialogue resource — `SHOPPE.DAT`, a 10-kilobyte file holding 195 token-compressed records — provides every bark, item description, room-rate quote, and farewell flourish any overlay prints. It shares the 128-entry phrase-token dictionary published in `catalogs/common-word-dictionary.md` with the conversation engine, but its records are addressed by integer record id rather than by keyword.
 
 This spec describes how a shop is entered from a Talk session, how the conversation engine selects which overlay handles a given shopkeeper, the on-disk layout of `SHOPPE.DAT` and the token expansion that decodes its records, the pricing model, the per-shop inventory model, the per-shop-kind interaction loops, the karma effects, and the hooks the shop overlays make back into the rest of the engine.
 
@@ -105,10 +105,12 @@ affordability model, debits the party gold word, and leaves a boardable horse
 object for the party. The ship-broker row differs after payment: the Talk
 trigger and sale flow are identified, and the successful sale queues a pending
 vehicle acquisition. On the next overworld entry, that pending state allocates a
-vehicle active-object slot at the stored sale coordinates. Frigate purchases
-place a ship-family active object with a standard full-hull auxiliary value and
-the queued skiff count; standalone Skiff purchases place a skiff-family active
-object. The pending state is then cleared.
+vehicle active-object slot at the *delivery coordinate stored for the
+shipwright the player bought from* — a fixed per-shipwright overworld cell
+published in Section 8.7, not the town exit cell and not a cell derived from
+the scene-to-exit mapping. Frigate purchases place a ship-family active object
+carrying the queued skiff count; standalone Skiff purchases place a
+skiff-family active object. The pending state is then cleared.
 
 The stock horse-trader sale rows are:
 
@@ -118,10 +120,13 @@ The stock horse-trader sale rows are:
 | `20` | North Britanny | `The Stablehouse` | Horse active object | 130 |
 | `22` | Paws | `Wishing Well Horses` | Horse active object | 160 |
 
-The shipped resident horse-price table also contains a fourth row for scene
-`30`, but the shipped NPC roster does not contain a `0x83` horse-trader trigger
-in that scene. Treat the three triggered rows above as the public horse-trader
-contract.
+The shipped resident horse-trader tables carry a **fourth** row: scene `30`
+(The Lycaeum), base price `190`, with a vendor name but an *empty* shop-name
+string. No `0x83` horse-trader trigger exists in that scene's shipped NPC
+roster, so the row is unreachable in ordinary play. Treat the three triggered
+rows above as the public horse-trader contract, and do not treat scene `30` as
+a fourth stable; the scene-byte table in Section 8.0 lists only the three
+reachable rows for the same reason.
 
 The confirmed Talk-driven shop arms all receive the caller's Talk context and
 the resident shop buffers prepared before dispatch. On return, the Talk action
@@ -130,12 +135,12 @@ service, or exited without acting.
 
 ## 4. `SHOPPE.DAT` structure
 
-`SHOPPE.DAT` holds the token-compressed text of every shopkeeper bark, item description, menu prompt, follow-up, room-rate quote, refusal, and farewell. The file is fixed at 10,135 bytes and contains exactly 196 NUL-terminated record slots, addressed by 0-based integer record id. Records are stored back-to-back with no per-record header or in-file offset table; the consumer supplies a record id and resolves it to the corresponding sequential record.
+`SHOPPE.DAT` holds the token-compressed text of every shopkeeper bark, item description, menu prompt, follow-up, room-rate quote, refusal, and farewell. The file is fixed at 10,135 bytes and contains exactly 195 NUL-terminated records, addressed by 0-based integer record id `0`..`194`; the final byte of the file is the final record's terminator. Records are stored back-to-back with no per-record header or in-file offset table; the consumer supplies a record id and resolves it to the corresponding sequential record.
 
 Each record is a sequence of bytes terminated by a NUL byte. Within a record:
 
 - **Low-ASCII bytes other than NUL** are emitted literally, except for substitution placeholders (Section 4.1) that the renderer expands inline.
-- **Bytes `0x80`–`0xFF`** are phrase-token indices, each replaced by a NUL-terminated word from a 128-entry common-word dictionary (Section 4.2). `0xFF` is a valid token byte, not a record terminator.
+- **Bytes `0x80`–`0xFF`** are phrase-token indices, each replaced by a word from the shared 128-entry common-word dictionary (Section 4.2, contents in `catalogs/common-word-dictionary.md`). `0xFF` is a valid token byte, not a record terminator.
 - **Byte `0x00`** ends the record.
 
 Records are not labelled in the file; the engine's per-shop-kind tables hardcode which record-id ranges belong to which shop kind. The cluster ranges are fixed and shipped:
@@ -176,11 +181,13 @@ A literal `&`, `%`, `*`, `$`, `#`, or `@` cannot be emitted as itself — none o
 
 ### 4.2 The phrase-token dictionary
 
-The 128 phrase tokens (`0x80`–`0xFF`) index a 128-entry pointer table held in the resident data segment. Each entry is a 16-bit data-segment-relative pointer to a NUL-terminated word in a common-word vocabulary. When the renderer encounters a token byte, it reads the pointer at index `(token - 0x80)` and inlines the word.
+The 128 phrase tokens (`0x80`–`0xFF`) index the shared one-hundred-twenty-eight-entry common-word dictionary, whose full contents and validation invariants are published in `catalogs/common-word-dictionary.md`. Shop token `t` selects catalog index `t - 0x7F`, so `0x80` is catalog index one (`the`) and `0xFF` is catalog index one hundred twenty-eight (`work`).
 
-Eleven entries are NUL pointers used by the text consumers as word-boundary sentinels. These are dictionary entries, not `SHOPPE.DAT` record terminators.
+The same dictionary serves both the shop bark renderer and the conversation engine's byte runner. The two engines disagree only on the *byte range* they treat as token codes: the conversation engine uses the catalog index directly as its token byte (`0x01`–`0x80`), while the shop renderer applies the `0x7F` bias above. The two ranges resolve to the same physical entries — conversation token `0x01` and shop token `0x80` both expand to `the`. A single loaded table serves both renderers.
 
-The same dictionary serves both the shop bark renderer and the conversation engine's byte runner. The two engines disagree only on the *byte range* they treat as token codes: the conversation engine reads low control-byte indices in its blob text, while the shop renderer reads high-byte tokens in `SHOPPE.DAT`. The two byte ranges resolve to the same physical pointer entries — conversation token `0x01` and shop token `0x80` both expand to `the`. The arithmetic differs by the bias each engine applies, but the table is a single shared block of 128 pointers.
+Ten catalog entries are empty. They are not word-boundary sentinels and they are not `SHOPPE.DAT` record terminators; the shop renderer has no empty-entry handling at all. No shipped `SHOPPE.DAT` record references an empty entry, so treat an empty-entry token in shop text as malformed content rather than as a spacing hint.
+
+**Spacing.** The shop renderer emits one space before the expanded word. It emits a trailing space after the word only when the next record byte is ordinary text — that is, when the next byte exists, is not the record terminator, and is not itself a token byte. Consecutive tokens therefore produce exactly one space between words, and a token at the end of a record adds no trailing space. This is not the same rule the conversation runner uses; see `systems/conversation.md` section 8.1 for that one.
 
 The vocabulary is heavily slanted toward Britannian function words and common nouns — *the, thou, of, and, for, thee, dost, art, ye, hast, canst, Blackthorn, British, Shadowlords, Mantra* — and contributes heavily to the shipped game's tone, because every shopkeeper draws from the same pool.
 
@@ -370,11 +377,13 @@ by the overworld entry pass before the next outdoor turn begins. A successful
 Frigate purchase records the ship-family acquisition class plus an initial
 skiff-count payload; a successful standalone Skiff purchase records the
 skiff-family acquisition class. The outdoor consumer allocates a free
-active-object slot at the pending coordinates, chooses ship versus skiff from
-the acquisition class, initializes the ship-family hull auxiliary value where
-applicable, copies the skiff-count payload for a frigate, and clears the pending
-state. The owner is the outdoor pending-action handshake, not a standalone
-commodity-stock field.
+active-object slot at the pending delivery coordinate, chooses ship versus
+skiff from the acquisition class, writes the initial hull condition and the
+carried-skiff count, and clears the pending state. The exact field values are
+in Section 8.7. The owner is the outdoor pending-action handshake, not a
+standalone commodity-stock field. The pending class byte and the pending
+coordinate pair all live inside the saved game image, so a queued delivery that
+has not yet been consumed survives a save and reload.
 
 ### 6.2 Post-transaction surcharge
 
@@ -492,7 +501,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Arms entry | Resident/tokenized shop greeting, resident shopkeeper-intro literal, two-entry resident long-greeting pool, then a resident closing quote/space | Appends to the inherited conversation window; no shop-local clear | No explicit shop cursor setter; output advances from the inherited cursor | Waits once after the first greeting, then waits for `B`, `S`, Space, or another exit key |
 | Arms buy stock list | Resident `Buy` echo, four-entry resident affirmation pool, four-entry resident stock-call pool, current stock item names | Appends after the entry transcript | Natural text advance only | Invalid stock letters leave the stock list visible and keep waiting; they do not redraw the list or consume a random draw |
 | Arms item quote and confirmation | Deterministic `SHOPPE.DAT` quote by equipment id, then one of four resident confirmation prompts | Appends after the stock list | Natural text advance only | Only `Y` and `N` advance. Other keys leave the quote/prompt visible and do not redraw or consume a random draw |
-| Arms sell browser | Resident sell-side literals plus deterministic sell-back quote records for the browsed carried item | Appends inside the inherited window | Natural text advance only | Empty, unsellable, and declined items return through the browser without a fresh shared bark |
+| Arms sell browser | Resident sell-side literals plus deterministic sell-back quote records for the browsed carried item | Installs its own framed side panel in text window `1` (geometry below), then restores window `2` | Fixed panel cursor origins while the panel is up; natural text advance afterwards | Empty, unsellable, and declined items return through the browser without a fresh shared bark |
 | Guild entry | Shared non-arms preamble row, resident acceptance/refusal literals, then guild stock menu | Appends; no shop-local clear | Natural text advance only | `Y`, `N`, and Space are accepted. Other keys leave the prompt visible and keep polling |
 | Reagent entry | Shared non-arms preamble row, resident acceptance/refusal literals, then reagent stock menu | Appends; no shop-local clear | Natural text advance only | Same as guild entry; ignored keys do not redraw or consume a random draw |
 | Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service choices re-prompt from the service menu rather than selecting a new shared preamble |
@@ -512,8 +521,11 @@ The short resident literal pools that affect prompt parity are:
 | Arms buy confirmation prompts | One prompt is selected uniformly from: `Wouldst thou buy one?`, `Wilt thou take it?`, `Wish ye it?`, `May I get one for thee?` |
 | Arms buy decline echo | `N` prints `No` followed by a blank line, then returns from that quote without changing gold or inventory. |
 | Arms carry-cap refusal | Prints the fixed carry-cap refusal followed by the shopkeeper suffix, waits for one key, then returns from the quote. |
-| Arms no-credit barks | One no-credit bark is selected uniformly from the four-entry resident pool, wrapped in the resident yelling suffix; this exits the shop flow without changing gold or inventory. |
-| Arms successful sale tail | Prints the fixed sold line, then the post-item "anything else" prompt addressed by Avatar gender. |
+| Arms no-credit barks | One no-credit bark is selected uniformly from the four-entry resident pool listed below, wrapped in the shopkeeper-attribution tail; this exits the shop flow without changing gold or inventory. |
+| Arms successful sale tail | Prints the fixed sold line, then the post-item "anything else" prompt addressed by the speaking member's gender field, or a neutral variant when no transaction has completed. |
+| Arms no-credit bark pool (verbatim) | `Can't pay?! Out with ye, orc-face!`, `What be ye trying to pull? OUT!`, `OUT, SLIME!`, `BEAT IT!` — one chosen uniformly, wrapped by the attribution tail `yells <shopkeeper>.` |
+| Arms carry-cap refusal (verbatim) | `"Thou canst not carry any more!"` followed by the attribution tail `says <shopkeeper>.` |
+| Shipwright post-sale tail | Renders the post-sale record, then addresses the buyer. The gender test in this branch compares a field against a value that field never holds, so the feminine form is unreachable and the shipped build always prints the masculine form. Implementations targeting frame parity should always print the masculine form here; the arms tail, by contrast, selects correctly. |
 
 Prompt redraw rules are intentionally narrow. A prompt redraw occurs only when
 the flow explicitly calls the prompt/menu renderer again, such as healer service
@@ -524,21 +536,59 @@ random barks are not retained in hidden state: the visible text remains only
 because the caller keeps polling without calling the bark dispatcher again.
 A later dispatcher call selects a fresh row ordinal.
 
-The traced ordinary arms, guild, reagent, healer, tavern, sage, meal/provision,
-horse-trader, and shipwright overlay paths do not install shop-local
-text-window rectangles or cursor origins. They render into the active text
-window inherited from the conversation/text system, with the clear/append
-ordering captured above where it affects dialogue behavior. The promoted
-shop-owned geometry exception is the inn multi-guest pickup register in Section
-8.4. Any further exact frame contract for menu/status rectangles must be tied to
-the caller that configured the inherited active window rather than inferred from
-the shop flow itself.
+The traced ordinary arms *buy* path, guild, reagent, healer, tavern, sage,
+meal/provision, horse-trader, and shipwright overlay paths do not install
+shop-local text-window rectangles or cursor origins. They render into the active
+text window inherited from the conversation/text system, with the clear/append
+ordering captured above where it affects dialogue behavior.
 
-For the ordinary Talk-to-shop entry path, the inherited caller-owned state is:
-active text window selector `2`, the main text-window descriptor configured by
-the surrounding scene UI, and that descriptor's current cursor. The Talk shop
-dispatcher does not reset the selector, rectangle, cursor, colour, or style
-before it calls the selected shop arm. It first emits the same conversation
+There are exactly **two** shop-owned geometry exceptions, and they share one
+shape: a framed side panel drawn in text window `1` and then handed back to
+window `2`.
+
+- **Inn multi-guest pickup register** (Section 8.4). Selects window `1`, sets
+  it to `(24, 1)..(38, 9)` and clears it, widens to `(24, 1)..(39, 9)` for the
+  frame, draws row borders at window-local `(0, row)` and `(14, row)` over rows
+  `1..7`, places a heading at `(1, 1)` and a subheading at `(1, 2)`, prints the
+  matching guest lines, then restores window `2`.
+- **Arms `S` sell browser** (Section 8.1). Selects window `1`, sets it to
+  `(24, 1)..(38, 6)` and clears it, widens to `(24, 1)..(39, 9)` for the frame,
+  draws row borders at window-local `(0, row)` and `(14, row)` over rows
+  `1..4`, and pages the party's carried equipment counters inside the panel.
+  It prints no heading or subheading. When the browser finishes it restores
+  window `2` before the ordinary confirm/prompt path resumes.
+
+Both use the same `(24, 1)..(38, N)` clear / `(24, 1)..(39, 9)` frame idiom that
+the character-sheet and inventory panels elsewhere in the game use, so a clean
+engine can implement one panel primitive and parameterise the cleared height
+and the number of bordered rows. All coordinates are text cells in the fixed
+40-by-25 grid, not pixels.
+
+For the ordinary Talk-to-shop entry path, the inherited caller-owned state is
+active text window selector `2` together with that window's descriptor and
+current cursor. The concrete contents of that descriptor are now settled, and
+the answer is that **nothing configures it**: across the whole analyzed build,
+the text-window rectangle setter is only ever called for window `0` (twice by
+the resident inverse-text banner helper, twice by the dungeon view) and window
+`1` (the framed side panel used by the character sheet, the command overlay,
+the inn register and the arms sell browser). Window `2` is never passed to it,
+and neither is window `3`.
+
+Window `2` therefore still holds the boot-time descriptor described in
+`systems/text-output.md`: the full-screen cell rectangle `(0, 0)..(39, 24)`,
+the bright-white-on-black colour attribute, and cleared descriptor flags. Its
+cursor is whatever previous output in window `2` left behind, advanced by the
+Talk entry newline; no shop or conversation path homes it. The colour setters
+are likewise never called by the town, overworld, conversation, or shop
+overlays — the only callers in the build are the dungeon inspection overlay and
+the resident framed-message-window helpers — so shop text renders in the
+inherited attribute and no shop branch varies it by shop kind, scene, party
+state, refusal reason, or resource availability.
+
+The Talk shop dispatcher does not reset the selector, rectangle, cursor,
+colour, or style before it calls the selected shop arm; in fact the
+conversation overlay makes no window-selection, rectangle, or cursor call at
+all on any path. It first emits the same conversation
 entry newline used for all Talk dispatches, resolves the shop trigger, and then
 hands control to the shop overlay. As a result, ordinary arms, guild, reagent,
 healer, tavern/sage/meal, horse-trader, and shipwright output begins in the
@@ -550,10 +600,27 @@ counter/talk-through fallback; the fallback changes only which NPC is resolved.
 No separate direct-tile shop trigger has been traced outside Talk dispatch.
 Short-funds refusals, counter-cap refusals, post-purchase redraws, and
 `SHOPPE.DAT`-missing fallback handling are inside shop or resource paths after
-the same inherited entry state has already been established. The inn
-multi-guest pickup register remains the promoted exception: it temporarily
-selects window `1` for the register side panel and restores window `2` before
-returning to its ordinary prompt path.
+the same inherited entry state has already been established. The two side
+panels above are the only departures: each temporarily selects window `1` and
+restores window `2` before returning to its ordinary prompt path.
+
+**Wording policy for literal text.** Two categories of shop text exist, and
+this document treats them differently on purpose. Text held in `SHOPPE.DAT` is
+addressed by record ordinal and never transcribed here: the shipped asset
+supplies the wording, and an engine that reads the asset reproduces it exactly.
+Resident literals are not in that asset, so the ones an engine must reproduce
+to match a frame are published verbatim in this document — the shared `Yes`/`No`
+echoes, the four arms confirmation prompts, the arms carry-cap refusal, the
+four arms no-credit barks, `Sold!`, and the arms "anything else" tail with its
+gendered suffixes. Any other resident literal is described behaviourally
+because its exact wording does not change engine behaviour or menu geometry.
+Where the same wording is needed in a future flow, publish it here rather than
+inventing an ordinal for it.
+
+One shipped-data oddity is worth calling out so it is not "fixed": the
+healer/sanctum initial-greeting and farewell rows in the table above name the
+same four records. That is what the shipped selector tables hold; a healer
+therefore greets and says goodbye from one pool.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -594,6 +661,12 @@ Every Talk-triggered shop kind resolves its per-location row through the active 
 | `6` | Trinsic | `Horse & Rider` |
 | `20` | North Britanny | `The Stablehouse` |
 | `22` | Paws | `Wishing Well Horses` |
+
+The shipped horse-trader scene table actually holds four entries — `6`, `20`,
+`22`, and `30` — but the scene-`30` row has an empty shop-name string and no
+`0x83` trigger anywhere in the shipped rosters. It is listed here for
+completeness only; implementations should publish and reach the three rows
+above.
 
 **Shipwrights** (4 rows):
 
@@ -663,12 +736,16 @@ After a randomised greeting ("Hail, friend! Wouldst thou Buy or Sell?"), the pla
   does not buy, quotes the shop's offer, asks for `Y`/`N`, and on acceptance
   adds gold and decrements the selected equipment counter. Used ammunition is
   explicitly refused rather than bought back.
-- *Space* (or any other input) — Exit with a randomised farewell.
+- *Space* — Exit with a randomised farewell. Any other key simply re-polls the
+  Buy/Sell prompt without output.
 
-Both sub-menus re-prompt after each completed action. The buy side refuses
-capped counters and insufficient gold without changing inventory. The sell
-side refuses empty, unsellable, or explicitly excluded equipment without
-changing inventory. Either side can exit when the player walks away.
+Each sub-menu re-prompts internally after a completed action, so the player can
+buy or sell repeatedly without leaving it. Leaving a sub-menu, however, ends
+the visit: control goes to the farewell rather than back to the Buy/Sell
+prompt. Only a key that is neither `B`, `S`, nor an exit key re-polls that
+prompt. The buy side refuses capped counters and insufficient gold without
+changing inventory. The sell side refuses empty, unsellable, or explicitly
+excluded equipment without changing inventory.
 
 The stock arms buy rows are scene-local and use the equipment item-id order in
 `catalogs/item-list.md`. `0xFF` is the end-of-row marker. `0x00` is not empty in
@@ -702,23 +779,58 @@ equipment item id:
 | `42..46` | records `44..48` respectively |
 | `8`, `15`, `35`, `39`, `40`, `41`, `47` | no arms-buy quote record in the traced selector; these ids are not present in the nine stock rows |
 
+The stock list itself is rendered from the row above. Each visible slot prints
+its menu letter followed by the item's display name. The display name is the
+canonical equipment name from `catalogs/item-list.md`, *except* that a
+canonical name of thirteen characters or more is replaced by that item's
+shorter panel label, so the entry fits the shop's list column. The affected
+equipment ids and their shorter labels are published in `catalogs/item-list.md`
+Section 5.1.2. The list is preceded by a heading line and one of four resident
+"what we have" call lines chosen with a uniform `0..3` draw.
+
 After the item description, the buy path chooses one of four literal
 confirmation prompts uniformly: `Wouldst thou buy one?`, `Wilt thou take it?`,
 `Wish ye it?`, or `May I get one for thee?`. The player must answer `Y` or
-`N`; other keys re-prompt without changing gold or inventory. `N` exits that
-item quote. `Y` first checks whether the carried equipment counter for that
-item is already `99`; if so it prints the carry-capacity refusal and returns to
-the buy menu. It then checks party gold against the adjusted price. Short
-funds print a random no-credit bark plus the shopkeeper name and leave gold and
-inventory unchanged. A successful purchase debits the adjusted price, applies
+`N`; other keys re-prompt without changing gold or inventory. `N` echoes `No`
+and exits that item quote back to the buy list. `Y` echoes `Yes` and first
+checks whether the carried equipment counter for that item is already `99`; if
+so it prints the fixed refusal `"Thou canst not carry any more!"` followed by
+the shopkeeper-attribution tail `says <shopkeeper>.`, waits for one key, and
+returns to the buy list.
+
+It then checks party gold against the adjusted price. On short funds the shop
+prints one line chosen uniformly from a four-entry resident pool, wrapped in
+the shopkeeper-attribution tail `yells <shopkeeper>.`:
+
+| Draw | No-credit bark |
+|---:|---|
+| 0 | `Can't pay?! Out with ye, orc-face!` |
+| 1 | `What be ye trying to pull? OUT!` |
+| 2 | `OUT, SLIME!` |
+| 3 | `BEAT IT!` |
+
+The short-funds branch leaves gold and inventory unchanged and **exits the
+whole arms buy flow**, not just the item quote: unlike a decline, which returns
+to the stock list, it leaves the buy list immediately, and because leaving the
+buy list ends the visit the next thing the player sees is the farewell. This is
+the same statement as the "exits the shop flow" wording in the Section 8.A
+timing table and resident-literal table; the passages describe one behaviour.
+
+A successful purchase debits the adjusted price, applies
 the normal post-transaction surcharge, increments the carried equipment counter
 or caps arrows/quarrels at `99`, and prints the fixed success line `Sold!`.
-There is no separate successful-purchase item-name template.
+There is no separate successful-purchase item-name template. It then prints the
+post-item prompt `"Anything else,` followed by `milady?` when the speaking
+member's gender field is the female value and `sir?` otherwise, or `then?` when
+no transaction has completed in this visit.
 
 Invalid buy selectors, including letters at or beyond the `0xFF` terminator,
 do not print a refusal line. The buy menu simply keeps waiting for a valid
 letter, Space, or Escape. Item id `0` is ordinary stock: it uses the same
 menu-name source as the other equipment ids and quote record `8`.
+
+The `S` (Sell) branch is the one arms path that owns its own screen furniture;
+its side-panel geometry is specified in Section 8.A.
 
 ### 8.2 Guildmaster (magic shop)
 
@@ -853,7 +965,31 @@ and asks whether the Avatar wants a drink; `Y` enters the local menu, while
 `N` or space leaves. Each tavern has its own menu text and state selector, so
 the visible letters and flavour records vary by location.
 
-The drink menu is state-driven. One state-specific letter buys a round for each
+The drink menu is state-driven, and the menu state comes from the tavern row,
+not from a fixed key layout. There is no fixed `A` drinks key, no fixed `F`
+food key, no fixed `M` provisions key, and no `B` "Bye" key anywhere in this
+flow. The four action letters visible at a given tavern are the four
+state-indexed letters in the Section 6 table, and the only exits from the
+post-list menu are Space, Escape, and Return. Any key that is neither an exit
+key nor one of that state's four letters is ignored, leaving the list on screen.
+
+The list body itself is also selected by menu state rather than by tavern, so
+all five state-`0` taverns print the same list record and differ only in their
+prices. In `SHOPPE.DAT` ordinals the post-`Y` list records are `69`, `70`,
+`71`, `72` for states `0..3`, and the post-branch "anything else" follow-up
+records are `73`, `74`, `75`, `76` for the same states. Both sets sit
+immediately after the shared tavern farewell row in Section 8.A, which is a
+useful cross-check.
+
+After any accepted branch completes, the tavern clears the text window, prints
+the resident "anything else for thee?" line, and waits for `Y` or `N`. `N`
+prints the resident decline echo, prints the beg-thy-pardon continuation, and
+leaves. `Y` renders the state's follow-up record and returns to the post-list
+key wait. Completing a branch also sets the tavern continuation state, which is
+what makes the sage/lore letter reachable; before that, pressing the sage/lore
+letter is ignored.
+
+One state-specific letter buys a round for each
 living party member using the stock per-person table in Section 6. The Blue
 Boar Tavern's `W` branch instead opens a six-choice fixed-price drink list. A
 paid drink branch deducts gold and prints the tavern success line; the drink
@@ -861,7 +997,11 @@ itself has no traced persistent effect on party state. Failed payment returns
 to the menu without changing gold.
 
 One tavern/meal-counter menu branch sells provisions rather than flavour
-drinks. It quotes a per-unit food price, asks for a quantity, and processes the
+drinks. It is reached through the state's *provision* letter, which is `R` at
+the five state-`0` taverns and `P` at The Humble Palate; states `1` and `2` have
+no provision letter, so the provision branch is unreachable at The Blue Boar
+Tavern, The Slaughtered Lamb, and The Fallen Virgin. It quotes a per-unit food
+price, asks for a quantity, and processes the
 requested units sequentially. For every affordable unit, the party gold counter
 is debited and the shared food/provisions counter is adjusted under the normal
 food floor and cap. If gold runs out before the requested quantity is complete,
@@ -894,27 +1034,56 @@ Escape exits. Each current shipwright has local prices for both sale classes.
 The flow quotes the selected price, asks for confirmation, runs the ordinary
 affordability check, and debits gold on success.
 
-The stock shipwright base prices are:
+Both quotes are Intelligence-adjusted from the speaking party member with the
+same shape used by inn charges and horse sales:
+`adjusted(base, Intelligence) = base + trunc(base * (100 - 3 * Intelligence) / 100)`,
+truncating toward zero.
 
-| Shipwright | Frigate | Skiff |
-|---|---:|---:|
-| Island Shipwrights | 600 | 200 |
-| The Crow's Nest | 753 | 175 |
-| The Oaken Oar | 650 | 125 |
-| The Rusty Bucket | 700 | 100 |
+The stock shipwright rows carry the two base prices *and* a fixed delivery
+coordinate. The delivery coordinate is a per-shipwright value held beside the
+price rows in the same resident shop table; it is **not** the town's exterior
+entrance or exit cell, and it is not derived from the scene-to-exit mapping in
+`systems/town-mode.md` or `systems/doors-and-z-transitions.md`. It is an
+overworld map cell in the same coordinate space as the location entrance
+coordinates in `catalogs/gazetteer.md`, and in every row it is near — but not
+equal to — the town's own entrance cell.
+
+| Scene | Shipwright | Frigate | Skiff | Delivery cell (overworld X, Y) |
+|---:|---|---:|---:|---|
+| `3` (Jhelom) | Island Shipwrights | 600 | 200 | `(39, 221)` |
+| `5` (Minoc) | The Crow's Nest | 753 | 175 | `(151, 21)` |
+| `21` (East Britanny) | The Oaken Oar | 650 | 125 | `(79, 109)` |
+| `24` (Buccaneer's Den) | The Rusty Bucket | 700 | 100 | `(138, 159)` |
 
 Unlike ordinary inventory shops, a successful shipwright purchase does not write
 a simple carried-item counter. It writes a shared pending vehicle-acquisition
-state used by the outdoor loop. The next overworld entry consumes that state,
-places a watercraft active object at the stored sale coordinates, initializes
-its purchased-vehicle auxiliary state, and clears the pending queue.
+state used by the outdoor loop, and copies the row's delivery coordinate into
+the pending X and Y bytes at the same moment. The next overworld entry consumes
+that state and places the watercraft.
+
+The delivery pass, which runs once before the first overworld turn after the
+purchase, does the following:
+
+1. Acquire an active-object slot through the ordinary allocator described in
+   `systems/active-objects.md`.
+2. Write the vehicle tile into both the object's type byte and its frame byte:
+   the ship-family tile for a Frigate, the skiff-family tile for a Skiff, in
+   both cases the east-facing member of the family (facing index `1` in the
+   transport-marker convention of `systems/vehicles.md`).
+3. Write the row's delivery X and Y into the object's coordinate bytes and set
+   its floor byte to the overworld plane.
+4. Set the hull-condition auxiliary byte to `99`.
+5. Set the carried-skiff auxiliary byte from the queued acquisition class: `2`
+   for a plain Frigate, `3` for a Frigate that absorbed one extra purchased
+   Skiff, `0` for a standalone Skiff.
+6. Clear the pending state.
 
 The two purchase classes use different pending payloads:
 
-- **Frigate.** Queues a ship-family active object with a full-hull starting
-  condition and an initial cargo of two skiffs. If a Skiff is bought while that
-  frigate is still pending delivery, the queued frigate's skiff count is
-  incremented rather than placing a second object.
+- **Frigate.** Queues a ship-family active object with hull condition `99` and
+  an initial cargo of two skiffs. If a Skiff is bought while that frigate is
+  still pending delivery, the queued frigate's skiff count is incremented
+  rather than placing a second object.
 - **Skiff.** Queues a standalone skiff-family active object when no frigate is
   pending.
 
@@ -932,8 +1101,18 @@ the shipwright menu:
 - Selecting **Skiff** while a standalone Skiff is pending refuses the extra
   Skiff purchase and leaves the pending state and gold unchanged.
 
-Exact numeric marker values, ship facing, and sail-state encodings remain with
-the vehicle marker table rather than the shop flow.
+The shipwright dialogue is drawn from the ship-broker record cluster. Beyond
+the shared preamble/greeting/farewell rows in Section 8.A, the deterministic
+records this flow renders are: the menu/prompt body at the top of each loop
+pass (record `119`), the Frigate quote (`117`), the Skiff quote (`118`), the
+shared take-it confirmation (`126`), the limited-dock-space quote used when a
+delivery is already pending (`125`), the skiff-stowed-as-cargo line (`120`),
+the already-have-a-skiff refusal (`121`), the delivery announcement printed
+just before the delivery coordinate is queued (`123`), and the post-sale
+"anything else" body (`124`).
+
+Ship facing and sail-state encodings for the placed object are owned by the
+vehicle marker table in `systems/vehicles.md` rather than by the shop flow.
 
 ### 8.8 Sage / rumour vendor
 
@@ -987,12 +1166,20 @@ purchase is the horse-trader sale arm. It does not publish an arbitrary
 display-stock table, sale item id, carried-item destination, or per-display
 SHOPPE text selector. Its sale item is always a horse active object.
 
-On entry, the flow first finds a free active-object slot. It then probes the
-four cardinal cells adjacent to the party, in south, north, east, west order,
-and accepts the first cell whose map tile is one of the horse-sale placement
-tiles (`0x44`, `0x45`, or `0x05`) and whose occupancy/classifier check allows
-the sale. If no placement cell or no free object slot is available, the shop
-prints the refusal line and exits without a purchase.
+On entry, the flow first walks the active-object table from slot zero and takes
+the first free slot. It then probes the four cardinal cells adjacent to the
+party using a fixed four-entry offset pair, in the order **south, north, east,
+west** (that is, `(0, +1)`, `(0, -1)`, `(+1, 0)`, `(-1, 0)` with world Y
+increasing southward). Each candidate is first rejected by the shared
+occupancy/NPC classifier for the current floor; a surviving candidate is
+accepted only if its map tile is one of the three horse-sale placement tiles
+`0x44`, `0x45`, or `0x05`. The first accepted candidate wins; probing does not
+continue to compare candidates. If all four probes fail, or if no free object
+slot was found, the shop prints the refusal line and exits without a purchase —
+both failures take the same exit.
+
+There is no display-marker ordinal, no per-marker stock row, and no marker-order
+selector. The probe result supplies a placement *cell* and nothing else.
 
 The local shop instance is already selected by the Talk shop dispatch from the
 current scene. That scene-selected row supplies the stable name, vendor name,
@@ -1009,8 +1196,15 @@ The purchase loop is Y/N driven:
   funds line and exits without placing a horse.
 - On success, the price is deducted, the normal post-transaction surcharge
   helper may run, and a horse-family active-object record is written into the
-  free slot at the accepted adjacent coordinate on the current floor. The local
-  view is then redrawn so the boardable horse is visible.
+  free slot: the base horse tile `0x10` in both the type byte and the frame
+  byte, the accepted probe cell in the coordinate bytes, the party's current
+  floor in the floor byte, and all three auxiliary/animation bytes cleared to
+  zero. The local view is then redrawn so the boardable horse is visible.
+
+The exit path reports one of three outcomes to the shared farewell dispatcher:
+a completed purchase, a short-funds refusal, or a plain decline. The quote text
+is a single deterministic record from the horse-trader cluster (ordinal `104`),
+rendered with the adjusted price substituted in.
 
 This flow is distinct from arms/guild/reagent stock. It does not browse a
 lettered stock table, does not deplete a shop inventory row, and does not write
@@ -1122,10 +1316,13 @@ fixed.
 - Remaining equipment class restrictions and armour defence values are tracked
   by `catalogs/item-list.md` and `formats/data-ovl.md`.
 - Shop-owned transcript clear/append, prompt wait, and cursor-origin behavior
-  is specified in Section 8.A. The remaining frame-identical presentation
-  boundary is caller-owned: the exact rectangle, cursor, colour, and style of
-  the inherited conversation window must come from the Talk/text-window specs
-  that set up window `2` before the shop overlay is called.
+  is specified in Section 8.A, including both side-panel geometries. The
+  inherited conversation window is also settled there: nothing in the analyzed
+  build installs a rectangle, colour, or cursor origin on text window `2`, so
+  it keeps the boot-time descriptor documented in `systems/text-output.md`.
+  What is left is not a shop question at all — it is how the display pipeline
+  composites the viewport and status artwork underneath that full-screen text
+  window, which belongs to the renderer specs.
 
 ## 12. Sources
 
@@ -1163,7 +1360,11 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/SHOPPES3_OVL/0x08B4_inn_menu_dispatch.md` — innkeeper
   pricing, rest recovery, inn registry, and persistent guest-lodging state.
 - `u5-decomp/formats/data-tables.md` — `SHOPPE.DAT` record layout, substitution placeholders, shared bark renderer.
-- `u5-decomp/formats/data-ovl.md` — 128-entry phrase-token dictionary
+- `u5-decomp/formats/data-ovl.md` — 128-entry phrase-token dictionary; the
+  published contents, biases, empty-slot census, and the shop renderer's own
+  spacing rule were re-derived in
+  `u5-decomp/notes/talk_group_retrace_2026-08-22.md` and
+  `u5-decomp/functions/SHOPPES_OVL/0x0026_format_record_with_tokens.md`
   location, byte-range bias, shop-kind trigger table, and SHOPPES2 shipwright
   dispatch correction.
 - `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md` and
@@ -1186,5 +1387,13 @@ The behaviour described here was derived from the private function and format no
 - `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` -- shared
   preamble, initial-greeting, and farewell random-bark record ordinals by
   shop trigger.
-- `u5-decomp/notes/shoppe_window_geometry_call_sweep_2026-05-24.md` --
-  overlay call sweep for shop-owned text-window rectangle and cursor setters.
+- `u5-decomp/notes/shoppe_window_geometry_call_sweep_2026-05-24.md` and
+  `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md` -- overlay call
+  sweep and the later whole-build census of the text-window selector,
+  rectangle, cursor, and colour primitives; the census supersedes the earlier
+  sweep's claim that the inn register was the only shop-owned panel.
+- `u5-decomp/functions/SHOPPES2_OVL/0x0ABC_shipwright_main.md` -- shipwright
+  menu, per-row Frigate/Skiff prices, per-row delivery coordinates, pending
+  acquisition encoding, and the post-sale tail.
+- `u5-decomp/functions/SHOPPES_OVL/0x0F64_arms_sell_inventory.md` -- arms sell
+  browser and its side-panel geometry.

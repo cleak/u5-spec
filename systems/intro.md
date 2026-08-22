@@ -52,9 +52,11 @@ After boot setup, the intro builds the title presentation in ordered phases:
 7. Load and draw the start/menu screen used behind the six menu options.
 
 The intro uses two different graphics-resource families. Screen-panel assets
-such as `STARTSC` and `STORY1` through `STORY6` use the paired `.16`/`.4` LZW
-archive family. `TITLE.BIT`, `BRITISH.BIT`, and `WD.BIT` use the display
-driver's compressed bitmap resource format instead. The intro orchestrates file
+such as `ULTIMA`, `STARTSC` and `STORY1` through `STORY6` use the paired
+`.16`/`.4` packed-4bpp archive family. `TITLE.BIT`, `BRITISH.BIT`, and `WD.BIT`
+are one-bit-per-pixel record archives handled by the driver's silhouette-stamp
+entry. Both families share the same outer LZW envelope with the single
+exception of `WD.BIT`, which ships uncompressed. The intro orchestrates file
 selection, loading, placement, and draw calls; the data formats themselves
 belong to `formats/bit.md`, `formats/tiles.md`, and the display-driver layer.
 
@@ -177,23 +179,91 @@ than accumulating on top of it:
 For a clean renderer, the compatibility rule is: show slot `0`, then replace
 it with slot `1`, then replace that with slot `2`, continuing through slot
 `6`. Clear the prior visible flourish area as needed so earlier slots do not
-remain visible. The completed title flourish is a single coherent `TITLE.BIT`
-slot `6` mark at `(20, 46)`, not seven stacked `ORIGIN SYSTEMS INC` fragments.
+remain visible. The completed title flourish is a single coherent slot `6`
+publisher wordmark at `(20, 46)`, not seven stacked copies of it. The seven
+records are the same artwork at seven sizes, which is exactly why drawing them
+all at once looks like a pile of nested duplicates.
 
-For frame-accurate EGA-style playback, each visible slot is revealed by rows in
-the following source-row groups. Row numbers are relative to that slot's own
-top row, not absolute screen rows. A vertical bar separates presentation
-updates; an empty group is a timing/update step that does not add rows.
+#### Flourish playback: seven frames, seven reveal steps, six erase steps
 
-| Slot | Row reveal groups |
-|---:|---|
-| 0 | empty \| empty \| empty \| `1` \| empty \| empty \| empty \| empty \| `0, 2` \| empty |
-| 1 | empty \| empty \| `1, 5` \| empty \| empty \| `2, 4` \| empty \| empty \| `3` \| empty \| `0, 6` \| empty |
-| 2 | empty \| empty \| `2, 8` \| `3, 7` \| `1, 9` \| `4, 6` \| `5` \| `0, 10` \| empty |
-| 3 | empty \| `4, 15` \| `1, 7, 12, 18` \| `5, 14` \| `2, 8, 11, 17` \| `3, 6, 13, 16` \| `9, 10` \| `0, 19` \| empty |
-| 4 | empty \| `7, 24` \| `2, 12, 19, 29` \| `3, 8, 13, 18, 23, 28` \| `1, 6, 11, 20, 25, 30` \| `4, 9, 14, 17, 22, 27` \| `5, 10, 15, 16, 21, 26` \| `0, 31` \| empty |
-| 5 | empty \| `4, 11, 18, 26, 33, 40` \| `1, 8, 15, 19, 36, 43` \| `6, 13, 20, 24, 31, 38` \| `3, 10, 17, 22, 27, 34, 41` \| `2, 5, 9, 12, 16, 19, 25, 28, 32, 35, 39, 42` \| `7, 14, 21, 23, 30, 37` \| `0, 44` \| empty |
-| 6 | empty \| `28, 23, 18, 13, 8, 3, 32, 37, 42, 47, 52, 57` \| `26, 21, 16, 11, 6, 1, 34, 39, 44, 49, 54, 59` \| `29, 24, 19, 14, 9, 4, 31, 36, 41, 46, 51, 56` \| `27, 22, 17, 12, 7, 2, 33, 38, 43, 48, 53, 58` \| `25, 15, 5, 35, 45, 55` \| `30, 40, 50, 20, 10` \| `0, 60` \| empty |
+The flourish is played by the display driver's animation-script entry, not by
+the title tick. The intro helper stamps the seven marks into the hidden surface,
+switches the render target back to the visible page, and makes exactly one call
+into the driver; the driver then owns the whole flourish until it finishes or a
+keystroke aborts it. The pacing unit is the driver's CPU-calibrated busy wait,
+one wait per presentation step — see `timing.md` section 5.1.
+
+The script is a fixed seven-frame program. Each frame names the hidden source
+row it starts from, the visible destination row its band starts at, and the
+band's height. The source rows and heights repeat the hidden-stack table above;
+the destination rows are the flourish's own vertical drift.
+
+| Frame (`TITLE.BIT` slot) | Hidden source top row | Visible band top row | Band height |
+|---:|---:|---:|---:|
+| 0 | 0 | 75 | 3 |
+| 1 | 3 | 72 | 7 |
+| 2 | 10 | 71 | 11 |
+| 3 | 21 | 66 | 20 |
+| 4 | 41 | 60 | 32 |
+| 5 | 73 | 53 | 45 |
+| 6 | 118 | 46 | 61 |
+
+Each frame carries seven **reveal steps**. A step adds a fixed set of that
+frame's own source rows to the visible set — row numbers are relative to the
+frame's own top row, not to the screen — and then presents. Steps whose set is
+empty are timing-only steps that repaint the same image. The sets are
+cumulative within a frame: step `k` shows the union of the sets from steps `1`
+through `k`.
+
+| Frame | Reveal 1 | Reveal 2 | Reveal 3 | Reveal 4 | Reveal 5 | Reveal 6 | Reveal 7 |
+|---:|---|---|---|---|---|---|---|
+| 0 | `0, 2` | — | — | — | `1` | — | — |
+| 1 | `0, 6` | `3` | — | `2, 4` | — | `1, 5` | — |
+| 2 | `0, 10` | `5` | `4, 6` | `1, 9` | `3, 7` | `2, 8` | — |
+| 3 | `0, 19` | `9, 10` | `3, 6, 13, 16` | `2, 8, 11, 17` | `5, 14` | `1, 7, 12, 18` | `4, 15` |
+| 4 | `0, 31` | `5, 10, 15, 16, 21, 26` | `4, 9, 14, 17, 22, 27` | `1, 6, 11, 20, 25, 30` | `3, 8, 13, 18, 23, 28` | `2, 12, 19, 29` | `7, 24` |
+| 5 | `0, 44` | `7, 14, 21, 23, 30, 37` | `2, 5, 9, 12, 16, 19, 25, 28, 32, 35, 39, 42` | `3, 10, 17, 22, 27, 34, 41` | `6, 13, 20, 24, 31, 38` | `1, 8, 15, 19, 36, 43` | `4, 11, 18, 26, 33, 40` |
+| 6 | `0, 60` | `30, 40, 50, 20, 10` | `25, 15, 5, 35, 45, 55` | `27, 22, 17, 12, 7, 2, 33, 38, 43, 48, 53, 58` | `29, 24, 19, 14, 9, 4, 31, 36, 41, 46, 51, 56` | `26, 21, 16, 11, 6, 1, 34, 39, 44, 49, 54, 59` | `28, 23, 18, 13, 8, 3, 32, 37, 42, 47, 52, 57` |
+
+Between two consecutive frames — that is, after frames `0` through `5`, but not
+after frame `6` — the driver runs six **erase steps** on the frame just shown.
+Erase step `j` removes the rows named in that frame's reveal column
+`8 - j` and presents: erase 1 removes the reveal-7 set, erase 2 removes the
+reveal-6 set, and so on down to erase 6 removing the reveal-2 set. The reveal-1
+set (the frame's top and bottom rows) is never erased; it is discarded when the
+next frame resets the visible set to empty. The flourish therefore runs
+`7 x 7 = 49` reveal steps plus `6 x 6 = 36` erase steps, **85 presentation
+steps in total**.
+
+Two data quirks in the shipped script are part of the contract:
+
+- The reveal sets for frame `5` name source row `19` twice (in reveal 3 and
+  reveal 6) and never name source row `29`. Row `29` of that 45-row mark is
+  therefore blank for the whole of frame `5`.
+- Every other frame's reveal sets partition its rows exactly once.
+
+Each presentation repaints the frame's whole band rather than drawing only the
+newly added rows. The currently visible rows are drawn **packed contiguously
+and centred vertically inside the band**, and the remaining band rows are
+blanked. The fill direction alternates by frame: frames are filled top-down and
+bottom-up on alternating frames, which is why the mark appears to unfold from
+opposite edges as it grows. The visible result is an expanding venetian-blind
+reveal followed by the reverse collapse, not a simple row-by-row wipe.
+
+Rows are copied and blanked at the **full 320-pixel screen width**, not at the
+mark's own width. The band a presentation owns is therefore the inclusive
+rectangle `(0, band top)..(319, band top + height - 1)`, and the mark's
+horizontal position inside it is simply the centred X it was stamped at in the
+hidden surface. A renderer that clips the repaint to the mark's width will
+leave stale pixels beside it.
+
+Because each frame's band is a different rectangle, the erase pass is what
+removes the previous frame's pixels from the rows the next frame does not
+cover. A renderer that skips the erase steps must clear the outgoing band
+before drawing the incoming one.
+
+A keystroke aborts the flourish at the current presentation step; the intro then
+proceeds directly to the overlay draws below.
 
 The EGA baseline is not a normal white-on-black foreground blit. The helper
 stamps 1-bit source pixels into the hidden driver surface, and the animation
@@ -206,12 +276,16 @@ chooses which rows to show.
 
 The remaining title sequence uses four explicit overlay draws:
 
-| Asset | Slot | Top-left X | Top-left Y | Size |
-|---|---:|---:|---:|---|
-| `TITLE.BIT` | 7 | 108 | 140 | 104 x 33 |
-| `TITLE.BIT` | 8 | 152 | 0 | 16 x 15 |
-| `BRITISH.BIT` | 0 | 24 | 66 | 272 x 62 |
-| `TITLE.BIT` | 9 | 104 | 160 | 112 x 33 |
+| Asset | Slot | Top-left X | Top-left Y | Size | Role |
+|---|---:|---:|---:|---|---|
+| `TITLE.BIT` | 7 | 108 | 140 | 104 x 33 | The word "Presents", under the finished publisher wordmark |
+| `TITLE.BIT` | 8 | 152 | 0 | 16 x 15 | The article letter that opens the attribution card |
+| `BRITISH.BIT` | 0 | 24 | 66 | 272 x 62 | The handwritten author signature, middle line of the card |
+| `TITLE.BIT` | 9 | 104 | 160 | 112 x 33 | The word "Production", closing line of the card |
+
+Slots `8`, `BRITISH.BIT` `0` and `9` are the three lines of one attribution
+card and are meant to be seen together. Slot `7` belongs to the preceding
+publisher card and is gone by the time the attribution card is complete.
 
 Their draw order is part of the compatibility contract:
 
@@ -224,18 +298,50 @@ Their draw order is part of the compatibility contract:
 5. Draw `BRITISH.BIT` slot `0` at `(24, 66)`.
 6. Draw `TITLE.BIT` slot `9` at `(104, 160)`.
 
-`BRITISH.BIT` is therefore not a backing image under the live path strokes.
-The path strokes are the animated pen movement; the `BRITISH.BIT` draw happens
-after those strokes and supplies the completed bitmap overlay for the final
-pre-menu title frame. A clean renderer should not draw `BRITISH.BIT` before
-`BRITISH.PTH` and then stroke on top of it.
+#### Two surfaces and whole-page publishes
 
-The final title frame before `STARTSC` is drawn contains the single completed
-`TITLE.BIT` slot `6` flourish at `(20, 46)`, with the lower band replaced by
-the later slot `7` and slot `9` overlays, the small slot `8` overlay at the
-top, and the completed `BRITISH.BIT` overlay over the middle/lower signature
-area. The subsequent `STARTSC` load replaces this title presentation; it is not
-another transparent layer over the final title frame.
+These four overlay draws are not painted straight onto the visible page. Each
+one is stamped into the same hidden surface the flourish used, and the intro
+then publishes the **entire** hidden surface over the **entire** visible page.
+That is the mechanism behind the title sequence's scene changes, and a renderer
+that draws the overlays directly onto the running image will get the wrong
+picture. The precise sequence is:
+
+1. After the flourish returns, clear the hidden surface's lower band from
+   `y = 140` to `y = 199`, stamp `TITLE.BIT` slot `7` at `(108, 140)`, and
+   publish **only the rectangle** `(0, 140)..(319, 199)`. The flourish's slot-6
+   mark, which lives on the visible page above that band, is untouched, so the
+   screen now reads as the finished mark plus the slot-7 line beneath it.
+2. If the flourish was not skipped, hold that image briefly, then poll for a
+   keystroke.
+3. Clear the whole hidden surface, stamp `TITLE.BIT` slot `8` at `(152, 0)`,
+   and publish the whole surface. This is the point at which the title mark and
+   the slot-7 line disappear: the visible page becomes black except for the
+   small slot-8 ornament at the top.
+4. Draw the four `BRITISH.PTH` signature path segments, in order, from pen
+   origins `(68, 44)`, `(94, 64)`, `(78, 143)`, and `(105, 167)`. These strokes
+   are painted **directly onto the visible page**, over the slot-8 ornament, and
+   are not stamped into the hidden surface.
+5. Stamp `BRITISH.BIT` slot `0` at `(24, 66)` into the hidden surface and
+   publish the whole surface. Because the hidden surface still holds only the
+   slot-8 ornament plus the freshly stamped signature bitmap, this publish
+   **replaces** the live pen strokes with the finished signature artwork. The
+   strokes and the bitmap are never both visible.
+6. Stamp `TITLE.BIT` slot `9` at `(104, 160)` into the hidden surface and
+   publish the whole surface again.
+
+`BRITISH.BIT` is therefore not a backing image under the live path strokes, and
+the strokes are not drawn over `BRITISH.BIT`. The strokes are the animation;
+the bitmap is the finished state that supersedes them. A clean renderer should
+not draw `BRITISH.BIT` before `BRITISH.PTH` and then stroke on top of it.
+
+The final title frame before the start/menu screen is drawn therefore contains
+exactly three things: the small `TITLE.BIT` slot `8` ornament at `(152, 0)`, the
+completed `BRITISH.BIT` signature at `(24, 66)`, and `TITLE.BIT` slot `9` at
+`(104, 160)`. It does **not** still contain the slot-6 flourish mark or the
+slot-7 line; those belonged to the earlier presentation and were cleared by the
+whole-page publish in step 3. The subsequent start/menu screen load replaces
+this frame in turn; it is not another transparent layer over it.
 
 Only these semantic title slots are visible. Do not render every decoded
 resource record from `TITLE.BIT` or `BRITISH.BIT` as an independent visible
@@ -243,24 +349,54 @@ sprite, and do not draw the hidden slot `0..6` source stack directly to the
 front page. Their visibility is controlled by the intro call sequence and
 driver presentation rules above.
 
-The start/menu surface is built from `STARTSC` after the title flourish ends
-or is skipped. `STARTSC` is a three-panel screen composition, not pre-rendered
-menu text:
+#### Start/menu screen composition
 
-| `STARTSC` slot | Role | Top-left X | Top-left Y | Size |
-|---:|---|---:|---:|---|
-| 0 | Left side strip | 0 | 0 | 16 x 137 |
-| 1 | Central start/menu backing art | 16 | 0 | 288 x 137 |
-| 2 | Right side strip | 304 | 0 | 16 x 137 |
+The start/menu surface is built from the `ULTIMA` banner archive — the same
+paired `.16`/`.4` family member the boot depth rule resolves for the current
+driver — after the title flourish and signature sequence end or are skipped. It
+is **not** built from `STARTSC`. `STARTSC` is the acknowledgement-screen credits
+card used by the `A` menu path (section 11); it plays no part in the start/menu
+screen.
 
-The loader clears the active intro display/text surface before drawing this
-composition, draws all three panels as one adjacent 320-by-137 upper-screen
-surface, then draws the intro menu text window over the lower portion of the
-screen. The `STARTSC` panels therefore do not themselves contain the six menu
-labels. The box/text-window pass owns the bottom menu area and overwrites any
-pixels it covers; pixels below the 137-pixel panel height are established by
-the preceding clear and by the subsequent text-window drawing, not by hidden
-`STARTSC` artwork.
+The `ULTIMA` archive holds five records:
+
+| `ULTIMA` record | Role | Size |
+|---:|---|---|
+| 0 | "Ultima V" logo banner | 319 x 61 |
+| 1 | Burning subtitle wordmark, animation phase 1 | 288 x 49 |
+| 2 | Burning subtitle wordmark, animation phase 2 | 288 x 49 |
+| 3 | Burning subtitle wordmark, animation phase 3 | 288 x 49 |
+| 4 | Burning subtitle wordmark, animation phase 4 | 288 x 50 |
+
+The loader runs the following sequence:
+
+1. Load the `ULTIMA` archive, retrying until the load reports a nonzero
+   segment. Force the intro scene state.
+2. Select the visible page and clear it.
+3. Select the hidden surface and draw record `0` at `(0, 0)`, opaque, no
+   mirroring and no transparency mask.
+4. Transfer the inclusive rectangle `(0, 0)..(319, 100)` from the hidden surface
+   to the visible page. The animated caller path performs that transfer as a
+   pseudo-random per-pixel dissolve (`display-driver-abi.md` section 9.6); the
+   plain caller path copies the rectangle in one step. There is no per-column
+   wipe on either path. The animated path then samples the keyboard once, and a
+   keystroke downgrades the rest of the loader to the plain path.
+5. Select the hidden surface, clear it, and draw records `1`, `2`, `3`, `4` at
+   `(16, 0)`, `(16, 50)`, `(16, 100)`, `(16, 150)` respectively — opaque, no
+   mirroring, no transparency mask. This lays out the four idle-animation bands
+   the title tick consumes; see section 5.
+6. Release the `ULTIMA` archive.
+7. On the still-animated path only: load `WD.BIT`, run the driver's
+   subtitle ignition transition with it, then release it. On the plain path this
+   step is skipped entirely.
+8. Select the visible page, run one title tick, and clear the intro text window
+   so the menu frame and labels can be drawn over the lower screen.
+
+The finished start/menu screen is therefore the `ULTIMA` record-0 logo occupying
+rows `0..60`, the animated subtitle band at rows `65..113`, and the intro menu
+text window below. The archive records do not contain the six menu labels; the
+box/text-window pass in section 6 owns the bottom area and overwrites whatever
+it covers.
 
 ## 4. `BRITISH.PTH` signature animation
 
@@ -282,12 +418,16 @@ schedules, or the world clock.
 The wall-clock cadence for every visible intro animation phase is specified
 in `timing.md` section 5; this section gives the per-phase behaviour and
 defers the unit, the catch-up policy, and the slow-CPU-gate handling to that
-document. The unit is one DOS BIOS user-tick (approximately 54.945 ms at the
-standard 18.2065 Hz rate), and the title-tick helper has that one-tick wait
-built into its body. The `TITLE.BIT` flourish, the `BRITISH.PTH` signature,
-the `STARTSC` reveal, the story step-1 reveal, and the menu idle pump all
-inherit that same unit through their reliance on the title-tick helper or on
-a direct hardware-tick wait.
+document. The title tick's own unit is one DOS BIOS user-tick (approximately
+54.945 ms at the standard 18.2065 Hz rate), and the title-tick helper has that
+one-tick wait built into its body. The `BRITISH.PTH` signature and the menu
+idle pump inherit that unit.
+
+The `TITLE.BIT` flourish does **not**. It is played entirely inside the display
+driver's animation-script entry and is paced by that entry's CPU-calibrated
+busy wait, one wait per presentation step, with no BIOS-tick involvement at
+all. Any statement that the flourish advances one reveal group per title-tick
+call, or that it runs at 18.2 Hz, is wrong. See `timing.md` section 5.1.
 
 The title tick advances only at explicit intro/display call sites. The Lord
 British signature path itself is paced by keyboard polling and real-time delay
@@ -295,7 +435,7 @@ ticks while it draws the path stream; those delay ticks do not advance the
 four-frame title strip. A keypress stops the remaining signature strokes and
 proceeds to the start/menu view; it does not skip boot setup or menu rendering.
 
-Once `STARTSC` has been drawn, the start-screen loader runs one clear-carry
+Once the start/menu screen has been drawn, the loader runs one clear-carry
 title tick before it redraws the lower intro text window and before the menu
 labels are rendered. The finished menu then polls input in a bounded idle loop:
 each no-key poll pass runs one clear-carry title tick, then polls again. If
@@ -310,50 +450,68 @@ small four-frame counter. A modern renderer can implement the same visible
 contract as a four-frame loop tied to the intro menu's idle cadence.
 
 For the EGA-compatible baseline, one clear-carry title tick draws the current
-driver-local frame strip over the title/start screen at pixel `(0, 65)` with
-size `320 x 49`, then advances the driver-local frame index modulo four. The
-covered destination rows are `65..113` inclusive and the covered columns are
-`0..319` inclusive. The first frame after driver initialisation is frame `0`;
-the frame index is not reset merely because `STARTSC` is redrawn, a menu row is
+frame strip over the start/menu screen at pixel `(0, 65)` with size
+`320 x 49`, then advances the frame index modulo four. The covered destination
+rows are `65..113` inclusive and the covered columns are `0..319` inclusive.
+The first frame after driver initialisation is frame `0`; the frame index is
+not reset merely because the start/menu screen is redrawn, a menu row is
 re-highlighted, or a non-play submenu returns.
 
-The source pixels are not in `TITLE.BIT`, `BRITISH.BIT`, `STARTSC`, or another
-external art file; they are produced at runtime by the loaded display driver.
-In the EGA driver, the tick reads its source from the driver's own back-buffer
-region of EGA video memory, treating it as four 320-pixel-wide frame bands
-with a 50-row source stride and copying the upper 49 rows of the selected
-band into the destination rectangle. The back-buffer holding those bands is
-populated by other display-driver entries earlier in the intro setup, not by
-an external asset file that a clean engine can parse.
+#### The four frames are shipped art, not driver-internal pixels
 
-Because the source pixels live in video memory rather than at any fixed byte
-offset inside `EGA.DRV` itself, a clean engine cannot extract the four bands
-by reading the driver file as a passive data container. There is no stable
-"title-tick frame offset" to publish: scanning the driver image for a 1-bit
-silhouette region, a 4-bit-planar block, or a contiguous bitmap will not find
-the original frames, and any heuristic that appears to succeed on one driver
-revision is necessarily a coincidence. A clean engine that wants the original
-title-tick visuals must either run the original driver binary against the
-real hardware path or load user-captured PNG frames of the bands; a clean
-engine that does not need exact visual parity should provide independently
-authored replacement frames in the active EGA-compatible palette as the
-default cleanroom asset for this overlay. The `U5_EGA_DRV_TITLE_TICK_OFFSET`
-style of locator-from-driver-file approach is not implementable against this
-contract.
+Earlier revisions of this section said the frame pixels are produced at runtime
+by the display driver, that no external asset contains them, and that a clean
+engine must author replacement art. **That was wrong and is withdrawn.**
 
-A cleanroom renderer that does not use the original driver binaries should
-treat the tick as an intro-only four-frame overlay in that rectangle,
-preserving the cadence and destination even if the replacement frames are
-independently authored.
+The frames are records `1`, `2`, `3` and `4` of the `ULTIMA` banner archive —
+the same paired `.16`/`.4` file the start/menu loader has already opened. They
+are ordinary packed-4bpp records in the family described by `formats/tiles.md`:
 
-The public v1 replacement target is deterministic and opaque. A clean
-implementation should provide four independently authored frames, advance one
-frame per title-tick call, wrap modulo four, and overwrite the entire
-`(0, 65)` `320 x 49` rectangle on every tick. There is no transparency key for
-this overlay: black replacement pixels are still drawn as black pixels and
-replace what was previously under them. A static placeholder can be useful
-during development, but it is a lower-fidelity fallback rather than the
-specified title/menu idle animation.
+| `ULTIMA` record | Size | Role |
+|---:|---|---|
+| 1 | 288 x 49 | Idle frame `0` |
+| 2 | 288 x 49 | Idle frame `1` |
+| 3 | 288 x 49 | Idle frame `2` |
+| 4 | 288 x 50 | Idle frame `3`; only its upper 49 rows are ever shown |
+
+The reason the pixels appear to come from nowhere is the staging step. Before
+the menu is drawn, the loader clears the driver's hidden surface and draws
+those four records into it at `(16, 0)`, `(16, 50)`, `(16, 100)` and
+`(16, 150)` — a 50-row band pitch. The tick then copies the **full 320-pixel
+width** of 49 rows starting at hidden row `50 x frame_index` onto visible rows
+`65..113`. Because the art is 288 pixels wide and drawn at `x = 16`, the
+16 columns at each end of every band come from the clear, not from the art, and
+are therefore background-coloured.
+
+A clean engine has two equivalent ways to satisfy this contract:
+
+1. **Direct.** Decode `ULTIMA` records `1..4`, composite each one onto a
+   `320 x 49` background-filled canvas at `x = 16` (records `1..3` use all 49
+   rows; record `4` contributes its first 49 rows), and blit the selected canvas
+   to `(0, 65)` on each tick.
+2. **Faithful.** Reproduce the staging surface literally: a `320 x 200`
+   offscreen buffer, cleared, with the four records drawn at the band origins
+   above, and a tick that copies rows `50 x frame_index .. 50 x frame_index + 48`
+   at full width to visible rows `65..113`.
+
+Both produce identical pixels. No authored replacement art, no driver-binary
+reuse, and no captured screenshots are required, and there is no
+"title-tick frame offset" inside the driver file to locate — the earlier
+suggestion of a locator-from-driver-file approach was based on the withdrawn
+claim and should be removed from any implementation.
+
+The tick is still an opaque full-rectangle overwrite. Every tick replaces all
+`320 x 49` pixels of the destination, including background-coloured ones. There
+is no transparency key, no alpha, no mask, no scaling, no cropping and no
+dithering, and the tick never preserves what was previously inside the
+rectangle. Where issue `#52` described this overlay as a sparse overlay that
+leaves surrounding pixels alone, that description is superseded: the surrounding
+pixels inside the rectangle are overwritten with the band's background, and only
+pixels outside the rectangle are preserved.
+
+A static placeholder can be useful during development, but it is a
+lower-fidelity fallback rather than the specified idle animation, and it is no
+longer necessary now that the source records are identified.
 
 Frame-perfect replacement behaviour can be implemented as:
 
@@ -361,29 +519,34 @@ Frame-perfect replacement behaviour can be implemented as:
 state title_frame = 0        ; initialised when the intro renderer/driver is created
 
 clear_carry_title_tick():
-    draw replacement_frame[title_frame] to pixels x=0..319, y=65..113
+    draw idle_frame[title_frame] to pixels x=0..319, y=65..113
     title_frame = (title_frame + 1) mod 4
 ```
 
-The replacement frames must use the active 16-colour EGA-compatible palette
-indices directly. Do not alpha-blend, scale, dither against the previous
-screen, or treat any palette index as transparent. If a replacement frame
-contains palette index `0`, those pixels overwrite the destination as black.
+The frames use the active 16-colour EGA-compatible palette indices directly.
+Do not alpha-blend, scale, dither against the previous screen, or treat any
+palette index as transparent. Palette index `0` pixels overwrite the
+destination as black.
 
-The carry-set title helper used by some start-screen transition code is not the
-public frame-advance operation. Only the clear-carry title tick above advances
-the four-frame idle strip in the public intro/menu contract.
+The carry-set title helper is a different operation and is not the public
+frame-advance. It takes a loaded one-bit-per-pixel resource as its argument and
+plays the subtitle ignition transition described in section 3: it saves the
+hidden surface, clears it, runs a pseudo-random pixel reveal that interleaves
+idle-strip steps with a percussive sound effect, and then restores the hidden
+surface. Its only intro caller passes `WD.BIT`, and it runs exactly once, on
+the animated start/menu path. Only the clear-carry title tick advances the
+four-frame idle strip.
 
 The menu and message timing rules are:
 
 | Situation | Title-strip advancement |
 |---|---|
 | Signature path drawing `BRITISH.PTH` | No title-strip advancement from the signature delay/poll steps. |
-| Plain `STARTSC` load or redraw | One clear-carry title tick before the lower intro text window and menu labels are redrawn. |
+| Plain start/menu screen load or redraw | One clear-carry title tick before the lower intro text window and menu labels are redrawn. |
 | Finished menu idle, no key returned | One clear-carry title tick for each no-key poll pass, up to the two-hundred-pass Return-to-View timeout. |
 | Valid menu key returned | No extra idle tick for that key pass; dispatch begins immediately. |
 | Invalid key returned | No extra idle tick for that key pass; the menu is re-rendered and resumes polling. |
-| Empty-save / no-active-game message | No autonomous title ticks while the message is waiting; the following menu redraw performs the ordinary one-tick `STARTSC` path. |
+| Empty-save / no-active-game message | No autonomous title ticks while the message is waiting; the following menu redraw performs the ordinary one-tick start/menu path. |
 | Return from story, transfer, chargen, acknowledgement, or Return-to-View | No background ticking while the subflow owns the screen. Ticking resumes only at explicit transition/title-tick calls and then in the menu idle loop. |
 
 Return-to-View is the exception among subflows in that its own per-frame
@@ -438,7 +601,7 @@ row; the intro then issues two short horizontal fills below that rule to
 finish the underline detail.
 
 The frame does not clear the interior cells. The preceding intro display
-clear, the `STARTSC` paint, and the title tick are the steps that establish
+clear, the start/menu screen paint, and the title tick are the steps that establish
 the interior pixels; the frame's job is the border and underline, not the
 fill.
 
@@ -452,7 +615,8 @@ through the entire intro menu lifetime.
 ### 6.2 Menu labels
 
 The menu labels are rendered as fixed-cell text inside the intro menu window,
-after `STARTSC` and the lower window frame have been drawn. The labels appear
+after the start/menu screen and the lower window frame have been drawn. The
+labels appear
 in this order and at these text-cell origins:
 
 | Row | Key | Label | Text-cell origin |
@@ -515,7 +679,7 @@ The file roles, empty-save guard, object-overlay mirror writes, and disk-swap se
 The empty-save message is written into the current intro text window after the
 failed load check, then the path waits for one keypress and returns to the
 intro menu loop. It does not start a gameplay mode, does not tick world time,
-and does not require a fresh `STARTSC` art load before the menu labels are
+and does not require a fresh start/menu art load before the menu labels are
 repainted by the normal menu loop.
 
 ## 8. Create New Character (`C`)
@@ -573,29 +737,47 @@ file changes only at fixed step boundaries:
 | 11-12 | `STORY5.16` |
 | 13-20 | `STORY6.16` |
 
-Each normal step follows the same pattern:
+Each step is composed on the hidden surface and revealed as one whole page
+after the wait, which is why a keypress appears to swap the slide instantly.
+The per-step order is:
 
 1. Ensure the story-art file for the current step is loaded, reloading only
    when the fixed step boundary changes the file.
-2. Select the story-art subimage and placement for this narrative step.
-3. Load or select the corresponding story text.
-4. Draw the panel through the screen-art renderer.
-5. Render the narrative text through the proportional-font renderer.
-6. Wait for the player to advance, except for the automatic opening step.
-7. Run any local display effect tagged to that step: transition-strip art, the step-1 rectangle transition, or secondary story art.
+2. Select the hidden surface and clear it. Every step therefore starts from a
+   blank page; no part of the previous step survives.
+3. If the step is a transition-strip step, draw its two `TEXT.16` records
+   first.
+4. Draw the step's primary story-art record at its fixed placement.
+5. If the step has a secondary story-art pass, draw that record.
+6. Publish the step's paragraph-box parameters (margins, band bounds, and the
+   starting pen position) to the proportional renderer.
+7. Render the step's narrative text through the proportional-font renderer:
+   either the `STORY.DAT` record selected for this step, or — for step 6 only
+   — the two inline doorway lines specified in section 10.1.
+8. Except for step 0, flush the keyboard type-ahead buffer once and then wait
+   until a key is returned.
+9. Transfer the whole hidden surface to the visible page. This is the moment
+   the step becomes visible.
+10. Run any post-reveal effect tagged to that step (only step 1 has one).
 
-Step 0 is an automatic opening transition: it consumes the first story text
-record and advances into the rest of the sequence without waiting for input.
-Steps 1 through 20 wait until the keyboard poll returns a non-zero key. This
-wait is local to the intro; it does not run gameplay world ticks, NPC
-schedules, active-object animation, or the saved-game clock.
+Step 0 is an automatic opening transition: it renders its text and is revealed
+immediately, without waiting for input. Steps 1 through 20 wait until the
+keyboard poll returns a non-zero key. Because the reveal happens *after* the
+wait, the key that dismisses step `n - 1` is the key that presents step `n`;
+after step 20 is presented, one further keypress ends the sequence. This wait
+is local to the intro; it does not run gameplay world ticks, NPC schedules,
+active-object animation, the title tick, or the saved-game clock, and nothing
+on the visible page changes while it is pending.
 
 The shipped `STORY.DAT` file supplies twenty non-empty text records. The intro
 sequence has one additional visual step: step 6 uses two inline
-doorway-transition lines owned by the intro code instead of consuming a
-`STORY.DAT` record. Every other step consumes the next `STORY.DAT` record in
-sequence and uses the same paragraph conventions as other proportional-font
-narrative screens.
+doorway-transition lines owned by the intro code instead of reading a
+`STORY.DAT` record. Every other step reads the record selected for it and uses
+the same paragraph conventions as other proportional-font narrative screens.
+Story text is addressed by a **fixed per-step record selection**, not by a
+running cursor: each text-consuming step names its own record independently, so
+step 6's lack of a read cannot desynchronise step 7 and an implementation needs
+no record-index bookkeeping at all. See `formats/story-dat.md`.
 
 Primary story-art placement uses 320-by-200 pixel coordinates with the origin
 at the upper-left corner. The following table records the story-art subimage
@@ -632,47 +814,111 @@ Special transition steps use the following additional draws and text sources:
 |---|---|
 | 0, 7, 14 | Draw two `TEXT.16` transition subimages before the story-art draw. Step 0 uses transition subimages 0 and 1 at `(224, 30)` and `(168, 58)`. Step 7 uses transition subimages 0 and 2 at `(232, 26)` and `(200, 54)`. Step 14 uses transition subimages 0 and 3 at `(184, 0)` and `(248, 0)`. |
 | 1 | After the step's key wait, draw `STORY1.16` subimage 2 at `(40, 86)` and run a local rectangular transition over the inclusive region from `(40, 86)` to `(75, 120)`. |
-| 6 | Draw an additional `STORY2.16` subimage 3 at `(96, 39)` and render two inline doorway-transition text lines instead of reading a `STORY.DAT` record. |
+| 6 | Draw an additional `STORY2.16` subimage 3 at `(96, 39)` and render two inline doorway-transition text lines instead of reading a `STORY.DAT` record. Fully specified in section 10.1. |
 | 15, 20 | Draw a second `STORY6.16` subimage 3 at the same X coordinate and 55 pixels below the primary story-art Y coordinate. |
 | 16, 18 | Draw a second `STORY6.16` subimage 5 at the same X coordinate and 55 pixels below the primary story-art Y coordinate. |
 | 17, 19 | Draw a second `STORY6.16` subimage 7 at the same X coordinate and 55 pixels below the primary story-art Y coordinate. |
 
 The transition effects are local to the story loop and do not advance gameplay
-time. Steps 0, 7, and 14 are static transition-strip pre-draws before the
-primary story art. Step 1 is the only confirmed rectangular transition: after
-the player advances that step, the extra `STORY1.16` art is drawn at `(40, 86)`
-and the intro runs a left-to-right column reveal over the inclusive rectangle
-`(40, 86)..(75, 120)`. The reveal is 36 title ticks long: one pixel column is
-made visible per tick, starting at `x = 40` and ending at `x = 75`. Previously
-revealed columns remain visible, unrevealed columns retain the previous screen
-contents, and the effect does not dither, blend, or recolour the panel. The
-player-input gate is the wait before the transition; once the reveal starts,
-the transition is a blocking local visual effect.
+time. Steps 0, 7, and 14 are static transition-strip pre-draws that happen
+before the primary story art, on the hidden surface, inside the same
+composition pass as everything else on that step; they are not animated
+transitions. The secondary art passes for steps 15 through 20 are likewise
+ordinary draws in the same composition pass, not post-reveal effects.
 
-No wider intro story-page rectangle/rate table is part of this baseline. A
-focused caller sweep of the intro slide loop identifies the step-1 case as the
-only column-wipe rectangle in that twenty-one-step story sequence. Steps 0, 7,
-and 14 are pre-drawn transition-strip art, not column-wipe rectangles, and the
-secondary art passes for steps 15 through 20 are direct draws after the step
-waits. A separate start/menu-screen loader also uses a rectangle helper, but it
-belongs to start-screen presentation rather than to a step-2 or later story-page
-transition table. If later evidence identifies additional story-page callers of
-the same rectangle helper, specify their bounds and rates per caller instead of
-inheriting the step-1 bounds by default.
+Step 1 is the only step with a post-reveal effect, and it is **not** a column
+wipe. Earlier revisions of this document described it as a left-to-right,
+one-pixel-column-per-title-tick reveal 36 ticks long; that is withdrawn. After
+step 1 has been presented, the intro selects the hidden surface again, draws
+`STORY1.16` subimage 2 at `(40, 86)`, and transfers the inclusive rectangle
+`(40, 86)..(75, 120)` to the visible page with the driver's pseudo-random
+per-pixel dissolve (`display-driver-abi.md` section 9.6), invoked once and
+self-paced. Every pixel in the rectangle is visited exactly once, the rectangle
+matches the hidden surface when the call returns, pixels outside it are
+untouched, and the effect does not dither, blend, or recolour the panel. The
+player-input gate is the wait before the transition; once the dissolve starts
+it runs to completion as a blocking local effect.
 
-The start/menu-screen loader's separate rectangle use is optional and
-caller-selected. It first loads and directly draws the `STARTSC` art, then, only
-when the caller requests the animated path, reveals the inclusive pixel
-rectangle `(0, 0)..(319, 100)` with the same left-to-right, one-pixel-column per
-title-tick helper used by story step 1. The reveal is therefore 320 title ticks
-long when enabled, copying columns `x = 0` through `x = 319` in order.
-Unrevealed columns retain the prior screen contents until their column is
-copied. The loader polls input only after this rectangle pass has completed;
-that poll can affect the following start-screen prompt/continuation path, but
-it does not interrupt the reveal itself. Ordinary direct `STARTSC` loads skip
-this rectangle pass. Fixed `END.DAT` and other ordinary bitmap-window callers
-do not inherit the start-screen reveal contract; their clear, page-in, border
-redraw, and wait timing remain caller-owned presentation details.
+No wider intro story-page transition table is part of this baseline. A caller
+sweep of the story loop finds exactly one post-reveal effect — the step-1
+dissolve above. Every other step's visual work is a plain
+compose-then-reveal.
+
+The start/menu-screen loader's separate reveal is optional and caller-selected,
+and it is **not** a column wipe. Earlier revisions of this document described it
+as a left-to-right, one-pixel-column-per-title-tick pass 320 ticks long; that is
+withdrawn. The loader draws the `ULTIMA` banner record into the hidden surface
+and then, only when the caller requests the animated path, transfers the
+inclusive pixel rectangle `(0, 0)..(319, 100)` to the visible page with the
+driver's pseudo-random per-pixel dissolve (`display-driver-abi.md` section 9.6),
+invoked once and self-paced. Every pixel in the rectangle is visited exactly
+once and the rectangle matches the hidden surface when the call returns; pixels
+outside the rectangle are untouched. The loader polls input only after the
+transfer completes; that poll can downgrade the rest of the loader to the plain
+path, but it does not interrupt the transfer itself. The plain caller path
+copies the same rectangle in one step with no animation. Fixed `END.DAT` and
+other ordinary bitmap-window callers do not inherit this contract; their clear,
+page-in, border redraw, and wait timing remain caller-owned presentation
+details.
+
+### 10.1 Step 6: the inline doorway lines
+
+Step 6 is the one step whose narrative text is not a `STORY.DAT` record. Its
+full contract:
+
+**Text.** Two lines, each a single plain sentence, rendered in this order:
+
+1. `Instantly, a shimmering blue door springs up!`
+2. `With heart beating rapidly, you step into it.`
+
+Both are 44 characters long. Neither contains a paragraph-indent brace, a
+soft-hyphen underscore, a line feed, or any other renderer marker; each is
+ordinary text terminated by a NUL. An implementation must not add the markers
+that `STORY.DAT` records carry, and the renderer's brace and underscore
+handling never fires on this step.
+
+**Renderer.** The same proportional-font paragraph renderer used for ordinary
+story records (`text-output.md`), not a fixed-cell text window and not a
+special two-line overlay primitive. Each line is issued as its own complete
+paragraph.
+
+**Placement.** Step 6 publishes the ordinary paragraph-box parameters for its
+step before the first line: left margin `0`, right margin `320`, and vertical
+band bounds that never select the alternate margin pair, so both lines have the
+full screen width available. Line 1 starts at the step's ordinary pen origin
+`(32, 9)`. Between the two lines the intro re-issues the **same left origin,
+`x = 32`**, with the vertical origin pinned to pixel row `180`, so line 2 starts
+at `(32, 180)`. The two lines therefore sit near the top and near the bottom of
+the screen with the doorway art between them. The renderer's line advance does
+not apply across the two lines: they are placed by explicit origins. Neither
+line is justified, because each ends at its terminator rather than at a wrap.
+
+**Draw order.** Within the step's single composition pass on the hidden
+surface: the primary `STORY2.16` subimage 2 at `(72, 38)` first, then the extra
+`STORY2.16` subimage 3 at `(96, 39)`, then line 1, then line 2. The extra
+subimage is drawn **before** the text, so text may overlay it but never the
+reverse. There is no text-band clear between the primary art, the extra art,
+and the lines; the only clear is the whole-page clear at the start of the step,
+which is also why no earlier step's text is still visible.
+
+**Colour and shadow.** The lines use the same colour and glyph treatment as
+every other story page. The renderer has no shadow, outline, or per-caller
+colour override.
+
+**Record bookkeeping.** Step 6 performs no `STORY.DAT` read of any kind.
+Because story text is addressed by fixed per-step record selection rather than
+by a running cursor, this leaves nothing to adjust for step 7 and no index
+state for an implementation to track.
+
+**Advance.** After the two lines are rendered, step 6 takes the ordinary
+non-automatic path: flush the keyboard type-ahead buffer, wait for any key,
+then present the page. There is no extra delay, no additional transition, and
+no post-reveal effect on this step.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+
+### 10.2 Boundaries
 
 The slide loop does not mutate gameplay state, does not create a save, and does not select a gameplay scene. Its only persistent effect is that, when it returns, the intro reloads or redraws the start/menu view so the six-option menu can continue.
 
@@ -682,9 +928,113 @@ The screen-panel asset container is specified in `formats/tiles.md`. The proport
 
 `A` displays the acknowledgement/credits screen and then returns to the intro menu. It uses the same already-initialised display and text systems as the title and story paths. The acknowledgement path is self-contained: it does not read or write the save image, does not change the gameplay scene, and does not exit the program.
 
-The acknowledgement screen loads its own graphics resource from the end-screen asset family, draws the credits artwork at a fixed position, and presents it through a pair of animated wipe transitions. The entry wipe reveals the credits from the bottom of the screen upward by copying successive horizontal slabs with a fixed pixel stride. After the credits are fully visible, the screen waits for a keypress. The exit wipe reverses the direction, wiping the credits artwork away from top to bottom. After the exit wipe, the acknowledgements handler reloads the start/menu screen and redraws the menu.
+### 11.1 The acknowledgement page is artwork, not text
+
+The acknowledgement screen is a **pre-rendered image page**. Its credit lines
+are drawn into the bitmap; the handler never selects a font, never sets a text
+rectangle, never emits a printable character, and never changes a palette or
+text attribute. There is consequently no font path, no per-line layout, no
+text colour or inverse behaviour, no pagination, and no per-page input rule to
+specify. An implementation reproduces this screen by drawing the shipped
+artwork; it must not attempt to typeset the credits from strings.
+
+The page comes from the `STARTSC` archive — the paired `.16`/`.4` screen-panel
+family member the boot depth rule resolves for the current driver. Earlier
+revisions of this document attributed `STARTSC` to the start/menu screen and
+sourced the credits from the end-screen family; both were wrong. The
+start/menu screen is built from the `ULTIMA` banner archive (section 3), and
+`STARTSC` is used by nothing except this path.
+
+`STARTSC` holds three records:
+
+| `STARTSC` record | Role | Size |
+|---:|---|---|
+| 0 | Left ornamental pillar | 16 x 137 |
+| 1 | Credits page (all credit text is part of the artwork) | 288 x 137 |
+| 2 | Right ornamental pillar (mirror of record 0) | 16 x 137 |
+
+Assembled, the three records form one 320-by-137 band whose top row is `63`,
+so the finished page occupies rows `63..199` — the whole screen below the
+`ULTIMA` logo band. Record 1 sits at `(16, 63)`, record 0 finishes at
+`(0, 63)`, record 2 finishes at `(304, 63)`.
+
+### 11.2 Presentation sequence
+
+All draws below use 320-by-200 pixel coordinates with the origin at the
+upper-left corner. "Hidden surface" and "visible page" are the two surfaces of
+the display-driver model in `display-driver-abi.md`.
+
+1. Load the `STARTSC` archive, retrying until the load reports a nonzero
+   segment.
+2. Select the hidden surface and draw record `1` at `(16, 63)`, opaque. The
+   credits page is composed off-screen; nothing is visible yet.
+3. Select the visible page. Everything from here draws directly to it.
+4. **Rise phase.** For `y` from `199` down to `63` inclusive, one pixel per
+   step, draw record `0` at `(144, y)` and record `2` at `(160, y)`. The two
+   pillars climb the centre of the screen from the bottom edge and come to
+   rest side by side occupying columns `144..175` at rows `63..199`.
+5. **Part phase.** For `k = 0, 8, 16, ... 136` (eighteen steps):
+   1. draw record `0` at `(136 - k, 63)`;
+   2. copy the inclusive rectangle `(152 - k, 63)..(159 - k, 199)` from the
+      hidden surface to the visible page;
+   3. draw record `2` at `(168 + k, 63)`;
+   4. copy the inclusive rectangle `(160 + k, 63)..(167 + k, 199)` from the
+      hidden surface to the visible page;
+   5. wait one presentation beat.
+
+   The pillars walk outward to `(0, 63)` and `(304, 63)` while two
+   eight-pixel-wide bands expand from the screen centre and publish the
+   credits page column by column. The last step's bands are `16..23` and
+   `296..303`, which exactly meet the resting pillars, so the completed band
+   is contiguous.
+6. Rebuild the menu screen on the hidden surface while the credits are still
+   displayed: load the `ULTIMA` archive, select the hidden surface, clear it,
+   draw `ULTIMA` record `1` at `(16, 65)` (the first subtitle animation
+   phase), release the archive, draw the lower intro text-window frame
+   (section 6.1), and render the six menu labels with the Acknowledgements row
+   highlighted (section 6.2).
+7. Poll the keyboard until any key is returned. **Any key advances; `Esc` has
+   no special meaning here.** There is no timeout, no timed auto-advance, and
+   no second page.
+8. Select the visible page. **Close phase**, the mirror of step 5. For
+   `k = 136, 128, ... 8, 0` (eighteen steps): draw record `0` at
+   `(144 - k, 63)`; copy `(136 - k, 63)..(143 - k, 199)` from the hidden
+   surface; draw record `2` at `(160 + k, 63)`; copy
+   `(176 + k, 63)..(183 + k, 199)` from the hidden surface; wait one
+   presentation beat. The pillars walk back to the centre while the rebuilt
+   menu screen is published from the outside inward.
+9. Release the `STARTSC` archive.
+10. **Sink phase.** For `y` from `63` to `198` inclusive, one pixel per step,
+    draw record `0` at `(144, y + 1)` and record `2` at `(160, y + 1)`, then
+    copy the single-row inclusive rectangle `(144, y)..(175, y)` from the
+    hidden surface to the visible page. Finish with one more single-row copy
+    of `(144, 199)..(175, 199)`. The two pillars slide off the bottom of the
+    screen and the last centre column of the menu screen is published behind
+    them.
+11. Rebuild the four subtitle animation bands on the hidden surface exactly as
+    the start/menu loader does (section 3, step 5): clear the hidden surface
+    and draw `ULTIMA` records `1`, `2`, `3`, `4` at `(16, 0)`, `(16, 50)`,
+    `(16, 100)` and `(16, 150)`.
+12. Select the visible page, flush the keyboard type-ahead buffer, and return
+    to the menu poll loop.
+
+### 11.3 Backing-surface contract
+
+No pixel above row `63` is written on either surface at any point in this
+path. The `ULTIMA` logo occupying rows `0..60` of the visible page is simply
+never touched, so it remains on screen throughout the credits. Rows `63..199`
+are overwritten by the credits band and then rebuilt from the hidden surface;
+nothing of the previous menu screen is saved or restored. The hidden surface
+is repurposed twice — first for the credits page, then for the rebuilt menu
+screen — and is finally left holding the subtitle animation atlas, which is
+what the title tick expects to find (section 5).
 
 After the acknowledgement screen finishes, the intro returns to its menu loop with intro state still active. A later `J`, `C`, or `T` selection is required to leave the intro.
+
+Source provenance: derived from private analysis notes
+`../u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`,
+`../u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, and
+`../u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`.
 
 ## 12. Return to View (`R`)
 
@@ -704,10 +1054,52 @@ continues. This snapshot is presentation-only; no save state or gameplay mode
 is entered.
 
 Each map-strip transition selects one of four 4-column by 19-row preview
-sections and renders a centered chapter caption above it. Captions are derived
-from the strip index: strip 0 is The Summoning, strip 1 is The Journey, strip 2
-is The Arrival, and strip 3 is The Welcoming. The command stream does not carry
-a separate caption opcode or inline caption text. Command `0x06` loads the
+sections and renders a centered chapter caption. The command stream does not
+carry a separate caption opcode or inline caption text; the caption is a fixed
+function of the strip index. The exact strings, including capitalization and
+the absence of trailing punctuation, are:
+
+| Strip index | Caption |
+|---:|---|
+| `0` | `The Summoning` |
+| `1` | `The Journey` |
+| `2` | `The Arrival` |
+| `3` | `The Welcoming` |
+
+### 12.1 The centered-caption helper
+
+The caption does **not** use the proportional font or the proportional
+paragraph renderer of `systems/text-output.md` section 8. It uses the ordinary
+**fixed-cell** text printer, through the same helper that draws the
+title-screen credit line, so the two share one geometry:
+
+- Let `len` be the caption length in characters. The starting text column is
+  `18 - floor(len / 2)`, and the helper also computes an end column
+  `start_col + len + 2`. The division truncates, so odd lengths sit half a cell
+  left of true centre.
+- Centering is **horizontal only**. The caption row is the fixed text row `24`;
+  there is no vertical centering inside a caption band and no configurable
+  caption rectangle.
+- Before the text, two filled rectangles are drawn in the first configured
+  chrome colour: one spanning `x = 8` to `start_col * 8` and one spanning
+  `x = end_col * 8` to `x = 311`, both covering `y = 193` through `y = 199`.
+  These are the horizontal rules that flank the caption.
+- Then, in the second configured chrome colour, two single-pixel rows at
+  `y = 192` over the same two horizontal spans.
+- Then the cursor is placed at column `start_col`, row `24`, the shared
+  text-window top border chrome is drawn, the caption is printed with the
+  ordinary string printer, and the bottom border chrome is drawn.
+
+There is no shadow pass, so nothing about shadow pixels affects centering.
+Because the caption is printed by the fixed-cell printer it uses that printer's
+active window colour, not a caption-specific attribute.
+
+**Draw order.** The caption is emitted by the strip-load helper at the very
+start of a chapter transition: caption first, then the 4-by-19 strip is copied
+into the preview buffers, then the strip-animation state is reset. It therefore
+precedes every per-frame tick of that chapter, including the per-frame title
+tick and the preview actor/tile overlay. The caption is not redrawn per frame;
+it persists until something else paints over that row. Command `0x06` loads the
 selected 4-by-19 strip into the preview buffers as one script action; the public
 clean contract does not require a middle-row outward reveal mask. Static terrain
 cells are copied into the active 32-by-32 preview tile planes, while moving
@@ -783,14 +1175,23 @@ historical-renderer parity work.
   Remaining parity work is limited to independently traced non-story intro
   presentation helpers or endgame display helpers, not an inferred story-page
   table.
-- **Acknowledgement screen content.** The acknowledgement branch is identified
-  as a self-contained intro submenu. Its exact text and pagination are left to
-  a source-free content transcription rather than copied binary text dumps.
-- **Title tick replacement art.** The EGA baseline destination rectangle,
-  four-frame cadence, and driver-local ownership are known. The original frame
-  pixels live inside the historical display driver rather than an external
-  asset; a modern cleanroom renderer needs independently authored replacement
-  frames if exact driver binary reuse is out of scope.
+- **Acknowledgement screen content.** Closed. The acknowledgement page is a
+  pre-rendered three-record image band, not typeset text, so there is no text
+  transcription, font path, or pagination to publish. Its asset, record sizes,
+  placement, four-phase wipe geometry, input rule, and backing-surface
+  behaviour are specified in section 11.
+- **Title tick art.** Closed. The destination rectangle, four-frame cadence,
+  staging layout, and source records are all specified in section 5: the frames
+  are records `1..4` of the `ULTIMA` banner archive, staged into the driver's
+  hidden surface at a 50-row band pitch. No replacement art and no driver-binary
+  reuse are needed. The only residual is the alternate-driver question below:
+  the CGA, Hercules, and Tandy builds stage the equivalent `.4` records, and
+  their exact pixel conversion is separate hardware-parity work.
+- **Flourish wall-clock.** The `TITLE.BIT` flourish's step count, per-step
+  content, and pacing mechanism are specified (section 3, `timing.md` section
+  5.1). The remaining gap is a measured wall-clock figure for one presentation
+  step on period hardware; the published figure is derived from the calibration
+  contract rather than from a timed capture.
 - **Alternate display-driver entries.** The EGA dispatch surface for rectangle
   fill, driver-compressed bitmap resources, and title ticks is specified in
   `display-driver-abi.md`. Exact CGA, Hercules, and Tandy conversion details
@@ -807,15 +1208,32 @@ The behaviour described here was derived by reading the function and format note
   single-poll shortcut): `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
   `u5-decomp/functions/ULTIMA_EXE/0x1D02_load_font_into_slot.md`, and
   `u5-decomp/functions/ULTIMA_EXE/0x1C9E_select_active_font.md`.
-- Start/menu screen loading, `STARTSC` composition use, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, and `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`.
+- Start/menu screen loading, `ULTIMA` banner composition, the dissolve reveal, the idle-band staging layout, lower intro text-window redraw, and fixed menu-entry placement: `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`, `u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`, `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md`, `u5-decomp/functions/INTRO_OVL/0x0676_menu_entry_render.md`, `u5-decomp/functions/INTRO_OVL/0x06BC_menu_render.md`, and `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
+- Acknowledgement/credits page asset, record roles and sizes, four-phase wipe
+  geometry, any-key advance, menu rebuild on the hidden surface, and the
+  untouched upper band: `u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`.
 - Lord British signature path consumption, four-segment walking, pen movement, pen-up semantics, and keyboard skip behaviour: `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, hidden-source
-  versus visible-destination placement, EGA row reveal groups, lower-band
-  clearing, and the explicit slot `7`, slot `8`, `BRITISH.BIT` slot `0`, and
-  slot `9` overlay order: `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
-  `u5-decomp/formats/ega-driver.md`, and fresh local resident
-  display-helper verification.
-- Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh local rectangle-transition helper analysis.
+- Title-mark helper sequencing for `TITLE.BIT` slots `0..6`, the resident
+  width/height tables behind the hidden-source stack, the seven-frame
+  presentation script with its per-frame source/destination/height triples and
+  eight row-reveal groups, the packed-and-centred band repaint, the
+  two-plane palette-index-9 rule, the lower-band clear, and the explicit
+  slot `7`, slot `8`, `BRITISH.BIT` slot `0`, and slot `9` overlay order with
+  its whole-page publishes:
+  `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`,
+  `u5-decomp/functions/EGA_DRV/0x1DE8_delay_with_animation_step.md`,
+  `u5-decomp/functions/EGA_DRV/0x190E_silhouette_stamp_back_buffer.md`,
+  `u5-decomp/functions/EGA_DRV/0x098A_back_buffer_invalidate.md`,
+  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
+  `u5-decomp/formats/ega-driver.md`, and
+  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
+- Story slide loop, story-art loading, proportional-font text rendering, slide wait/advance behaviour, the step-1 rectangle-transition handoff, and return-to-menu path: `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and `u5-decomp/functions/EGA_DRV/0x256B_lfsr_pixel_dissolve.md`.
+- Return-to-View chapter caption strings, the centered-caption helper's column
+  arithmetic, flanking-rule rectangles, caption row, and draw order relative to
+  the strip copy and per-frame ticks:
+  `u5-decomp/functions/INTRO_OVL/0x043E_print_centered_credit.md`,
+  `u5-decomp/functions/FONT_OVL/0x0418_load_world_section.md`, and
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 2.4.
 - Return-to-View entry point, preview bytecode runtime, preview map-strip
   loader, per-frame active-object animation bridge, per-cell tile rendering,
   helper schedules, and screen save/restore behaviour:
@@ -826,13 +1244,17 @@ The behaviour described here was derived by reading the function and format note
   `u5-decomp/functions/FONT_OVL/0x02A2_render_entity_tile.md`,
   `u5-decomp/functions/FONT_OVL/0x0E52_screen_save.md`, and
   `u5-decomp/functions/FONT_OVL/0x0E7B_screen_restore.md`.
-- Title tick ownership, EGA destination rectangle, four-frame cadence, signature
-  delay/poll separation, and the clarification that `FLAMES.OVL` is a
-  scratch-buffer thunk, not the flame renderer:
-  `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`,
+- Title tick ownership, EGA destination rectangle, four-frame cadence, the
+  `ULTIMA` record `1..4` frame source and its 50-row staging pitch, the
+  carry-set subtitle-ignition variant, signature delay/poll separation, and the
+  clarification that `FLAMES.OVL` is a scratch-buffer thunk, not the flame
+  renderer: `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`,
+  `u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`,
+  `u5-decomp/functions/EGA_DRV/0x282D_animate_flames_strip.md`,
   `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`,
-  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`, and
-  `u5-decomp/formats/ega-driver.md`.
+  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`,
+  `u5-decomp/formats/ega-driver.md`, and
+  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
 - Filled-rectangle dispatch, corrected driver-compressed bitmap dispatch, and
   driver-side title/bitmap rendering relationship:
   `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`,
@@ -847,6 +1269,9 @@ The behaviour described here was derived by reading the function and format note
 - `BRITISH.PTH` file structure and its confirmation as a title-screen path stream rather than an NPC schedule file: `u5-decomp/formats/npc-tlk-pth.md`.
 - Title, start-screen, and story-panel graphics container format: `u5-decomp/formats/tile-graphics.md`.
 - Story text data observations used to identify the intro slide text source: `u5-decomp/formats/data-tables.md`.
-- Fresh local title-sequence verification identified the visible title
-  sequencing and the four `BRITISH.PTH` pen origins; no code, disassembly, or
-  raw data is reproduced here.
+- The visible title sequencing and the four `BRITISH.PTH` pen origins were
+  re-derived and recorded in
+  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`; no code,
+  disassembly, or raw data is reproduced here. That note supersedes the
+  unrecorded "fresh local verification" attributions that earlier revisions of
+  this section used.

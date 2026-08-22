@@ -260,9 +260,20 @@ Two resident one-byte-per-scene tables in `DATA.OVL` (one for X, one for Y) carr
 | 39 | Hythloth | 239 | 240 |
 | 40 | Doom | 128 | 128 |
 
-The last eight entries (scenes 33..40, the dungeons) double as the Word-of-Power seal-coordinate table — speaking a Word of Power succeeds only when the party stands at the corresponding dungeon's overworld entry coordinate. Doom's `(128, 128)` is an underworld coordinate (the Codex chamber wall) rather than a surface coordinate.
+The last eight entries (scenes 33..40, the dungeons) double as the Word-of-Power seal-coordinate table. The coordinate names the **entrance cell itself**, and the party speaks the word from an adjacent cell, not from the entrance: the Yell handler looks for the entrance among the party's four cardinal neighbours and then requires that neighbour's coordinate to equal the row below. The sealed entrance is impassable, so standing on it before the word is spoken is not possible in any case. The full predicate is in `systems/commands.md` Section 11.1.
 
-The four "Britain" castles cluster around `(80..90, 105..107)` plus Lord Blackthorn's Castle at the far southeast outlier `(196, 245)`. Buccaneer's Den at the map center `(136, 158)` sits on its eponymous central island. Doom at `(128, 128)` is on the underworld plane.
+Doom's `(128, 128)` is the Doom dungeon entrance at the centre of the Underworld surface. It is not a Codex-chamber coordinate and it is not reached from inside a dungeon; earlier wording describing it as the Codex chamber wall is retracted. The seven other rows carry a dungeon entrance on **both** world surfaces at the same coordinate, and the saved seal flag is shared between them, so unsealing a dungeon opens it on both.
+
+The four "Britain" castles cluster around `(80..90, 105..107)` plus Lord Blackthorn's Castle at the far southeast outlier `(196, 245)`. Buccaneer's Den at the map center `(136, 158)` sits on its eponymous central island.
+
+One family of shop coordinates is deliberately *not* folded into this table.
+The four shipwrights each deliver a purchased vessel to a fixed overworld cell
+of their own, published as a column of the shipwright row table in
+`systems/shops.md` Section 8.7. Those cells are in the same overworld
+coordinate space as the entry coordinates above and sit near the selling town,
+but none of them equals the town's entry coordinate, and none of them is
+derived from the scene entry/exit mapping. Do not resolve a ship delivery
+through this table.
 
 This table is complete for stock scene entry and ordinary exterior return for
 the forty scene rows. It does not claim to publish every coordinate-like

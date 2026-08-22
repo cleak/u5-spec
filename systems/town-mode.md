@@ -131,7 +131,7 @@ After entry, control sits in a tight loop that reads one command per iteration a
 1. **Read a command.** The input pipeline blocks until a keystroke arrives, applies its translation rules (key-to-command, numpad-to-direction, queue handling), and returns a single byte.
 2. **Pre-dispatch checks.** A short setup step handles meta-states (combat in progress, turn already in flight) and the cursed-by-spell timer. If the scene byte has been cleared during the previous turn — meaning the player just walked across a boundary tile — the loop breaks out (Section 15).
 3. **Dispatch.** Movement commands use a small direction dispatch table; letter commands flow into the shared per-letter dispatcher described in the commands spec. Many handlers live in the town-mode overlay (Attack, Klimb); others are shared across modes (Cast, Get, Look, Talk, Use) and resolve to the appropriate cross-mode handler after a scene-byte check.
-4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, copies the party's current map coordinates into slot zero, ticks down the curse/buff counter, and calls the NPC schedule processor with the current hour byte.
+4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, runs the underfoot-effect handler described in Section 10, ticks down the curse/buff counter, copies the party's current map coordinates into slot zero, and calls the NPC schedule processor with the current hour byte. The underfoot-effect handler is called unconditionally on every consumed turn and it re-reads the tile the party is standing on, so it is not gated on the party having moved; its last act is to run the shared party status/provision pass specified in `systems/time.md`.
 5. **Render.** If the schedule processor reported any NPC moved, or the visibility-dirty flag is set, a full render runs. Otherwise the screen is left as-is and the loop reads the next command.
 
 The dispatcher's return code decides when to skip parts of the epilogue: actions that take no turn (a cancelled command, a "What?" fallthrough, the buffer-toggle key) skip both the time advance and the schedule tick. Actions that consume more than one turn advance the clock once per inner action.
@@ -170,7 +170,7 @@ The phantom is allocated on town entry and freed on town exit. Re-entries to the
 
 The Talk command triggers the conversation engine. The handler reads the player's current facing direction, computes the facing tile as `(player_x + dx, player_y + dy)`, and looks for an NPC whose linked sprite occupies that cell. If found, the NPC's dialogue index is handed to the conversation engine. If not found, the handler tests the facing tile for *talk-through* status (shop counters, low fences); if pass-through, it advances once more and queries again. If still no match, "Nobody's here!" is printed.
 
-A pre-conversation gate inspects the candidate NPC's current sprite tile to detect transient states: a "sleeping" tile produces "Zzzzzz...", a "no response" tile produces "No response!" — both return without entering the engine.
+A pre-conversation gate then inspects the **live map tile at the resolved cell** — not the NPC's sprite. Tile `0xAB` (the bed tile) produces the "Zzzzzz..." line and tile `0x9D` (the mirror tile) produces the "No response!" line; both return without entering the engine, consuming the dialogue index, or reaching shop-trigger dispatch. Every other tile value falls through. `systems/conversation.md` Section 2 owns the full gate contract.
 
 The Talk command is town-mode-only. The shared per-letter dispatcher routes T-Talk to the conversation engine when the scene byte indicates town mode; in overworld and dungeon modes the same key produces "Funny, no response!" or similar. There are no schedule-driven NPCs to talk to outside the named locations.
 
@@ -208,9 +208,72 @@ use into this command; those are separate letter commands.
 
 All these interactions except Look and inspect-style actions consume a turn and run the per-turn epilogue.
 
-Several underfoot effects also belong to town mode. Sleeping party members can recover from sleep as turns pass. Chair tiles normally act like a downward floor transition, but Stonegate's chair scene is a special imprisonment sequence that clears the town presentation, marks the party into the long-term consequence state, and returns after a fade. Rune/lever-style tiles print their local effect text and redraw.
+### Underfoot effects
 
-The top-down poison-gas terrain case is keyed by live town tile id `0x04` while the party's current transport marker is the on-foot marker `0x1C`. This is a tile-id rule, not a coordinate sidecar: any loaded town-family cell that still has live tile `0x04` and is processed while the party is on foot uses this effect. The handler scans active party slots in order. Dead (`D`) and already Poisoned (`P`) slots are skipped. Every other status, including Sleeping, is eligible. For each eligible slot, roll the shared inclusive random range `0..29`; if the result is greater than that member's Dexterity byte, set the member's status to Poisoned and emit the standard status feedback. If the roll is less than or equal to Dexterity, the member is unchanged.
+Town mode has a single underfoot-effect handler, and Section 7's epilogue calls
+it once per consumed turn. Its cadence matters as much as its contents:
+
+- It runs **after** the clock advance for that turn, not before.
+- It runs on **every** turn-consuming action, not only on a committed step. A
+  party that stands still and passes turns, waits, attacks, opens a door, or
+  takes any other turn-costing action re-runs the whole handler, including the
+  tile effect for the cell it is standing on.
+- Actions that consume no turn — Look, a cancelled prompt, an unrecognized key
+  — do not run it at all.
+- If an effect moves the party to a different floor, the handler re-reads the
+  tile under the party's new position and applies that tile's effect too, so
+  chained effects within one turn are possible.
+
+The handler does the following, in order.
+
+**Waking sleepers.** Each active party member whose status is Sleeping gets an
+independent 1-in-16 chance to wake to Good status. This runs before the tile
+effects and independently of what tile the party is on.
+
+**Trapdoor/chair family, live tile `0x8C`.** Skipped entirely while the party's
+transport marker is `0x14` or `0x15`, the carpet-family markers listed in
+`systems/vehicles.md`. Otherwise the handler prints
+its line, temporarily clears the transport marker for the presentation, rebuilds
+the view, applies an independently rolled `1..8` hit points of damage to every
+non-Dead party slot below the party count (capped at six slots), and restores
+the transport marker. In the Stonegate scene the sequence then continues into
+the special imprisonment cutscene that clears the town presentation, marks the
+party into the long-term consequence state, and returns after a fade. In every
+other scene the handler instead decrements the floor index, reloads the map, and
+re-probes the tile under the party on the new floor.
+
+**Rune/lever family, live tiles `0xBC` and `0x8F`.** Rebuild the view, print the
+local effect text, then apply the same independently rolled `1..8` mass damage
+to every non-Dead slot. These tiles are damage tiles, not cosmetic ones.
+
+**Poison-gas terrain, live tile `0x04`.** Keyed by live town tile id `0x04`
+while the party's current transport marker is the on-foot marker `0x1C`. This is
+a tile-id rule, not a coordinate sidecar: any loaded town-family cell that still
+has live tile `0x04` and is processed while the party is on foot uses this
+effect, and no coordinate table is needed. The handler scans active party slots
+in order. Dead (`D`) and already Poisoned (`P`) slots are skipped. Every other
+status, including Sleeping, is eligible. For each eligible slot, roll the shared
+inclusive random range `0..29`; if the result is greater than that member's
+Dexterity byte, set the member's status to Poisoned, print the status line for
+that member, and repaint the stats panel. If the roll is less than or equal to
+Dexterity, the member is unchanged and nothing is printed for that member.
+Because the roll's maximum is 29, a member whose Dexterity is 29 or higher never
+fails this save, and the failure chance is `(29 - Dexterity) / 30` otherwise.
+Each eligible slot rolls independently, so several members can be poisoned in
+the same turn, and the messages appear in slot order.
+
+Two consequences follow from the per-turn cadence that a step-only reading would
+miss. First, standing on a gas tile is not safe: every turn spent on it is a
+fresh save for every eligible member, so a party that lingers will eventually be
+poisoned. Second, because the poison status tick in `systems/time.md` also runs
+once per consumed turn, a member poisoned on a gas tile begins losing one hit
+point per turn immediately, starting with the very same turn's status pass,
+which runs at the end of this handler.
+
+**Trailing party pass.** The handler finishes by invoking the shared party
+status/provision pass specified in `systems/time.md`. That is where the
+per-turn poison damage, the provision consumption and starvation branches, and
+the Ring of Regeneration check happen for town mode.
 
 ## 11. Multi-floor locations
 
@@ -241,7 +304,10 @@ without rolling back elapsed side effects. If the requested duration completes,
 sleeping members are restored to good status before control returns to the town
 loop. The town-bed path does not contain its own HP/MP recovery block; recovery
 claims belong in `systems/rest-and-camp.md` and time-driven effects such as the
-hourly Ring of Regeneration tick belong in `systems/time.md`.
+Ring of Regeneration check belong in `systems/time.md`. The town-bed loop does
+invoke the shared party status/provision pass once per ten-minute step, so
+poison damage, the Ring of Regeneration roll, and any crossed-hour provision or
+starvation branch all apply while a town-bed sleep elapses.
 
 Hole-up is the only path that runs the schedule processor outside the per-turn
 epilogue. The cadence differs from ordinary turns, but the scheduler contract is
@@ -279,6 +345,20 @@ The castle's tile grid, NPC roster, and dialogue file are otherwise ordinary. A
 handful of other named locations have one-scene quirks (a scripted NPC arrival
 in one dwelling, a special-event stairway in one keep), encoded entirely in
 their data or mode-specific handlers.
+
+**Shadowlord hideout installation on town entry.** Entering one of the eight
+towns compares the town's own scene byte against the three Shadowlord hideout
+slots. On a match, the entry path records which of the three is hosted here and
+allocates a live actor slot for that Shadowlord, so the Shadowlord is present in
+the town's cast without the player doing anything. The town's scene identity,
+map, and NPC roster are unaffected — entry never rewrites the scene byte to a
+different location. Only the eight town scenes can match, because the slot value
+is itself a town scene byte (`catalogs/quest-graph.md`, Runtime Shadowlord
+State). One guard applies: the whole check is skipped when the party's Y
+coordinate at that moment is `4`, in which case no host is recorded and no
+Shadowlord is installed. When a host is recorded but no free actor slot is
+available, the install is abandoned and the scene proceeds without the
+Shadowlord.
 
 Stonegate has a separate entry-time presentation surface. On entry, the town
 setup path can play a Sceptre-gated prelude row when the party carries the
@@ -395,6 +475,13 @@ town-loop mechanism.
   Remaining work is cataloguing authored secret room cells and their
   player-visible contents, if a per-location parity atlas is needed.
 
+- **Underfoot-effect cadence is fixed.** The underfoot handler is a per-turn
+  post-action pass, not a step-commit hook. Any earlier statement that the
+  poison-gas effect "fires from the step path" is retracted: it fires once per
+  turn-consuming action while the party occupies the tile, including turns spent
+  passing in place, and it fires after that turn's clock advance. No separate
+  idle or pass table exists, and none is needed.
+
 - **Soft re-entry empirical parity.** The traced caller census now assigns the
   preserving and fresh setup argument paths. Remaining work is empirical parity
   for rare nested script returns, if a test target needs confirmation of
@@ -427,9 +514,16 @@ The behaviour described above was derived by reading the function and format not
 - The world-mutation primitive that links logical NPC state to active-object slots — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
 - The NPC roster loader for one location — `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md`.
 - The per-tick NPC walker invoked once per turn from the town loop — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
-- The NPC pathfinder notes that bind marker IDs `0xC8` and `0xC9` to the scheduler's tile-ID goal path, plus the town step handler's separate `0x8C` chair trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
+- The NPC pathfinder notes that bind the ascend/descend marker IDs `0xC8` and `0xC9` to the scheduler's tile-ID goal path, plus the town step handler's separate `0x8C` trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
 - The shared per-letter command dispatcher routed by mode — `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
 - The per-turn cleanup that advances the clock and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- The underfoot handler's unconditional per-turn placement after the clock
+  advance, its wake roll, its two mass-damage tile families, its poison-gas
+  Dexterity save and per-member presentation order, and its trailing party
+  status pass -
+  `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`,
+  `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`, and
+  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
 - The location tile-grid file format and the two-floor-per-location layout — `u5-decomp/formats/maps.md`.
 - The NPC roster and dialogue file formats — `u5-decomp/formats/npc-tlk-pth.md`.
 - The clean verification summary for Lord British's castle scene binding and

@@ -129,12 +129,12 @@ charge or mana.
 | 2 | `AZ` | An Zu | Awaken | 1 | Ginseng + Garlic | C/D/I/O | healing; wakes the first Sleeping party member found in roster order |
 | 3 | `AN` | An Nox | Cure | 1 | Ginseng + Garlic | C/D/I/O | healing; selected-member Poisoned-to-Good status gate |
 | 4 | `M` | Mani | Heal | 1 | Ginseng + Spider Silk | C/D/I/O | healing; selected-member HP add from halved 0..60 roll with minimum 1, skips only Dead targets, clamps at maximum HP |
-| 5 | `AY` | An Ylem | Vanish | 1 | Garlic + Blood Moss | C/I | utility |
-| 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility |
-| 7 | `ACX` | An Xen Corp | Repel Undead | 2 | Sulfur Ash + Garlic | C | buff/debuff |
+| 5 | `AY` | An Ylem | Vanish | 1 | Garlic + Blood Moss | C/I | utility; directed tile helper, clears a removable-object tile to the shared cleared-cell tile `0x44` and prints `POOF!`; works on combat-arena terrain too |
+| 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility; directed tile helper, unlocks a locked door (`0xB9`→`0xB8`, `0xBB`→`0xBA`) or clears a co-located object's lock bit; separate dungeon-cell arm in dungeon scenes |
+| 7 | `ACX` | An Xen Corp | Repel Undead | 2 | Sulfur Ash + Garlic | C | buff/debuff; critical-HP flee setup on non-humanoid undead-class monster actors |
 | 8 | `HR` | Rel Hur | Wind Change | 2 | Sulfur Ash + Blood Moss | O | utility |
 | 9 | `IW` | In Wis | Locate | 2 | Nightshade | O | utility; prints the shared sextant-style Y-then-X coordinate line |
-| 10 | `KX` | Kal Xen | Conjure | 2 | Spider Silk + Mandrake | C | summon; weighted Giant Rat/Giant Spider/Bat/Python placement |
+| 10 | `KX` | Kal Xen | Conjure | 2 | Spider Silk + Mandrake | C | summon; sixteen-outcome selector, 6 Giant Rat / 5 Giant Spider / 3 Bat / 2 Python, one actor on the first of up to eight legal random arena probes |
 | 11 | `IMX` | In Xen Mani | Create Food | 2 | Ginseng + Garlic + Mandrake | C/D/I/O | utility; adds random 1..3 food/provisions, capped at 9999 |
 | 12 | `LV` | Vas Lor | Great Light | 3 | Sulfur Ash + Mandrake | D/I/O | utility |
 | 13 | `FV` | Vas Flam | Fireball | 3 | Sulfur Ash + Black Pearl | C | damage; single target, raw roll 1..30 before target defense |
@@ -148,9 +148,9 @@ charge or mana.
 | 21 | `PU` | Uus Por | Up | 4 | Spider Silk + Blood Moss | D | utility |
 | 22 | `DP` | Des Por | Down | 4 | Spider Silk + Blood Moss | D | utility |
 | 23 | `QW` | Wis Quas | Reveal | 4 | Spider Silk + Nightshade | C | utility |
-| 24 | `BIX` | In Bet Xen | Swarm | 5 | Sulfur Ash + Spider Silk + Blood Moss | C | summon; eight random target cells with short placement retries |
-| 25 | `AEP` | An Ex Por | Magic Lock | 5 | Sulfur Ash + Garlic + Blood Moss | C/I | utility |
-| 26 | `EIP` | In Ex Por | Unlock Magic | 5 | Sulfur Ash + Blood Moss | C/I | utility |
+| 24 | `BIX` | In Bet Xen | Swarm | 5 | Sulfur Ash + Spider Silk + Blood Moss | C | summon; up to eight probes find one legal cell, then up to four Insect Swarm actors are placed at that single coordinate |
+| 25 | `AEP` | An Ex Por | Magic Lock | 5 | Sulfur Ash + Garlic + Blood Moss | C/I | utility; directed tile helper, `0xB8`/`0xB9`→`0x97` and `0xBA`/`0xBB`→`0x98`; works on combat-arena terrain too |
+| 26 | `EIP` | In Ex Por | Unlock Magic | 5 | Sulfur Ash + Blood Moss | C/I | utility; directed tile helper, the only magic-lock removal: `0x97`→`0xB8` and `0x98`→`0xBA`; works on combat-arena terrain too |
 | 27 | `MV` | Vas Mani | Great Heal | 5 | Ginseng + Spider Silk + Mandrake | C/D/I/O | healing; selected-member current HP restore to maximum, refuses Dead targets and the dungeon combat-active substate |
 | 28 | `IZ` | In Zu | Sleep | 5 | Ginseng + Spider Silk + Nightshade | C | buff/debuff |
 | 29 | `RT` | Rel Tym | Quickness | 5 | Sulfur Ash + Blood Moss + Mandrake | C/D/I/O | buff/debuff; player-dispatch gate |
@@ -215,6 +215,34 @@ charge or mana.
   and does not use the ordinary movement passability or active-object
   occupancy checks. If no grass tile is found, the spent cast fails without
   moving the party.
+- `AY`, `AS`, `AEP` and `EIP` form one directed-tile family. Each prompts for a
+  direction, resolves the single orthogonally adjacent cell, tests that cell's
+  live tile and rewrites it. The prompt origin is the party's map cell outside
+  combat and the **acting combat actor's arena cell** inside combat, and the
+  live-tile lookup resolves to the combat-arena terrain grid whenever the scene
+  is combat-class, so all four really do mutate arena terrain during a fight.
+  Answering the prompt with Space prints `Pass` and ends the cast silently; the
+  premixed charge and mana were already debited and are not refunded. A matched
+  tile prints `Success!` — except Vanish and the dungeon arm of Open, which
+  print their own line (`POOF!`, and the disarm/chest-opened pair) and suppress
+  the shared epilogue — and a non-matching tile prints `Failed!` with the
+  failure sound. The tile maps are: Vanish accepts `0x5B`, `0x90`, `0x91`,
+  `0x92`, `0x93`, `0x9D`, `0xA5`, `0xA6`, `0xA8`, `0xA9`, `0xAD`, `0xAE`, `0xAF`
+  and writes `0x44`; Open (non-dungeon arm) turns `0xB9` into `0xB8` and `0xBB`
+  into `0xBA`, else clears the lock/trap high bit on a kind-1 dynamic object at
+  the target cell, skipping that object's Z test in combat scenes; Magic Lock
+  turns `0xB8`/`0xB9` into `0x97` and `0xBA`/`0xBB` into `0x98`; Unlock Magic
+  performs the inverse `0x97`→`0xB8` and `0x98`→`0xBA`. Earlier guidance that
+  these four are unmodelled combat no-ops that always print `Failed!` without
+  prompting is withdrawn.
+- Combat eligibility for that family is uneven by arena family. Outdoor combat
+  arenas contain no door tiles, and exactly one of them carries Vanish-family
+  object tiles. Dungeon-room arenas contain door tiles in eighteen arenas — the
+  magic-locked, ordinary-locked and unlocked forms all appear — and
+  Vanish-family object tiles in seven. Combat Open always takes the non-dungeon
+  arm, because the arm split keys on the dungeon-exploration scene class rather
+  than on which arena file the fight loaded. Off-arena directions are not
+  clamped by the original; treat them as non-matching and report `Failed!`.
 - The CAST dispatcher table follows this exact public order. Handler-family
   classification is now known for the major shared cases: `IL`/`LV` write the
   light counter, `GP`/`FV`/`CX` are active-target attack wrappers using the
@@ -258,21 +286,40 @@ charge or mana.
   lifetime is bounded by the combat framer's table restore. `CIQ`
   sweeps hostile combat actors and forces each accepted target into the
   critical-HP flee setup; the combat wound-score morale classifier performs the
-  actual fleeing-flag write from that state. A separate lower-tier
-  summon/tame-style helper repurposes eligible live non-party, non-humanoid
-  actors using descriptor bit `0x01`, the same team/control bit used by charm;
-  that is a summon activation side effect rather than the `CIQ` fear path and
-  not a write to the flee bit `0x02`.
-  Conjure selects Giant Rat, Giant Spider, Bat, or Python from a fixed weighted
-  animal selector before making up to eight independent `0..10` X/Y random
-  arena placement attempts. Swarm walks the eight-cell ring around the caster
-  and gives each target cell up to four placement probes, with the first probe
-  testing the target cell itself. Clone duplicates an accepted creature into
+  actual fleeing-flag write from that state. `ACX` (Repel Undead) is the same
+  critical-HP flee setup narrowed to non-humanoid monster-side actors whose
+  class carries the undead flag: it drives the accepted actor's combat HP to one
+  and sets the flee bit `0x02`. It is not a summon or tame effect and does not
+  write the controlled bit `0x01`; earlier text describing it as a
+  "summon/tame-style repurpose helper" is withdrawn.
+  Conjure, Swarm, and Summon share one random placement probe: each probe draws
+  X and Y independently and uniformly over the inclusive range `0..15` and
+  rejects the whole candidate unless both are at most 10, consuming that attempt
+  rather than re-rolling, so the per-probe acceptance chance is `(11/16)^2`.
+  Accepted candidates then go to the shared combat spawn-cell validator.
+  Conjure rolls one inclusive `0..15` value — sixteen outcomes — and selects
+  Giant Rat (class 20) on six of them, Giant Spider (class 22) on five, Bat
+  (class 21) on three and Python (class 34) on two, then makes up to eight
+  probes and places one actor on the first legal cell; its terrain-suitability
+  query always uses the Giant Rat movement family regardless of the rolled
+  class. Swarm makes up to eight probes to find a **single** legal cell, then
+  places up to four Insect Swarm actors (class 31) at that one coordinate; there
+  is no caster-centred ring and no jitter retry. Every actor placed by Conjure,
+  Swarm, or Summon is stamped with the controlled/charmed descriptor bit `0x01`.
+  Clone duplicates an accepted creature into
   paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor
-  at the first accepted cell from up to eight independent random arena-coordinate
-  probes. It does not use the direction prompt, an adjacent cached target
-  coordinate, or an ordered eight-cell ring. A
+  (class 38) at the first accepted cell from up to eight of the shared probes,
+  adding one extra per-probe condition of its own: the candidate cell's terrain
+  byte must not be the arena's impassable void byte. It does not use the
+  direction prompt, an adjacent cached target coordinate, or an ordered
+  eight-cell ring. Summon's self-check threshold is a concrete stat — the
+  caster character's **Intelligence** for a party caster, or the second stat
+  field of the caster's class row for a monster caster — compared against a
+  uniform inclusive `0..60` roll halved with the fraction discarded and floored
+  to one, i.e. `1..30`. On `roll >= threshold` the cast prints `Oops...`,
+  returns the silent-failure result, and leaves the Daemon placed but
+  **without** the controlled bit. A
   previously suspected CAST2 placement helper is now attributed to shrine/urn
   kneel presentation. It prepares temporary active-object records from a
   private visual pattern and is not a traced party C-Cast row for Conjure,

@@ -56,7 +56,8 @@ band. What is known from refusal text and command behaviour is:
 - Ring of Invisibility and Ring of Regeneration are readied as ring-slot
   equipment, but each has a random vanish check after a successful ready action
   and another random removal check while worn in combat. Ring of Regeneration
-  also participates in the hourly non-combat regeneration tick.
+  also participates in the non-combat regeneration check that runs inside the
+  shared party status pass, once per turn-consuming action.
 
 R-Ready moves items between the carried equipment band and these six readied
 slots. It lists rows whose carried counter is nonzero and rows already readied
@@ -65,7 +66,7 @@ combat-armour, and hand-occupancy gates, then decrements the carried counter
 only after an equip is accepted. Selecting an already readied row unequips the
 first matching slot and returns one carried copy up to the R-Ready equipment
 stock cap of `99`. Different items are not swapped atomically into occupied
-slots. Ring of Regeneration has a traced hourly non-combat HP tick while worn;
+slots. Ring of Regeneration has a traced per-action non-combat HP tick while worn;
 Ring of Invisibility's continuing traced effect is combat-side. The public flow
 lives in `systems/inventory.md`.
 
@@ -222,6 +223,39 @@ Quarrels (`29`) are ammunition bundle grants worth five units per award; other
 equipment grants add one carried unit. All traced equipment grant counters cap
 at 99.
 
+### 5.1.2 Short display labels
+
+Two display names exist per equipment id: the canonical name in the table above
+and a shorter label used where the canonical name would not fit a narrow
+column. Consumers that render into a narrow column measure the canonical name
+and substitute the short label when the canonical name is **thirteen characters
+or longer**; the arms-shop buy list is the traced consumer of that rule, and the
+character-sheet equipment listing draws from the same short-label set.
+
+Ten of the forty-eight ids trip the length rule. Their short labels are:
+
+| Id | Canonical name | Short label |
+|---:|---|---|
+| 6 | Spiked Shield | `Spkd. Shld` |
+| 10 | Leather Armour | `Leather` |
+| 15 | Mystic Armour | `Myst. Armr` |
+| 35 | Sword of Chaos | `Chaos Swrd` |
+| 40 | Jeweled Sword | `Jewel Swrd` |
+| 42 | Ring of Invisibility | `Inv. Ring` |
+| 43 | Ring of Protection | `Prot. Ring` |
+| 44 | Ring of Regeneration | `Regen Ring` |
+| 45 | Amulet/Turning | `Am/Turning` |
+| 46 | Spiked Collar | `Sp. Collar` |
+
+Every other id's short label is either identical to its canonical name or a
+shorter spelling that the length rule never selects, so an engine that always
+prints the canonical name below the threshold matches the original. Of the ten
+above, ids `6`, `10`, `42`, `43`, `44`, `45`, and `46` appear in shipped
+arms-shop stock rows; `15`, `35`, and `40` do not.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/functions/SHOPPES_OVL/0x0B30_arms_buy_menu.md`.
+
 ### 5.2 Armour, helms, and shields
 
 | Item | Family | Known role | Catalog boundary |
@@ -312,7 +346,7 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 | Short Sword | Weapon | One-handed sword with an ordinary attack max value. | None for ordinary damage. |
 | Long Sword | Weapon | Sword with an ordinary attack max value. | Detailed hand rule. |
 | Morning Star | Weapon | Heavy melee weapon with an ordinary attack max value; non-adjacent range cap 2. | None for ordinary damage. |
-| Sword of Chaos | Magical weapon | Named high-tier sword using the combat special attack value. | Exact effect branch and drawbacks. |
+| Sword of Chaos | Magical weapon | Named high-tier sword using the combat special attack value. Its drawback is now traced: while item id 35 sits in the wielder's weapon-hand or shield-hand readied slot, that character's combat turns are taken away from the player. The combat turn dispatcher stamps the controlled/charmed descriptor bit on the character, clears the active-player sentinel, and runs the turn through the automatic actor driver instead of reading a command, so the character shows the `C` status letter and acts on its own. See `systems/combat.md` Section 6.1a. | Whether any narration accompanies the compulsion. |
 | Silver Sword | Weapon | Special sword, likely effective against specific enemies. | Exact enemy interactions. |
 | Glass Sword | Weapon | Named weapon using the combat special attack value. | No attack-time breakage in the analyzed baseline. |
 | Jeweled Sword | Weapon | High-tier sword with a fixed low ordinary attack value. | Exact special-purpose use, if any. |
@@ -332,7 +366,7 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 |------|--------|------------|------|
 | Ring of Invisibility | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check; when worn by a combatant, it marks that combatant hidden/suppressed and can be randomly removed by the combat round loop. No separate non-combat invisibility timer or world-mode effect writer is traced. | Broader combat visibility details live in `systems/combat.md`. |
 | Ring of Protection | Ring | Magic ring; one ring may be worn at a time. | Protection value, duration, and whether it has any related random-removal path. |
-| Ring of Regeneration | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check. Outside combat, the hourly party-status pass gives each non-Dead wearer a 1-in-8 chance to recover exactly 1 HP, capped at maximum HP. In combat, each living wearer can be healed by the regeneration pass and can have the ring randomly removed by the combat round loop. | Hourly non-combat cadence lives in `systems/time.md`; combat healing cadence lives in `systems/combat.md`. |
+| Ring of Regeneration | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check. Outside combat, the shared party status pass gives each non-Dead wearer a 1-in-8 chance to recover exactly 1 HP, capped at maximum HP; that pass runs once per turn-consuming action in world, town, and dungeon modes, once per ten-minute town-bed rest step, and once per five-minute wilderness camp step, not once per hour. In combat, each living wearer can be healed by the regeneration pass and can have the ring randomly removed by the combat round loop. | Non-combat cadence lives in `systems/time.md`; combat healing cadence lives in `systems/combat.md`. |
 | Amulet/Turning | Amulet | Amulet/neck-slot equipment row. Its combat passive effect applies when a living party wearer is targeted by a turnable ranged/effect attack: half the time, the attack is forced through the scattered-impact path instead of the ordinary hit-roll result. The v1 flagged attackers are Mage, Wanderer, Blackthorn, Lord British, Sea Horse, Reaper, Gazer, Daemon, and Shadow Lord. | No U-Use activation, countdown, random disappearance, or non-combat periodic effect is traced. |
 | Spiked Collar | Neck item | Listed beside amulets; likely neck-slot equipment. | Whether it is equippable, cursed, or creature-specific. |
 | Ankh | Miscellaneous amulet/neck equipment row | Metadata places it in the same amulet/neck equipment class as the neck-slot rows above. The traced CAST U-Use picker and dispatcher do not include Ankh in their usable-item family, and no carried quest, ritual, or consumable consumer is traced. | No U-Use activation, quest ritual, or consumable effect is traced. |
@@ -445,10 +479,10 @@ These items are named by inventory strings, save-image categories, use-item disp
 | Crown of Lord British | Unique royal item. U-Use toggles it through the shared worn-regalia state: using it while active removes it; otherwise the handler installs the Crown state and prints the wearing message. The Crown ownership flag also gates magic absorption in Lord Blackthorn's Castle; acquisition-side rescue/NPC-table work belongs to `systems/containers.md` and `systems/endgame.md`, not to wearing the Crown. | Dialogue reactions, if any, belong to targeted quest-graph branch validation rather than item activation. |
 | Sceptre of Lord British | Unique royal item. U-Use is not a worn-state toggle for the Sceptre. In eligible non-dungeon scenes, the branch prints the wielding label, scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites each accepted cell to ordinary open ground with redraw/effect presentation, and reports success when any cell dissolves; if none are accepted, it reports no effect or the alternate helper result. Stonegate entry presentation is gated by Sceptre ownership and owned by `systems/town-mode.md`, not by Sceptre U-Use. | Exact per-tile art labels belong to `catalogs/tile-catalog.md`. |
 | Amulet of Lord British | Unique royal item distinct from Amulet/Turning equipment. U-Use toggles it through the shared worn-regalia state: using it while active removes it; otherwise the handler prints the wearing message and installs the Amulet state. No separate U-Use spell, protection, or timer writer is traced for the Amulet. | Dialogue or location predicates, if any, belong to quest-graph validation rather than item activation. |
-| Shard of Falsehood | Shadowlord shard story item. U-Use dispatches shard index 0 into the Shadowlord-destruction handler. | Search/Get/container grants use the same shard index; destruction requires the matching interior destruction position and active Faulinei encounter, as specified by the quest graph. |
-| Shard of Hatred | Shadowlord shard story item. U-Use dispatches shard index 1 into the Shadowlord-destruction handler. | Search/Get/container grants use the same shard index; destruction requires the matching interior destruction position and active Astaroth encounter, as specified by the quest graph. |
-| Shard of Cowardice | Shadowlord shard story item. U-Use dispatches shard index 2 into the Shadowlord-destruction handler. | Search/Get/container grants use the same shard index; destruction requires the matching interior destruction position and active Nosfentor encounter, as specified by the quest graph. |
-| Spyglass | Surface-only utility. U-Use prints a looking message and enters the same LOOKOBJ full Britannia chunk-map renderer specified in `systems/view.md` when the scene and sky-state gates accept; unsupported scenes or no-star conditions refuse. Lord Seggallion's shipped conversation branch grants the carried-item flag. | Pixel-perfect map/view presentation belongs to `systems/view.md`; this row owns item gates and acquisition. |
+| Shard of Falsehood | Shadowlord shard story item. U-Use dispatches shard index 0 into the Shadowlord-destruction handler. A successful destruction consumes the shard: the handler clears its carried flag together with retiring the Shadowlord. A refused attempt keeps it. | Search/Get/container grants use the same shard index; destruction requires the matching interior destruction position and active Faulinei encounter, as specified by the quest graph. |
+| Shard of Hatred | Shadowlord shard story item. U-Use dispatches shard index 1 into the Shadowlord-destruction handler. A successful destruction consumes the shard: the handler clears its carried flag together with retiring the Shadowlord. A refused attempt keeps it. | Search/Get/container grants use the same shard index; destruction requires the matching interior destruction position and active Astaroth encounter, as specified by the quest graph. |
+| Shard of Cowardice | Shadowlord shard story item. U-Use dispatches shard index 2 into the Shadowlord-destruction handler. A successful destruction consumes the shard: the handler clears its carried flag together with retiring the Shadowlord. A refused attempt keeps it. | Search/Get/container grants use the same shard index; destruction requires the matching interior destruction position and active Nosfentor encounter, as specified by the quest graph. |
+| Spyglass | Surface-only utility. U-Use prints a looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2 when the scene and sky-state gates accept; unsupported scenes or no-star conditions refuse. Lord Seggallion's shipped conversation branch grants the carried-item flag. | Pixel-perfect sky/view presentation belongs to `systems/view.md`; this row owns item gates and acquisition. |
 | Sextant | Outdoor night-only navigation utility. U-Use refuses outside the overworld or during daytime and otherwise prints the party position using the shared sextant-style formatter: Y-coordinate first, then X-coordinate, with each coordinate encoded as two `A`..`P` nibble letters separated by an apostrophe. David's shipped conversation branch grants the carried-item flag. | Caller-side refusal text variants. |
 | Pocket Watch | Time utility. U-Use prints the current hour as a twelve-hour AM/PM reading: hour zero maps to twelve after modulo-twelve conversion, and the AM/PM suffix is selected from the current hour byte. | No minute display is present in the traced branch. |
 | Black Badge | Wearable story or faction item. U-Use checks availability through the shared item helper, removes the current matching worn state when already active, or installs the badge into the shared worn-item state and marks party/status presentation dirty. Elistaria's shipped conversation branch grants the carried-item flag. No separate quest/NPC mutation is traced in the U-Use branch. | Dialogue reactions, if any, belong to targeted quest-graph branch validation rather than item activation. |
@@ -530,10 +564,12 @@ Known acquisition paths:
 - **Horse traders** handle a Talk-entered vehicle sale that places a horse
   active object after payment. **Ship brokers** also have a Talk-entered
   shop-triggered sale flow; after payment, the next overworld entry places a
-  watercraft active object at the sale coordinates. `F` purchases a Frigate
-  ship-family object with full hull and two skiffs aboard; `S` purchases a
-  standalone Skiff unless a Frigate is already queued, in which case the Skiff
-  is added to that Frigate's carried-skiff count. A second standalone Skiff
+  watercraft active object at that shipwright's fixed delivery cell, published
+  as a per-shipwright coordinate column in `systems/shops.md` Section 8.7.
+  `F` purchases a Frigate ship-family object with hull condition `99` and two
+  skiffs aboard; `S` purchases a standalone Skiff unless a Frigate is already
+  queued, in which case the Skiff is added to that Frigate's carried-skiff
+  count. A second standalone Skiff
   before delivery is refused. Do not model shipwrights as an ordinary
   carried-item inventory menu.
 - **Treasure, search, chest, and body results** can grant food, gold, torches, gems, ordinary or special keys, scrolls, potions, equipment, or story items.

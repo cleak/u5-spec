@@ -363,32 +363,101 @@ The mode boundary is enforced by the redraw orchestrator: it inspects the scene 
 ## 12. Local Light Sources
 
 A handful of map and runtime tiles can make nearby cells visible independently
-of the player's ambient/personal light radius. The observed mechanism is a
-separate local-light mask, not a simple rewrite of the one light-radius byte.
+of the player's ambient/personal light radius. The mechanism is a separate
+local-light mask, not a rewrite of the one light-radius byte.
 
-The local-light refresh pass:
+### 12.1 The refresh pass
 
-1. Clears a thirty-two by thirty-two mask to the hidden sentinel.
-2. Scans the active map window for local-light-source candidates.
-3. For each source, clears an eleven-by-eleven per-source visited grid.
-4. Runs the same centre-out visibility carve into the thirty-two by
-   thirty-two mask, using the source as the centre and a fixed source radius.
-5. Converts untouched mask cells to zero, leaving carved/source cells nonzero.
+1. Clear a thirty-two by thirty-two mask to the hidden sentinel.
+2. Scan the active thirty-two by thirty-two map window for cells whose tile id
+   is in the local-light source set, recording each hit as a source and writing
+   its tile byte into the corresponding mask cell.
+3. For each recorded source, in scan order:
+   a. Clear a fresh eleven-by-eleven per-source visited grid.
+   b. Run the **same centre-out queue carve** the ordinary visibility producer
+      uses (Section 5), centred on the source, writing into the thirty-two by
+      thirty-two mask with a thirty-two-byte row stride and an output origin
+      five cells up and five cells left of the source, so the source sits at
+      the centre of its own eleven-by-eleven carve box. Candidates whose output
+      row would fall outside the thirty-two-row window are rejected.
+4. Convert every mask cell still holding the hidden sentinel to zero. Carved
+   and source cells keep their nonzero tile bytes.
 
-The candidate source ids currently proven by the resident lookup are
-`0xB0..0xB3`, `0xBC..0xBF`, `0xDC`, and `0xDE`. Their exact gameplay names and
-the full visual names should be sourced from the tile catalog rather than from
-this byte list alone.
+Sources do not interfere: each carve writes into the same mask, so the lit set
+is the union over all sources.
 
-The resident redraw order gives the mask one additional non-combat writer: the
-moongate animator. The NPC/light refresh path can rebuild the mask after
-rewriting in-scene NPC light tiles, then the moongate animator may stamp the
-current moongate frame into the same thirty-two-byte-stride scratch region and
-set the visibility-dirty flag. The following expensive visibility producer
-then sees the current mask contents during the carve. Preserve that ordering:
-local-light refresh first, transient moongate frame stamps second, visibility
-carve third. The moongate writes are transient visibility/render state, not
-durable map edits and not replacements for the ambient light-radius byte.
+### 12.2 Source radius
+
+The per-source carve is invoked with a light value of **ten**, and that value
+is a **squared-distance threshold**, exactly as it is for the ordinary producer
+in Section 5. A cell is inside a source's light when
+
+```text
+dx * dx + dy * dy <= 10
+```
+
+where `dx` and `dy` are the cell's offsets from the source. That is a Euclidean
+disc of radius the square root of ten, roughly `3.16`. Concretely it covers
+thirty-seven cells: every offset with `|dx| <= 3` and `|dy| <= 3` **except** the
+twelve corner-ish offsets `(+-3, +-3)`, `(+-3, +-2)`, and `(+-2, +-3)`.
+
+Two earlier statements about this radius are retracted. It is **not** Chebyshev
+distance, it is **not** a solid seven-by-seven square, and the threshold value
+is **not** three. The eleven-by-eleven per-source visited grid is larger than
+the lit disc; it is bookkeeping for the queue carve, not the radius.
+
+Beyond the threshold the ordinary carve rules apply: propagation is still
+gated by the propagation-blocker set of Section 6, so a source does not light
+through a wall even within the disc.
+
+The mask is binary in effect — a cell is either locally lit or not. There is no
+graduated brightness inside the disc; ambient brightness is owned by
+`systems/lighting.md`.
+
+### 12.3 Source tile ids
+
+The candidate source ids proven by the resident lookup are `0xB0..0xB3`,
+`0xBC..0xBF`, `0xDC`, and `0xDE`. Their gameplay names should be sourced from
+the tile catalog rather than from this byte list alone. Note that `0xBC` is
+also a propagation blocker (Section 6): a tile can both stop the carve and act
+as a light source.
+
+### 12.4 When the pass runs, and in what order
+
+The refresh is **not** a per-frame or per-turn pass. It has exactly three
+trigger points:
+
+- the Moonstone live-gate terrain refresh, after it rewrites eligible saved
+  Moonstone slot cells;
+- combat entry, after combat setup work;
+- combat exit, after non-combat mode state is restored.
+
+Between triggers the mask persists unchanged and the visibility producer keeps
+consulting it. The combat entry and exit rebuilds exist because the same
+scratch region is reused as combat terrain storage while combat is running, so
+the mask must be re-established on both sides of a combat.
+
+Ordering inside a non-combat redraw is: **local-light refresh first, transient
+moongate frame stamps second, visibility carve third.** The producer consults
+the finished mask; the mask is not produced from the producer's output. An
+earlier statement that the local-light pass runs *after* the ordinary
+visibility producer and before the renderer compositors is retracted — it is
+backwards.
+
+The moongate animator is the mask's one other non-combat writer: it may stamp
+the current moongate frame into the same thirty-two-byte-stride scratch region
+and set the visibility-dirty flag. Those writes are transient visibility/render
+state, not durable map edits and not replacements for the ambient light-radius
+byte.
+
+### 12.5 Dungeon mode
+
+Nothing in the traced trigger list is scene-specific, so this specification
+makes no claim that the pass is suppressed in dungeon mode. An earlier
+statement that "the local-light pass does not run in dungeon mode" is
+retracted as untraced. What is safe to implement: the mask is rebuilt only at
+the three trigger points above, and the producer reads whatever the mask
+currently holds.
 
 Implementations should keep this as an isolated local-light resource. It is
 part of visibility propagation state, not a permanent mutation of map bytes and
@@ -431,8 +500,10 @@ The behaviour described above was derived by reading the function and format not
   — `u5-decomp/functions/ULTIMA_EXE/0x5A28_visibility_buffer_setup.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x5DFE_visibility_tile_class.md`.
 - The local-light mask refresh pass, source-candidate lookup, per-source carve
-  radius, and final untouched-cell zeroing —
-  `u5-decomp/functions/ULTIMA_EXE/0x5E4A_light_radius_lookup.md`.
+  radius, its squared-distance semantics, the three trigger points, and the
+  final untouched-cell zeroing —
+  `u5-decomp/functions/ULTIMA_EXE/0x5E4A_light_radius_lookup.md` and
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 4.
 - The Moonstone-slot live-gate refresh caller that rebuilds the local-light
   mask after in-scene tile rewrites -
   `u5-decomp/functions/ULTIMA_EXE/0x475A_npc_schedule_tick.md`.
