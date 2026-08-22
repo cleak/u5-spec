@@ -270,14 +270,20 @@ The path defines three text windows:
 Before those rectangles are installed, the path clears the whole screen with a
 single full-screen text window and draws the lower prompt frame.
 
-**Lower prompt window.** Drawn with the same box-drawing glyph family used by
-the intro menu's lower text-window frame (`systems/intro.md` section 6.1), but
-it is a **separate descriptor with its own bounds**, not a reuse of the menu
-frame: the menu frame has an eight-row interior, this one has three. The frame
-is: at cell `(0, 19)` the top-left corner glyph, thirty-eight horizontal-bar
-glyphs, the top-right corner glyph; on rows `20`, `21` and `22` a vertical-bar
-glyph in column `0` and another in column `39`; on row `23` the bottom-left
-corner glyph, thirty-eight horizontal bars, and the bottom-right corner glyph.
+**Lower prompt window.** Drawn from the same five frame glyphs as the intro
+menu's lower text-window frame (`systems/intro.md` section 6.1), but it is a
+**separate descriptor with its own bounds**, not a reuse of the menu frame: the
+menu frame has an eight-row interior, this one has three. Those five glyphs are
+the four rounded bevel corners (`IBM.CH` codes `0x7B`, `0x7C`, `0x7D`, `0x7E`)
+and **one fully solid cell** (code `0x7F`, all sixty-four pixels set). There is
+no separate horizontal-bar and vertical-bar glyph: the horizontal runs and the
+side columns are the same solid cell, so the frame reads as a thick band, not as
+a line-drawn box. Earlier revisions of this section called them "horizontal-bar"
+and "vertical-bar" glyphs; that is withdrawn. The frame is: at cell `(0, 19)`
+the top-left corner glyph, thirty-eight solid cells, the top-right corner glyph;
+on rows `20`, `21` and `22` one solid cell in column `0` and another in column
+`39`; on row `23` the bottom-left corner glyph, thirty-eight solid cells, and
+the bottom-right corner glyph.
 The frame glyphs are emitted in the panel colour — user-interface colour
 slot 2 of `display-driver.md` section 2. A four-segment line rectangle is then
 drawn in the accent colour — slot 1 — through the pixel corners `(7, 159)`,
@@ -301,11 +307,11 @@ a different pixel origin: the left panel at `x = 0`, the right panel at
 | Panel cell(s) on row 0 | Content | Colour |
 |---|---|---|
 | 0 | top-left corner glyph | panel colour |
-| 1, 2 | horizontal-bar glyph | panel colour |
-| 3 | left title-plate cap: one cap glyph, plus two short angled rules drawn through the cell's pixel box from `(px, py)` to `(px + 5, py + 3)` and from `(px + 5, py + 4)` to `(px, py + 7)` | cap glyph in panel colour, rules in accent colour |
+| 1, 2 | solid cell (`0x7F`) | panel colour |
+| 3 | left title-plate cap: the right-pointing bracket end-cap glyph (`IBM.CH` code `0x02`), plus two short angled rules drawn through the cell's pixel box from `(px, py)` to `(px + 5, py + 3)` and from `(px + 5, py + 4)` to `(px, py + 7)` | cap glyph in panel colour, rules in accent colour |
 | 4..14 | the eleven characters of the title text ` Ultima IV ` (leading and trailing space included) | accent colour |
-| 15 | right title-plate cap: one cap glyph, plus the mirrored rules from `(px + 7, py)` to `(px + 2, py + 3)` and from `(px + 2, py + 4)` to `(px + 7, py + 7)` | cap glyph in panel colour, rules in accent colour |
-| 16, 17 | horizontal-bar glyph | panel colour |
+| 15 | right title-plate cap: the left-pointing bracket end-cap glyph (code `0x01`), plus the mirrored rules from `(px + 7, py)` to `(px + 2, py + 3)` and from `(px + 2, py + 4)` to `(px + 7, py + 7)` | cap glyph in panel colour, rules in accent colour |
+| 16, 17 | solid cell (`0x7F`) | panel colour |
 | 18 | top-right corner glyph | panel colour |
 
   where `px` and `py` are the pixel coordinates of the cap cell's upper-left

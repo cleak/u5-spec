@@ -38,7 +38,7 @@ Each file's first sixteen-bit word records the NPC count for that file. The ship
 | `CASTLE.TLK`   |        40 | ~21.8 KB              |
 | `KEEP.TLK`     |        32 | ~17.9 KB              |
 
-The counts include the universal sentinel slot at index one (Section 6); the number of *real* NPCs per file is therefore one less than the count word. The format imposes no fixed cap; the count is a sixteen-bit unsigned integer used as a loop limit. The engine's working buffer holds five hundred twelve bytes of header data — enough for up to one hundred twenty-eight NPC entries, well above the largest shipped count of forty-eight.
+The count is the number of real NPC blobs in the file; every id from `1` to the count addresses a real blob (Section 6). The format imposes no fixed cap; the count is a sixteen-bit unsigned integer used as a loop limit. The engine's working buffer holds five hundred twelve bytes of header data — enough for up to one hundred twenty-seven NPC entries plus the count word, well above the largest shipped count of forty-eight. The four files together hold one hundred thirty-five NPC blobs.
 
 ## 4. File-level layout
 
@@ -46,16 +46,30 @@ Every `.TLK` file is laid out as a fixed-size header followed by a concatenated 
 
 | Region | Width / count | Meaning |
 |--------|---------------|---------|
-| NPC count | 2 bytes | Total NPC slots in the file, including the sentinel. |
-| Sentinel | 2 bytes | Always `0x0001`. |
-| Real NPC entries | 4 bytes each, `npc_count - 1` entries | One entry per real NPC, sorted by id ascending. |
+| NPC count | 2 bytes | Number of NPC entries in this file, and equally the number of blobs. |
+| NPC entries | 4 bytes each, `npc_count` entries | One entry per NPC, ordered by ascending id `1..npc_count`. |
 | Blob data | Remainder of file | Concatenated NPC blobs containing XOR-obfuscated text and control bytes. |
 
-The first four bytes form a special leading pair `(npc_count, 0x0001)`: the count value occupies the slot a regular entry would use for its blob offset, and the sentinel `1` occupies the slot a regular entry would use for its NPC id. After this pair, the remaining `npc_count − 1` entries describe real NPCs, sorted by ascending NPC id starting at id `2`.
+The count word is followed immediately by `npc_count` four-byte entries, each an
+`(npc_id, blob_offset)` pair, in ascending id order starting at id `1`. The
+header therefore occupies exactly `4 × npc_count + 2` bytes, and the first blob
+begins at that offset: one hundred ninety-four in `TOWNE.TLK`, sixty-two in
+`DWELLING.TLK`, one hundred sixty-two in `CASTLE.TLK`, one hundred thirty in
+`KEEP.TLK`. Each of those numbers is exactly `4N + 2` for that file's count, so
+the header ends where the blob region begins with no padding and no gap.
+
+**Retraction.** Earlier revisions of this spec described the header the other way
+round — four-byte `(blob_offset, npc_id)` pairs behind a leading degenerate pair
+`(npc_count, 0x0001)`, with id `1` a structural sentinel and only `npc_count − 1`
+real NPCs. That reading is withdrawn. It leaves two bytes of the header
+unexplained in every file, leaves the final blob of every file unreferenced by
+any header entry, and binds each id to the blob that actually belongs to the
+previous id. The corrected reading accounts for every header byte, for every
+blob, and matches the runtime lookup exactly.
 
 The blob region begins immediately after the header. There is no separator, no length prefix per blob, and no end-of-region marker. Each blob's start is given by its header entry's `blob_offset` field. For static file inspection, the next NPC's `blob_offset` (or end-of-file for the last entry) gives the nominal span occupied by that entry in the concatenated region. At runtime, however, the engine does not use that span as a read length.
 
-The header is sized so a single five-hundred-twelve-byte read covers any class's full header — even TOWNE's forty-eight-NPC header is only one hundred ninety-two bytes. The engine performs that fixed-size header read once, then issues a second fixed-window read of one thousand twenty-four bytes at the matched blob offset. The fixed window is the compatibility contract: it may include bytes from following entries for shorter blobs, and it truncates any nominal span longer than one thousand twenty-four bytes.
+The header is sized so a single five-hundred-twelve-byte read covers any class's full header — even TOWNE's forty-eight-NPC header is only one hundred ninety-four bytes. The engine performs that fixed-size header read once, then issues a second fixed-window read of one thousand twenty-four bytes at the matched blob offset. The fixed window is the compatibility contract: for shorter blobs it reads past the blob's own end into following file data, which is harmless because the blob's own terminators stop every scan first. No shipped blob is long enough for the window to truncate it: the largest shipped nominal span is seven hundred four bytes (`TOWNE.TLK`), and the largest in the other three files are six hundred ninety-three, six hundred sixty-eight, and six hundred thirty-eight. The one-thousand-twenty-four-byte cap is therefore a compatibility contract that shipped data never exercises.
 
 ## 5. The HeaderEntry record
 
@@ -63,31 +77,48 @@ Each header entry is exactly four bytes:
 
 | Field offset | Width   | Field        | Meaning                                                                                                                |
 |--------------|---------|--------------|------------------------------------------------------------------------------------------------------------------------|
-| `+0x00`      | 2 bytes | `blob_offset` | Absolute file offset (little-endian unsigned word) of this NPC's blob in the file.                                    |
-| `+0x02`      | 2 bytes | `npc_id`      | One-based identifier (little-endian unsigned word) matching `dialog_index` in the paired `.NPC` file's roster record. |
+| `+0x00`      | 2 bytes | `npc_id`      | One-based identifier (little-endian unsigned word) matching `dialog_index` in the paired `.NPC` file's roster record. |
+| `+0x02`      | 2 bytes | `blob_offset` | Absolute file offset (little-endian unsigned word) of this NPC's blob in the file.                                    |
 
-Entries are sorted by `npc_id` ascending. Real entries start at `npc_id = 2`; the sentinel entry at the head of the file carries `npc_id = 1` and a `blob_offset` field reused as the NPC count. The last entry's `blob_offset` is simply the start of the final blob; there is no terminator entry.
+Entries are sorted by `npc_id` ascending and run `1..npc_count` with no gaps.
+The last entry's `blob_offset` is simply the start of the final blob; there is
+no terminator entry.
 
-Lookup is by linear scan: walk the entries in order, comparing each entry's `npc_id` against the desired dialog index, stop at the first match. The lookup is O(N) but N is small (forty-eight at most) and the header is in cache after the initial header read.
+Lookup is by linear scan: walk the entries in order, comparing each entry's `npc_id` against the desired dialog index, and on the first match take the word that immediately follows the matched id. The lookup is O(N) but N is small (forty-eight at most) and the header is in cache after the initial header read.
 
-## 6. The leading pair and NPC 1 sentinel
+Note the field order, because it is what makes the lookup a two-word walk: the
+id comes first and its blob offset second, so "match the id, then read the next
+word" is the whole of the runtime algorithm.
 
-The first four bytes of every `.TLK` file form a special pair:
+## 6. The count word and dialog index 1
 
-| Field | Value                            |
-|-------|----------------------------------|
-| Word 0 | NPC count for this file         |
-| Word 1 | `0x0001` — the sentinel NPC id  |
+The first two bytes of every `.TLK` file are the NPC count, and the four bytes
+after them are an ordinary header entry for `npc_id = 1`:
 
-Two design facts make this work. First, dialog index `1` is reserved as a universal stub — no live NPC in any scene carries dialog index `1`. Real NPCs use dialog indices `2..npc_count`. The convention is enforced by the `.NPC` file content, not by the format. Second, because the sentinel NPC is not used by shipped rosters, its header entry's `blob_offset` slot is structurally unused; the format reuses it to hold the NPC count.
+| Field | Value                                    |
+|-------|------------------------------------------|
+| Word 0 | NPC count for this file                 |
+| Word 1 | `0x0001` — the id of the first NPC entry |
+| Word 2 | that NPC's blob offset                   |
 
-The runtime loader does not reject dialog index `1`. If a corrupted or custom
-`.NPC` roster points a talkable NPC at index `1`, the header walk matches the
-leading sentinel id and then uses the following real entry's blob offset. The
-observable compatibility edge is therefore an alias to the first real NPC blob
-in that `.TLK` file, not the index-zero no-dialogue stub.
+**Dialog index `1` is a real NPC, not a sentinel.** Each class file's id `1`
+addresses an ordinary blob with a name, a description, a greeting, a job line, a
+bye line and a keyword body, exactly like every other id, and shipped rosters do
+point live NPCs at it: one occupied roster slot per class file carries dialog
+index `1`. Real ids run `1..npc_count`, and the count word counts blobs, not
+slots-plus-a-placeholder.
 
-This is a small space optimisation. An external reference describing the header as "a sorted list of `(offset, id)` pairs with no count prefix" is partially correct: the layout *is* a sorted list of pairs, but the first pair's offset slot is overloaded as the count. The header is `4 × N` bytes total, with the first four bytes serving the dual count/sentinel role and the remaining `4 × (N − 1)` bytes covering the real NPC entries.
+Earlier revisions of this spec described index `1` as a universal stub that "no
+live NPC in any scene carries", with real NPCs starting at index `2` and the
+first pair's offset slot reused to hold the count. All of that is withdrawn.
+There is no sentinel entry, no overloaded offset slot, and no aliasing edge for
+index `1`: the count is a plain two-byte prefix ahead of `npc_count` ordinary
+entries.
+
+An external reference describing the header as "a sorted list of pairs with no
+count prefix" is wrong on both halves for the same reason: there *is* a count
+prefix, and the pairs are `(id, offset)` rather than `(offset, id)`. The header
+is `4 × N + 2` bytes total.
 
 ## 7. Per-NPC blob structure
 
@@ -105,7 +136,7 @@ Each leading entry is a NUL-terminated stream of post-obfuscation bytes. The fiv
 
 The keyword body is a sequence of paired NUL-terminated streams: a keyword string followed by a response stream. The keyword string is obfuscated text representing a word the player can type, e.g. `JOIN`, `QUEST`, `HORSE`. The response stream is the engine's reply and may contain any control codes the format supports.
 
-Both sides use the same obfuscation and byte-runner semantics. Ordinary per-NPC keywords are matched against the player's typed input by a bit-7-stripping, case-insensitive space-boundary compare: the keyword must end at the match point, and the typed input must either end there or have a literal space there. There is no arbitrary substring or fuzzy match. There is no explicit "end of blob" sentinel; the runtime walks successive keyword/response pairs in the loaded 1024-byte window until the seek for the next keyword fails. Offline validators can use the next NPC's `blob_offset` (or end-of-file for the last blob) as the nominal file-region terminator, but runtime behavior is governed by the fixed loaded window.
+Both sides use the same obfuscation and byte-runner semantics. Ordinary per-NPC keywords are matched against the player's typed input by a bit-7-stripping, case-insensitive space-boundary compare: the keyword must end at the match point, and the typed input must either end there or have a literal space there. There is no arbitrary substring or fuzzy match. There is no explicit "end of blob" sentinel; the runtime walks successive keyword/response pairs in the loaded 1024-byte window until the seek for the next keyword fails. Offline validators can use the next NPC's `blob_offset` (or end-of-file for the last blob) as the nominal file-region terminator, but runtime behavior is governed by the fixed loaded window. Shipped blobs carry between two and twenty-six keyword/response pairs.
 
 The thirty-four-entry table involved in keyword input is not a `.TLK` blob pointer table. It is the engine's fixed reserved-word table for `NAME`, `JOB`, `WORK`, `BYE`, `THANK`, and profanity/default rebukes. The five mandatory leading entries are fixed blob ordinals used by the conversation envelope; variable keyword/response pairs fill the matchable body after them. The full scan order is covered in `systems/conversation.md`.
 
@@ -283,23 +314,23 @@ not by a reserved keyword match.
 
 ## 12. Worked example — `TOWNE.TLK`'s leading bytes
 
-The first four bytes of `TOWNE.TLK` are the leading pair: the count word `0x0030` (forty-eight) followed by the sentinel id `0x0001`. A reader interprets this as "forty-eight slots, with the slot at id one being the universal sentinel."
+The first two bytes of `TOWNE.TLK` are the count word `0x0030` (forty-eight). A reader interprets this as "forty-eight NPC entries and forty-eight blobs."
 
-The next four bytes are the first real header entry: a blob offset followed by the NPC id `0x0002`. Subsequent four-byte entries cover NPC ids three, four, and so on, sorted ascending, up to the last real NPC at id `0x0030` (forty-eight).
+The next four bytes are the first header entry: the NPC id `0x0001` followed by that NPC's blob offset. Subsequent four-byte entries cover NPC ids two, three, and so on, sorted ascending, up to the last NPC at id `0x0030` (forty-eight). The header ends at byte one hundred ninety-four (`4 × 48 + 2`), which is also the value in the first entry's offset field.
 
-After the header — at the offset given by the first real entry — the first NPC's blob begins. The first byte is an obfuscated text byte encoding the first letter of the NPC's name. For "Iolo", the first byte is `0xC9` (obfuscated `'I'`); for "Mariah", `0xCD`. Subsequent bytes encode the rest of the name, terminated by NUL.
+After the header — at the offset given by the first entry — the first NPC's blob begins. The first byte is an obfuscated text byte encoding the first letter of the NPC's name. For "Mariah", the first byte is `0xCD` (obfuscated `'M'`); for "Iolo", `0xC9`. Subsequent bytes encode the rest of the name, terminated by NUL.
 
 After the Name entry's NUL comes Description, then Greeting, then Job, then Bye, each NUL-terminated. Greetings typically carry control bytes such as PRINT-AVATAR-NAME or END-STREAM. After the five leading entries comes the keyword body: a keyword string such as `JOIN`, a NUL, the response stream, an END-OF-RESPONSE marker, and so on for additional pairs.
 
 A reader can sanity-check a `.TLK` decoder by:
 
-1. Reading the first four bytes as `(npc_count, sentinel)` and confirming the sentinel equals `0x0001`.
-2. Reading `(npc_count − 1) × 4` more bytes as header entries and confirming the NPC ids are sorted ascending starting at `2`.
-3. Picking any entry, seeking to its `blob_offset`, reading until end-of-response, and XOR-ing the printable-range bytes with `0x80` to recover ASCII.
-4. Confirming the recovered text begins with a recognisable NPC name (e.g. "Iolo", "Mariah", "Jennifer", "Lord British").
-5. Scanning nominal blob spans against the 1024-byte runtime window. The largest
-   shipped nominal span is the last `DWELLING.TLK` entry at 1139 bytes, which
-   proves the fixed-window cap is observable in shipped data.
+1. Reading the first two bytes as `npc_count` and confirming the first entry's id word equals `0x0001`.
+2. Reading `npc_count × 4` more bytes as header entries and confirming the NPC ids are sorted ascending and run `1..npc_count` with no gaps.
+3. Confirming that `4 × npc_count + 2` equals the first entry's `blob_offset`. If it does not, the reader has the two words of an entry swapped.
+4. Picking any entry, seeking to its `blob_offset`, reading until end-of-response, and XOR-ing the printable-range bytes with `0x80` to recover ASCII.
+5. Confirming the recovered text begins with a recognisable NPC name (e.g. "Mariah", "Jennifer", "Blackthorn", "Chuckles"), and that the last entry's blob is a real named NPC rather than an unreferenced tail.
+6. Scanning nominal blob spans against the 1024-byte runtime window. No shipped
+   span reaches it; the largest is seven hundred four bytes.
 
 ## 13. Cross-references
 
@@ -316,8 +347,8 @@ A reader can sanity-check a `.TLK` decoder by:
 ## 14. Validation Boundary
 
 The format is verified by direct byte inspection at the file-structure level
-(header layout, NPC counts, sentinel mechanism, blob alignment, fixed-window
-blob load) and by behavioural inspection at the byte-runner level (control-byte
+(header layout, NPC counts, `(id, offset)` entry order, blob alignment,
+fixed-window blob load) and by behavioural inspection at the byte-runner level (control-byte
 dispatch, dictionary substitution, obfuscation). The file-structure contract is
 complete in this spec; conversation runtime behavior is tracked in
 `systems/conversation.md`.
@@ -326,7 +357,8 @@ complete in this spec; conversation runtime behavior is tracked in
 
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
-- The first-pass survey of the four `.TLK` files, the per-class NPC counts, the leading-pair-as-count discovery, the obfuscation verification against decoded names, and the control-byte prevalence analysis — `u5-decomp/formats/npc-tlk-pth.md`.
+- The first-pass survey of the four `.TLK` files, the per-class NPC counts, the obfuscation verification against decoded names, and the control-byte prevalence analysis — `u5-decomp/formats/npc-tlk-pth.md`. That note's leading-pair-as-count reading of the header is superseded; see the retraction in Section 4.
+- The corrected header contract — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, the `4N + 2` header size that matches the first blob offset in all four files, and the consequent withdrawal of the "index 1 sentinel" — re-derived directly from the shipped `.TLK` files and from the runtime header walk in `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`, cross-checked against the shipped `.NPC` dialog-index arrays and against the sprite-class description strings of `LOOK2.DAT`.
 - The conversation-engine entry point — the dialog-index dispatch from the Talk command, the dispatch into the file loader, and the conversation envelope — `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
 - The `.TLK` file loader — the four-class file dispatch by scene byte, the header read into a working buffer, the linear header walk for the matched NPC id, and the second blob read at the matched offset — `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
 - The byte runner's full dispatch table — the control-code semantics, the multi-byte command machinery, the dictionary substitution, the GOTO-label search, and the per-conversation state cluster — `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.

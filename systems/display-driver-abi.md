@@ -475,7 +475,8 @@ frame-by-frame parity may substitute any other order that satisfies the four
 bullet points above.
 
 **Callers.** For engine authors who want the complete picture, the rectangle
-dissolve has six call sites in the shipped program, spanning three rectangles:
+dissolve has six call sites in the shipped program, spanning four rectangles
+(the map-viewport rectangle accounts for three of the six sites):
 
 | Rectangle (inclusive) | Where | Specified in |
 |---|---|---|

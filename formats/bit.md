@@ -191,8 +191,11 @@ subtitle band, and the driver's subtitle-ignition entry uses it to split a
 two-pass reveal — the first pass restores only the positions where the mask bit
 is clear, so the flames appear around the lettering, and the second pass
 restores the positions where it is set, so the lettering fills in last. One mask
-serves all four animation frames because the lettering is identical in all four.
-See `systems/intro.md` section 5.
+serves all four animation frames because the lettering is effectively invariant
+across them: of the `1624` positions this record marks as lettering, `1623`
+carry the same palette index in all four band records and exactly one does not.
+That single pixel has no bearing on the effect, but "identical in all four" is
+an overstatement and is withdrawn. See `systems/intro.md` section 5.
 
 ## 5. Rendering Behaviour
 

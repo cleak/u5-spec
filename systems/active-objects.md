@@ -349,7 +349,7 @@ The animator does not move the player. Player movement is owned by the input sys
 
 Combat suspends the world by swapping the active-object table to a backup region and overwriting the live table with combat actors. The mechanism is a pair of byte-for-byte copies.
 
-**Enter combat.** The framer copies the entire two hundred fifty-six bytes of the live table into a fixed backup region. It runs one of three setup paths (terrain, ambush, or scripted) that populate the live table with combatants. Only after this swap does the framer call into the round loop.
+**Enter combat.** The framer copies the entire two hundred fifty-six bytes of the live table into a fixed backup region. It runs one of three setup paths — terrain, ambush, or the rest/camp alternate (`systems/combat.md` Section 4; "scripted" was an older name for the third one, which is the H-Hole-up rest/camp helper) — that populate the live table with combatants. Only after this swap does the framer call into the round loop, and the rest/camp path can decline combat so that the round loop is never entered at all.
 
 **Exit combat.** On round-loop return (victory, defeat, or escape), the framer restores by copying the backup region back over the live table. Every byte returns to its pre-combat value: world NPCs to their pre-combat coordinates, vehicles to where they were docked, projectiles to their last position. The world resumes exactly where it left off.
 
@@ -425,7 +425,15 @@ substituted value exactly as it would to the original. `catalogs/tile-catalog.md
 from the catalogue side, and `systems/endgame.md` section 4 works it through for
 the endgame tableau.
 
-**Combat.** The framer swaps the table to a backup, runs combat with combatant records in place, and restores. The round walker reads slot zero for the player and slots one and up for monsters; the parallel combat-effect descriptor table holds round-only state.
+**Combat.** The framer swaps the table to a backup, runs combat with combatant
+records in place, and restores. Inside combat there is no reserved player
+record: the round walker iterates the parallel combat-effect descriptor table,
+which holds all round-only state, and reads whichever active-object record each
+descriptor's link byte names. Record zero belongs to the first seated party
+member, not to the player avatar (Section 7). An earlier revision of this entry
+said the round walker reads slot zero for the player and slots one and up for
+monsters; that is withdrawn, and it is the same withdrawn "reserved player
+slot" claim Section 7 corrects.
 
 **Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. Also drives water, lava, and torch animation cycles via per-tile-class frame indices.
 

@@ -994,11 +994,27 @@ The observed transfer path:
 
 1. Switches the intro into its transfer/continue state.
 2. Sets up disk-swap state for the transfer media.
-3. Loads a U5 Britannia seed image and object-overlay seed used as the destination baseline.
-4. Renders a character-roster/status screen showing party slots and statistics.
-5. Polls for transfer confirmation, abort, or follow-up input.
-6. On abort, restores intro/menu state and returns to the menu.
+3. Loads the `INIT.GAM` save-image seed and the `INIT.OOL` object-overlay seed
+   as the destination baseline — the same pair chargen uses.
+4. Runs the drive-selection loop for the Ultima IV media. **This is the only
+   place the path can be abandoned:** `Esc` here restores the intro/menu state
+   and returns to the menu without reading or writing anything.
+5. Reads and validates the predecessor save, then renders the comparison
+   screen — two character-information panels for the single imported
+   character, not a party roster — and walks its fixed sequence of
+   confirmation and conversion stages.
+6. On a validation failure, prints the bad-data page, waits for a key, and
+   returns to the menu with nothing written.
 7. On commit, writes the normal save files, restores the intro/menu state, redraws the start/menu screen, and resumes menu polling.
+
+Earlier revisions of this list named a "Britannia seed image", described the
+preview as "a character-roster/status screen showing party slots", and placed
+an abort in the confirmation polling loop. All three are **withdrawn**: the
+seed files are `INIT.GAM` and `INIT.OOL` (no `BRIT.GAM` exists), the preview is
+a two-panel single-character comparison screen, and once the drive has been
+selected no key aborts the transfer — `Esc` at the confirmation stages is
+simply ignored. `systems/u4-transfer.md` sections 6.4, 6.5 and 8 own the
+detail.
 
 The U4-to-U5 character-field translation is specified in
 `systems/u4-transfer.md`. It belongs with the transfer spec because it
@@ -1771,9 +1787,14 @@ historical-renderer parity work.
   the CGA, Hercules, and Tandy builds stage the equivalent `.4` records, and
   their exact pixel conversion is separate hardware-parity work. The `.4` twin
   of the `ULTIMA` archive holds the same five records with one difference — its
-  record `4` is `288 x 49` rather than `288 x 50`. The 50-row band pitch is a
-  driver constant rather than a record height, so on that path the last source
-  row of band `3` is simply background.
+  record `4` is `288 x 49` rather than `288 x 50`. The band pitch is a driver
+  constant rather than a record height, so on the four-colour (CGA) path — which
+  keeps the 50-row pitch, 49 copied rows and destination row `65` of the EGA
+  baseline — the last source row of band `3` is simply background. The pitch is
+  **not** 50 on every backend: the Hercules driver uses its own band geometry,
+  published in `display-driver.md` section 8 ("Per-driver title-band geometry").
+  Earlier wording here generalised the 50-row pitch to the whole `.4` path and
+  is withdrawn.
 - **Flourish wall-clock.** The `TITLE.BIT` flourish's step count, per-step
   content, and pacing mechanism are specified (section 3, `timing.md` section
   5.1). The remaining gap is a measured wall-clock figure for one presentation

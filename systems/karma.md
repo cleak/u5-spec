@@ -425,7 +425,7 @@ Each of Britannia's eight virtues is associated with a companion character class
 
 This pairing is inherited from Ultima IV, where the avatar's class was selected at chargen by the questionnaire's "winning virtue". Ultima V breaks that link: the avatar is always class "Avatar" regardless of which virtue won (see `chargen.md`). The class byte is set to the Avatar letter by the seed save (`INIT.GAM`) and is never overwritten by chargen.
 
-The eight class letters that appear in the character roster therefore belong only to the companions: Shamino's slot carries the ranger letter, Iolo's the bard letter, Mariah's the mage letter, and so on. The avatar's slot carries the Avatar letter for the entire campaign.
+The non-Avatar class letters that appear in the character roster therefore belong only to the companions, and the avatar's slot carries the Avatar letter for the entire campaign. Note that the table above is the **Ultima IV** virtue-to-class pairing and is not a reading of the shipped Ultima V roster bytes: the seed save uses only three companion class letters — the mage, bard and fighter letters — so, for example, Shamino's slot carries the **fighter** letter, not the ranger letter. An earlier revision of this paragraph said "Shamino's slot carries the ranger letter" and spoke of "the eight class letters that appear in the character roster"; both are **withdrawn**. `systems/chargen.md` section 7 lists the letter actually carried by each seed slot.
 
 This decoupling matters: in Ultima V, the avatar's karma standings are independent of class and may evolve in any direction. Companion stats and abilities reflect their class but are not adjusted by karma at runtime.
 
@@ -476,7 +476,7 @@ implements its own threshold. The sage rumour shop path is not listed as a
 karma-gated branch: the decoded shop flow is a topic, fee, destination, and
 template lookup.
 
-Shop pricing in Ultima V is **not** karma-modulated. Arms purchases do have a decoded speaking-member Intelligence adjustment, but karma standing does not change gold cost. Karma affects some dialogue branches and virtue outcomes, not price tags.
+Shop pricing in Ultima V is **not** karma-modulated. Five shop paths do have a decoded speaking-member Intelligence adjustment — arms buy and sell, horse sales, inn charges, shipwright vessels, and tavern provisions, listed in `systems/shops.md` Section 6 — but karma standing does not change gold cost anywhere. Karma affects some dialogue branches and virtue outcomes, not price tags.
 
 ## 12. Karma Boundaries
 

@@ -96,8 +96,11 @@ The clean surface seed contains a small set of non-empty object records and othe
 `SAVED.OOL` in a clean install begins as the surface seed followed by an empty underworld table. `INIT.OOL` matches the surface seed. As the player moves vehicles, drops or removes objects, or otherwise changes overworld object state, the object-overlay tables become the durable record of those changes.
 
 The questionnaire and Ultima IV transfer writers have a traced fresh-game
-exception: they emit a blank 256-byte half followed by the surface seed
-(`INIT.OOL` for questionnaire chargen, `BRIT.OOL` for transfer). That emitted
+exception: they emit a blank 256-byte half followed by the surface seed, and
+**both** of them read that seed from `INIT.OOL`. (An earlier revision of this
+paragraph named `BRIT.OOL` as the transfer path's seed; that is withdrawn — the
+transfer reads the same `INIT.GAM` / `INIT.OOL` pair the questionnaire uses, and
+no `BRIT.GAM` exists in the shipped data at all.) That emitted
 order is documented with the writer flows in `systems/chargen.md` and
 `systems/u4-transfer.md`. The canonical load/save interpretation in this
 format remains surface first, underworld second.

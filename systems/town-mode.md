@@ -452,7 +452,11 @@ The handler does the following, in order.
 independent 1-in-16 chance to wake to Good status. This runs before the tile
 effects and independently of what tile the party is on.
 
-**Trapdoor/chair family, live tile `0x8C`.** Skipped entirely while the party's
+**Trapdoor / loose-brick step trigger, live tile `0x8C`.** (`0x8C` is *not* a
+chair: the shipped description table names it a loose brick, and the seat tiles
+are the separate `0x90..0x93` family, which carries no step trigger — see
+`catalogs/tile-catalog.md`. The earlier "chair family" label here is withdrawn.)
+Skipped entirely while the party's
 transport marker is `0x14` or `0x15`, the carpet-family markers listed in
 `systems/vehicles.md`. Otherwise the handler prints
 its line, temporarily clears the transport marker for the presentation, rebuilds
@@ -464,9 +468,12 @@ party into the long-term consequence state, and returns after a fade. In every
 other scene the handler instead decrements the floor index, reloads the map, and
 re-probes the tile under the party on the new floor.
 
-**Rune/lever family, live tiles `0xBC` and `0x8F`.** Rebuild the view, print the
-local effect text, then apply the same independently rolled `1..8` mass damage
-to every non-Dead slot. These tiles are damage tiles, not cosmetic ones.
+**Burning family, live tiles `0xBC` and `0x8F`.** Rebuild the view, print the
+stored line `Burning!`, then apply the same independently rolled `1..8` mass
+damage to every non-Dead slot. These tiles are damage tiles, not cosmetic ones.
+The two ids are the fireplace and molten lava of `catalogs/tile-catalog.md`
+Section 6; an earlier revision of this bullet called them "the rune/lever
+family", which is withdrawn.
 
 **Poison-gas terrain, live tile `0x04`.** Keyed by live town tile id `0x04`
 while the party's current transport marker is the on-foot marker `0x1C`. This is

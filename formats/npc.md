@@ -164,19 +164,27 @@ Three special values matter to the engine contract:
 |---:|---|
 | `0` | Empty slot. The scheduler skips the slot. |
 | `1` | Occupied slot that uses the default human/person sprite instead of the ordinary derived sprite. |
-| `0xFC` | Shadow Lord actor class. Not present in any shipped roster slot; it is written into a live NPC slot only by the town-entry Shadowlord install (`systems/town-mode.md` Section 13), which also stamps the matching Shadow Lord actor tile into the linked active-object record. |
+| `0xFC` | Shadow Lord actor class. Three shipped roster slots carry it — Stonegate slots one, two and three (`KEEP.NPC` sub-map 4) — and it is also written into a live NPC slot by the town-entry Shadowlord install (`systems/town-mode.md` Section 13), which stamps the matching Shadow Lord actor tile into the linked active-object record. |
 
 **Retraction.** Earlier revisions of this table described `0xFC` as a "runtime
 player-mirror marker written when the town-mode player is attached to an NPC
 slot". That is withdrawn. `0xFC` is the head of the Shadow Lord sprite run
 `0xFC..0xFF` (`catalogs/monster-bestiary.md`, class 47), it resolves through the
-sprite page to the shipped "a shadow lord" look-up string, and the single traced
+sprite page to the shipped "a shadow lord" look-up string, and the only runtime
 writer of the value is the Shadowlord install described in
 `systems/town-mode.md` Section 13 — not a player attach. An implementation that
 treats a `0xFC` slot as the player will render a Shadowlord as the avatar, or
 mistake a live Shadowlord for the player in NPC-table scans. The spec no longer
 claims that the player has any NPC-slot representation; see
 `systems/town-mode.md` Section 8.
+
+A second, narrower claim in the same paragraph is also withdrawn: `0xFC` **is**
+present in shipped roster data. Stonegate's roster slots one, two and three are
+authored `0xFC` with no dialogue and no schedule times, one per Shadowlord, and
+the shard-destruction path marks the matching slot permanently removed so a
+vanquished Shadowlord is never placed there again
+(`catalogs/quest-graph.md` Section 5). "Written only at runtime" was an artifact
+of scanning writers rather than the shipped files.
 
 Values such as `0x50`, `0x54`, `0x70`, `0x90`, and `0xD8` are stable sprite
 classes used by shipped roster slots. The roster catalog keeps them as tags and
@@ -203,7 +211,17 @@ Each NPC slot has a one-byte dialog index at offset `+0x220..+0x23F` of the sub-
 
 The matching is by file class: a town NPC's dialog index points into `TOWNE.TLK`, a castle NPC's into `CASTLE.TLK`, and so on. Within the matched `.TLK` file, the dialog index is compared against the `npc_id` field of each header entry; the first match identifies the NPC's blob. See the TLK format spec for the header layout.
 
-Dialog index zero on a populated slot is a valid value: it means "this NPC has no dialogue." The engine dispatches the Talk command against an NPC whose dialog index is zero by emitting a "funny look" or equivalent stub message; no `.TLK` lookup happens. The format reserves `npc_id == 1` in `.TLK` files as a sentinel that no live NPC carries (because dialog index `1` is unused — every speaking NPC has dialog index `2` or above). The result is that `.TLK` files always start with a `(npc_count, 1)` leading pair, with the count word occupying the slot a regular header entry would use for its blob offset. This is a shipped-data convention rather than a runtime rejection: if corrupted roster data uses dialog index `1`, the TALK loader aliases it to the first real blob in the matching `.TLK` file. See the TLK format spec for that mechanism.
+Dialog index zero on a populated slot is a valid value: it means "this NPC has no dialogue." The engine dispatches the Talk command against an NPC whose dialog index is zero by emitting a "funny look" or equivalent stub message; no `.TLK` lookup happens.
+
+Dialog index `1` is **not** reserved. It addresses an ordinary authored blob like
+any other id, and exactly one occupied roster slot in each of the four class
+files carries it: `TOWNE:0` slot 3, `DWELLING:0` slot 1, `CASTLE:0` slot 13, and
+`KEEP:0` slot 1. Earlier revisions of this section said the opposite — that
+`npc_id == 1` was a `.TLK` sentinel no live NPC carried, that every speaking NPC
+had index `2` or above, and that a roster using index `1` would be corrupt data
+aliased to the first real blob. All of that is withdrawn; see `formats/tlk.md`
+Section 6 for the corrected `.TLK` header contract and
+`catalogs/npc-roster.md` for the four slots.
 
 High dialog-index values are not `.TLK` ids. In the shipped rosters, the
 values `0x81` through `0x88` are Talk-entry shop triggers:

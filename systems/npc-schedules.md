@@ -598,30 +598,30 @@ appearance. The logical NPC position, schedule state, collision link, and
 conversation eligibility remain tied to the runtime slot; only the sprite is
 visually suppressed.
 
-The shipped DOS data sets hidden-sprite bits only for the public scenes below.
-The mask is indexed by the town-mode scene order; the public scene byte remains
-one-based, so the roster key in the table is the same key used by
-`catalogs/npc-roster.md`.
+The mask table is indexed by the **one-based public scene byte itself**, not by
+a zero-based scene ordinal: the engine scales the live scene byte by the
+four-byte stride and reads the entry at that position, so scene 1 reads the
+first entry after the table base. The shipped DOS data sets hidden-sprite bits
+in only four scenes:
 
 | Public scene | Location | Roster key | Hidden roster slots | Clean role |
 |---:|---|---|---|---|
-| 1 | Moonglow | `TOWNE:0` | 0 | Reserved slot-zero marker; the scheduler never treats it as a live NPC. |
-| 1 | Moonglow | `TOWNE:0` | 1, 2 | Shared shop/service actors. |
-| 1 | Moonglow | `TOWNE:0` | 3 | Unnamed occupied human/noble actor using the universal sentinel dialogue id. |
-| 1 | Moonglow | `TOWNE:0` | 4 | Zachariah. |
-| 1 | Moonglow | `TOWNE:0` | 5 | Malifora. |
-| 1 | Moonglow | `TOWNE:0` | 9 | Silent guard or patrol actor. |
-| 1 | Moonglow | `TOWNE:0` | 11 | Malik. |
-| 5 | Minoc | `TOWNE:4` | 15, 17 | Empty roster slots in the shipped block; the bits are inert unless a compatible data mod occupies those slots. |
-| 6 | Trinsic | `TOWNE:5` | 1 | Shared shop/service actor. |
-| 29 | Stonegate | `KEEP:4` | 3 | Avatar/free-slot sentinel actor authored into the Stonegate roster. |
-| 29 | Stonegate | `KEEP:4` | 4 | Elistaria. |
-| 29 | Stonegate | `KEEP:4` | 5, 6, 7, 8 | Animal/pet/livestock-style actors in Stonegate's hidden presentation group. |
-| 29 | Stonegate | `KEEP:4` | 9 | Monster-variant actor in Stonegate's hidden presentation group. |
-| 30 | The Lycaeum | `KEEP:5` | 5 | Balinor. |
-| 30 | The Lycaeum | `KEEP:5` | 6 | Lady Janell. |
-| 30 | The Lycaeum | `KEEP:5` | 7 | Gardner. |
-| 30 | The Lycaeum | `KEEP:5` | 8 | Rollo. |
+| 4 | Yew | `TOWNE:3` | 15, 17 | Two of the three rodent-class actors in Yew's block; the third (slot 16) is not hidden. |
+| 5 | Minoc | `TOWNE:4` | 1 | Tactus, the fighter-sprite NPC who carries the Oppression password topic. |
+| 28 | Windemere | `KEEP:3` | 3, 4, 5, 6, 7, 8, 9 | The keep's entire rodent-class group. |
+| 29 | Stonegate | `KEEP:4` | 5, 6, 7, 8 | Stonegate's four bat-class actors. Note that the three Shadow Lord slots (1-3), the daemon (4), and the Sceptre object (9) are **not** hidden. |
+
+**Retraction.** An earlier revision of this table was off by one scene, because
+it read the mask array as zero-based. Every row moved: what it listed for
+Moonglow is the word that sits immediately ahead of the array (in the shipped
+image that word is the tail of an adjacent text string, not a mask at all), what
+it listed for Minoc belongs to Yew, its Trinsic row belongs to Minoc, its
+Stonegate row belongs to Windemere, and its Lycaeum row belongs to Stonegate.
+The visible consequence of the old table was severe: it claimed Moonglow renders
+Zachariah, Malifora and Malik invisible and that the Lycaeum renders Lady Janell
+and three companions invisible, while `catalogs/sage-rumours.md` sends the
+player to talk to several of exactly those NPCs. No shipped scene hides a
+talkable named NPC except Minoc's single row.
 
 These hidden bits do not by themselves activate a slot, create an NPC, or
 change dialogue routing. If the roster slot is empty or filtered out by the
@@ -757,9 +757,12 @@ The behaviour described above was derived by reading the function and format not
   a floor-transition state — `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`
   sections 1.6 and 5.
 - The world-mutation helper, the hidden-NPC bitmask, and the default-human tile sentinel — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
-- The shipped hidden-mask scene/slot catalogue was cross-checked against local
-  `DATA.OVL` table reads, the public roster keys in `catalogs/gazetteer.md`,
-  and the role-label notes in `u5-decomp/formats/npc-tlk-pth.md`.
+- The shipped hidden-mask scene/slot catalogue was re-derived from the resident
+  mask table together with the mask index computation in
+  `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`, which scales the live
+  one-based scene byte directly; the earlier zero-based reading of that table is
+  superseded. Roster keys from `catalogs/gazetteer.md`; slot roles from the
+  shipped sprite classes published in `catalogs/npc-roster.md` Section 4.
 - The town turn loop's once-per-turn invocation of the scheduler — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
 - The on-disk `.NPC` file layout — `u5-decomp/formats/npc-tlk-pth.md`.
 - The save-format omission of NPC runtime state and the location-entry re-initialisation that fills its place — `u5-decomp/formats/saves.md`.

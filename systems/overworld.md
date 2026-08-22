@@ -45,7 +45,17 @@ byte, not from a search that happened to stop.
   plane for scene byte `0x19`. This is an interior-to-overworld
   exit rule, not proof of a general outdoor underworld-ascent tile set.
 
-- **Gate-like world transition.** One traced surface coordinate owns a special narrative gate branch (Section 9). Ordinary natural moongates use the saved Moonstone slot live-terrain refresh and entry helper described separately in Section 9.
+- **Not a plane writer: the narrative gate branch.** One traced surface
+  coordinate owns a special narrative gate branch — the Shrine of the Codex
+  approach of Section 9. It is listed here only to be excluded: it grants or
+  refuses passage and can push the party one cell south, and it never writes
+  the plane byte. An earlier revision counted it as a sixth plane-crossing
+  route; that is withdrawn, and the closed writer sets in
+  `systems/doors-and-z-transitions.md` Section 14, `formats/under-dat.md`
+  Section 7 and `catalogs/gazetteer.md` Section 8.3 correctly omit it.
+  Ordinary natural moongates are the separate saved-Moonstone-slot route in
+  the next bullet but one; their live-terrain refresh and entry helper are in
+  Section 9.
 
 - **Dungeon exits.** Leaving a dungeon writes the plane as well as the scene:
   off the topmost level the party surfaces on Britannia, and out through the
@@ -69,11 +79,22 @@ The mode loop itself does not branch on Z. The chunk loader, the visibility prod
 
 ## 3. Map structure
 
-Each surface is a flat 256-by-256 grid of tile bytes — one byte per cell, no padding. The grid is held on disk as a sequence of 16-by-16 *chunks*, each chunk a 256-byte block laid out row-major. The world has 256 chunks total (sixteen across by sixteen down), and the mapping from chunk grid position to disk offset goes through a 256-byte *chunk-index table* in the resident data segment.
+Each surface is a flat 256-by-256 grid of tile bytes — one byte per cell, no padding. The grid is held on disk as a sequence of 16-by-16 *chunks*, each chunk a 256-byte block laid out row-major. The world has 256 chunks total (sixteen across by sixteen down). On Britannia the mapping from chunk grid position to disk offset goes through a 256-byte *chunk-index table* in the resident data segment; in the Underworld it is plain arithmetic.
 
 The chunk-index table encodes one byte per chunk in row-major order. The byte is either a chunk's 0-based index in the on-disk file or the all-ones sentinel meaning *all-water*. On Britannia, large stretches of open ocean are pure water, and the on-disk grid omits those chunks — only the non-water chunks are stored. The index byte for a water chunk is the all-ones sentinel; the chunk loader recognises this, fills the chunk buffer with the water tile, and returns without doing any disk I/O. A non-sentinel index is the zero-based file index, multiplied by 256 to give the seek offset. This compression-by-omission is why Britannia's on-disk grid is about 52 KB rather than 64 KB.
 
-The Underworld is dense — every chunk is stored, including uniformly cavern ones. Its on-disk grid is exactly 64 KB and its chunk-index table is the identity. The same table format is used; only the contents differ.
+The Underworld is dense — every chunk is stored, including uniformly cavern
+ones. Its on-disk grid is exactly 64 KB and its chunk index is the identity
+map, **computed rather than looked up**. There is no second resident
+chunk-index table: the single resident table accounts for the 205 stored
+Britannia chunks and nothing else. The shared per-chunk loader tells the two
+planes apart by the **first letter of the map filename** it is handed — the
+Britannia arm indexes that table and synthesizes an all-water chunk on the
+sentinel, while the Underworld arm uses the caller's chunk-aligned descriptor
+directly as the file offset. An earlier revision of this section said "the same
+table format is used; only the contents differ", implying a second resident
+table for the Underworld; that is withdrawn. See `formats/under-dat.md`
+Section 1 and `formats/data-ovl.md` Section 5.2.
 
 After a chunk is loaded or synthesized, the loader walks the 16-by-16 live
 chunk copy and applies a substitution pass that re-derives two pieces of quest
@@ -504,11 +525,11 @@ The transport state covers the visible vehicle families:
   increment and the ordinary one-cell movement-command shape. The shared
   movement predicates provide the horse-specific terrain restrictions; no
   separate player rough-terrain stride table is part of the traced baseline.
-- **Skiff.** Water-only transport. The time system has a `Q` state-tag modifier that halves the turn's minute increment, with a one-minute floor; public specs associate that timing with skiff/raft-like water travel without using `Q` as the full vehicle identity.
+- **Skiff.** Water-only transport at the standard outdoor turn cost. The time system's `Q` state-tag modifier, which halves the minute increment with a one-minute floor, is the Quickness magic effect and is not set by boarding a skiff; the earlier association of that timing with skiff/raft travel is withdrawn (`systems/time.md` Section 4).
 - **Ship.** Water-bound but faster than skiff. Uses the standard outdoor turn
   cost when manually handled; with sails hoisted, `weather.md` owns the
   wind-cadenced movement and any wait passes before movement releases.
-- **Magic carpet.** Boardable carpet transport. The current public trace does not prove that carpet travel sets the `T` timing tag, so v1 should not make carpet travel minute-free solely from that tag.
+- **Magic carpet.** Boardable carpet transport at the standard outdoor turn cost. The `T` timing tag is Negate Time, not carpet identity, and no carpet path writes it; carpet travel is never minute-free.
 - **Balloon.** Known from vehicle art/manual-facing material, but not promoted
   into the traced B-Board, X-Xit, U-Use, shipwright, active movement, or
   transport-marker contract. Do not infer a live boarding path, transport
@@ -527,8 +548,8 @@ Each overworld turn that consumes the player's action advances the clock by **tw
 
 Two state-tag modifiers can apply before the cascade:
 
-- **`Q` tag.** The increment is halved (with a one-minute floor) before the cascade runs. Use this for the skiff/raft timing contract.
-- **`T` tag.** The minute and light-counter writes are skipped for that cleanup call. Cleanup still recomputes daylight and can still mark visibility dirty. Current public evidence treats `T` as a scene/action tag, not as a proved vehicle identity.
+- **`Q` tag.** The increment is halved (with a one-minute floor) before the cascade runs. This is the Quickness magic effect, not a skiff/raft timing contract; no vehicle sets it.
+- **`T` tag.** The minute and light-counter writes are skipped for that cleanup call. Cleanup still recomputes daylight and can still mark visibility dirty. This is the Negate Time magic effect (`systems/magic.md`), not a scene/action tag and not any vehicle's identity; no vehicle path writes it, so carpet travel is never minute-free (Section 11).
 
 The cleanup itself does the cascade — minutes to hours, hours to days, days to months, months to years. Shadowlord hideout maintenance runs at midnight, while character month counters and long-period flag clears run only when the day wraps past 28. On any hour change while the player is in a surface/town-family scene, the sky/status presentation row is refreshed; this is display work, not natural-moongate placement. The full cleanup contract is in `time.md`.
 
@@ -603,8 +624,10 @@ unresolved outdoor loop control flow.
   centralized in `vehicles.md` section 2; an exhaustive sweep of every shipped
   binary found no writer or reader outside it, so there are no opaque marker
   values left to preserve and there is no live balloon transport path.
-  Separately, the time cleanup's `Q` and `T` tags are documented as
-  timing/state modifiers, and `T` is still not a proved vehicle identity.
+  Separately, the time cleanup's `Q` and `T` tags are *closed too*: they are the
+  Quickness and Negate Time codes of the shared timed-magic-effect byte
+  (`systems/magic.md`), no vehicle path writes that byte, and neither tag is a
+  vehicle identity or a vehicle-derived timing state.
 
 - **Moongate entry path.** *Closed.* Placement is the once-per-turn live-terrain
   refresh over the eight saved Moonstone slots, gated on the hour alone with no

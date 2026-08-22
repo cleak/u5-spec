@@ -149,7 +149,12 @@ Notes on the low rows:
 - Classes 8 and 9 are the passive/neutral classes: an actor placed with either
   class id gets the passive faction tag instead of the hostile one, so it is
   visible and addressable but never targeted.
-- Classes 9, 42, and 43 have no display name in the shipped name tables. Rows 42
+- The shipped name data is two parallel tables, and classes 8 and 9 differ
+  between them. Neither class has an entry in the **singular** name table —
+  which is also blank for 42 and 43 — but the **plural** encounter-banner table
+  does name class 8, and that banner is where the name "Pirate" used for row 8
+  above comes from; class 9's plural entry is a placeholder, so it has no name
+  in either table. Rows 42
   and 43 are all-zero identity gaps; row 9's stats duplicate class 8's. The two
   gap rows sit exactly where the special outdoor animated sprite families
   (`0xE8..0xEB` and `0xEC..0xEF`) would map, which is consistent with those
@@ -448,8 +453,18 @@ For a terrain fight:
   and off permanently afterwards (`systems/encounters.md` Section 5).
 - Town-style hostility overrides the count to one attacker.
 - Placement uses sixteen arena slots supplied by the selected arena's metadata
-  and cached in resident scratch before placement. Terrain fights use
-  deterministic slot order; ambushes can shuffle the slots.
+  and cached in resident scratch before placement. Terrain fights walk those
+  slots in identity order, and that is the only order any traced caller
+  produces. The terrain setup helper does contain a placement-slot shuffle
+  branch, but no live caller sets the flag that reaches it: ambush and
+  rest/camp setup run through different helpers entirely, and the ambush helper
+  reads its own source band instead of the terrain helper's slot array
+  (`systems/combat.md` Section 5, `formats/cbt.md` Section 5). An earlier
+  revision of this list said "ambushes can shuffle the slots"; that is
+  withdrawn. Where an ambush-style fight does get a randomised arrangement —
+  dungeon wandering-monster combat — the randomisation is performed upstream by
+  the dungeon room painter when it writes the synthesised source band, not by
+  the terrain helper's dormant branch (`systems/dungeon-mode.md` Section 14.1).
 - The first placed monster uses the encounter's base class. For later
   placements, actors whose placement index is below `(count / 4) + 1` may use
   the base class's **companion class** when the one-in-nine predicate permits

@@ -12,7 +12,16 @@ Doors live in two parallel encodings — one for the surface and town tile maps,
 
 In the surface and town encoding, the tile codes J-Jimmy and O-Open care about fall into these groups:
 
-- **Closed door pair.** Each door orientation has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the north-south pair and `0xBA`/`0xBB` the east-west pair. The magic-locked forms live outside that pair, at `0x97` for north-south and `0x98` for east-west; Jimmy refuses them without rolling (though it still breaks a key doing so), and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write the standing open-door code below; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
+- **Closed door pair.** Each door orientation has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the plain-door pair ("a wooden door" / "a locked door") and
+  `0xBA`/`0xBB` the windowed pair ("a wooden door with a window" / "a locked
+  door with a window"). **The two families are plain versus windowed, not two
+  orientations**; an earlier revision of this document labelled them the
+  north-south and east-west pairs, which is inherited from a superseded
+  reading and is withdrawn — the shipped description strings and the Jimmy
+  conversion of § 3.1 both name the window, and `systems/npc-schedules.md`
+  carries the same names. The magic-locked forms live outside those pairs, at
+  `0x97` for the plain family and `0x98` for the windowed family, and the
+  shipped description table gives both the same string; Jimmy refuses them without rolling (though it still breaks a key doing so), and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write the standing open-door code below; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
 - **Open door.** A single code drawn as the open-door sprite. Both Jimmy and Open recognise this as already-open and consume the turn without acting. The renderer paints it identically to a passage.
 - **Restraint tiles.** Stocks and a set of manacles. These are not containers and not doors: J-Jimmy treats them as prisoner releases (§ 3.1), and they never convert to an "unlocked" counterpart tile.
 - **NPC occupancy marker.** A non-rendered marker returned by the tile-probe path when the target cell is occupied by an NPC. J-Jimmy uses it only to find the prisoner standing on a restraint tile; there is no pickpocket interaction.
@@ -253,7 +262,11 @@ town.
 
 ## 7. Magic-locked doors
 
-Some doors carry a magical lock that no key can pick — the lower byte of the door pair (§ 2). Magic-locked doors appear mostly in plot-critical locations: a sealed throne room, the entrance to a quest reward, a story-gated dungeon cell.
+Some doors carry a magical lock that no key can pick. Its tile codes are `0x97`
+and `0x98`, which sit **outside** the ordinary closed-door pairs rather than
+inside them (§ 2); an earlier revision of this sentence called the magic-locked
+form "the lower byte of the door pair", contradicting § 2 and
+`systems/magic.md`, and that is withdrawn. Magic-locked doors appear mostly in plot-critical locations: a sealed throne room, the entrance to a quest reward, a story-gated dungeon cell.
 
 J-Jimmy on a magic-locked door refuses without rolling: no member is prompted
 and no Dexterity is read. The refusal is not free, though — it prints the
@@ -261,8 +274,8 @@ ordinary broken-key result and consumes one key (§ 3.1). Earlier drafts of this
 document reported a distinct "Magic lock!" message at no cost; both halves of
 that claim are retracted. The paths through are:
 
-- **Unlock Magic** cast on the door rewrites the cell from magic-locked straight to the closed-and-*unlocked* form for that orientation (`0x97` becomes `0xB8`, `0x98` becomes `0xBA`), so O-Open works on it immediately and no Jimmy roll is needed.
-- **Magic Lock** is the inverse and the only writer of the magic-locked forms. It collapses both the unlocked and the ordinary-locked byte of an orientation onto that orientation's magic-locked byte (`0xB8` or `0xB9` becomes `0x97`, `0xBA` or `0xBB` becomes `0x98`), so magic-locking an ordinary locked door and then unlocking it magically leaves the door merely closed.
+- **Unlock Magic** cast on the door rewrites the cell from magic-locked straight to the closed-and-*unlocked* form for that door family (`0x97` becomes `0xB8`, `0x98` becomes `0xBA`), so O-Open works on it immediately and no Jimmy roll is needed.
+- **Magic Lock** is the inverse and the only writer of the magic-locked forms. It collapses both the unlocked and the ordinary-locked byte of a door family onto that family's magic-locked byte (`0xB8` or `0xB9` becomes `0x97`, `0xBA` or `0xBB` becomes `0x98`), so magic-locking an ordinary locked door and then unlocking it magically leaves the door merely closed.
 - **Open** (the *An Sanct* spell, not the O-Open command) steps a door one rung *down* the ordinary lock ladder: `0xB9` becomes `0xB8` and `0xBB` becomes `0xBA`. It does not recognise the magic-locked bytes, so it cannot substitute for Unlock Magic.
 - **Blink** can place the caster on the cell on the far side when the destination is legal, bypassing the lock; the door stays locked but the party is past it.
 - **Cannon fire** (§ 6) destroys magic-locked doors as readily as regular ones.

@@ -43,7 +43,7 @@ game-screen frame are fifteen cells wide: their right rule sits at pixel
 | Absolute row | Contents |
 |---:|---|
 | 1..6 | The six party rows (section 4). |
-| 7 | The upper divider band, carrying the timed-effect slot (section 8). Not part of the stats window; written through the full-screen window. |
+| 7 | The upper divider band, carrying the timed-effect slot (section 8). It lies inside the stats window's rectangle, but the panel does not write it through that window — the slot is emitted through the full-screen window instead. |
 | 8 | The counters row: food, and either gold or ship hull (section 6). |
 | 9 | The date row (section 7). |
 | 10 | The lower divider band. Plain chrome; nothing is written into it. |

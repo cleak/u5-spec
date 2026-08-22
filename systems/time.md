@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Ultima V keeps a single in-world clock that advances during play and is consulted by every system that cares about when something happens — NPC schedules, lighting, hour-prompted events, the date displayed on the look-at-the-sky tile, daily schedule maintenance, and month-boundary character counters. The clock is driven from one cleanup routine that every active mode loop calls once per consumed turn; that routine takes a "minute increment" argument from its caller, advances minutes, and cascades minute → hour → day → month → year through fixed wrap thresholds. The same routine is also called with a zero increment as a "recompute, do not advance" form so that systems whose state depends on the current time (most notably ambient light) can be brought up to date when the player crosses between modes without spending a turn.
+Ultima V keeps a single in-world clock that advances during play and is consulted by every system that cares about when something happens — NPC schedules, lighting, hour-prompted events, the date displayed on the look-at-the-sky tile, daily schedule maintenance, and month-boundary character counters. The clock is driven from one cleanup routine that every active mode loop calls once per turn (once per consumed turn outdoors, in town, and in combat; once per loop iteration in a dungeon — see Section 3); that routine takes a "minute increment" argument from its caller, advances minutes, and cascades minute → hour → day → month → year through fixed wrap thresholds. The same routine is also called with a zero increment as a "recompute, do not advance" form so that systems whose state depends on the current time (most notably ambient light) can be brought up to date when the player crosses between modes without spending a turn.
 
 The clock is part of the saved game. Year, month, day, hour, and minute are persistent fields in the save image and survive every save/load cycle.
 
@@ -29,7 +29,9 @@ Several other variables sit alongside the clock in the save image (transport mar
 
 ## 3. The per-turn cleanup contract
 
-Every mode loop in the game — overworld, town, dungeon, combat — finishes each consumed turn by calling the per-turn cleanup routine. The same routine is also called at certain points where no turn has been consumed but where the daylight or hour-driven state needs to be brought up to date (for example when an outdoor view is being entered from a town).
+Every mode loop in the game — overworld, town, dungeon, combat — advances the clock through one shared per-turn cleanup routine. The same routine is also called at certain points where no turn has been consumed but where the daylight or hour-driven state needs to be brought up to date (for example when an outdoor view is being entered from a town).
+
+The overworld, town, and combat loops make the call only for a turn that was actually consumed. **The dungeon loop does not.** Its single cleanup call sits at the top of each loop iteration, ahead of the input read and the command dispatch, and is not gated on the previous command's status word, so every dungeon iteration costs a minute — including commands the dispatcher reports as "no action". `systems/commands.md` Section 3 and `systems/dungeon-mode.md` own that detail; the effect on the clock is the same one minute per iteration.
 
 The routine takes one word argument that is both the *minute increment for this turn* and a *mode tag* selecting how the call should behave. Three values are observed:
 
@@ -221,7 +223,7 @@ The dawn/dusk gradient levels are:
 
 **Stage three — change detection.** The pre-recompute daylight value is saved on the local stack before stage one runs. After the personal-light floors, the new value is compared against the saved one; if they differ, a visibility-dirty flag is set so that the next render runs the full visibility recompute rather than reusing the cached one. Daylight that *did not* change does not force a visibility repaint.
 
-The light-source counters themselves are advanced as part of the per-turn cleanup, with the same effective increment after the state-tag modifier described in Section 4, via the saturating-arithmetic helper. They count down toward zero; reaching zero ends the effect. An hour-rollover-only counter (used by the once-per-hour spell timer) is also incremented at the moment of hour change, before the daylight recompute runs, so that "this spell expires at the top of the hour" effects work correctly.
+The light-source counters themselves are advanced as part of the per-turn cleanup, with the same effective increment after the state-tag modifier described in Section 4, via the saturating-arithmetic helper. They count down toward zero; reaching zero ends the effect. One further byte is touched at the moment of hour change, before the daylight recompute runs: the camp cooldown counter is reduced by one through the same saturating helper, floored at zero. That counter is armed at 14 by a completed wilderness camp and gates whether a later camp recovers anything; `systems/rest-and-camp.md` Section 5 owns it. Earlier wording here calling this an *incremented* "once-per-hour spell timer" is withdrawn — the hour rollover decrements it, and no spell timer is aged by this path (see the paragraph below).
 
 This cleanup path is not the owner of every magical countdown. The shared
 combat active-effect/runtime counter (`P`, `Q`, `C`, `N`, and Negate Time's
@@ -292,7 +294,9 @@ month boundary. The traced set is exactly:
   `systems/containers.md`);
 - the cycling fixed hidden-treasure record's daily cooldown cookie
   (`systems/hidden-treasures.md`, record 14);
-- the fortunes-of-war encounter reroll flag (`systems/encounters.md`).
+- the early-game encounter-size damper (`systems/encounters.md` Section 5). The
+  older names "fortunes of war" and "double encounter" for this byte are
+  withdrawn; it lowers spawn counts rather than raising them.
 
 All five are day-of-month cookies or one-shot flags owned by other gameplay
 systems, so the time system's contract is only that they are zeroed when the day
@@ -336,7 +340,7 @@ The relationship between the time system and NPC schedules is therefore simple: 
 
 The per-turn cleanup is called from each mode loop with the increment shown in Section 3 — one minute indoors, two minutes outdoors. Special command handlers may pass their own argument:
 
-- **Movement.** Move one cell using the standard mode-loop turn cost. Indoor moves are one minute and outdoor moves are two minutes. Water transport uses the `Q` timing tag's half-increment rule. Carpet movement is not proven to use the `T` tag; implement it with the standard committed-turn cost unless a separate movement trace supplies a different modifier.
+- **Movement.** Move one cell using the standard mode-loop turn cost. Indoor moves are one minute and outdoor moves are two minutes. **No vehicle changes that cost.** Skiffs, ships, horses, and the magic carpet all move on the unmodified mode increment; the `Q` half-increment applies only while the Quickness effect of Section 4 is running, and the `T` suppression only while Negate Time is. Earlier wording here attributing the `Q` half-increment to water transport, and the `T` suppression to carpet travel, is withdrawn.
 - **Hole up / camp.** The rest command prompts for an hours count, then advances
   elapsed rest through its own loop rather than by passing one large value to the
   cleanup routine. The cleanup routine accepts larger rest/wait increments, and
@@ -486,7 +490,15 @@ The behaviour described here was derived from the private function notes listed 
 - The town mode loop's per-turn invocation of the cleanup with the one-minute increment, the rest/wait command's twenty-minute call, and the entry-time mode-zero refresh — derived from `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
 - The ordinary town arrest surrender path's wait-to-morning loop - derived
   from `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`.
-- The dungeon mode loop's per-turn invocation of the cleanup with the one-minute increment — derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- The dungeon mode loop's per-turn invocation of the cleanup with the one-minute increment, its single call site at the head of the loop iteration ahead of the input read, and the fact that it is not gated on the command status word — derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- The hour-rollover decrement of the camp cooldown byte, and the withdrawal of
+  the earlier "incremented once-per-hour spell timer" reading of the same site —
+  derived from `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md` and
+  `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
+- The exhaustive writer census of the shared timed-magic-effect byte, which
+  contains no vehicle, boarding, or movement writer and therefore withdraws the
+  "skiff halves the increment" reading everywhere it appeared — derived from
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` section 27.
 - The combat-exit non-cleanup lighting path - derived from
   `u5-decomp/functions/ULTIMA_EXE/0x6360_exit_combat.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.

@@ -12,7 +12,7 @@ The full file roster covers the canonical tile atlas (`TILES`), the inventory sp
 
 Every file is wrapped in the shared Ultima V LZW envelope. After unwrap, the body is one of three small container layouts — a flat tile array, a directory of variable-shape images, or a directory of variable-shape image-and-mask sprites. The container choice is implicit per file (no tag, no magic number, no version); a reader knows which layout to apply because the file family's role is fixed. Sections 5 and 6 enumerate the layouts; Section 7 lists which files use which layout.
 
-The format carries no embedded palette. The sixteen-entry palette for `.16` is the standard IBM EGA hardware palette; the four-entry palette for `.4` is one of the standard IBM CGA hardware palettes selected by the display driver at mode set time. Both palettes are baked into the executable's display driver, not into the asset files, and a reader that wants to render the bytes faithfully must source the palette separately.
+The format carries no embedded palette. The sixteen-entry palette for `.16` is the stock IBM set for the EGA mode with one substitution at index six, and it ships as a table in the resident image rather than inside any driver; the four-entry palette for `.4` is a single IBM CGA hardware palette that the CGA driver hard-codes at mode set time and never revisits. Neither palette is in the asset files, and a reader that wants to render the bytes faithfully must source the palette separately. Section 7 gives both in full.
 
 ## 2. The LZW envelope
 
@@ -55,7 +55,7 @@ The `.4` files store pixel data as *packed two-bit values, four pixels per byte,
 
 A row of *w* pixels packs into `(w + 3) / 4` bytes. There is no row stride padding for the CGA depth; the row width is exactly the packed-byte count. A sixteen-by-sixteen tile costs sixteen rows times four bytes per row, equals sixty-four bytes — exactly half the EGA cost. A flat atlas of five hundred twelve such tiles costs five hundred twelve times sixty-four, equals thirty-two thousand seven hundred sixty-eight bytes uncompressed.
 
-The two-bit-per-pixel encoding constrains the CGA renderer to four colours per scene; on the IBM CGA card this is the canonical mode-four limitation. Different game scenes select different sub-palettes through driver state — the disk format does not encode a per-scene palette switch.
+The two-bit-per-pixel encoding constrains the CGA renderer to four colours; on the IBM CGA card this is the canonical mode-four limitation. The four colours are the same for the whole run: the CGA driver selects one fixed palette during mode setup and never issues another palette request (Section 7). The disk format encodes no palette switch of any kind. **Correction:** an earlier revision of this paragraph said different game scenes select different sub-palettes through driver state; that is withdrawn.
 
 The 2:1 byte ratio between the EGA and CGA encodings is exact for every image of the same width and height *except* for sprite-and-mask sub-blocks, where the depth-independent mask plane shifts the ratio (Section 6).
 
@@ -71,18 +71,30 @@ A decoder enumerates tiles by index by simply multiplying the index by the tile 
 
 This layout is used by the world tile atlas only. Every other file uses one of the variable-shape directory layouts.
 
-### 5.1.1 Resident miniature tile glyphs
+### 5.1.1 Resident miniature tile glyphs — withdrawn
 
-The main tile atlas is not the only tile-shaped rendering source. The resident
-engine also carries a compact per-tile miniature encoding used for the small
-tile glyph shown in the stats panel and some inventory-style contexts. Each
-miniature record describes sixteen rows with two offset bytes per row, for
-thirty-two bytes per tile. The renderer expands that row/offset encoding into a
-small display glyph through a dedicated resident helper.
+**Withdrawn in full.** Earlier revisions of this section claimed that the
+resident engine carries a second, compact per-tile rendering source: a
+"miniature" encoding of thirty-two bytes per tile, sixteen rows of two offset
+bytes each, expanded by a dedicated resident helper into the small tile glyph
+shown in the stats panel and in inventory-style contexts. No such path exists.
 
-This path is distinct from the main sixteen-by-sixteen EGA tile blit. Do not
-try to extract these miniature glyphs from `TILES.16` by cropping the atlas; they
-are a separate resident representation intended for compact UI display.
+The shared data overlay does hold a table of thirty-two-byte records made of
+sixteen signed byte pairs, and a resident helper does walk it sixteen pairs at a
+time — but the records are indexed by an **animation frame number reduced modulo
+sixteen**, not by tile id; the helper writes only the two byte values "lit" and
+"clear" into the thirty-two-by-thirty-two local-light mask, never into any pixel
+buffer; and it performs no nibble, plane, or bitmap work of any kind. It is the
+sixteen-bearing beam stencil of the night-time rotating light beacon specified in
+`systems/visibility.md` Section 12.6. The mistaken reading is what put a
+"miniature tile-glyph path" into this document and into
+`systems/stats-panel.md`; that document withdrew its half of the claim in its
+Section 8, where the timed-effect glyph is now specified as an ordinary
+fixed-cell font character.
+
+Consequently `TILES.{16,4}` is the **only** tile-shaped graphics source in the
+game, and this document specifies it completely. There is no second resident
+tile representation to reproduce.
 
 ### 5.2 Directory of variable-shape images, thirty-two-bit offsets
 
@@ -155,7 +167,15 @@ The full set of tile-graphics files, with their container layouts, sub-image cou
 | `STARTSC`        | Image directory (5.2)        | 3 panels                            | ~21.9 KB               | ~11.0 KB              |
 | `ENDSC`          | Image directory (5.2)        | 1 panel                             | ~22.2 KB               | ~10.9 KB              |
 | `END1` / `END2`  | Image directory (5.2)        | 3 panels each                       | ~24.7–28.2 KB          | ~12.2–14.1 KB         |
-| `STORY1`–`STORY6`| Image directory (5.2)        | 3–5 panels per file                 | ~28.3–42.0 KB          | ~13.1–20.9 KB         |
+| `STORY1`–`STORY6`| Image directory (5.2)        | 3, 4, 2, 2, 2 and 8 panels          | ~28.3–42.0 KB          | ~13.1–20.9 KB         |
+
+The story-file counts are per file and not a range: an earlier revision of this
+row gave "3–5 panels per file", which is **withdrawn**. Re-decoding the shipped
+directories gives `STORY1` 3, `STORY2` 4, `STORY3` 2, `STORY4` 2, `STORY5` 2 and
+`STORY6` 8, in both depth twins. `STORY6`'s eight records are what the intro's
+story steps 13 through 20 address as subimages `0..7`
+(`systems/intro.md` section 10); a reader that expects at most five records in
+that file cannot resolve those steps.
 
 Several roles deserve dedicated commentary.
 
@@ -201,9 +221,11 @@ exactly which record is which:
 | `ENDSC` | 0 | 260 x 168 | Single end-screen parchment panel |
 
 Two depth differences are worth recording. In the `.4` twin of `ULTIMA`, record
-4 is `288 x 49` rather than `288 x 50`; the 50-row band pitch the consumer uses
-is a display-driver constant, not a record height, so the low-depth build simply
-leaves one background row at the bottom of the last staged band. `STARTSC.4` and
+4 is `288 x 49` rather than `288 x 50`; the band pitch the consumer uses is a
+display-driver constant, not a record height, so the 50-row-pitch backends
+simply leave one background row at the bottom of the last staged band. (50 is
+the EGA, Tandy and CGA figure; the Hercules driver stages at its own pitch —
+see `systems/display-driver.md` section 8.) `STARTSC.4` and
 `ENDSC.4` carry the same record shapes as their high-colour twins.
 
 The naming is a trap worth calling out, because it has been got wrong before:
@@ -247,7 +269,7 @@ For `TILES.4`, the procedure is identical except the declared length is thirty-t
 - The world tile-index-to-attribute catalogue — the per-tile walkability and animation flags consumed by movement and rendering — `catalogs/tile-catalog.md`.
 - The location tile grids that index into the world tile atlas — `formats/location-dat.md`.
 - The active-object table whose tile bytes index into the world tile atlas — `systems/active-objects.md`.
-- The text-output pipeline that renders glyphs by slicing the `TEXT` strips — `systems/text-output.md`.
+- The text-output pipeline — `systems/text-output.md`. Note that it does **not** consume this file family for glyphs: the fixed-cell fonts are the `.CH`/`.HCS` character files and the proportional font is `PROPORT.PCS`. The `TEXT` records are whole-image chapter headings and are never sliced per character (Section 6).
 - The dungeon mode that composites the wall billboards from `DNG1`/`DNG2`/`DNG3` — `systems/dungeon-mode.md`.
 - The chargen sequence that displays the panels in `CREATE` — `systems/chargen.md`.
 - The intro and end-game sequences that display panels from `STARTSC`, `ENDSC`, `END1`, `END2`, `STORY1`–`STORY6`, `ULTIMA` — `systems/intro.md` and `systems/endgame.md`.
@@ -263,7 +285,18 @@ the sprite-and-mask family's deviation from the 2:1 inter-depth ratio.
 Remaining work is catalog, renderer, or historical-hardware parity rather than
 archive decoding:
 
-- **Per-screen palette overrides.** The CGA palette is set by driver state at mode-switch time and may differ between scenes. Whether any specific scene transition triggers a palette change — and which scenes carry which palette — is a property of the CGA driver and the scene-mode initialisers, not of the file format. A reader that wants to faithfully render the CGA artwork must either source the active palette from the running engine or assume one of the standard CGA mode-four palettes per scene.
+- **Per-screen palette overrides.** *Closed — there are none.* An earlier
+  revision of this bullet said the CGA palette "is set by driver state at
+  mode-switch time and may differ between scenes", and asked which scenes carry
+  which palette. That is withdrawn. Both palettes are loaded exactly once, inside
+  the mode-set entry, and no entry in any of the four drivers and no path in the
+  resident image or any overlay issues a further palette request or writes
+  palette hardware directly (`systems/display-driver-mode.md` Section 5.2). The
+  CGA selection is fixed and is named in Section 7. Apparent recolouring in the
+  shipped presentation is always either a draw performed under a restricted plane
+  write mask or a mutation of the loaded asset bytes, never a palette change. A
+  reader can therefore render every `.4` file against one four-colour set and
+  every `.16` file against one sixteen-entry set.
 
 - **Per-strip roles in `TEXT`.** Closed. The six records are whole-image chapter headings, not glyph strips; their sizes, words and consumers are published in Section 6. There is nothing to slice and no font data in this file.
 
@@ -292,7 +325,13 @@ The format described above was derived from the analysis notes listed below. Non
 - The display drivers' byte-by-byte unpacking of the chunky packed (EGA) and packed two-bit (CGA) row data into hardware framebuffer form — `u5-decomp/code-inventory.md` (the `EGA.DRV`, `CGA.DRV`, `HERC.DRV`, and `TANDY.DRV` driver entries).
 - The `TEXT` record roles, sizes and words, decoded from the shipped archive with this document's own container rules and cross-checked against their consumers in `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - The world tile attribute table held in the resident data slab — referenced by the location tile grids' decoded tile indices — `u5-decomp/formats/data-ovl.md`.
-- The resident miniature tile-glyph rendering path — `u5-decomp/functions/ULTIMA_EXE/0x7040_render_2x16_sprite.md`.
+- The withdrawal of the "resident miniature tile-glyph rendering path" of
+  Section 5.1.1: the routine that reading rested on is the night-time light
+  beacon's stencil stamp, re-read from the shipped executable for this revision
+  and written up in `u5-decomp/functions/ULTIMA_EXE/0x7040_light_beacon_stamp.md`
+  and `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`. The stale
+  reading survives as `u5-decomp/functions/ULTIMA_EXE/0x7040_render_2x16_sprite.md`
+  and in a `u5-decomp/CORRECTIONS.md` entry; both are superseded.
 - Per-record inventories and roles for `ULTIMA`, `STARTSC` and `ENDSC`, the depth difference in `ULTIMA`'s last record, and the `STARTSC`-is-not-the-start-screen correction — `u5-decomp/notes/intro_title_sequence_2026-08-22.md`, with every record shape re-decoded from the shipped files before publication.
 - The active-object table whose per-slot tile byte indexes the world tile atlas — `u5-spec/systems/active-objects.md`.
 - The location tile grids' per-cell tile byte that indexes the world tile atlas — `u5-spec/formats/location-dat.md`.

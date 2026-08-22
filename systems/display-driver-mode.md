@@ -32,7 +32,7 @@ any separate VGA code path.
 | Scanline byte stride | 40 bytes per plane |
 | Plane count | 4 (one bit per colour channel) |
 | Pixel container size | One byte per eight horizontal pixels per plane |
-| Display pages | Eight 8-KB pages at adapter base; this driver uses page zero as the visible page and reserves the next three pages for the driver back buffer |
+| Display pages | The adapter's page memory at the graphics base; this driver uses the first page as the visible page and reserves the 32-KB region immediately above it for the driver back buffer, which holds four sequential 8,000-byte plane images (Section 4.3) |
 
 The visible page is hardware page zero. There is no ordinary world or text
 update path that flips pages; presentation effects copy or dissolve from the
@@ -296,14 +296,20 @@ a modern reconstruction, not an original behaviour.
 
 ## 7. Known Uncertainties
 
-- **Exact CGA palette policy.** The CGA backend selects one of the historical
-  fixed CGA palettes (palette zero or one, with or without high intensity)
-  at mode-set time. The v1 contract does not constrain which selection is
-  used, because the EGA path is the baseline and no asset depends on a
-  specific CGA palette choice. A future CGA-targeting implementation should
-  pick a policy and document it locally. There is no index-mapping table from
-  the sixteen-colour palette down to the four-colour one anywhere in the
-  original, so no such mapping can be published as historical behaviour.
+- **Exact CGA palette policy.** *Closed.* An earlier revision of this bullet
+  said the v1 contract "does not constrain which selection is used" and asked a
+  future CGA implementation to pick a policy. That is withdrawn: the choice is
+  not open. The CGA driver's mode-set entry requests the four-colour
+  320-by-200 mode and then issues one palette-select call for **palette one** —
+  black, cyan, magenta, white — with the background and border black at low
+  intensity, and it never issues another. `formats/tiles.md` section 7 and
+  `catalogs/tile-catalog.md` section 13 publish the same selection, and this
+  document's Section 5.2 rule that nothing reprograms a palette after mode setup
+  applies to that driver too. What remains genuinely open is only the *pixel*
+  conversion: there is no index-mapping table from the sixteen-colour palette
+  down to the four-colour one anywhere in the original, so no such mapping can be
+  published as historical behaviour, and the low-colour art is authored at its
+  own depth instead.
 - **Mode-set fast path.** Some entry paths invoke the mode-set entry with
   the do-real-mode-set flag cleared so that the firmware mode change and
   palette upload are skipped. These paths assume the adapter is already in

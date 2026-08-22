@@ -26,9 +26,13 @@ Vehicle state is stored in three cooperating places:
   with a vehicle-class tile, coordinates, floor/plane marker, and auxiliary
   bytes. For ships, byte `+5` is hull condition and byte `+7` is skiffs
   aboard.
-- **Timing/state tag.** The per-turn cleanup reads a nearby single-character
-  state tag for the `Q` half-time and `T` no-minute cases. That tag is not the
-  full vehicle identity and should not be used as the vehicle table.
+- **Timing/state tag — not vehicle state at all.** The per-turn cleanup reads a
+  nearby single-character state byte for the `Q` half-time and `T` no-minute
+  cases. That byte is the single shared timed-magic-effect slot owned by
+  `systems/magic.md`: `Q` is Quickness and `T` is Negate Time. No boarding,
+  dismount, or movement path writes it, so it is neither a vehicle identity nor
+  a vehicle-derived timing state. Earlier revisions of this spec described the
+  skiff as setting or being represented by `Q`; that reading is withdrawn.
 - **Save and object-overlay files.** The live active-object table is persisted
   in `SAVED.GAM` for the current scene. The overworld plane object tables live
   in the `.OOL` companion files. See `formats/saved-gam.md` and
@@ -59,7 +63,7 @@ value:
 | `0x1C` | Foot/avatar | The clean seed and default state. The adjacent value `0x1D` is the second frame of the on-foot sprite pair and is accepted by the engine's two "party is on foot" predicates, but nothing ever writes it; treat it as defensive breadth, not a reachable state. |
 | `0x20..0x23` | Frigate, sails hoisted | Full four-way facing in the low two bits: `0` north, `1` east, `2` south, `3` west. The ship is under wind control. Ordinary terrain queries use the ship predicate family in `systems/movement.md`. |
 | `0x24..0x27` | Frigate, sails furled | Full four-way facing on the same convention. The ship is aboard but not under wind control. Ordinary terrain queries use the same ship predicate family as the under-sail range. |
-| `0x28..0x2B` | Skiff | Full four-way facing on the same convention. Ordinary terrain queries use the facing-sensitive skiff/water predicate family in `systems/movement.md`. Slow-water timing is represented separately by the `Q` timing/status tag. |
+| `0x28..0x2B` | Skiff | Full four-way facing on the same convention. Ordinary terrain queries use the facing-sensitive skiff/water predicate family in `systems/movement.md`. A skiff step costs the ordinary mode increment; it does not carry a timing modifier of its own. |
 
 Note that `0x10` and `0x11` (a riderless horse) and `0x1B` (a carpet lying on
 the ground) are **object** tiles for parked vehicles, not marker values.
@@ -104,7 +108,7 @@ change the clock increment and it is not a player movement-speed table.
 | Foot | Default state. | No vehicle object; normal terrain restrictions. | None at this level. |
 | Horse | Boardable. X-Xit can leave a horse object behind. | Overland transport; requires the party to be on foot before boarding. Directional movement uses the ordinary one-cell overland step with mounted-horse passability. | None at this level. |
 | Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; boarding warns when hull is below ten or no skiffs are aboard. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
-| Skiff | Boardable. | Water transport; time cleanup halves non-zero turn increments with a one-minute floor. The shared movement spec names the facing-sensitive skiff predicate family. | None at this level. |
+| Skiff | Boardable. | Water transport at the ordinary mode turn cost; no vehicle-specific time modifier. The shared movement spec names the facing-sensitive skiff predicate family. | None at this level. |
 | Magic carpet | Boardable as a carpet. | Boarding changes the party transport state to the carpet transport marker. The B-Board trace does not prove the `T` timing tag is carpet; outdoor Klimb is a separate Grapple-gated command, not a carpet ownership test. The shared movement spec names the carpet predicate family. | None at this level. |
 | Balloon | Vehicle tile family only in the analyzed baseline. | Balloon art and manual-facing references can be preserved as assets, but no traced B-Board, X-Xit, U-Use, shipwright, or ordinary movement branch promotes a live balloon transport state. | No command-level balloon mechanics are specified for v1; do not infer a boardable vehicle from art alone. |
 
@@ -268,11 +272,11 @@ vehicle system contributes the current transport state and a few modifiers:
   confirmed transport-marker pendulum for horse/carpet values gates
   active-object and encounter cadence, not player stride and not the time
   cleanup's minute increment.
-- Skiff/raft-like water travel is associated with the time cleanup's `Q` tag,
-  which halves non-zero time increments and floors the result at one minute.
-- A separate `T` timing/state tag suppresses minute and light-counter
-  advancement in the time cleanup, but it is not currently identified as a
-  boarded vehicle family.
+- Skiff and other water travel uses the unmodified mode increment. The time
+  cleanup's `Q` half-increment and `T` minute-suppression come from the shared
+  timed-magic-effect byte (Quickness and Negate Time) and are never set by
+  boarding, dismounting, or moving a vehicle; the earlier association of `Q`
+  with skiff/raft travel is withdrawn.
 - Vehicle state participates in encounter checks and the overworld special
   underfoot-tile handling that can suppress movement and force zero light.
 
