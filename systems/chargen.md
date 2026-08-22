@@ -37,17 +37,53 @@ This "clone the template" pattern is why the campaign begins in a known initial 
 
 After the seed is loaded, chargen renders two prompts in sequence.
 
-**The name prompt.** The text "By what name shalt thou be known?" is printed in the proportional font, and a free-text input prompt is opened with a maximum length of eight characters. The avatar's name is written directly into the first eight bytes of the seed-loaded Avatar name field; the save record has a fixed nine-byte name field, and the ninth byte remains seed padding for questionnaire-created names. Names shorter than eight characters are null-padded; names exactly eight characters fill the entered-name slice with no terminator. The name prompt accepts printable ASCII; backspace deletes; Enter terminates.
+Both prompts use the **fixed-cell 8-by-8 character path** on the standing
+full-screen text window, not the proportional paragraph renderer. Character
+creation never resizes a text window; see Section 4.1.
+
+**The name prompt.** The text "By what name shalt thou be known?" is printed with the fixed-cell character printer, and a free-text input prompt is opened with a maximum length of eight characters. The avatar's name is written directly into the first eight bytes of the seed-loaded Avatar name field; the save record has a fixed nine-byte name field, and the ninth byte remains seed padding for questionnaire-created names. Names shorter than eight characters are null-padded; names exactly eight characters fill the entered-name slice with no terminator. The name prompt accepts printable ASCII; backspace deletes; Enter terminates.
 
 If the player presses Enter at the empty prompt — a zero-length name — chargen takes its **abort path**. It skips the rest of the flow, leaves `SAVED.GAM` on disk untouched, and returns to the intro menu. The in-memory save image will have been clobbered with the seed contents (since the read happened before the prompt), but that is harmless because nothing has written it back to disk and the next "Journey Onward" or "Create New Character" attempt will start over from the working file.
 
-**The gender prompt.** Provided a name was entered, chargen prints "Art thou Male or Female? " and polls for either `M` or `F`, looping silently on any other key. The chosen value is written into the avatar's record at the field one byte beyond the name. The byte values used are not ASCII letters — the male code is `0x0B` and the female code is `0x0C`, two adjacent bytes well below the printable-ASCII range. These same two byte values appear at the same offset in every companion record in `INIT.GAM`, distinguishing the male and female members of the canonical companion roster. The codes are interpreted as glyph indices by the proportional-font renderer when displaying the gender on the character sheet; an `M`/`F` ASCII pair in this slot would have collided with other glyphs.
+**The gender prompt.** Provided a name was entered, chargen prints "Art thou Male or Female? " and polls for either `M` or `F` — upper or lower case, folded to upper case before the comparison — looping silently on any other key and echoing the accepted letter at the cursor. The chosen value is written into the avatar's record at the field one byte beyond the name. The byte values used are not ASCII letters — the male code is `0x0B` and the female code is `0x0C`, two adjacent bytes well below the printable-ASCII range. These same two byte values appear at the same offset in every companion record in `INIT.GAM`, distinguishing the male and female members of the canonical companion roster. The codes are interpreted as glyph indices by the proportional-font renderer when displaying the gender on the character sheet; an `M`/`F` ASCII pair in this slot would have collided with other glyphs.
 
-After both prompts are answered, chargen sets up a full-screen text rectangle for the questionnaire and proceeds.
+### 4.1 There is no questionnaire text rectangle
+
+**Retraction.** Earlier revisions of this section ended with "chargen sets up a
+full-screen text rectangle for the questionnaire and proceeds". That is
+**withdrawn**: there is no such rectangle, and character creation never resizes
+or reconfigures a fixed-cell text window at any point. An engine that models
+the questionnaire as fixed-cell text in a caller-configured window will not
+match.
+
+Character creation uses **two independent text systems**, and the split is
+clean:
+
+| Path | Used for |
+|---|---|
+| Fixed-cell 8-by-8 character printer, on the standing full-screen window | The name prompt, the typed name, the gender prompt, and the echoed gender letter — nothing else |
+| Proportional paragraph renderer (`text-output.md` section 8) | The opening gypsy paragraph, every question paragraph, and the result paragraph |
+
+The proportional renderer takes its geometry from a shared layout descriptor
+rather than from a text window, so it is unaffected by which fixed-cell window
+happens to be active. Section 5.1 publishes the descriptor values for all three
+paragraph screens.
+
+The one fixed-cell reset that *does* happen is a **single opaque fill of the
+menu window's interior**, pixels `(8, 128)..(311, 191)`, in colour 0, issued
+once immediately before the name prompt. That rectangle is character cells
+`(1, 16)..(38, 23)`. Above it, two small fills draw the prompt area's divider:
+a colour-1 fill of `(120, 120)..(200, 126)` and a colour-3 horizontal rule from
+`(120, 127)` to `(200, 127)`.
+
+The interior is **not** cleared again between the name and gender steps, which
+is why the name prompt and the typed name stay visible under the gender prompt.
+The next clear of any kind is the full-page clear that precedes the gypsy
+screen, and that one happens on the hidden surface.
 
 ## 5. The QUESTION.DAT file
 
-The questionnaire's text content lives in `QUESTION.DAT`, a 7,746-byte data file shipped with the game. It is laid out as thirty NUL-terminated text records in plain ASCII, sharing two lightweight markup conventions with the intro narrative file: a leading `{` marking the start of a paragraph (consumed by the renderer as a paragraph-break sigil that produces no glyph), and `_` anywhere mid-word as a soft hyphen — a syllable-break the line-wrapper may use as a wrap candidate but which produces no glyph otherwise.
+The questionnaire's text content lives in `QUESTION.DAT`, a 7,746-byte data file shipped with the game. It is laid out as thirty NUL-terminated text records in plain ASCII, sharing two lightweight markup conventions with the intro narrative file: a leading `{`, which is a **first-line indent** of 15 pixels that draws no glyph and is not a page break, and `_` anywhere mid-word as a soft hyphen — a syllable-break the line-wrapper may use as a wrap candidate, which draws a hyphen only when the line actually breaks there and produces no glyph otherwise. Both markers are specified in `systems/text-output.md` section 8.2.
 
 The thirty records decompose as: record 0, the gypsy-wagon arrival narrative (about 800 bytes); record 1, the gypsy's post-question/result paragraph (about 900 bytes); and records 2 through 29, the twenty-eight virtue-pair dilemmas, each a short prose paragraph (150 to 300 bytes) asking the player to choose between an option A and an option B. Twenty-eight is the count of unique unordered pairs of eight virtues, and the records cover exactly those twenty-eight pairings. The mapping from pair to record is held in an eight-by-eight symmetric table in the resident data image: indexing by the smaller-numbered virtue along one axis and the larger-numbered along the other yields the selected record. The diagonal cells are zero and unreachable because no virtue is paired with itself. The public record-ordinal mapping is listed in `formats/question-dat.md`.
 
@@ -67,10 +103,11 @@ font and `CREATE` asset have been loaded.
 | Question frame right backing | 1 | 200 | 0 | 120 x 148 | Right option backing |
 | Post-question/result paragraph | 10 | 168 | 100 | 152 x 100 | Closing/result scene panel |
 
-Slots 2 through 9 are the virtue option panels. The option labelled `A` uses
-the lower-numbered virtue in the current pair and is drawn at that virtue's
-base origin. The option labelled `B` uses the higher-numbered virtue and is
-drawn 184 pixels to the right of that virtue's base origin.
+Slots 2 through 9 are the virtue option panels. The option labelled `A` is the
+**left** panel: it uses the lower-numbered virtue in the current pair and is
+drawn at that virtue's base origin. The option labelled `B` is the **right**
+panel: it uses the higher-numbered virtue and is drawn 184 pixels to the right
+of that virtue's base origin.
 
 | Virtue | `CREATE` slot | Base X | Base Y | Size |
 |---|---:|---:|---:|---|
@@ -108,6 +145,101 @@ the proportional font width table and advances within the caller's active
 paragraph rectangle. The caller flushes after each paragraph/page and performs
 the wait; paragraph rendering itself does not consume input.
 
+### 5.1.1 Prompt cell positions
+
+The two fixed-cell prompts sit inside the menu window's interior, at these
+character cells on the standing full-screen window:
+
+| Element | Cell `(column, row)` |
+|---|---|
+| `By what name shalt thou be known?` | `(3, 17)` |
+| The `:` that precedes the typed name | `(14, 19)` |
+| The typed name itself | begins at `(15, 19)`, at most 8 characters |
+| `Art thou Male or Female? ` | `(8, 21)` |
+| The echoed `M` or `F` | at the cursor where the prompt leaves it |
+
+An empty name aborts character creation, as described in Section 4.
+
+### 5.1.2 Paragraph rectangles
+
+All three paragraph screens drive the proportional paragraph renderer of
+`text-output.md` section 8, whose full contract — the margin-pair-plus-band
+model, the brace indent, the soft hyphen, the justification rule, the nine-pixel
+line advance and the clip at vertical position 192 — is published there and is
+not restated here. The per-glyph advance table those rules measure with is
+published in `formats/font-pcs.md` section 4. What chargen supplies is the
+per-screen descriptor.
+
+Three facts that black-box observation gets wrong often enough to be worth
+stating flatly: **the line advance is exactly 9 pixels, not about 12**; glyphs
+carry **no drop shadow and no outline** of any kind; and glyph drawing stops
+once the pen reaches vertical position **192**, though the pen keeps advancing
+as though it had not.
+
+The renderer **fully justifies** every line except the last line of a paragraph
+— that is, except a line ended by an explicit newline or by the end of the
+record — which is left ragged. The leftover pixels of a justified line are
+distributed across that line's spaces, each space taking the base space advance
+plus the remaining slack divided by the number of spaces still to come,
+truncating, with the remainder carried into later spaces; the leftovers
+therefore land on the *last* spaces of the line.
+
+| Field | Opening gypsy paragraph | Per-question paragraph | Result paragraph |
+|---|---|---|---|
+| `QUESTION.DAT` record | 0 | the pair's record, 2..29 | 1 |
+| Pen start | `(0, 9)` | `(0, 152)` | `(0, 0)` |
+| Outside band: left, right | 0, 320 | 0, 320 | 0, 320 |
+| Inside band: left, right | 175, 320 | (band disabled) | 0, 166 |
+| Band low, high | 89, 200 | (band disabled) | 90, 200 |
+| Space advance | 5 | 5 | **4** |
+| Line advance | 9 | 9 | 9 |
+| Glyph shadow | none | none | none |
+
+Read plainly:
+
+- **The opening gypsy paragraph** starts at the very top-left, runs the full
+  320-pixel width justified, and from the first line whose pen passes y = 89 it
+  flows in the 175..320 column — to the right of the 168-wide art that starts at
+  y = 96. The left margin is **175**, not 176.
+- **The per-question paragraph** is full width throughout. The band is
+  *disabled* before the questions begin, by collapsing its low bound onto its
+  high bound so the band test can never succeed; that is the mechanism the
+  original uses to turn the flow-around-art rule off, and setting the two bounds
+  equal is the portable way to express it. With a pen start of `(0, 152)` and a
+  nine-pixel advance, its lines land at y = 152, 161, 170, 179 and 188 before
+  the clip at 192 stops output.
+- **The result paragraph** is the mirror of the gypsy screen: full width at the
+  top, then clipped to the 0..166 column — to the *left* of the 152-wide art
+  that starts at x = 168 — for every line whose pen has passed y = 90. It is the
+  only paragraph in the game that runs with the tightened 4-pixel space advance,
+  which is restored to 5 as soon as the paragraph is laid out.
+
+Each record's leading brace supplies a 15-pixel first-line indent that draws
+nothing; every shipped `QUESTION.DAT` record opens with one.
+
+### 5.1.3 Screen composition and buffer discipline
+
+Every character-creation screen composes off-screen and is published in **one
+instantaneous full-screen copy**. There is no wipe, no dissolve, and no
+save-and-restore of a backing surface anywhere in this path. Per screen, in
+order:
+
+1. Install the layout descriptor values for this screen.
+2. Read the `QUESTION.DAT` record into the shared text scratch buffer.
+3. Select the hidden surface.
+4. Issue the text system's clear control, blanking the page.
+5. Draw the artwork.
+6. Lay out the paragraph.
+7. Copy the hidden page to the visible page.
+8. Wait for a key — any key on the gypsy and result screens, `A` or `B` on a
+   question screen.
+
+The question screen is cleared this way **before each question**, so the
+previous question's panels never survive into the next one. The proportional
+font resource and the `CREATE` archive are opened once at the start of the
+sequence and held for its whole duration; both are released after the result
+screen, which then clears the hidden page, publishes it, and returns.
+
 ## 6. The questionnaire — eight virtues, seven questions
 
 Britannia has eight virtues. The chargen code numbers them zero through seven, and the in-engine numbering matches the canonical Britannian order: Honesty, Compassion, Valor, Justice, Sacrifice, Honor, Spirituality, Humility. Each virtue has its own per-stat delta weights — small integer increments (zero, one, or two) added to the running stat tallies whenever that virtue is selected as the winner of a question. The deltas are:
@@ -140,9 +272,28 @@ Two flag arrays support the elimination logic:
 
 A virtue is eligible for a question only if both arrays are clear for it. The random virtue-picker is rejection-sampled — it draws a random index in zero through seven and rolls again if the chosen virtue is flagged. When a virtue is accepted, the picker immediately marks it selected for the current round before returning. Because each question calls the picker twice, the second draw cannot return the first draw's virtue; self-pairings are unreachable. With four eligible virtues drawn two at a time per round, the picker never has fewer than two candidates and so cannot loop forever.
 
-For each question, after the two virtues are drawn, chargen sorts them by index: smaller-numbered virtue gets the "A" slot (top), larger-numbered the "B" slot (bottom). The internal record of which random draw ended up as the smaller number lets the engine map the player's A/B keypress back to winner/loser. The question record is loaded from `QUESTION.DAT` at the offset given by the symmetric pair table (which makes draw order irrelevant to question selection), and the two option tiles are drawn at fixed-per-virtue screen positions.
+For each question, after the two virtues are drawn, chargen sorts them by index: the smaller-numbered virtue gets the **`A` slot, which is the left panel**, and the larger-numbered virtue the **`B` slot, which is the right panel**. The internal record of which random draw ended up as the smaller number lets the engine map the player's A/B keypress back to winner/loser. The question record is loaded from `QUESTION.DAT` at the offset given by the symmetric pair table (which makes draw order irrelevant to question selection), and the two option tiles are drawn at fixed-per-virtue screen positions.
 
-The player presses A or B; any other key loops silently. On a valid answer, chargen adds the winner virtue's three stat deltas into running totals (INT, DEX, STR) and sets the loser's lost-forever flag. The loser contributes no stat deltas, including in the final round. The winner remains eligible for subsequent rounds; the loser does not.
+**Retraction — the panels are left and right, not top and bottom.** Earlier
+revisions of this section called the two slots "top" and "bottom", which
+contradicted Section 5.1's own placement table. The panels are side by side:
+both smoke backings are drawn at vertical position 0, at horizontal positions
+16 and 200, and the right-hand virtue symbol is displaced by exactly 184 pixels
+in X from the left-hand one's per-virtue base origin. `A` selects the left
+panel and `B` the right.
+
+**No literal `A` or `B` glyph is drawn.** Neither the code nor the artwork
+carries option letters: the two smoke backings are a plume rising from a
+brazier with no lettering, and no character is printed beside either panel. The
+option letters exist **only inside the question prose itself**, which reads in
+the form "Dost thou A) ... or B) ...". An engine that draws its own A/B labels
+beside the panels will not match.
+
+The player presses A or B — upper or lower case, folded to upper case before
+the comparison; any other key loops silently with no redraw and no error. The
+engine reorders its internal pair when the pressed letter does not match the
+side the lower-numbered virtue was drawn on, so the left/right mapping holds
+regardless of which virtue was drawn first. On a valid answer, chargen adds the winner virtue's three stat deltas into running totals (INT, DEX, STR) and sets the loser's lost-forever flag. The loser contributes no stat deltas, including in the final round. The winner remains eligible for subsequent rounds; the loser does not.
 
 ## 7. Stat assignment
 
@@ -258,6 +409,12 @@ The behaviour described here was derived from the private function and format no
 - The per-question logic, the random-draw sort into A/B slots, the symmetric eight-by-eight pair-to-record table, the tournament's three-round structure, and the two flag arrays — derived from `u5-decomp/functions/FONT_OVL/0x09C8_questionnaire_iter.md`.
 - The rejection-sampled random virtue picker — derived from `u5-decomp/functions/FONT_OVL/0x0998_pick_random_unused_virtue.md`.
 - The proportional-font paragraph renderer and its paragraph-pacing conventions — derived from `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
+- The three paragraph screens' layout descriptors, the nine-pixel line advance,
+  the justification rule, the absence of a glyph shadow, the prompt cell
+  positions, the single menu-interior clear, the left/right panel orientation,
+  the absence of drawn option letters, and the compose-off-screen-then-publish
+  discipline — derived from
+  `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - The intro menu key dispatch, the trampoline into the chargen routine on `C`, and the scene-byte handshake on return — derived from `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - The Transfer-from-Ultima-IV path's character-roster screen, disk-swap reads, and abort-versus-commit dispatch — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - The misclassification correction that placed chargen in the proportional-font overlay rather than the spell-casting overlay — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.

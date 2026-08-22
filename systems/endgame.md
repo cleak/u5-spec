@@ -79,8 +79,8 @@ handler requires Saduj's clue conversation as a mechanical prerequisite.
 
 On entry, the endgame takes over the screen and scene state:
 
-1. Mark the resident state as being in the endgame, so normal world redraw behaviour no longer applies.
-2. Reset the screen and palette state.
+1. Mark the resident state as being in the endgame, so normal world redraw behaviour no longer applies, and mark the scene as having no active combatant so the arena renderer suppresses its target cursor.
+2. Run a full status-panel redraw. Its side effect is that the message window of section 3.1 becomes the active text window for the whole dialogue phase.
 3. Load endgame-specific data resources for the throne-room/cinematic scene and Lord British message records.
 4. Load and draw the endgame bitmap assets through the same resident image-loading path used elsewhere.
 5. Clear the active-object table and rebuild it as a cinematic tableau rather than as a gameplay object list.
@@ -93,7 +93,62 @@ needed.
 
 The original loader retries indefinitely if required resources are not available. A modern implementation can report a missing-asset error instead, but it should treat the sequence as blocked until the resources are present.
 
-The active-object table is reused because the original engine already has sprite movement and drawing helpers for those records. During the endgame, the table no longer represents the live map. It represents the party, Lord British, and scene markers used by the cinematic. Since the endgame has no normal return path, these writes are presentation state rather than gameplay state.
+The active-object table is reused because the original engine already has sprite movement and drawing helpers for those records. During the endgame, the table no longer represents the live map. It represents the party, Lord British, and the two props the cinematic stages in front of the throne — the sandalwood box and the Orb spark it becomes (section 4). Since the endgame has no normal return path, these writes are presentation state rather than gameplay state.
+
+### 3.1 The endgame surface is the ordinary gameplay screen
+
+The endgame installs **no bespoke renderer and no bespoke screen layout**. It
+reuses the standing gameplay surface and the standing text windows, and only
+selects which of them is active. Everything below follows from that.
+
+**The throne-room tableau is the ordinary eleven-by-eleven world viewport.**
+Cells are sixteen pixels square and the grid's top-left corner is pixel
+`(8, 8)`, so the tableau occupies the inclusive square
+`(8, 8)..(183, 183)` — 176 pixels on a side. That is the same rectangle the
+per-character revival flash of section 4 fills, and the same rectangle
+`display-driver-abi.md` section 9.6 lists for the map viewport, so an engine
+that gets one right gets all three.
+
+**The tableau chamber is not the castle map.** The scene terrain is the fourth
+eleven-by-eleven scene record of the shipped miscellaneous-maps file — record
+index `3`, counting from zero. It is read as 11 rows of 16 bytes and re-strided
+into the buffer a combat arena's terrain normally occupies, which uses a 32-byte
+row stride; only the leading 11 bytes of each row are meaningful and the
+remainder of each arena row is left as it was. The staging buffer the record is
+read into is *not* the buffer the renderer draws from — the scene compositor
+overwrites it every frame — so an implementation must perform the copy into the
+arena terrain slot, not render the record in place.
+
+Because the scene terrain lives in the arena slot, the endgame runs with the
+engine's scene selector in its combat range. The consequence a clean engine
+must reproduce is that **tableau actor coordinates are viewport cells
+directly**: the world-to-viewport projection the outdoor and town modes apply is
+skipped, so an actor at scene cell `(5, 4)` draws at viewport column 5, row 4,
+i.e. pixels `(88, 72)..(103, 87)`. The overlay also marks "no active combatant"
+on entry, which suppresses the combat target cursor the arena renderer would
+otherwise draw.
+
+**The text rectangles are standing fixed-cell windows.** The endgame never
+resizes a text window; it only selects one. Two of the four standing windows are
+used:
+
+| Endgame text | Window rectangle (cells) | Rectangle (pixels) | Used for |
+|---|---|---|---|
+| Message window | `(24, 11)..(39, 23)`, 16 columns x 13 rows | `(192, 88)..(319, 191)` | Lord British's greeting, both box-delivery yes/no prompts and their echoes, the per-character revival lines, the seven rite messages, and the refusal branch's exchange |
+| Full-screen window | `(0, 0)..(39, 24)`, 40 columns x 25 rows | `(0, 0)..(319, 199)` | The six narrative windows' page clears, and the certificate |
+
+The message window is selected **implicitly**, as the last act of the
+full-status-panel redraw the endgame calls on entry; nothing in the endgame
+selects it explicitly, and nothing changes the selection again until the
+narrative presentation of section 8 selects the full-screen window. The message
+window does not overlap the `(8, 8)..(183, 183)` tableau, which is precisely why
+the dialogue never occludes the scene — an engine that centres endgame text or
+gives it its own rectangle will occlude the tableau and diverge.
+
+Text behaviour inside the message window is the ordinary fixed-cell contract of
+`text-output.md`: left-aligned, word-wrapped at the right margin, a line feed
+advances one row, and the window scrolls up by one row when the cursor passes
+the bottom.
 
 ## 4. Party tableau and restoration pass
 
@@ -101,7 +156,15 @@ Before Lord British's main dialogue, the endgame walks the active party slots an
 
 For each party member:
 
-- if the character is marked dead, the sequence announces their restoration, changes the character to a present/active post-death state, restores current health from the stored maximum, plays a short audio/visual flourish, and waits briefly;
+- if the character is marked dead, the sequence announces their restoration,
+  changes the character to a present/active post-death state, restores current
+  health from the stored maximum, plays a short audio/visual flourish, and waits
+  briefly. The announcement is a line feed, the character's name, and the
+  literal text `" lives!"` followed by a line feed, printed into the message
+  window of section 3.1. The flourish is a **single opaque fill of the whole
+  `(8, 8)..(183, 183)` tableau rectangle** in the resident drawing colour,
+  followed by a speaker tone and then a full status-panel redraw, which is what
+  restores the tableau underneath. It is one flash, not a repeating cycle;
 - the character's class or role is mapped to a sprite used in the tableau;
 - the character is placed into an active-object slot at the starting position for the scene;
 - the movement helper steps that slot toward its target until it arrives.
@@ -121,10 +184,10 @@ gameplay floor semantics from those untouched bytes.
 
 The renderer's ordinary active-object order still matters: slots are scanned
 from 31 down to 0, so lower-numbered slots draw on top when sprites overlap.
-That means the party leader in slot 0 draws above other party members, Lord
-British in slot 6, and the scene marker in slot 31.
+That means the party leader in slot 0 draws above the other party members and
+above both of the scripted scene actors.
 
-| Slot | Role | Initial type/tile | Initial X,Y | Phase | Initial settled target |
+| Slot | Role | Initial actor byte | Initial X,Y | Phase | Initial settled target |
 |---:|---|---:|---|---:|---|
 | 0 | Active party member 0 / party leader | Class table | 5,9 | 0 | 5,5 |
 | 1 | Active party member 1 | Class table | 5,9 | 0 | 4,6 |
@@ -132,26 +195,81 @@ British in slot 6, and the scene marker in slot 31.
 | 3 | Active party member 3 | Class table | 5,9 | 0 | 3,7 |
 | 4 | Active party member 4 | Class table | 5,9 | 0 | 5,7 |
 | 5 | Active party member 5 | Class table | 5,9 | 0 | 7,7 |
-| 6 | Lord British, victory branch only | `0x0E` | 5,4 | 0 | Created already at target |
-| 31 | Scene marker | `0x7C` | 5,8 | 0 | Branch-specific |
+| 6 | The sandalwood box, then the Orb — victory branch only | `0x0E`, later `0x08` | 5,4 | 0 | Created already at target |
+| 31 | Lord British | `0x7C` | 5,8 | 0 | 5,3 in the victory branch; 4,1 in the refusal branch |
+
+**Correction — the two scripted actors were inverted in earlier revisions.**
+Earlier versions of this table named slot 6 "Lord British" and slot 31 a
+"scene marker". Both are **withdrawn**. Slot 31 carries Lord British; slot 6
+is the sandalwood box, which is later swapped in place for the Orb spark and
+then cleared. The staging in section 7 only reads coherently with the corrected
+identities: Lord British is on stage before the party arrives and walks up to
+the throne row, and the box does not appear until the player's actor has
+stepped forward to hand it over. An engine built on the old table draws a
+chest on the throne and a king on the floor in front of it.
 
 Party slots are populated only for active party indices below the current
 party count. The setup loop does not synthesize absent party members for
 empty slots above the party count.
 
-The party type and tile/frame bytes are both initialized from the class table:
+#### The actor-byte index space
 
-| Class byte | Class | Tableau type/tile |
-|---|---|---:|
-| `A` | Avatar | `0x4C` |
-| `M` | Mage | `0x40` |
-| `B` | Bard | `0x44` |
-| `F` | Fighter | `0x48` |
-| `D` | Druid | `0x4C` |
-| `T` | Tinker | `0x4C` |
-| `P` | Paladin | `0x4C` |
-| `R` | Ranger | `0x4C` |
-| `S` | Shepherd | `0x4C` |
+Tableau actor bytes are **not** tile-catalogue indices, and reading them as
+such produces floor and furniture tiles rather than people. The rule is a
+property of the shared scene compositor, not of the endgame:
+
+1. When the compositor places an active object, it writes the object's actor
+   byte into the companion band for that cell and sets the corresponding
+   viewport grid cell to zero.
+2. When the renderer meets a **non-zero** grid cell, it draws the terrain tile
+   that cell names, through the animation-frame table.
+3. When the renderer meets a **zero** grid cell, it reads the companion byte
+   and draws tile index `companion_byte + 256`.
+
+So an actor byte indexes the **upper half of the 512-entry tile space** — the
+creature-and-person bank described in `catalogs/tile-catalog.md` — at an offset
+of 256. One value is reserved: companion byte `0x16` means **draw nothing**,
+and is how a transparent cell is expressed. Nothing else in the actor range is
+special-cased.
+
+Applying the `+256` rule, the endgame's actors resolve as follows.
+
+| Actor byte | Drawn tile index | What it depicts |
+|---:|---:|---|
+| `0x40` | 320 | Mage sprite |
+| `0x44` | 324 | Bard sprite |
+| `0x48` | 328 | Fighter sprite |
+| `0x4C` | 332 | Avatar sprite |
+| `0x0E` | 270 | Lidded chest — the sandalwood box |
+| `0x08` | 264 | Radiant spark — the Orb of the Moons |
+| `0x7C` | 380 | Crowned, robed, seated figure between two banners — Lord British on his throne |
+| `0x16` | — | Reserved "draw nothing" sentinel |
+
+Note in particular that actor byte `0x44` is the Bard sprite at tile 324, not
+the floor tile whose *terrain* index is also `0x44`; the two live in different
+halves of the tile space and are never confused by the renderer, because a
+terrain byte only ever reaches the renderer through a non-zero grid cell.
+
+The party type and tile/frame bytes are both initialized from the class table.
+The table has nine entries but only four distinct values, so only Mage, Bard
+and Fighter get their own sprite and every other class — the Avatar included —
+draws the Avatar sprite:
+
+| Class byte | Class | Tableau actor byte | Drawn tile |
+|---|---|---:|---:|
+| `A` | Avatar | `0x4C` | 332 |
+| `M` | Mage | `0x40` | 320 |
+| `B` | Bard | `0x44` | 324 |
+| `F` | Fighter | `0x48` | 328 |
+| `D` | Druid | `0x4C` | 332 |
+| `T` | Tinker | `0x4C` | 332 |
+| `P` | Paladin | `0x4C` | 332 |
+| `R` | Ranger | `0x4C` | 332 |
+| `S` | Shepherd | `0x4C` | 332 |
+
+The lookup is by the **position of the character's class letter** within the
+nine-letter class-order string `AMBFDTPRS`, not by an arithmetic mapping from
+the letter's character code.
 
 Only the Dead status has a special restoration branch during tableau setup:
 it is changed to the restored/present status and current health is copied from
@@ -177,6 +295,35 @@ Compatibility note: the observed control flow stores both answers, but the branc
 
 The confirmation is a blocking prompt. While it waits, normal gameplay turns, world ticks, NPC schedules, and time advancement do not run.
 
+### 5.1 Message source and pacing
+
+All of this dialogue, and all seven rite messages of section 7, come from the
+endgame message file `ENDMSG.DAT`. The whole file is read once, at entry, into
+the shared text scratch buffer; the endgame then addresses records inside it by
+ordinal. The file holds **eleven NUL-terminated records** with these roles:
+
+| Record | Role |
+|---:|---|
+| 0 | Lord British's greeting, ending mid-sentence so the party leader's name and the literal `!"` plus a blank line can be appended |
+| 1 | The first box question, ending with the literal reply lead-in `You reply: ` |
+| 2 | The second, explicit sandalwood-box question, likewise ending with `You reply: ` |
+| 3 | The first rite message, describing Lord British opening the box |
+| 4..9 | The remaining six rite messages |
+| 10 | The refusal branch's "pull up a chair" exchange |
+
+Each yes/no prompt is a **blocking single-key read** that accepts only `Y` or
+`N` and re-reads on anything else. The accepted answer is echoed into the
+message window as the literal `Yes` or `No` followed by a blank line, and only
+then does the next record print. There is no on-screen cursor prompt beyond the
+record's own `You reply: ` tail.
+
+The seven rite messages are printed as **seven discrete pages**. After the
+first of them the sequence runs a short timed pause and then prints a fixed
+`He says:` lead-in with exactly one blank row before it and one after; from
+there every remaining rite
+message is separated from the next by a blocking key read, so the player
+advances each page. Nothing in this stretch is timed out or auto-advanced.
+
 ## 6. Refusal or missing-box branch
 
 If the final confirmation is not yes, or if the saved sandalwood-box completion flag is absent, the sequence does not return the player to ordinary conversation. Instead, Lord British moves into a non-victory ending tableau: the player is made to wait with him, the party is seated or animated around the scene, and the endgame remains there indefinitely.
@@ -187,11 +334,11 @@ The refusal/missing-box branch uses the same initial party tableau setup, then
 changes the scene as follows:
 
 1. Slot 0's Y coordinate is decremented once.
-2. The script repeatedly steps slot 2 toward (8,6), slot 31 toward (4,1),
-   and slot 0 toward (8,4) until all three have arrived.
-3. The terminal loop then jitters only slots 1, 3, 4, and 5. Slot 0, slot 2,
-   Lord British's slot, and the scene marker do not participate in that jitter
-   loop.
+2. The script repeatedly steps slot 2 toward (8,6), slot 31 — Lord British —
+   toward (4,1), and slot 0 toward (8,4) until all three have arrived.
+3. The terminal loop then jitters only slots 1, 3, 4, and 5. Slot 0, slot 2 and
+   Lord British's slot 31 do not participate in that jitter loop, and slot 6 is
+   never created on this branch at all.
 
 The jitter helper is a local cinematic wander. On each call for an occupied
 slot, movement is first throttled by a random yes/no gate. If movement is
@@ -216,13 +363,17 @@ If the final confirmation is yes and the saved completion flag is present, the e
 
 The visible sequence has these functional parts:
 
-1. Palette and display-state changes prepare the screen for the ceremony.
+1. Display-state changes prepare the screen for the ceremony.
 2. Party-member active-object slots are stepped into their target positions.
-3. Lord British is placed as a separate scene sprite.
+3. The sandalwood box is placed as a separate scene sprite in front of the
+   throne. Lord British is already on stage, from the setup pass of section 4.
 4. A series of Lord British message records is printed with page pauses between records.
-5. The scene changes to the orb/cinematic portion of the ending.
-6. Timed waits, palette pulses, and fade-like display steps create the visual transition.
-7. Scene markers are cleared, a final panel or zoom transition runs, and the screen is prepared for the certificate.
+5. The box sprite is replaced by the Orb spark, then cleared, and the gate cell
+   takes over that scene cell.
+6. Timed world ticks and the gate's brightness ramp create the visual transition.
+7. Every scripted actor is walked into the gate cell and cleared, the gate cell
+   is repainted with the chamber floor tile, and the screen is prepared for the
+   narrative presentation and the certificate.
 
 The movement predicate used by the endgame is grid based: each call examines one active-object slot and moves it one cell toward a target, preferring the axis with the greater remaining distance. The caller repeats this until the slot reaches the target.
 
@@ -230,17 +381,46 @@ The separate tableau animation helper is a random local wander, not an animation
 
 This helper is used by the terminal "wait here a while" tableau for party-member slots rather than by ordinary gameplay movement. It should be modeled as cinematic jitter within the authored endgame scene, not as a reusable NPC pathfinder, not as a direction-facing animation switch, and not as evidence for an unresolved party-sprite facing map.
 
-The scripted victory movement order is:
+The scripted staging and victory movement order, in full and with the corrected
+actor identities of section 4, is:
 
-1. Step slot 0 from its initial settled position to (5,4), then back to
-   (5,5).
-2. Create Lord British in slot 6 at (5,4) with type/tile `0x0E`.
-3. Print the Lord British message beats.
-4. Change Lord British's slot 6 type/tile to `0x08`.
-5. After the long wait, clear Lord British's slot 6 type/tile.
-6. Move slot 31, the scene marker, to (5,4), then clear its type/tile.
-7. For each active party slot in ascending party order, step that slot to
-   (5,4), then clear its type/tile before advancing to the next party slot.
+1. Place **Lord British** in slot 31 with actor byte `0x7C` at cell (5, 8), let
+   the display settle, then step slot 31 to (5, 3) — he walks up to the throne
+   row before anyone else is on stage.
+2. For each live party index in ascending order: place that party member's class
+   actor byte in the slot of the same index at cell (5, 9), then step it to its
+   fixed target. The targets are (5,5), (4,6), (6,6), (3,7), (5,7) and (7,7) —
+   a wedge fanning out below the throne.
+3. Print the greeting and run the two box-delivery prompts of section 5.
+4. Step slot 0 from its settled position to (5, 4), then back to (5, 5) — the
+   player's actor walks up to hand the box over and steps back.
+5. Create the **sandalwood box** in slot 6 with actor byte `0x0E` at (5, 4).
+6. Print the seven rite messages with the pacing of section 5.1.
+7. Change slot 6's actor byte to `0x08`, the **Orb spark** — the box opens.
+   A blocking key read and a speaker sting follow.
+8. Clear slot 6, and write the moongate terrain tile into the scene grid at
+   cell (5, 4). The gate now owns that cell.
+9. **Ramp the gate up.** The gate cell is drawn at a brightness level that the
+   sequence raises through 1, 2, ... 15, running one world tick at each of those
+   fifteen levels. The level then steps once more, to 16, which is outside the
+   brightness range below, and the sequence holds there for **four** world ticks
+   with the cell drawn as the ordinary gate tile — the flare's bright top of
+   arc, and the pause before Lord British moves.
+10. Step slot 31 — Lord British — to (5, 4), then clear it. He enters the gate.
+11. For each live party slot in ascending order, step that slot to (5, 4), then
+    clear it, running a world tick between actors. The party follows one by one.
+12. **Ramp the gate down**: the level is reset to 15 and stepped down, one world
+    tick at each of the levels 15 through 1, finishing at 0 with no further
+    tick. The down-ramp has no top-of-arc hold.
+13. Repaint the gate cell (viewport column 5, row 4) with the plain chamber
+    floor tile, drawn from the terrain bank rather than the actor bank.
+
+The gate cell's terrain byte is the moongate value; the renderer routes that
+value through the driver's brightness entry using the ramp level while the level
+is inside its 1..15 range, which is what produces the pulsing flare. An engine
+that models the flare as a palette animation rather than as a per-cell
+brightness level will not be able to leave the rest of the tableau steady while
+the gate pulses.
 
 The step helper moves one cell per call and runs one display tick after each
 movement. It prefers the axis with greater remaining distance; equal remaining
@@ -337,44 +517,329 @@ The six fixed windows form two narrative groups:
 | Blackthorn judgment and gate sequence | Lord British and Blackthorn share the closing judgment scene, the Orb/Gate choice is presented, and Blackthorn's exile resolution is shown. |
 
 Each selected window is bounded by the caller rather than by an in-file table.
-Brace markers inside `END.DAT` remain layout/page markers for the text
-renderer. A clean implementation should keep the six window selections
-data-driven, but their semantic role is fixed narrative presentation, not
-party-slot retirement data.
+Brace markers inside `END.DAT` remain layout markers for the text renderer, as
+specified in `formats/end-dat.md`. A clean implementation should keep the six
+window selections data-driven, but their semantic role is fixed narrative
+presentation, not party-slot retirement data.
 
-The six fixed `END.DAT` narrative windows have **no** page-in transition of
-their own. There is no per-window rectangle, no caller-owned clear, no border
-redraw, and no wait timing beyond the window setup's own drawing and the input
-wait between windows. Each window is a fixed window selection plus a
-proportional-text presentation, and an engine should model it that way.
+### 8.1 Per-window bindings
 
-There is exactly one full-screen rectangle operation on this path, and it is
-not a per-window transition: it is the fade to black that opens the whole
-narrative presentation (section 7.1), before the first window is selected. It
-happens once, not once per window, and it is not evidence for six `END.DAT`
-page wipes. Do not inherit the intro step-1 rectangle dissolve for these
-windows either; the intro step-1 contract is specific to that caller.
+Each of the six windows binds one panel from the endgame panel archives to one
+`END.DAT` record and one paragraph rectangle. All of the values below are fixed
+resident data laid out as parallel per-window tables; nothing about them is
+computed at run time.
+
+Windows 1 to 3 take their panel from the first endgame panel archive `END1`,
+slots 0 to 2 in order; windows 4 to 6 take theirs from the second archive
+`END2`, slots 0 to 2 in order. The archive is opened when it first becomes the
+required one and released when the next window needs a different archive.
+
+| Window | Archive | Slot | Panel size | Panel top-left | `END.DAT` record |
+|---:|---|---:|---|---|---:|
+| 1 | `END1` | 0 | 167 x 124 | `(0, 0)` | 1 |
+| 2 | `END1` | 1 | 191 x 90 | `(64, 0)` | 2 |
+| 3 | `END1` | 2 | 192 x 95 | `(0, 52)` | 3 |
+| 4 | `END2` | 0 | 173 x 98 | `(0, 0)` | 4 |
+| 5 | `END2` | 1 | 157 x 90 | `(0, 92)` | 5 |
+| 6 | `END2` | 2 | 153 x 110 | `(160, 0)` | 6 |
+
+The panel is drawn opaque, with no border, no shadow and no frame of its own.
+The window numbering here matches the `END.DAT` record numbering published in
+`formats/end-dat.md` section 4.
+
+### 8.2 Per-window paragraph rectangles
+
+The prose is laid out by the proportional paragraph renderer of
+`text-output.md` section 8, so each window supplies that renderer's layout
+descriptor rather than a single rectangle: a margin pair for lines outside a
+named vertical band, a second margin pair for lines strictly inside it, the
+band's two bounds, and the pen's starting position. The margin pair is
+re-selected at entry and after every line break, which is what makes the prose
+flow around the panel. Line advance is nine pixels and glyph output stops once
+the pen reaches vertical position 192. The endgame never writes the space
+advance, so all six windows lay out with the shipped default of five.
+
+| Window | Pen start | Outside band: left, right | Inside band: left, right | Band low, high |
+|---:|---|---|---|---|
+| 1 | `(172, 66)` | 172, 320 | 0, 320 | 126, 200 |
+| 2 | `(0, 92)` | 0, 320 | 0, 320 | 126, 200 |
+| 3 | `(0, 9)` | 0, 320 | 196, 320 | 42, 148 |
+| 4 | `(179, 38)` | 179, 320 | 0, 320 | 100, 200 |
+| 5 | `(0, 9)` | 0, 320 | 161, 320 | 82, 200 |
+| 6 | `(0, 0)` | 0, 154 | 0, 320 | 112, 200 |
+
+Read plainly, that gives: window 1 starts to the right of its top-left panel
+and opens out to the full width once the pen passes y = 126; window 2 is full
+width throughout, since both of its margin pairs are identical; window 3 starts
+full width at the top and indents to x = 196 while the pen is between y = 42
+and y = 148, clearing the panel that sits at `(0, 52)`; window 4 mirrors window
+1 against a taller panel; window 5 starts full width and indents to x = 161
+once the pen passes y = 82, clearing the panel at `(0, 92)`; and window 6 is
+clipped to a right margin of 154 — the space to the left of its right-hand
+panel — until the pen passes y = 112, after which it uses the full width.
+
+Two windows also draw decorative title strips from the shared `TEXT` strip
+archive on top of the panel, before the prose is laid out:
+
+| Window | Strips drawn, in order |
+|---:|---|
+| 1 | `TEXT` slot 0 at `(216, 0)`, then slot 4 at `(152, 28)` |
+| 4 | `TEXT` slot 5 at `(224, 0)`, then slot 0 at `(176, 0)` |
+
+Those two strip pairs read as the chapter titles "The Homecoming" and
+"The Dream" respectively; the words are part of the artwork, not typeset text.
+The overlap between the two strips of window 4 is intentional kerning — the
+second strip is drawn opaque over the first.
+
+### 8.3 Presentation model
+
+The presentation model is a **hard cut**, not a fade or a wipe. Per window,
+in order:
+
+1. If this window needs a different panel archive than the one currently open,
+   release the open one and load the new one.
+2. Select the hidden surface.
+3. Issue the text system's clear control. The active text window at this point
+   is the full-screen one selected when the presentation began, so this blanks
+   the entire hidden page.
+4. Draw the decorative title strips, if this window has any.
+5. Draw the panel.
+6. Install the window's layout descriptor values.
+7. Read the window's `END.DAT` record into the shared text scratch buffer and
+   lay out its prose with the proportional renderer.
+8. For every window except the first, block until a key is pressed.
+9. Copy the whole hidden page to the visible page in one instantaneous
+   full-screen operation.
+
+So window 1 appears as soon as it is composed, and each later window is
+composed entirely off-screen and then published in a single copy on the
+player's keypress. The player never sees a partial page, a per-window wipe, or
+a redraw in progress.
+
+**Retraction.** Earlier revisions of this section stated that the six windows
+have "no caller-owned clear" and that "there is exactly one full-screen
+rectangle operation on this path". Both are **withdrawn**. Every window issues
+a full-page clear on the hidden surface (step 3) and a full-page copy to the
+visible page (step 9); they are simply never visible as separate events,
+because both land off-screen or as one atomic copy. What *is* unique on this
+path is the **rectangle dissolve** of section 7.1: that happens once, before
+the first window, and is not a per-window page-in transition. Do not inherit
+the intro's step-1 rectangle dissolve for these windows either; the intro
+step-1 contract is specific to that caller.
+
+### 8.4 The certificate backdrop
+
+After the sixth window the presentation waits for one more key, then prepares
+the certificate page: select the hidden surface, issue the text system's clear
+control, load the end-screen archive, draw its **only** record — a single
+260-by-168 image of a blank torn-edged parchment with a plain light interior —
+at `(40, 0)`, release the archive, copy the hidden page to the visible page,
+and select the visible page as the render target.
+
+The parchment therefore occupies pixels `(40, 0)..(299, 167)`, and the
+certificate text of section 9 is printed **directly onto the visible page, over
+that parchment**. There is no second composition step and no further page copy;
+the text appears line by line as it is printed.
 
 ## 9. Certificate scroll
 
-The certificate scroll is the final successful ending screen. It uses the text-output system, but with a small endgame-specific line accumulator so the overlay can compose a line from multiple fragments before flushing it to the screen.
+The certificate scroll is the final successful ending screen. It uses the
+fixed-cell text-output system, printing **directly onto the visible page over
+the parchment image of section 8.4**, with a small endgame-specific line
+accumulator so the overlay can compose one line from several fragments before
+flushing it.
 
-The certificate body is assembled from:
+### 9.1 Text mode and geometry
 
-- the current saved day, rendered as an ordinal word;
-- the current saved month number, also rendered as an ordinal word;
-- the current saved year, rendered in words split into hundreds and remainder;
-- the party leader's name;
-- a short royal salvation statement naming Lord British, the people, and the land;
-- a centered Codex-style closing title rendered through the sign/tile-glyph text path rather than ordinary prose text.
+Three things are set up before the first character is printed, and none of them
+is changed again until the elapsed-time report:
 
-The month is treated as a numbered month for this output, not as a named month. The ordinal helper covers the game's calendar range and composes twenty-first through twenty-eighth style ordinals from smaller word fragments. The cardinal helper covers the year fragments used by the certificate.
+1. The cursor is placed at **column 0 of row 1** of the full-screen text window
+   (`(0, 0)..(39, 24)`, the window selected back in section 8.3).
+2. **Inverse video is switched on**, so every glyph is drawn with its bitmap
+   inverted. That is what puts dark lettering on the light parchment; there is
+   no colour change and no palette work involved.
+3. **Centred output is switched on**, so the wrap-aware printer centres each
+   line it emits.
 
-After the certificate body, the scroll clears or advances to a final report panel. It computes elapsed campaign time from the fixed campaign start date using the same thirteen-month, twenty-eight-day calendar model used by the rest of the game. Negative day or month differences borrow from the next larger unit. The result is printed as numeric years, months, and days, omitting zero-value units and applying singular or plural labels as needed. The final line asks the player to report the completed quest to Origin.
+Centring is the standard rule of `text-output.md` section 5, and on this window
+it works out to **ordinary centring in a forty-column window**. The printer
+counts the columns still available on the current row — the window's right
+column minus its left column, minus the cursor's current column — and compares
+that count with the **index of the last character** of the line it is about to
+emit. The line's starting column is half that difference, truncated toward
+zero. Every certificate line begins at column 0 of the full-screen window, so
+the rule reduces to `(40 - characters_in_line) / 2`, truncating.
 
-The elapsed-time baseline is year 139, month 4, day 5. The calculation subtracts that baseline from the saved world clock, borrows twenty-eight days from the month delta when the day delta is negative, and borrows thirteen months from the year delta when the month delta is negative. Separators are emitted only between printed nonzero units, so "years, months, days" collapses naturally when any component is zero.
+Even-length lines are therefore centred exactly. Odd-length lines land half a
+cell — four pixels — left of true centre, because truncation always drops the
+half column on the left. That is the only offset in play. An engine that
+centres against a width of 39 instead of 40 agrees on odd-length lines but
+places **every even-length line one cell (eight pixels) too far left**; among
+the lines below that would misplace `saved the life`, `of our sovereign`,
+`IS FOREVER` and `to Lord British at Origin Systems!`.
 
-When this output finishes, the original program enters an intentional infinite loop. There is no keypress-to-continue, no return to title, no DOS exit, and no automatic save.
+Note that the text is centred on the **screen**, not on the parchment. The
+parchment of section 8.4 spans x = 40 through x = 299, so its own centre is
+x = 170 while the text's centre is the screen's x = 160. The certificate
+therefore sits about ten pixels left of the parchment's centre. **That is
+correct and must be reproduced** — do not re-centre the text on the artwork.
+
+Lines are built in a **39-character accumulator**. Each fragment is appended,
+clamped at 39 characters, and the whole accumulator is flushed through the
+centring printer as soon as the character just appended is a line feed. Fixed
+strings that already end in a line feed bypass the accumulator and go straight
+to the printer. This is how the variable date, name and duration fragments join
+their fixed suffixes into single centred lines. There is no word wrapping in
+play: no certificate line reaches 39 characters, and every break below is an
+explicit line feed in the fixed text.
+
+### 9.2 The certificate body
+
+The literal prose, in emission order, one line per row:
+
+```text
+Be it known that on
+the <day ordinal> Day of
+the <month ordinal> Month
+of the Year
+<year hundreds cardinal> Hundred
+<year remainder cardinal>
+
+<party leader name> the Avatar
+
+saved the life
+of our sovereign
+Lord British, thereby
+saving our people
+and our land.
+
+```
+
+The blank rows shown in that block are exactly the ones the original emits:
+**one** after the year-remainder line, **one** after the leader-name line, and
+**one** after `and our land.` Each of those three gaps is encoded the same way
+in the fixed text — a pair of line feeds — and a line feed is a *combined*
+carriage return and line feed (`text-output.md` section 5). The first line feed
+of a pair ends the line just printed; the second advances one further row. So a
+run of *k* line feeds leaves *k − 1* blank rows, never *k*.
+
+Because the cursor starts on row 1 and nothing on this screen wraps or scrolls,
+the whole certificate has a fixed row assignment, which is the easiest thing to
+check an implementation against:
+
+| Row | Content |
+|---:|---|
+| 1 | `Be it known that on` |
+| 2 | `the <day ordinal> Day of` |
+| 3 | `the <month ordinal> Month` |
+| 4 | `of the Year` |
+| 5 | `<year hundreds cardinal> Hundred` |
+| 6 | `<year remainder cardinal>` |
+| 7 | *(blank)* |
+| 8 | `<party leader name> the Avatar` |
+| 9 | *(blank)* |
+| 10 | `saved the life` |
+| 11 | `of our sovereign` |
+| 12 | `Lord British, thereby` |
+| 13 | `saving our people` |
+| 14 | `and our land.` |
+| 15 | *(blank)* |
+| 16 | `THE QUEST OF THE AVATAR` (section 9.3) |
+| 17 | `IS FOREVER` (section 9.3) |
+| 18–20 | *(blank)* |
+| 21 | `Report now, thy Quest compleat in` (section 9.4) |
+| 22 | the elapsed-interval line (section 9.4) |
+| 23 | `to Lord British at Origin Systems!` (section 9.4) |
+
+Rows 0 through 20 are the rows the parchment covers, so the certificate body
+and the closing title land on the parchment while the three report rows land on
+the cleared black page below its bottom edge. That is not a coincidence and it
+is a useful self-check: an implementation whose report does not fall clear of
+the parchment has miscounted a blank row somewhere above.
+
+The four substituted values are:
+
+| Placeholder | Value |
+|---|---|
+| `<day ordinal>` | The saved day of the month as an ordinal word |
+| `<month ordinal>` | The saved month number as an ordinal word — a numbered month, not a named one |
+| `<year hundreds cardinal>` | The saved year divided by one hundred, as a cardinal word |
+| `<year remainder cardinal>` | The saved year modulo one hundred, as a cardinal word |
+
+The ordinal helper covers the game's calendar range and composes
+twenty-first-through-twenty-eighth style ordinals from smaller word fragments.
+The cardinal helper covers the year fragments used here.
+
+### 9.3 The closing title
+
+Two more centred lines follow, still in inverse video, reading:
+
+```text
+THE QUEST OF THE AVATAR
+IS FOREVER
+```
+
+They are **not** a sign, a tile composition, or a graphics blit. They go
+through the same ordinary fixed-cell character path as everything above, using
+the font-slot selector of `text-output.md` section 7: **slot 1, the runic font,
+is selected for exactly those two lines** and slot 0 is restored immediately
+afterwards. Earlier revisions of this section described a "sign/tile-glyph text
+path"; that is withdrawn — the only difference from the body text is which font
+slot the glyph source points at. Centring and inverse video are both still in
+force, so the two lines are centred and inverse like the body above them.
+
+The stored form of these two lines uses the rune digraph encoding shared with
+the game's sign and Codex text: one character stands for the TH digraph,
+another for the ST digraph, and the at-sign stands for a word space. A clean
+implementation that stores the decoded Latin form must re-encode it, or supply
+its own rune glyph mapping, before drawing it through a rune font.
+
+**Three** blank rows follow the closing title — rows 18 through 20 — the gap
+between the certificate body and the report below. The fixed text ends that
+line with four line feeds, and four line feeds leave three blank rows, for the
+reason given in section 9.2.
+
+### 9.4 The elapsed-time report
+
+The report is **not a separate panel**, and there is **no clear** between it and
+the certificate. It continues in the same text window, on the same page, with
+centring still on. The only thing that changes is that **inverse video is
+switched off**, so the report renders in normal video while the body above it
+stays inverse. That is consistent with where it lands: its three rows are rows
+21 through 23, which fall below the parchment's bottom edge on the cleared
+page, so normal video is what makes them legible there while inverse video is
+what makes the body legible on the light parchment. Its lines are:
+
+```text
+Report now, thy Quest compleat in
+<N year(s)>[, <N month(s)>][, <N day(s)>]
+to Lord British at Origin Systems!
+```
+
+The interval is measured from the fixed campaign start date — year 139, month
+4, day 5 — using the same thirteen-month, twenty-eight-day Britannian calendar
+as the rest of the game. Subtract the baseline from the saved world clock;
+borrow twenty-eight days from the month delta when the day delta is negative,
+then borrow thirteen months from the year delta when the month delta is
+negative. Each of the three components is then formatted as a decimal number
+followed by ` year`, ` month` or ` day`, with a trailing `s` when the value is
+greater than one. **A zero component is skipped entirely**, and the `, `
+separator is emitted only when a later component will also be printed, so
+"years, months, days" collapses naturally.
+
+### 9.5 The terminal state
+
+**Nothing follows.** After `to Lord British at Origin Systems!` the original
+program enters a deliberate infinite loop: no key is read, no timer runs, the
+program never returns to the menu, and it never exits to the operating system.
+The player must reset the machine.
+
+A clean engine should reproduce this as an explicit, intentional end-of-program
+state rather than treating it as a hang to be worked around. If an
+implementation adds a way out, that is a modern affordance and should be
+labelled as one. The refusal branch of section 6 ends the same way: a permanent
+idle loop in which the remaining party actors wander the throne room forever.
 
 ## 10. State effects
 
@@ -431,21 +896,30 @@ The original uses the active-object renderer for cinematic movement. A modern en
 
 ## 12. Gaps and open questions
 
+- **Endgame screen geometry.** Closed. The tableau rectangle, cell size, scene
+  terrain source and buffer, and both text-window rectangles are published in
+  section 3.1; the actor index space and per-class sprites in section 4.
 - **Pixel-perfect endgame scene rasters.** The terminal tableau slot layout,
-  sprite ids, movement order, and local wander rule are specified here. Exact
-  per-frame display-helper internals for every fade/palette transition remain
-  presentation-parity work.
-- **Final narrative page-in transitions.** Closed for the purposes of the
-  transition question. The six fixed `END.DAT` windows and their narrative
-  roles are specified, and the traced endgame entry surface has no per-window
-  page-in rectangle, clear, border redraw, or wait timing beyond what the
-  window setup itself draws. They are direct fixed-window text presentations
-  with input waits between them, and an engine should model them that way. The
-  one late full-screen rectangle operation happens once, before the first
-  window, and is a fade of the whole screen to black (section 7.1); it is not a
-  per-window page-in transition and must not be modelled as one.
-- **Display helper taxonomy.** The visual sequence uses resident display, palette, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
-- **Asset variant mapping.** The paired graphics archive family and bitmap formats are specified, but exact endgame resource-slot-to-panel selection should be cross-checked if pixel-perfect presentation parity becomes required.
+  actor bytes, movement order, gate brightness ramp, and local wander rule are
+  specified here. The residual is the driver's exact per-step pixel pattern for
+  the gate's brightness entry, which belongs to `display-driver-abi.md`.
+- **Final narrative page-in transitions.** Closed. The six windows' archive,
+  slot, panel size, panel origin, text record, layout descriptor, title strips
+  and presentation model are published in section 8. Each window does clear the
+  hidden page and does publish itself with a full-page copy; neither is visible
+  as a transition, and neither is the rectangle dissolve of section 7.1, which
+  still happens exactly once, before the first window.
+- **Display helper taxonomy.** The visual sequence uses resident display, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
+- **Asset variant mapping.** Closed for the endgame. The panel archive, slot,
+  size and origin for every window, the title strips, and the certificate
+  backdrop are published in section 8. The equivalent alternate-depth archives
+  hold the same records and remain alternate-hardware parity work.
+- **`END.DAT` and `ENDMSG.DAT` prose.** The certificate's fixed prose is
+  published in section 9 because it is assembled from resident fragments. The
+  narrative prose in `END.DAT` and the dialogue prose in `ENDMSG.DAT` are shipped
+  data files: their structure, record count, ordering, seek windows and markup
+  conventions are published, but their wording is read from the shipped files at
+  run time and is not transcribed here.
 
 ## 13. Sources
 
@@ -476,11 +950,24 @@ This document is a cleanroom prose rewrite from the following source notes. It i
 - `u5-decomp/notes/system-trace_quest-endgame.md`
 - `u5-decomp/notes/endgame_late_fullscreen_rect_2026-08-22.md` — the primitive,
   colour, target surface, timing, and input behaviour of the late full-screen
-  fill, plus the absence of any per-window page-in rectangle.
+  fill. Its further claim that the six narrative windows perform no clear of
+  their own is superseded by section 8.3.
 - `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md` — the follow-on
   full-screen rectangle dissolve that consumes that fill, the complete caller
   census of the dissolve entry, and the fill-then-dissolve fade idiom.
 - `u5-decomp/notes/lord_british_dialogue.md`
+- `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md` — the endgame
+  surface geometry and scene-terrain source of section 3.1, the actor index
+  space and corrected scene-actor identities of section 4, the corrected
+  scripted staging and gate ramp of section 7, the complete per-window
+  bindings, paragraph rectangles, title strips and presentation model of
+  section 8, and the certificate's text modes, fixed prose, closing-title font
+  path, elapsed-time rule and terminal state in section 9.
+- `u5-decomp/notes/gameplay_screen_layout_2026-08-22.md` — independent
+  derivation of the same viewport and message-window rectangles.
+- `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` — the proportional
+  paragraph renderer's layout-descriptor contract that section 8.2 supplies
+  values for.
 
 Local spec cross-references used for terminology and integration:
 

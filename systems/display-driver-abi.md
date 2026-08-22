@@ -328,6 +328,15 @@ covers all eight octants. Each plotted pixel uses the same single-pixel
 front-buffer writer as dispatch offset `0x30`; the entry does not optimise
 horizontal or vertical lines into rectangle fills.
 
+The resident layer wraps this entry twice: a line-from-two-endpoints call that
+also records the second endpoint as the current point, and a line-to-point call
+that starts from that recorded point. A polyline is therefore one of the former
+followed by any number of the latter, and that is how the game-screen frame's
+box outlines and the bracket end-cap strokes are issued (`display-driver.md`
+section 7). Purely horizontal rules are also sometimes issued through the
+single-scanline entry at dispatch offset `0x39` instead, which produces the same
+pixels; both spellings appear in the chrome-repaint helpers.
+
 ### 9.3 Asset Segment Lifecycle
 
 Dispatch offset `0x48` registers a caller-supplied DOS segment as the active
@@ -385,7 +394,11 @@ window upward by eight scanlines:
 The entry checks that the primary register argument names the panel's left
 edge before proceeding; calls with any other left-edge value return without
 visible effect. This makes the entry strictly a right-side-text-panel scroll,
-not a general scroll-rectangle helper. A compatible engine may either match
+not a general scroll-rectangle helper. The panel it scrolls is the gameplay
+message window, text cells columns 24..39 rows 11..23 — see `text-output.md`
+sections 10.1 and 10.5. The resident text layer's scroll-by-N helper computes a
+larger pixel distance but issues this same entry, so on the EGA baseline it also
+moves exactly one cell row. A compatible engine may either match
 the hardcoded extent and exposed-band policy exactly, or expose a more general
 scroll-rectangle operation and reduce it to this one when the resident core
 asks for it.

@@ -2,11 +2,11 @@
 
 ## 1. Overview
 
-Ultima V's dungeon mode is the third top-level world mode, after the overworld and the town/dwelling/castle/keep family. Where those modes paint top-down tile views of the world, dungeon mode paints a sparse first-person three-dimensional view of a small grid the player walks through cell by cell. There are eight such grids — the named dungeons of Britannia, in resident entry and `DUNGEON.DAT` record order: Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, and Doom. Each dungeon is a stack of eight levels, and each level is a square eight-by-eight grid of cells. The player enters from a fixed surface or underworld location, descends or ascends through ladders and through the two dungeon level-change spells, fights room encounters that swap into combat mode, and leaves by passing the top or the bottom of the level stack - which always returns the party to that dungeon's own outdoor entrance cell, on Britannia from the top and in the Underworld from the bottom.
+Ultima V's dungeon mode is the third top-level world mode, after the overworld and the town/dwelling/castle/keep family. Where those modes paint top-down tile views of the world, dungeon mode paints a first-person three-dimensional view of a small grid the player walks through cell by cell. There are eight such grids — the named dungeons of Britannia, in resident entry and `DUNGEON.DAT` record order: Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, and Doom. Each dungeon is a stack of eight levels, and each level is a square eight-by-eight grid of cells. The player enters from a fixed surface or underworld location, descends or ascends through ladders and through the two dungeon level-change spells, fights room encounters that swap into combat mode, and leaves by passing the top or the bottom of the level stack - which always returns the party to that dungeon's own outdoor entrance cell, on Britannia from the top and in the Underworld from the bottom.
 
-Structurally, dungeon mode is a sibling of town mode: it has its own per-turn loop, its own special tile reactions, its own command handler that forwards letter inputs to the resident A-Z dispatcher, and its own per-turn epilogue that advances the world clock. It differs in three important ways. First, the floor is not a tile grid the player sees from above — it is a 3D first-person view of what the party would see standing inside the dungeon. Second, the renderer is not a raycaster and not a line renderer; it plots sparse precomputed pixel constellations for visible wall and feature cues. Third, NPC schedules do not run in dungeons — there are no scheduled inhabitants underground — so the per-turn loop never invokes the NPC scheduler.
+Structurally, dungeon mode is a sibling of town mode: it has its own per-turn loop, its own special tile reactions, its own command handler that forwards letter inputs to the resident A-Z dispatcher, and its own per-turn epilogue that advances the world clock. It differs in three important ways. First, the floor is not a tile grid the player sees from above — it is a 3D first-person view of what the party would see standing inside the dungeon. Second, the renderer is not a raycaster and not a line renderer; it composites pre-drawn billboard bitmaps chosen by cell class and depth band. Third, NPC schedules do not run in dungeons — there are no scheduled inhabitants underground — so the per-turn loop never invokes the NPC scheduler.
 
-This spec describes the scene byte that selects which dungeon and entry mode is active, the on-disk and in-memory layout of dungeon levels, the per-turn loop, the special tile reactions, the sparse first-person renderer, the lighting model, movement and turn commands, Z-axis ladder transitions, the look and view commands, camp/sleep, the room-encounter combat trigger, time integration, and how the player exits a dungeon.
+This spec describes the scene byte that selects which dungeon and entry mode is active, the on-disk and in-memory layout of dungeon levels, the per-turn loop, the special tile reactions, the billboard first-person renderer, the lighting model, movement and turn commands, Z-axis ladder transitions, the look and view commands, camp/sleep, the room-encounter combat trigger, time integration, and how the player exits a dungeon.
 
 The original binary splits this public dungeon-mode contract across two overlay
 families. DNGLOOK owns view/lifecycle helpers such as view setup, teardown,
@@ -82,7 +82,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 
 **Initialisation.** Set a "rendering-pending" visibility flag, run a one-shot boot-tick on the first turn after entry, read the underfoot tile, and cache its high nibble.
 
-**Status painting.** Paint the side panel border and the status row showing the current level number and facing direction ("Dungeon Level N", "Facing North"). Repainted each turn because the player may have changed level or direction during the previous turn.
+**Status painting.** Repaint the two chrome bands and the two framed labels they carry: the four-cell level label in the top band and the twelve-cell facing label in the bottom band. Their exact cells and their exact stored literals are specified in section 4.1 — the labels are terse field abbreviations, not sentences. Repainted each turn because the player may have changed level or direction during the previous turn.
 
 **Flavour selection.** Read the scene byte, pick one of the three flavour values (§ 2), and write the corner-glyph pair and flavour byte that the renderer and L-Look will consume.
 
@@ -90,7 +90,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 
 **Inner loop.**
 1. **Pendulum tick.** In Q-quest mode the loop alternates between running and skipping the time-advance call so quest scenes pass time at half rate. Normal play keeps the pendulum disabled.
-2. **Render and poll.** Paint the sparse first-person view (§ 6) and wait for a keystroke. The primitive blocks until an accepted key arrives; if it returns a negative sentinel rather than a dispatchable key, the loop skips step 3 for that iteration. The sleep line is not produced here — it belongs to the party-capability check of step 7.
+2. **Render and poll.** Paint the first-person view (§ 6) and wait for a keystroke. The primitive blocks until an accepted key arrives; if it returns a negative sentinel rather than a dispatchable key, the loop skips step 3 for that iteration. The sleep line is not produced here — it belongs to the party-capability check of step 7.
 3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes the four cardinal direction codes — and Enter and the period key, which mean "advance" here — to the dungeon movement dispatcher; digits to the solo-member selector, always reporting "no action" afterwards; the four shared Control bindings (exit-to-DOS prompt, moral-standing readout, sound toggle, version banner) to their own arms; and everything else, letters included, to the resident command dispatcher (§ 10). The handler's own default is "acted", so an unrecognised byte forwarded to the dispatcher reports whatever the dispatcher decides.
 4. **Scene-byte exit check.** If the scene byte has dropped to thirty-two or below, the player has climbed out (§ 13) and the loop breaks.
 5. **Refresh tile cache.** Re-read the underfoot tile and update the cached high nibble.
@@ -106,17 +106,109 @@ The loop then iterates, checking the scene byte; if it is still in the dungeon r
 The dungeon loop owns a small amount of presentation state around the
 first-person renderer:
 
-**Viewport frame.** On mode entry and refresh, dungeon mode paints the side
-panel's frame, the dungeon header, and the command prompt row before the
-first-person viewport is composited. The frame uses the resident dim and bright
-presentation pens; exact pixel coordinates are display-driver presentation
-data, not gameplay state.
+**The two chrome bands.** On dungeon-mode entry the loop paints the viewport's
+static chrome once. It consists of two horizontal bands drawn in the resident
+chrome pen, each with an accent rule along its inner edge:
 
-**Status row.** The status redraw saves the current text colour, clears the
-target row, prints the one-based dungeon level, then prints the current facing
-name from the four cardinal directions. Invalid facing values fall through to
-the same resident fallback string path as the original presentation layer. The
-saved colour is restored before control returns to the turn loop.
+| Band | Filled span | Accent rule |
+|---|---|---|
+| Top | x 40 to 152, y 0 to 7 | a horizontal line at y = 7 |
+| Bottom | x 48 to 152, y 185 to 191 | a horizontal line at y = 184 |
+
+Both labels are written in **whole-screen character cells** - text window 0,
+which spans the entire forty-by-twenty-five grid, so window cells equal screen
+cells. The top band is text row 0 and the bottom band is text row 23.
+
+**The level label.** The top band carries a framed level label occupying
+**four cells, 10 through 13**:
+
+| Cell | Content |
+|---|---|
+| 10 | right end-cap glyph |
+| 11 | the capital letter `L` |
+| 12 | one digit: the one-based level |
+| 13 | left end-cap glyph |
+
+The stored literal is the letter followed by **one space**, but that space is a
+**placeholder**. It exists only to advance the cursor past cell 11 when the
+panel is first drawn; the status redraw seeks back to cell 12 and prints the
+digit over it. The rendered result therefore has **no space between the letter
+and the digit**, and the label is always exactly four cells wide. The level
+byte is stored zero-based and displayed as one more than its stored value, in a
+one-wide space-padded field, so the displayed range is one through eight.
+
+**The facing label.** The bottom band carries a framed facing label occupying
+**twelve cells, 6 through 17**:
+
+| Cell | Content |
+|---|---|
+| 6 | right end-cap glyph |
+| 7 to 10 | `D` `i` `r` `:` |
+| 11 | a pad space that is never overwritten |
+| 12 to 16 | the five-character facing field |
+| 17 | left end-cap glyph |
+
+The stored prefix literal is `Dir:` followed by **six** spaces - ten characters
+in all - and the redraw overwrites only the last five of those with the facing
+name.
+
+The subtlety that makes the rendered spacing look uneven is that **two of the
+four facing names carry their own leading space** and the other two do not.
+All five are five characters wide, so the label never changes length:
+
+| Facing code | Stored name | Rendered label |
+|---:|---|---|
+| 0 | `North` | `North` after one space |
+| 1 | `_East` (leading space) | `East` after two spaces |
+| 2 | `South` | `South` after one space |
+| 3 | `_West` (leading space) | `West` after two spaces |
+| anything else | `_????` (leading space, four question marks) | `????` after two spaces |
+
+The last row is the **invalid-facing fallback** and is a real, reachable
+presentation state; it is the same five-character width as a real name, so the
+label geometry is unchanged. The facing encoding is north, east, south, west in
+that order.
+
+**Cell-arithmetic correction.** The facing label's gap between its two end caps
+is **ten cells (7 through 16), not eleven**. The surface wind banner's gap is
+eleven cells (7 through 17), because its content is a five-character wind name
+plus the six-character suffix ` Winds`. Both labels begin at the same cell 6 and
+share the same band, the same pixel spans and the same accent rule row, but the
+dungeon label's closing cap sits one cell to the left of the wind banner's.
+The two are not an identical ribbon and must not be specified as one. The
+padding conventions are mirror images as well: wind names pad on the **right**
+and their suffix carries a leading space, so a short wind name yields two spaces
+*before* the word `Winds`; facing names pad on the **left** behind a prefix that
+carries trailing pad, so a short facing name yields two spaces *after* the
+colon. The surface producers for the same two slots are specified in
+`systems/moons.md` (top slot, the sky strip) and `systems/weather.md` section
+2.1 (bottom slot, the wind banner); the shared frame and end-cap contract is in
+`systems/display-driver.md` section 7.
+
+**Shared border slots.** The surface sky strip and the dungeon level label are
+the same top slot; the surface wind banner and the dungeon facing label are the
+same bottom slot. All three producers use the same pixel spans (x 40 to 152 on
+top, x 48 to 152 on the bottom), the same accent rule rows (y = 7 and y = 184)
+and the same whole-screen text window. They differ only in how many cells of the
+band their label occupies and in which columns the caps land. There is never a
+conflict, because both surface renderers test the scene byte and return
+immediately in dungeon mode.
+
+**Status row refresh cadence.** The status redraw selects the whole-screen text
+window, seeks to the level digit cell, prints the one-based level, seeks to the
+facing field, prints the facing name, and restores the previously active window
+before returning. It runs immediately after the chrome is first drawn, and again
+after **every** three-dimensional repaint - which includes the return from the
+map view, so both labels are rewritten on exiting the map even though the map
+never damaged them.
+
+**The entry facing seed is walk-in-only.** Walking into a dungeon from the
+overworld sets the facing explicitly as part of the entry seed (Section 3).
+**Loading a saved game never runs that code**, so a saved facing survives
+untouched and the party resumes facing whatever the save recorded. A
+spec-conformant engine must apply the seed on walk-in entry and must **not**
+apply it on load; a save whose facing field is zero starts the party facing
+north, not east.
 
 **Render and poll.** Each poll pass first services any pending cursor/status
 redraw request, emits the normal line-feed/flush boundary, and asks the shared
@@ -187,49 +279,372 @@ cell. Baseline-compatible implementations should not add a
 `DUNGEON.DAT` wind-contact behavior; wind/gust artwork belongs to transient
 presentation effects unless a variant handler is explicitly being modeled.
 
-## 6. The Sparse First-Person Renderer
+## 6. The First-Person Renderer
 
-Dungeon mode's defining feature is its first-person three-dimensional view,
-painted into the side panel each turn. The renderer is *not* a raycaster and it
-does not draw continuous wall lines. It plots a sparse set of precomputed pixels
-for wall edges and feature cues; the player perceives these dot constellations as
-the dungeon corridor view.
+**Correction to earlier revisions.** Earlier revisions of this section described
+the corridor as a *sparse* renderer that plots precomputed pixel constellations
+taken from four coordinate-pair tables named forward wall, side door, side wall
+and corner. **That reading is withdrawn.** The corridor is drawn from
+**billboard bitmaps** held in the dungeon art files, which is why the shipped
+game shows a textured brick corridor with mortar courses, darker recessed side
+openings at each depth band, and dithered floor and ceiling planes converging on
+a small far wall - rather than an outline of dots. The four sparse
+coordinate-pair tables are real, but they are the **animated fountain water**
+(Section 6.7); they have nothing to do with walls, doors or corners.
 
-**Distance bands.** The view is composed of a small fixed set of forward depth
-bands. The renderer walks the facing direction, using nearby floor cells to
-select which sparse pixel groups to plot. Distant or off-end bands can collapse
-to degenerate draws rather than a smooth projected line system.
+The renderer is not a raycaster either. There is no projection arithmetic and no
+depth buffer. It classifies each cell, selects a bitmap by role and depth band,
+blits it at a fixed destination, and relies on painter's-algorithm ordering.
+Depth shading is baked into the artwork, not applied by the renderer.
 
-**Direction-delta tables.** To compute "what cell is N steps ahead", the renderer indexes two small four-entry tables — one for the X delta and one for the Y delta — by the facing direction byte. Each table holds the per-step offset for each cardinal direction. The renderer reads the cell at `(player_X + dx * (band + 1), player_Y + dy * (band + 1))` for each band.
+### 6.1 Screen geometry and the frustum
 
-**Wall checks.** For each band, the renderer reads the cell's tile byte and consults the high nibble. If the nibble identifies a wall class (`0xB` through `0xE`, plus door sub-cases of `0xF`), the band paints a wall cue at the appropriate viewer-relative depth. Open-passage cells are painted as a void: the sparse view shows the floor and ceiling cues extending farther forward. Closed doors paint a door rectangle; open doors paint as a passage.
+The renderer draws into the back buffer and then composites a rectangle to the
+front buffer. Three rectangles matter and they are not the same:
 
-**Side-wall mirroring.** The renderer also reads cells to the left and right of
-the forward path and mirrors the corresponding sparse pixel groups. This gives
-the side walls their bilateral shape without runtime projection math.
+| Rectangle | Extent | Role |
+|---|---|---|
+| Composite rectangle | x 16 to 175, y 14 to 178 | What the renderer blits from the back buffer to the front buffer each repaint. |
+| Pixel-plot clip rectangle | x 40 to 152, y 42 to 183 | Installed before drawing; it bounds the point-plotting primitive only. |
+| Visible art | x 16 to 175, y 16 to 175 | The nearest band's aperture: a 160-pixel square. Its corners are the outermost non-transparent pixels the player can see. |
 
-**Precomputed pixel tables.** The wall and feature cues come from compact
-resident coordinate tables. The renderer selects a table entry from the dungeon
-cell class and facing context, then emits individual pixel plots. There is no
-runtime ray projection and no call to a 2D line primitive for ordinary dungeon
-wall geometry.
+The rows between the composite rectangle and the visible art are the
+billboards' transparent margin. A black-box raster measurement of the lit view
+therefore reports approximately `(16,16)` to `(175,175)`, and that is correct;
+an earlier estimate of `(16,17)` to `(174,174)` is superseded.
 
-**Far-wall extras.** After painting the near-to-far primary walls, the renderer walks back outward, painting the symmetric far-wall counterparts and the ceiling and floor outline corners that connect them. The result is a complete sparse outline of the corridor or chamber the player is looking down.
+The **vanishing point is (96, 96)**, the centre of the visible art.
 
-**Light gate.** Before any of the above runs, the renderer checks the torch counter and the light-spell counter — two remaining-duration counters, neither of which is a radius. If both are zero, the renderer paints nothing — the side panel goes black, and the player sees only the status row and message panel. This "pitch dark" state is the gating reason torches and light-spells are gameplay-critical underground. The renderer is otherwise purely a function of the eight-by-eight floor data, the party's position and facing, and the lighting state.
+Every placement constant in the renderer falls out of one sequence, the
+**per-band half-aperture**. The view is a nest of concentric squares centred on
+the vanishing point; the opening at band `b` is the square whose edges lie
+`hw[b]` pixels either side of the vanishing point in both axes.
 
-Dungeon visibility is binary at the first-person renderer boundary: with no
-torch and no light spell, the viewport is black; with either counter nonzero,
-the renderer walks the current geometry and paints until blocked by wall/door
-classes. There is no top-down eleven-by-eleven fog grid, no per-cell remembered
-visibility, and no gradual numeric radius inside the dungeon renderer. Depth
-cueing and far/near brightness are presentation state owned by the renderer,
-not stored in `DUNGEON.DAT` cells.
+| Band `b` | Cell it describes | `hw[b]` | Wall x-edges | Ceiling line y | Floor line y |
+|---:|---|---:|---|---:|---:|
+| 0 | the party's own cell | 80 | 16 and 176 | 16 | 176 |
+| 1 | one cell ahead | 56 | 40 and 152 | 40 | 152 |
+| 2 | two cells ahead | 24 | 72 and 120 | 72 | 120 |
+| 3 | three cells ahead | 8 | 88 and 104 | 88 | 104 |
 
-### 6.1 Renderer Helper Contract
+**Band 0 is the party's own cell, not the cell ahead.** The side cells of band 0
+are the cells immediately left and right of the party, and they frame the view
+at its outer edge; the "forward" test at band 0 is the party's own cell, which
+is normally open. An earlier revision that computed each band's cell as the
+party's position plus the facing delta times `band + 1` is off by one and is
+withdrawn.
 
-The first-person renderer is a deterministic helper pipeline over the current
-8-by-8 dungeon level image.
+The original pre-fills only the right half of the composite rectangle with black
+before drawing. The left half is always fully covered by opaque billboards, so
+the asymmetry is an artefact of the original's mirrored-blit path. An
+implementation that clears the whole rectangle and draws both halves opaquely is
+conformant and will not differ visibly.
+
+### 6.2 The billboard banks
+
+There are **three interchangeable corridor art files**, one per presentation
+flavour byte (Section 2): flavour 1 selects the first, flavour 2 the second,
+flavour 3 the third. The file is chosen once, on dungeon-mode entry, from a
+three-entry filename table indexed by the flavour byte, and the object sprite
+file is loaded alongside it.
+
+**All three corridor files have byte-identical directories**; only the pixels
+differ. That is the whole of the "different dungeons look different" mechanism:
+a clean implementation needs one geometry and three texture sets. Both banks are
+released and the world tile atlas reloaded when dungeon mode ends.
+
+The directory holds **twenty-eight entries**, of which **two are deliberately
+absent** (Section 6.4 explains why). Every image is **164 rows tall** and is
+drawn at a **fixed vertical origin of y = 14**, so the only per-image variable
+is horizontal placement.
+
+| Role | Band 0 | Band 1 | Band 2 | Band 3 |
+|---|---|---|---|---|
+| Side wall | 24 wide | 32 wide | 16 wide | 8 wide |
+| Side door | 24 | 32 | 16 | 8 |
+| Side opening | 24 | 32 | 16 | 8 |
+| Side flavour wall | 24 | 32 | 16 | 8 |
+| Forward wall | *absent* | 56 | 24 | 8 |
+| Forward door | **80** | 56 | 24 | 8 |
+| Forward flavour wall | *absent* | 56 | 24 | 8 |
+
+Two invariants make the widths self-checking:
+
+- A **side** image's width is `hw[b] - hw[b+1]` - the thickness of the ring
+  between its own band's aperture and the next band's (80-56, 56-24, 24-8,
+  8-0).
+- A **forward** image's width is `hw[b]` itself, because each forward billboard
+  is a *half* wall drawn twice.
+
+The forward-door family's band-0 entry is an **80-wide image that stands in for
+every blocker family at band 0** - wall, door and flavour wall alike, because
+the renderer overrides the family selection at that range (Section 6.4). That is
+why the band-0 entries of the forward wall and forward flavour wall families are
+absent from the directory: nothing ever asks for them. Those are the two empty
+slots a reader of the shipped files will notice.
+
+A second art file holds the object sprites (Section 6.6). A third bank is
+allocated on demand for the active wandering object. Neither the corridor bank
+nor the object bank is used by the map view (Section 12).
+
+### 6.3 The placement rule
+
+Every corridor image is drawn **twice**: once at its left position and once
+horizontally mirrored. The rule is one sentence:
+
+> `x_right = 192 - x_left - width`
+
+which is the reflection of the left rectangle about the vertical centre line at
+x = 95.5. For both families the left position is `96 - hw[b]`:
+
+| Band | Left x | Side image right x | Forward image right x |
+|---:|---:|---:|---:|
+| 0 | 16 | 152 | 96 |
+| 1 | 40 | 120 | 96 |
+| 2 | 72 | 104 | 96 |
+| 3 | 88 | 96 | 96 |
+
+The forward family's mirrored copy therefore always begins exactly at the
+centre line, and the two halves meet seamlessly. Every destination rectangle in
+the corridor reproduces exactly from the half-aperture sequence and these two
+rules; no further tables are needed.
+
+### 6.4 Cell class to image
+
+**Side cells.** For each band the renderer paints the cell to the left and the
+cell to the right, using the perpendicular of the facing direction. The image is
+chosen from the side cell's high nibble:
+
+| Side cell | Image family |
+|---|---|
+| Any class below the door families - passage, ladders, chest, fountain, pit, open chest, energy field, and the unused `0x9?` class | Side **opening** |
+| `0xA?` heavy door, `0xE?` heavy door, `0xF?` room trigger | Side **door** |
+| `0xC?` flavour wall | Side **flavour wall**, plus the decoration of Section 6.8 |
+| `0xB?`, `0xD?` plain wall | Side **wall** |
+
+Note that class `0x9?` selects the *opening* image, not the wall image; every
+class below the door families does.
+
+**The forward cell.** The forward test reports "see-through" for any cell below
+the door families, and the sweep continues to the next band. Otherwise it paints
+a blocker twice - left copy then mirrored copy - and reports "blocked":
+
+| Forward cell | Band 1 | Band 2 | Band 3 |
+|---|---|---|---|
+| `0xA?` heavy door | forward door | forward door | forward door |
+| `0xB?` wall | forward wall | forward wall | forward wall |
+| `0xC?` flavour wall | forward flavour wall | forward flavour wall | forward flavour wall |
+| `0xD?` wall | same as `0xB?` | same | same |
+| `0xE?` heavy door | forward door | forward door | forward door |
+| `0xF?` room trigger | forward door | forward door | forward door |
+
+**At band 0 every blocker family uses the single point-blank image**, whatever
+its class - the override is unconditional, and it is the reason the three band-0
+forward directory entries do not exist.
+
+Two special cases at band 0:
+
+- A `0xE?` heavy door in the party's own cell paints the point-blank door image
+  and then reports **see-through anyway**, so the sweep advances one more cell
+  and the doorway shows depth behind it. It also sets the renderer's
+  point-blank flag, which suppresses the band-0 side walls so the door frame is
+  not boxed in.
+- A `0xF?` room trigger has no such pass-through. (In practice the player never
+  sees it, because stepping onto a room-trigger cell enters combat.)
+
+The band-0 side cells are also skipped when the caller's point-blank gate
+argument is clear, which is how the composite redraw of Section 6.9 forces the
+near frame on.
+
+Two flavour-conditional extras hang off the forward test:
+
+- A `0xB?` wall one cell ahead whose low nibble is non-zero routes to the
+  per-dungeon scenery-text handler, which is what prints the dripping-stalactite
+  family of ambient lines.
+- A `0xC?` flavour wall one cell ahead in a **flavour-3** dungeon has a rare
+  decorative flourish: on roughly a one-in-sixteen roll it draws four short
+  strokes near the vanishing point in a bright accent pen. It is visual only,
+  and it is the visual half of the flavour-3 easter egg noted in Section 2.
+
+### 6.5 Sweep order
+
+The renderer performs two sweeps over the same four cells.
+
+1. **Forward sweep**, band 0 through 3. Band 0 is the party's own cell; each
+   subsequent band steps one cell along the facing direction. At each band the
+   renderer runs the forward test, then - if the band is not skipped - paints the
+   two side cells. The sweep stops at the first band whose forward test reports
+   "blocked".
+2. **Backward sweep**, from the deepest accepted band back to band 0, painting
+   forward-facing objects, sprites, fields and active-object overlays. This is
+   the renderer's entire depth sorting: nearer bands paint over farther ones,
+   with no depth buffer.
+
+Every cell read wraps X and Y independently to the range `0..7` before indexing
+the level image, so a sweep that steps off the edge of the eight-by-eight floor
+tiles seamlessly into the opposite side.
+
+**Light gate.** Before any of the above runs, the renderer reads the torch
+counter and the light-spell counter as **booleans only**. Either non-zero
+renders the full corridor; both zero fills the viewport interior with black and
+draws nothing else. There is no progressive dimming and no radius: the counters'
+numeric values never reach the renderer.
+
+The unlit fill covers the **viewport interior only** - the square x 8 to 183,
+y 8 to 183. The viewport's frame outline, both border bands and therefore the
+level and facing labels of Section 4.1, the right-hand roster panel and the
+message window all lie outside it and stay lit. Igniting a torch restores the
+corridor on the next redraw with no transition effect.
+
+### 6.6 Object sprites
+
+Objects standing in a cell are drawn from a separate art file holding **twenty
+sprites in five families of four**, one sprite per depth band. Each sprite is
+stored as a colour image **plus a separate one-bit transparency mask of the same
+dimensions**, so objects composite over the corridor art rather than punching
+opaque rectangles through it.
+
+| Family | Band 0 | Band 1 | Band 2 | Band 3 |
+|---|---|---|---|---|
+| Ladder | 40 x 80 | 24 x 56 | 16 x 24 | 8 x 8 |
+| Fountain | 40 x 80 | 24 x 56 | 16 x 24 | 8 x 8 |
+| Pit | 40 x 24 | 24 x 32 | 16 x 16 | 8 x 8 |
+| Chest | 40 x 24 | 24 x 32 | 16 x 16 | 8 x 8 |
+| Open chest | 40 x 24 | 24 x 32 | 16 x 16 | 16 x 16 |
+
+Cell class selects the family and the drawing mode:
+
+| Cell class | Rising sprite | Floor sprite |
+|---|---|---|
+| `0x1?` up ladder | ladder | - |
+| `0x2?` down ladder | - | ladder |
+| `0x3?` both ladders | ladder | ladder |
+| `0x4?` closed chest | - | chest |
+| `0x5?` fountain | - | fountain, plus the water animation of Section 6.7 |
+| `0x6?` pit | - | pit |
+| `0x7?` open chest | - | open chest |
+
+Closed and open chests are visually distinct sprites, and the bidirectional
+ladder genuinely draws both a rising and a descending sprite in the same cell.
+
+Placement follows three rules, all of which reproduce exactly from the
+half-aperture sequence:
+
+- Like corridor images, every sprite is drawn as a **left half at x 56, 72, 80
+  or 88** for bands 0 to 3 and a **mirrored right half beginning at the centre
+  line**, so the two halves meet at x = 96.
+- **Floor-standing objects** - pit, chest, open chest - are positioned so their
+  **bottom edge sits on the floor line of their band**: y = 176, 152, 120, 104.
+- A **rising ladder** is positioned so its **bottom edge sits on the horizon**
+  at y = 95, so it climbs from the vanishing row up to the ceiling. A
+  **descending ladder and a fountain** hang from the horizon downward, starting
+  at y = 96.
+
+An extra overlay sprite is drawn for cells in the active-object classes when the
+cell's overlay bit is set, using the pit sprite family in rising mode. Energy
+fields (class `0x8?`) are drawn by their own animated strobe helper rather than
+from this sprite bank; the field's low nibble selects the flavour. Where the
+level's dropped-item coordinates match a swept cell at a band other than 0, the
+dropped-item painter also runs.
+
+### 6.7 The fountain water animation
+
+The four sparse coordinate-pair tables that earlier revisions attributed to
+walls are the **animated water of a fountain**. Each is a three-frame point
+animation, one point set per depth band. The frame counter advances by one,
+modulo three, once per band-0 paint, so the whole view shares a single
+animation phase.
+
+Each point is plotted **once at the coordinate given and once mirrored about the
+vertical centre line**, i.e. at `190 - x`. Points are plotted individually;
+there is no line drawing. The animation is drawn in a single blue pen, with the
+nearest band re-issuing a brighter blue, and it is **suppressed entirely on
+two-colour adapters**, where the pen resolves to the background.
+
+Absolute left-hand screen coordinates, per band and per frame. Each point also
+appears at its mirror.
+
+**Band 0** (18 points per frame including the mirrors):
+
+| Frame | Points |
+|---|---|
+| 0 | (90,115) (82,119) (95,123) (87,125) (91,131) (80,133) (80,133) (80,133) (89,145) |
+| 1 | (87,115) (94,119) (81,122) (93,125) (95,129) (85,130) (89,135) (80,139) (80,144) |
+| 2 | (84,117) (90,117) (90,124) (80,126) (85,136) (89,138) (89,138) (89,138) (85,143) |
+
+**Band 1** (10 points per frame including the mirrors):
+
+| Frame | Points |
+|---|---|
+| 0 | (94,103) (91,106) (85,107) (95,116) (85,123) |
+| 1 | (90,102) (89,111) (95,111) (84,112) (87,122) |
+| 2 | (87,104) (94,107) (88,115) (83,117) (90,124) |
+
+**Band 2** (8 points per frame including the mirrors):
+
+| Frame | Points |
+|---|---|
+| 0 | (91,97) (95,100) (89,102) (91,104) |
+| 1 | (90,98) (94,98) (92,106) (92,106) |
+| 2 | (93,97) (89,100) (89,105) (89,105) |
+
+**Band 3** (2 points per frame including the mirror):
+
+| Frame | Point |
+|---|---|
+| 0 | (94,96) |
+| 1 | (93,97) |
+| 2 | (95,98) |
+
+Two readability notes. The repeated trailing coordinates - band 0 frames 0 and
+2, band 2 frames 1 and 2 - are genuine padding: the original's loop runs a fixed
+byte count, so the last coordinate is simply re-plotted. An implementation may
+deduplicate them freely. And the geometry is self-consistent: band 3's points
+sit within a pixel of the vanishing point, band 2's within a small box around
+it, and band 0's span x 80 to 110 and y 115 to 145, which is the near
+fountain's spray sitting on the floor plane directly over its sprite.
+
+The fourth band of the animation draws nothing beyond its single point; the
+fountain sprite itself is always drawn first by the object pass.
+
+### 6.8 Wall decorations
+
+Flavour walls in **flavour-1 (normal) dungeons only** carry a five-stage
+decoration animation - the falling droplet the player sees on a mossy wall. It
+is drawn as a three-pixel cross (one horizontal run and one vertical run through
+the same centre) with a brighter centre pixel, in the same blue pen family as
+the fountain water.
+
+Horizontal position is fixed per band and side:
+
+| Placement | Band 0 | Band 1 | Band 2 |
+|---|---:|---:|---:|
+| Side cell, left | x = 33 | x = 67 | - |
+| Side cell, right | x = 157 | x = 123 | - |
+| Forward cell | - | x = 95 | x = 95 |
+
+Vertical position advances through the five stages:
+
+| Placement | Stage 0 | 1 | 2 | 3 | 4 |
+|---|---:|---:|---:|---:|---:|
+| Side cell, band 0 | y = 28 | 37 | 64 | 112 | 173 |
+| Side cell, band 1 | y = 54 | 59 | 74 | 98 | 133 |
+| Forward cell, band 1 | y = 54 | 61 | 80 | 114 | 160 |
+| Forward cell, band 2 | y = 60 | 64 | 76 | 96 | 123 |
+
+The stage is stored in the **low three bits of the level cell itself**, and the
+painter writes the next stage back, so the animation's state persists in the
+live level map for the duration of the visit. Stage 0 advances only on a
+one-in-sixteen roll; stages 1 through 4 advance on every paint; stage 4 uses a
+brighter pen and omits the extra centre pixel; the stage after 4 draws nothing,
+plays a short falling-pitch tone whose pitch depends on the band, and resets the
+cycle to 0.
+
+Only stages 0 through 4 are producible by the animation. An implementation
+should treat each placement as exactly five entries and clamp; the original's
+tables run into their neighbours past stage 4, but that region is unreachable.
+
+### 6.9 Cell reads, active objects and the composite redraw
 
 **Cell reads.** Every renderer-facing cell read wraps X and Y independently to
 the range `0..7`, then reads the current Z-level image. For cell bytes below
@@ -237,92 +652,29 @@ the range `0..7`, then reads the current Z-level image. For cell bytes below
 classes `0x9?` and higher, bit `0x08` remains meaningful as a render-side
 overlay/extra-glyph flag. This bit is not persistent visibility memory.
 
-**Top-level render pass.** A render pass clears the dungeon viewport in the
-back buffer, installs the plot-pixel clip rectangle, applies the binary light
-gate, then performs two sweeps:
+**Fields.** Energy-field cells draw animated horizontal strobe lines. The strobe
+uses per-field resident parameters for vertical band, row count, and row
+spacing, plus a field-specific pen choice. The exact row coordinates are
+randomized within the configured bands each render pass.
 
-1. The forward sweep walks up to four depth slots in the current facing
-   direction. At each slot, it classifies the forward cell, paints the centered
-   blocker/decor cue if needed, and stops when the helper reports an opaque
-   cell. If the slot remains open, the renderer paints the left and right side
-   cells for that depth.
-2. The backward sweep walks from the deepest accepted slot back toward the
-   party and paints front-facing objects, walls, fields, and active-object
-   overlays in far-to-near order. This ordering is the renderer's depth sorting:
-   closer objects intentionally overpaint farther objects.
-
-Depth slot three is structurally reachable only when nearer slots are open.
-The wall-coordinate tables are effectively authored for the visible near and
-middle bands; implementations should preserve the table-driven behavior rather
-than invent a fourth projected wall band.
-
-**Blocker and side-wall classification.** The centered renderer blocker and
-the movement gate are related but not identical. For movement, the solid
-wall/flavour classes are `0xB?`, `0xC?`, and `0xD?`; door-like `0xA?`,
-`0xE?`, and room-trigger `0xF?` cells use pass-through or special underfoot
-paths. The first-person renderer can still paint `0xA?`, `0xE?`, and `0xF?`
-with door-like frames so the player sees the room doorway context. Class
-`0xB?` wall decoration at the observed near depth may print per-dungeon
-scenery text from resident tables. Class `0xC?` flavour walls can draw an
-extra decoration glyph in the normal-flavour case. Doom-flavour class-`0xC?`
-near walls also have a rare decorative skeleton-chamber presentation; this is
-visual only.
-
-Side-wall classification uses the side cell at the same depth. Passages paint
-the side-flat marker, heavy-door and room-trigger families paint the door
-silhouette, class `0xC?` can add the normal-flavour decoration glyph, and other
-wall classes paint the ordinary side-wall cue. Decoration glyph painting may
-update the cell's low-bit animation substate in the live image for the current
-visit; it does not rewrite the static dungeon record.
-
-**Sparse wall points.** Wall geometry comes from resident coordinate-pair
-tables, selected by wall role:
-
-| Wall role | Contract |
-|---|---|
-| Forward wall | Emit the full mirrored point set for a wall directly ahead at the selected depth. |
-| Side door | Emit the smaller mirrored point set used by side-door silhouettes. |
-| Side wall | Emit the side-wall point set around the side-cell anchor. |
-| Corner | Emit the single mirrored corner point pair that connects adjacent wall cues. |
-
-The renderer mirrors each point pair around the role's fixed axis and modulates
-the pen through the current brightness toggle. These tables are resident
-rendering data; the public spec describes their role without reproducing their
-raw coordinate contents.
-
-**Object and glyph painting.** Small dungeon features use the dungeon glyph
-source image, while larger creature/Codex/role sprites use the dungeon sprite
-source image. Glyph-like feature ids select a depth/subclass screen-position
-table, with point-blank door and chest families forced to the viewport centre.
-Larger sprite ids select a separate source and a separate depth-position table.
-The renderer passes a mirror flag to support left/right side drawing.
-
-The single-glyph helper has three visible families:
-
-- standard four-sided decoration glyphs, with a small random chance to advance
-  their animation phase;
-- shrine-flavoured bright glyphs using the same shape with a brighter pen;
-- Codex/shrine glow strips drawn at a fixed viewport location with vertical
-  phase adjustment and a short presentation tone/pause.
-
-**Fields and active objects.** Energy-field cells draw animated horizontal
-strobe lines. The strobe uses per-field resident parameters for vertical band,
-row count, and row spacing, plus a field-specific pen choice. The exact row
-coordinates are randomized within the configured bands each render pass.
-
-Active monster, Codex, Shadowlord, and similar dungeon sprites are drawn by an
-animated sprite helper keyed to the global dungeon animation phase and the
-current creature record. The helper can apply small random flicker/direction
-variants, has a special quest-scene sprite-table path, and paints a paired
-sprite/overlay result when the dungeon sprite source is loaded. If the sprite
-source is unavailable, it falls back to text presentation rather than silently
-painting a blank object.
+**Active objects.** Active monster, Codex, Shadowlord, and similar dungeon
+sprites are drawn by an animated sprite helper keyed to the global dungeon
+animation phase and the current creature record. The helper can apply small
+random flicker/direction variants, has a special quest-scene sprite-table path,
+and paints a paired sprite/mask result when the dungeon sprite source is loaded.
+If the sprite source is unavailable, it falls back to text presentation rather
+than silently painting a blank object.
 
 **Composite redraw.** Commands that mutate dungeon state use a composite redraw
-helper: reset the prompt/status presentation, render the 3D viewport with the
-point-blank wall gate forced on, blit the viewport rectangle from back buffer to
-front buffer, run the local presentation tick, and redraw the dungeon status
-row. This is a repaint helper, not a game-state transition.
+helper: reset the prompt/status presentation, render the viewport with the
+point-blank gate forced on, blit the composite rectangle from the back buffer to
+the front buffer, run the local presentation tick, and redraw the two border
+labels of Section 4.1. This is a repaint helper, not a game-state transition,
+and it is the path the map view returns through.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, and
+re-verified against the shipped dungeon art directories.
 
 ## 7. Light sources
 
@@ -341,7 +693,9 @@ Two state bytes track the player's light:
 Neither byte is a radius. Both are durations; the lighting system recomputes an
 ambient value every turn and merely raises it to a floor while either counter
 is burning, and inside the dungeon renderer the two counters are consulted only
-as a binary lit/unlit gate. A dungeon turn spends one counter unit; the exact
+as a binary lit/unlit gate. The first-person view never reads the ambient value
+at all: the dawn/dusk curve and the squared-distance thresholds of
+`systems/lighting.md` have no effect underground. A dungeon turn spends one counter unit; the exact
 decay cadence, the counter unit, and the ambient floors are specified in
 `systems/lighting.md` sections 4 and 5.
 
@@ -528,6 +882,16 @@ light-spell counters.
 
 Dungeon mode's movement set is small and uses the numpad / arrow keys, *not* letter commands:
 
+Dungeon movement does **not** echo the four direction words the surface and town
+loops use. It has its own verbs, each printed into the message window and each
+followed by a newline: `Advance`, `Back up`, `Turn left`, `Turn right`,
+`Turn around.`, and the refusals `Blocked!` and `Not in doorway!` - the latter
+belonging to the movement family and reachable from more than one arm, so a spec
+should treat it as a movement refusal rather than binding it to one key.
+Attacking straight ahead echoes
+`Attack` with a newline and no direction hyphen, because a dungeon attack takes
+no direction argument (`commands.md` section 5.2).
+
 - **Forward.** Step one cell in the facing direction. The engine consults the cell at `(player_X + facing_dx, player_Y + facing_dy)`. If that cell's high nibble is one of the wall/flavour classes `0xB?`, `0xC?`, or `0xD?`, the move is rejected and "Blocked!" is printed. Otherwise the party advances one cell, the energy-field check fires (§ 8) if the destination is a field, and the turn ends. Door-like `0xA?`, `0xE?`, and `0xF?` cells are not rejected by the ordinary forward movement gate; their room/door semantics are handled by underfoot and presentation paths.
 - **Back.** Step one cell in the opposite direction. It uses the same destination calculation, with a small room-trigger exception: back-stepping into `0xA?` or `0xF?` is rejected, while ordinary wall/flavour classes remain blocked and `0xE?` uses the pass-through branch.
 - **Turn left.** Decrement the facing byte by one (modulo four). Status row updates; the first-person view is repainted on the next loop iteration.
@@ -648,13 +1012,79 @@ The fountain prompt is the only state-mutating L-Look class currently identified
 
 **V-View.** The V letter routes through the resident dispatcher before it reaches the dungeon-look overlay. The dispatcher requires a *gem of vision*, prints the no-gem refusal if the count is zero, and decrements the gem count before dispatching to the dungeon view handler. The shared look/view contract, including combat's no-consume `V` branch, lives in `view.md`.
 
-The handler clears the side-panel viewport normally used by the first-person view and paints a top-down map centered on the party. It seeds a scratch flood walk at a center cell representing the party, maintains a visited map plus two row queues, tries the eight neighbouring scratch cells for each dequeued cell, maps each accepted scratch coordinate back onto the current 8-by-8 dungeon level relative to the party with wrapping, reads the corresponding `DUNGEON.DAT` byte, and paints a glyph based on that byte's high-nibble class.
+The handler clears the viewport normally used by the first-person view and
+paints a top-down map centred on the party.
 
-The V-View visited map is temporary scratch memory only. It starts filled as
-unvisited for the overlay, marks scratch cells as visited during that one flood
-walk, and is discarded when the side panel is restored. It does not write
-exploration bits into the loaded dungeon image and does not change what the
-first-person renderer or future V-View calls can see.
+### 12.1 Map geometry
+
+The map is a **twenty-two by twenty-two grid of eight-by-eight-pixel cells** -
+484 cells in all. Grid cell `(0,0)` begins at the top-left corner of the
+published clear rectangle, and a cell's pixel origin is
+
+> `x = 8 * grid_x + 8`, `y = 8 * grid_y + 8`
+
+so cell `(0,0)` occupies pixels `(8,8)` to `(15,15)` and cell `(21,21)` ends at
+`(183,183)`. Twenty-two cells of eight pixels **exactly fill** the clear
+rectangle `(8,8)` to `(183,183)`, which is the same viewport interior the
+first-person view uses, so the two views cover identical ground.
+
+**Correction.** Earlier revisions of this section described a twelve-row cell
+whose "lower four rows" were left untouched. That is wrong in both directions:
+the cell is eight rows tall and every row of it is drawn. The twelve-row reading
+came from a misread of two unused values in the original and is withdrawn here
+so it is not re-derived later. Every per-cell geometry below spans rows `y`
+through `y + 7` of an eight-row cell.
+
+The party always occupies the **centre cell `(11,11)`**, which is pre-marked as
+visited before the flood begins, so the flood never paints over the party
+marker.
+
+**The wrap rule** is what makes a twenty-two-cell window possible over an
+eight-by-eight floor: the dungeon coordinate of a grid cell is the party's
+coordinate plus the cell's offset from the centre, taken **modulo eight in both
+axes**. The level therefore tiles about two and three-quarter times across the
+window. What the player sees is a view onto a wrapped torus, not a single copy
+of the floor - this is deliberate and matches how the first-person sweep wraps.
+
+### 12.2 The flood
+
+The painter is an **eight-connected breadth-first walk** seeded at the party's
+centre cell, using a visited grid so each cell is painted at most once. Diagonal
+steps are permitted and there is **no corner-cutting test**: the walk can slip
+between two diagonally touching walls. The neighbour order is northwest, north,
+northeast, west, east, southwest, south, southeast.
+
+A cell stops the walk if it is outside the grid, already visited, or one of the
+three solid wall classes. Every other class paints its glyph and continues.
+
+The frontier queue is a fixed ring of **two hundred fifty-six entries with no
+occupancy check**. Shipped data never approaches that bound, but an
+implementation should treat "the frontier never exceeds 256 pending cells" as a
+requirement of the contract rather than as an incidental property, and should
+not substitute an unbounded queue that would paint a differently shaped map on
+hand-authored data.
+
+### 12.3 The glyph source
+
+The map does **not** use the corridor billboards or the object sprites of
+Section 6. It uses the engine's two fixed **eight-by-eight one-bit fonts** - the
+text font and the runic font. Each holds one hundred twenty-eight glyphs of
+eight bytes, one byte per row, most significant bit leftmost. Every published
+glyph identifier below is an index into whichever of the two fonts the class
+selects.
+
+Most classes select the **runic** font. Four deliberately select the **text**
+font instead: three of them for directional arrows the runic font does not have,
+and one for a solid block - the runic font's slot at that index is blank, which
+is precisely why the bedrock class does not switch fonts.
+
+Each cell is drawn opaquely in a foreground/background pair, so a painted cell
+fully replaces whatever was underneath it.
+
+Two classes are not font characters at all but small vector drawings; their
+geometry is published below.
+
+### 12.4 Floodability and the class-to-glyph table
 
 Minimap floodability is its own presentation rule, not dungeon movement
 passability. The per-cell painter returns "expand" for most classes after
@@ -663,34 +1093,43 @@ painting their glyph. Only the wall presentation classes `0xB?`, `0xC?`, and
 and `0xF?`) paint door glyphs but still return expand to the flood walker.
 The open-chest class paints nothing and still returns expand.
 
-The class-to-glyph contract for the dungeon minimap is:
+| Dungeon high nibble / exact byte | Font | Minimap output | Flood expands past cell |
+|---|---|---|---|
+| `0x0?` with bit `0x08` set | text | Up-arrow glyph `0x18`. | Yes. |
+| `0x0?` without bit `0x08` | - | No glyph; the cell stays black. | Yes. |
+| `0x1?` | runic | Up-ladder glyph `0x2E` (bar at the top). | Yes. |
+| `0x2?` | runic | Down-ladder glyph `0x2D` (bar at the bottom). | Yes. |
+| `0x3?` | runic | Two-way-ladder glyph `0x2F` (both bars). | Yes. |
+| `0x4?` | runic | Closed-chest glyph `0x70`. | Yes. |
+| `0x5?` | vector | Fountain drawing; see below. | Yes. |
+| Exact `0x60` | text | Down-arrow glyph `0x19`. | Yes. |
+| Exact `0x61` or `0x69` | runic | Hidden/fall-pit glyph `0x71`. | Yes. |
+| Exact `0x68` | text | Up-and-down-arrow glyph `0x12`. | Yes. |
+| Other `0x6?` | runic | Trap/blocker glyph `0x72`. | Yes. |
+| `0x7?` | - | No glyph; the open chest is not drawn on the map. | Yes. |
+| `0x8?` | vector | Energy-field drawing; see below. | Yes. |
+| `0x9?` | - | No glyph. | Yes. |
+| `0xA?` or `0xF?` | runic | Heavy-door glyph `0x73`. | Yes. |
+| Exact `0xB0` | **text** | Solid block glyph `0x7F` - bedrock. The runic font's slot at this index is blank, so this class deliberately keeps the text font. | **No.** |
+| Other `0xB?` | runic | Latticed wall glyph `0x74`. | **No.** |
+| `0xC?` | runic | Speckled diagonal wall glyph `0x75`, drawn with a background pen rather than a foreground pen, which is what gives it its filled look. | **No.** |
+| `0xD?` | runic | Arch wall glyph `0x76`, likewise drawn with a background pen; which pen depends on the display adapter. | **No.** |
+| `0xE?` | runic | Filled rounded block glyph `0x77`. | Yes. |
+| party marker | runic | Arrowhead glyph `0x60`, drawn unconditionally at the centre cell `(11,11)`. | - |
 
-| Dungeon high nibble / exact byte | Minimap output | Flood expands past cell |
-|---|---|---|
-| `0x0?` with bit `0x08` set | Passage detail glyph `0x18`. | Yes. |
-| `0x0?` without bit `0x08` | No glyph. | Yes. |
-| `0x1?` | Up-ladder glyph `0x2E`. | Yes. |
-| `0x2?` | Down-ladder glyph `0x2D`. | Yes. |
-| `0x3?` | Two-way-ladder glyph `0x2F`. | Yes. |
-| `0x4?` | Closed-chest glyph `0x70`. | Yes. |
-| `0x5?` | Fountain mask rooted at the mapped cell; see below. | Yes. |
-| Exact `0x60` | Pit glyph `0x19`. | Yes. |
-| Exact `0x61` or `0x69` | Hidden/fall-pit glyph `0x71`. | Yes. |
-| Exact `0x68` | Fired/walked-through pit glyph `0x12`. | Yes. |
-| Other `0x6?` | Trap/blocker glyph `0x72`. | Yes. |
-| `0x7?` | No glyph (the open chest is not drawn on the minimap). | Yes. |
-| `0x8?` | Stair/field helper mask; see below. | Yes. |
-| `0x9?` | No glyph. | Yes. |
-| `0xA?` or `0xF?` | Heavy-door glyph `0x73`. | Yes. |
-| Exact `0xB0` | Wall glyph `0x7F`. | No. |
-| Other `0xB?` | Wall glyph `0x74`. | No. |
-| `0xC?` | Flavour-wall glyph `0x75`, then a source-selector reset. No second visible cell is painted. | No. |
-| `0xD?` | Extra-wall glyph `0x76`, with the peer-view tint source when active. | No. |
-| `0xE?` | Heavy-door variant glyph `0x77`. | Yes. |
+**Withdrawal.** Earlier revisions described a peer-spell tint branch inside the
+V-View painter and a "source-selector reset" after the `0xC?` glyph. Both
+readings are withdrawn. The value they were reading is the **display-adapter
+identifier**, not a peer-spell flag, and the "reset" is the painter's ordinary
+epilogue restoring the default foreground pen and the text font. V-View has no
+peer-spell branch of its own; the peer spell's own presentation is specified in
+`magic.md`.
 
-For the fountain and stair/field masks, let `(x, y)` be the accepted
-minimap cell's pixel origin. All line ranges below are inclusive. The fountain
-class first draws the basin strokes with the active minimap line source:
+### 12.5 The two vector glyphs
+
+Let `(x, y)` be the accepted cell's pixel origin. All ranges are inclusive.
+
+The **fountain** first draws its basin in the bright foreground pen:
 
 | Fountain stroke | Geometry |
 |---|---|
@@ -699,34 +1138,52 @@ class first draws the basin strokes with the active minimap line source:
 | Left foot | `x + 1..x + 2` at `y + 6` |
 | Right foot | `x + 5..x + 6` at `y + 6` |
 
-It then switches to the secondary fountain detail source and draws:
+then switches to a brighter blue for the jet and spray:
 
 | Fountain detail | Geometry |
 |---|---|
-| Upper-left dot | glyph pixel at `(x + 2, y + 1)` |
-| Upper-right dot | glyph pixel at `(x + 5, y + 1)` |
-| Left side dot | glyph pixel at `(x + 1, y + 2)` |
-| Right side dot | glyph pixel at `(x + 6, y + 2)` |
-| Upper cap | `x + 3..x + 4` at `y + 2` |
-| Lower cap | `x + 3..x + 4` at `y + 3` |
+| Upper-left spray dot | pixel at `(x + 2, y + 1)` |
+| Upper-right spray dot | pixel at `(x + 5, y + 1)` |
+| Left side spray dot | pixel at `(x + 1, y + 2)` |
+| Right side spray dot | pixel at `(x + 6, y + 2)` |
+| Upper jet | `x + 3..x + 4` at `y + 2` |
+| Lower jet | `x + 3..x + 4` at `y + 3` |
 
-The stair/field helper draws eight one-pixel-high horizontal rules over the
-upper eight rows of the minimap cell, leaving the lower four rows untouched:
+The **energy field** draws eight full-width horizontal runs covering **all eight
+rows** of the cell, in four two-row colour bands:
 
-| Source family | Geometry |
+| Band | Geometry |
 |---|---|
-| Stair band A | `x + 1..x + 6` at `y` and `y + 1` |
-| Stair band B | `x + 1..x + 6` at `y + 2` and `y + 3` |
-| Stair band C | `x + 1..x + 6` at `y + 4` and `y + 5` |
-| Stair band D | `x + 1..x + 6` at `y + 6` and `y + 7` |
+| A | `x + 1..x + 6` at `y` and `y + 1` |
+| B | `x + 1..x + 6` at `y + 2` and `y + 3` |
+| C | `x + 1..x + 6` at `y + 4` and `y + 5` |
+| D | `x + 1..x + 6` at `y + 6` and `y + 7` |
 
-The stair/field helper itself does not branch on peer-spell mode. Peer-spell
-mode affects the surrounding V-View source choices for the tinting wall
-classes, but the `0x8?` helper always emits the four-band rule pattern above.
-The `0xC?` reset after glyph `0x75` is a source-selector terminator only; it
-has no relative offset, shape, or extra drawable cell for the minimap renderer.
+The energy-field drawing **reads no sub-type**, so all four field flavours look
+identical on the map. That is a genuine behaviour of the original, not an
+omission in this spec.
 
-When peer-spell view mode is active, V-View applies the same magic-vision tint branch used by the dungeon peer path. When the flood walk finishes, the handler waits for a key/poll result, clears the side panel again, and calls back into the dungeon renderer to restore the first-person view before returning. The minimap is therefore an inspect overlay, not a persistent panel that waits for the next turn loop to erase it.
+### 12.6 Frame contract
+
+The V-View visited map is temporary scratch memory only. It starts filled as
+unvisited for the overlay, marks scratch cells as visited during that one flood
+walk, and is discarded when the viewport is restored. It does not write
+exploration bits into the loaded dungeon image and does not change what the
+first-person renderer or future V-View calls can see.
+
+The map view clears **only the viewport interior** `(8,8)` to `(183,183)`, so
+the top and bottom border bands - and therefore the level and facing labels of
+Section 4.1 - are never damaged. It switches the active text window to the
+message window, waits for any key, clears the viewport again, and returns
+through the composite redraw of Section 6.9, which repaints the first-person
+view and rewrites both labels even though they were never touched.
+
+The map is therefore an inspect overlay, not a persistent panel that waits for
+the next turn loop to erase it, and not an automap: it is recomputed from the
+current dungeon record every time the player spends a gem.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 
 ## 13. Z transitions and exiting
 
@@ -1136,11 +1593,11 @@ specified, and stock data cannot produce that edge.
   lock/trap sub-type on a dungeon chest cell — and the trap's flavour is chosen
   entirely by the shared resolver's four-way distribution published in
   `systems/traps.md`. Nothing further is outstanding here.
-- **V-View visual parity.** The minimap painter's class-to-glyph ids and flood
-  expansion rules are specified. Visual confirmation of those glyph ids against
-  the active font/tile bank and pixel placement of the multi-cell
-  fountain/stair helper belongs to presentation QA, not the flood ownership
-  rule.
+- **V-View visual parity.** Resolved. The map's cell size and origin, the
+  twenty-two by twenty-two grid, the wrap rule, the flood bound, the glyph
+  source fonts, the per-class font selection, and the pixel geometry of both
+  vector glyphs are published in Section 12. What remains is screenshot
+  comparison, not unknown rules.
 - **Open/Get chest traps.** Search's chest trap narration is covered here, while
   Open owns the trap-springing gameplay path and Get owns the seven-row
   open-chest reward generator specified in `containers.md`. The caller layer is
@@ -1182,6 +1639,10 @@ The behaviour described here was derived by reading the private function notes l
   derived from `u5-decomp/functions/DNGLOOK_OVL/0x0844_set_room_cleared.md`,
   `u5-decomp/functions/DNGLOOK_OVL/0x08D4_is_room_cleared.md`, and
   `u5-decomp/functions/DNGLOOK_OVL/0x093A_demote_cleared_room_markers.md`.
+- The dungeon chrome bands, their exact cell layouts, the two border-label
+  literals and the invalid-facing fallback, the status refresh cadence, and the
+  walk-in-only entry facing seed -- derived from private analysis note
+  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 - The dungeon viewport frame, status row redraw, render-and-poll helper,
   active-object setup and placement, and room-entry state handoff -- derived
   from `u5-decomp/functions/DUNGEON_OVL/0x0332_draw_view_panel.md`,
@@ -1190,7 +1651,13 @@ The behaviour described here was derived by reading the private function notes l
   `u5-decomp/functions/DUNGEON_OVL/0x0134_dungeon_view_init.md`,
   `u5-decomp/functions/DUNGEON_OVL/0x0252_dungeon_place_active_object.md`,
   and `u5-decomp/functions/DUNGEON_OVL/0x0000_dungeon_room_enter.md`.
-- The first-person renderer's sparse point-plotting model, distance bands, direction-delta-table indexing, side/front wall pass order, helper pipeline, back-buffer redraw bracket, and binary light gate -- derived from `u5-decomp/functions/DUNGEON_OVL/0x1A90_dungeon_render_3d.md`, `u5-decomp/notes/system-trace_dungeon-rendering.md`, and cross-checked against `u5-decomp/CORRECTIONS.md`.
+- The first-person renderer's billboard model, half-aperture frustum, per-band
+  destination rules, cell-class-to-image mapping, sprite families and placement,
+  fountain-water and wall-decoration animations, two-sweep ordering, and binary
+  light gate -- derived from private analysis note
+  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, which also
+  withdraws the earlier sparse-point-plotting reading recorded in
+  `u5-decomp/notes/`.
 - The dungeon-entry scene/name/record binding, selected-record load, and entry seed coordinates — derived from the MAINOUT E-Enter helper and its dungeon-entry subhelper, cross-checked against `u5-decomp/formats/data-ovl.md`.
 - Source provenance: the single shared exit contract and its plane rule, the
   four routes that reach it, the foot-travel entry gate, Doom's Shadowlord gate
@@ -1199,26 +1666,24 @@ The behaviour described here was derived by reading the private function notes l
   climbable-exit table are derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - The mode-aware letter dispatch table including the dungeon-specific routes for A-Attack, K-Klimb, L-Look, T-Talk, V-View, and the H-Hole-up overworld path — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
-- The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/0x006C_sjog_dir_step.md` and `u5-decomp/functions/SJOG_OVL/0x002A_sjog_apply_dir_step.md`. The View handler's centered flood map, wait/clear/restore flow, and peer-spell tint branch — derived from `u5-decomp/functions/DNGLOOK_OVL/0x06A8_dnglook_v_view.md`.
+- The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/0x006C_sjog_dir_step.md` and `u5-decomp/functions/SJOG_OVL/0x002A_sjog_apply_dir_step.md`. The View handler's centred flood map, its twenty-two by twenty-two eight-pixel cell grid, wrap rule, flood bound, font-based glyph source, and wait/clear/restore flow — derived from the DNGLOOK function notes under `u5-decomp/functions/DNGLOOK_OVL/` and from private analysis note `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, which withdraws the earlier peer-spell tint reading.
 - The wrapped dungeon cell reader's class-sensitive `0x08` normalization and
   the front-cell renderer's extra-glyph/active-object overlay use of that bit
   -- derived from `u5-decomp/functions/DUNGEON_OVL/0x10DC_dungeon_get_cell.md`,
   `u5-decomp/functions/DUNGEON_OVL/0x1952_dungeon_draw_outer_cell.md`, and
   `u5-decomp/notes/system-trace_dungeon-rendering.md`.
-- The first-person renderer helper contracts -- active-object sprite painting,
-  field strobe painting, glyph/sprite source selection, single-glyph
-  decoration families, front blocker classification, side-wall classification,
-  sparse point-pair wall painting, and composite redraw sequencing -- derived
-  from `u5-decomp/functions/DUNGEON_OVL/0x111E_dungeon_draw_active_object.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x127E_dungeon_draw_field_object.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x134A_dungeon_draw_object_at_depth.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x145C_dungeon_draw_glyph.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x150A_dungeon_check_blocking.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x1682_dungeon_draw_wall_at_depth.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x1786_dungeon_draw_walls_for_cell.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x1952_dungeon_draw_outer_cell.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x1BE0_dungeon_redraw_after_action.md`,
-  and `u5-decomp/functions/DUNGEON_OVL/0x104C_dungeon_handle_wall_decor.md`.
+- The first-person renderer helper contracts -- billboard bank selection and
+  directory roles, per-band destination placement and the mirror rule,
+  cell-class-to-image mapping including the point-blank override and the
+  heavy-door pass-through, object sprite families and their masked format,
+  the fountain-water point animation, the flavour-wall decoration animation and
+  its persisted stage, field strobe painting, active-object sprite painting,
+  and composite redraw sequencing -- derived from the dungeon renderer function
+  notes under `u5-decomp/functions/DUNGEON_OVL/`, consolidated and corrected in
+  private analysis note
+  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`. That note
+  withdraws the earlier "sparse point-pair wall table" reading and reattributes
+  those four tables to the fountain-water animation.
 - The dungeon Search handler's light gate, high-nibble feature descriptions,
   chest trap-tier narration, pit-family secret reveal, `0xC?`/`0xD?`
   visit-local rewrites, and bomb branch - derived

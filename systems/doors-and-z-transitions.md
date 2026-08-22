@@ -324,20 +324,29 @@ cell without changing Z. Falling through a chasm to the underworld is a
 separate underfoot trigger, not a Klimb path (§ 10).
 
 **Town K and stair movement.** Inside a town, dwelling, castle, or keep,
-K is "climb the ladder". The handler consults the underfoot tile of the leader
-or prompted member: an up-ladder moves to the floor above, a down-ladder to the
-floor below, and a two-way ladder prompts up-or-down. Facing-sensitive
-walk-on stairs are the separate `0xC4..0xC7` tile family: their low two bits
-match the town movement wrapper's normalized facing value for an upward
-transition, match that value's opposite-facing partner for a downward
+K is "climb the ladder". The handler echoes the verb prefix, refuses while the
+party is mounted on a horse with "-On foot!" at no turn cost, and otherwise
+reads the cell under the party: the ascend link `0xC8` moves to the floor above,
+and the descend link `0xC9` or a metal grate `0x86` moves to the floor below.
+**There is no two-way ladder cell in town mode** and no up-or-down prompt on
+this path; the two link ids are directional and a cell is one or the other.
+When the underfoot cell is none of the three, K instead prompts for a direction
+and inspects the neighbour: a wooden fence or gate cell there moves the party
+one cell onto it **without any floor change**, and anything else prints "What?"
+and consumes no turn. A cancelled direction prompt still counts as the party's
+action.
+
+Facing-sensitive walk-on stairs are the separate `0xC4..0xC7` tile family: their
+low two bits match the town movement wrapper's normalized facing value for an
+upward transition, match that value's opposite-facing partner for a downward
 transition, and do nothing on side crossings. Both paths implement the Z change
-by rewriting the active floor index and reloading the tile buffer with a
-different 1024-byte slice from the location's per-floor pair, then re-running
-the per-map NPC linker so that NPCs on the new floor become visible while NPCs
-on the old floor are unlinked from the active-object table. X and Y are
-preserved; only the floor index and the surrounding 32-by-32 tile content
-shift. Non-ladder underfoot tiles print "Not climbable!" and consume no turn.
-There is no falling within a town's floor structure.
+by rewriting the active floor index and reloading the tile buffer from the page
+that the location's base page plus the new signed floor selects
+(`formats/location-dat.md` Section 4), then re-running the per-map NPC linker so
+that NPCs on the new floor become visible while NPCs on the old floor are
+unlinked from the active-object table. X and Y are preserved; only the floor
+index and the surrounding 32-by-32 tile content shift. Trapdoors are a separate
+underfoot trigger, not a K path (§ 10).
 
 **Dungeon K.** In a dungeon scene, K reads the underfoot dungeon tile's high
 nibble and offers whichever directions that cell provides. Up is offered on an
@@ -373,7 +382,13 @@ Three movement events change Z without a Klimb:
   underworld value, and re-initialises the active-object table. There is no
   mirror outdoor underworld-to-surface ascent cell anywhere - the plane-writer
   census is complete - so do not infer one from the traced falls handler.
-- **Town and dwelling trap-doors.** A few interiors have trap-door cells in their floor (an oubliette, a basement entry); walking onto one triggers the same Z-down behaviour as a dungeon pit.
+- **Town-family trap-doors.** Trapdoor cells (`0x8C`) appear in several
+  interiors and are dense in the upper floors of Blackthorn's castle. Walking
+  onto one prints "A TRAPDOOR!" and drops the party one floor, the same Z-down
+  behaviour as a dungeon pit. It is suppressed while the party is on the magic
+  carpet. One location overrides it entirely: Stonegate's trapdoor ring runs a
+  scripted party-death sequence instead of a floor change
+  (`systems/town-mode.md` Section 3).
 
 In all three cases the trigger is an *underfoot reaction*, not a command, run as part of the per-turn epilogue's tile-effect pass — the same pass that handles damage tiles, energy fields, and moongate landings.
 
@@ -426,7 +441,7 @@ The scene byte ties everything together. The value zero is the overworld; values
 
 The transitions across the major boundaries are:
 
-- **Overworld → town / dungeon.** Enter on a fixed location coordinate sets the scene byte to the location's index and triggers entry. Town scenes seed the ground floor through their entry table; dungeon scenes load the selected dungeon record and seed the level/X/Y/facing entry state: surface entries use `(0, 1, 1)` facing east, underworld non-Doom entries use `(7, 7, 7)` facing west, and Doom uses the surface entry seed.
+- **Overworld → town / dungeon.** Enter on a fixed location coordinate sets the scene byte to the location's index and triggers entry. Town scenes seed the ground floor through their entry table; dungeon scenes load the selected dungeon record and seed the level/X/Y/facing entry state: surface entries use `(0, 1, 1)` facing east, underworld non-Doom entries use `(7, 7, 7)` facing west, and Doom uses the surface entry seed. That seeding is part of the walk-in entry path only; loading a saved game does not run it and leaves the saved level, position and facing untouched.
 - **Town / dungeon to overworld.** The town-family exit is a map-boundary
   event and not a tile effect: a step that would carry the party off the
   thirty-two-by-thirty-two interior grid raises a leave prompt instead of
@@ -453,7 +468,7 @@ The transitions across the major boundaries are:
   off-bottom is the one exception: it clears the scene after incrementing beyond
   the deepest dungeon level and keeps the trap-chain X/Y; it does not call the
   exterior-coordinate reset table.
-- **Town floor ↔ town floor.** Klimb on a ladder cell rewrites the active floor index and reloads the tile buffer from the corresponding slice of the location's per-floor pair. The scene byte does not change. NPCs on the new floor are linked into the active-object table; NPCs on the old floor are unlinked. Quick and stateless: a single tile-buffer reload, a single NPC re-link, no save-game write.
+- **Town floor ↔ town floor.** Klimb on a ladder or grate cell, a walk-on staircase, or a trapdoor step rewrites the active floor index and reloads the tile buffer from the page selected by the location's base page plus the new signed floor (`formats/location-dat.md` Section 4). The scene byte does not change. NPCs on the new floor are linked into the active-object table; NPCs on the old floor are unlinked. Quick and stateless: a single tile-buffer reload, a single NPC re-link, no save-game write.
 - **Dungeon level ↔ dungeon level.** Klimb on an up-ladder, down-ladder, or two-way cell, casting either of the two dungeon level-change spells, stepping on an automatic fall-trap pit, or standing on a scripted teleport changes the level index. The new level's eight-by-eight slice of DUNGEON.DAT becomes active. The scene byte does not change unless the change would carry the party past the top or bottom of the stack, in which case the exit contract runs; a fall-trap chain running past the deepest level is the separate off-bottom case.
 - **Surface and underworld.** The confirmed outdoor plane swap is the surface
   fall at `(54, 138)`, which writes the underworld plane and re-initialises the
@@ -594,7 +609,14 @@ The behaviour described here was derived from the private function notes listed 
   selected, including the fact that the caller passes no trap flavour -- derived
   from `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md` and sibling
   resident party-damage and status helper notes.
-- The town-mode floor-pair encoding and the per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
+- The town-mode per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
+  town climb handler's actual cell set and refusal text, the absence of a
+  two-way link cell in town mode, the fence/gate side path that changes no
+  floor, the trapdoor's general descend behaviour with its single scripted
+  exception, and the base-page floor-selection rule that replaces the earlier
+  "per-floor pair" reading used in this document.
 - The town-family grid-boundary exit prompt (and the withdrawal of the earlier
   "exit threshold tile" reading of it), its scene clear, exterior coordinate
   lookup, and scene-`0x19` underworld-plane selection -- derived from

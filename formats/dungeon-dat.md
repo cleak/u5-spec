@@ -98,7 +98,7 @@ or infer automap discovery from this bit in `DUNGEON.DAT`.
 
 ### Rendering
 
-Dungeon mode renders `DUNGEON.DAT` as a sparse first-person view. The renderer is table-driven rather than a raycaster or line renderer. It walks a fixed number of cells forward from the party's current position, reads each cell's class nibble, and plots precomputed wall and door cues for the visible distance bands.
+Dungeon mode renders `DUNGEON.DAT` as a first-person view built from pre-drawn billboard bitmaps rather than from projected geometry. The renderer is neither a raycaster nor a line renderer and it does not plot point constellations: it walks four depth bands from the party's own cell forward, reads each cell's class nibble, and composites one bitmap per cell role and band at a fixed destination. The band placement, the class-to-image mapping and the object sprite families are specified in `systems/dungeon-mode.md` section 6. An earlier revision of this paragraph described "precomputed wall and door cues" plotted from sparse coordinate tables; that reading is withdrawn - the sparse coordinate tables belong to the fountain-water animation.
 
 The renderer checks light before drawing. If neither torch light nor spell light is active, the dungeon view is black even though the geometry remains loaded and movement still reads the same cell bytes.
 

@@ -1,14 +1,14 @@
 # Tile-graphics files
 
-Format specification for the paired tile-graphics archive family — the `*.16` files for sixteen-colour EGA and the `*.4` files for four-colour CGA. The two depths share an identical container layout; only the per-pixel encoding differs. Together they store every tile, sprite, font strip, screen panel, and cutscene frame the engine renders. The set covers the world tile atlas, the inventory and monster sprite sheets, the font and glyph strips, the dungeon wall billboards, the title and end-game panels, and the multi-page story screens.
+Format specification for the paired tile-graphics archive family — the `*.16` files for sixteen-colour EGA and the `*.4` files for four-colour CGA. The two depths share an identical container layout; only the per-pixel encoding differs. Together they store every tile, sprite, title strip, screen panel, and cutscene frame the engine renders. The set covers the world tile atlas, the inventory and monster sprite sheets, the decorative chapter-heading strips, the dungeon wall billboards, the title and end-game panels, and the multi-page story screens.
 
 ## 1. Overview
 
-Ultima V's renderable graphics are partitioned into four functional families — the world tile atlas, the variable-shape sprite sheets, the font and glyph strips, and the screen-sized panel sets. Each family lives in its own file, but every file in the set ships in two parallel copies: a `.16` for the sixteen-colour EGA card and a `.4` for the four-colour CGA card. The engine picks one of the two at boot based on the active display driver and never mixes the two depths in a single session.
+Ultima V's renderable graphics are partitioned into four functional families — the world tile atlas, the variable-shape sprite sheets, the decorative chapter-heading strips, and the screen-sized panel sets. Each family lives in its own file, but every file in the set ships in two parallel copies: a `.16` for the sixteen-colour EGA card and a `.4` for the four-colour CGA card. The engine picks one of the two at boot based on the active display driver and never mixes the two depths in a single session.
 
 Both depths share an identical outer envelope and an identical container structure. Inside the container, the only difference is the per-pixel encoding: `.16` packs two four-bit pixels per byte (chunky packed, high nibble first), while `.4` packs four two-bit pixels per byte (packed, most-significant bits first). Every container layout, every directory format, every image header, and every padding convention is depth-agnostic; a single decoder can read either depth by switching only the row-stride formula and the per-byte unpacking code.
 
-The full file roster covers the canonical tile atlas (`TILES`), the inventory sprite sheet (`ITEMS`), the eight monster sprite sheets (`MON0` through `MON7`), the dungeon wall billboard sets (`DNG1`, `DNG2`, `DNG3`), the font and glyph strip set (`TEXT`), the chargen panel set (`CREATE`), the universal banner panels (`ULTIMA`), the intro acknowledgement/credits page (`STARTSC`), the end-of-game cutscene frames (`ENDSC`, `END1`, `END2`), and the six story screens (`STORY1` through `STORY6`). Every file in this list ships as both `.16` and `.4`. There are no other tile-graphics files; the set is exhaustive.
+The full file roster covers the canonical tile atlas (`TILES`), the inventory sprite sheet (`ITEMS`), the eight monster sprite sheets (`MON0` through `MON7`), the dungeon wall billboard sets (`DNG1`, `DNG2`, `DNG3`), the chapter-heading strip set (`TEXT`), the chargen panel set (`CREATE`), the universal banner panels (`ULTIMA`), the intro acknowledgement/credits page (`STARTSC`), the end-of-game cutscene frames (`ENDSC`, `END1`, `END2`), and the six story screens (`STORY1` through `STORY6`). Every file in this list ships as both `.16` and `.4`. There are no other tile-graphics files; the set is exhaustive.
 
 Every file is wrapped in the shared Ultima V LZW envelope. After unwrap, the body is one of three small container layouts — a flat tile array, a directory of variable-shape images, or a directory of variable-shape image-and-mask sprites. The container choice is implicit per file (no tag, no magic number, no version); a reader knows which layout to apply because the file family's role is fixed. Sections 5 and 6 enumerate the layouts; Section 7 lists which files use which layout.
 
@@ -159,17 +159,56 @@ The full set of tile-graphics files, with their container layouts, sub-image cou
 
 Several roles deserve dedicated commentary.
 
-The **tile atlas** is the heart of the two-dimensional rendering pipeline. Every overworld cell, town/interior cell, combat-arena terrain cell, and active-object sprite resolves to one of these five hundred twelve tiles. First-person dungeon floors are the exception: `DUNGEON.DAT` uses its own packed-nibble cell encoding and the dungeon renderer plots sparse first-person wall and feature cues rather than indexing the world tile atlas for each floor cell. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, combat arenas, and active-object tile bytes.
+The **tile atlas** is the heart of the two-dimensional rendering pipeline. Every overworld cell, town/interior cell, combat-arena terrain cell, and active-object sprite resolves to one of these five hundred twelve tiles. First-person dungeon floors are the exception: `DUNGEON.DAT` uses its own packed-nibble cell encoding and the dungeon renderer composites its own billboard and sprite art rather than indexing the world tile atlas for each floor cell. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, combat arenas, and active-object tile bytes.
 
 The **inventory sprites** in `ITEMS` are larger-than-tile artwork shown on the inventory and trade screens. The ten sprites are paired into the standard image-and-mask layout. Sprite dimensions vary — the larger ones are around forty by eighty pixels — and the iconography is rendered at a higher resolution than world tiles to fill the inventory panel.
 
 The **monster sprites** in `MON0` through `MON7` carry three animated monster sprites per file across eight files, for twenty-four sprites total. Each sprite's width is wider than its visible silhouette because animation frames are laid out side-by-side within a single sprite — a four-frame walk cycle of a sixteen-pixel-tall figure is rendered as one sixty-four-pixel-wide image, which the renderer slices into four sixteen-pixel frames at draw time. The exact frame count per sprite varies; the cataloguing of which file holds which monster category is a property of the resident monster table, not of the file format.
 
-The **font and glyph strips** in `TEXT` carry the bitmap font and other glyph artwork as a small set of large bitmap strips rather than as a per-character grid. A typical strip is a row of glyphs laid out side-by-side at a consistent height, and the renderer slices the strip per-character at draw time. The exact role of each of the six strips — printable ASCII, runic glyphs, status-bar bitmaps, party-status icons — is a property of the text-rendering overlay, not of the file format.
+The **title strips** in `TEXT` are decorative chapter headings, drawn as artwork and blitted whole. Each of the six records is one word rendered in an ornate blackletter face, at a fixed height of 32 or 33 pixels, and the consumer draws the record as a single opaque image at a caller-supplied origin. They are **not** a bitmap font and are never sliced per character.
 
-The **dungeon wall billboards** in `DNG1`, `DNG2`, and `DNG3` carry the pre-rendered three-dimensional perspective views the dungeon mode composites onto the player's view. Each file carries twenty-eight slots in a fixed directory, with two slots empty (offset zero) and the rest filled. The three files presumably correspond to three visual styles (above-ground dungeon, underworld, deep dungeon, or similar); the assignment is a property of the dungeon-mode overlay.
+| `TEXT` record | Size | Word |
+|---:|---|---|
+| 0 | 52 x 32 | `The` |
+| 1 | 152 x 32 | `Summoning` |
+| 2 | 104 x 32 | `Arrival` |
+| 3 | 71 x 32 | `Story` |
+| 4 | 168 x 33 | `Homecoming` |
+| 5 | 96 x 33 | `Dream` |
+
+Callers pair record 0 with one of the others to compose a two-word heading. The intro story sequence uses records 0 through 3 (`systems/intro.md` section 10) and the endgame's narrative windows use records 0, 4 and 5 (`systems/endgame.md` section 8.2).
+
+**Retraction.** Earlier revisions of this section described `TEXT` as "the bitmap font and other glyph artwork ... a row of glyphs laid out side-by-side ... which the renderer slices per-character at draw time", and listed "printable ASCII, runic glyphs, status-bar bitmaps, party-status icons" as candidate per-strip roles. All of that is **withdrawn**. The printable and runic fixed-cell fonts live in the `.CH` character files (`formats/font-ch.md`) and the proportional font in `PROPORT.PCS` (`formats/font-pcs.md`); no font data of any kind is in `TEXT`.
+
+The **dungeon wall billboards** in `DNG1`, `DNG2`, and `DNG3` carry the pre-rendered three-dimensional perspective views the dungeon mode composites onto the player's view. Each file carries twenty-eight slots in a fixed directory, with two slots empty (offset zero) and the rest filled. The three files correspond to the three dungeon presentation flavour bytes, selected on dungeon-mode entry from a three-entry filename table indexed by that byte; the flavour-to-dungeon binding is published in `systems/dungeon-mode.md` section 2. All three directories are byte-identical - same slot count, same empty slots, same per-image dimensions - so the three files are pure texture variants over one shared geometry.
 
 The **screen panels** in `STARTSC`, `ENDSC`, `END1`, `END2`, `STORY1` through `STORY6`, `ULTIMA`, and `CREATE` carry full-screen or partial-screen artwork for the title and menu screens, the acknowledgement/credits page, the end-game sequence, the story screens, and the character-creation screen. Note the split inside the title sequence: `ULTIMA` holds the start/menu banner and its animated bands, while `STARTSC` holds only the acknowledgement page and its two ornamental pillars and is used by no other path (`systems/intro.md` sections 3 and 11.1). These are the files whose decompressed sizes can rival or exceed the tile atlas itself, because each panel is a single large bitmap rather than a packed atlas of small tiles.
+
+The three title-and-menu panel files have been decoded record by record, and
+their inventories are published here because the intro contract depends on
+exactly which record is which:
+
+| File | Record | Size (`.16`) | Role |
+|---|---:|---|---|
+| `ULTIMA` | 0 | 319 x 61 | The `Ultima V` logo banner, drawn at `(0, 0)` on the start/menu screen |
+| `ULTIMA` | 1 | 288 x 49 | Burning subtitle band, animation frame `0` |
+| `ULTIMA` | 2 | 288 x 49 | Burning subtitle band, animation frame `1` |
+| `ULTIMA` | 3 | 288 x 49 | Burning subtitle band, animation frame `2` |
+| `ULTIMA` | 4 | 288 x 50 | Burning subtitle band, animation frame `3`; only its first 49 rows are ever displayed |
+| `STARTSC` | 0 | 16 x 137 | Left ornamental pillar of the acknowledgement page |
+| `STARTSC` | 1 | 288 x 137 | The acknowledgement page itself, with all its credit lines painted into the artwork |
+| `STARTSC` | 2 | 16 x 137 | Right ornamental pillar — a mirrored *variant*, not a horizontal flip of record 0 |
+| `ENDSC` | 0 | 260 x 168 | Single end-screen parchment panel |
+
+Two depth differences are worth recording. In the `.4` twin of `ULTIMA`, record
+4 is `288 x 49` rather than `288 x 50`; the 50-row band pitch the consumer uses
+is a display-driver constant, not a record height, so the low-depth build simply
+leaves one background row at the bottom of the last staged band. `STARTSC.4` and
+`ENDSC.4` carry the same record shapes as their high-colour twins.
+
+The naming is a trap worth calling out, because it has been got wrong before:
+`STARTSC` is **not** the start screen. The start/menu screen is built from
+`ULTIMA`; `STARTSC` is used by the acknowledgement path and by nothing else.
 
 ## 7. Palette and rendering
 
@@ -226,9 +265,9 @@ archive decoding:
 
 - **Per-screen palette overrides.** The CGA palette is set by driver state at mode-switch time and may differ between scenes. Whether any specific scene transition triggers a palette change — and which scenes carry which palette — is a property of the CGA driver and the scene-mode initialisers, not of the file format. A reader that wants to faithfully render the CGA artwork must either source the active palette from the running engine or assume one of the standard CGA mode-four palettes per scene.
 
-- **Per-strip glyph ranges in `TEXT`.** The six strips' widths and heights are known, but the assignment of strips to character sets — printable ASCII, runic glyphs, status-bar bitmaps, party-status icons — is a property of the text-output overlay's slicing logic, not of the file format. A content tool that wants to extract the printable font as a per-character bitmap must read the text-output overlay's slicing parameters.
+- **Per-strip roles in `TEXT`.** Closed. The six records are whole-image chapter headings, not glyph strips; their sizes, words and consumers are published in Section 6. There is nothing to slice and no font data in this file.
 
-- **Per-slot mapping in `DNG1`/`DNG2`/`DNG3`.** The twenty-eight directory slots include two empty slots in every file (offset zero). Which slot index corresponds to which wall billboard direction (north-facing wall, side wall, ceiling, floor) and which file represents which dungeon visual style is a property of the dungeon-mode overlay's drawing logic.
+- **Per-slot mapping in `DNG1`/`DNG2`/`DNG3`.** *Closed.* The twenty-eight slots are four families of four side images (wall, door, opening, flavour wall), three families of forward images at the three farther depth bands, and one wide image used for any blocker at point-blank range; the two empty slots are the point-blank entries of two forward families, which the renderer never requests because it overrides them. The slot roles, their widths, and the destination rule are published in `systems/dungeon-mode.md` section 6.2 and 6.3, and the file-to-flavour assignment in section 6.2.
 
 - **`MON0`–`MON7` monster category mapping.** Each of the eight files carries three sprites; which file holds which monster category (animals, undead, demons, dragons, and so on) is a property of the resident monster table, not of the file format. A content tool that wants to extract a named monster's sprites must consult the monster table.
 
@@ -251,8 +290,9 @@ The format described above was derived from the analysis notes listed below. Non
   in both `.16` and `.4` forms confirmed matching image/mask dimensions and
   the "set bit = transparent" polarity.
 - The display drivers' byte-by-byte unpacking of the chunky packed (EGA) and packed two-bit (CGA) row data into hardware framebuffer form — `u5-decomp/code-inventory.md` (the `EGA.DRV`, `CGA.DRV`, `HERC.DRV`, and `TANDY.DRV` driver entries).
-- The text-output overlay's slicing of the `TEXT` strips into per-character glyphs — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and the text-output overlay's per-character draw function.
+- The `TEXT` record roles, sizes and words, decoded from the shipped archive with this document's own container rules and cross-checked against their consumers in `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - The world tile attribute table held in the resident data slab — referenced by the location tile grids' decoded tile indices — `u5-decomp/formats/data-ovl.md`.
 - The resident miniature tile-glyph rendering path — `u5-decomp/functions/ULTIMA_EXE/0x7040_render_2x16_sprite.md`.
+- Per-record inventories and roles for `ULTIMA`, `STARTSC` and `ENDSC`, the depth difference in `ULTIMA`'s last record, and the `STARTSC`-is-not-the-start-screen correction — `u5-decomp/notes/intro_title_sequence_2026-08-22.md`, with every record shape re-decoded from the shipped files before publication.
 - The active-object table whose per-slot tile byte indexes the world tile atlas — `u5-spec/systems/active-objects.md`.
 - The location tile grids' per-cell tile byte that indexes the world tile atlas — `u5-spec/formats/location-dat.md`.

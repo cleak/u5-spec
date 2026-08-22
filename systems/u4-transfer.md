@@ -119,7 +119,7 @@ unsigned little-endian.
 | Region | File offset | Size | Use |
 |---|---|---:|---|
 | Two leading counters | `0x0000` | 8 | Skipped. The transfer never reads them, so their meaning does not matter to a clean parser. |
-| Character records | `0x0008` | 8 records of 39 bytes each | Only the **first** record is read. The read pulls 40 bytes from offset `0x0008`, i.e. the whole leading record plus one slack byte. |
+| Character records | `0x0008` | 8 records of 39 bytes each | Only the **first** record is read, so the transfer path itself never exercises the stride; the 39-byte stride is fixed instead by the file geometry — eight records between `0x0008` and the party-wide block at `0x0140` — and by the field layout below, which fills exactly 39 bytes. The read pulls 40 bytes from offset `0x0008`, i.e. the whole leading record plus one slack byte. |
 | Party-wide block | `0x0140` | 182 bytes read | Begins immediately after the eighth character record (`0x0008 + 8 * 39 = 0x0140`). Used only for the Avatarhood test in Section 5.3. |
 
 A character record is ten 16-bit fields, then a sixteen-byte name, then three
@@ -209,6 +209,21 @@ Implementations should key on the geometry rather than on the labels: read the
 sixteen bytes that begin six bytes into the party-wide block and require every
 one of them to be zero. That is the shipped test, and it produces the correct
 result regardless of how a particular predecessor save spells the standings.
+
+The test is **eight independent comparisons against zero** — no loop, no index
+register, no accumulation, and no summation. Element width is 16 bits and the
+stride is two bytes, giving file offsets `0x0146`, `0x0148`, `0x014A`, `0x014C`,
+`0x014E`, `0x0150`, `0x0152` and `0x0154`, with the block ending at `0x0155`.
+The 182-byte read that supplies them begins at file offset `0x0140`, so the
+party-wide food and gold fields at the head of that block are skipped by
+construction rather than by an explicit step. **A byte-wide test, an eight-byte
+span, or any offset near the head of the file is wrong**: eight bytes at
+`0x0002` lands on the moon counter, the dungeon counter and the 16-bit gold
+field, none of which this path ever reads.
+
+The resulting flag is set at most once and is **never cleared** for the
+remainder of the run, so treat it as a one-shot latch computed per transfer
+attempt and do not assume it resets between attempts.
 
 Earlier revisions of this document described this as a "no-transferable-data
 gate" in which all-zero values reject the transfer. That is withdrawn and was
@@ -360,6 +375,13 @@ Centring is a text-window mode that the path turns on before `Found:` and off
 after the name. The class names printed are `Mage`, `Bard`, `Fighter`,
 `Druid`, `Tinker`, `Paladin`, `Ranger` and `Shepherd`, each followed by a line
 break. All values on this page are the **unconverted** Ultima IV values.
+
+The level shown on this page is **not** the level Section 7 computes. It is the
+staged value written when the source record is copied: the source record's
+maximum-hit-points field divided by one hundred, truncating. Section 7's
+experience-derived level and the `30 * level` hit points overwrite it later,
+during the conversion stage, so the number on this page and the number on the
+comparison screen's right-hand panel can legitimately differ.
 
 The page waits for any key and is then cleared.
 
@@ -707,6 +729,11 @@ private offsets, or binary text dumps are reproduced.
   stride, the derived-level source field, and the identity of the eight tested
   party-wide values as the virtue standings:
   `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
+- Third-pass re-verification of the virtue-standing block's offset, element
+  width and stride, the unrolled eight-comparison form of the test, the
+  one-shot latch behaviour of the resulting flag, and the staged
+  maximum-hit-points-derived level shown on the summary page:
+  `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - U4-to-U5 primary-attribute translator:
   `u5-decomp/functions/INTRO_OVL/0x12EA_u4_attr_to_u5.md`.
 - Intro menu entry and return-to-menu context:

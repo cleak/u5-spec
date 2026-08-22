@@ -502,49 +502,95 @@ record, reveal secret doors, or enter combat.
 ## 6. Dungeon View
 
 In a dungeon, `V` View spends one gem in the resident dispatcher and then enters
-DNGLOOK's minimap renderer. The renderer:
+DNGLOOK's map renderer. The renderer:
 
-- clears the side panel used by the first-person dungeon view, covering the
+- clears the viewport used by the first-person dungeon view, covering the
   rectangle from `(8,8)` through `(183,183)`;
-- initializes a temporary unrevealed/visited grid and queue;
-- seeds the queue at the party's current cell;
+- initialises a temporary visited grid and a frontier queue;
+- seeds the queue at the party's own cell, pre-marked as visited;
 - flood-walks up to eight neighbours per visited cell in this order:
   northwest, north, northeast, west, east, southwest, south, southeast;
 - converts each accepted scratch coordinate back to the current dungeon level's
   wrapped eight-by-eight cell coordinates;
-- paints each visible cell by dungeon class;
-- stops expansion only on dungeon minimap wall presentation classes;
+- paints each accepted cell by dungeon class;
+- stops expansion only on the three dungeon wall presentation classes;
 - waits for a keypress or poll result;
-- clears the same side-panel rectangle and restores the first-person dungeon
-  renderer.
+- clears the same rectangle and returns through the dungeon composite redraw,
+  which repaints the first-person view and rewrites both border labels.
 
-When the magic peer-view flag is active, the renderer applies the same
-alternate/tinted tile-source branch used by the peer spell. This affects
-presentation only; it does not change the dungeon cell data.
+### 6.1 Cell size, origin and extent
 
-The minimap is a temporary side-panel overlay. It is not a persistent automap,
-does not write exploration bits, and is repainted from the current dungeon
-record every time the player spends a gem.
+The map is a **twenty-two by twenty-two grid of eight-by-eight-pixel cells**.
+Grid cell `(0,0)` begins at the top-left corner of the clear rectangle, and a
+cell's pixel origin is `x = 8 * grid_x + 8`, `y = 8 * grid_y + 8`. Twenty-two
+cells of eight pixels exactly fill `(8,8)` to `(183,183)`, so the grid and the
+clear rectangle are the same area, and that area is the same viewport interior
+the first-person view uses.
 
-The visited grid used by this flood walk is separate scratch state, not a flag
-inside the loaded dungeon cells. Dungeon cell bit `0x08` remains class-specific
-variant/overlay data owned by dungeon-mode systems; View must not treat it as
-seen/unseen map memory.
+The party occupies the centre cell `(11,11)`, whose pixels are `(96,96)` to
+`(103,103)`.
 
-Dungeon minimap floodability is not the same as movement passability. The
-class-to-glyph and flood-return table lives in `systems/dungeon-mode.md`; in
-short, `0xB?`, `0xC?`, and `0xD?` wall presentation classes stop expansion,
-while heavy-door/room-trigger classes still paint a door glyph and allow the
-minimap flood to continue.
+**Correction.** An earlier revision of this section and of
+`systems/dungeon-mode.md` implied a twelve-row cell whose lower four rows were
+left untouched. The cell is eight rows tall and all eight rows are drawn. That
+reading is withdrawn.
 
-The dungeon minimap is also source-family based rather than raw-pixel-table
-based. Passage, ladder, chest, pit, door, and wall classes emit the glyph ids
-specified in `systems/dungeon-mode.md`. Fountain cells paint a two-by-three
-multi-cell icon rooted at the mapped cell. The `0x8?` stair/field helper paints
-stacked horizontal rules through the upper part of the minimap cell using the
-dungeon minimap source families. Peer-view mode changes the source family for
-the magic-vision tint branches only; it does not change the flood queue, visited
-grid, or dungeon bytes.
+**Correction.** An earlier revision described fountain cells as painting a
+"two-by-three multi-cell icon rooted at the mapped cell". The fountain is a
+**single-cell vector drawing** inside one eight-by-eight cell, and so is the
+energy field. Their exact geometry is in `systems/dungeon-mode.md` section 12.5.
+
+The dungeon coordinate of a grid cell is the party's coordinate plus the cell's
+offset from the centre, **taken modulo eight in both axes**, so the level tiles
+about two and three-quarter times across the window. The player is looking at a
+wrapped view of the floor, not a single copy of it.
+
+### 6.2 The glyph source
+
+The map does **not** use the corridor billboard art or the dungeon object
+sprites. It uses the engine's two fixed **eight-by-eight one-bit fonts** - the
+text font and the runic font - each one hundred twenty-eight glyphs of eight
+bytes, one byte per row, most significant bit leftmost. Every published glyph
+identifier in the class-to-glyph table is an index into whichever of the two
+fonts that class selects, and each cell is drawn opaquely in a
+foreground/background pair.
+
+Most classes select the runic font. Four deliberately select the text font: the
+three directional-arrow classes and the solid-block bedrock class, whose runic
+slot is blank. Two classes are drawn as vectors instead of glyphs.
+
+The class-to-glyph, font-selection and flood-return table lives in
+`systems/dungeon-mode.md` section 12.4; in short, `0xB?`, `0xC?`, and `0xD?`
+wall presentation classes stop expansion, while heavy-door and room-trigger
+classes still paint a door glyph and allow the flood to continue.
+
+### 6.3 The flood bound and the visited grid
+
+The frontier queue is a fixed ring of two hundred fifty-six entries with no
+occupancy check. Shipped data never approaches that bound, but a compatible
+implementation should treat it as a contract requirement rather than swap in an
+unbounded queue, which would paint a differently shaped map on hand-authored
+data. Diagonal steps are permitted with no corner-cutting test.
+
+The visited grid is separate scratch state, not a flag inside the loaded dungeon
+cells. It starts filled as unvisited, marks cells during the one flood walk, and
+is discarded when the viewport is restored. Dungeon cell bit `0x08` remains
+class-specific variant/overlay data owned by dungeon-mode systems; View must not
+treat it as seen/unseen map memory.
+
+**Withdrawal.** Earlier revisions of this section described a magic peer-view
+tint branch inside the dungeon map renderer, and an alternate tinted tile source
+for some wall classes. Both are withdrawn: the value being read is the display
+adapter identifier, not a peer-spell flag. The dungeon map renderer has no
+peer-spell branch. The peer spell's own presentation is specified in `magic.md`.
+
+The map is a temporary overlay. It is not a persistent automap, does not write
+exploration bits, and is recomputed from the current dungeon record every time
+the player spends a gem. Map floodability is not the same as movement
+passability.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 
 ## 7. Data Ownership
 
@@ -571,6 +617,11 @@ state or persistence behavior.
   are specified above. Remaining visual parity work is empirical screenshot QA
   against DOS output and catalog naming for source-family palettes, not unknown
   gameplay or renderer control flow.
+- **Dungeon map geometry.** *Closed.* Cell size, cell origin, grid extent, the
+  wrap rule, the flood bound and the two-font glyph source are published in
+  Section 6.1 through 6.3 and in `systems/dungeon-mode.md` section 12. The
+  twelve-row cell, the multi-cell fountain icon and the peer-view tint branch
+  are all withdrawn there.
 - **Tile special cases.** *Closed.* The full trigger set for top-down Look is
   published in Section 3, including the dispatch order and the redirect tiles.
   Tile id `0x59` is a **telescope**, and it is the trigger for the sky renderer
@@ -598,6 +649,13 @@ private address maps.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x06A4_lookobj_print_object_string.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x06F8_signs_dat_print.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x07E4_wanted_poster_render.md`.
+- The dungeon map's cell size and origin, its twenty-two by twenty-two extent,
+  the modulo-eight wrap rule, the fixed frontier bound, the two eight-by-eight
+  one-bit fonts that supply its glyphs, the per-class font selection, the
+  single-cell fountain and energy-field vector drawings, and the withdrawal of
+  the peer-view tint branch and of the twelve-row cell -- derived from private
+  analysis note
+  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 - The sky renderer's two presentation paths, the eight rows, the calendar-driven
   column rule, the per-row body and Shadowlord-marker geometry, and the
   retraction of the chunk-map/party-marker reading —

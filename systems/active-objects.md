@@ -405,6 +405,26 @@ grid's obscured marker are skipped; visible slots stamp their tile bytes or
 companion-buffer markers according to vehicle/creature class. The currently
 traced carve helper does not directly scan the active-object table.
 
+**The actor tile-index space.** A slot's tile byte is **not** a terrain index,
+and reading it straight into `catalogs/tile-catalog.md` produces floor and
+furniture instead of people. When the compositor places an actor it writes the
+actor byte into the companion band for that cell and sets the corresponding
+viewport grid cell to zero. The renderer then branches on the grid cell: a
+non-zero cell draws the terrain tile that cell names, and a **zero** cell reads
+the companion byte and draws tile index `companion_byte + 256`. Actor bytes
+therefore index the upper, actor half of the 512-entry tile space. One value is
+reserved: companion byte `0x16` means "draw nothing", and it is the only
+transparent value this path recognises — an actor that must occupy a slot
+without being drawn carries it. A few tile families are not written through
+verbatim: before the companion write, the compositor inspects the terrain under
+the actor and substitutes a context-dependent actor byte for actors standing on
+chairs, beds, stairs and floor links, so a seated or climbing figure draws a
+different sprite than the same actor standing on open floor. The substitution
+changes only which actor byte is written; the `+256` rule then applies to the
+substituted value exactly as it would to the original. `catalogs/tile-catalog.md` section 3.1 carries the same rule
+from the catalogue side, and `systems/endgame.md` section 4 works it through for
+the endgame tableau.
+
 **Combat.** The framer swaps the table to a backup, runs combat with combatant records in place, and restores. The round walker reads slot zero for the player and slots one and up for monsters; the parallel combat-effect descriptor table holds round-only state.
 
 **Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. Also drives water, lava, and torch animation cycles via per-tile-class frame indices.
@@ -433,6 +453,9 @@ The behaviour described above was derived by reading the function and format not
 - The dungeon loop's first-person rendering path and its absence of NPC/active-object population during exploration — `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 
 - The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+- The compositor's companion-band write, the renderer's zero-grid-cell branch,
+  the `+256` actor index rule and the reserved transparent value —
+  `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - The resident active-object acquisition cascade and slot initialiser -
   `u5-decomp/functions/ULTIMA_EXE/0xB714_acquire_object_slot.md` and
   `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.

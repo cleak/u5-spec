@@ -80,7 +80,14 @@ Each sub-image is:
 |---|---:|---|
 | Width | 2 bytes | Pixel width. |
 | Height | 2 bytes | Pixel height, in rows. |
-| Rows | `ceil(width / 8) * height` bytes | One bit per pixel, row-major. |
+| Rows | `row_stride * height` bytes | One bit per pixel, row-major. |
+
+The row stride is `max(1, ceil(width / 8))` bytes. For every record of non-zero
+width that is simply `ceil(width / 8)`. The `max(1, ...)` clause covers the one
+shipped record whose width is zero — glyph index 0 of `PROPORT.PCS`, the space —
+which still reserves one byte per row, all of it padding. A zero-width record
+paints nothing; the reserved bytes exist only to keep that file's record stride
+uniform.
 
 Row bits run most-significant-bit first, so bit 7 of the first byte of a row is
 that row's leftmost pixel. A set bit is ink; a clear bit leaves the destination
@@ -90,7 +97,23 @@ padding bits at the end of the row; those padding bits are not pixels.
 
 The first offset in the table always equals `2 + count * 2`, and the last
 sub-image ends exactly at the end of the decoded image. Both are useful
-integrity checks.
+integrity checks. So is the stronger invariant that pins the whole reading:
+consecutive offsets differ by exactly `4 + max(1, ceil(width / 8)) * height` of
+the earlier record — the four header bytes plus its row data, with nothing
+between records. A candidate parse that satisfies that relation for every
+adjacent pair and consumes the image exactly is the correct one; a parse that
+does not is either mis-strided or applied to a file outside this family.
+
+Two consequences worth stating, because a reader that drops the `max(1, ...)`
+clause will reject a shipped file:
+
+- Across the three `.BIT` files every width is non-zero, so there the relation
+  reduces to `4 + ceil(width / 8) * height` and holds for every adjacent pair.
+- In `PROPORT.PCS` every glyph is eight rows tall and at most eight pixels
+  wide, so the stride is one byte per row for every record including the
+  zero-width space, and the record stride is a flat 12 bytes throughout. A
+  validator that computes the space glyph's record as four bytes will read the
+  remaining ninety records at the wrong offsets.
 
 ## 4. File-Specific Notes
 
@@ -161,8 +184,15 @@ word. That reading was an artefact of the withdrawn strip model; the four
 leading words are simply the count, the single offset, the width, and the
 height.
 
-The practical visible role is unchanged: the resource supplies the "Warriors
-of Destiny" lettering used by the story/intro presentation.
+The practical visible role is narrower than "lettering artwork", and worth
+stating because it explains the odd storage: the record is never drawn. It is a
+**mask**. Its `288 x 49` footprint is exactly the footprint of one burning
+subtitle band, and the driver's subtitle-ignition entry uses it to split a
+two-pass reveal — the first pass restores only the positions where the mask bit
+is clear, so the flames appear around the lettering, and the second pass
+restores the positions where it is set, so the lettering fills in last. One mask
+serves all four animation frames because the lettering is identical in all four.
+See `systems/intro.md` section 5.
 
 ## 5. Rendering Behaviour
 
@@ -204,10 +234,11 @@ A strict loader or inspection tool should:
 - Require `count` to be at least one and the offset table to fit in the image.
 - Require the first offset to equal `2 + count * 2`.
 - Require every offset to leave room for a four-byte sub-image header.
-- Require each sub-image's row data (`ceil(width / 8) * height` bytes) to stay
-  inside the image.
+- Require each sub-image's row data (`max(1, ceil(width / 8)) * height` bytes)
+  to stay inside the image. Do not special-case a zero width to zero bytes; see
+  Section 3.
 - Require the sub-images to tile the remainder of the image without gaps and to
-  end exactly at the end of the image.
+  end exactly at the end of the image, using that same stride.
 - For an enveloped file, require the decoded byte count to match the declared
   length and the code stream to terminate with an end code.
 
@@ -288,3 +319,8 @@ data.
   why the seven flourish records differ from the rest:
   `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`
   sections 4 and 6.
+- The consecutive-offset invariant, and `WD.BIT`'s role as the two-pass mask of
+  the subtitle ignition rather than as drawn artwork:
+  `u5-decomp/notes/intro_title_sequence_2026-08-22.md`. The record inventories
+  restated in section 4 were re-decoded from the shipped files before
+  publication.

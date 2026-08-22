@@ -133,9 +133,10 @@ intended to be drop-in replacements for the original engine.
 ## 8. Relationship to Other Formats and Systems
 
 The `.CH` fonts are separate from the compressed tile-graphics files. The
-`TEXT` graphics resources described in `formats/tiles.md` are image strips in
-the tile-graphics container family; `.CH` is a direct per-code-point bitmap
-font with no LZW envelope and no strip slicing.
+`TEXT` graphics resources described in `formats/tiles.md` are decorative
+chapter-heading images in the tile-graphics container family, not a font: they
+carry no glyph data and are drawn whole. `.CH` is a direct per-code-point
+bitmap font with no LZW envelope and no slicing.
 
 The `.HCS` font family, described in `formats/font-hcs.md`, carries the same
 one hundred twenty-eight code points at a larger fixed cell size. It should be
@@ -149,8 +150,12 @@ chosen.
 
 ## 9. Runtime Boundaries
 
-- The exact runtime rule for selecting `IBM.CH` versus `RUNES.CH` belongs to
-  the text or magic/rune display path and is not encoded in the file.
+- *Closed.* The runtime rule for selecting `IBM.CH` versus `RUNES.CH` is a
+  font-slot selector owned by the text-output system: slot 0 holds the Roman
+  font and slot 1 the runic font, both loaded at boot, and callers switch the
+  active slot explicitly around the cells they want re-alphabeted. See
+  `systems/text-output.md` section 7. Nothing about the selection is encoded in
+  the file, as this section already noted.
 - The relationship between these standalone fonts and any driver-embedded font
   cache is a runtime-loading question, not an on-disk-format question.
 

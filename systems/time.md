@@ -92,10 +92,11 @@ duration, the interruption checks, and any repeated cleanup/world-tick calls.
 
 1. A 12-hour display value is recomputed from the new hour (Section 2).
 2. If the active scene is in the surface/town-family range and the party is not
-   at dungeon depth, the engine refreshes the lower sky/status presentation
-   row. This resolves the older hourly gameplay-hook note: the work is display
-   refresh for the sky/status strip, not a gameplay event dispatcher and not the
-   natural-moongate placer.
+   at dungeon depth, the engine refreshes the sky strip in the top viewport
+   border. This resolves the older hourly gameplay-hook note: the work is
+   display refresh for that strip, not a gameplay event dispatcher and not the
+   natural-moongate placer. The strip is not part of the stats panel; see
+   `systems/moons.md`.
 3. The displayed hour and the current fixed hour marker, Trammel, and Felucca
    presentation are therefore brought up to date at the top of the hour. The
    sky-strip display contract is specified in `moons.md`.
@@ -183,13 +184,13 @@ camp loses nothing from poison while the camp loop runs.
 
 ## 6. Daylight
 
-The daylight value is a single byte that the cleanup routine recomputes on every call (mode 0 included). It represents how much ambient light the world has right now and is consumed by the visibility system to decide what cells the player can see and how the screen should look.
+The daylight value is a single byte that the cleanup routine recomputes on every call (mode 0 included). It represents how much ambient light the world has right now and is consumed by the visibility system to decide what cells the player can see and how the screen should look. Note what the number *is*: a squared-distance threshold compared inclusively against each viewport cell's squared distance from the player, handed to the visibility carve unmodified. It is not a sight radius and nothing squares or scales it. `systems/lighting.md` Section 3 and `systems/visibility.md` Section 3 own that contract; this section owns only when the value is recomputed and what the clock puts in it.
 
 The recompute proceeds in three stages.
 
 **Stage one — base value from hour and scene.** The base value is determined by the current hour and by the player's location:
 
-- If the player is on a fixed-dark scene type (the underworld is the obvious case) **or** at any dungeon depth (Z is positive), the base value is the *full-darkness* level. The hour does not matter; the underworld and dungeons are always dark.
+- If the party's Z value has its high bit set when read as an unsigned byte — under the Z convention of `formats/saved-gam.md` Section 6 that is the Underworld plane on the outdoor map and a below-entry (basement) floor inside a town-family location — the base value is the *full-darkness* level and the hour does not matter. Ordinary dungeon levels are **not** in this set: a dungeon level index counts up from zero at the top of the stack and never sets the high bit, so the clock still drives the ambient value there; it simply has no effect, because the first-person dungeon view does not read it (`systems/lighting.md` Sections 3 and 6). Earlier wording here saying "any dungeon depth" is withdrawn. One surface-reachable location, scene twenty-five (Ararat), is tested by scene number and is likewise dark at every hour.
 - Otherwise, if the hour is before five in the morning or after seven in the evening, the base value is again the full-darkness level. Britannia is dark at night.
 - Otherwise, if the hour is exactly five, the base value is read from a small dawn-gradient table indexed by `minute / 10`. The table interpolates between full darkness and full daylight across the six tens of minutes in the hour, so 5:00 starts at dark and 5:59 ends at near-daylight.
 - Otherwise, if the hour is exactly nineteen, the base value is read from the same gradient table indexed by `(59 - minute) / 10`. This interpolates from near-daylight at the top of the hour to full darkness at 19:59, making dusk the reverse of dawn.

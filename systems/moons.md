@@ -2,15 +2,22 @@
 
 ## 1. Scope
 
-This document covers the lower status-strip sky display for the fixed hour
-marker and the two moons, Trammel and Felucca. Natural moongate placement,
-entry, and teleport destinations are mode-level behaviour owned by
-`overworld.md`; this file only specifies the display values exposed to the
-status panel.
+This document covers the sky strip: the twelve-cell display in the **top**
+border of the world viewport that shows a fixed hour marker and the two moons,
+Trammel and Felucca. Natural moongate placement, entry, and teleport
+destinations are mode-level behaviour owned by `overworld.md`; this file
+specifies the strip and the display values it exposes.
+
+**Correction.** Earlier revisions of this document called the strip a "lower
+status-strip" and treated it as part of the stats panel. Both readings are
+withdrawn. The strip sits in the top chrome ribbon, in the gap directly above
+the world viewport, and it is painted by its own renderer on its own cadence —
+not by the stats-panel refresh. Its place inside the game-screen frame is
+specified in `display-driver.md` section 7.
 
 ## 2. Sky Strip Renderer
 
-The status panel renders a twelve-cell strip for outdoor/town-family scenes.
+The sky renderer paints a twelve-cell strip for outdoor/town-family scenes.
 Each refresh starts from a blank strip, then attempts to plot up to three
 markers:
 
@@ -27,32 +34,78 @@ Felucca can be above the visible horizon at different times of day. If a
 computed position falls outside the visible twelve-cell range, that marker is
 not printed for this refresh.
 
-Cells are numbered left to right from `0` through `11`. The renderer plots in
-fixed order: hour marker first, then Trammel, then Felucca. If two markers
-select the same cell, the later marker replaces the earlier one for that
-refresh.
+Cells are numbered left to right from `0` through `11`. Cell `11` is the rising
+edge and cell `0` the setting edge, so every body tracks right to left across
+the strip as the hours advance. The renderer plots in fixed order: hour marker
+first, then Trammel, then Felucca. If two markers select the same cell, the
+later marker replaces the earlier one for that refresh — so on a collision
+Felucca wins over Trammel, and either moon wins over the hour marker.
 
 The strip is a plain twelve-character text run, not a pixel overlay. It is
 printed into the full-screen text window at **row `0`, starting at column `6`**,
 so it occupies columns `6` through `17` of the top text row. Blank cells are
-spaces. The fixed hour marker is the character `*`; the two moon markers are the
-phase digits from the tables below. Each cell is emitted in the ordinary strip
-colour except the `*` cell, which uses a second, distinct colour; both come from
-the resident per-display-mode chrome slots rather than from literals, so a clean
-implementation should expose them as two configurable indices.
+spaces.
+
+### 2.1 Strip geometry
+
+The strip lives in a gap in the frame's top chrome ribbon, bracketed by the
+ordinary end-caps specified in `display-driver.md` section 7:
+
+| Absolute column | Content |
+|---:|---|
+| 5 | Right-pointing bracket end-cap |
+| 6..17 | The twelve marker cells; strip cell `i` is at column `6 + i` |
+| 18 | Left-pointing bracket end-cap |
+
+All of it is written through the full-screen text window at row `0`, so window
+coordinates and absolute grid cells coincide.
+
+Two routines share the strip. A **slate** painter runs once per mode entry: it
+positions the cursor at column 5, draws the right cap, prints a stored run of
+**twelve spaces**, and draws the left cap. That run is a literal in the shared
+data overlay and is never modified at runtime; it exists only to blank the gap
+and to place the two caps. The **marker** painter then builds a twelve-character
+buffer in memory, plots up to three markers into it, positions the cursor at
+column 6, and emits the buffer one cell at a time, changing the text foreground
+per cell.
+
+Because the two caps' outline strokes terminate on the ribbon's rule row, the
+white rule at `y = 7` appears interrupted over `x = 41..150` rather than over the
+caps' full cell extents.
+
+### 2.2 Glyph bank and colours
+
+**The strip does not render in the main text font.** The marker painter switches
+the active font to the **runic** font (font slot 1, `RUNES.CH`, or its Hercules
+equivalent) for the duration of the render and restores the main font before it
+returns. The character codes it emits are the ASCII bytes for the digits `'0'`
+through `'7'` for the eight moon phases, and the ASCII byte for `*` for the hour
+marker — but in the runic font those code positions hold moon-phase artwork and
+an eight-point starburst, not digits. An implementation that renders these codes
+in the main fixed-cell font will draw literal digits and an asterisk on screen.
+
+Each cell is emitted in one of two foreground colours drawn from the
+user-interface colour table published in `display-driver.md` section 2: the hour
+marker uses slot 5 (EGA value 14, bright yellow) and both moons use slot 6 (EGA
+value 7, light grey). Blank cells inherit whatever foreground was last set. The
+painter restores the accent foreground (slot 1) before it returns, so following
+text is unaffected. Because these are table entries rather than literals, a clean
+implementation should expose them as configurable indices.
 
 There are two distinct non-drawing cases, and they behave differently:
 
 - **Scenes outside the surface/town family** (combat, intro, and every scene id
   at or above the location range) never reach the renderer at all. Nothing is
   drawn and nothing is cached.
-- **Scene 25, Ararat** reaches the renderer but paints the strip's footprint
-  flat instead of printing it: a filled rectangle from `(40, 0)` to `(152, 6)`
-  in one chrome colour and a single pixel row from `(40, 7)` to `(152, 7)` in
-  another. The two glyph bytes are still cached in this case. The renderer
-  carries the same flat-fill branch for below-surface map levels, but the only
-  live caller already declines to call it there, so that arm is unreachable in
-  the shipped build.
+- **Scene 25 (Ararat, the underworld-only keep) and any below-surface map
+  level** reach the marker painter but make it paint the strip's footprint flat
+  instead of printing it: a filled rectangle from `(40, 0)` to `(152, 6)` in the
+  chrome colour (colour-table slot 2), then a single scanline from `(40, 7)` to
+  `(152, 7)` in the accent colour (slot 1). This erases both end-caps as well as
+  the markers, leaving a plain ribbon. The two glyph bytes are still cached in
+  this case, because the cache is written before the visibility test. The slate
+  painter tests the same two conditions and, when either holds, draws nothing at
+  all rather than erasing — the erase is the marker painter's job.
 
 | Marker | Visible hours | Cell position |
 |--------|---------------|---------------|
@@ -120,6 +173,15 @@ Because the calendar wraps day twenty-eight back to day one, the Felucca
 sequence is not continuous across a month boundary; the original does not
 smooth that discontinuity and neither should an implementation.
 
+**Worked example, to settle the hour-versus-day question.** On a save reading
+date `4-5-139` at hour 8: the hour marker's position is `17 - 8 = 9`, so it
+occupies strip cell 9 (absolute column 15); Trammel's position is `8 - 8 = 0`,
+so it occupies strip cell 0 (absolute column 6); Felucca's position is
+`2 - 8 = -6`, which is outside `0..11`, so Felucca is not drawn. Trammel's
+**glyph** comes from day 5, not hour 8, and the day-5 row of the table above
+gives `'2'`. Any implementation that indexes the phase table by the hour will
+draw `'4'` there and be visibly wrong.
+
 The day index is the saved day-of-month byte, which the per-turn clock keeps in
 the range one through twenty-eight and resets to one after it passes
 twenty-eight. There is no day zero, so an implementation should treat a
@@ -179,20 +241,25 @@ over-read:
   belongs to the night-time light beacon in `systems/visibility.md` Section
   12.6.
 
-The renderer is suppressed for dungeon-class views and the underworld status
-presentation. Those scenes use their own lower-row presentation instead of the
-surface sky strip, even though the same saved clock continues to advance.
+The renderer is suppressed for dungeon-class views, combat, and the underworld
+presentation, even though the same saved clock continues to advance. The dungeon
+view puts its own bracketed level label in the same top-ribbon gap and its own
+bracketed facing label in the bottom-ribbon gap; see `systems/dungeon-mode.md`
+and `display-driver.md` section 7. Combat and the underworld leave both gaps as
+plain chrome.
 
 ## 4. Sources
 
-This public description is a cleanroom prose rewrite from private status-panel
-analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
+This public description is a cleanroom prose rewrite from private screen-layout
+and status analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
 glyph dumps, or private address tables.
 
-- Status-panel moon glyph lookup, day-of-month indexing, and the published
-  twenty-eight-day table --
-  `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md` and
-  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 3.
+- Sky-strip moon glyph lookup, day-of-month indexing, and the published
+  twenty-eight-day table -- the sky-strip renderer note among the resident
+  user-interface function notes under `u5-decomp/functions/ULTIMA_EXE/`
+  (whose filename is a misnomer: the routine paints the top sky strip, not a
+  combat grid), and `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md`
+  section 3.
 - Strip placement (twelve cells at columns six through seventeen of text row
   zero), the `*` hour-marker character, the per-cell colour selection, and the
   flat fill used when the strip is suppressed --
@@ -201,6 +268,15 @@ glyph dumps, or private address tables.
   the withdrawal of the moongate animator, are derived from private analysis
   note `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - Calendar bounds (day one through twenty-eight, reset after twenty-eight) and
-  the single hour-change trigger --
-  `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md` and
+  the single hour-change trigger -- the per-turn cleanup note under
+  `u5-decomp/functions/ULTIMA_EXE/` and
   `u5-decomp/notes/system-trace_turn-cycle.md`.
+- Source provenance: the strip's location in the top viewport border, the two
+  bracket end-cap cells, the stored twelve-space slate, the runic font slot used
+  for the render, the identification of the two foreground colours with the
+  user-interface colour table, the right-to-left travel direction and collision
+  priority, and the erase branch's exact rectangles are derived from private
+  analysis note `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`,
+  cross-checked against a fresh local re-read of the shipped executable and
+  shared data overlay. The day-indexed phase table was re-read byte for byte
+  from the shipped data during that check and matches the table published above.

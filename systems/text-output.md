@@ -73,9 +73,9 @@ The system exposes five families of operations. None of them takes a window argu
 
 **The per-cell emitter** takes one byte and either renders one glyph at the active window's cursor or interprets newline/carriage-return as cursor movement. It is the foundation of the system; both the wrap-aware printer and the numeric printer go through it. Its behaviour:
 
-- A byte with the high bit clear and not equal to line-feed or carriage-return is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, the window scrolls (Section 7) and the cursor is left on the now-blank bottom row.
-- A line-feed byte advances the cursor down one row without emitting a glyph and without resetting the column. If that step carries the cursor past `bottom_right_y`, the window scrolls.
-- A carriage-return byte returns the cursor to the window's left edge without changing the row and without emitting a glyph.
+- A byte with the high bit clear and not equal to line-feed or carriage-return is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, the window scrolls (Section 7) and the cursor is left on the bottom row. The scroll does not blank the vacated row; the glyph that triggered the scroll is written over it immediately.
+- A line-feed byte is a **combined carriage return and line feed**: it emits no glyph, advances the cursor down one row *and* returns the column to the window's left edge. If that step carries the cursor past `bottom_right_y`, the window scrolls. Implementations must not treat it as a bare row advance — the blank-row mechanism of Section 10.4 depends on the column reset.
+- A carriage-return byte returns the cursor to the window's left edge without changing the row and without emitting a glyph. It is the column-only half of the line-feed behaviour.
 - Selected high-bit control bytes are handled by the adjacent extended-control
   path. The confirmed controls are `0xFB` for centre-output off, `0xFC` for
   centre-output on, `0xFD` for inverse-video toggle, and `0xFE` for underline
@@ -100,7 +100,7 @@ carriage-return bytes embedded in the source string force an immediate flush at
 that point and pass through to the per-cell emitter so the cursor moves
 accordingly.
 
-If the active window's centre flag is set, the printer computes the centred starting column for the line (`(width − characters_in_line) / 2`) and repositions the cursor horizontally to that column before emitting; the cursor's row is left alone, so centring affects only horizontal placement. The centre flag applies once per line of output produced by this printer, and only by this printer — the per-cell emitter does not centre.
+If the active window's centre flag is set, the printer computes a centred starting column for the line and repositions the cursor horizontally to that column before emitting; the cursor's row is left alone, so centring affects only horizontal placement. The computation works from two quantities: the columns still *available* on the current row, which is `(bottom_right_x − top_left_x) − cursor_x` as the printer was entered, and the **index of the last character** of the line about to be emitted, which is one less than its character count. The starting column is `(available − last_character_index) / 2`, truncated toward zero. For the ordinary case of a line emitted with the cursor at the window's left edge, that is exactly `(columns_in_window − characters_in_line) / 2` truncating, where `columns_in_window` is `bottom_right_x − top_left_x + 1` — i.e. plain centring in the window's column count, with even-length lines centred exactly and odd-length lines landing half a cell (four pixels) to the left. Implementations must not drop the “plus one” and centre against `bottom_right_x − top_left_x`: that agrees on odd-length lines but shifts every even-length line one whole cell left. The centre flag applies once per line of output produced by this printer, and only by this printer — the per-cell emitter does not centre.
 
 An empty string is a no-op.
 
@@ -145,6 +145,24 @@ When the per-cell emitter decides to render a glyph, it does so in three concept
 2. **Style transformations.** The working buffer is then post-processed in place per the active window's style flags. If the underline flag is set, the bottom row of the buffer is forced to all-ones (every pixel of the bottom scan-line lit). If the inverse flag is set, every word of the buffer is bitwise-inverted. The two transformations compose: a cell can be both inverse and underlined, in which case the underline pass runs first and the resulting buffer is then inverted, leaving the bottom row all-zeros. Implementations should follow this order to match the original.
 
 3. **Driver dispatch.** The emitter asks the driver to render one cell at absolute screen position `(top_left_x + cursor_x, top_left_y + cursor_y)` in the active window's colour, using the working buffer as the cell's bitmap. The driver does whatever is needed to put those pixels on display — for an EGA-style driver, this is a per-plane write into video memory with bit-fielded foreground/background masks; for a modern backend, it could be a glyph-indexed blit or a terminal-style cell update.
+
+**The active fixed-cell font is a selectable slot.** The text system keeps a
+one-entry "current font" pointer plus a small table of loaded font slots, and a
+selector call publishes a slot into it. Two slots are loaded at boot: **slot 0
+is the Roman text font and slot 1 is the runic font**, both specified in
+`formats/font-ch.md` - one hundred twenty-eight glyphs of eight bytes each,
+eight by eight pixels, one bit per pixel, most significant bit leftmost, glyph
+`n` at offset `n * 8`. The two fonts share code points, so switching slots
+re-alphabets the same byte values rather than remapping them.
+
+Callers switch the slot explicitly and are responsible for switching back;
+several presentation surfaces do exactly that for a single cell. The inventory
+picker selects the runic slot for one selector character and for the symbol
+prefixes on spell and reagent rows (`inventory.md` section 4.5); the dungeon map
+selects it for most of its cell glyphs and deliberately does *not* select it for
+four classes whose runic slots are blank or wrong (`dungeon-mode.md` section
+12.3). This closes the runtime-selection question left open in
+`formats/font-ch.md` section 9.
 
 The text system's contract with the driver is "render this prepared cell at this position in this colour". Anything beyond that — scrolling a rectangle, clearing a rectangle, setting an attribute on a rectangle — is also a driver call, but invoked from elsewhere in the text system, such as auto-scroll on overflow or a higher-level clear-window helper, and is described in the driver ABI document rather than here.
 
@@ -321,10 +339,10 @@ At program startup, the text system is initialised in three steps:
 
 2. **Window descriptor defaults.** All four window descriptors are reset to a known initial state: each window's rectangle is set to the full 40×25 screen (corners `(0, 0)` and `(39, 24)`), each cursor is set to `(0, 0)`, each colour is set to bright white on black (foreground 15, background 0), and each window's flags are cleared. The active window is set to window 0. After this step, any output call produces visible output.
 
-3. **Per-window configuration by gameplay code.** A census of every call to the
-   rectangle setter in the analyzed build shows that gameplay code reshapes only
-   two of the four windows, and it does so transiently rather than as a one-time
-   UI layout pass:
+3. **Per-window configuration by gameplay code.** Three windows are given their
+   standing gameplay rectangles once, when the gameplay screen is assembled;
+   section 10.1 publishes those three rectangles and is the authoritative list.
+   On top of that standing layout, overlays reshape windows transiently:
 
    - **Window 0** is reshaped by the resident inverse-text banner helper, which
      narrows it to a single-row strip spanning columns 6 to 33 on rows 12–13 and
@@ -336,12 +354,18 @@ At program startup, the text system is initialised in three steps:
      the arms-shop sell browser — uses the same idiom: set the window to
      `(24, 1)..(38, N)` and clear it, then widen the right edge to
      `(24, 1)..(39, 9)` and draw the frame.
-   - **Windows 2 and 3 are never passed to the rectangle setter at all.** They
-     keep the boot-time defaults from step 2 for the whole session: full-screen
-     rectangle, bright white on black, cleared flags.
+   - **Window 2** is set once, during gameplay-screen assembly, to the message
+     window rectangle in section 10.1, and no overlay reshapes it afterwards.
+     An earlier revision of this document said window 2 is never passed to the
+     rectangle setter and keeps the full-screen boot default; that is withdrawn.
+     The earlier census covered the shop and panel overlays and did not reach
+     the one-time gameplay-screen assembly.
+   - **Window 3 is never passed to the rectangle setter at all.** It keeps the
+     boot-time defaults from step 2 for the whole session: full-screen
+     rectangle, bright white on black, cleared flags. It is unused by gameplay.
 
    Window 2 is the one ordinary gameplay text goes to — conversation, shop
-   dialogue, command feedback. Because it is never reshaped or recoloured, its
+   dialogue, command feedback. Because nothing recolours it after assembly, its
    only mutable state is its cursor, which advances with output and is moved
    only by explicit cursor calls made while it is active. The colour setters are
    called only by the dungeon inspection overlay and by the resident
@@ -351,14 +375,233 @@ At program startup, the text system is initialised in three steps:
    From then on, the active window is switched whenever UI focus moves; a panel
    selects window 1, draws, and selects window 2 again when it is done.
 
-   Source provenance: derived from private analysis note
-   `../u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`.
+   Source provenance: derived from private analysis notes in
+   `../u5-decomp/notes/`.
 
 The rectangle setter takes a window index (0–3) and four cell coordinates, and updates only the four rectangle bytes of the chosen descriptor; it leaves the cursor, colour, and flag bytes untouched, so a window can be resized without losing its other state. The setter clamps each X to 0–39 and each Y to 0–24, then swaps the X pair if the supplied left exceeds the supplied right and swaps the Y pair if the supplied top exceeds the supplied bottom. The result always satisfies the rectangle invariant. An out-of-range window index is a silent no-op.
 
 The colour and flag setters write one byte of one descriptor; their effects are as described where the colour and flag fields are introduced.
 
-## 10. Boundaries And Parity Work
+## 10. Gameplay Screen Text Windows
+
+### 10.1 The three windows the gameplay screen installs
+
+The gameplay screen is assembled once, on the intro's Journey Onward path,
+before the save file is read. That assembly configures three of the four
+window descriptors and leaves the fourth alone:
+
+| Window | Cell rectangle | Pixel rectangle | Role |
+|---:|---|---|---|
+| 0 | `(0, 0) - (39, 24)` | `(0, 0) - (319, 199)` | Full screen. Every piece of border chrome is written through it — the frame's corner glyphs, the sky strip, the wind banner, the dungeon level and facing labels — so its window-relative cursor coordinates are identical to absolute grid cells. |
+| 1 | `(24, 1) - (39, 9)` | `(192, 8) - (319, 79)` | Stats window: six roster rows, the counters row, the date row, and the timed-effect slot. See `stats-panel.md`. |
+| 2 | `(24, 11) - (39, 23)` | `(192, 88) - (319, 191)` | Message window: command echo, command output, and the live input line. |
+
+One transient reshape precedes those three: window 0 is briefly set to
+`(1, 16) - (38, 23)`, then restored to the full screen and cleared with the
+clear-window control byte, which blanks the intro's lower text block before the
+frame is painted.
+
+**There is no fourth gameplay window.** Window 3 is never reshaped after boot
+and keeps the full-screen default for the whole session.
+
+- **Attributes.** Windows 1 and 2 keep the boot attribute — foreground 15 on
+  background 0 — for the whole session; no gameplay path rewrites either. Window
+  0's foreground is left at the frame's accent index by the chrome writers, and
+  its background is never changed from 0.
+- **Initial cursors.** Windows 1 and 3 keep `(0, 0)` from boot. Window 0's
+  cursor is wherever the last chrome writer left it. Window 2's cursor is
+  explicitly set to window-relative `(0, 12)` — absolute row 23, its own last
+  row — so the message log is bottom-anchored from the very first frame.
+- **Column 39.** The stats window spans columns 24..39, but the panel only ever
+  writes columns 24..38, because the roster and counter boxes are fifteen cells
+  wide: their right rule sits at pixel `x = 312`, the first pixel of column 39.
+- **Row 24.** Absolute text row 24 (`y = 192..199`) lies inside no window. It is
+  cleared to black when the frame is painted and is never written again.
+
+An earlier revision of section 9 said, on the strength of a shop-overlay
+geometry census, that windows 2 and 3 are never passed to the rectangle setter
+and keep full-screen defaults for the whole session. That is withdrawn for
+window 2: the gameplay-screen assembly reshapes it to the message-window
+rectangle above, and every later message, echo and prompt is bounded by that
+rectangle rather than by the full screen. The statement stands for window 3.
+
+### 10.2 The command-echo cycle
+
+Every gameplay mode loop — overworld, town, and dungeon — runs the same three
+steps in the same order before it reads a command key:
+
+1. Emit a line feed into the message window.
+2. Draw the right-pointing bracket end-cap at the window's first column
+   (absolute column 24). The end-cap composite is specified in
+   `display-driver.md` section 7; it is **not** the ASCII `>` character.
+3. Read the key.
+
+The marker therefore occupies column 24 and leaves the cursor at column 25,
+which is where the echoed verb begins. Because the marker is emitted before the
+read, echoed command lines carry it and pure output lines do not: a line such as
+`Player: None!` starts unprefixed at column 24.
+
+The overworld loop gates the newline-and-marker pair on a one-byte flag, and
+sets that flag again immediately after emitting the pair. The flag is cleared
+only on the "already sailing that way" path, where the loop synthesises a repeat
+movement command rather than reading a key, so those synthesised turns do not
+accumulate empty prompt lines. The town and dungeon loops emit the pair
+unconditionally on every polled turn.
+
+The newline-first ordering is a rule, not an incidental observation. It is what
+produces the single blank row between command turns, and it is what closes lines
+left open by verbs that prompt for an operand.
+
+### 10.3 Echoed verb strings and their punctuation contract
+
+There is no keystroke-indexed echo table; each command's handler holds its own
+literal string and prints it through the wrap-aware printer. The trailing
+punctuation of that string is a contract:
+
+| Suffix | Meaning |
+|---|---|
+| `-` | A direction is prompted next and appended to the same line. |
+| `...` then newline | The command opens a sub-mode or a full-screen panel; the line is closed immediately. |
+| trailing space | An operand name is appended to the same line by the handling overlay. |
+| newline | Complete; result text starts on the next row. |
+| two newlines | Complete, plus one deliberate extra blank row. |
+| none | The handling overlay owns the rest of the line. |
+
+Representative literals, exactly as they appear on screen:
+
+| Echo | Suffix class |
+|---|---|
+| `Pass` + newline | complete |
+| `Board ` | operand follows |
+| `Cast...` + newline | sub-mode |
+| `Fire-`, `Get-`, `Jimmy-`, `Klimb-`, `Open-`, `Push-`, `Search-`, `Talk-` | direction follows |
+| `Hole up- ` | direction follows, then an operand |
+| `Mix Reagents` + two newlines | complete plus blank row |
+| `Ready...` + two newlines | sub-mode plus blank row |
+| `Use item` + two newlines | sub-mode plus blank row |
+| `X-it `, `Yell ` | operand follows |
+| `Z-stats...` + newline | full-screen panel |
+| `Look` | overlay-owned; the handler appends the direction hyphen itself, so the visible line reads `Look-` while the direction is awaited |
+
+The direction prompt appends `North`, `South`, `East`, `West` or `Pass`, each
+followed by a newline, to the open line. `Pass` is what Escape and Space
+produce.
+
+An unrecognised command key prints `What?` followed by a newline and **consumes
+no turn**: the mode loop skips its per-turn cleanup for that keypress, so no
+game time passes. Two sibling refusals reach the screen through the same slot
+with a disambiguating prefix, `D-What?` and `W-What?`, and the push-into-nothing
+case prints `Push` + newline + `Not here!` + newline.
+
+### 10.4 The blank row between commands
+
+The per-cell emitter treats the line-feed byte as a combined carriage return and
+line feed: it advances the row *and* returns the column to the window's left
+edge. The carriage-return byte returns the column only.
+
+A verb whose echo ends in a newline therefore leaves the cursor at column 0 of a
+fresh row, and the next cycle's leading line feed advances again — producing
+exactly one blank row after each completed command turn. Verbs whose echo ends
+in a hyphen or a trailing space rely on that same leading line feed to close
+their partially written line, which is why the newline comes first rather than
+last.
+
+### 10.5 Scrolling the message window
+
+When output would carry the cursor below the message window's bottom row, the
+window scrolls up by exactly one cell row and the cursor is left on the last
+visible row. The vacated bottom row is **not** blanked; the output that caused
+the scroll immediately overwrites it. There is no "press a key to continue"
+pause anywhere on this path, and no page-at-a-time behaviour.
+
+The underlying display entry is hardwired to this window's pixel column and to a
+one-cell-row step, and ignores any larger requested distance; a general
+scroll-by-N request therefore still scrolls exactly one row on the original.
+See `display-driver-abi.md` section 9.5.
+
+### 10.6 The live input line and its cursor
+
+Typed input happens on the message window's own last row, so the visible layout
+is a log whose final line is being edited — for example `Player: ` followed by
+the input cursor, or `Look-` while a direction is awaited.
+
+The input cursor is an animation, not a single glyph: it cycles through four
+consecutive fixed-cell glyph codes, `0x05` through `0x08`, drawn in place with
+the cursor-advance gate suppressed, and is erased with a space as soon as a key
+arrives. The starting code and the cycle length are resident values rather than
+literals, so an implementation should expose them as configuration.
+
+Three readers share that presentation but differ in their key rules:
+
+| | General typed string | Case-preserving text | Typed number |
+|---|---|---|---|
+| Used for | most free-text prompts | character names | numeric prompts |
+| Case | keys are uppercased | preserved as typed | not applicable |
+| World ticks while idle | yes | no | yes |
+| Accepted | any printable byte | any printable byte | digits; a leading sign only in the first position |
+| Backspace | destructive, erases one character backwards | same | same |
+| Escape | erases the whole typed buffer | same | same |
+| Terminator | Return, not echoed | same | same |
+
+Backspace and Escape erase rather than overwrite: the helper repaints the
+editable tail with spaces in place, with cursor advance suppressed, and then
+repositions the cursor, wrapping back to the end of the previous row when it
+passes column 0.
+
+Not every prompt is typed input. The active-player prompt prints `Player: ` and
+then runs a highlight picker — digit keys `1` through `6`, up and down, Return or
+Space to accept, Escape to cancel, and `0` for "no active player", which prints
+`None!` and a newline.
+
+### 10.7 Framed border labels
+
+A *framed border label* is a short caption written into a chrome band and
+bracketed by the two triangular end-caps of `display-driver.md` section 7. The
+stored literal is always the bare text; the brackets a reader transcribes as
+angle characters are the two cap glyphs, and **no label literal in the game
+contains an angle character**.
+
+There are three distinct label slots, and they must not be described as one
+mechanism, because their blanking geometry and their centring rules differ:
+
+| Slot | Band | Written by | Content |
+|---|---|---|---|
+| Viewport top ribbon | text row 0, pixels x 40 to 152 | the surface sky strip, or the dungeon level label | see `view.md` section 4.2 and `dungeon-mode.md` section 4.1 |
+| Viewport bottom ribbon | text row 23, pixels x 48 to 152 | the surface wind banner, or the dungeon facing label | as above |
+| Stats-panel top ribbon | text row 0, pixels x 192 to 311 | the shared panel-label writer | `Select:` plus the picker page labels (`inventory.md` section 4.7) |
+
+Only the third has a general writer. Its contract is:
+
+1. Place the **opening cap in column `30 - (L / 2)`** (integer division), for a
+   caption of `L` characters; the caption then occupies the next `L` columns and
+   the closing cap the column after that. Column 30 is the anchor of that cap
+   formula, **not** the caption's centre: the centre of the panel's fifteen-cell
+   field (columns 24..38) is column 31, and an odd-length caption lands exactly
+   on it. The full arithmetic and its worked example are in `stats-panel.md`
+   section 9.
+2. Blank the chrome band either side of the caption, within the pixel span
+   x 192 to 311 on row 0.
+3. Redraw the horizontal accent rule beneath the band at y = 7.
+4. Emit the right-pointing cap, the caption, and the left-pointing cap.
+
+When no picker and no selection is active, the stats-panel ribbon carries no
+label and is repainted plain by the corresponding chrome helper.
+
+The two viewport ribbons have no general writer: each producer positions its own
+cursor, draws its own caps, and owns its own cell arithmetic. That is why the
+dungeon facing label and the surface wind banner start at the same cell yet end
+one cell apart.
+
+A **fourth, unrelated** slot exists and is easy to confuse with these: the
+single-character badge parked in the divider row between the stats panel and the
+message window, which frames one glyph with the same caps. It is the
+timed-effect indicator specified in `stats-panel.md` section 8, not a text
+label, and it uses neither the centring rule nor the blanking geometry above.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+
+## 11. Boundaries And Parity Work
 
 This section separates text-output compatibility boundaries from remaining
 pixel-parity work.
@@ -388,10 +631,14 @@ pixel-parity work.
   trace proves otherwise.
 
 - **Scroll-by-N semantics.** Auto-scroll after bottom overflow moves the active
-  text-window rectangle up by exactly one cell and leaves the bottom row blank
-  in the current background colour. The lower-level driver operation also
-  supports a pixel-distance argument; that is display-driver ABI detail, not a
-  separate text-output rule.
+  text-window rectangle up by exactly one cell row and leaves the cursor on the
+  last visible row. It does **not** blank the vacated row: whatever pixels lay
+  immediately below the window scroll into it, and the caller's next output
+  covers them. An earlier revision of this bullet said the bottom row is left
+  blank in the current background colour; that is withdrawn. The lower-level
+  driver operation nominally accepts a pixel-distance argument, but the EGA
+  entry ignores it and always steps one cell row; see `display-driver-abi.md`
+  section 9.5.
 
 - **Proportional right-edge exactness.** Resolved. The advance table is
   published in `formats/font-pcs.md` section 4, the exclusive right-edge test,
@@ -409,7 +656,7 @@ pixel-parity work.
   driver is loaded; treating the system as if exactly one EGA-equivalent driver
   is always present is a sound engine simplification.
 
-## 11. Sources
+## 12. Sources
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
@@ -418,7 +665,9 @@ The behaviour described here was derived from the private function notes listed 
 - The padded numeric printer — derived from `u5-decomp/functions/ULTIMA_EXE/0x1A3E_print_number.md`.
 - The cursor accessors — derived from `u5-decomp/functions/ULTIMA_EXE/0x1F12_get_cursor_x.md`, `u5-decomp/functions/ULTIMA_EXE/0x1CEE_get_cursor_y.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1BF2_set_cursor_pos.md`.
 - The window-descriptor initialisation, rectangle configuration, and active-window selection — derived from `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`, `u5-decomp/functions/ULTIMA_EXE/0x1C22_set_text_descriptor_rect.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1B94_set_display_mode.md` (the latter, despite its filename, is the active-window selector).
-- The whole-build census of which windows are actually configured at runtime — derived from `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`.
+- The overlay-side census of which windows are reshaped transiently — derived from `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`. Its "window 2 is never configured" conclusion is corrected in section 9 step 3 and section 10.1.
+- Source provenance: the three standing gameplay window rectangles and their attributes and initial cursors, the absence of a fourth gameplay window, the command-echo cycle and its newline-first ordering, the echoed verb strings and their punctuation contract, the unrecognised-key response and its no-turn result, the blank-row mechanism, the un-blanked scroll, the input-cursor animation, and the three typed-input readers are derived from private analysis note `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked against a fresh local re-read of the shipped executable, overlays and shared data overlay.
+- The selectable fixed-cell font slot, the two boot-loaded fonts and their shared code points, and the three framed-border-label slots with their differing centring and blanking rules — derived from private analysis note `../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 - The driver-load step in boot-time setup — derived from `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
 - The C-runtime string-length utility used at some call sites for label width — derived from `u5-decomp/functions/ULTIMA_EXE/0x216C_string_length.md`. This utility is the standard NUL-terminated string length function and does not warrant a dedicated spec section.
 - Cross-overlay call-frequency and no-thunk text-output architecture — derived

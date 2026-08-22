@@ -138,35 +138,254 @@ the visible page sequence; number keys `1..6` jump to the corresponding active
 party slot while preserving whether the current character page is the stats
 page or the equipment page. Jumps beyond the active party size are rejected.
 
-Character pages have two alternating forms:
+### 4.1 The panel's cell rectangle
 
-- **Stats page.** Shows class, status, level, Strength, Dexterity, Intellect,
-  current and maximum hit points, magic points, and experience for the selected
-  character. Class and status are looked up through label tables rather than
-  printed from the raw record byte. Numeric fields use the resident number
-  printer, with HP and XP rendered at their wider field widths.
-- **Equipment page.** Reads the six readied-equipment bytes in record order and
-  prints each non-empty abbreviated equipment name. The empty equipment value
-  is `0xFF`; if all six slots are empty, the page prints the ordinary nothing-
-  equipped fallback instead of a blank list.
+The display is a forty-column by twenty-five-row grid of eight-by-eight-pixel
+character cells, and the engine maintains four independent text windows over it
+(`text-output.md` sections 2 to 4). Three of the four carry the standing layout:
 
-The party-wide inventory pages use the same eight-row panel and row renderer as
-the R-Ready picker. The traced pages are raw reagents, premixed spell charges,
-special/use items, and the weapons/armour equipment stock band. The row scanner
-walks a caller-supplied counter band forward or backward from a mutable cursor,
-skipping zero-count rows for ordinary inventory browsing. When a character
-slot is supplied for R-Ready, a row is also displayable if that character
-already has the item readied, which lets the picker offer unequip rows even
-when the carried counter is zero. When no displayable row exists, the panel
-prints the normal none placeholder and waits for a key before returning to the
-page loop.
+| Window | Cell rectangle (inclusive) | Role |
+|---|---|---|
+| 0 | `(0,0)` to `(39,24)` | Whole screen: chrome, border bands, viewport labels. |
+| 1 | `(24,1)` to `(39,9)` | The **roster / stats panel**. |
+| 2 | `(24,11)` to `(39,23)` | The **message window**. |
 
-Inventory line rendering is table-driven. Ordinary item names print verbatim.
-Names with a leading marker request one of three special layouts: a one-shot
-quest-item indicator, a counted-special prefix using the matching value table,
-or a parenthesized/single-character count prefix. The marker is a display
-prefix convention in the name table; it does not change the underlying counter
-band or item id.
+The panel is therefore **sixteen columns by nine rows**. Earlier revisions of
+this section guessed columns 24 through 38 and rows 1 through 6; both figures
+are corrected. Columns 24 through 38 - **fifteen cells** - is the *content*
+width that the roster rows and the picker frame use; column 39 is reached only
+by the stats page, which re-widens the window's right edge to 39 before drawing.
+Rows 1 through 9 - **nine rows** - is the full height, because the food/gold
+line and the date line live below the six member rows.
+
+Every surface in this section draws inside window 1 unless it is explicitly
+described as going to the message window.
+
+### 4.2 The resting roster layout
+
+A full panel refresh paints, in order, six member rows on panel rows 1 through
+6, then the food-and-gold line on panel row 8, then the date line on panel
+row 9. In window-relative terms those are window rows 0 through 5, 7 and 8.
+
+Each member row is exactly **fifteen cells** wide:
+
+| Window cells | Screen columns | Content |
+|---|---|---|
+| 0 to 8 | 24 to 32 | Member name, printed then space-padded to a width of nine. |
+| 9 | 33 | Marker column: a right-pointing arrow glyph when this row is the one the active-player selector names *and* the member's status letter is neither the dead letter nor the sleeping letter; a space otherwise. |
+| 10 to 13 | 34 to 37 | Current hit points, right-aligned in a four-cell field padded with spaces. |
+| 14 | 38 | One-letter status code. |
+
+Rows past the end of the travelling party are blanked with exactly **fifteen
+spaces**, which is what fixes the content width at fifteen.
+
+In a combat scene the acting combatant's row is preceded by the text system's
+**inverse-video control byte**, not by an extra glyph. Control bytes do not
+render pixels and do not advance the cursor, so the row stays fifteen cells
+wide and is simply drawn inverted. See `stats-panel.md` section 4.
+
+The class letter and the status letter are each one character selected by index
+from a fixed alphabet. Publish both in order: the class alphabet is
+`A M B F D T P R S` and the status alphabet is `G P D S C`. Both are looked up
+by scanning the alphabet for the record byte's position, so an out-of-range
+byte yields no letter rather than a wrong one.
+
+The food-and-gold line and the date line use these literals (underscore is a
+literal space, `\n` a newline):
+
+| Literal | Use |
+|---|---|
+| `F:` | Food label; the count follows immediately, then spaces out to window column 8. |
+| `_G:` | Gold label, with a **leading** space. |
+| `Ship:` | Replaces the gold label while the party is aboard a vessel; the hull condition follows. |
+| `\n___` | Newline plus three spaces - the date line's own indent. |
+| `Starving!\n` | The out-of-food warning. |
+
+The date is printed as month, a hyphen, day, a hyphen, then the year in a
+three-digit zero-padded field.
+
+### 4.3 Member selection: the framed label and the inverted row
+
+Every command that needs a party member - Z-stats, R-Ready, New Order, and the
+rest - shares one selection surface. Its contract is:
+
+- The message window shows the `Player:_` prompt (`commands.md` section 5.6).
+- The panel's **top border band** carries the framed label `Select:`. The
+  stored literal is the bare word with its colon; the brackets a reader sees are
+  the two end-cap glyphs the label writer draws around it (`text-output.md`
+  section 10.7).
+- The currently indicated member is shown by **inverting a rectangle covering
+  the full fifteen content cells of that row** - an exact-width video inversion
+  of screen columns 24 through 38 across the whole of that text row. It is not
+  a cursor character and it does not extend to column 39.
+- Moving the indicator inverts the old row back and inverts the new one, so the
+  inversion is its own undo.
+- Number keys `1` through `6` select directly, bounded by the current party
+  size; the four direction keys move the indicator.
+
+**Nothing in the panel is cleared during member selection.** The six roster
+rows, the food-and-gold line and the date line all stay on screen; only the
+border label changes and one row inverts. The message window is untouched apart
+from the prompt itself. Cancelling prints the universal cancel word into the
+message window.
+
+### 4.4 The item picker frame
+
+The item picker is a different contract from member selection, because it
+**does** clear the panel.
+
+The frame builder takes a row count. It first narrows window 1 to
+`(24,1)-(38,count+1)` and clears it, then re-widens the window to
+`(24,1)-(39,9)` and draws an ornamental border out of seven text-font frame
+glyphs: a top-left ornament, thirteen top-edge glyphs, a top-right ornament;
+then, on each interior row, a vertical rule in window column 0 and another in
+window column 14; then a newline, a bottom-left ornament, thirteen bottom-edge
+glyphs, and a bottom-right ornament. The top edge is a single rule and the
+bottom edge is a double rule; the four corners are curved ornaments.
+
+The `U`-Use path calls it with a row count of **eight**, which yields the
+picker every caller in the game uses:
+
+| Property | Value |
+|---|---|
+| Frame width | 15 cells, screen columns 24 to 38 |
+| Frame height | 9 rows, screen text rows 1 to 9 |
+| Vertical rules | window columns 0 and 14 (screen columns 24 and 38) |
+| Interior item rows | 7 (window rows 1 to 7, screen rows 2 to 8) |
+| Interior content columns | 13 (window columns 1 to 13, screen columns 25 to 37) |
+
+Because the clear covers the whole panel, **the food-and-gold line and the date
+line are erased for the duration of the picker**, and both are restored by a
+full roster redraw when the picker closes. The message window and the map
+viewport are genuinely untouched.
+
+The `U`-Use flow is the reference sequence: refuse with `No_usable_items!\n`
+if nothing is usable; print `Item:_` into the message window; select the panel;
+write the framed border label `Items:`; draw the eight-row frame; run the
+picker; restore the message-window frame; redraw the full roster.
+
+### 4.5 Picker row format
+
+A picker row is **`[two-cell quantity][one-cell selector][name]`**, i.e. window
+columns 1 and 2 hold the quantity right-aligned, window column 3 holds the
+selector character, and window columns 4 through 13 hold the name.
+
+| Quantity case | Rendered |
+|---|---|
+| Zero | The two-character literal `--` |
+| One to ninety-nine | The number, right-aligned in two cells, space-padded |
+| "No quantity" marker | Neither the quantity nor the selector cell is emitted; the row prints only its name |
+
+Selector characters below the printable range are drawn from the **runic** font
+rather than the text font; the renderer switches fonts for that one cell and
+switches back.
+
+Name strings may carry a leading sentinel that requests a decorated row:
+
+| Sentinel | Rendered |
+|---|---|
+| quest-item marker | A runic symbol glyph, a space, a plus sign and a space, then the rest of the name in the text font |
+| counted-special marker | A second runic symbol glyph with the same spaced plus sign, then a count word |
+| moonstone marker | The word `Moonstone_`, then a single runic letter naming the stone |
+| none | The name verbatim |
+
+The sentinel is a display convention in the name table; it does not change the
+counter band or the item id.
+
+### 4.6 Border labels
+
+A border label is not a printed heading inside the panel. It is written by a
+shared label routine whose contract is:
+
+- Centre the text on the panel's top border band.
+- Blank the band either side of the text.
+- Redraw the horizontal rule beneath the band.
+- Bracket the text with the right-pointing end-cap glyph on the left and the
+  left-pointing end-cap glyph on the right.
+
+The stored literals are the bare words with their punctuation - `Select:`,
+`Items:`, `Reagents`, `Spells`, `Armaments` - and the two triangles are chrome,
+not characters. When neither a picker nor a member selection is active, the
+panel's top border carries no label.
+
+Note that this writer is a **different** slot from the two border bands around
+the dungeon viewport: it centres on a different column and blanks a different
+pixel span. See `dungeon-mode.md` section 4.1 and `text-output.md` section 10.7.
+
+### 4.7 Pages, field labels and placeholders
+
+There are **six** pages in all: the attribute page, the equipment page, and four
+inventory pages.
+
+| Page | Border label | Slots |
+|---|---|---:|
+| Attributes | none | - |
+| Equipment | none | 6 |
+| Armaments | `Armaments` | 48 |
+| Spells | `Spells` | 48 |
+| Reagents | `Reagents` | 8 |
+| Items | `Items` | 38 |
+
+Leaving the pages prints `Done\n` in the message window. Long pages **do not
+paginate**: the navigator scans forward or backward for the next slot with a
+non-zero count, so empty slots are skipped rather than shown as blank rows.
+
+The attribute page clears the panel, re-widens the window's right edge to column
+39, centres the member's name by emitting leading spaces, emits the record's
+leading glyph, and then appends value after value. Its layout is
+**label-driven, not column-driven**: each label carries its own line breaks and
+its own interior spacing, and each value is printed immediately after its label
+at whatever cursor column the label left behind.
+
+| Literal | Field |
+|---|---|
+| `_Lv-` | Level |
+| `Str=` | Strength |
+| `__HP:` | Hit points |
+| `\nInt=` | Intelligence |
+| `__HM:` | Magic points |
+| `\nDex=` | Dexterity |
+| `__Ex:` | Experience |
+| `\n\n____Magic:` | Magic heading |
+| `Arms\n\n` | Arms heading |
+| `Equipment` | Equipment heading |
+| `\n_Food:_` | Food |
+| `\n_Gold:_` | Gold |
+| `\n\n_Keys.......` | Keys, dotted leader |
+| `\n_Gems.......` | Gems, dotted leader |
+| `\n_Torches....` | Torches, dotted leader |
+| `\n_Grapple` | Grapple |
+| `\nStatus:_` | Status |
+
+`Str=`, `Int=` and `Dex=` form the left column, and `__HP:`, `__HM:` and
+`__Ex:` sit on the same three rows to their right. The dotted leaders are
+**literal runs of periods inside the label strings** - seven for keys and gems,
+four for torches - which is why the three counts land in the same column with
+no padding logic anywhere. All three labels are twelve characters long after
+their newline, so the counts align at the thirteenth cell of the line.
+
+Empty-state placeholders, both parenthesised:
+
+| Literal | Used when |
+|---|---|
+| `(None ready)` | The equipment list has nothing readied. |
+| `(None owned!)` | An inventory page has no slot with a non-zero count. |
+
+The empty equipment value in the six-slot block is the all-bits-set byte; if all
+six slots are empty the page prints the `(None ready)` placeholder rather than a
+blank list.
+
+The party-wide inventory pages use the same eight-row frame and row renderer as
+the R-Ready picker. The row scanner walks a caller-supplied counter band forward
+or backward from a mutable cursor, skipping zero-count rows for ordinary
+inventory browsing. When a character slot is supplied for R-Ready, a row is also
+displayable if that character already has the item readied, which lets the
+picker offer unequip rows even when the carried counter is zero. When no
+displayable row exists, the panel prints the none placeholder and waits for a
+key before returning to the page loop.
+
+Source provenance: derived from private analysis note
+`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 
 ## 5. R-Ready Flow
 
@@ -206,6 +425,27 @@ action; only a dead actor escapes the cost, with a short refusal and a free
 re-prompt. Because the panel stays open until the player exits, the cost is per
 invocation of the command, not per item readied: several items can be equipped,
 unequipped or refused within one turn.
+
+### 5.1 R-Ready presentation
+
+R-Ready reuses both surfaces specified in Section 4 without modification. Its
+member selection is the shared surface of Section 4.3: the framed `Select:`
+label on the panel's top border, the `Player:_` prompt in the message window,
+and the fifteen-cell inverse-video row. Its item list is the eight-row frame of
+Section 4.4 with the row format of Section 4.5.
+
+The literals R-Ready owns for itself are:
+
+| Literal | Meaning |
+|---|---|
+| `Item:_` | The item prompt, in the message window. Colon then one trailing space. |
+| `Thou_art_empty-\nhanded!\n` | Nothing to ready. The embedded newline is part of the literal, so the word "handed" always starts a new line. |
+| `None!\n` | The picker was cancelled. |
+| `Done\n` | The picker was closed after use. |
+
+Closing the picker restores the message-window frame and then triggers a full
+roster redraw, which is what puts the six member rows, the food-and-gold line
+and the date line back on the panel.
 
 ## 6. R-Ready Eligibility And Writes
 

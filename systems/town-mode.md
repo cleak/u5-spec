@@ -28,18 +28,25 @@ The world has thirty-two named non-overworld locations divided evenly into four 
 
 The engine tracks the active scene in a single resident byte. Zero means "overworld"; values one through thirty-two put the engine in town mode for one named location; values outside that range do not select a town-family location. Walking onto an enclosed cell sets the scene byte; stepping off the edge of the interior grid and confirming the leave prompt clears it.
 
-Per-location data lives in four parallel families of files — one tile-grid file per class, one NPC roster file per class, one dialogue file per class. The roster and dialogue files use the per-class location index directly; the tile-grid file uses the same physical ordering but active floor pages are selected through the resident base-page table described below. The engine resolves the file family from `(scene - 1) >> 3` against a four-entry pointer table.
+Per-location data lives in four parallel families of files — one tile-grid file per class, one NPC roster file per class, one dialogue file per class. The roster and dialogue files use the per-class location index directly. The tile-grid file does **not**: its unit is the 1,024-byte floor page, and which pages belong to a location comes from the resident per-scene base-page table published in `formats/location-dat.md` Section 4.1, not from the location index. The engine resolves the file family from `(scene - 1) >> 3` against a four-entry pointer table.
 
 ## 3. Per-location map data
 
-A location's map is a thirty-two-by-thirty-two grid of one-byte tile indices, totalling 1,024 bytes per floor. Each per-class file contains sixteen such floor pages, physically arranged as eight two-page location pairs. Runtime floor selection is driven by a resident per-scene base-page table, not just by the physical pair: logical floor zero is the scene's base page, floor one is the next page, and floor `0xFF` is the previous page.
+A location's map is a thirty-two-by-thirty-two grid of one-byte tile indices, totalling 1,024 bytes per floor. Each per-class file is a flat array of sixteen such floor pages numbered `0..15`. Runtime floor selection reads the scene's **base page** from a resident per-scene table and adds the signed floor byte to it: floor `0` is the base page, floor `+1` the page after it, floor `0xFF` the page before it. The loaded page is at file offset `page × 1024` and exactly 1,024 bytes are read.
+
+`formats/location-dat.md` Section 4.1 publishes the complete table — base page, page run, and floor range for all thirty-two locations. Two things about it matter to town mode:
+
+- **The base page is not the location index doubled.** For twenty of the thirty-two locations it is something else, so an engine that derives pages as `location_index × 2 + floor` renders the wrong room in most locations. Iolo's Hut, for example, is page 12 of `DWELLING.DAT`, not page 8.
+- **A higher page index is a higher floor.** Floor `+1` is one storey up and floor `−1` is a basement. Four locations — Yew, both large castles, and Serpent's Hold — enter above the bottom of their page run and therefore use negative floor values in ordinary play.
+
+Locations have between one and five floors. Thirteen have exactly one, and in those the floor byte never leaves zero because the page contains no transition cell at all.
 
 The active floor is loaded into a single 32×32 byte buffer in the resident data segment. Cell `(row, col)` is at buffer offset `row × 32 + col`; row indices increase southward, column indices increase eastward. The renderer reads this buffer for the static terrain layer; the active-object table (described in the active-objects spec) layers sprites on top.
 
 The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID — wall, floor, grass, water, door, chair, ladder — that the renderer paints directly. A handful of special tile values are *markers* that the location-load pipeline and NPC scheduler harvest, rewrite, or consume:
 
 - **NPC start markers** (`0x48` or `0x49`) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and exact marker byte.
-- **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). Locations with no asterisk inherit a default per-scene spawn coordinate.
+- **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). What the engine does when a page carries no asterisk is an open item: earlier wording here named a per-scene default coordinate, and that rule is retracted — it belongs to the resident-Shadowlord install pass, not to player placement. See `formats/location-dat.md` Section 6.
 - **Farmland and orchard terrain** (the standing-crop and fruit-tree tile values) is not marker data at all, but in a settlement that is currently hiding a Shadowlord it is rewritten in place by a blight pass at the end of the map load. In every other settlement that pass does nothing. See the Shadowlord blight below.
 - **NPC floor-link markers** (`0xC8` and `0xC9`) are consumed by the NPC scheduler's tile-ID pathfinder after map load. They must remain distinguishable in the live tile buffer for the schedule processor.
 
@@ -111,7 +118,39 @@ change together.) Second, the bracketing is **not** a save-and-restore of the
 PRNG: the pass discards whatever generator state was running and leaves fresh
 clock entropy behind it. See `systems/prng.md` section 3.
 
-The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a scene place its ground floor in the middle of nearby authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
+### Floor transitions
+
+Five authored cell families change the floor while the party is inside a location. All five are ordinary tile bytes in the location grid; there is no separate per-location transition record and no hidden-floor feature.
+
+| Cell | Name | How it fires | Result |
+|---|---|---|---|
+| `0xC4..0xC7` | Staircase | Walking onto the cell | Floor `±1`, direction from the approach |
+| `0xC8` | Ascend ladder | The K-Klimb command, while standing on it | Floor `+1`, prints `Up!` |
+| `0xC9` | Descend ladder | The K-Klimb command, while standing on it | Floor `−1`, prints `Down!` |
+| `0x86` | Metal grate | The K-Klimb command, while standing on it | Floor `−1`, prints `Down!` |
+| `0x8C` | Trapdoor | Stepping onto the cell | Prints `A TRAPDOOR!`, then floor `−1` |
+
+**Staircases.** The staircase byte encodes an axis in its low two bits, in the same normalized facing space the town movement wrapper uses. Entering the cell moving along that axis in the authored direction ascends; entering it from the opposite side descends; entering it from a perpendicular side does nothing at all. The same staircase byte is authored at the same cell coordinate on both connected pages, so a flight is two-way and the party arrives standing on its far end.
+
+**K-Klimb inside a location.** The handler echoes the verb prefix `Klimb-`, then:
+
+1. If the party is mounted on a horse it prints `-On foot!`, changes nothing, and costs no turn.
+2. Otherwise it reads the cell under the party. An ascend ladder goes up; a descend ladder or a metal grate goes down. There is no two-way ladder cell in town mode — the two ladder ids are directional and a given cell is one or the other.
+3. If the cell under the party is none of those, the command instead prompts for a direction and looks at the adjacent cell. If that neighbour is a wooden fence or gate cell it moves the party one cell onto it; this is climbing *over* something and **does not change the floor**. Anything else prints `What?` and costs no turn. A cancelled direction prompt still counts as the party's action.
+
+**Trapdoors.** Stepping onto a trapdoor cell announces `A TRAPDOOR!` and drops the party one floor. It is an underfoot reaction in the per-turn tile-effect pass, not a command. It is suppressed entirely while the party is on the magic carpet, which floats over the cell. Lord Blackthorn's Castle is built around this: its entry floor and the three floors above it carry forty-five, thirty-six, thirty, and thirty-six trapdoor cells respectively. Its basement carries none, so the bottom of the tower is where falling stops.
+
+**One location overrides the trapdoor.** Stonegate is a single-floor keep whose trapdoor cells form a ring around one open centre cell. Walking into that ring does not descend; it runs a scripted sequence — a tone-and-fade presentation, the visible map replaced wholesale with a single tile, the active-object table cleared, and every party member's status set to dead. This is the *only* place a trapdoor is not a floor transition; every other trapdoor in the game takes the generic descend path above. Specify it as a scripted location event, not as part of floor selection.
+
+**Every floor change is a full reload.** A transition re-runs the whole location load against the new page: read the page, harvest NPC start markers and spawn markers, run the dawn/dusk substitution if the hour is in the night band, run the Shadowlord blight pass, relink the active-object table for the new floor, and mark visibility dirty. It is never a partial update, and the announcement (`Up!` / `Down!`) is printed before the reload.
+
+### The floor byte has two roles
+
+The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a location place its entry floor in the middle of its authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
+
+That is its role *while the scene byte names a location*. The moment the party leaves and the scene byte returns to the overworld value, the same saved field becomes the **world plane selector**: zero is Britannia and the all-ones byte is the Underworld. The town exit path writes it accordingly, and exactly one location — Ararat, which exists only underground — exits to the Underworld; every other location exits to Britannia (`systems/doors-and-z-transitions.md` Section 12, `systems/overworld.md` Section 2).
+
+An engine must keep the two roles distinct in its own reasoning even though the original keeps them in one byte. In particular, "floor `−1`" inside a keep and "the Underworld" outside one are the same stored value meaning two unrelated things, and a floor-change handler must never run against an overworld scene byte.
 
 ## 4. Per-location NPC and dialogue data
 
@@ -471,9 +510,11 @@ the Ring of Regeneration check happen for town mode.
 
 ## 11. Multi-floor locations
 
-Several locations span more than one floor. A castle has a throne room above and a great hall below; a dwelling may have a basement; a keep has watchtowers above the main floor. Floor changes are mediated by stairway tiles — ladders, staircases, and occasionally trapdoors.
+Nineteen of the thirty-two locations span more than one floor: ten have two, seven have three, and the two large castles have five each. The remaining thirteen are single-floor. `formats/location-dat.md` Section 4.1 gives the exact floor range of each.
 
-The current floor is tracked in a single resident byte. When the player walks onto a facing-sensitive stairway tile and triggers the climb, or invokes K-Klimb on a ladder/trapdoor-style floor transition, the floor byte is updated, the tile buffer is reloaded with the new floor's data (running the marker-harvest and dawn/dusk gate-normalization passes again), the active-object table is partially reset (NPCs not on the new floor are unlinked, NPCs on the new floor are linked), and the player's slot is updated with the new Z. The schedule processor handles its own side through its Z-mismatch state machine described in the NPC schedules spec.
+Floor changes are mediated by the five authored cell families listed in Section 3 — the facing-sensitive staircase family, the two directional ladder ids, the metal grate, and the trapdoor.
+
+The current floor is tracked in a single resident byte, signed, added to the location's base page (Section 3). When the player walks onto a staircase cell and triggers the climb, invokes K-Klimb on a ladder or grate cell, or steps onto a trapdoor, the floor byte is updated, the tile buffer is reloaded with the new page's data (running the marker-harvest, dawn/dusk gate-normalization, and blight passes again), the active-object table is partially reset (NPCs not on the new floor are unlinked, NPCs on the new floor are linked), and the player's slot is updated with the new Z. X and Y are preserved across the transition. The schedule processor handles its own side through its Z-mismatch state machine described in the NPC schedules spec.
 
 Visibility is per-floor: the visibility producer treats the active map as the only walkable surface and runs its centre-out carve against tiles in the current floor's tile buffer. NPCs on other floors are invisible and silent.
 
@@ -529,8 +570,9 @@ audience-prompt or quest-item-presentation contract.
 
 **The harpsichord and the secret passage.** Lord British's castle holds a
 harpsichord — tile `0x8D`, whose `LOOK2.DAT` description names it as an
-instrument with ten keys numbered zero through nine — on logical floor two,
-with a chair in the cell immediately north of it. The instrument is armed by
+instrument with ten keys numbered zero through nine — on floor `+2`, two
+storeys above the castle's entry floor, with a chair in the cell immediately
+north of it. The instrument is armed by
 position alone, and the test is exactly "the tile one cell south of the party
 is the harpsichord tile": no flag, latch, or prior event arms it. This is the
 same four-neighbour probe the Fire and Yell commands use.
@@ -558,7 +600,7 @@ normal commands everywhere but the chair.
   note resets progress to zero. Progress is not cleared by leaving the chair —
   only by a wrong note or by completing the tune.
 - **Completion.** On the thirteenth correct note, and only while the scene is
-  Lord British's Castle on logical floor two, the wall cell five squares north
+  Lord British's Castle and the floor byte is `2`, the wall cell five squares north
   of the harpsichord in the same column is rewritten in the live tile buffer to
   ordinary cobble floor, opening the passage behind it, and the view is marked
   dirty. Progress resets to zero. The rewrite is a live tile-buffer edit rather
@@ -840,7 +882,16 @@ The behaviour described above was derived by reading the function and format not
   the exhaustive accessor sweep showing the mask has no other owners.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/0x011E_npc_find_idle.md`.
 - The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md`, `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler note as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
-- The town Attack and Open handlers - `u5-decomp/functions/TOWN_OVL/0x09E6_town_attack_handler.md` and `u5-decomp/functions/TOWN_OVL/0x0B82_town_open_handler.md`.
+- The town Attack handler and the town K-Klimb handler - the corresponding command-handler notes under `u5-decomp/functions/TOWN_OVL/`. The climb-handler note predates the 2026-08-22 retrace and is filed under a different command name than the one it actually analyses; the retrace note above supersedes its labelling.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
+  per-scene base floor-page binding and its sign convention, the complete
+  inventory of floor-transition cells and their on-screen text, the climb
+  command's refusal cases and its fence/gate side path, the trapdoor's general
+  descend behaviour and the single scripted exception at Stonegate, the
+  full-reload semantics of a floor change, and the two roles of the saved floor
+  byte. It also fixes the floor of the harpsichord puzzle: floor `2` is two
+  storeys above the castle's entry floor, not a basement.
 - The town alarm, pacify/fortify, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/0x085E_npc_set_state_fortified.md`, `u5-decomp/functions/TOWN_OVL/0x08D4_npc_set_state_pacified.md`, `u5-decomp/functions/TOWN_OVL/0x0958_npc_scatter.md`, `u5-decomp/functions/TOWN_OVL/0x09BC_npc_death_handler.md`, `u5-decomp/functions/TOWN_OVL/0x10DA_npc_print_killed.md`, `u5-decomp/functions/TOWN_OVL/0x10F2_npc_should_pacify.md`, `u5-decomp/functions/TOWN_OVL/0x1156_town_setup_post_npc.md`, `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`, and `u5-decomp/functions/TOWN_OVL/0x1352_town_post_action_cleanup.md`.
 - The Lord British castle chord handler - `u5-decomp/functions/TOWN_OVL/0x0E34_lb_audience_chord.md`.
 - The Stonegate setup helper audio/presentation pattern - `u5-decomp/functions/TOWN_OVL/0x11B8_town_setup_helper.md`.

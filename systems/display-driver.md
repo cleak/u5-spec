@@ -78,11 +78,23 @@ differ between the two families:
 
 The low-colour values are all inside `0..3` because the CGA and Hercules
 drawing-colour entries mask their argument to two bits before translating it,
-so any larger index would alias. Known consumers so far are the Return-to-View
-caption panel (slot 2 for the panel fill, slot 1 for the rule beneath it), the
-Return-to-View fixed wipe command (slot 1), and the Ultima IV transfer preview
+so any larger index would alias. Known consumers are the Return-to-View caption
+panel (slot 2 for the panel fill, slot 1 for the rule beneath it), the
+Return-to-View fixed wipe command (slot 1), the Ultima IV transfer preview
 screen (slot 2 for its frame glyphs and panel bars, slot 1 for its pixel rules
-and panel titles — `u4-transfer.md` section 6.1).
+and panel titles — `u4-transfer.md` section 6.1), and — the heaviest consumer —
+the whole gameplay screen:
+
+| Slot | Gameplay role |
+|---:|---|
+| 1 | Accent pen: every one-pixel rule of the game-screen frame, every bracket end-cap outline, and the standing text foreground. |
+| 2 | Chrome pen: every solid chrome band, the rounded corner glyphs, and the filled body of every bracket end-cap. |
+| 5 | Foreground of the sky strip's fixed hour marker (`moons.md`). |
+| 6 | Foreground of the two moon markers in the sky strip (`moons.md`). |
+
+Slots 0, 3 and 4 have no confirmed gameplay-screen consumer. Because these are
+table entries rather than literals, an implementation should expose all seven
+as configurable indices rather than hard-coding the EGA values.
 
 For v1 asset compatibility, an implementation should support the EGA-compatible
 rendering path and the original asset selectors. It may reject or map the
@@ -210,29 +222,199 @@ drafts labelled it as combat screen setup, which was a mistaken inference from
 neighbouring combat code rather than from what the routine does.
 
 The paint is deterministic and reads no gameplay state: not save data, not the
-scene state, not combat state, not party contents. Its only inputs are the
+scene state, not combat state, not party contents. Its only inputs are the two
 border colour indices selected for the active display family. Because of that
 it can legitimately run before any world state exists — the intro's Journey
 Onward path draws the frame before it reads the save file, so the player sees
 the gameplay layout appear while the load proceeds (see `intro.md` and
 `save-load.md`).
 
-On the 320-by-200 baseline the frame divides the screen into three zones:
+#### The two chrome pens
 
-| Zone | Extent | Contents |
+The frame uses exactly two colours, both taken from the user-interface colour
+table published in section 2, so the frame recolours itself per display family
+without any code change:
+
+| Role | UI colour slot | EGA/Tandy value | CGA/Hercules value |
+|---|---:|---:|---:|
+| Chrome fill — every solid band, the corner bevel glyphs, and the filled body of every bracket end-cap | 2 | 1 | 1 |
+| Accent — every one-pixel rule, every end-cap outline stroke, and the standing text foreground the frame leaves behind | 1 | 15 | 3 |
+
+On the EGA baseline that is chrome index `1` and accent index `15`. The paint
+also leaves the text foreground set to the accent index when it returns, which
+is the colour all later panel and message text inherits unless a caller changes
+it.
+
+#### Paint order
+
+The frame is painted in three phases, in this order, with no conditional
+branches anywhere in it. The order matters: phase 3 deliberately overpaints one
+row or column of several phase-1 bands, and phase 2's opaque glyph cells carve
+the rounded corners out of bands that phase 1 already filled. An implementation
+that draws only the *visible* result, without reproducing the order, will get
+the corner bevels and the label gaps wrong.
+
+**Phase 1 — eight filled rectangles.** All rectangles are inclusive on all four
+edges, in screen pixels.
+
+| # | Colour | Rectangle `(x1, y1) - (x2, y2)` | Role |
+|---:|---|---|---|
+| 0 | black (index 0) | `(0, 0) - (319, 199)` | full-screen clear |
+| 1 | chrome | `(0, 0) - (319, 6)` | top ribbon |
+| 2 | chrome | `(0, 185) - (191, 191)` | bottom ribbon, viewport side only |
+| 3 | chrome | `(0, 0) - (6, 191)` | left ribbon |
+| 4 | chrome | `(185, 0) - (191, 191)` | centre divider ribbon |
+| 5 | chrome | `(313, 0) - (319, 87)` | right ribbon — stops at `y = 87`, not at the bottom of the screen |
+| 6 | chrome | `(192, 80) - (312, 87)` | lower stats divider band |
+| 7 | chrome | `(192, 57) - (312, 63)` | upper stats divider band |
+
+**Phase 2 — three rounded-corner glyph cells.** The text foreground is set to
+the chrome colour and three glyphs from the fixed-cell text font (`IBM.CH`, or
+its Hercules equivalent) are emitted through the ordinary text path into the
+full-screen text window. The blit is opaque, so the clear bits of each glyph
+punch black back through the ribbon fills and carve the bevel:
+
+| Text cell | Glyph code | Shape |
+|---|---:|---|
+| `(0, 0)` | `0x7B` | rounded top-left |
+| `(39, 0)` | `0x7C` | rounded top-right |
+| `(0, 23)` | `0x7D` | rounded bottom-left |
+
+There is **no bottom-right corner glyph**. The bottom-right of the screen is
+the message window, not a chrome box. The font does contain a bottom-right
+bevel and a solid block in the adjacent codes; the frame uses neither.
+
+The resulting bevel profile, at the screen's left edge, is: column `x = 0`
+chrome from `y = 5`, `x = 1` from `y = 3`, `x = 2` from `y = 2`, `x = 3` and
+`x = 4` from `y = 1`, and `x = 5` onward from `y = 0`. The bottom-left glyph
+mirrors that vertically and the top-right glyph mirrors it horizontally, so the
+same profile appears at all three painted corners.
+
+Because cursor coordinates are window-relative, the caller must have the
+full-screen text window active for these three cells to land at the absolute
+grid corners. Every observed caller does.
+
+**Phase 3 — four rule outlines.** The pen is set to the accent colour and four
+polylines are stroked. Coordinates are inclusive pixel endpoints; each vertex
+list is walked in order from the first point.
+
+| Box | Path | Result |
 |---|---|---|
-| World viewport | Left band, roughly 184 pixels wide, inset from the top and left screen edges | Tile view for the active mode. |
-| Stats panel | Right band, the remaining width of roughly 134 pixels | Party rows and the bottom information block described in `stats-panel.md`, split into an upper, a middle, and a lower zone by two horizontal dividers. |
-| Command/prompt area | Band along the bottom beneath the viewport | Text output and command echo. |
+| A — world viewport | `(7, 7)` → `(7, 184)` → `(184, 184)` → `(184, 7)` → `(7, 7)` | closed box `(7, 7) - (184, 184)`; interior `x = 8..183`, `y = 8..183`, exactly 11 by 11 tiles of 16 pixels with tile `(0, 0)` at pixel `(8, 8)` |
+| B — message window | `(191, 191)` → `(191, 87)` → `(319, 87)` | an open "L": left rule `x = 191` over `y = 87..191`, top rule `y = 87` over `x = 191..319`. The message window has no right or bottom rule; it runs to the screen edge. |
+| C — roster box | `(191, 7)` → `(312, 7)` → `(312, 56)` → `(191, 56)` → `(191, 7)` | closed box `(191, 7) - (312, 56)`; interior text cells columns 24..38, rows 1..6 |
+| D — counters box | `(191, 63)` → `(312, 63)` → `(312, 80)` → `(191, 80)` → `(191, 63)` | closed box `(191, 63) - (312, 80)`; interior text cells columns 24..38, rows 8..9 |
 
-The frame itself is built from filled rectangles: a full-screen ground fill, a
-top bar, left and bottom viewport borders, the vertical divider between the
-viewport and the stats panel, the stats panel's outer right edge, and the two
-horizontal dividers inside that panel. Three box-drawing glyphs are then
-stamped through the ordinary text path at the top-left, top-right, and
-bottom-left text-grid corners, and line-draw helpers close the outlines of the
-viewport, the stats panel, and the prompt area. There are no conditional
-branches in the paint, so the frame looks identical on every entry.
+#### Filled extents versus visible extents
+
+Phase 3 runs after phase 1 and repaints one row or column of several bands in
+the accent colour. Both figures are published because both are needed: the fill
+list is what an implementation must execute, and the visible list is what a
+pixel comparison against the original will show.
+
+| Phase-1 band | Overpainted by | Chrome actually visible |
+|---|---|---|
+| centre divider `x = 185..191` | left rules of boxes B, C and D at `x = 191` (for `y >= 7`) | `x = 185..190` |
+| right ribbon `y = 0..87` | top rule of box B at `y = 87` (for `x >= 191`) | `y = 0..86` |
+| upper stats band `y = 57..63` | top rule of box D at `y = 63` | `y = 57..62` |
+| lower stats band `y = 80..87` | bottom rule of box D at `y = 80` and top rule of box B at `y = 87` | `y = 81..86` |
+| top ribbon `y = 0..6` | not overpainted | `y = 0..6` |
+| left ribbon `x = 0..6` | not overpainted | `x = 0..6` |
+| bottom ribbon `y = 185..191` | not overpainted | `y = 185..191` |
+
+Text row 24 (`y = 192..199`) is left black by the phase-0 clear and is never
+painted again by any gameplay path. It belongs to no text window.
+
+#### Resulting zones
+
+| Zone | Pixels | Text cells | Contents |
+|---|---|---|---|
+| World viewport | interior `(8, 8) - (183, 183)` | not text | 11 by 11 tiles of 16 pixels for the active mode |
+| Roster box | interior `(192, 8) - (311, 55)` | cols 24..38, rows 1..6 | six party rows (`stats-panel.md`) |
+| Upper divider band | `(192, 57) - (312, 62)` visible | row 7 | timed-magic-effect slot (`stats-panel.md`) |
+| Counters box | interior `(192, 64) - (311, 79)` | cols 24..38, rows 8..9 | food/gold and date rows (`stats-panel.md`) |
+| Lower divider band | `(192, 81) - (312, 86)` visible | row 10 | plain chrome |
+| Message window | `(192, 88) - (319, 191)` | cols 24..39, rows 11..23 | command echo, output, and the live input line (`text-output.md`) |
+| Bottom gutter | `(0, 192) - (319, 199)` | row 24 | always black |
+
+The chrome ribbons carry three label gaps that other systems paint into: the
+sky strip in the top ribbon (`moons.md`), the wind banner in the bottom ribbon
+(`weather.md`), and the timed-effect slot in the upper stats divider band
+(`stats-panel.md`). Each of those is bracketed by the end-cap described next.
+
+#### Bracket end-caps
+
+Every interruption in the chrome — the sky strip, the wind banner, the
+timed-effect slot, the stats-window label strip, and the message window's
+command-echo prompt — is framed by the same pair of triangular caps. This is
+the single most reused piece of chrome on the screen, and it is **not stored
+art**: no matching bitmap exists in the shipped fonts, the shared data overlay,
+or the display drivers. It is composited at draw time from a glyph and two
+strokes, at the active text window's current cursor cell:
+
+1. Save the active window's colour attribute; set the text foreground to the
+   chrome colour and the text background to black.
+2. Emit one opaque 8-by-8 fixed-cell glyph at the cursor. The right-pointing
+   cap uses `IBM.CH` glyph code `0x02`; the left-pointing cap uses code `0x01`.
+   Both are solid triangles in that font.
+3. Set the pen to the accent colour and stroke two straight lines along the
+   triangle's hypotenuse. With `(px, py)` the cell's top-left pixel, the
+   right-pointing cap strokes `(px, py)` → `(px + 5, py + 3)` and
+   `(px + 5, py + 4)` → `(px, py + 7)`; the left-pointing cap strokes
+   `(px + 7, py)` → `(px + 2, py + 3)` and `(px + 2, py + 4)` →
+   `(px + 7, py + 7)`.
+4. Restore the saved colour attribute.
+
+The cursor advances one cell, exactly as for an ordinary glyph.
+
+Two consequences are worth stating because they are visible and easy to get
+wrong. First, the union of the cap's chrome-coloured pixels and its
+accent-coloured pixels is exactly the source triangle glyph, and the
+chrome-coloured component alone is that triangle with its diagonal traced away
+— which is why searching the shipped assets for either colour component finds
+nothing. Second, both strokes terminate on the cell's outer column at its top
+and bottom rows, which are the same rows the adjoining ribbon rules occupy. The
+rule therefore appears to run continuously into the cap, and the measurable gap
+in the rule stops one pixel short of the cap cell at each end. For the two
+viewport-ribbon labels that produces the rule gaps `y = 7` broken over
+`x = 41..150` and `y = 184` broken over `x = 49..150`.
+
+#### Repaintable chrome regions
+
+Four small helpers repaint a chrome region back to its plain state when the
+label that occupied it goes away. They are published because their extents are
+one pixel different from the corresponding frame rectangles, and matching them
+matters for pixel comparison:
+
+| Region | Repaint |
+|---|---|
+| Sky-strip gap (top ribbon) | fill `(40, 0) - (152, 6)` in chrome, then stroke the rule `(40, 7)` → `(152, 7)` in accent |
+| Wind-banner gap (bottom ribbon) | stroke the rule `(48, 184)` → `(152, 184)` in accent, then fill `(48, 185) - (152, 191)` in chrome |
+| Upper stats divider band | fill `(191, 57) - (312, 62)` in chrome, then stroke single scanlines `(192, 56) - (311, 56)` and `(192, 63) - (311, 63)` in accent |
+| Stats-window label strip (top ribbon, right of the divider) | fill `(192, 0) - (311, 6)` in chrome, then stroke the single scanline `(192, 7) - (311, 7)` in accent |
+
+The dungeon view blanks both viewport-ribbon gaps with its own pair of fills
+before writing its own labels: `(40, 0) - (152, 7)` and `(48, 185) - (152, 191)`
+in chrome, followed by the two rules `(40, 7)` → `(152, 7)` and
+`(48, 184)` → `(152, 184)` in accent.
+
+#### Primitive requirements
+
+The frame relies on four display-layer behaviours that a cleanroom renderer
+must match:
+
+- **Filled rectangles are inclusive on all four edges** and are normalised and
+  clamped to the screen before drawing, so either corner order is accepted.
+- **The single-scanline fill and the rectangle fill are distinct operations.**
+  The single-scanline entry takes one row coordinate and has no row loop; see
+  `display-driver-abi.md` section 5.
+- **Lines include both endpoints** and cover all eight octants; a polyline is a
+  first line followed by continuation strokes from the current point.
+- **The message-window scroll is hardwired.** On the EGA baseline the scroll
+  entry accepts only the message window's left pixel column, moves a
+  128-pixel-wide stripe up by exactly one 8-pixel cell row, and ignores any
+  requested distance. A portable engine may generalise it, but must not assume
+  the original honours a row count; see `display-driver-abi.md` section 9.5.
 
 ## 8. Intro and Cutscene Effects
 
@@ -282,6 +464,28 @@ destination rectangle, including background-coloured pixels, then advances the
 frame index modulo four. The renderer must not alpha-blend, mask, scale, crop,
 or reuse the previous surface contents inside that rectangle; the rectangle is
 fully overwritten every time. Pixels outside the rectangle are never touched.
+
+Frame `N` is sourced from hidden-surface row `50 x N`, which is where the
+loader staged archive record `N + 1`, so the slot-to-frame mapping is ascending
+and one-to-one: record `1` is frame `0` through record `4` is frame `3`. The
+counter is **driver state, not screen state**. It starts at zero when the driver
+is loaded, is advanced by every tick from any caller, and is never reset by a
+start/menu redraw, a menu repaint, or a subflow return. A renderer must model it
+as one long-lived counter; in particular, on the animated start path the
+subtitle ignition entry below has already ticked it many times before the menu
+is first polled, so the menu does not begin at frame `0`.
+
+**The tick entry's second form.** The same entry has a second behaviour selected
+by its carry flag on entry. With carry set, and a loaded one-bit-per-pixel
+resource segment supplied, it is not a single frame advance at all: it saves the
+whole hidden surface aside, blanks it, and runs a two-pass masked pseudo-random
+reveal that restores the saved pixels into all four staged bands at once,
+publishing the current band and advancing the frame counter every 128 restored
+positions (256 below the calibration baseline), then restores the saved hidden
+surface and releases its scratch storage. The pass structure, the mask polarity,
+the speaker effect and the abort rule are specified in `intro.md` section 5
+under "Subtitle ignition". Only the carry-clear form is the public frame
+advance.
 
 The animation advances only when intro or cutscene code requests the title
 tick. It runs once after the start/menu screen is drawn, once for each no-key
@@ -374,6 +578,25 @@ value for the local cell effect, and the pixel-dissolve entry's single-cell
 sub-entry for the temporary actor draws. Both are specified in
 `display-driver-abi.md` sections 9.6 and 10.
 
+**Surface targeting of the filled-rectangle entry.** The driver's clipped
+filled-rectangle operation honours the screen descriptor's render-target
+selector and fills whichever surface that selector currently names. Any
+statement that it is visible-page-only is withdrawn. The intro depends on this:
+the text system's window-clear control is implemented as a filled rectangle, and
+the intro uses it against the hidden surface to blank the flourish stack before
+the ornament phase, to blank the hidden surface before the four subtitle bands
+are staged, and again to blank the menu window's interior. A renderer that makes
+the fill a no-op on the hidden surface cannot reach the documented frames.
+
+**Ink of the flourish, stated once.** The publisher-flourish playback entry
+(`display-driver-abi.md` section 10) is the only publisher in the whole intro
+that does not move all four colour planes. It holds a two-plane write mask for
+its entire run and copies a single plane of the composed image, which is why the
+publisher wordmark arrives on screen as palette index `9` while every other
+title phase — published by all-plane surface or rectangle copies — arrives as
+index `15`. That is the entry's own contract and is not restated here, so the
+two documents cannot drift.
+
 ### Per-driver title-band geometry
 
 The title/menu idle band is the one intro effect whose geometry differs between
@@ -449,12 +672,21 @@ own hidden surface.
   alternate-hardware and exact-raster parity item rather than under
   Return-to-View. The "short fixed wait" after the fixed wipe was a misreading
   of a speaker call and is withdrawn.
-- **Which entry paths repaint the game-screen frame.** The frame's content and
-  its independence from gameplay state are settled, and the intro's Journey
-  Onward path is a confirmed painter. Whether each mode-loop entry repaints it
-  on every transition, or whether it persists once painted, has not been traced
+- **Which entry paths repaint the game-screen frame.** The frame's geometry,
+  paint order, colours, and independence from gameplay state are now fully
+  specified in section 7, and the intro's Journey Onward path is a confirmed
+  painter. Whether each mode-loop entry repaints the frame itself on every
+  transition, or whether it persists once painted, has not been traced
   exhaustively. Because the paint is deterministic, repainting more often than
   the original is visually indistinguishable except for the cost of the redraw.
+  The labels that sit inside the frame's chrome gaps have their own, separately
+  specified cadences (`moons.md`, `weather.md`, `stats-panel.md`).
+
+- **Bracket end-cap art.** Closed. The caps are a two-pass composite of a font
+  glyph and two accent strokes, specified in section 7. Searching the shipped
+  fonts, the shared data overlay, or the driver binaries for either colour
+  component of the cap will not find it, because neither component is stored
+  art. No authored replacement sprite is required.
 
 - **Alternate hardware parity.** CGA, Hercules, and Tandy conversion details
   are outside the v1 baseline unless a later implementation targets those modes
@@ -468,12 +700,26 @@ addresses.
 
 - Driver selection and load sequence:
   `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
+- The title-tick entry's slot-to-frame mapping and free-running counter, its
+  carry-set two-pass masked band reveal, the filled-rectangle entry's honouring
+  of the descriptor render target, and the single-plane masked publish that
+  gives the publisher flourish its own ink:
+  `u5-decomp/notes/intro_title_sequence_2026-08-22.md` and
+  `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`.
 - Shared game-screen frame — zone layout, deterministic paint, absence of any
   gameplay-state dependency, and the correction that the frame is common to all
   gameplay modes rather than combat-specific:
   `u5-decomp/functions/ULTIMA_EXE/0x637E_combat_screen_layout.md` (the note file
   keeps its original filename; its contents were corrected on 2026-05-24) and
   `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+- Source provenance: the frame's three-phase paint order, the eight filled
+  rectangles, the three rounded-corner glyph cells, the four rule polylines, the
+  filled-versus-visible overpaint relationship, the two chrome pens and their
+  place in the user-interface colour table, the bracket end-cap composite, and
+  the four chrome-repaint regions are derived from private analysis note
+  `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked
+  against a fresh local re-read of the shipped executable and shared data
+  overlay.
 - EGA dispatch ABI, slot inventory, rectangle fill, packed-to-planar archive
   preparation, 16-by-16 tile blit, and 8-by-8 glyph blit:
   `u5-decomp/formats/ega-driver.md` and the `u5-decomp/functions/EGA_DRV/`
