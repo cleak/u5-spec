@@ -10,7 +10,7 @@ The four files partition by location class, mirroring the same partition used by
 
 Each NPC's record specifies three *waypoints* — three (X, Y, Z) positions on the location's map — plus four *time boundaries* that select which waypoint is active at any given hour, three behaviour-mode bytes (one per waypoint), a one-byte role tag, and a one-byte dialogue index that points into the matching `.TLK` file. The schedule processor consumes this record once per game turn, advancing each NPC toward its currently active waypoint.
 
-The four files are companions to each other: a live NPC is a row in a `.NPC` file's sub-map, possibly hosting a tile grid in the corresponding `.DAT` file's sub-map, possibly speaking lines from the corresponding `.TLK` file's NPC blob. The pairing is by file family (TOWNE/DWELLING/CASTLE/KEEP) and by sub-map index within that family.
+The four files are companions to each other: a live NPC is a row in a `.NPC` file's sub-map, possibly walking a tile grid held in the corresponding `.DAT` file, possibly speaking lines from the corresponding `.TLK` file's NPC blob. The `.NPC`-to-`.TLK` pairing is by file family (TOWNE/DWELLING/CASTLE/KEEP) and by sub-map index within that family. The `.DAT` pairing is by family only: which page of the class file a location occupies comes from the per-scene base-page table in `formats/location-dat.md` Section 4.1, not from the sub-map index.
 
 ## 2. The four files and the scene-byte partition
 

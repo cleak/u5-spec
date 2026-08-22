@@ -721,7 +721,9 @@ The behaviour described above was derived by reading the function and format not
   candidates beyond the threshold, the fixed near/far distance of the fog
   refinement and its twenty-one-cell core, the zero-extension that makes the
   negative-value branch unreachable, and the whole-binary census showing a
-  single lighting-value consumer — derived from private analysis note
+  single *distance-threshold* consumer of the lighting value, alongside the
+  night-time beacon's day/night read of the same byte — derived from private
+  analysis note
   `u5-decomp/notes/light_threshold_semantics_2026-08-22.md`. That note also
   withdraws the "light radius in tiles" and ray-walk descriptions carried by the
   older private lighting/visibility system trace.
