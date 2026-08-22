@@ -146,6 +146,19 @@ Every iteration walks the same sequence:
 
 7. **Loop.** Back to step 1 unless the exit flag is set.
 
+Ahead of the input block of step three, each iteration runs the shared
+party-capability check that all three exploration modes use, described in
+`systems/main-loop.md` Section 6: if nobody in the party can act but somebody is
+asleep, the loop prints the sleep line and passes the turn without reading a
+command; if nobody can act and nobody is asleep, it runs the total-party-defeat
+sequence of `systems/blackthorn.md` Section 7 instead of taking a turn. The
+overworld contributes no condition of its own to that check. It does add
+bookkeeping on the defeat path: when the party is on the Britannia surface
+rather than in the Underworld, the loop first asks the player to make the
+surface map file available and re-asks until it is, and it then runs a
+maintenance pass over the active-object table. Neither step is a precondition —
+the sequence runs either way, and the object pass runs on both surfaces.
+
 The "consumed a turn" gate means looking at the sky, opening the inventory, mistyping a command, talking-to-no-one cost zero time. Only a successful action advances the clock.
 
 The pre-loop underfoot latch is also passed into the outdoor movement
@@ -626,6 +639,11 @@ unresolved outdoor loop control flow.
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
+- The shared per-turn party-capability check that precedes the overworld input
+  block, its three-way result mapping, and the surface-only map-file prompt and
+  active-object maintenance pass that precede the total-party-defeat sequence.
+  Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
 - The pre-loop special-underfoot latch that forces zero light and gates outdoor
   movement commit — `u5-decomp/functions/MAINOUT_OVL/0x0A1A_mainout_pre_loop_water_check.md`.
 - Local MAINOUT outer-loop analysis -- one-shot pending vehicle-acquisition
@@ -654,7 +672,7 @@ The behaviour described above was derived by reading the function and format not
   filename; note content now corrected).
 - The location map setup that harvests up to two indoor light-source positions
   into the same beacon coordinate scratch — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
-- The combat loop exit reset of the moongate animation phase byte —
+- The combat loop exit reset of the light beacon's bearing byte —
   `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
 - The MAINOUT caller boundary for the live moongate-tile shimmer helper, as
   captured in `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.

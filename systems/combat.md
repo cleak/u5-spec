@@ -841,8 +841,20 @@ After this hook, the AI target picker and direction synthesis run as normal.
   for slots that reference a *non-zero* roster record, and roster record zero is
   the player's own character; further, record zero is the only record the player
   ever names - character creation and the Ultima IV import both write only that
-  record, and no path in the game writes the name field of any other roster
-  record, which arrive verbatim from the shipped seed roster or from the save.
+  record. Whole thirty-two-byte roster records do move between slots elsewhere
+  in the game: a companion joining or leaving the travelling party is inserted
+  or lifted out and the neighbouring records shift by one slot, the usurper's
+  capture scene removes a member the same way, and New Order exchanges two
+  records outright. None of those moves can carry the player's own record out
+  of record zero. A companion joins at the current party-size index, which is
+  never zero because the player's character always occupies record zero and is
+  always counted; the leave path refuses the leader's own slot with a refusal
+  message; the capture scene's selector passes over the leader and takes the
+  first eligible companion after it; and New Order rejects the leader's slot in
+  either prompt. None of these paths writes player-supplied text into a record
+  either - they only relocate records that already exist. Names in records one
+  through fifteen therefore always arrive verbatim from the shipped seed roster
+  or from the save.
   In the shipped roster exactly one record matches, and it is the traitor
   template. An implementation may key this rule directly to that roster record;
   it must not key it to any property that a player-entered name could satisfy.
@@ -1471,7 +1483,15 @@ The behaviour described here was derived from the private function and format no
   hostile roster template, the guard that keeps roster record zero out of the
   override, the census of shipped roster names confirming exactly one match, and
   the confirmation that character creation and the Ultima IV import name only
-  roster record zero. Cross-checked against
+  roster record zero. The roster-relocation paths that move whole records
+  between slots -- the companion join/leave paths, the usurper's capture scene,
+  and New Order -- were each checked to confirm that none of them can move the
+  player-named record out of record zero and that none writes player-supplied
+  text into another record; see
+  `u5-decomp/functions/SHOPPES3_OVL/0x02AE_leave_companion.md`,
+  `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md`,
+  `u5-decomp/functions/BLCKTHRN_OVL/0x03AE_jail_party_member.md` and
+  `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`. Cross-checked against
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - Note for save-tooling authors: a hand-edited save could in principle make one
   of the other roster records match the shipped traitor template's name shape

@@ -45,8 +45,8 @@ The engine should distinguish at least these classes:
 | Keep | Britannia | Town mode | `KEEP.DAT`, `KEEP.NPC`, `KEEP.TLK` |
 | Dungeon | Britannia or scripted underworld entry | Dungeon mode | `DUNGEON.DAT`, `DUNGEON.CBT` |
 | Shrine | Britannia | Shrine meditation handler | Resident shrine table and virtue/mantra data |
-| Moongate | Britannia | Saved-slot live-terrain refresh and live `0xDC` entry hook | Overworld moongate animation, Moonstone slot state, and entry contract |
-| Plane transition | Britannia or Underworld | Overworld plane swap | Confirmed overworld loop branches plus unresolved transition metadata |
+| Moongate | Britannia | Saved-slot live-terrain refresh and live `0xDC` entry hook | Overworld moongate placement and waning contract, Moonstone slot state, and entry contract |
+| Plane transition | Britannia or Underworld | Overworld plane swap | Overworld loop branches plus the closed transition inventory of Section 8.3 |
 | Minor landmark | Usually Britannia | Local prompt or effect handler | Tile class plus fixed runtime handler |
 
 Town, dwelling, castle, and keep are one runtime family. They all enter town
@@ -99,9 +99,11 @@ An engine should use the gazetteer in these places:
 1. **Overworld entry.** When the player enters on a fixed location coordinate,
    look up the matching gazetteer row, set the corresponding scene byte, clear
    or reseed active objects as required, and load the destination mode.
-2. **Interior exit.** When a town-mode boundary tile clears the scene byte,
-   resolve the active scene back to its overworld entry record and restore the
-   party to the matching surface location.
+2. **Interior exit.** When a town-mode grid-boundary step and its confirmed
+   leave prompt clear the scene byte, resolve the active scene back to its
+   overworld entry record and restore the party to the matching surface
+   location. The exit is triggered by stepping off the edge of the interior
+   grid, not by any exit tile.
 3. **Dungeon exit.** When dungeon mode exits from the top level or an
    exit-dungeon cell, resolve the active dungeon to its surface return record.
 4. **Shrine meditation.** Resolve the shrine by fixed overworld coordinate or

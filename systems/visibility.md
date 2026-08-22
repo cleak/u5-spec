@@ -77,7 +77,7 @@ The producer reads several pieces of resident state on every dirty-frame call.
 
 The lighting subsystem owns the rules that decide what value goes into this byte; from the producer's point of view, the byte is read once per frame and passed down to the visibility carve helper.
 
-**Visibility-dirty flag.** A single byte that other systems set when the visibility state must be recomputed: the player moved, the lighting changed, a live moongate animation frame was stamped, or a new scene was entered. The redraw orchestrator reads this byte to choose between the expensive path (run the producer) and the cheap path (lazy refill of consumed cells). The producer's caller clears the flag immediately after the producer returns.
+**Visibility-dirty flag.** A single byte that other systems set when the visibility state must be recomputed: the player moved, the lighting changed, the night-time beacon lit or cleared a local-light cell, or a new scene was entered. The redraw orchestrator reads this byte to choose between the expensive path (run the producer) and the cheap path (lazy refill of consumed cells). The producer's caller clears the flag immediately after the producer returns.
 
 **Active map buffer.** The world tiles that the visibility carve reads come from one of three buffers, selected by scene:
 

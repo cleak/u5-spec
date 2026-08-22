@@ -122,17 +122,24 @@ Earlier wording here named that default as "column fifteen, a per-scene row from
 
 The marker is harvested into runtime spawn coordinates. Any visual replacement is handled by the broader town load pipeline, not by the spawn-coordinate harvest itself.
 
-### Farmland and orchard harvest scatter
+### Farmland and orchard blight in a Shadowlord hideout
 
-Four adjacent tile values form two authored/harvested pairs of ordinary
+Four adjacent tile values form two authored/spoiled pairs of ordinary
 terrain: standing crops (`0x2D`) and its plowed-patch counterpart (`0x2C`),
 and a fruit tree (`0x2E`) and its hollow-stump counterpart (`0x2B`). The
 in-game look-at description table names all four, so they are visible terrain,
 not markers and not route hints.
 
-Location files store only the *full* member of each pair. A second-tier pass,
-gated on the player's actor slot already being assigned, scans the 32-by-32
-runtime tile buffer after load-time marker harvest and thins them:
+Location files store only the *full* member of each pair. A second-tier pass
+scans the 32-by-32 runtime tile buffer after the load-time marker harvest and
+thins them — but only in the one settlement that is currently hiding a living
+Shadowlord. The pass reads the runtime record of which Shadowlord is resident
+in the location being entered and returns immediately when that record says
+"none", which is the ordinary case for every location in the game. A decoder or
+an editor therefore never needs to model it, and an engine must not apply it as
+a general harvest.
+
+Where it does run:
 
 - Standing crops (`0x2D`) rewrite to a plowed patch (`0x2C`) on a nonzero roll
   from `0..7`, i.e. seven times out of eight.
@@ -145,10 +152,13 @@ always sees the full-terrain form.
 
 The pass is bracketed by two generator seeds, not by a save and restore. Before
 the scan the gameplay PRNG is seeded from the calendar day of the month, so the
-scatter is identical for every entry to every location on the same in-game day
-and re-rolls when the date advances; after the scan the generator is re-seeded
+result is a pure function of the day byte and the loaded floor content and is
+therefore identical for every load of that floor on the same in-game day,
+re-rolling when the date advances; after the scan the generator is re-seeded
 from the host clock, so the previous stream position is discarded rather than
-recovered. See `systems/prng.md` section 3 and `systems/town-mode.md` section 3.
+recovered. `systems/town-mode.md` section 3 owns the gate, the two call sites,
+and the double application that follows an in-town floor reload;
+`systems/prng.md` section 3 owns the seeding contract.
 
 ### NPC floor-link markers
 
@@ -478,12 +488,14 @@ The format described above was derived from the analysis notes listed below. Non
 - The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
-- Source provenance: derived from private analysis note
-  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
-  farmland/orchard harvest scatter, the direction of both substitutions, the
-  seven-in-eight rate, the day-of-month seed, and the clock re-seed that
-  follows the pass. That note's earlier "grass/path texturing", "six-in-seven"
-  and "save/restore the PRNG" readings are superseded.
+- Source provenance: derived from private analysis notes
+  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` and
+  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
+  farmland/orchard blight, its resident-Shadowlord gate, the direction of both
+  substitutions, the seven-in-eight rate, the day-of-month seed, and the clock
+  re-seed that follows the pass. That note's earlier "grass/path texturing",
+  "six-in-seven", "save/restore the PRNG" and "gated on the player's actor slot
+  already being assigned" readings are all superseded.
 - The town-mode entry orchestrator that calls the loader once per location entry and re-entry — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
 - The world-mutation primitive that links logical NPC state to active-object slots, consuming the harvested NPC start positions — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
 - The facing-sensitive town stair family and floor-change reload path -

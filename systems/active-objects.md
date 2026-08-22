@@ -105,9 +105,9 @@ eligible for the off-screen phases. The omitted ranges `0x12..0x1F` and
 priority phases. The last-resort phase can still take any byte except `0xB5`,
 so `0xB5` is the only universally protected byte-0 value in this allocator.
 The decoded NPC roster uses `0xB5` as a monster-variant actor class, including
-the Grendel row; it is not the natural-moongate renderer. Natural moongate
-frames are drawn through the separate scratch-buffer animator described in
-`systems/overworld.md`.
+the Grendel row; it is not a moongate renderer. There is no moongate renderer:
+natural gates are live terrain written and removed by the once-per-turn refresh
+in `systems/overworld.md` Section 9, with no frame plate and no animator.
 
 Slot allocation is centralised in a single resident helper. When a system needs
 a new active-object slot -- an NPC arriving on the player's floor, a monster

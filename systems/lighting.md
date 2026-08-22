@@ -7,7 +7,7 @@ Ultima V has one shared lighting model with two layers:
 - **Ambient daylight**, derived from the world clock and from where the party is.
 - **Personal light**, supplied by a torch or by a light spell.
 
-The same state is read by surface visibility, dungeon rendering, dungeon Look, moongates, and the stats panel. The important distinction is that daylight is environmental and recalculated from time and scene, while torches and light spells are finite counters that decay as turns pass.
+The same state is read by surface visibility, dungeon rendering, dungeon Look, the night-time light beacon, and the stats panel. The important distinction is that daylight is environmental and recalculated from time and scene, while torches and light spells are finite counters that decay as turns pass.
 
 Lighting is not a separate weather system. Wind does not brighten or darken the
 world, and weather does not extinguish light sources in the currently mapped
@@ -63,7 +63,15 @@ ambient light is recomputed from the clock and scene without spending time.
 
 The cleanup routine marks visibility dirty when the recomputed ambient value changes. Rendering then rebuilds the visible grid instead of reusing the previous one.
 
-Ambient daylight also gates moongate presentation: moongates only animate when the ambient level is high enough for the daytime condition. That gate is a consumer of lighting, not a lighting rule in its own right.
+Ambient daylight also gates the night-time rotating light beacon
+(`systems/visibility.md` Section 12.6): the beacon runs only while the ambient
+level is *below* the dark threshold, and in daylight it draws nothing and its
+bearing resets. That gate is a consumer of lighting, not a lighting rule in its
+own right. It has nothing to do with moongates: earlier wording here said
+ambient daylight gates "moongate presentation" and that moongates "only animate"
+above a daylight threshold. Both halves are withdrawn - gates are ordinary live
+terrain placed by the clock hour alone (`systems/overworld.md` Section 9), and
+the light gate's sense is the opposite of what that wording implied.
 
 ## 4. Personal Light
 
@@ -107,12 +115,20 @@ Decay is saturating subtraction: if the remaining counter is greater than the sp
 
 Mode-zero lighting refreshes do not spend counter duration. They recompute ambient lighting only.
 
-Dungeon mode also runs a dungeon-local torch/light upkeep hook before drawing the first-person view. The observable contract is still turn-based: active light sources burn down as the party takes dungeon turns, and no-light dungeon rendering blacks out.
+Dungeon mode consults the two counters before drawing the first-person view,
+but it does not maintain them: the decay happens in the shared per-turn cleanup
+the dungeon loop calls at the end of each turn, exactly as in town and
+overworld mode. Underground the counters are read as a plain lit/unlit gate.
+The observable contract is still turn-based: active light sources burn down as
+the party takes dungeon turns, and no-light dungeon rendering blacks out.
 
 The mapped dungeon and weather paths do not extinguish a torch through a
-wind/breeze contact tile. Torch state changes through Ignite, spellbook light
-bumps, and ordinary counter decay/upkeep; light-spell state changes through the
-light-spell writers and the same decay cadence.
+wind/breeze contact tile. Torch state changes through Ignite, through the
+G-Get "borrow a lit fixture" branch, through the Blackthorn clear, and through
+ordinary counter decay/upkeep; light-spell state changes through the three
+light-spell writers listed in section 8, the same Blackthorn clear, and the same
+decay cadence. Nothing else writes either counter — in particular no spellbook
+item, shrine, or decorative light tile bumps them during per-turn cleanup.
 
 ## 6. Dungeon Blackout
 
@@ -131,7 +147,7 @@ The surface renderer does not have the dungeon's all-or-nothing first-person bla
 The local-light mask is not part of this system: it is owned by
 `systems/visibility.md` section 12, which specifies the source tile set, the
 per-source carve, the squared-distance threshold of ten (a Euclidean disc of
-radius about 3.16, not a Chebyshev box and not the dungeon torch radius), and
+radius about 3.16, not a Chebyshev box and not the dungeon light gate), and
 the three points at which the mask is rebuilt. In particular the local-light
 source radius is unrelated to the ambient/torch/spell radii tabulated in this
 document; do not reuse a value from here for it.
@@ -195,7 +211,14 @@ The behavior described here was derived from cleanroom reading of the following 
   `u5-decomp/functions/CAST2_OVL/0x08EA_set_torch_radius.md`. This supersedes
   the counter labelling in the private DS/BSS map notes, in which the two
   counter names were swapped and both were misdescribed as radii.
-- Dungeon first-person blackout when both light counters are zero, plus dungeon-local light upkeep - `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- Dungeon first-person blackout when both light counters are zero, and the
+  finding that the dungeon overlay only reads the two counters as a gate while
+  the shared per-turn cleanup does all the decay - a whole-binary scan for
+  readers and writers of both counters, recorded in
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`, together
+  with `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`. An
+  earlier reading here described a dungeon-local light upkeep hook; that is
+  withdrawn.
 - Shared resident data model and relevant string/table regions - `u5-decomp/formats/data-ovl.md`.
 - Existing cleanroom descriptions of time, dungeon lighting consumers, magic
   spell categories, overworld visibility integration, and the surface

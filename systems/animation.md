@@ -7,8 +7,8 @@ Ultima V has two animation layers that run during normal play:
 - **Active-object animation**, which advances the per-slot phase for visible
   actors, vehicles, monsters, and other slot-backed dynamic entities.
 - **Global tile animation**, which advances shared frame selectors for terrain
-  and effect tiles such as water, lava, torches, moongates, and other repeating
-  map artwork.
+  and effect tiles such as water, lava, torches, and other repeating map
+  artwork. Natural moongates are **not** one of these families; see Section 8.
 
 Both layers are visual and turn-paced. They are not independent real-time
 threads, and they are not driven directly by the in-world clock. They advance
@@ -223,7 +223,7 @@ global tile-animation layer exactly as they do outdoors.
 
 Dungeon mode has less confirmed use of the active-object table outside combat,
 but dungeon rendering still consumes animated tile families where applicable.
-Dungeon dark-out, torch radius, and light spells are lighting concerns, not
+Dungeon dark-out, the torch counter, and light spells are lighting concerns, not
 animation concerns, even though torch artwork may animate at the same time.
 
 ### Combat

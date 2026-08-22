@@ -7,7 +7,7 @@ Ultima V's *encounter system* is the layer that decides **when combat starts**, 
 There are three arena-encounter trigger families in the running game:
 
 - **Random overworld encounters.** On eligible overworld epilogue turns, a chance-roll decides whether a hostile monster spawns near the party. The roll is keyed off terrain, Z plane, and hour; surface roads and similar safe bands suppress daytime encounters but still receive the night-time boost.
-- **Scripted encounters.** A small, hand-authored set of locations and events force a specific encounter when reached: ambush tiles in story-driven keeps, the duel with Lord Blackthorn, a few unique boss meetings. Blackthorn's follow-on capture and rescue scenes are specified in `systems/blackthorn.md`.
+- **Scripted encounters.** A small, hand-authored set of locations and events force a specific encounter when reached: ambush tiles in story-driven keeps, the duel with Lord Blackthorn, a few unique boss meetings. Neither the duel nor any other encounter leads to the Blackthorn audience/capture cinematic: that scene is entered only from the town-mode arrest path (`systems/blackthorn.md` Section 2). A total-party wipe in any fight reaches the rescue/refuge cinematic (`systems/blackthorn.md` Section 7) indirectly, through the exploration loop's next party-capability check, not through the encounter system.
 - **Dungeon room encounters.** Stepping onto certain dungeon-room cells loads a fixed dungeon arena from a separate on-disk bank.
 
 Once any arena trigger fires, the same combat-enter framing function runs - combat is a function call from the world or dungeon mode loop perspective (see `combat.md`). The encounter system's job ends when that call begins; everything after the framer's save phase belongs to combat. This spec covers the trigger-side mechanics, the arena-selection logic, the class-row spawn-count and companion-class pipeline, and the small set of side mechanics - sleep ambushes and the early-game encounter-size damper - that change encounter pacing.
@@ -141,8 +141,8 @@ Monster selection is terrain-bucketed before the active-object write:
 | Surface tile 1 after the low-tile allowance gate | One-in-seven chance of a special animated active-object class whose outdoor engagement is the whirlpool/forced-underworld branch; otherwise use the surface default/aquatic bucket. |
 | Terrain tile 7 | One-in-three chance of the outdoor sea-serpent adjacency class; a failed special roll rejects the candidate. |
 | Terrain tile 4 on the full underworld plane marker | Directly selects the Rot Worm sprite run. Other tile-4 cases continue to the land bucket selected by plane. |
-| Surface town-outline tiles `0x0C` and `0x0D` | Reject. |
-| Low tiles below 4, shore/harbor `0x60..0x6F`, roads `0xD4..0xD7`, and bridge/passable `0xE4..0xE7` | Run an extra one-in-four allowance die before any bucket selection; a failed die rejects. Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
+| Surface mountain tiles `0x0C` (mountains) and `0x0D` (high peaks) | Reject. |
+| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the animated-water family `0xE4..0xE7` | Run an extra one-in-four allowance die before any bucket selection; a failed die rejects. Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
 | Tile ids below `0x10` after the special and hard-reject cases, plus tile ids `0x30..0x33` | Use the land bucket selected by plane: surface land on the surface, underworld land below. |
 | Other tile ids at or above `0x10` | Reject. |
 

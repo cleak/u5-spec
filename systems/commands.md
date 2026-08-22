@@ -134,7 +134,7 @@ handoffs.
 | `N` | New order. | Routes to the party-order swap handler described in Section 6. |
 | `O` | Open. | Routes to the Open handler for doors, chests, and dungeon underfoot cases. |
 | `P` | Push. | Refuses in dungeons; otherwise routes to the push/movable-tile handler described in Section 8. |
-| `Q` | Save game. | Routes to the save-game handler, which prompts whether to save. On `N`, it returns without writing. On `Y`, it writes the save files, acknowledges completion, and returns to the caller. This letter is not the DOS-terminate path by itself. |
+| `Q` | Save game. | Routes to the save-game handler, which prompts whether to save. On `N`, it returns without writing. On `Y`, it writes the save files, acknowledges completion, and returns to the caller. This letter is not the DOS-terminate path by itself. Combat `Q` is refused outright by the combat parser: it neither saves nor ends the fight, as specified in `combat.md`. |
 | `R` | Ready. | Routes to the equipment-ready handler in the status/equipment overlay. The picker, slot mapping, stock-counter mutations, and hand-occupancy gates are specified in `inventory.md`. |
 | `S` | Search. | Routes to the Search handler, including secret-door and searchable-object paths. |
 | `T` | Talk. | Town-family scenes route to the conversation engine. Overworld and dungeon scenes refuse; the overworld path may still prompt for a direction before printing its refusal. |
@@ -289,7 +289,7 @@ trap resolver when a caller selects one.
 
 Dungeon Search does not use the surface object-table scan. It routes to the
 dungeon inner handler, which first enforces the dungeon light gate: with no
-torch light and no light-spell radius, Search reports that it is too dark and
+torch light and no light-spell duration remaining, Search reports that it is too dark and
 does not inspect the cell. In light, it reads the packed dungeon cell ahead of
 the party and classifies by high nibble. Ordinary ladders, doors, walls, pits,
 fountains, open chests, fields, and flavour objects print feature-specific
@@ -416,8 +416,11 @@ None of the four consumes a turn in any mode. Beyond them the tables agree on
 the four cardinal direction codes, which route to that mode's movement handler,
 and differ only in the surrounding detail: which unrecognised codes are silent
 and which print the stock refusal, and what extra pre-dispatch stages the loop
-runs first — the overworld's water, party-capability and moongate probes and its
-under-sail cadence, town's drunkenness scrambler, dungeon's inlined poll.
+runs first — the overworld's water and moongate probes and its under-sail
+cadence, town's drunkenness scrambler, dungeon's inlined render-and-poll. The
+party-capability check is not one of those differences: all three exploration
+loops run it identically ahead of the input block, as `systems/main-loop.md`
+Section 6 specifies.
 Dungeon mode also accepts Enter and the period key as movement, and treats
 digits as a solo-member select that always reports "no action". Combat replaces
 the scheme entirely with its own parser, which adds Escape, Space, the

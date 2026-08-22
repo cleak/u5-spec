@@ -62,7 +62,7 @@ Underworld coordinates are byte-sized world coordinates and wrap modulo 256 on b
 - Chunk coordinates wrap modulo 16 after world coordinates wrap.
 - A viewport centered near a world edge can draw from chunks on both sides of the logical grid.
 
-Movement legality remains separate from coordinate sampling. Tile class, vehicle state, active objects, chasms, ascents, and scripted handlers decide whether the party can move or transition after a wrapped coordinate has been resolved.
+Movement legality remains separate from coordinate sampling. Tile class, vehicle state, active objects, chasms, dungeon entrances, and scripted handlers decide whether the party can move or transition after a wrapped coordinate has been resolved.
 
 ## 5. Tile Encoding
 
@@ -75,7 +75,7 @@ The file stores tile identity only. It does not encode:
 - light level or visited state;
 - random-encounter probabilities;
 - active monsters, vehicles, objects, or the party;
-- ascent coordinates or scripted transition targets.
+- plane-transition or scripted transition targets.
 
 Preserve unknown or uninterpreted tile values as raw tile indices. Gameplay semantics belong to the tile catalogue and consuming systems.
 
@@ -90,18 +90,18 @@ Preserve unknown or uninterpreted tile values as raw tile indices. Gameplay sema
 | Chunk lookup | Requires chunk-index table | Direct logical chunk order |
 | Default omitted terrain | Deep water synthesized by loader | No omitted terrain |
 | Ambient light | Day-night surface model | Forced dark underworld model |
-| Fixed features | Towns, keeps, castles, shrines, moongates, dungeon entrances, falls | Cavern terrain, dungeon/ascend features, underworld-specific transitions |
+| Fixed features | Towns, keeps, castles, shrines, moongates, dungeon entrances, falls | Cavern terrain, dungeon entrances, the single underworld-only keep (Ararat), and underworld-specific transitions - but no ascent terrain |
 | Object seed | Surface object layer | Underworld object layer |
 
 The differences after loading are mostly system behavior, not file structure. The same renderer and visibility producer can consume both planes once the proper chunks are in the live buffer.
 
 ## 7. Relationship To Location Entry And Plane Transitions
 
-The party's current plane selects whether the overworld loader samples `BRIT.DAT` or `UNDER.DAT`. Britannia uses the surface plane value; the Underworld uses the underworld plane value. Traced plane transitions such as the surface falls path, whirlpool forced-underworld path, and interior exits change that plane state and reinitialize the active-object layer for the destination plane. Ordinary natural-moongate placement and any general natural-gate destination handler remain owned by `systems/overworld.md` until traced.
+The party's current plane selects whether the overworld loader samples `BRIT.DAT` or `UNDER.DAT`. Britannia uses the surface plane value; the Underworld uses the underworld plane value. The set of plane transitions is closed and is published in `systems/overworld.md` Section 2 and `catalogs/gazetteer.md` Section 8.3: the surface falls path, the whirlpool forced-underworld path, town-family interior exits, dungeon exits, and the saved Moonstone-slot warp shared by natural moongates and Gate Travel. Each of them writes the plane state, and arriving on the overworld of the destination plane reseeds the chunk window and the active-object layer for that plane. A save-state restore also sets the plane, but it replays a previously recorded position rather than performing a transition. What remains owned by `systems/overworld.md` is the moongate *placement* state - which gates are currently live and where a buried moonstone has moved one - not the destination handler, which simply copies the recorded plane and coordinates of the selected Moonstone slot.
 
-`UNDER.DAT` itself does not name transition coordinates, destination points, or scene identities. It stores only the terrain bytes at those cells. The overworld system and resident coordinate tables decide which underworld cells lift the party back to the surface, which cells lead to dungeon or special scenes, and how the active-object table is reseeded.
+`UNDER.DAT` itself does not name transition coordinates, destination points, or scene identities. It stores only the terrain bytes at those cells. The overworld system and resident coordinate tables decide which underworld cells lead to dungeon or special scenes and how the active-object table is reseeded. No underworld cell returns the party to the surface by itself: the plane-writer census is closed and contains no outdoor ascent, so a decoder must not reserve an "ascent cell" meaning for any underworld terrain byte.
 
-Unlike the surface, the Underworld does not dispatch into the town, dwelling, castle, or keep location files. When it does leave the 256-by-256 map, the destination is a plane transition, dungeon-mode scene, combat or scripted scene, not a `TOWNE.DAT`-style interior chosen from a named surface settlement.
+The Underworld dispatches into the location files far more sparsely than the surface does, but it is not excluded from them: one keep, Ararat, stands on the underworld map and enters its interior from the keep class file like any surface keep, and its exit returns the party underground. Apart from that single settlement, leaving the 256-by-256 map means a plane transition, a dungeon-mode scene, combat, or a scripted scene rather than an interior chosen from a named surface settlement. `catalogs/gazetteer.md` Section 8.3 carries the full destination inventory.
 
 ## 8. Relationship To Visibility And Rendering
 

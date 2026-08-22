@@ -347,7 +347,11 @@ two-way, or pit cell; when both are available the handler prompts for a
 direction. Up decrements the level Z, down increments it, and X and Y on the new
 level are the same as on the old. Exact pit byte `0x60` is the special
 non-ladder K path: it bypasses the ladder apply helper and invokes the dungeon
-surface-reset helper. Other cells return without a level change.
+surface-reset helper. Other cells return without a level change, and they
+consume no turn: the two "nothing to klimb here" refusals - one for a
+climbable-with-equipment cell the party lacks the gear for, one for a cell with
+no climbable feature - both report "no action" to the dungeon loop, while every
+applied climb, pit fall, or cancel at the direction prompt counts as an action.
 
 Two corrections to earlier revisions of this paragraph. First, a **climb never
 tests the cell it lands on** - the ladder or pit under the party is treated as
@@ -423,11 +427,22 @@ The scene byte ties everything together. The value zero is the overworld; values
 The transitions across the major boundaries are:
 
 - **Overworld → town / dungeon.** Enter on a fixed location coordinate sets the scene byte to the location's index and triggers entry. Town scenes seed the ground floor through their entry table; dungeon scenes load the selected dungeon record and seed the level/X/Y/facing entry state: surface entries use `(0, 1, 1)` facing east, underworld non-Doom entries use `(7, 7, 7)` facing west, and Doom uses the surface entry seed.
-- **Town / dungeon to overworld.** The traced town-family exit threshold is
-  tile id `0x59`; accepting its prompt clears the scene byte. A dungeon
+- **Town / dungeon to overworld.** The town-family exit is a map-boundary
+  event and not a tile effect: a step that would carry the party off the
+  thirty-two-by-thirty-two interior grid raises a leave prompt instead of
+  committing, and accepting that prompt clears the scene byte. (The former
+  claim that the trigger is "tile id `0x59`" is withdrawn; that id is the
+  telescope Look trigger catalogued in `catalogs/tile-catalog.md`, which occurs
+  in three interior cells and never on a boundary.) The ordinary passability
+  and occupancy tests run before the prompt, so a blocked boundary step reports
+  blocked rather than offering the exit. A dungeon
   surface-reset helper, pit-chain off-bottom path, or total-party-wipe path can
-  also clear the scene byte. The mode loop's only contract is "if the scene byte
-  is no longer in my range, exit". Town-family exits also write the destination
+  also clear the scene byte. The mode loop's general contract is "if the scene
+  byte is no longer in my range, exit"; the one exit not signalled that way is
+  the total-party wipe, where the exploration loop's party-capability check ends
+  the loop from inside and the rescue/refuge sequence rewrites the scene byte
+  afterwards (`systems/dungeon-mode.md` § 13.4, `systems/blackthorn.md`
+  Section 7). Town-family exits also write the destination
   plane: ordinary exits select Britannia, while scene byte `0x19` - Ararat, the
   one location that exists only underground - selects the Underworld. The
   dungeon surface-reset helper restores the exterior coordinate and writes the
@@ -480,7 +495,7 @@ The transitions across the major boundaries are:
   trap-effect resolver documented in `traps.md`. This document owns the door
   and container routes that may precede that resolver; `traps.md` owns the
   common party HP/status effects once selected.
-- **Time.** Door open / close, vehicle dismount, and Klimb each consume one turn at the current mode's rate (two minutes outdoor, one minute indoor / dungeon). Jimmy attempts that reach a door, restraint, or container outcome also consume a turn, including failed attempts.
+- **Time.** Door open / close, vehicle dismount, and an *applied* Klimb each consume one turn at the current mode's rate (two minutes outdoor, one minute indoor / dungeon). Jimmy attempts that reach a door, restraint, or container outcome also consume a turn, including failed attempts. A refused Klimb is the exception, and only in two of the three modes: the town handler's non-ladder refusal and both of the dungeon handler's "nothing to klimb here" refusals report "no action" and cost nothing (Section 9), whereas the overworld handler's value is not forwarded at all, so its gear and on-foot refusals still report "acted" and still cost the outdoor turn (`systems/commands.md` Section 3).
 
 ## 14. Transition Boundaries
 
@@ -574,15 +589,16 @@ The behaviour described here was derived from the private function notes listed 
   spells' route to the same exit, and the closed plane-writer census are derived
   from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
-- The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with boundary refusals separated from surface-reset and pit-chain off-bottom exits — derived from `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
+- The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with boundary refusals separated from surface-reset and pit-chain off-bottom exits, together with that handler's turn cost - applied climbs, pit falls, and a cancelled prompt count as an action while both "nothing to klimb here" refusals do not, and the two refusals are distinct (`systems/dungeon-mode.md` Section 13.1) — derived from `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
 - The shared resident trap-effect resolver used after a chest trap has been
   selected, including the fact that the caller passes no trap flavour -- derived
   from `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md` and sibling
   resident party-damage and status helper notes.
 - The town-mode floor-pair encoding and the per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
-- The town-family tile-`0x59` exit threshold, prompt, scene clear, exterior
-  coordinate lookup, and scene-`0x19` underworld-plane selection -- derived
-  from `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
+- The town-family grid-boundary exit prompt (and the withdrawal of the earlier
+  "exit threshold tile" reading of it), its scene clear, exterior coordinate
+  lookup, and scene-`0x19` underworld-plane selection -- derived from
+  `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
 - The facing-sensitive town stair family and floor-change reload path --
   derived from `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`,
   cross-checked against `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.

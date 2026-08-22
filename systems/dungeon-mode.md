@@ -90,14 +90,14 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 
 **Inner loop.**
 1. **Pendulum tick.** In Q-quest mode the loop alternates between running and skipping the time-advance call so quest scenes pass time at half rate. Normal play keeps the pendulum disabled.
-2. **Render and poll.** Paint the sparse first-person view (§ 6) and wait for a keystroke. If input idled long enough that the player slept through one tick, the primitive returns a special "idle slept" sentinel.
+2. **Render and poll.** Paint the sparse first-person view (§ 6) and wait for a keystroke. The primitive blocks until an accepted key arrives; if it returns a negative sentinel rather than a dispatchable key, the loop skips step 3 for that iteration. The sleep line is not produced here — it belongs to the party-capability check of step 7.
 3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes the four cardinal direction codes — and Enter and the period key, which mean "advance" here — to the dungeon movement dispatcher; digits to the solo-member selector, always reporting "no action" afterwards; the four shared Control bindings (exit-to-DOS prompt, moral-standing readout, sound toggle, version banner) to their own arms; and everything else, letters included, to the resident command dispatcher (§ 10). The handler's own default is "acted", so an unrecognised byte forwarded to the dispatcher reports whatever the dispatcher decides.
 4. **Scene-byte exit check.** If the scene byte has dropped to thirty-two or below, the player has climbed out (§ 13) and the loop breaks.
 5. **Refresh tile cache.** Re-read the underfoot tile and update the cached high nibble.
 6. **Post-action hook.** If the dispatch did anything, call a post-action helper for end-of-turn cleanup.
-7. **Idle slot.** If the dispatch did nothing (unrecognised key), enter a short polling step that prints "Zzzzzz..." at the appropriate cadence and re-polls input.
+7. **Party-capability check.** The iteration then ends by running the shared party-capability check specified in `systems/main-loop.md` Section 6 — the same check town and overworld mode run, with the same three-way result mapping — before the loop reads another command. The check also runs once on entry, ahead of the first command read, and it runs on every iteration regardless of what the dispatch reported, so a command that took no turn (a refused Klimb, say) skips the post-action helper of step 6 but still passes through the check. If at least one member can act, the loop proceeds to the next iteration. If nobody can act but at least one member is asleep, the loop pauses briefly, prints the sleep line ("Zzzzzz..."), and re-runs the check without reading a command, repeating for as long as that result holds; the dungeon takes this pass without running the post-action helper. If nobody can act and nobody is asleep, the inner loop stops and the epilogue runs the total-party-defeat sequence (§ 13.4). Dungeon mode contributes no condition of its own to the check.
 
-**Epilogue.** Toggle the appropriate visibility flag bit so the next render runs a full repaint, call the per-turn redraw primitive, and call the world-clock advance routine — the same routine town and combat call — with a one-minute increment. Time in dungeons advances at the indoor rate. If the input poll reported end-of-stream / quit, run the dungeon-exit teardown.
+**Epilogue.** Toggle the appropriate visibility flag bit so the next render runs a full repaint, call the per-turn redraw primitive, and call the world-clock advance routine — the same routine town and combat call — with a one-minute increment. Time in dungeons advances at the indoor rate. If the party-capability check of step 7 reported that nobody can act and nobody is asleep, the epilogue's last act is to run the total-party-defeat sequence of `systems/blackthorn.md` Section 7; the per-turn redraw/view-helper pass named above runs immediately before it, as bookkeeping rather than as a condition on it. An earlier revision described this tail call as a dungeon-exit teardown fired by an end-of-stream / quit poll result; that reading is withdrawn.
 
 The loop then iterates, checking the scene byte; if it is still in the dungeon range, the next turn begins.
 
@@ -216,7 +216,7 @@ wall geometry.
 
 **Far-wall extras.** After painting the near-to-far primary walls, the renderer walks back outward, painting the symmetric far-wall counterparts and the ceiling and floor outline corners that connect them. The result is a complete sparse outline of the corridor or chamber the player is looking down.
 
-**Light gate.** Before any of the above runs, the renderer checks the torch radius and the light-spell radius. If both are zero, the renderer paints nothing — the side panel goes black, and the player sees only the status row and message panel. This "pitch dark" state is the gating reason torches and light-spells are gameplay-critical underground. The renderer is otherwise purely a function of the eight-by-eight floor data, the party's position and facing, and the lighting state.
+**Light gate.** Before any of the above runs, the renderer checks the torch counter and the light-spell counter — two remaining-duration counters, neither of which is a radius. If both are zero, the renderer paints nothing — the side panel goes black, and the player sees only the status row and message panel. This "pitch dark" state is the gating reason torches and light-spells are gameplay-critical underground. The renderer is otherwise purely a function of the eight-by-eight floor data, the party's position and facing, and the lighting state.
 
 Dungeon visibility is binary at the first-person renderer boundary: with no
 torch and no light spell, the viewport is black; with either counter nonzero,
@@ -328,12 +328,37 @@ row. This is a repaint helper, not a game-state transition.
 
 Two state bytes track the player's light:
 
-- **Torch radius.** A counter that decrements once per dungeon turn while a torch is lit. When it reaches zero, the torch goes out. The I-Ignite command consumes one torch; in dungeon scenes it adds 112..127 turns to the current torch counter, capped at 255.
-- **Light-spell radius.** A separate counter tracking the duration of the light spells. *In Lor* sets it to 100 turns; *Vas Lor* sets it to 255 turns. It ticks down per turn alongside the torch counter.
+- **Torch counter.** A remaining-duration counter for a burning torch. It is
+  spent as the party takes dungeon turns, and when it reaches zero the torch
+  goes out. The I-Ignite command consumes one torch from inventory and refuses
+  when none are carried; in dungeon scenes it adds a random 112..127 counter
+  units to the current torch counter, capped at 255.
+- **Light-spell counter.** A separate remaining-duration counter for magic
+  light. *In Lor* sets it to 100 counter units, *Vas Lor* sets it to 255, and
+  the Light scroll sets it to 240. It drains on the same cadence as the torch
+  counter.
+
+Neither byte is a radius. Both are durations; the lighting system recomputes an
+ambient value every turn and merely raises it to a floor while either counter
+is burning, and inside the dungeon renderer the two counters are consulted only
+as a binary lit/unlit gate. A dungeon turn spends one counter unit; the exact
+decay cadence, the counter unit, and the ambient floors are specified in
+`systems/lighting.md` sections 4 and 5.
 
 Either counter being non-zero "lights" the dungeon — the renderer paints, L-Look describes the selected focus cell, and movement proceeds normally. Both counters being zero darkens the dungeon: the renderer paints nothing, L-Look returns "darkness" regardless of what is actually in front of you, and the player must light a torch (or cast the light spell) to see again.
 
-Other observed sources: **spellbook lighting** items can bump the torch counter at every per-turn cleanup; **shrines** in some levels emit light; certain decorative tiles (the "gargoyle eyes" of one or two dungeons) are visual flavour only. The analyzed dungeon contact paths do not include a wind/breeze tile that extinguishes only the torch counter. The decay of the two counters is part of the world-clock advance call, not the dungeon mode loop's own logic; the time system shares a saturating-byte helper that the dungeon and overworld both use.
+No dungeon feature writes either counter. Shrine glow strips, Codex glow, and
+decorative tiles such as the "gargoyle eyes" of one or two dungeons are
+presentation only: they brighten what is drawn without touching the light
+state, so they never make an unlit dungeon visible. An earlier draft of this
+section claimed that spellbook lighting items bump the torch counter at every
+per-turn cleanup; that claim is withdrawn. The torch counter is written only by
+I-Ignite, by the G-Get "borrow a lit fixture" branch (100 counter units, see
+`systems/containers.md`), and by the Blackthorn restoration, which zeroes both
+counters; the light-spell counter is written only by *In Lor*, *Vas Lor*, the
+Light scroll, and that same Blackthorn clear. The analyzed dungeon contact
+paths do not include a wind/breeze tile that extinguishes only the torch
+counter. The decay of the two counters is part of the world-clock advance call, not the dungeon mode loop's own logic; the time system shares a saturating-byte helper that the dungeon and overworld both use.
 
 ## 8. Special cells in detail
 
@@ -727,6 +752,18 @@ cannot be blocked by what is on the level above or below. An earlier revision of
 this section said the destination cell is tested for passability before the
 level index is written; that is withdrawn - it belongs to the spell route below.
 
+**What a K costs.** A K that applies something - a climb up, a climb down, a pit
+fall, or a cancel at the up-or-down prompt - reports "acted" to the dungeon
+loop, so the turn's post-action pass runs. Both "nothing to klimb here"
+refusals report "no action" instead: the post-action pass is skipped and
+klimbing where there is nothing to climb costs the party nothing. The two
+refusals are also distinct from each other - one is given for a cell that holds
+a climbable feature the party is not carrying the climbing gear for, the other
+for a cell with no climbable feature at all - so a player can tell "you need
+equipment here" from "there is nothing here". `systems/commands.md` Section 3
+owns the status enum these values belong to and lists this route among the six
+that forward their handler's own value.
+
 **The dungeon level-change spells.** The Up and Down pair (`catalogs/spell-list.md`
 ids 21 and 22) are castable only inside a dungeon, and they move the party one
 level from wherever they stand with **no ladder, pit, or equipment required**.
@@ -811,16 +848,31 @@ Doom is the exception to nearly every rule above:
 
 ### 13.4 The other ways dungeon mode ends
 
-Beyond the level-edge exit, dungeon mode terminates through **death** (a total
-party wipe routes to the death sequence and the game-over flow) and through the
-**endgame** hand-off, where dungeon-room and post-combat cleanup can consume the
-special combat absorption marker and enter the endgame overlay instead of
-restoring ordinary dungeon play. In stock data the authored route is Doom level
+Beyond the level-edge exit, dungeon mode terminates through a **total party
+wipe** and through the **endgame** hand-off.
+
+A wipe is detected by the shared party-capability check of § 4, step 7, not by
+any dungeon-local test: when that check reports that nobody can act and nobody
+is asleep, the turn loop stops and its epilogue runs the rescue/refuge sequence
+specified in `systems/blackthorn.md` Section 7. That sequence restores every
+member, reads out a moral-standing verdict, and resumes ordinary play in Lord
+British's Castle, so an ordinary wipe underground is **not** a terminal
+game-over. An earlier revision of this section routed the wipe to a "death
+sequence" and a "game-over flow"; no such dungeon-side path exists and that
+claim is withdrawn. Losing a fight in a dungeon room reaches the same place
+indirectly: combat returns to the dungeon loop that framed it, and the loop's
+next capability check sees the result (`systems/combat.md` Section 14).
+
+The endgame hand-off is separate: dungeon-room and post-combat cleanup can
+consume the special combat absorption marker and enter the endgame overlay
+instead of restoring ordinary dungeon play. In stock data the authored route is Doom level
 seven's room-id-fifteen trigger at local coordinate `(X=5, Y=7)`, which selects
 the final Doom room arena.
 
-The dungeon turn loop's only contract is that *if the scene byte drops to
-thirty-two or below, the loop exits*; how it got there is the caller's concern.
+The dungeon turn loop has two exits: *if the scene byte drops to thirty-two or
+below, the loop exits* — how it got there is the caller's concern — and the
+capability check's wipe result ends the loop from inside, before the sequence
+that then resets the scene runs.
 
 ## 14. Combat triggers
 
@@ -1114,7 +1166,7 @@ The behaviour described here was derived by reading the private function notes l
 
 - The withdrawal of the per-hour "HP regeneration" step in Section 11, and the confirmation that the dungeon H path converges on the same shared hole-up handler as the overworld, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 
-- The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, the status-gated post-action helper, the ungated party-capability check, and the epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
 - The wandering-monster combat contract in Section 14.1 -- ambush entry mode,
   arena and metadata-band synthesis, party-entry and source coordinate tables,
   source-band construction, class derivation, active-object slot handling, and
@@ -1199,7 +1251,9 @@ The behaviour described here was derived by reading the private function notes l
   dungeon-combat launch bracket -- derived from
   `u5-decomp/functions/DUNGEON_OVL/0x07E2_dungeon_monster_step.md` and
   `u5-decomp/functions/DUNGEON_OVL/0x0B7E_dungeon_encounter_face.md`.
-- The K-Klimb destination passability check is derived from
+- The destination passability test shared by the dungeon level-change routes,
+  which Section 13.1 records as enforced for the level-change spells and skipped
+  by K-Klimb, is derived from
   `u5-decomp/functions/DUNGEON_OVL/0x1C0C_dungeon_cell_passable.md`.
 - The DNGLOOK minimap cell painter, passage/room painters, room-clear bitmap reader/writer, cleared-room demotion pass, room NPC setup, and view teardown/init helpers - derived from `u5-decomp/functions/DNGLOOK_OVL/0x0340_v_view_paint_cell.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0284_paint_stair_glyph.md`, `u5-decomp/functions/DNGLOOK_OVL/0x097E_paint_passage_full.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0A48_paint_passage_short.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0AEE_paint_passage_medium.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0B9E_paint_passage_from_party.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0C6C_paint_room_layout.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0FDA_apply_movement.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0844_set_room_cleared.md`, `u5-decomp/functions/DNGLOOK_OVL/0x08D4_is_room_cleared.md`, `u5-decomp/functions/DNGLOOK_OVL/0x093A_demote_cleared_room_markers.md`, `u5-decomp/functions/DNGLOOK_OVL/0x109E_init_dungeon_view.md`, `u5-decomp/functions/DNGLOOK_OVL/0x1130_teardown_dungeon_view.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`.
 - The H-Hole-up code path's per-slot rest, ambush check, and HP regeneration — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
@@ -1211,3 +1265,21 @@ The behaviour described here was derived by reading the private function notes l
   values of dungeon Klimb. Source provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
   `../u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`.
+
+- The Section 7 light-source correction: the two dungeon light bytes are
+  remaining-duration counters rather than radii, the renderer consults them
+  only as a binary lit/unlit gate, and the complete writer census for both
+  counters (Ignite, the G-Get borrow branch, the three light-spell writers, and
+  the Blackthorn clear) rules out the previously claimed per-turn spellbook
+  bump. Source provenance: derived from private analysis notes
+  `../u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
+  `../u5-decomp/functions/CAST2_OVL/0x08EA_set_torch_radius.md`, and from the
+  sibling spec `u5-spec/systems/lighting.md`.
+
+- The Section 4 turn-loop tail and the Section 13.4 wipe route: the dungeon's
+  per-iteration party-capability check, its ownership of the sleep line, the
+  withdrawn "idle pump" / "dungeon-exit teardown" reading of that tail, and the
+  routing of a total party wipe to the rescue/refuge sequence rather than to a
+  death or game-over path. Source provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2, and
+  `../u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.

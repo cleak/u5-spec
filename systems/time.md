@@ -438,8 +438,8 @@ boundaries that are already fixed for engine behavior.
 
 - **Natural moongates.** The traced time cleanup does not own natural-gate
   placement or teleport handling. Its hour-change hook refreshes the
-  sky/status strip, while the separate redraw tick only animates moongate
-  frames when another owner has supplied temporary coordinates. Natural-gate
+  sky/status strip, while the separate redraw tick advances the night-time
+  light beacon whose source coordinates another owner has supplied. Natural-gate
   schedule and landing behavior therefore belong to the overworld transition
   inventory, not to the clock/calendar or moon-display contract.
 
