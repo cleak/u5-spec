@@ -652,10 +652,16 @@ the resident inverse-text banner helper, twice by the dungeon view) and window
 the inn register and the arms sell browser). Window `2` is never passed to it,
 and neither is window `3`.
 
-Window `2` therefore still holds the boot-time descriptor described in
-`systems/text-output.md` Section 9, which now carries the whole-build
-window-configuration census this paragraph summarises: the full-screen cell rectangle `(0, 0)..(39, 24)`,
-the bright-white-on-black colour attribute, and cleared descriptor flags. Its
+Window `2` is therefore never reshaped *by a shop or conversation path*. That
+is not the same as its keeping the boot-time full-screen rectangle: the
+gameplay-screen assembly sets window `2` once, to the message-window rectangle
+of `systems/text-output.md` Section 10.1, and no overlay changes it afterwards.
+Shop and conversation text is consequently bounded by the message window, not
+by the full screen. An earlier revision of this paragraph asserted the
+full-screen boot rectangle here; that is withdrawn, and `systems/text-output.md`
+Sections 9 and 10.1 are authoritative. What the shop overlays do leave
+untouched is the descriptor's colour attribute — bright white on black — and
+its cleared flags. Its
 cursor is whatever previous output in window `2` left behind, advanced by the
 Talk entry newline; no shop or conversation path homes it. The colour setters
 are likewise never called by the town, overworld, conversation, or shop
@@ -1466,9 +1472,11 @@ fixed.
   by `catalogs/item-list.md` and `formats/data-ovl.md`.
 - Shop-owned transcript clear/append, prompt wait, and cursor-origin behavior
   is specified in Section 8.A, including both side-panel geometries. The
-  inherited conversation window is also settled there: nothing in the analyzed
-  build installs a rectangle, colour, or cursor origin on text window `2`, so
-  it keeps the boot-time descriptor documented in `systems/text-output.md`.
+  inherited conversation window is also settled there: no shop or conversation
+  path installs a rectangle, colour, or cursor origin on text window `2`, but
+  the gameplay-screen assembly does shape it once to the message-window
+  rectangle, so it does not keep the boot-time full-screen default. See
+  `systems/text-output.md` Sections 9 and 10.1.
   What is left is not a shop question at all — it is how the display pipeline
   composites the viewport and status artwork underneath that full-screen text
   window, which belongs to the renderer specs.

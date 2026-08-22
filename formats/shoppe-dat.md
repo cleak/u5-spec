@@ -223,8 +223,10 @@ Presentation geometry is also not owned here. Ordinary shop output renders into
 the inherited conversation text window, whose descriptor is never reconfigured
 by any caller in the analyzed build; the two shop flows that do install their
 own framed side panel are specified in `systems/shops.md`. See
-`systems/text-output.md` for the window model and the boot-time descriptor
-values that the inherited window keeps.
+`systems/text-output.md` Sections 9 and 10.1 for the window model and for the
+message-window rectangle the inherited window actually carries (it is shaped
+once by the gameplay-screen assembly; it does not keep the boot-time
+full-screen default).
 
 ## 11. Sources
 
