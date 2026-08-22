@@ -130,12 +130,28 @@ Runtime changes should be modeled as overlays or live-buffer mutations:
 
 No save/load path should rewrite `UNDER.DAT`.
 
-The shared overworld chunk loader applies the same fixed live-buffer
-substitution pass after an Underworld chunk is copied into memory. Tile ids
-`0x16..0x18` cause a write of tile `0xDF` through the live world-tile accessor;
-tile id `0x19` writes tile `0x1A` only when the current chunk descriptor passes
-the chunk high-byte classifier. The file remains a dense, direct map source;
-these substitutions belong to the runtime window.
+The shared overworld chunk loader applies its substitution pass to Underworld
+chunks on exactly the same terms as surface chunks. **Both substitutions are
+conditional on save-backed quest state; neither is unconditional.** A cell
+holding a dungeon-entrance tile (`0x16`, `0x17`, `0x18`) is rewritten to the
+collapsed-entrance tile `0xDF` only while the Word of Power owning that chunk
+is still unspoken, and a cell holding the shrine tile `0x19` is rewritten to
+the ruined-shrine tile `0x1A` only while that chunk's shrine is marked ruined.
+The full rule, including the two opposite defaults for chunks that own neither,
+is specified once in `formats/brit-dat.md` Section 9.1; `systems/commands.md`
+Sections 11.1 and 11.2 own the command-side contract. An engine that applies
+either rewrite unconditionally leaves every dungeon entrance permanently
+sealed.
+
+This matters more on the Underworld than on the surface, because the
+Underworld grid carries **eight** dungeon-entrance cells, not seven: the same
+seven coordinates as the surface plane, plus Doom's entrance at the centre of
+the plane. The per-word flag is shared between the two planes, so speaking a
+word unseals that dungeon's cell on both. The Underworld grid carries no shrine
+cells and, like the surface grid, no `0xDF` or `0x1A` cell of its own.
+
+The file remains a dense, direct map source; these substitutions belong to the
+runtime window and are never written back.
 
 ## 11. Validation
 
@@ -197,4 +213,6 @@ This spec is a cleanroom prose rewrite derived from the project notes and existi
 - `u5-spec/formats/tiles.md`
 - `u5-spec/catalogs/tile-catalog.md`
 - `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`
-- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md`
+- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md` (retargeted as the shrine-ruin gate)
+- `u5-decomp/functions/OUTSUBS_OVL/0x0000_outsubs_water_check.md` (retargeted as the Word-of-Power seal gate)
+- `u5-decomp/notes/2026-08-22_quest-world-retrace.md`

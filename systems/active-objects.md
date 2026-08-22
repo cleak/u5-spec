@@ -118,9 +118,9 @@ of the compatibility contract.
 
 Slot freeing is a one-byte write: zero to byte 0. There is no separate free-list, no compaction pass, no garbage collector. Freed slots become candidates for the next acquisition pass, but occupied slots keep their index until freed or explicitly evicted.
 
-A few call sites use a *highest-empty-slot-down* discipline rather than the allocator's lowest-up scan. The player-as-NPC attachment helper, for example, walks the parallel NPC type array from index thirty-one down looking for an empty NPC slot. The intent is to keep low NPC indices reserved for schedule-driven NPCs from the location's roster while the player's "NPC mirror" lives in a high index that won't collide. The discipline lives at the call site, not in the allocator.
+A few call sites use a *highest-empty-slot-down* discipline rather than the allocator's lowest-up scan. The town-entry Shadowlord install, for example, walks the parallel NPC type array from index thirty-one down looking for an empty NPC slot, so that low NPC indices stay reserved for the schedule-driven NPCs of the location's own roster. That walk has no failure exit: if every index is occupied it proceeds with index thirty-one and overwrites whatever was there. The discipline lives at the call site, not in the allocator. See `systems/town-mode.md` Section 13.
 
-A second-level helper sits behind the allocator: the *initialiser*. After a slot is allocated, the initialiser takes the slot index plus the tile byte, type byte, target coordinates, and floor, and writes them into the first six bytes of the record in one pass, leaving the animation and auxiliary bytes to the caller or later animator. The split (allocator finds slot, initialiser fills it) lets call sites that already know the slot index -- combat setup, the player attachment helper -- bypass the search.
+A second-level helper sits behind the allocator: the *initialiser*. After a slot is allocated, the initialiser takes the slot index plus the tile byte, type byte, target coordinates, and floor, and writes them into the first six bytes of the record in one pass, leaving the animation and auxiliary bytes to the caller or later animator. The split (allocator finds slot, initialiser fills it) lets call sites that already know the slot index -- combat setup, the town-entry Shadowlord install -- bypass the search.
 
 The table is never compacted or defragmented. Repeated allocate-and-free fragments empty slots between occupied ones; that is the steady-state condition and costs nothing measurable at thirty-two slots.
 
@@ -130,22 +130,27 @@ The player occupies slot zero. Every world frame, the compositor refreshes bytes
 
 The world-state globals are the *authoritative* source for player position; slot zero is a *derived* view that other systems read — NPCs computing distance to the player, the visibility producer determining what the player blocks. Slot zero is never freed, compacted, or reallocated; mode entries preserve it; the combat backup-and-restore preserves it.
 
-A second representation of the player exists in town / dwelling / castle / keep modes: the *player-as-NPC* slot. On entry, the engine allocates a high-indexed NPC slot and stamps a sentinel value into its type byte and the player's spawn coordinates into the coordinate fields. The runtime descriptor is populated with a stationary three-waypoint schedule pinning the player to the spawn cell. The NPC scheduler then treats the player as a static NPC; the "already-on-waypoint" check passes every tick; the player never actually moves through the scheduler. The active-object slot is still slot zero — the player has two representations, in two different tables, referring to the same conceptual entity.
+**Retraction — the player has no second representation.** Earlier revisions of
+this section described a *player-as-NPC* slot in town / dwelling / castle /
+keep modes: a high-indexed NPC slot stamped with a player sentinel type byte,
+the player's spawn coordinates in its coordinate fields, and a stationary
+three-waypoint schedule pinning the player to the spawn cell. That contract is
+withdrawn in full. Every detail of it was read off a single town-entry helper
+that has since been re-derived: the helper installs a resident **Shadowlord**
+in a town that hosts one, the sentinel byte is the Shadow Lord actor tile
+(`systems/town-mode.md` Section 13, `formats/npc.md` Section 6), and the scan
+that appeared to be an "existing player slot found, skip" short-circuit is the
+Shadowlord's one-at-a-time reject. No traced path gives the player an entry in
+the NPC type array, the per-NPC runtime descriptor table, or the schedule
+tables. Implement the player as slot zero of the active-object table only.
 
-The pattern exists because some town-mode helpers walking the NPC table need to
-find the player there. Without the second representation, those helpers would
-be blind to the player. NPC pathfinding collision does not depend on treating
-the phantom as an ordinary walking NPC: its workspace builder stamps nearby
-occupied active-object cells as dynamic obstacles and then stamps the player's
-current cell separately. The result is that NPCs cannot route through the
-player's live position even when the phantom NPC entry remains pinned to the
-entry coordinate.
-
-For compatibility, collision uses the current player coordinate, not the
-player-as-NPC mirror's stationary schedule coordinate. The mirror exists for
-NPC-table consumers; the live player cell is the blocker used by pathfinding.
-
-The player-as-NPC slot is allocated on town entry and preserved across re-entries to the same town (the setup helper checks for an existing slot with the player sentinel byte and returns early if found). Cross-location re-entries clear all NPC slots; the new town creates a fresh one.
+The one behaviour that formerly rested on the mirror is independently sourced
+and unaffected: NPC pathfinding does not need the player to be an NPC. Its
+workspace builder stamps nearby occupied active-object cells as dynamic
+obstacles and then stamps the player's *current* cell separately, so NPCs
+cannot route through the live player position. For compatibility, collision
+uses the current player coordinate — there is no stationary mirror coordinate
+to consult.
 
 ## 6. NPC slots
 
@@ -167,7 +172,7 @@ The active-object table only holds the on-screen cast. NPCs on other floors of t
 
 A per-scene "hidden NPC" bitmask layered on top of the floor-visibility check lets specific NPCs be invisible in specific scenes. When an NPC has its bit set in the current scene's mask, the helper still allocates a slot but writes a "transparent" tile byte so the renderer paints nothing. Plot-controlled NPCs (a tied-up Lord British, a hiding spy) are kept on-stage but not visible.
 
-The per-NPC runtime descriptor's slot index and the active-object slot index are independent. The player-as-NPC mirror lives at a high *NPC* index; the player's avatar lives at active-object *slot zero*. Schedule-driven NPCs occupy low NPC indices and land in low active-object slot indices in arrival order.
+The per-NPC runtime descriptor's slot index and the active-object slot index are independent. Schedule-driven NPCs occupy low NPC indices and land in low active-object slot indices in arrival order; a Shadowlord installed on town entry takes a high *NPC* index and whatever active-object slot the allocator returns. The player's avatar lives at active-object *slot zero* and has no NPC index at all.
 
 ## 7. Monster slots
 
@@ -175,7 +180,7 @@ Combat mode uses the same active-object table for combatants, but the contents a
 
 Within combat there is no reserved player slot and no twenty-six-combatant cap; earlier drafts of this section claimed both and were wrong. The setup pass first clears all thirty-two records, then seats the party, then places monsters. Party members are allocated the first free records, one per live (non-dead) member in roster order, so a full party occupies records zero through five and a party with dead members packs into fewer. Monsters take the next free records. The hard limits are the thirty-two records themselves and, for terrain combat, the sixteen arena placement slots; a terrain encounter can never place more than sixteen monsters (`systems/combat.md` Section 5). Each spawned monster gets one renderer-facing active-object slot with the monster's class-derived tile in byte 0, the per-frame tile byte at byte 1, arena coordinates in bytes 2 and 3, and a floor/plane flag at byte 4. A seated party member's record uses the same shape, with the class-derived party sprite in bytes 0 and 1, its arena seat in bytes 2 and 3, and its roster slot index in byte 5. The higher auxiliary bytes remain mode-specific render/drop scratch rather than round-loop scheduling fields. At placement time byte 5 receives the placed monster's starting HP, byte 4 receives the arena plane/Z argument, and byte 7 receives an all-ones marker; the default monster-death path may later overwrite byte 5 with the class drop-cap value while the temporary combat table is live (`systems/combat.md` Section 6.3). Placements made on the special marker path receive the setup id in both tile bytes and in byte 5, and get no parallel combat descriptor at all.
 
-A *parallel* combat-effect descriptor table holds the additional per-actor state combat needs — base-step, phase counter, target index, flag bits — at a different data-segment location. The two tables are allocated independently: descriptors are taken from index zero for party members and from index six for monsters, while active-object records are always taken from the lowest free index. The descriptor's active-object link byte is the authoritative pairing, and the two indexes coincide only when no earlier allocation was skipped. The two tables are kept in sync by the per-action primitive: when an actor moves, its coordinates are written into both.
+A *parallel* combat-effect descriptor table holds the additional per-actor state combat needs — base-step, phase counter, target index, flag bits — at a different data-segment location. The two tables are allocated by independent first-free scans: descriptors are taken from index zero for party members and from index six for monsters, while active-object records are always taken from the lowest free index for everyone. For party members the two scans therefore run in lockstep and a member's descriptor index always equals its active-object index, dead-member skips included. For monsters the indexes differ by construction: descriptor six pairs with the first active-object record left free by the seated party, so a party of four puts the first monster at descriptor six and active-object record four. The descriptor's active-object link byte is the authoritative pairing either way, and an engine should follow it rather than assume the indexes match. The two tables are kept in sync by the per-action primitive: when an actor moves, its coordinates are written into both.
 
 The combat-effect descriptor table owns combat-only fields that earlier notes sometimes attributed to the active-object record. Its first byte is the current monster HP or wound counter for non-party actors, it contains the friend/foe faction tag used by target selection, and one byte is a back-reference to the linked active-object slot. The active-object table remains the renderer-facing table during combat; it is not the source of the combat faction byte.
 
@@ -240,9 +245,11 @@ a random cardinal wander. Ship-like water-creature and pirate frames first pass
 through the wind cadence table owned by `weather.md`; once that cadence permits
 movement, they use the same directed step planner as land monsters.
 
-A special `0xFC` sprite class has an additional proximity-mask branch. The
-ordinary per-turn walk skips slot zero, so this is not normally the player's
-slot despite sharing the avatar marker value. The branch first computes wrapped
+A special `0xFC` sprite class has an additional proximity-mask branch. That
+sprite value is the Shadow Lord actor class (`catalogs/monster-bestiary.md`,
+class 47), not an avatar marker, and the ordinary per-turn walk skips slot zero
+in any case, so the branch never applies to the player. The branch first
+computes wrapped
 absolute distance to the player and consults a fixed mask:
 
 | Wrapped `dy` | Wrapped `dx` values that enter the special branch |
@@ -327,7 +334,7 @@ Combat suspends the world by swapping the active-object table to a backup region
 
 **Exit combat.** On round-loop return (victory, defeat, or escape), the framer restores by copying the backup region back over the live table. Every byte returns to its pre-combat value: world NPCs to their pre-combat coordinates, vehicles to where they were docked, projectiles to their last position. The world resumes exactly where it left off.
 
-The backup region is dedicated to this purpose, not preserved across saves, a transient buffer used only inside the framer's call. The framer also saves and restores the player's world coordinates (combat overwrites slot zero's coords with arena coords), the active-player byte, and a scene-byte sentinel that signals "combat is in progress." The calling mode loop sees combat as a function call that returns with the table and globals exactly as they were, plus side effects (damage, death, time advance) baked into separate persistent state.
+The backup region is dedicated to this purpose, not preserved across saves, a transient buffer used only inside the framer's call. The framer also saves and restores the player's world coordinates (seating writes arena coordinates over the low records, record zero included), the active-player byte, and a scene-byte sentinel that signals "combat is in progress." Record zero is overwritten because it is the first record the party seating allocates, not because combat reserves a player slot; see Section 7. The calling mode loop sees combat as a function call that returns with the table and globals exactly as they were, plus side effects (damage, death, time advance) baked into separate persistent state.
 
 The copy is byte-for-byte; slot indices are stable across the round-trip. An NPC in slot fifteen before combat is in slot fifteen after, with the same tile and coordinates. The NPC scheduler resumes per-tick walking without re-allocation.
 
@@ -349,9 +356,9 @@ not a merge of temporary combat death markers.
 
 Each mode's entry handler initialises the table according to its needs.
 
-**Town / dwelling / castle / keep entry.** Clears every slot except slot zero. Runs the per-NPC roster load (building runtime descriptors and schedules), the per-NPC initial-waypoint placement (calling the world-mutation helper for each NPC currently on the player's floor, allocating slots), and finally the player-as-NPC attachment helper (which finds an empty NPC slot, allocates an active-object slot for the player, and stamps the player sentinel value into both). Result: slot zero has the avatar, a handful of low-indexed slots have on-screen NPCs, and the highest empty NPC index gets the player-as-NPC mirror.
+**Town / dwelling / castle / keep entry.** Clears every slot except slot zero. Runs the per-NPC roster load (building runtime descriptors and schedules), the per-NPC initial-waypoint placement (calling the world-mutation helper for each NPC currently on the player's floor, allocating slots), and finally the Shadowlord install, which runs only in a town that currently hosts one of the three Shadowlords and is skipped entirely otherwise (`systems/town-mode.md` Section 13). Result: slot zero has the avatar and a handful of low-indexed slots have on-screen NPCs; in a hideout town one further active-object slot and the highest empty NPC index hold the resident Shadowlord. The entry pass writes no NPC-table entry for the player.
 
-**Overworld entry.** Slot zero is the player. The remainder of the table is populated from the on-disk overworld object overlay (per-map static object lists). Each non-zero record from the overlay is copied into a free slot. Before normal outdoor input begins, entry also consumes the one-shot pending vehicle-acquisition state used by shipwright purchases: if set, it allocates a free slot, writes the pending coordinates, initializes either a ship-family object with hull/skiff auxiliary state or a skiff-family object, and clears the pending state. Random encounters, dropped items, and spawned creatures appear in the table over the course of overworld play and are pruned when they leave the player's viewport: the overworld per-turn walker checks each slot's distance from the scroll bases and frees slots more than thirty-two cells away.
+**Overworld entry.** Slot zero is the player. The remainder of the table is populated from the on-disk overworld object overlay (per-map static object lists). Each non-zero record from the overlay is copied into a free slot. Before normal outdoor input begins, entry also consumes the one-shot pending vehicle-acquisition state used by shipwright purchases: if set, it allocates a free slot, writes the pending coordinates, initializes either a ship-family object with hull/skiff auxiliary state or a skiff-family object, and clears the pending state. Those pending coordinates are the fixed delivery cell of the shipwright that sold the vessel, published per row in `systems/shops.md` Section 8.7; they are not the town's entrance or exit cell. Random encounters, dropped items, and spawned creatures appear in the table over the course of overworld play and are pruned when they leave the player's viewport: the overworld per-turn walker checks each slot's distance from the scroll bases and frees slots more than thirty-two cells away.
 
 **Dungeon entry.** Dungeon exploration does not populate the table for its first-person view. The dungeon loop reads the player's dungeon Z/X/Y and facing globals, renders from the loaded dungeon record, and does not run the town NPC scheduler or the overworld active-object walker. The active-object table remains part of global saved state, but it is not the dungeon renderer's actor list. If a dungeon room, trap, ambush, or attack enters combat, the combat framer takes over as described in Section 9.
 
@@ -391,7 +398,7 @@ traced carve helper does not directly scan the active-object table.
 
 The core active-object contract is complete for known traced users at
 table-lifecycle depth: record shape, slot allocation/freeing, player slot
-ownership, NPC linkage, player-as-NPC mirror separation, renderer/visibility
+ownership, NPC linkage, renderer/visibility
 compositor ownership, combat backup/restore, field-marker lifetime,
 projectile/impact non-ownership, mode-entry initialization, persistence, and
 outdoor hostile-slot movement are public.
@@ -432,7 +439,7 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
 - The compositor that walks the table backwards to stamp on-screen sprites into the viewport, plus the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
 - The world-mutation helper that links logical NPC state to a slot in the table when an NPC arrives on or leaves the player's floor — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
-- The player-as-NPC attachment helper that allocates a slot and a parallel high-indexed NPC slot for the avatar on town entry — `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`.
+- The town-entry Shadowlord install that allocates an active-object slot and a parallel high-indexed NPC slot for a resident Shadowlord — `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md` (see that note's 2026-08-22 repair-round correction, which supersedes its original "player attach" framing) and `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
 - The NPC pathfinding workspace builder that overlays active-object obstacles
   and the current player cell for collision avoidance -
   `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.

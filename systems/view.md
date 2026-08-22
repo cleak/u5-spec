@@ -89,9 +89,27 @@ per-map object case wins over the sign case when both would match.
 | 5b | Live tile `0xDE` | Append a virtue word chosen by the current scene: scene `30` appends Truth, scene `31` appends Love, scene `32` appends Courage. In any other scene the base description is printed with no appended word. |
 | 5c | Live tile `0xDF` | Append a dungeon name chosen by the target cell's map X coordinate: `58` Shame, `72` Destard, `91` Despise, `126` Wrong, `128` Doom, `156` Covetous, `239` Hythloth, `240` Deceit. Any other X appends nothing. |
 
-Rows 2, 3 and 4 replace the base description entirely; those four tile ids
-carry no usable description record of their own, which is consistent with the
-handler owning their output.
+Rows 2, 3 and 4 cover six tile ids in total (`0x59`, `0xA1`, `0xD8`, `0xD9`,
+`0xDA` and `0xDB`) and all six replace the base description entirely: the
+handler runs and returns before any description string is emitted. Whether the
+tile also owns a description record is a separate question and is **not** a
+usable test for which tiles are handler triggers. `0x59` and the four fountain
+ids carry only the shared placeholder record, as do the five sign/poster ids of
+entry-dispatch row 5; but `0xA1` carries a real description record of its own
+naming a deep well, which the Look path simply never reaches. Implementations
+should key these branches on the tile ids listed here, never on "the record is
+a placeholder".
+
+The shared line-spacing cleanup belongs to the plain-description path only. A
+tile that took none of the appender rows above -- that is, a tile that is not
+`0xFA`, `0xFB`, `0xDE` or `0xDF` -- finishes by running the same line-spacing
+cleanup the per-map object branch uses, which may emit one further newline;
+that affects spacing only and never changes the described text. A tile that
+matched an appender row returns as soon as its suffix is printed and never
+reaches the cleanup. This holds even when the matched row appends nothing:
+`0xDE` in a scene other than `30`, `31` or `32`, and `0xDF` at an X coordinate
+outside the list above, print the base description alone and still skip the
+cleanup. So a clock tile emits its description and time and nothing further.
 
 The wishing well's granting condition and the fixed wanted poster's coordinate
 are handler-internal, not dispatch predicates: the well runs its coin and wish
@@ -111,9 +129,9 @@ description record.
 Special LOOKOBJ look cases include:
 
 - **Per-map object entry.** Prints the object-description form from the upper
-  LOOK2.DAT object-description range. The object branch appends the same
-  line-spacing cleanup as terrain descriptions so object and terrain look text
-  remain visually consistent.
+  LOOK2.DAT object-description range. The object branch always runs the shared
+  line-spacing cleanup, which the terrain path runs only on its
+  plain-description rows (Section 3).
 - **Signs and wanted posters** (live tile `0x89`, `0x8A`, `0xA0`, `0xA4`, `0xF8`). Prints a line break, then renders
   the sign or poster text through the sign/poster helper. One fixed exception
   in Yew, floor `0`, at local coordinate `(x=17, y=21)` renders the
@@ -517,7 +535,7 @@ grid, or dungeon bytes.
 
 The Look/View command contract is complete at gameplay depth: dispatcher
 routing, gem consumption, surface/town description flow, sign and poster
-handling, fountain and wishing-well special cases, full-map and local view
+handling, fountain and wishing-well special cases, sky and local view
 overlays, dungeon look descriptions, and dungeon minimap flood behavior are
 fixed. Remaining work is visual cataloging and pixel-level parity, not command
 state or persistence behavior.
@@ -529,10 +547,14 @@ state or persistence behavior.
   gameplay or renderer control flow.
 - **Tile special cases.** The full trigger set for top-down Look is published
   in Section 3, including the dispatch order and the redirect tiles. Tile id
-  `0x59` is the trigger for the full Britannia map renderer and, like the
-  wishing-well, fountain and sign tiles, carries no usable base description
-  record; naming those ids in the in-world tile catalog is presentation
-  cataloguing, not an open behaviour question.
+  `0x59` is the trigger for the sky renderer of Section 4.2; the older
+  "Britannia chunk-map renderer" reading of that path is withdrawn in full, as
+  Section 4 records. Whether a trigger tile also owns a `LOOK2.DAT` description
+  record is a separate question and is not a test for handler ownership: `0x59`,
+  the fountain ids and the sign ids carry only the shared placeholder record,
+  while the wishing-well tile `0xA1` carries a real record of its own naming a
+  deep well that the Look path never reaches. Naming those ids in the in-world
+  tile catalog is presentation cataloguing, not an open behaviour question.
 
 ## 9. Sources
 

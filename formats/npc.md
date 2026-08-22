@@ -105,7 +105,7 @@ The four boundary values are not required to be sorted ascending. The engine com
 
 `X[i]` and `Y[i]` are zero-based map cell coordinates within the location's thirty-two-by-thirty-two tile grid, with X increasing eastward and Y increasing southward. Both are unsigned eight-bit values; valid range is `0..31`. Coordinates outside that range are not validated by the engine and would produce out-of-bounds reads on the location's tile buffer.
 
-`Z[i]` is the location's floor index for waypoint *i*, matching the per-location floor convention used by the location data file: floor zero is the ground floor, floor one is upper or basement, occasional higher values address re-purposed extra floors. Treat it as an unsigned byte. Runtime initialisation widens the selected schedule Z byte into the per-NPC runtime state without preserving a signed sentinel, and the schedule processor compares the resulting value against the player's current floor byte. An NPC whose active waypoint is on a different floor from the player's view enters a Z-mismatch movement state and resumes visible movement when the player switches floors or when the NPC reaches a stair-transition path.
+`Z[i]` is the location's floor index for waypoint *i*, matching the per-location floor convention used by the location data file: floor zero is the ground floor, floor one is upper or basement, occasional higher values address re-purposed extra floors. Treat it as an unsigned byte. Runtime initialisation widens the selected schedule Z byte into the per-NPC runtime state without preserving a signed sentinel, and the schedule processor compares the resulting value against the player's current floor byte. An NPC whose active waypoint is on a different floor from the player's view enters a Z-mismatch movement state. It leaves that state either by routing to a floor-link or stairway cell on the displayed floor and surfacing there, or by being placed directly at its waypoint when neither end of the transition is on the displayed floor. `systems/npc-schedules.md` Sections 7 and 8.5 own the state set and the marker-selection rule.
 
 Shipped content uses only small unsigned floor values in the range `0x00..0x07`. Values above the shipped range are not validated by the engine; a compatible content tool should preserve them, but a gameplay implementation should not interpret `0x80..0xFF` as negative floor numbers for the stock DOS baseline.
 
@@ -153,7 +153,19 @@ Three special values matter to the engine contract:
 |---:|---|
 | `0` | Empty slot. The scheduler skips the slot. |
 | `1` | Occupied slot that uses the default human/person sprite instead of the ordinary derived sprite. |
-| `0xFC` | Runtime player-mirror marker written when the town-mode player is attached to an NPC slot. |
+| `0xFC` | Shadow Lord actor class. Not present in any shipped roster slot; it is written into a live NPC slot only by the town-entry Shadowlord install (`systems/town-mode.md` Section 13), which also stamps the matching Shadow Lord actor tile into the linked active-object record. |
+
+**Retraction.** Earlier revisions of this table described `0xFC` as a "runtime
+player-mirror marker written when the town-mode player is attached to an NPC
+slot". That is withdrawn. `0xFC` is the head of the Shadow Lord sprite run
+`0xFC..0xFF` (`catalogs/monster-bestiary.md`, class 47), it resolves through the
+sprite page to the shipped "a shadow lord" look-up string, and the single traced
+writer of the value is the Shadowlord install described in
+`systems/town-mode.md` Section 13 — not a player attach. An implementation that
+treats a `0xFC` slot as the player will render a Shadowlord as the avatar, or
+mistake a live Shadowlord for the player in NPC-table scans. The spec no longer
+claims that the player has any NPC-slot representation; see
+`systems/town-mode.md` Section 8.
 
 Values such as `0x50`, `0x54`, `0x70`, `0x90`, and `0xD8` are stable sprite
 classes used by shipped roster slots. The roster catalog keeps them as tags and

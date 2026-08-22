@@ -279,8 +279,12 @@ British's castle services.
 - **Commands.** `systems/commands.md` owns the dispatcher row for H and routes
   into this rest contract.
 - **Time.** `systems/time.md` owns minute/hour/day/month rollover, rest's
-  repeated cleanup calls, and the hourly status/provision cadence that can fire
-  during simulated rest.
+  repeated cleanup calls, and the shared party status pass that can fire during
+  simulated rest. Only the provision/starvation branch of that pass is gated on
+  an hour crossing. The poison point and the Ring of Regeneration roll fire once
+  per pass, which during town-bed rest means once per ten-minute step, and which
+  during a wilderness camp means not at all for poison and once per five-minute
+  step for the ring.
 - **Encounters.** `systems/encounters.md` owns the combat setup reached after a
   sleep ambush fires.
 - **Town mode.** `systems/town-mode.md` owns bed/tile gating and the fact that
@@ -337,6 +341,10 @@ tables, or implementation-specific addresses.
 - `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`
   (cadence of the shared status/provision pass, and the town-bed versus
   wilderness-camp difference).
+- `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`
+  (independent second-pass re-derivation of the completed long-camp guard set,
+  the `1..63` hit-point roll, the class-keyed magic-point writes, the cooldown
+  counter's arming and hourly decay, and the Ring of Regeneration predicate).
 - `systems/time.md`.
 - `systems/encounters.md`.
 - `systems/town-mode.md`.

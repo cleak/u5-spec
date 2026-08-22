@@ -151,7 +151,7 @@ predicate each family uses while an outdoor active object is trying to step:
 | `0xF0..0xF3` | Mongbat sprite run. | Carpet-like composite predicate. |
 | `0xF4..0xF7` | Corpser sprite run. | Accepts only tile id `0x05`. |
 | `0xF8..0xFB` | Rot Worm sprite run. | Accepts only tile id `0x04`. |
-| `0xFC..0xFF` | Shadow Lord sprite run and avatar/quest-sprite defensive branch family. | Glyph-restricted predicate: only the very-low ids and `0x60..0x6F` glyph/river family. |
+| `0xFC..0xFF` | Shadow Lord sprite run, which is also the quest-sprite defensive branch family. | Glyph-restricted predicate: only the very-low ids and `0x60..0x6F` glyph/river family. |
 | Other non-vehicle families using the base predicate | Generic active-object / interaction movement with no promoted art name at this layer. | Base bitset predicate, with the documented `0x90..0x93` force-reject edge unless the query is in an exception family. |
 
 ## 5. Tile-Class Dispatcher
@@ -268,8 +268,10 @@ consumed action.
 
 **Town.** Movement is floor-local and shares the location tile buffer with the
 NPC scheduler. Each consumed player turn advances time, then runs the schedule
-walker once. The player is also represented as a phantom NPC so NPC/NPC and
-NPC/player collision can share lookup code.
+walker once. The player is not represented in the NPC tables; NPC/player
+collision comes from the pathfinding workspace, which marks the player's live
+cell as an obstacle alongside nearby active objects (`systems/town-mode.md`
+Section 8).
 
 **Dungeon.** Movement is first-person. The party's facing is part of movement
 state, and turning can be the whole movement action. Dungeon cells use the

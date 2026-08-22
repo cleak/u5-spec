@@ -133,8 +133,8 @@ without visible effect.
 | `0x36` | 18 | No-op. |
 | `0x39` | 19 | Fill a single horizontal scanline in either buffer. The row coordinate is the entry's Y argument; there is no row loop. |
 | `0x3C` | 20 | Fill a rectangle in either buffer using the earlier-generation rectangle helper. |
-| `0x3F` | 21 | Fill a clipped rectangle with the current colour. Front-buffer only; back-buffer fills go through dispatch offset `0x39` or `0x3C`. |
-| `0x42` | 22 | Decode and draw a driver-compressed bitmap/font-strip resource. |
+| `0x3F` | 21 | Fill a clipped rectangle with the current colour, on whichever surface the descriptor's render-target selector currently names. See section 6. |
+| `0x42` | 22 | Prepare a decompressed paired graphics archive for blitting: an in-place, size-preserving conversion of every image in the segment from packed four-bits-per-pixel storage into the per-row planar layout the EGA blitters expect. Not a codec, not a decompressor, and not a draw call; see section 7. The CGA, Hercules and Tandy drivers implement this entry as a no-op because their blitters read the archive in its packed form. |
 | `0x45` | 23 | No-op. |
 | `0x48` | 24 | Register a loaded asset segment as the active tile/sprite asset and prepare it for blitting by converting its embedded pixel payload from packed to planar layout in place. Despite the historical working name "pack to back buffer", this entry does not touch the back buffer; it operates on the asset segment. |
 | `0x4B` | 25 | General tile or sprite blit. Accepts a render-flags word whose low bits choose between an opaque blit and a transparency-mask blit. |
@@ -152,8 +152,12 @@ without visible effect.
 | `0x6F` | 37 | Play a driver-resident byte-stream animation script, pacing each presentation step with a CPU-calibrated busy wait. This is the entry that plays the title flourish. |
 
 The most important correction from the full driver pass is that dispatch
-offset `0x3F` is the filled-rectangle entry, not the compressed-bitmap entry.
-The compressed bitmap/font-strip decoder is dispatch offset `0x42`.
+offset `0x3F` is the filled-rectangle entry. An earlier revision called
+dispatch offset `0x42` a compressed bitmap/font-strip decoder; that is
+withdrawn in full, and section 7 gives what the entry really does. No driver
+entry decodes the one-bit-per-pixel `.BIT` and `.PCS` resources at all: those
+are parsed by the caller and drawn through the ordinary point, span, stamp and
+blit entries, on every driver family.
 
 ## 6. Rectangle Fill
 
@@ -170,13 +174,23 @@ The original EGA implementation achieves sub-byte edges with plane masks and
 latch-modify-write behaviour. A modern renderer only needs to preserve the
 resulting pixels.
 
-For the corrected EGA slot-21 path, the active rectangle loop is a front-buffer
-operation. If the descriptor's render-target selector names the driver back
-buffer, this entry does not perform the per-scanline fill. Back-buffer fills are
-owned by the earlier horizontal-span and rectangle entries, not by dispatch
-offset `0x3F`. Compatibility tests should therefore treat `0x3F` as the
-clipped front-buffer rectangle fill even though the broader descriptor state has
-a back-buffer selector used by other entries.
+**Correction: this entry is render-target aware.** An earlier revision of this
+document said dispatch offset `0x3F` was "front-buffer only", that it skipped
+its per-scanline fill when the descriptor's render-target selector named the
+back buffer, and that back-buffer fills were owned by dispatch offsets `0x39`
+and `0x3C` instead. All three statements are withdrawn. The entry reads the
+render-target selector before filling and writes whichever surface the selector
+names; it has a distinct row loop for each surface, and both loops fill for
+real. The visible contract above therefore applies to the front buffer and the
+back buffer alike, and the choice of surface is made entirely by the render-target
+selector the caller set beforehand.
+
+This matters beyond bookkeeping: the endgame's fade to black
+(`systems/endgame.md` section 7) and the map-viewport fades listed in
+section 9.6 all work by pointing the render target at the hidden surface,
+filling it through `0x3F`, and then dissolving the result forward. An
+implementation that made `0x3F` a no-op on the hidden surface would leave those
+transitions dissolving stale pixels.
 
 ## 7. Packed-To-Planar Graphics Preparation
 
@@ -392,15 +406,88 @@ visible contract is:
 4. The visit order is not row-major, not column-major, and not a clean spiral;
    it should appear as scattered single-pixel updates to a viewer.
 
+**Abort gate and sound.** The entry carries a driver-local gate that is enabled
+when the driver image is first loaded and is cleared permanently the first time
+any character is drawn through the driver's fixed-cell glyph entry. Nothing
+ever re-enables it. While the gate is enabled, the dissolve does extra work on
+**every second** visited pixel, and only there: it emits one short percussive
+speaker click and it samples keyboard status. Both the click and the poll sit
+behind the same alternating flag, so neither happens on every pixel. **Earlier
+revisions of this section said the speaker effect was per-pixel and that its
+pitch tracked progress through the rectangle; both halves are withdrawn.** The
+click frequency is drawn from a driver-internal scrambling sequence rather than
+rising monotonically, and the width of the range it is drawn from grows as the
+transfer advances, so the effect reads as a scatter of clicks that spreads out
+over the transition rather than a glissando. A pending keystroke aborts the
+call immediately, leaving the rectangle **partly** transferred and the speaker
+silenced. The abort only tests for a pending key; it does not consume it, so
+the keystroke is still queued for whatever the caller reads next. Once the gate
+has been cleared, the dissolve is silent, never polls, and runs to completion
+regardless of input.
+
+In practice that makes exactly one dissolve in a normal session interruptible:
+the first start/menu screen reveal, which happens before any menu text has been
+drawn. Every later dissolve in the run — the intro story step-1 transition and
+every repeat of the menu reveal — is silent and uninterruptible. An engine that
+wants the historical behaviour should model the gate rather than hard-coding
+"the first one", because a path that draws text earlier changes which call is
+affected.
+
+**Single-cell use, and why it must not be confused with the rectangle
+dissolve.** Dispatch offset `0x66` is really two operations selected by the
+carry flag on entry. Carry clear is the rectangle dissolve specified above.
+Carry set is a different sub-entry that converges one 16-by-16 viewport cell to
+a requested tile; it takes a cell position and a tile, not a rectangle, and it
+advances one step per call. Callers drive it from a resident wrapper that
+issues a fixed run of steps for a single cell and checks the keyboard, and
+advances the world tick, every few steps. That wrapper is used in several
+places, including the Return-to-View preview's temporary actor draws
+(`formats/location-dat.md` section 11).
+
+**Correction.** An earlier revision of this section said the resident core
+wraps *the rectangle dissolve* in an outer loop that re-invokes the world tick
+every few visits, "so the dissolve does not freeze gameplay timing for the
+duration of a full-screen transition". That is withdrawn. The stepped,
+tick-interleaved wrapper belongs to the carry-set single-cell sub-entry only.
+Every caller of the rectangle dissolve issues it as **one blocking call**: no
+world tick, no title tick, and no gameplay time advance runs while a rectangle
+dissolve is in progress, whatever the rectangle's size. Its wall-clock duration
+is whatever the machine needs to visit that many pixels.
+
 A compatible engine that wants exact frame-by-frame visual parity with the
 original can reuse the original tap-set inventory, indexed by the integer
-log2 of the rectangle's pixel count. The size-class taps are stored in the
-driver as 16-bit Galois polynomials; the resident core's dissolve caller wraps
-this entry in an outer loop that re-invokes the world tick every few visits,
-so the dissolve does not freeze gameplay timing for the duration of a
-full-screen transition. An engine that does not need exact frame-by-frame
-parity may substitute any other order that satisfies the four bullet points
-above.
+log2 of the rectangle's pixel count; the size-class taps are stored in the
+driver as 16-bit Galois polynomials. An engine that does not need exact
+frame-by-frame parity may substitute any other order that satisfies the four
+bullet points above.
+
+**Callers.** For engine authors who want the complete picture, the rectangle
+dissolve has six call sites in the shipped program, spanning three rectangles:
+
+| Rectangle (inclusive) | Where | Specified in |
+|---|---|---|
+| `(40, 86)..(75, 120)` | Intro story step 1 | `systems/intro.md` section 10 |
+| `(0, 0)..(319, 100)` | Intro start/menu loader, animated path only | `systems/intro.md` section 10 |
+| `(0, 0)..(319, 199)` | Endgame, entering the final narrative presentation | `systems/endgame.md` sections 7 and 8 |
+| `(8, 8)..(183, 183)` | Map viewport; two sites in the Blackthorn audience/rescue scene and one in the search/open command path | not yet specified; see section 11 |
+
+The rectangle `(8, 8)..(183, 183)` is exactly the 176-by-176 world map viewport.
+
+**The fade idiom.** Four of the six sites are instances of one caller-side
+idiom that an engine should recognise, because the dissolve alone does not
+describe it:
+
+1. Point the render target at the hidden surface.
+2. Either fill the rectangle with a flat colour (index `0` for a fade to
+   black), or compose the new scene into it.
+3. Point the render target back at the visible page.
+4. Dissolve that rectangle from the hidden surface to the visible page.
+
+Filling first gives a dissolve **out** to a flat colour; composing first gives
+a dissolve **in** to new art. The dissolve entry itself always reads the hidden
+surface and always writes the visible page; it ignores the render-target
+selector entirely. The selector changes around it exist only so that steps 2
+and 4 land on the right surfaces.
 
 ## 10. Transitions And Animation Entries
 
@@ -424,10 +511,23 @@ The EGA driver owns several visual effects that are not gameplay systems:
 - Rectangle dissolve: copies pixels from the back buffer to the front buffer
   in pseudo-random order until the rectangle matches. The EGA implementation
   uses a deterministic LFSR-style visit order; after the entry completes, the
-  destination rectangle's front-buffer pixels match the back buffer.
-- Animated tile shimmer: mutates selected loaded tile graphics entries, not
-  framebuffer pixels. The effect becomes visible when the normal viewport path
-  later redraws those tiles.
+  destination rectangle's front-buffer pixels match the back buffer. It always
+  reads the back buffer and always writes the front buffer, regardless of the
+  descriptor's render-target selector. It is always issued as a single blocking
+  call, and it is the carry-clear half of dispatch offset `0x66`; the carry-set
+  half is the stepped single-cell entry. See section 9.6.
+- Animated tile shimmer: mutates selected loaded tile graphics entries rather
+  than writing framebuffer pixels directly, then runs its own propagation and
+  composite pass. In the ordinary world path the effect becomes visible when the
+  viewport redraws those tiles. The entry also takes a target cell as a screen
+  tile row and column plus the current viewport pixel origin and a step value,
+  and the Return-to-View preview drives it that way for its local cell effect,
+  stepping `1..15` to open a cell and `15..1` to close it. The caller marks the
+  cell as skipped in its own repaint for the duration, so the shimmer entry owns
+  that cell while the effect runs. The exact per-step pixel pattern the entry
+  produces is a driver-internal raster detail and is not part of the public
+  contract; the step count, coordinates, and the tiles written before and after
+  are (`formats/location-dat.md` section 11).
 - Loaded-tile palette-plane mutation: dispatch offset `0x6C` mutates tile
   graphics in the loaded asset segment rather than drawing directly to the
   framebuffer. Publicly confirmed modes are save-original tile bytes, restore
@@ -444,10 +544,21 @@ The EGA driver owns several visual effects that are not gameplay systems:
   presentation step the entry performs one calibrated wait and then repaints
   the frame's whole destination band: the currently selected source rows are
   copied from the back buffer packed contiguously and centred in the band, and
-  the rest of the band is blanked. Any keystroke aborts and is reported through
-  the return value. Correction: this is the title-flourish player, not a
-  credits or death-screen player; `intro.md` section 3 publishes the shipped
-  script's frame table and group sets.
+  the rest of the band is blanked, with the odd leftover blank row placed below
+  the copied rows. Only one plane of the back-buffer image is read, and the
+  write mask means each set source pixel is presented as palette index `9`;
+  everything else in the band becomes index `0`. The band is always repainted
+  at the full screen width, not at the source artwork's width. The fill
+  direction alternates per frame: even frames fill downward from the
+  destination top row, odd frames fill upward starting one row below the band,
+  so odd frames are drawn vertically mirrored and one row lower.
+  Any keystroke aborts, and the abort is not a bare early return: the entry
+  makes the whole final frame visible with the even-frame fill direction and
+  presents it once before returning, so an aborted run and a completed run
+  leave the same picture. The return value reports which happened, and its
+  caller uses that as the intro's skip flag. Correction: this is the
+  title-flourish player, not a credits or death-screen player; `intro.md`
+  section 3 publishes the shipped script's frame table and group sets.
 
 These effects do not advance saved-game time, NPC schedules, combat rounds, or
 active-object simulation.
@@ -455,8 +566,9 @@ active-object simulation.
 ## 11. ABI Boundaries And Remaining Hardware Parity
 
 The EGA-facing ABI contract is complete for the v1 compatibility target:
-dispatch-cell loading, EGA buffer layout, rectangle fill, compressed bitmap
-decode, front-buffer tile and glyph entries, title/dissolve animation entries,
+dispatch-cell loading, EGA buffer layout, rectangle fill, packed-to-planar
+archive preparation, front-buffer tile and glyph entries, title/dissolve
+animation entries,
 the combat-exit tile-graphics restoration path, and the absence of ordinary
 hardware page-flipping for world/text updates are public.
 
@@ -469,11 +581,16 @@ Remaining work is historical hardware and exact visual parity:
   alternate-mode asset byte coverage remains driver-side parity work.
 - CGA, Hercules, and Tandy implement the same broad ABI with different pixel
   encodings and hardware details; their exact conversion rules remain separate
-  historical-hardware parity work. The compressed-bitmap slot is already bounded
-  as a no-op for those drivers.
-- The driver-compressed bitmap metadata word is not consumed by the EGA decode
-  path. If another driver uses it for placement or palette selection, that is
-  an alternate-driver compatibility detail.
+  historical-hardware parity work.
+- The packed-to-planar preparation entry is a no-op in the CGA, Hercules and
+  Tandy drivers. That is correct behaviour rather than a missing feature: only
+  the EGA blitters need the plane-major permutation, and the other three
+  families read the decompressed archive in its packed form. It does **not**
+  mean those backends fail to draw archive art, and it has no effect at all on
+  the one-bit `.BIT`/`.PCS` resources, which never pass through this entry.
+- The per-record metadata word carried in the paired-archive directory is not
+  consumed by the EGA path. If another driver uses it for placement or palette
+  selection, that is an alternate-driver compatibility detail.
 
 ## 12. Sources
 
@@ -483,7 +600,25 @@ Cleanroom prose derived from these private analysis notes:
   that identified the animation-script entry's real caller, located and parsed
   the shipped script, resolved the idle-strip frame source, and separated the
   two carry paths of dispatch offset `0x69`.
+- `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md` — the
+  independent re-derivation of the animation-script entry's helper bodies, its
+  presentation-step counts, its centring and fill-direction rules, its
+  keystroke-abort tail, and its two-plane presentation mask.
 - `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`.
+- `u5-decomp/notes/rect_dissolve_abort_and_sound_2026-08-22.md` — the dissolve
+  entry's abort gate and its one-shot disable through the glyph entry.
+- `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md` — the
+  whole-program caller census of the dissolve entry and its rectangles, the
+  separation of its two carry paths and of the two resident wrappers that reach
+  them, the correction that the speaker click and the keyboard check share one
+  alternating every-second-pixel gate, the fill-then-dissolve fade idiom, and
+  the correction that the clipped rectangle fill is render-target aware.
+- `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md` — the
+  dissolve entry's single-cell carry-set sub-entry and the shimmer entry's
+  direct-cell arguments.
+- `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md` — the
+  per-driver status of the packed-to-planar preparation entry and the reason
+  the other three families implement it as a no-op.
 
 - `u5-decomp/formats/ega-driver.md`.
 - `u5-decomp/functions/EGA_DRV/_OVERVIEW.md` (full per-slot index, 38 slots

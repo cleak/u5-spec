@@ -52,8 +52,8 @@ intro narrative renderer:
 
 | Byte | Meaning |
 |---|---|
-| `{` | Paragraph/page-start marker consumed by the proportional-font paragraph renderer. It is layout markup, not a visible glyph. |
-| `_` | Soft hyphen or syllable-break marker. It gives the renderer an additional wrap point inside a word and is not normally emitted as an underscore glyph. |
+| `{` | First-line paragraph indent consumed by the proportional-font paragraph renderer: nothing is drawn and the pen advances a flat fifteen pixels. It is layout markup, not a visible glyph, and it is not a page break or an input wait. |
+| `_` | Soft hyphen at a syllable break. Invisible and zero-width; it gives the renderer a legal wrap point inside a word, and a real hyphen glyph is drawn only when the line actually breaks there. The renderer never hyphenates on its own, so these markers must survive loading. |
 
 Line-feed bytes, if present, should be treated as hard line breaks by the
 renderer. NUL terminates the current record and is not rendered.

@@ -316,6 +316,14 @@ cap, records the current day as that point's cooldown cookie, and prints the
 "sprigs of" reagent narration. Searches at the right coordinate but the wrong
 hour, or repeated on the same day, fall through as no harvest.
 
+Each harvest point owns its own cooldown cookie, and the three cookies are
+durable save state (`formats/saved-gam.md` Section 10), so the once-per-day
+limit survives save and reload. The cookie stores a day-of-month only; nothing
+clears it at ordinary midnight, it simply stops matching when the day advances.
+The 28-day month rollover does zero all three (`systems/time.md` Section 8).
+They start at zero on a new game, which matches no calendar day, so all three
+points are harvestable at the first midnight of a fresh game.
+
 Search has a separate trap/detail narrator for per-map object slots that carry
 trap-class metadata. The slot metadata has two semantic parts: a trappable bit
 and a low difficulty value. Search combines that difficulty with the selected

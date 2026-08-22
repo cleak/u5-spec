@@ -32,6 +32,28 @@ fixed order: hour marker first, then Trammel, then Felucca. If two markers
 select the same cell, the later marker replaces the earlier one for that
 refresh.
 
+The strip is a plain twelve-character text run, not a pixel overlay. It is
+printed into the full-screen text window at **row `0`, starting at column `6`**,
+so it occupies columns `6` through `17` of the top text row. Blank cells are
+spaces. The fixed hour marker is the character `*`; the two moon markers are the
+phase digits from the tables below. Each cell is emitted in the ordinary strip
+colour except the `*` cell, which uses a second, distinct colour; both come from
+the resident per-display-mode chrome slots rather than from literals, so a clean
+implementation should expose them as two configurable indices.
+
+There are two distinct non-drawing cases, and they behave differently:
+
+- **Scenes outside the surface/town family** (combat, intro, and every scene id
+  at or above the location range) never reach the renderer at all. Nothing is
+  drawn and nothing is cached.
+- **Scene 25, Ararat** reaches the renderer but paints the strip's footprint
+  flat instead of printing it: a filled rectangle from `(40, 0)` to `(152, 6)`
+  in one chrome colour and a single pixel row from `(40, 7)` to `(152, 7)` in
+  another. The two glyph bytes are still cached in this case. The renderer
+  carries the same flat-fill branch for below-surface map levels, but the only
+  live caller already declines to call it there, so that arm is unreachable in
+  the shipped build.
+
 | Marker | Visible hours | Cell position |
 |--------|---------------|---------------|
 | Fixed hour marker | `06:00..17:59` | `17 - hour` |
@@ -159,6 +181,10 @@ glyph dumps, or private address tables.
   twenty-eight-day table --
   `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md` and
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 3.
+- Strip placement (twelve cells at columns six through seventeen of text row
+  zero), the `*` hour-marker character, the per-cell colour selection, and the
+  flat fill used when the strip is suppressed --
+  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 6.6.
 - Calendar bounds (day one through twenty-eight, reset after twenty-eight) and
   the single hour-change trigger --
   `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md` and

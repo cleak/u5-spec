@@ -56,8 +56,10 @@ band. What is known from refusal text and command behaviour is:
 - Ring of Invisibility and Ring of Regeneration are readied as ring-slot
   equipment, but each has a random vanish check after a successful ready action
   and another random removal check while worn in combat. Ring of Regeneration
-  also participates in the non-combat regeneration check that runs inside the
-  shared party status pass, once per turn-consuming action.
+  also participates in the non-combat regeneration check that runs as the last
+  step of the shared party status pass, once per turn-consuming action and once
+  per ten-minute town-bed rest step, plus once per five-minute wilderness camp
+  step issued directly by the camp loop. It is never an hourly effect.
 
 R-Ready moves items between the carried equipment band and these six readied
 slots. It lists rows whose carried counter is nonzero and rows already readied
@@ -66,7 +68,7 @@ combat-armour, and hand-occupancy gates, then decrements the carried counter
 only after an equip is accepted. Selecting an already readied row unequips the
 first matching slot and returns one carried copy up to the R-Ready equipment
 stock cap of `99`. Different items are not swapped atomically into occupied
-slots. Ring of Regeneration has a traced per-action non-combat HP tick while worn;
+slots. Ring of Regeneration has a traced per-status-pass non-combat HP tick while worn;
 Ring of Invisibility's continuing traced effect is combat-side. The public flow
 lives in `systems/inventory.md`.
 
@@ -366,7 +368,7 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 |------|--------|------------|------|
 | Ring of Invisibility | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check; when worn by a combatant, it marks that combatant hidden/suppressed and can be randomly removed by the combat round loop. No separate non-combat invisibility timer or world-mode effect writer is traced. | Broader combat visibility details live in `systems/combat.md`. |
 | Ring of Protection | Ring | Magic ring; one ring may be worn at a time. | Protection value, duration, and whether it has any related random-removal path. |
-| Ring of Regeneration | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check. Outside combat, the shared party status pass gives each non-Dead wearer a 1-in-8 chance to recover exactly 1 HP, capped at maximum HP; that pass runs once per turn-consuming action in world, town, and dungeon modes, once per ten-minute town-bed rest step, and once per five-minute wilderness camp step, not once per hour. In combat, each living wearer can be healed by the regeneration pass and can have the ring randomly removed by the combat round loop. | Non-combat cadence lives in `systems/time.md`; combat healing cadence lives in `systems/combat.md`. |
+| Ring of Regeneration | Ring | Ring-slot equipment. After accepted R-Ready, it has a 1-in-16 immediate vanish check. Outside combat, a regeneration check gives each non-Dead wearer a 1-in-8 chance to recover exactly 1 HP, capped at maximum HP. It is reached once per turn-consuming action in world, town, and dungeon modes and once per ten-minute town-bed rest step, in both cases as the last step of the shared party status pass, and once per five-minute wilderness camp step, in that case called directly by the camp loop rather than through the status pass. It is never an hourly effect. In combat, each living wearer can be healed by the regeneration pass and can have the ring randomly removed by the combat round loop. | Non-combat cadence lives in `systems/time.md`; combat healing cadence lives in `systems/combat.md`. |
 | Amulet/Turning | Amulet | Amulet/neck-slot equipment row. Its combat passive effect applies when a living party wearer is targeted by a turnable ranged/effect attack: half the time, the attack is forced through the scattered-impact path instead of the ordinary hit-roll result. The v1 flagged attackers are Mage, Wanderer, Blackthorn, Lord British, Sea Horse, Reaper, Gazer, Daemon, and Shadow Lord. | No U-Use activation, countdown, random disappearance, or non-combat periodic effect is traced. |
 | Spiked Collar | Neck item | Listed beside amulets; likely neck-slot equipment. | Whether it is equippable, cursed, or creature-specific. |
 | Ankh | Miscellaneous amulet/neck equipment row | Metadata places it in the same amulet/neck equipment class as the neck-slot rows above. The traced CAST U-Use picker and dispatcher do not include Ankh in their usable-item family, and no carried quest, ritual, or consumable consumer is traced. | No U-Use activation, quest ritual, or consumable effect is traced. |
@@ -495,6 +497,12 @@ These items are named by inventory strings, save-image categories, use-item disp
 Search/container shard grants use the same public shard indexes `0..2` as
 U-Use and set the corresponding ownership flag.
 
+The world source of the three shards, and of the Amulet of Lord British, is a
+fixed-coordinate placement on the Underworld plane rather than a container or a
+hidden-treasure record. The four coordinates and the placement gates — including
+the rule that a shard stops being placed once its Shadowlord is vanquished — are
+published in `catalogs/quest-graph.md` Section 5.
+
 ## 9. Vehicles
 
 Vehicles straddle inventory and world state. A vehicle can be a map object, a shop purchase, a carried or owned item, and a current party state.
@@ -533,6 +541,12 @@ the speaking member's Intelligence adjustment described in `systems/shops.md`.
 | The Crow's Nest | 753 | 175 |
 | The Oaken Oar | 650 | 125 |
 | The Rusty Bucket | 700 | 100 |
+
+Shipwright quotes take the same Intelligence adjustment as horse quotes. A paid
+vessel is not handed over in the shop: it is queued and then placed on the
+overworld at a fixed per-shipwright delivery cell, published with these rows in
+`systems/shops.md` Section 8.7. That cell is a sidecar value belonging to the
+shipwright row, not the selling town's entrance or exit coordinate.
 
 ## 10. Shops and acquisition
 

@@ -406,9 +406,21 @@ distance, it is **not** a solid seven-by-seven square, and the threshold value
 is **not** three. The eleven-by-eleven per-source visited grid is larger than
 the lit disc; it is bookkeeping for the queue carve, not the radius.
 
-Beyond the threshold the ordinary carve rules apply: propagation is still
-gated by the propagation-blocker set of Section 6, so a source does not light
-through a wall even within the disc.
+Two rules complete the shape.
+
+**Inside the disc**, a reached cell is painted with its real tile byte even when
+that tile is a propagation blocker. The blocker stops the *expansion*, not the
+lighting of its own cell, so a wall segment facing a torch is lit while the
+cells behind it are not. This is why a source does not light through a wall
+even though its disc would reach past one.
+
+**Outside the disc**, the local-light carve simply stops. A candidate whose
+squared distance exceeds the threshold is neither painted nor expanded further,
+so the flood never leaves the disc even though the per-source visited grid is
+larger. This differs from the ordinary producer's carve, which does keep
+expanding through dark space beyond its own radius and consults this mask to
+decide what to paint out there (Section 5). Do not carry that behaviour over
+into the local-light pass; the mask is write-only while it is being built.
 
 The mask is binary in effect — a cell is either locally lit or not. There is no
 graduated brightness inside the disc; ambient brightness is owned by
@@ -504,6 +516,14 @@ The behaviour described above was derived by reading the function and format not
   final untouched-cell zeroing —
   `u5-decomp/functions/ULTIMA_EXE/0x5E4A_light_radius_lookup.md` and
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 4.
+- The carve's two caller modes, the per-source visited grid, the stop-at-the-
+  disc-boundary rule for local light, the fact that a blocker cell inside the
+  disc is itself lit, and the folded squared-distance lookup being exactly
+  `dx * dx + dy * dy` - `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md`
+  sections 6.2 through 6.4, cross-checked against
+  `u5-decomp/functions/ULTIMA_EXE/0x5A28_visibility_buffer_setup.md`,
+  `u5-decomp/functions/ULTIMA_EXE/0x5DFE_visibility_tile_class.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/0x6FF0_range_to_player.md`.
 - The Moonstone-slot live-gate refresh caller that rebuilds the local-light
   mask after in-scene tile rewrites -
   `u5-decomp/functions/ULTIMA_EXE/0x475A_npc_schedule_tick.md`.

@@ -130,8 +130,8 @@ charge or mana.
 | 3 | `AN` | An Nox | Cure | 1 | Ginseng + Garlic | C/D/I/O | healing; selected-member Poisoned-to-Good status gate |
 | 4 | `M` | Mani | Heal | 1 | Ginseng + Spider Silk | C/D/I/O | healing; selected-member HP add from halved 0..60 roll with minimum 1, skips only Dead targets, clamps at maximum HP |
 | 5 | `AY` | An Ylem | Vanish | 1 | Garlic + Blood Moss | C/I | utility; directed tile helper, clears a removable-object tile to the shared cleared-cell tile `0x44` and prints `POOF!`; works on combat-arena terrain too |
-| 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility; directed tile helper, unlocks a locked door (`0xB9`→`0xB8`, `0xBB`→`0xBA`) or clears a co-located object's lock bit; separate dungeon-cell arm in dungeon scenes |
-| 7 | `ACX` | An Xen Corp | Repel Undead | 2 | Sulfur Ash + Garlic | C | buff/debuff; critical-HP flee setup on non-humanoid undead-class monster actors |
+| 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility; directed tile helper, unlocks a locked door (`0xB9`→`0xB8`, `0xBB`→`0xBA`) or clears the lock/trap bit on a co-located kind-1 chest object — including a monster's combat drop; separate dungeon-cell arm in dungeon scenes |
+| 7 | `ACX` | An Xen Corp | Repel Undead | 2 | Sulfur Ash + Garlic | C | buff/debuff; drives every undead-class monster-side actor that fails the resistance check to combat HP 1 and sets its fleeing bit; protected classes 14/15/47 excluded; creates and repurposes nothing |
 | 8 | `HR` | Rel Hur | Wind Change | 2 | Sulfur Ash + Blood Moss | O | utility |
 | 9 | `IW` | In Wis | Locate | 2 | Nightshade | O | utility; prints the shared sextant-style Y-then-X coordinate line |
 | 10 | `KX` | Kal Xen | Conjure | 2 | Spider Silk + Mandrake | C | summon; sixteen-outcome selector, 6 Giant Rat / 5 Giant Spider / 3 Bat / 2 Python, one actor on the first of up to eight legal random arena probes |
@@ -158,16 +158,16 @@ charge or mana.
 | 31 | `AQW` | Quas An Wis | Mass Charm | 6 | Nightshade + Mandrake | C | buff/debuff; AI target remap |
 | 32 | `AI` | In An | Negate Magic | 6 | Sulfur Ash + Garlic + Mandrake | C/D/I/O | marquee; absorbs combat casts |
 | 33 | `AWY` | Wis An Ylem | X-Ray | 6 | Sulfur Ash + Mandrake | I/O | utility |
-| 34 | `AEX` | An Xen Ex | Charm | 6 | Spider Silk + Black Pearl + Nightshade | C | buff/debuff |
+| 34 | `AEX` | An Xen Ex | Charm | 6 | Spider Silk + Black Pearl + Nightshade | C | buff/debuff; toggles the controlled/charmed descriptor bit `0x01` on the picked creature (a second cast clears it), sets a party-side target's roster status letter back to Good, prints `<name> charmed!` and suppresses the shared epilogue; it does not change faction |
 | 35 | `BRX` | Rel Xen Bet | Polymorph | 6 | Sulfur Ash + Spider Silk + Nightshade + Mandrake | C | buff/debuff |
 | 36 | `LS` | Sanct Lor | Invisibility | 7 | Blood Moss + Nightshade + Mandrake | C | buff/debuff |
 | 37 | `CX` | Xen Corp | Kill | 7 | Black Pearl + Nightshade | C | damage; single-target instant kill |
 | 38 | `IQX` | In Quas Xen | Clone | 7 | Sulfur Ash + Ginseng + Spider Silk + Blood Moss + Mandrake | C | summon |
 | 39 | `IQW` | In Quas Wis | Peer | 7 | Nightshade + Mandrake | D/I/O | utility |
 | 40 | `HIN` | In Nox Hur | Poison Wind | 7 | Sulfur Ash + Blood Moss + Nightshade | C | damage |
-| 41 | `CIQ` | In Quas Corp | Cause Fear | 7 | Garlic + Nightshade + Mandrake | C | buff/debuff |
+| 41 | `CIQ` | In Quas Corp | Cause Fear | 7 | Garlic + Nightshade + Mandrake | C | buff/debuff; drives every monster-side actor that fails the resistance check to combat HP 1 and sets its fleeing bit; protected classes 14/15/47 excluded; no undead condition |
 | 42 | `CIM` | In Mani Corp | Resurrect | 8 | Sulfur Ash + Ginseng + Garlic + Spider Silk + Blood Moss + Mandrake | D/I/O | healing |
-| 43 | `CKX` | Kal Xen Corp | Summon | 8 | Garlic + Spider Silk + Blood Moss + Mandrake | C | summon |
+| 43 | `CKX` | Kal Xen Corp | Summon | 8 | Garlic + Spider Silk + Blood Moss + Mandrake | C | summon; places one Daemon (class 38) on the first of up to eight random arena probes whose cell passes the shared spawn-cell validator (Summon re-tests the impassable void terrain byte itself, duplicating a rejection the validator already makes, so it changes no outcome), through the ordinary monster placement path (hostile, AI-driven); then the caster self-check rolls `1..30` against the caster's Intelligence and, on roll at or above that value, prints `Oops...`, returns the silent-failure result and leaves the Daemon uncontrolled; on success it stamps the controlled bit `0x01` |
 | 44 | `CGIV` | In Vas Grav Corp | Death Wind | 8 | Sulfur Ash + Nightshade + Mandrake | C | damage |
 | 45 | `FHI` | In Flam Hur | Flame Wind | 8 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
 | 46 | `PRV` | Vas Rel Por | Gate Travel | 8 | Sulfur Ash + Black Pearl + Mandrake | D/I/O | marquee |
@@ -229,15 +229,21 @@ charge or mana.
   failure sound. The tile maps are: Vanish accepts `0x5B`, `0x90`, `0x91`,
   `0x92`, `0x93`, `0x9D`, `0xA5`, `0xA6`, `0xA8`, `0xA9`, `0xAD`, `0xAE`, `0xAF`
   and writes `0x44`; Open (non-dungeon arm) turns `0xB9` into `0xB8` and `0xBB`
-  into `0xBA`, else clears the lock/trap high bit on a kind-1 dynamic object at
+  into `0xBA`, else clears the lock/trap high bit on a kind-1 chest object at
   the target cell, skipping that object's Z test in combat scenes; Magic Lock
   turns `0xB8`/`0xB9` into `0x97` and `0xBA`/`0xBB` into `0x98`; Unlock Magic
-  performs the inverse `0x97`→`0xB8` and `0x98`→`0xBA`. Earlier guidance that
+  performs the inverse `0x97`→`0xB8` and `0x98`→`0xBA`. Vanish and Magic Lock
+  play their cast effect as soon as the direction is accepted, and Unlock
+  Magic's is played for any outcome other than Space/Pass, so a failed cast of
+  those three is still audible/visible before `Failed!`; only Open holds its
+  effect until a success branch. Earlier guidance that
   these four are unmodelled combat no-ops that always print `Failed!` without
   prompting is withdrawn.
 - Combat eligibility for that family is uneven by arena family. Outdoor combat
   arenas contain no door tiles, and exactly one of them carries Vanish-family
-  object tiles. Dungeon-room arenas contain door tiles in eighteen arenas — the
+  object tiles. Open is the exception to that scarcity: its object arm matches
+  the kind-1 chest record a dying monster drops, so combat Open has a reachable
+  success case in every arena regardless of terrain. Dungeon-room arenas contain door tiles in eighteen arenas — the
   magic-locked, ordinary-locked and unlocked forms all appear — and
   Vanish-family object tiles in seven. Combat Open always takes the non-dungeon
   arm, because the arm split keys on the dungeon-exploration scene class rather
@@ -283,12 +289,14 @@ charge or mana.
   full; the original capacity-failure result word is undefined, so exact bug
   compatibility may expose unpredictable success/failure narration. No traced
   Clone helper installs a separate per-spell duration counter; combat-exit
-  lifetime is bounded by the combat framer's table restore. `CIQ`
-  sweeps hostile combat actors and forces each accepted target into the
-  critical-HP flee setup; the combat wound-score morale classifier performs the
-  actual fleeing-flag write from that state. `ACX` (Repel Undead) is the same
-  critical-HP flee setup narrowed to non-humanoid monster-side actors whose
-  class carries the undead flag: it drives the accepted actor's combat HP to one
+  lifetime is bounded by the combat framer's table restore. `CIQ` (Cause Fear)
+  sweeps all thirty-two combat slots and, for every monster-side actor that
+  fails the shared resistance check, drives its combat HP to one and sets the
+  flee bit `0x02` directly; the combat wound-score morale classifier then keeps
+  re-asserting the flag from that critical-HP state. `ACX` (Repel Undead) is the same
+  critical-HP flee setup narrowed to monster-side actors whose class carries the
+  undead flag, with the three protected special classes (14 Blackthorn, 15 Lord
+  British, 47 Shadow Lord) excluded from both spells' sweeps: it drives the accepted actor's combat HP to one
   and sets the flee bit `0x02`. It is not a summon or tame effect and does not
   write the controlled bit `0x01`; earlier text describing it as a
   "summon/tame-style repurpose helper" is withdrawn.
@@ -304,18 +312,26 @@ charge or mana.
   query always uses the Giant Rat movement family regardless of the rolled
   class. Swarm makes up to eight probes to find a **single** legal cell, then
   places up to four Insect Swarm actors (class 31) at that one coordinate; there
-  is no caster-centred ring and no jitter retry. Every actor placed by Conjure,
-  Swarm, or Summon is stamped with the controlled/charmed descriptor bit `0x01`.
+  is no caster-centred ring and no jitter retry. Every actor placed by Conjure or
+  Swarm is stamped with the controlled/charmed descriptor bit `0x01`, and Summon
+  stamps it only when its caster self-check succeeds, but all three place through
+  the ordinary monster path, so the creature is a monster-side, AI-driven,
+  hostile actor. The bit is not an allegiance flag and
+  does not hand the creature to the player; it only redirects that actor's
+  attack action into the fixed magic-strike branch, which additionally requires
+  an adjacent target.
   Clone duplicates an accepted creature into
   paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor
-  (class 38) at the first accepted cell from up to eight of the shared probes,
-  adding one extra per-probe condition of its own: the candidate cell's terrain
-  byte must not be the arena's impassable void byte. It does not use the
+  (class 38) at the first accepted cell from up to eight of the shared probes.
+  Summon also re-tests the candidate cell's live terrain byte against the
+  arena's impassable void byte itself, but the shared spawn-cell validator
+  already rejects that byte, so the duplicate test changes no outcome. It does not use the
   direction prompt, an adjacent cached target coordinate, or an ordered
   eight-cell ring. Summon's self-check threshold is a concrete stat — the
-  caster character's **Intelligence** for a party caster, or the second stat
-  field of the caster's class row for a monster caster — compared against a
+  caster character's **Intelligence** for a party caster (the only case a player
+  C-Cast can reach), or the class row's flip-HP field, the third of the eight
+  class-stat fields, for a monster caster — compared against a
   uniform inclusive `0..60` roll halved with the fraction discarded and floored
   to one, i.e. `1..30`. On `roll >= threshold` the cast prints `Oops...`,
   returns the silent-failure result, and leaves the Daemon placed but

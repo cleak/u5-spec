@@ -126,13 +126,19 @@ A few tile ids have command-specific handling around the table lookup:
   intentionally left to `systems/view.md` and `catalogs/tile-catalog.md`.
 - `0xA1` routes to the LOOKOBJ wishing-well handler and `0xD8..0xDB` routes to
   the LOOKOBJ fountain handler. Both replace the base string entirely rather
-  than decorating it, which is why those entries carry no usable description
-  record. `0xD8..0xDB` here is a terrain-domain id; the identically numbered
-  entries in the object domain are an unrelated creature sprite run.
-- `0xE0`, `0xE1` and `0xE2` are redirect entries rather than descriptions: the
-  look command moves its target cell one step (north, east and west
-  respectively) and re-resolves before any lookup happens, so these ids never
-  reach the table themselves.
+  than decorating it. The two differ in what they store: `0xD8..0xDB` share the
+  placeholder record, but `0xA1` carries a real description record of its own
+  naming a deep well, which the look path never reaches because the handler
+  returns first. Owning a real record therefore does not mean an id lacks a
+  handler, and carrying the placeholder is not a reliable way to enumerate the
+  handler-driven ids; use the dispatch tables in `systems/view.md` Section 3.
+  `0xD8..0xDB` here is a terrain-domain id; the identically numbered entries in
+  the object domain are an unrelated creature sprite run.
+- `0xE0`, `0xE1` and `0xE2` behave as redirects: the look command moves its
+  target cell one step (north, east and west respectively) and re-resolves
+  before any lookup happens, so the look path never prints these ids' own
+  records. They do carry real description records all the same — all three
+  share one desert-terrain string — which other readers of the table may use.
 - `0xFA` and `0xFB` print their base `LOOK2.DAT` description, then append the
   current clock time with an AM/PM suffix.
 - `0xDE` prints its base description, then appends the current shrine
@@ -195,3 +201,6 @@ cross-reference alignment.
   `u5-decomp/functions/LOOKOBJ_OVL/0x06A4_lookobj_print_object_string.md`.
 - The look-command layer resolution and special-tile fall-through context --
   derived from `u5-decomp/functions/LOOKOBJ_OVL/0x0502_lookobj_describe.md`.
+- Which handler-driven tile ids carry the placeholder record and which carry a
+  real record (the deep-well and desert cases) -- derived from
+  `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`.

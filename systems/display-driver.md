@@ -79,8 +79,10 @@ differ between the two families:
 The low-colour values are all inside `0..3` because the CGA and Hercules
 drawing-colour entries mask their argument to two bits before translating it,
 so any larger index would alias. Known consumers so far are the Return-to-View
-caption panel (slot 2 for the panel fill, slot 1 for the rule beneath it) and
-the Return-to-View fixed wipe command (slot 1).
+caption panel (slot 2 for the panel fill, slot 1 for the rule beneath it), the
+Return-to-View fixed wipe command (slot 1), and the Ultima IV transfer preview
+screen (slot 2 for its frame glyphs and panel bars, slot 1 for its pixel rules
+and panel titles — `u4-transfer.md` section 6.1).
 
 For v1 asset compatibility, an implementation should support the EGA-compatible
 rendering path and the original asset selectors. It may reject or map the
@@ -347,9 +349,30 @@ the preview cell draws and the preview actor draws go through the ordinary
 resulting geometry is given in `intro.md` section 12 and
 `formats/location-dat.md` section 11: origin `(8, 16)`, 16-by-16 cells, screen
 tile rows `7..10` and columns `0..18`, i.e. the pixel rectangle
-`(8, 128)..(311, 191)`. The five fixed wipe rectangles are absolute framebuffer
-pixel rectangles on that same page. Nothing about the preview is scaled,
-cropped, or drawn through a private miniature raster.
+`(8, 128)..(311, 191)`. The strip is **nineteen cells across by four down**; a
+reader that transposes it computes an impossible 64-by-304 preview. The five
+fixed wipe rectangles are absolute framebuffer pixel rectangles on that same
+page. Nothing about the preview is scaled, cropped, or drawn through a private
+miniature raster.
+
+Two further display-side rules the preview depends on:
+
+- **No clear, no full repaint.** Each preview tick repaints only the cells
+  inside the currently revealed column span, and skips cells that a cell-effect
+  command has marked as owned by another entry. Everything else on the page,
+  inside and outside the strip, is left alone. This is cell-granular painting
+  over preserved backing, not a dirty-rectangle system and not a full redraw.
+- **The strip reveals from its centre column outward.** A strip load resets a
+  repaint cursor to column 9 only; it widens by one column on each side on every
+  second preview tick and reaches the full span after eighteen ticks. The
+  planes are filled immediately by the load, so this is purely a painting-order
+  contract for the display layer.
+
+The preview also uses two driver entries besides the tile blitter: the
+animated-terrain shimmer entry, driven directly on one preview cell with a step
+value for the local cell effect, and the pixel-dissolve entry's single-cell
+sub-entry for the temporary actor draws. Both are specified in
+`display-driver-abi.md` sections 9.6 and 10.
 
 ### Per-driver title-band geometry
 
@@ -376,9 +399,10 @@ own hidden surface.
 - Decode file containers before handing image bodies to the renderer.
 - Preserve the update-then-render-then-present ordering for idle animation and
   viewport redraws.
-- Preserve the original asset-depth selection rule: use `.16` resources for
-  EGA-compatible output and `.4` resources only when intentionally supporting a
-  low-colour historical backend.
+- Preserve the original asset-depth selection rule exactly as section 2 states
+  it: the high-colour `.16` family for EGA **and Tandy**, the low-colour `.4`
+  family for CGA **and Hercules**. The split follows colour depth, not
+  resolution. A v1 engine that ships EGA only always uses the `.16` family.
 - Do not require the original `*.DRV` binaries in a modern cleanroom engine.
 
 ## 10. Known Uncertainties
@@ -399,17 +423,32 @@ own hidden surface.
   display backends remain: the CGA, Hercules, and Tandy builds stage the
   equivalent low-colour archive records, and their pixel conversion is part of
   the alternate-hardware parity item above.
-- **Story rectangle-transition helper.** Fixed title artwork placement, menu
-  idle ticking, story-art selection, story primary placement, and the step-1
-  story-transition rectangle reveal are specified in `intro.md`. A focused
-  intro slide-loop caller census did not find a step-2 or later story-page
-  column-wipe table. Any non-story intro helper use or endgame display-helper
-  use needs its own caller-specific bounds and reveal-rate trace.
-- **Return-to-View resident helper internals.** The script-level command
-  schedule, rectangle coordinates, actor draw ordering, and preview tick counts
-  are specified in `formats/location-dat.md`. The remaining display gap is the
-  exact resident helper implementation for special actor draws, local
-  cell-effect rastering, and the short fixed wait.
+- **Story rectangle-transition helper.** Closed for the intro and the endgame.
+  Fixed title artwork placement, menu idle ticking, story-art selection, story
+  primary placement, and the step-1 story transition are specified in
+  `intro.md`; the step-1 effect is the rectangle dissolve, not a column wipe. A
+  focused intro slide-loop caller census found no step-2 or later story-page
+  transition table. The start/menu loader's optional reveal is specified in
+  section 8 above.
+  **Correction.** An earlier revision of this bullet said the late endgame
+  rectangle "turned out to be an opaque fill of the hidden surface with no
+  visible effect". That is withdrawn. The fill is real, but it is immediately
+  followed by a full-screen rectangle dissolve issued from the next routine, so
+  the beat is a visible full-screen fade to black; see `endgame.md` section
+  7.1. A whole-program census of the dissolve entry now lists all six of its
+  call sites in `display-driver-abi.md` section 9.6. Three of them — two in the
+  Blackthorn audience/rescue scene and one on the search/open command path, all
+  over the `(8, 8)..(183, 183)` map viewport — are still unspecified in their
+  own system docs, and remain open work outside this document.
+- **Return-to-View resident helper internals.** Closed. The script-level
+  command schedule, rectangle coordinates, actor draw ordering, preview tick
+  counts, framebuffer geometry, repaint policy, and column reveal are specified
+  in `formats/location-dat.md` section 11 and `intro.md` section 12, and the
+  three driver entries involved are ordinary published ones. The only residual
+  is the shimmer entry's exact per-step pixel pattern, which falls under the
+  alternate-hardware and exact-raster parity item rather than under
+  Return-to-View. The "short fixed wait" after the fixed wipe was a misreading
+  of a speaker call and is withdrawn.
 - **Which entry paths repaint the game-screen frame.** The frame's content and
   its independence from gameplay state are settled, and the intro's Journey
   Onward path is a confirmed painter. Whether each mode-loop entry repaints it
@@ -435,10 +474,17 @@ addresses.
   `u5-decomp/functions/ULTIMA_EXE/0x637E_combat_screen_layout.md` (the note file
   keeps its original filename; its contents were corrected on 2026-05-24) and
   `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
-- EGA dispatch ABI, slot inventory, rectangle fill, driver-compressed bitmap
-  decode, 16-by-16 tile blit, and 8-by-8 glyph blit:
+- EGA dispatch ABI, slot inventory, rectangle fill, packed-to-planar archive
+  preparation, 16-by-16 tile blit, and 8-by-8 glyph blit:
   `u5-decomp/formats/ega-driver.md` and the `u5-decomp/functions/EGA_DRV/`
   notes.
+- Driver-to-asset-family selection, the two user-interface colour sets, the
+  per-driver framebuffer shapes, the per-driver title-band geometry, and the
+  status of the packed-to-planar preparation entry in each family:
+  `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md`,
+  `u5-decomp/formats/cga-driver.md`, `u5-decomp/formats/tandy-driver.md`,
+  `u5-decomp/formats/hercules-driver.md`, and
+  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - Text descriptor initialization, cell rendering, rectangle conversion, and
   scroll/clear dispatch:
   `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`,
@@ -473,3 +519,13 @@ addresses.
   stream, actor draw scheduling, and effect steps:
   `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper
   analysis.
+- Return-to-View strip orientation, framebuffer origin and cell size, per-tick
+  repaint policy, and centre-outward column reveal:
+  `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and
+  `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
+- Rectangle-dissolve abort gate and its speaker effect:
+  `u5-decomp/notes/rect_dissolve_abort_and_sound_2026-08-22.md`.
+- Whole-program rectangle-dissolve caller census, the separation of the entry's
+  two carry paths, the fill-then-dissolve fade idiom, and the correction that
+  the clipped rectangle fill is render-target aware:
+  `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md`.

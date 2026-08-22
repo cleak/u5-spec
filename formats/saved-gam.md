@@ -40,7 +40,7 @@ after the roster.
 | Tail of resident state              | `0x0329` – `0x03B3`   | ~139 bytes  | 10      |
 | Dungeon room-clear bitmap           | `0x033A` – `0x0349`   | 16 bytes    | 10      |
 | Active map / dungeon tile buffer    | `0x03B4` – `0x05B3`   | 512 bytes   | 8.2     |
-| Mixed world and quest state         | `0x05B4` – `0x06B3`   | 256 bytes   | 10      |
+| Per-location NPC bitmasks (removed, then name-known) | `0x05B4` – `0x06B3` | 256 bytes | 9.2 |
 | Active-object table (32 × 8 bytes)  | `0x06B4` – `0x07B3`   | 256 bytes   | 8.1     |
 | Reserved / NPC and tile scratch     | `0x07B4` – `0x105F`   | 2,220 bytes | 12      |
 
@@ -187,7 +187,7 @@ implementation that gives them private storage will diverge:
   the gate for fixed hidden-treasure record 15. It is the same byte, not a
   parallel cookie. See Section 10.
 
-The reagent block is small enough to enumerate as a fixed eight-byte record at `0x02AA`. The order matches the in-world spell-mixing UI, with black pearl in the first byte and sulfurous ash in the last.
+The reagent block is small enough to enumerate as a fixed eight-byte record at `0x02AA`. The order matches the in-world spell-mixing UI, with black pearl in the first byte and sulfurous ash in the last. The block is exactly eight bytes: the three bytes immediately after it are the rare-reagent harvest cooldown cookies described in Section 10, not a ninth through eleventh reagent.
 
 ### 7.1 Spell-charge stock
 
@@ -300,8 +300,10 @@ the resident image.
 The two bitmasks together encode a four-state virtue quest: not started (both zero), ordained (ordained set, codex clear), codex-read (both set), complete (ordained clear, codex set — the ordained bit is cleared on shrine turn-in). All eight virtues use the same encoding, with the same bit-to-virtue map, so the layout is uniform. Ordinary post-completion shrine offerings leave these masks unchanged; they update gold and shrine standing instead.
 
 The Shadowlord slot bytes are the gameplay-visible vanquish state: they gate
-Shadowlord re-rolls, name summons, town-entry Shadowlord installation, Sextant
-reports, Stonegate atmosphere, and Doom entry. The quest-progress word at
+Shadowlord re-rolls, name summons, town-entry Shadowlord installation, the
+Underworld shard placement, a view-side location marker, Stonegate atmosphere,
+and Doom entry. They are **not** read by the Sextant: the Sextant prints the
+party's own coordinates and has no Shadowlord readout. The quest-progress word at
 `0x0624` is also written by the same successful destruction path for
 byte-compatible state, but do not use it as a substitute for the three
 Shadowlord slot bytes when deciding whether a Shadowlord is alive.
@@ -315,16 +317,31 @@ save produced after a destruction has all three consistent.
 ### 9.2 NPC Interaction Boundary
 
 Named-NPC interaction persistence is handled by the quest and NPC-state fields
-documented in `systems/quest-flags.md` and `systems/conversation.md`. Earlier
-external descriptions assign a full 256-byte block at `0x05B4..0x06B3` to
-NPC met/killed-style flags, but the finished engine trace does not support
-treating that whole span as a standalone NPC flag table. It overlaps mixed
-world and quest state immediately before the active-object table, including confirmed
-quest-progress bits and mode-owned scratch.
+documented in `systems/quest-flags.md` and `systems/conversation.md`.
 
-Implementations should therefore preserve `0x05B4..0x06B3` byte-for-byte for
-save compatibility and use the system-level quest/NPC contracts for semantic
-state. Do not infer a dense public met/killed table for this entire range.
+The 256-byte block at `0x05B4..0x06B3` is **two back-to-back per-location
+bitmask tables**, each thirty-two slots of four bytes, ending flush against the
+active-object table at `0x06B4`. Both are indexed by the one-based location id
+of a town-mode scene (one through thirty-two), and within a slot the bit number
+is the NPC's roster slot in that location, zero through thirty-one:
+
+| Range              | Table | Meaning of a set bit |
+|--------------------|-------|----------------------|
+| `0x05B4` – `0x0633` | NPC removed | Roster slot *n* is permanently gone from this location and must not be placed on entry. |
+| `0x0634` – `0x06B3` | NPC name known | Roster slot *n* has been told the party's name. This is the TALK branch-flag bank of `systems/quest-flags.md` section 3. |
+
+An earlier revision of this section said the trace did not support treating the
+span as an NPC flag table and described it as mixed world, quest, and mode
+state. That is withdrawn: the decomposition above is exact, the two tables meet
+at `0x0634` with no gap, and no other system owns bytes inside the span. What
+the earlier caution got right is that neither table is a met/killed table in the
+sense external descriptions use — the first is a *placement suppression* mask
+written by NPC death and by a small number of scripted world events, and the
+second is a conversation memory bit written only by the dialogue name prompt.
+
+The factory seed has all 256 bytes zero. Implementations should still preserve
+the span byte-for-byte for save compatibility, and should read the semantics
+from the owning system specs rather than inventing per-bit meanings.
 
 ## 10. Per-turn flags and combat scratch
 
@@ -332,10 +349,11 @@ A loosely packed band of bytes before the dungeon/map-cell working buffer holds 
 
 | Offset       | Field                          | Meaning                                                                                                                                         |
 |--------------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| `0x02E2`     | Moral-standing selector        | One-byte capped standing/progression value used by shrine rewards, Blackthorn rescue/refuge verdict text, the Lord British camp event, and several action penalties. This is not the party food word at `0x0202`. Preserve adjacent unnamed bytes in this band. |
-| `0x02E5`     | Turn-step counter              | One-byte saturating counter. The resident per-turn party-upkeep pass advances it by one on every pass and clamps it at `255`; that pass runs once per turn-consuming action in overworld, town, and dungeon play, and once per ten simulated minutes of town-bed rest. It has exactly one reset anywhere in the game: the conversation gold-payment milestone (`systems/karma.md` section 4.1) zeroes it when it reads at least `100` and the payment's other gates pass. It is therefore a cooldown timer, not a payment tally — earlier revisions of this document called it a "toll-progress counter incremented on every successful gold payment", which was wrong on both counts. New games seed it at zero. |
+| `0x02E2`     | Moral-standing selector        | One-byte capped standing/progression value used by shrine rewards, Blackthorn rescue/refuge verdict text, the Lord British camp event, and several action penalties. This is not the party food word at `0x0202`. The factory seed value is `75`. Preserve adjacent unnamed bytes in this band. |
+| `0x02E5`     | Turn-step counter              | One-byte saturating counter. The resident per-turn party-upkeep pass advances it by one on every pass and clamps it at `255`; that pass runs once per turn-consuming action in overworld, town, and dungeon play, and once per ten simulated minutes of town-bed rest. Its only known reset is the conversation gold-payment milestone (`systems/karma.md` section 4.1), which zeroes it when it reads at least `100` and the payment's other gates pass; that exclusivity comes from a static census of the shipped code's direct references to the byte, so read it as "no other directly-referenced writer exists" rather than as a proof (see `systems/karma.md` section 4.1's confidence note). It is therefore a cooldown timer, not a payment tally — earlier revisions of this document called it a "toll-progress counter incremented on every successful gold payment", which was wrong on both counts. New games seed it at zero. |
 | `0x02B6..0x02C4` | Fixed hidden-treasure found bitmap | 15 bytes, 113 bits. Bit `N` (with `byte = N >> 3` and `bit = N & 7`, little-endian within each byte) is set when ordinary fixed hidden-treasure records are recovered by S-Search. Special records 13, 14, and 15 do not use this bitmap as their durable grant state. The 113 records' `(scene, Z, X, Y, code)` coordinates live in `DATA.OVL`. See `systems/hidden-treasures.md` for the search-and-grant flow. New games seed all 15 bytes to zero. |
-| `0x020C`     | Record-14 daily cooldown cookie | One byte. Holds the day-of-month at the last grant of the cycling fixed hidden-treasure record (record index 14). The scan skips record 14 when `current_day == cookie` and writes the current day on grant. Bit 14 of the found bitmap above is NOT used; the cookie fully owns record 14's availability. This byte is **not an independent field of its own**: it sits inside the special/quest-item band of Section 7, at the one offset in `0x020A..0x0219` that no carried item claims. It is not a carried-item counter and must not be displayed or granted as one. Factory: `0x00`. |
+| `0x020C`     | Record-14 daily cooldown cookie | One byte. Holds the day-of-month at the last grant of the cycling fixed hidden-treasure record (record index 14). The scan skips record 14 when `current_day == cookie` and writes the current day on grant. Bit 14 of the found bitmap above is NOT used; the cookie fully owns record 14's availability. This byte is **not an independent field of its own**: it sits inside the special/quest-item band of Section 7, at the one offset in `0x020A..0x0219` that no carried item claims. It is not a carried-item counter and must not be displayed or granted as one. The 28-day month rollover zeroes it (`systems/time.md` Section 8); ordinary midnight does not. Factory: `0x00`. |
+| `0x02B2..0x02B4` | Rare-reagent harvest cooldown cookies | Three bytes, one per fixed rare-reagent Search harvest point, in the harvest-table order published in `systems/containers.md`. Each holds the day-of-month of that point's last successful harvest; a harvest is refused when the byte equals the current day, and success writes the current day into it. These sit between the reagent counters of Section 7 and the party-size byte, and they are not reagent counters — do not read or display them as inventory. The 28-day month rollover zeroes all three. Factory: all zero. |
 | `0x0241`     | Record-15 gate — the Glass Sword equipment counter | Not a dedicated cookie. This is the **equipment-inventory counter for item id `39` (Glass Sword)** from Section 7, and record 15's granted item is that same Glass Sword. Record 15 grants only when the byte is zero and no NPC is present at the searched tile; the skip predicate is `byte != 0` OR an NPC is present. The scan itself never writes the byte and never sets bitmap bit 15 — the ordinary inventory grant increments the counter, and that is what makes the record single-use. An engine that gives record 15 a separate never-written cookie yields an infinitely repeatable Glass Sword. Factory: `0x00`. |
 | `0x02EE`     | Saved scene / mode scratch     | See Section 6. Adjacent to the location tuple; combat uses it for pre-combat scene restore and mode code may reuse it as transition/redraw scratch. |
 | `0x02F2..0x02FF` | Animation / cached light    | Animation, redraw, and cached ambient-light bytes. The active light-source duration counters start at `0x0300`.                                  |
@@ -458,11 +476,11 @@ remaining work is runtime ownership naming for opaque bytes and
 transport/action marker values outside known live ranges, not a change to the
 base file layout.
 
-- **Mixed state byte ownership.** The `0x05B4..0x06B3` band is known to hold
-  mixed world, quest, and mode state rather than the older external
-  single-purpose NPC-flag interpretation. Some individual fields are named by
-  their owning systems; remaining bytes should be preserved unless a future
-  trace assigns them.
+- **`0x05B4..0x06B3` ownership.** Resolved. The band is two back-to-back
+  per-location bitmask tables — NPC removed, then NPC name known — each
+  thirty-two four-byte slots, ending flush against the active-object table.
+  Section 9.2 gives the split and the bit numbering, and withdraws the older
+  "mixed world, quest, and mode state" framing for this span.
 
 - **Transport/action marker values.** Offsets `0x02D4` and `0x02D6` are
   separate fields, not one enum. The stats panel reads `0x02D4` as the bottom
@@ -481,9 +499,9 @@ base file layout.
   combat-passive branch is specified in `systems/combat.md`. The adjacent
   `+0x18` byte is the combat defense value consumed by the damage path; current
   traced equipment helpers do not recompute it from readied armor. Do not map
-  party combat defense to record byte `+0x0D`; that byte is Intelligence in the
-  roster layout, while the combat reader resolves to `+0x18` at the
-  thirty-two-byte character stride.
+  party combat defense to record byte `+0x0D`; that byte is Dexterity in the
+  roster layout (Intelligence is `+0x0E`), while the combat reader resolves to
+  `+0x18` at the thirty-two-byte character stride.
 
 Historical third-party references sometimes swap the gender and class positions.
 This spec's order is verified: gender at `+0x09`, class at `+0x0A`, and status

@@ -60,7 +60,7 @@ publicly named families:
 | Caller family | Helper shape | Public contract |
 |---------------|--------------|-----------------|
 | Party food/provision cadence | Word floor-subtract | Hourly provision use subtracts the number of active eaters and floors at zero. Starvation is caller-owned when the counter is already zero. |
-| Party HP recovery and healing | Word capped-add | Completed long-camp recovery, small-heal spells, and the per-action Ring of Regeneration check add HP up to the member's current maximum HP. |
+| Party HP recovery and healing | Word capped-add | Completed long-camp recovery, small-heal spells, and the Ring of Regeneration check add HP up to the member's current maximum HP. The ring check is per status pass, never hourly. |
 | Party damage | Word floor-subtract | Damage paths that route through the shared word subtract floor HP at zero before caller-owned death/status handling runs. |
 | Combat and spell experience credit | Word capped-add | Experience rewards that use the helper cap at `9999`; eligibility, reward unit, and narration remain caller-owned. |
 | Inventory and equipment stock grants | Byte capped-add | Spell charges, equipment stock, torches, gems, keys, reagents, potions, scrolls, and similar byte counters cap at the caller's stock maximum, most commonly `99`. |

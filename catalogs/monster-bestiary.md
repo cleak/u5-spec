@@ -257,12 +257,18 @@ saved-combat scene, Doom, and one special monster class, Shadow Lord, bypass the
 extra suppressed-state filter, but not the ordinary invisibility filter. If no
 usable party target is visible, the AI can fall back toward the centre of the
 arena and mark pending-action monsters for follow-up. Cause Fear is a confirmed
-upstream flee route: it forces accepted hostile actors into the critical-HP
-state, and the wound-score morale classifier writes the flee flag from that
-state. A lower-tier summon/tame-style spell helper also sets the same
-actor-state flag while repurposing eligible live non-party, non-humanoid actors;
-that path is a spell-side activation/repurpose effect rather than morale. The
-no-target centre fallback is the other traced direct writer: it marks eligible
+upstream flee route: it sweeps all thirty-two combat slots and, for every
+monster-side actor that is not one of the three protected special classes
+(14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the shared
+resistance check, drives that actor's combat HP counter to one and sets the
+fleeing flag directly. Repel Undead is the same sweep with one extra condition:
+the actor's class must also carry the undead class-flag bit. Both write only the
+HP counter and the fleeing flag; neither creates, repurposes, tames, or
+re-types an actor, and neither touches the controlled/charmed flag. Earlier
+revisions of this catalog described Repel Undead as "a lower-tier
+summon/tame-style spell helper" that repurposed eligible actors; that
+description was wrong and is withdrawn, and it also omitted the undead-class
+condition. The no-target centre fallback is the other traced direct writer: it marks eligible
 monster-side slots with the flee flag and critical-HP marker. Once that flag
 marks an actor as fleeing, the target picker reverses the chosen direction so
 the same movement code handles both pursuit and retreat.
@@ -285,10 +291,10 @@ damage, spell, target-picker, movement, and monster-special readers:
 | `physical immune` | Non-magical physical damage is reduced to zero. |
 | `team override` | The class participates in special faction handling used by target selection. |
 | `vanish branch` | On death, the class prints the vanish narration, leaves the gravestone-style marker in the temporary combat view, clears the combat actor, and bypasses the default drop-marker path. |
-| `special death` | A class-specific tile/effect transition runs on death. |
+| `special death` | A class-specific death transition runs instead of the terrain/drop path. Only two classes carry it: the Gazer, whose branch marks its own record and then places a live Insect Swarm at the death cell, and the Gargoyle, whose branch edits the arena terrain and releases the slot. |
 | `possess` | On a monster AI turn, the class may pick a random eligible party target, run resistance, and mark the target controlled for combat. Daemon-class possessors self-clear after a successful landing path. |
 | `blink` | On a monster AI turn, the class may toggle its phase/hidden state and linked visual tile. |
-| `summon-daemon` | On a monster AI turn, the class may attempt to place a Daemon-class actor near the AI step direction. |
+| `summon-daemon` | On a monster AI turn, the class may make one attempt to place a Daemon-class actor at a random legal arena cell. No direction is consulted, there is no retry, and the placed Daemon is an ordinary hostile — it does not receive the controlled/charmed marker the player's Summon spell stamps (`systems/combat.md` Section 9). |
 | `poison/status attack` | The class's attack can route through the shared party-status/damage helper before ordinary melee damage. Against a Good party member this can apply poison with zero ordinary damage and no attacker experience. |
 | `turnable attack` | When this class targets a living party member wearing Amulet/Turning with a ranged or special effect attack, half of attempts are forced into the scattered-impact path instead of the ordinary hit-roll result. |
 | `teleport-capable` | If ordinary attack/action handling falls through to movement, a class with this flag can attempt a random legal arena-cell move before ordinary stepping. |
@@ -352,7 +358,7 @@ room and ambush mappings are encounter data, not additional class-row fields.
 | 23 | Ghost | `0x9C..0x9F` | 20 | 6 | 0 | 10 | physical half; blink | Undead or spectral encounter |
 | 24 | Slime | `0xA0..0xA3` | 10 | 3 | 0 | 2 | splits | Replicating dungeon creature |
 | 25 | Gremlin | `0xA4..0xA7` | 10 | 3 | 12 | 10 | - | Dungeon, trap, or nuisance encounter |
-| 31 | Insect Swarm | `0xBC..0xBF` | 5 | 2 | 0 | 1 | - | Swarm encounter; also associated with the Insect Swarm spell |
+| 31 | Insect Swarm | `0xBC..0xBF` | 5 | 2 | 0 | 1 | - | Swarm encounter; also associated with the Insect Swarm spell. Additionally spawned mid-combat, one per death, by the Gazer's special-death branch (row 28) |
 | 34 | Python | `0xC8..0xCB` | 10 | 3 | 0 | 8 | poison/status attack | Snake or trap encounter |
 | 46 | Rot Worm | `0xF8..0xFB` | 5 | 2 | 0 | 6 | poison/status attack | Dungeon or underworld vermin encounter |
 
@@ -367,14 +373,14 @@ ranged/effect routing, and default damage/death paths.
 
 These are the main hostile monster classes for outdoor and dungeon combat. The
 encounter system confirms the terrain setup's first-spawn plus
-leader/follower-style replacement model, but not a full terrain distribution per
-class. The contexts below are therefore broad.
+companion-class substitution model (Section 2.1), but not a full terrain
+distribution per class. The contexts below are therefore broad.
 
 | Class | Creature | Sprite run | HP | Reward unit | Drop cap | Charm threshold | Traits | Encounter context |
 |------:|----------|------------|---:|------------:|---------:|---------------:|--------|-------------------|
 | 26 | Mimic | `0xA8..0xAB` | 30 | 8 | 20 | 12 | team override | Chest-like or ambush-style monster |
 | 27 | Reaper | `0xAC..0xAF` | 40 | 11 | 25 | 12 | team override; turnable attack | Forest or fixed dungeon encounter |
-| 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death; possess; turnable attack | Eye-burst death effect: writes the eye-burst tile, spawns the matching tile effect, redraws, and keeps the slot. No drop roll. |
+| 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death; possess; turnable attack | Eye-burst death: writes the eye-burst tile onto its own record, keeps the slot, runs no drop roll, and **places a live class-31 Insect Swarm at the death cell** through the ordinary monster-placement mode (tile `0xBC`, five HP, hostile), then redraws. The spawn is a real combatant, not a visual effect. |
 | 29 | Crawler | `0xB4..0xB7` | 35 | 9 | 0 | 12 | - | Dungeon or underworld encounter |
 | 30 | Gargoyle | `0xB8..0xBB` | 40 | 11 | 0 | 5 | splits; team override; special death | Writes the lava-pool byte into the arena terrain under the corpse, then releases the slot. It does **not** continue into the default kill path, so it leaves no corpse marker and no drop; pixel details belong to combat presentation QA. |
 | 32 | Orc | `0xC0..0xC3` | 10 | 3 | 11 | 10 | team override | Humanoid wilderness or dungeon group |
@@ -480,7 +486,7 @@ classes.
   scene-resistance rows, the Gremlin cast-like branch row, and the Mimic
   pre-gate bypass row.
 - Shared AI target-selection behavior and the confirmed first-spawn,
-  replacement-class, and follower placement model.
+  companion-class, and follower placement model.
 
 **Owned by sibling specs rather than this catalog:**
 
@@ -549,6 +555,12 @@ offsets, raw private addresses, binary dumps, or private note prose.
   `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
   `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
   `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+- The Cause Fear and Repel Undead sweeps described in the monster-AI section
+  (the shared exclusion of the three protected special classes, Repel Undead's
+  extra undead class-flag condition, the combat-HP-to-one plus fleeing-bit
+  writes, and the withdrawal of the earlier "summon/tame-style repurpose helper"
+  description): `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md` and
+  `u5-decomp/functions/CAST_OVL/all_spells.md`.
 - `u5-decomp/formats/data-ovl.md` - resident data segment overview, monster name
   and combat table regions, ranged/effect side rows, and DATA.OVL completion
   notes.
@@ -567,7 +579,7 @@ offsets, raw private addresses, binary dumps, or private note prose.
 - ULTIMA executable terrain-target wrapper and SJOG auxiliary combat helpers -
   caller-side original trigger-slot reconciliation.
 - ULTIMA executable terrain-combat setup note - encounter count roll, placement
-  slots, replacement-class selection, and active-object placement.
+  slots, companion-class selection, and active-object placement.
 
 **Public specs cross-checked:**
 

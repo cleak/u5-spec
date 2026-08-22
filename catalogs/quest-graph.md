@@ -165,6 +165,28 @@ the active named encounter. The Yell/name path supplies that active encounter;
 the shard handler then checks that the Shadowlord marker is immediately north
 of the party and that the active Shadowlord index matches the shard.
 
+The four gates, in the order the handler applies them, are:
+
+1. **Position.** The party's X, Y, scene, and floor must all equal the row for
+   the shard's index in the table below. Any mismatch refuses before anything
+   else is tested.
+2. **Shadowlord present on the flame.** The handler queries the *active-object*
+   layer — not the terrain — at the cell one row north of the party, and
+   requires it to return the Shadow Lord actor tile (`0xFC`; see
+   `catalogs/monster-bestiary.md`). It does not test the flame terrain tile
+   itself. The flame is authored terrain (`0xDE`, the "Flame of" tile) that the
+   summoned Shadowlord is standing on.
+3. **Handshake.** The active-Shadowlord id recorded by the name/Yell path must
+   equal the shard's own index. Using the Shard of Falsehood on a summoned
+   Astaroth refuses.
+4. Only then does the destruction run.
+
+Note the two different offsets: the name/Yell path drops the Shadowlord **two**
+cells north of wherever the party was standing, while the destruction gate reads
+the cell **one** north of the fixed destruction position. The Shadowlord is a
+moving actor, so the player summons it somewhere in the keep and then has to be
+at the destruction cell at a moment when the Shadowlord occupies the flame cell.
+
 | Shard / Shadowlord | Destruction scene | Party floor | Party X | Party Y | Eternal Flame cell | Additional gate |
 |---|---|---:|---:|---:|---|---|
 | Falsehood / Faulinei | The Lycaeum | 2 | 15 | 9 | `(15, 8)`, same floor | Active Faulinei encounter immediately north |
@@ -190,6 +212,64 @@ list or the character inventory panel. Nothing else about the party's inventory
 changes: no counter for any other item is touched, and a refused attempt (wrong
 cell, wrong floor, wrong scene, no active Shadowlord, or a mismatched active
 Shadowlord index) leaves the shard in the party's possession.
+
+**Presentation order.** The narration is not gated behind the position test, so a
+misfired shard use is still visibly a shard use:
+
+1. The handler first prints a heading naming the shard family and a line
+   describing the party holding the evil shard aloft, completed by the shard's
+   own virtue word (Falsehood, Hatred, or Cowardice). This happens before any
+   gate is evaluated.
+2. It then plays a rising pitch sweep, followed by a falling one, again
+   unconditionally.
+3. Only the **position** gate produces the shared no-effect result. If the
+   party's cell, floor, or scene is wrong, the handler prints that result and
+   returns with no state change.
+4. Once the position matches, it pauses, prints a line describing the shard
+   being cast into the Eternal Flame completed by the opposed principle's word
+   (Truth, Love, or Courage), and pauses again — **before** testing whether a
+   Shadowlord is on the flame and whether the handshake matches.
+5. If either of those two gates fails, the handler simply returns. It prints no
+   refusal line, so from the player's side the sequence stops after the
+   cast-into-the-flame line with nothing further happening.
+6. On success it runs a short repeated flash effect over the flame cell with an
+   accompanying sound, applies the three state writes, and closes with a line
+   naming the destroyed Shadowlord.
+
+Two divergences an implementation should avoid: evaluating the gates before any
+output (in the original, a wrong-position shard use still produces the heading
+and the sound before refusing), and printing a refusal for the actor/handshake
+failures (in the original those are silent).
+
+### Where the shards are: fixed Underworld placement
+
+The three shards are not hidden-treasure records and are not conversation
+grants. They are ordinary active objects placed at fixed Underworld coordinates
+by the outdoor setup pass that runs whenever the party is on a non-surface
+outdoor plane. The same pass places the Amulet of Lord British. Every record it
+writes is on the Underworld plane (floor byte `255`):
+
+| Object | Underworld X | Underworld Y | Placed only while |
+|---|---:|---:|---|
+| Amulet of Lord British | 105 | 225 | the party does not already carry the Amulet |
+| Shard of Falsehood | 192 | 80 | the party does not carry it **and** Faulinei's slot is not vanquished |
+| Shard of Hatred | 130 | 65 | the party does not carry it **and** Astaroth's slot is not vanquished |
+| Shard of Cowardice | 176 | 184 | the party does not carry it **and** Nosfentor's slot is not vanquished |
+
+Getting one of these objects runs the ordinary inventory-add path, which prints
+the shard's own narration and sets that shard's carried flag. The pass is a
+placement pass, not a respawn: once the carried flag is set the object is never
+emitted again.
+
+**This is a real spawn consumer of the Shadowlord slot table**, and it is not
+decorative. Earlier public wording said the Shadowlord slots drive nothing but
+town installation and the Doom gate; that was incomplete. The alive test exists
+because destruction *consumes* the shard by clearing exactly the carried flag
+this pass reads: after a successful destruction the shard's carried flag is
+clear again, so the carried-flag test alone would happily re-place the shard in
+the Underworld on the party's next visit and hand the player an infinite supply.
+The alive test is what suppresses that. An engine that implements the placement
+with only the carried-flag half of the gate will respawn every spent shard.
 
 The three shard-location branches are intentionally different:
 
@@ -256,7 +336,13 @@ Several user-visible behaviours consume the same state:
 
 - Entering a town whose scene byte matches a living Shadowlord's slot installs
   that Shadowlord as an actor in that town's live cast. The town's scene
-  identity, map, and NPC roster are unaffected.
+  identity, map, and NPC roster are unaffected. The install obeys the same
+  one-at-a-time rule as the Yell summon: it is abandoned if any active-object
+  record already carries the Shadow Lord actor tile `0xFC`. It is **not**
+  abandoned for lack of a free record. One coordinate guard precedes all of
+  this: a party entering on row `4` skips the hideout comparison entirely, so
+  no Shadowlord is installed and the accompanying NPC sweep does not run. See
+  `systems/town-mode.md` Section 13.
 - Entering Stonegate reads the same three slots as presentation state: every
   non-vanquished slot contributes that Shadowlord's "air of" atmospheric line,
   while vanquished slots are silent.
@@ -268,8 +354,16 @@ Several user-visible behaviours consume the same state:
   when the result still has the high bit set, which happens only when all three
   are `0xFF`. Attempting to enter Doom with any Shadowlord still living does not
   merely refuse: the party is ambushed at the entrance and stays outside.
+- The Underworld outdoor setup pass places a Shadowlord's shard only while that
+  Shadowlord's slot is alive, as described in Section 5. This is the one traced
+  object-spawn consumer of the slots.
 - A view/report path marks the current hideout state for each living
   Shadowlord. The exact readout geometry is not yet published; see Section 12.
+
+There is still no traced effect on random-encounter rate or on ordinary monster
+spawning: living Shadowlords do not make the overworld more dangerous. The
+spawn-side consumer above is a fixed quest-object placement, not an encounter
+rule.
 
 This table replaces older wording that treated the midnight table as NPC
 schedule or day-rollover pointer state. NPC schedules are separate per-NPC

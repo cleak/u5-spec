@@ -231,16 +231,55 @@ modelled as tile-asset mutations, not as colour-channel mutations.
 
 ## 6. CGA, Hercules, And Tandy Notes
 
-The CGA, Hercules, and Tandy driver families implement the same dispatch
-table at the same offsets but target their own hardware modes. Their planar
-representations differ from the EGA one: CGA uses two-bit packed pixels,
-Hercules a single bit, Tandy a 16-colour mode with a different memory
-arrangement. The asset-segment depth selection in `display-driver.md` already
-captures the gameplay-visible consequence (the `.4` family is selected for
-low-colour backends); the precise alternate planar layouts and palette
-policies are not part of the v1 contract and remain documented at the
-private-analysis level until a future implementation chooses to target one of
-those backends.
+The CGA, Hercules, and Tandy driver families implement the same dispatch table
+at the same offsets but target their own hardware modes. None of them shares
+the EGA pixel layout, and **Tandy is not an EGA equivalent at pixel level**
+despite using the same sixteen palette indices.
+
+| Family | Mode | Surface | Pixel storage |
+|---|---|---|---|
+| EGA | Firmware mode `0x0D` | 320 x 200, 16 colours | Four bit planes, one plane byte per eight pixels |
+| Tandy | Firmware mode `0x09` | 320 x 200, 16 colours | **Packed** four bits per pixel, one contiguous row per scanline |
+| CGA | Firmware mode `0x04` | 320 x 200, 4 colours | Packed two bits per pixel, with the even and odd scanlines held in two separate halves of the adapter's memory |
+| Hercules | No firmware mode; the driver programs the display controller directly | 720 x 348, 1 bit per pixel | Packed one bit per pixel, with the scanlines interleaved across four banks by row number modulo four |
+
+Consequences that are part of the public contract:
+
+- **Asset family.** The high-colour `.16` family is selected for EGA and
+  Tandy; the low-colour `.4` family for CGA and Hercules. That split is stated
+  in `display-driver.md` section 2 and follows colour depth, not resolution.
+  Any statement that Tandy shares CGA's family, or that Hercules shares EGA's,
+  is wrong. There is no separate Hercules screen-art family; the only other
+  per-driver asset difference in the whole distribution is the glyph pair.
+- **Archive preparation.** The packed-to-planar preparation entry
+  (`display-driver-abi.md` section 7) exists only in the EGA driver. The other
+  three families implement it as a no-op, because their blitters read the
+  decompressed archive in its packed form directly. This is correct behaviour,
+  not a missing feature, and it does not blank any screen.
+- **One-bit resources.** The standalone one-bit bitmap and proportional-font
+  resources are parsed by the caller and drawn through the ordinary point,
+  span, stamp and blit entries, so they are available on every driver family.
+- **Title band.** The title/menu idle band keeps the same four-frame cycle on
+  every family. EGA, CGA and Tandy place it identically; Hercules uses a taller
+  band pitch and a lower destination row to suit its 348-line display, and
+  copies 640 of the 720 pixels in a row. The table in `display-driver.md`
+  section 8 gives the numbers.
+- **Drawing colour.** The CGA and Hercules drawing-colour entries reduce the
+  requested index to two bits before translating it, which is why the
+  low-colour user-interface colour set in `display-driver.md` section 2 uses
+  only values `0..3`. The EGA entry stores the index unchanged.
+- **Mode switching.** No driver triggers an extra disk-swap or memory-downgrade
+  path. The one memory-conditional path is at startup: a Tandy selection on a
+  machine reporting too little memory falls back to the CGA driver, which also
+  moves that session to the low-colour asset family.
+
+What remains outside the v1 contract is the exact per-driver pixel conversion:
+how a given `.4` record is expanded onto CGA's two-bit or Hercules' one-bit
+surface, and what the resulting image looks like. No conversion table and no
+dithering pass exists anywhere in the original for this; the low-colour art is
+authored at its own depth, and each driver's blitters consume it directly. Any
+per-driver palette-mapping or ordered-dither table offered for these backends is
+a modern reconstruction, not an original behaviour.
 
 ## 7. Known Uncertainties
 
@@ -249,7 +288,9 @@ those backends.
   at mode-set time. The v1 contract does not constrain which selection is
   used, because the EGA path is the baseline and no asset depends on a
   specific CGA palette choice. A future CGA-targeting implementation should
-  pick a policy and document it locally.
+  pick a policy and document it locally. There is no index-mapping table from
+  the sixteen-colour palette down to the four-colour one anywhere in the
+  original, so no such mapping can be published as historical behaviour.
 - **Mode-set fast path.** Some entry paths invoke the mode-set entry with
   the do-real-mode-set flag cleared so that the firmware mode change and
   palette upload are skipped. These paths assume the adapter is already in
@@ -282,8 +323,17 @@ and any source-shaped representation of the original code.
   `u5-decomp/functions/EGA_DRV/0x0A78_get_pixel.md`.
 - Front-buffer scanline-fill helper (rectangle inner loop):
   `u5-decomp/functions/EGA_DRV/0x04F6_front_buffer_scanline_fill.md`.
-- Compressed-bitmap codec and asset-segment layout:
-  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md`.
+- Packed-to-planar preparation entry and asset-segment layout:
+  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md` (the note file
+  keeps its original filename; the entry is not a codec) and
+  `u5-decomp/CORRECTIONS.md`.
+- Per-driver hardware modes, framebuffer shapes, drawing-colour reduction,
+  asset-family selection, title-band geometry, and the status of the
+  packed-to-planar entry in each family:
+  `u5-decomp/formats/cga-driver.md`, `u5-decomp/formats/tandy-driver.md`,
+  `u5-decomp/formats/hercules-driver.md`,
+  `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md`, and
+  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
 - Tile-blit and glyph entries:
   `u5-decomp/functions/EGA_DRV/0x1637_tile_blit_16x16.md`,
   `u5-decomp/functions/EGA_DRV/0x12B4_tile_blit_general.md`,

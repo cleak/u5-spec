@@ -57,12 +57,23 @@ The chunk-index table encodes one byte per chunk in row-major order. The byte is
 The Underworld is dense — every chunk is stored, including uniformly cavern ones. Its on-disk grid is exactly 64 KB and its chunk-index table is the identity. The same table format is used; only the contents differ.
 
 After a chunk is loaded or synthesized, the loader walks the 16-by-16 live
-chunk copy and applies a fixed substitution pass. Tile ids `0x16..0x18`
-trigger a write of tile `0xDF` through the live world-tile accessor; tile id
-`0x19` triggers a write of tile `0x1A` only when the chunk high-byte classifier
-accepts the current chunk descriptor. These substitutions affect the live
-chunk/window state, leaving the on-disk chunk untouched, and are separate from
-the per-turn tile animator.
+chunk copy and applies a substitution pass that re-derives two pieces of quest
+presentation from save state. **Both substitutions are conditional; neither is
+unconditional.** A cell holding a dungeon-entrance tile (`0x16`, `0x17`, `0x18`)
+is rewritten to the collapsed-entrance tile `0xDF` only while the Word of Power
+owning that chunk is still unspoken; a cell holding the shrine tile `0x19` is
+rewritten to the ruined-shrine tile `0x1A` only while that chunk's shrine is
+marked ruined. Each of the eight words owns exactly one chunk, and a parallel
+list assigns chunks to shrines; the two rules take opposite defaults for a chunk
+that owns neither, and the full contract is in `formats/brit-dat.md`
+Section 9.1 and `systems/commands.md` Section 11.2.
+
+Because these are the only producers of the sealed and ruined tiles, an engine
+that applies either rewrite unconditionally leaves every dungeon entrance
+permanently sealed and the Word of Power apparently inert, while one that omits
+the pass entirely starts every dungeon open on a new game. Both substitutions
+affect only the live chunk/window state, leave the on-disk chunk untouched, and
+are separate from the per-turn tile animator.
 
 The visible viewport at any moment is an 11-by-11 window centred on the party. To service it, the engine keeps four 16-by-16 chunks live in a 1-KiB *chunk buffer* in the data segment, arranged as a 2-by-2 grid. The four chunks together form a 32-by-32 cell window, of which the renderer projects the central 11-by-11. Movement crossing an internal cell boundary is satisfied from the buffer; movement crossing a chunk boundary triggers a reload (Section 4).
 
@@ -194,7 +205,7 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 
 - **Town/keep/dwelling/castle entrance.** When the player's last action was Enter (E), the entry helper compares the party's current overworld coordinate against the first thirty-two rows of the DATA.OVL-derived `WorldLocationTable`. Row zero maps to scene byte one, row one maps to scene byte two, and so on through row thirty-one mapping to scene byte thirty-two. The scene-to-name and scene-to-file-family binding is published in `catalogs/gazetteer.md` and `formats/npc.md`.
 
-  On a match, the original path emits the location-entry prompt, performs any needed surface-disk availability check, clears or reseeds the active-object table, writes the scene byte to `matched_row + 1`, and seeds the party's town-mode coordinates on floor zero. The following town entry pass owns the final player attach point; see `systems/town-mode.md` for the `LocationEntryYTable` rule. If no row matches, E-Enter does not change mode.
+  On a match, the original path emits the location-entry prompt, performs any needed surface-disk availability check, clears or reseeds the active-object table, writes the scene byte to `matched_row + 1`, and seeds the party's town-mode coordinates on floor zero. The following town entry pass owns the final player placement; see `systems/town-mode.md` Section 5 step 6, which now records the player's fallback entry cell as an open item (the `LocationEntryYTable` rule previously stated there belongs to the Shadowlord install, and the phantom-NPC representation of the player is withdrawn entirely). If no row matches, E-Enter does not change mode.
 
 - **Dungeon entrance.** E-Enter compares the party's current coordinate against rows thirty-two through thirty-nine of the same DATA.OVL-derived `WorldLocationTable`. Row thirty-two maps to `DUNGEON:0` / scene byte thirty-three, row thirty-three maps to `DUNGEON:1` / scene byte thirty-four, and so on through row thirty-nine mapping to `DUNGEON:7` / scene byte forty. The name and data-record order is Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, Doom.
 

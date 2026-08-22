@@ -333,9 +333,16 @@ The rest handler saves the current input mode, probes whether the current tile
 allows rest, walks the party slots, prints the sleep narration, and prompts for
 the number of hours when the path requires an explicit duration. Poisoned and
 dead members are not treated like healthy sleepers. Sleeping party members are
-restored to good status during cleanup. Eligible living members can receive a
-small random HP gain capped at their maximum HP; the traced regeneration gate is
-class-aware and does not imply a blanket full-party heal.
+restored to good status during cleanup.
+
+Recovery is not part of this routing contract and is not a per-hour drip. The
+town-bed path has no recovery block of its own at all. Only a *completed long
+camp* recovers anything, and it does so once, at the end, under the guard set
+and with the `1..63` hit-point roll and class-keyed magic-point rules specified
+in `systems/rest-and-camp.md` section 5. An earlier revision of this section
+described a "small random HP gain" with a "class-aware regeneration gate";
+that was a conflation of the camp block's hit-point roll with its separate
+class-keyed magic-point write, and it is withdrawn.
 
 The town hours path advances elapsed rest with a caller-owned loop rather than
 by handing the clock one large "N hours" value. It accepts one nonzero digit,
@@ -364,15 +371,24 @@ returns without a world change. Nonempty input is routed by scene context:
 - **Shadowlord-name contexts.** Only the three Eternal Flame keeps — The
   Lycaeum, Empath Abbey, and Serpent's Hold — accept Shadowlord names. In one of
   those three scenes the typed word is compared with the three Shadowlord names.
-  A matching name creates the active Shadowlord encounter state only when that
-  Shadowlord has not been vanquished and a monster slot is free; the party must
-  also be far enough from the scene's northern edge for the encounter to be
-  placed. The success path records which Shadowlord is now active, places the
-  encounter state a short distance north of the party, and plays the
-  visible/sound appearance effect. Any of the three names works in any of the
-  three keeps; the pairing is enforced later by the destruction position, not
-  here. Wrong names, any other scene, vanquished Shadowlords, or full monster
-  slots produce no effect.
+  A matching name summons that Shadowlord only when all three of these hold:
+  that Shadowlord's slot is not vanquished; the party's Y coordinate is at least
+  `2`, so there is room two rows north of the party; and **no Shadowlord actor is
+  already present in the scene** — the handler rejects the summon if any live
+  active-object slot already carries the Shadowlord actor tile (`0xFC`, the
+  Shadow Lord row of `catalogs/monster-bestiary.md`). That last test is a
+  one-at-a-time rule, not a "table is full" rule: an engine that instead checks
+  for a free slot will let the player stack Shadowlords.
+  On success the handler records which Shadowlord is now active (the handshake
+  the destruction path checks), installs the Shadowlord as an active object
+  **exactly two cells north of the party** in the party's current floor and
+  region, and plays the appearance line together with the long warble and the
+  fade-in effect. The actor takes the highest free active-object slot, searching
+  downward from the last slot.
+  Any of the three names works in any of the three keeps; the pairing is enforced
+  later by the destruction position, not here. Wrong names, any other scene, a
+  vanquished Shadowlord, a party standing within one row of the north edge, or a
+  Shadowlord already present all produce no effect.
 - **Word-of-Power contexts.** Only the outdoor scene accepts Words of Power.
   Both world surfaces qualify, because both use the outdoor scene with the
   plane distinguished by the party's floor/depth byte. There is no
@@ -447,11 +463,16 @@ spoken. They are durable state in the save image (`formats/saved-gam.md`
 Section 9.1) and start clear on a new game, so **every dungeon entrance begins
 sealed**. The shipped world maps always store the unsealed entrance tile; the
 sealed presentation is re-derived from these flags every time a map region is
-loaded into the live view. Concretely, when a region is loaded, any cell holding
-one of the three dungeon-entrance tiles is rewritten to the collapsed-entrance
-tile if that dungeon's word is still unspoken. The same pass rewrites shrine
-cells to the ruined-shrine tile according to a parallel set of eight saved
-shrine flags.
+loaded into the live view. Concretely, when a map chunk is loaded, any cell
+holding one of the three dungeon-entrance tiles is rewritten to the
+collapsed-entrance tile if the word owning that chunk is still unspoken. The
+same pass rewrites shrine cells to the ruined-shrine tile according to a
+parallel set of eight saved shrine flags. The gating is per chunk, not per cell:
+each word owns exactly one of the 256 map chunks, and the two rules take
+opposite defaults for a chunk that owns no word or no shrine. The loader-side
+statement of the rule, with those defaults, is in `formats/brit-dat.md`
+Section 9.1, and it applies identically to both world surfaces
+(`formats/under-dat.md`, `systems/overworld.md` Section 3).
 
 Two consequences an implementation must honour:
 

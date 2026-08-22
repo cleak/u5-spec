@@ -259,6 +259,15 @@ with the failure sound. Space/Pass always yields the handled-silently result, so
 declining the prompt is quiet — but the premixed charge and mana were already
 spent by the dispatcher and are **not** refunded.
 
+The cast's audio/visual effect does not wait for the tile test in three of the
+four cases. Vanish and Magic Lock play their effect as soon as a direction is
+accepted, before the target tile is examined, and Unlock Magic's effect is
+played by the dispatcher for any outcome other than Space/Pass. Only Open plays
+its effect inside its success branches. So a failed Vanish, Magic Lock or
+Unlock Magic still shows and sounds like a cast before printing `Failed!`,
+while a failed Open is silent up to the failure line. Space/Pass suppresses the
+effect in every case.
+
 - **Vanish.** On a matching cell the helper overwrites the tile with the shared
   cleared-cell tile `0x44` — the same value O-Open writes when it opens a door —
   prints `POOF!`, marks the view dirty, forces a redraw, and plays a sound. It
@@ -271,11 +280,20 @@ spent by the dispatcher and are **not** refunded.
   and `0xBB` and, on a match, steps each down one rung to its unlocked form
   `0xB8` or `0xBA`, marks the view dirty, plays a sound and returns success. If
   the tile is not a locked door it scans the dynamic-object table for a record
-  of object kind 1 whose stored X and Y equal the target cell, and clears that
-  record's lock/trap high bit. Outside combat the scan also requires the
+  of object kind 1 — the chest object class — whose stored X and Y equal the
+  target cell, and clears that record's lock/trap high bit, which is the high
+  bit of the same byte whose low seven bits hold the chest's contents/difficulty
+  value. Outside combat the scan also requires the
   object's stored Z to match the party's; in combat-class scenes the Z test is
   skipped, so any matching kind-1 object at that cell qualifies. No match at all
-  returns `Failed!`. Inside a dungeon scene Open takes a different arm entirely:
+  returns `Failed!`. This second arm is the reason Open has a real effect in
+  ordinary combat: the drop a dying monster leaves behind is written into the
+  combat-instance object table as exactly a kind-1 chest record whose lock/trap
+  bit may be set (`systems/combat.md` Section 6.3), so casting Open at an
+  adjacent dropped chest unlocks it for the combat J-Jimmy and S-Search
+  commands. The spell only clears the lock/trap bit; it never grants contents,
+  and it is not the O-Open command.
+  Inside a dungeon scene Open takes a different arm entirely:
   it acts on the party's own dungeon cell when that cell is a door/urn-class
   cell, otherwise on the direction-biased neighbour, prints a disarm line when
   the cell carries the trapped variant bit, rewrites the cell to the opened form
@@ -396,10 +414,12 @@ creature target and places a class 20 Giant Rat at the target's same combat
 coordinates.
 Invisibility is active-caster only: it marks the current combat actor
 hidden/phase-shifted and updates the parallel visual actor state for that same
-slot. Cause Fear is not a single-target prompt; it sweeps the combat actor
-table and forces each valid hostile actor into the critical-HP flee setup. The
-monster wound-score morale classifier is the shared path that turns that
-critical state into the fleeing flag.
+slot. Cause Fear is not a single-target prompt; it sweeps all thirty-two combat slots
+and, for every monster-side actor that is not one of the three protected special
+classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the
+shared resistance check, drives that actor's combat HP counter to one and sets
+its fleeing flag directly. The monster wound-score morale classifier then keeps
+re-asserting the flag from that critical-HP state on later turns.
 
 **Direct damage and wind attacks.** Magic Missile, Fireball, Tremor, Kill, Poison Wind, Death Wind, and Flame Wind. Magic Missile, Fireball, and Kill are active-target attack wrappers: the spell prints the shared aiming prompt, uses the combat aiming/projectile path, and on an actor collision calls the combat spell-damage wrapper with the caster slot, target slot, and active spell tag. The projectile portion is presentation-only state: it builds and walks a temporary path, renders per-cell visual effects, and leaves no active-object slot or persistent projectile record behind. Magic Missile rolls raw damage in `[1, 16]`; Fireball rolls raw damage in `[1, 30]`; Kill uses the shared decimal `99` instant-kill sentinel. Magic Missile and Fireball then subtract a random defense roll from the target's applicable combat defense value; if the subtraction drives damage negative, the normal miss/no-damage path is used. Kill bypasses that defense subtraction by using the instant-kill sentinel. Tremor is a table-wide combat scan, not a directional spell: it walks every combat actor slot, skips empty or non-damageable records, applies the shared resistance/random gate, rolls 1..20 damage for each accepted actor, and calls the combat damage/status handler with that roll and actor slot. If that handler returns a raw monster-kill reward unit, Tremor adds it to the caster's experience word with the normal 9999 cap. Tremor does not run the friend/foe lookup; party actors and monsters are both eligible if they pass the common gates. Poison Wind, Death Wind, and Flame Wind share the directed wind-cone family described below. Poison Wind runs a per-target resistance/random gate and then routes accepted targets to the poison-status helper. Death Wind passes the decimal `99` instant-kill sentinel into the shared combat damage/status path. Flame Wind rolls raw damage in `[1, 30]` before the same damage/status path. Death Wind and Flame Wind add returned monster-kill reward units to the caster's experience with the normal 9999 cap. The shared directed scan and these per-effect branches do not run the friend/foe lookup or skip same-faction actors.
 
@@ -524,14 +544,30 @@ succeeds if at least one actor was placed. There is no caster-centred ring and
 no jitter retry; earlier drafts of this spec described both, and both are
 withdrawn.
 
-Every actor placed by Conjure, Swarm, or Summon is stamped with the controlled
-bit described in `systems/combat.md` Section 6.1a, so a freshly summoned
-creature starts in the same controlled state a charmed monster occupies.
+Every actor placed by Conjure or Swarm is stamped with the controlled bit
+described in `systems/combat.md` Section 6.1a, so a freshly conjured creature
+starts in the same controlled state a charmed monster occupies. Summon stamps
+the same bit only when its caster self-check succeeds; the rebound branch
+described below leaves the placed Daemon uncontrolled.
+
+That bit is **not** an allegiance flag, and this is the single most important
+thing to get right about these spells. All three place their creature through
+the ordinary monster placement path, so the new actor's faction byte is the
+monster-side one: the friend/foe resolver treats it as hostile, and monster AI
+drives its turns exactly as it drives any other monster. Nothing routes a
+summoned creature through the player command parser, and the player never gets
+to move it. What the controlled bit changes is only the actor's *attack*: when
+its turn produces an attack it resolves through the fixed magic-strike branch,
+which also requires the chosen target to be adjacent (`systems/combat.md`
+Section 6.1a). An earlier answer published against this spec said summoned
+creatures take their turn through the player-command path so the player drives
+their actions; that is withdrawn.
 
 Repel Undead is not a summoning effect and does not create or repurpose
-anything. It sweeps the whole combat actor table and, for each non-humanoid
-monster-side actor whose class carries the undead class flag and that fails the
-shared resistance check, drives that actor's combat HP counter to one and sets
+anything. It sweeps the whole combat actor table and, for each monster-side
+actor that is not one of the three protected special classes (14 Blackthorn, 15
+Lord British, 47 Shadow Lord), whose class carries the undead class flag, and
+that fails the shared resistance check, drives that actor's combat HP counter to one and sets
 the **fleeing** bit. That is the same critical-HP flee setup Cause Fear applies,
 narrowed to undead classes; it never touches the controlled bit. Earlier drafts
 called this a "lower-tier summon/tame-style helper" that set the controlled bit;
@@ -550,8 +586,10 @@ as a no-op failure. Clone is not an adjacency-based spell.
 
 Summon uses the per-tile placement/impact helper, not the shrine/urn helper and
 not the shared direction prompt. It makes up to eight of the shared random arena
-probes described above, and adds one further per-probe condition of its own: the
-candidate cell's terrain byte must not be the arena's impassable void byte. The
+probes described above. It additionally re-tests, on its own, that the
+candidate cell's live terrain byte is not the arena's impassable void byte; the
+shared spawn-cell validator already rejects that byte, so this duplicate test
+can never change an outcome and an implementation may omit it. The
 first accepted cell receives a Daemon-class combat actor (class 38), plays the
 temporary flame/daemon impact animation, and, on ordinary success, stamps the
 placed slot with the controlled bit. There is no cached adjacent target
@@ -561,8 +599,10 @@ spell path.
 This spell path uses the helper's self-checking mode after a Daemon has been
 placed and animated. The threshold it checks against is a concrete stat: the
 **Intelligence** value of the acting caster's character record when the caster
-is a party member, or the second stat field of the caster's class row when the
-caster is a monster. The roll it compares is formed the same way the game forms
+is a party member, or the class row's flip-HP field — the third of the eight
+class-stat fields published in `catalogs/monster-bestiary.md` Section 2 — when
+the caster is a monster. The party case is the only one a player C-Cast can
+reach. The roll it compares is formed the same way the game forms
 its other small rolls — a uniform inclusive `0..60` value halved with the
 fraction discarded and floored to a minimum of one, giving `1..30`. The `Oops...`
 branch fires when `roll >= threshold`, so a caster with Intelligence at or above
@@ -596,15 +636,15 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Active-target attack wrapper | Grav Por, Vas Flam, Xen Corp | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage, Vas Flam rolls 1..30 raw damage, and Xen Corp passes the decimal 99 instant-kill sentinel. Non-instant rolls subtract target defense before the shared damage/status path. |
 | Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu scans the roster and wakes the first Sleeping member to Good status; it has no selected-member prompt. An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires Dead status, rejects Ashes and other non-Dead statuses, changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
 | Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind plus active target slot to the arena-field helper. Player combat C-Cast uses the arena cursor followed by the ordinary projectile/impact resolver, not an adjacent direction prompt. Cursor moves outside the eleven-by-eleven arena or beyond range are ignored, Escape cancels after charge/mana debit but before marker placement, and the cursor does not reject empty or occupied cells. Combat marker placement requires a confirmed impact cell, but no Fire/Sleep/Energy random acceptance gate exists for marker materialization. The helper places the matching temporary active-object field marker, then separately reports a hit/contact target from the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Arena contact skips the current active actor but does not run the friend/foe lookup, and contact does not consume the marker. Poison Field skips linked active-object classes `>= 0x80`; for accepted targets it poisons Good party members and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members, otherwise sleeps party targets or marks non-party targets with the combat sleep/disabled bit; it does not seed a separate combat sleep countdown. Fire Field rolls raw 1..21 before defense, and Energy Field supplies raw zero to the same damage/value path. The traced placement/contact/redraw path and generic active-object tick show no field countdown/decrement; placed markers persist until combat exit restores the pre-combat active-object table. |
-| Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock bit on a co-located dynamic object, and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
+| Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock/trap bit on a co-located kind-1 chest object — which in combat includes the chest a dying monster drops, making Open's success case reachable in every arena — and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
 | Field removal helper | An Grav | Uses a separate Dispel Field path. Dungeon scenes inspect the faced adjacent live cell and turn recognized field cells back into open/visited-live-cell state while preserving only the visit marker. Combat/non-dungeon spell scenes use the shared direction prompt and remove a matching active-object field marker at the cached target coordinate. Failure leaves the map image or active-object table unchanged. |
 | Directional Blink | In Por | Outside combat, prompts for a cardinal direction, scans that ray through the active 32-by-32 loaded world window, and moves the party to the farthest grass tile (`0x05`) found. No random target, retry budget, occupancy check, or generic passability query is used; no matching grass tile reports ordinary spell failure after the shared charge/mana spend. |
 | Directed wind-cone effects | In Zu, In Nox Hur, In Vas Grav Corp, In Flam Hur | Prompt for a cardinal direction, build the widening clipped cone described in Section 8, and scan the combat actor table for actors whose arena coordinates match those cells. The normal cone starts one cell forward from the caster, widens by one cell on both sides per forward step, de-duplicates selected cells, and writes up to 63 coordinates. The common application layer skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common wind-cone layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors are eligible if their cells are in the directed area and they pass the non-faction gates. In Zu applies the sleep-status branch, In Nox Hur applies a resistance/random gate before the poison-status branch, In Vas Grav Corp uses the decimal `99` instant-kill sentinel through the shared damage/status path, and In Flam Hur rolls raw `[1, 30]` damage through that same damage/status path. The two damage winds credit returned monster-kill reward units to the caster's experience with the 9999 cap. |
 | Table-wide tremor damage | In Vas Por Ylem | Scans all thirty-two combat actor slots. For each non-empty slot that passes the generic damageability and resistance/random gates, the spell rolls 1..20 damage and feeds that roll plus the actor slot to the shared combat damage/status handler. The handler applies HP damage, death effects, split checks, and temporary drop markers as usual. Any raw monster-kill reward unit returned by the handler is added to the caster's experience word, capped at 9999. Tremor does not run a faction filter, so friendly-fire is allowed for any party actor that passes the common gates. |
 | Active-effect display wrapper | In Sanct, Rel Tym, Quas An Wis, In An | Pass an animation/effect kind, visible tag, and counter to a shared active-effect helper: In Sanct uses `P` / 20, Rel Tym uses `Q` / 30, Quas An Wis uses `C` / 20, and In An uses `N` / 10. The helper stores one global visible tag/counter pair, plays the common animation, and refreshes the stats panel; resident update helpers age the counter until expiry clears the tag. This aging is separate from torch/light-spell cleanup cadence. Confirmed consumers: `P` adds 3 to party-member defense, `Q` runs a 0..1 random gate before player-side combat command dispatch, `C` lets monster AI target selection roll a random byte against the acting monster's class charm threshold and remap the monster to neutral group 0 on a strictly greater roll, and `N` absorbs combat casts before the shared dispatcher consumes charge or MP. |
-| Creature-prompt targeters | An Xen Ex, Rel Xen Bet, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, reject walls, empty cells, protected/immune classes, and same-faction targets, then apply the spell-specific result: Charm toggles the target's charm allegiance flag, Polymorph replaces the target with a class 20 Giant Rat at the same coordinates, and Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. No traced Clone helper installs a separate per-spell duration counter. |
+| Creature-prompt targeters | An Xen Ex, Rel Xen Bet, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, reject walls, empty cells, protected/immune classes, and same-faction targets, then apply the spell-specific result: Charm toggles the target's controlled/charmed marker — a second successful Charm on the same actor clears it, and the marker is not an allegiance change (`systems/combat.md` Section 6.1a) — Polymorph replaces the target with a class 20 Giant Rat at the same coordinates, and Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. No traced Clone helper installs a separate per-spell duration counter. |
 | Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
-| Table-wide fear | In Quas Corp | Scans all combat actor slots, skips empty/dead, protected/immune, and same-faction actors, and forces each remaining hostile actor into the critical-HP flee setup. The combat wound-score morale classifier owns the actual fleeing-flag write from that HP state. |
+| Table-wide fear sweeps | In Quas Corp, An Xen Corp | Not a prompt-driven target family. Sweeps all thirty-two combat actor slots and accepts every monster-side actor that is not one of the three protected special classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the shared resistance check. For each accepted actor **the spell itself** drives the combat HP counter to one and ORs in the fleeing bit `0x02`. The combat wound-score morale classifier does **not** perform that write; it only keeps re-asserting the flag from the resulting critical-HP state on later turns. Repel Undead (An Xen Corp) runs the identical sweep with one added condition, the undead class-flag bit, and writes the same two values. Neither spell places, re-types, tames, or repurposes an actor, and neither touches the controlled/charmed bit `0x01`. |
 | Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
 | Negate Time | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
@@ -643,12 +683,19 @@ What actually happens:
   persistent: the arena terrain grid is refilled from the arena definition on the
   next combat entry, and the arena files themselves are never written.
 - **Matches genuinely exist.** Outdoor combat arenas contain no door tiles at
-  all, so in outdoor combat Open, Magic Lock and Unlock Magic can only reach
-  their non-door branch or `Failed!`. Exactly one shipped outdoor arena carries
+  all, so in outdoor combat Magic Lock and Unlock Magic can only fail, and Open
+  can only reach its object branch. Exactly one shipped outdoor arena carries
   tiles from Vanish's removable-object set. Dungeon-room arenas are different:
   eighteen of them contain door tiles — including magic-locked, ordinary-locked
   and unlocked forms — and seven contain Vanish-family object tiles, so all four
-  spells have reachable success cases in dungeon-room combat.
+  spells have reachable terrain success cases in dungeon-room combat.
+- **Open's object branch is reachable in every arena.** Independently of arena
+  terrain, the ordinary monster-death drop writes a kind-1 chest record into the
+  combat-instance object table at the dead monster's cell, and that record's
+  lock/trap bit is exactly what Open's second arm clears. A cast aimed at an
+  adjacent dropped chest therefore succeeds and prints `Success!` wherever the
+  fight is happening. The earlier published claim that combat drop markers are
+  not Open-eligible is withdrawn.
 - **Off-arena targets are undefined and should be treated as failures.** The
   direction prompt does not clamp its result to the arena, and the combat
   live-tile lookup does not bounds-check. A direction that steps off the eleven
@@ -703,7 +750,9 @@ The Z-stats panel — the dedicated character-sheet command — is the player's 
 - **Charge counter panel.** A third panel shows the per-spell charge counts, displayed as the spell name plus a small integer. Spells with zero charges are shown but greyed.
 - **Stats line.** The character's intelligence stat and current/maximum mana points are shown on the main Z-stats line.
 
-Z-stats is read-only with respect to the magic system: it shows the state but never changes it. The mana-recovery model — slow regeneration of mana over real game-time, plus full restoration on rest — is described in the world's per-turn system, not here. The magic system's only requirement is that the dispatcher reads the *current* mana value; any other system can write it.
+Z-stats is read-only with respect to the magic system: it shows the state but never changes it. The magic system's only requirement is that the dispatcher reads the *current* mana value; any other system can write it.
+
+**There is no time-driven mana regeneration, and rest is not a full mana restore.** The shared party status pass in `systems/time.md` section 5 never writes a magic-point field, and neither ordinary rest, rest-with-watch, nor town-bed sleep contains a magic-point restore block of its own. Outside spell effects and resurrection, the only traced writer reached by resting is the completed long-camp recovery block specified in `systems/rest-and-camp.md` section 5, and it *assigns* rather than adds, and only for specific class rows: Avatar and Mage are set to Intelligence, Bard to half Intelligence rounded down, and every other class row is left untouched. Because the assignment has no cap test, a listed class whose current magic points were already above the target ends the camp with fewer. An earlier revision of this paragraph described the model as "slow regeneration of mana over real game-time, plus full restoration on rest"; both halves are wrong and are withdrawn.
 
 ## 12. Persistence
 
@@ -792,6 +841,8 @@ forty-eight player spell definitions.
 
 The behaviour described here was derived by reading the private function and format notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
+- The absence of any time-driven magic-point regeneration, and the withdrawal of the earlier "full restoration on rest" claim in Section 11, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
+
 - The C-Cast dispatcher itself — its prompt, the forty-eight-entry token table, the charges/mana/level gate cascade, the scene gate, the per-spell handler dispatch, the light-spell duration writes, the field-placement byte mapping, the handler-family map, and the print-on-success and print-on-failure narration — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`, local CAST/CAST2 helper analysis, and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
 - The directed wind-cone and actor-scan family used by several combat spells,
   including the cardinal cone geometry, 63-coordinate cap, and absence of
@@ -864,8 +915,11 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/formats/maps.md`.
 - The shared random arena probe, the sixteen-outcome Conjure selector, Swarm's
   single-cell-then-stack placement, the controlled-bit stamp on placed actors,
-  the Summon self-check threshold and roll, and the correction that spell id 7
-  is Repel Undead rather than a summon/tame helper are derived from
+  the Summon self-check threshold and roll, the correction that spell id 7
+  is Repel Undead rather than a summon/tame helper, and the finding that the
+  shared exclusion filter used by Cause Fear and Repel Undead rejects the three
+  protected special classes rather than "humanoids" are derived from
+  `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`,
   `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
   `u5-decomp/functions/CAST_OVL/all_spells.md`,
   `u5-decomp/functions/CAST2_OVL/0x04C2_spell_target_animate.md`,

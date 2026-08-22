@@ -48,8 +48,12 @@ changes. Its scratch counters are temporary presentation state.
 **Hardware-tick wait.** Longer or wall-clock-sensitive waits can request a
 counted BIOS timer-tick delay. The helper temporarily installs a user-tick
 counter, waits until the requested number of ticks has elapsed, and restores the
-prior timer hook. A one-tick request may be skipped on sufficiently fast
-calibrated machines to avoid hook overhead. This wait is for visible pacing
+prior timer hook. A one-tick request is skipped entirely — no hook, no wait —
+when the boot calibration value reports a CPU **at or below** the original IBM
+PC measured baseline; any faster host performs the real one-tick wait. Earlier
+revisions of this section stated that direction backwards ("skipped on
+sufficiently fast machines"); that is retracted. Section 5.2 gives the gate and
+the calibration-override pattern that suppresses it. This wait is for visible pacing
 only; it is not the calendar, not an animation phase counter, and not a source
 of deterministic gameplay time.
 
@@ -90,14 +94,27 @@ tick" means one ~55 ms BIOS tick produced by the hardware-tick wait helper.
 | Start/menu subtitle ignition | Calibrated busy wait inside the driver | Runs once, on the animated start/menu path only, when the ignition resource is supplied. Self-paced; no BIOS tick. |
 | Story step-1 rectangle reveal | Self-paced inside one driver call | The pseudo-random per-pixel dissolve of the inclusive rectangle `(40, 86)..(75, 120)` runs to completion in a single driver call. It is not a per-column, per-tick loop; see `intro.md` section 10. |
 | Story `U` slide-show inter-slide pacing | Blocking keyboard wait | Bounded by player input; no wall-clock advancement except the cursor blink loop. |
-| Menu idle pump (Return-to-View timeout) | One BIOS tick per no-key pass | One menu-idle pass advances; the title-tick is fired separately before each pass, so each no-key pass is one tick of wait plus one title-tick. |
-| Acknowledgement screen pacing | One BIOS tick per scripted step | The acknowledgement screen uses its own scripted sequence of one-tick waits between paint steps. |
+| Return-to-View preview tick | One BIOS tick per preview tick | One preview tick advances the animated-tile frame table and active-object animation by one step, fires one title tick, rescatters preview actors, repaints the revealed columns, widens the strip reveal on every second tick, and polls the keyboard once. Commands request a fixed number of these; see `formats/location-dat.md` section 11. |
+| Return-to-View local cell effect | One preview tick between steps | One of the fifteen shimmer steps of an open or close effect. |
+| Return-to-View temporary actor draw | Self-paced inside one driver call | One cell converges to its target tile over a fixed run of dissolve steps, with a keyboard poll roughly every eighth step. Not tick paced. |
+| Menu idle pump (Return-to-View timeout) | **Two** BIOS ticks per no-key pass, about 110 ms | One menu-idle pass advances. The pass first calls the blinking-cursor input poll, which waits one tick when no key is queued (when a key *is* queued it erases the cursor cell and returns without waiting), and then, still holding no key, calls the title tick, which waits a second tick before advancing the idle strip. The two waits are sequential, so the idle strip advances about every 110 ms and the two-hundred-pass Return-to-View timeout is about 22 seconds of unattended menu, not 11. |
+| Acknowledgement screen, part and close wipes | One BIOS tick per step | One eight-pixel band of the credits page (part) or of the rebuilt menu screen (close) is published and both ornamental pillars advance eight pixels. Eighteen steps each, so about 0.99 s per phase; see `intro.md` section 11.2. |
+| Acknowledgement screen, rise and sink wipes | No wait at all | The pillar slide phases are unpaced: 137 rise steps and 136 sink steps run back to back at draw speed. Any claim that the whole acknowledgement sequence is uniformly tick-paced is wrong. |
 | Animation-script player (display-driver dispatch offset `0x6F`) | One calibrated delay unit per presentation step, driven by a byte-stream script | This is the same entry that plays the `TITLE.BIT` flourish above — it is the flourish player, not a credits or death-screen player. The script's frame and group structure determines the step count. |
+
+One cadence outside the intro follows the same rule and is listed here so it is
+not modelled with a tick schedule by mistake: the endgame's full-screen fade to
+black (`endgame.md` section 7.1) is a full-surface fill followed by a
+pseudo-random per-pixel dissolve of the inclusive rectangle `(0, 0)..(319, 199)`
+in one driver call. Like the two intro dissolves it is self-paced, blocking, not
+tick-driven, and runs no title tick and no keyboard poll while it works.
 
 The title-tick helper has the per-call BIOS-tick wait built into its body, so
 intro callers do not add an external wait around it. The pacing of any phase
 whose unit is "one title-tick call per X" therefore inherits the same ~55 ms
-per step as a direct hardware-tick wait of one tick.
+per step as a direct hardware-tick wait of one tick. That is a floor, not a
+ceiling: where the caller does its own waiting in the same pass — the menu idle
+pump is the case that matters — the per-pass cost is the sum of both waits.
 
 #### Calibrated delay unit for the flourish
 
@@ -121,6 +138,25 @@ requirement per section 5.3, not as a calibration emulation.
 Anything that claims the flourish is 67 groups long, one BIOS tick per group,
 or about 3.7 seconds total is wrong on all three counts and is withdrawn.
 
+An independent black-box observation of a real run agrees with the short
+figure. Sampling the original at two-second intervals from launch shows a black
+screen at about two seconds and the attribution card's first line already alone
+on the screen at about four seconds. The intro holds the preceding frame for
+eighteen ticks — about one second — plus a bounded poll before that card is
+drawn, so the flourish has to fit comfortably inside the remaining interval. A
+3.7-second flourish is not compatible with that capture; a one-second flourish
+is.
+
+Because the flourish is calibration-paced rather than tick-paced, it is also
+the one intro phase whose duration genuinely varied with host speed in the
+original. Treating it as a fixed wall-clock target is a deliberate
+modernisation, not a reproduction.
+
+A keystroke ends the flourish early, but not by cutting to the next phase
+mid-picture: the driver presents the completed final frame once before
+returning, so the abort is visible as an instant snap to the finished mark
+rather than as a partial one. See `intro.md` section 3.
+
 **Residual.** The 10.5–15.8 ms bracket is derived from the calibration contract
 and instruction-cost reasoning, not from a timed capture. A measured
 wall-clock figure from an instrumented run would replace the bracket with a
@@ -135,8 +171,9 @@ helper short-circuits and returns immediately without installing the timer
 hook or waiting. This keeps total time stable on the original target hardware
 where the surrounding loop body itself already consumed comparable time.
 
-Two intro phases override the calibration during their inner loop so the
-hardware-tick wait runs on every host, not just fast machines:
+Three intro paths override the calibration for the duration of an inner loop
+so the hardware-tick wait runs on every host, not only on hosts above the
+baseline:
 
 - The `BRITISH.PTH` signature path swaps in a calibration override (the
   literal value the original walker uses is just above the IBM PC baseline)
@@ -203,16 +240,27 @@ or private address tables.
   `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`.
 - `BRITISH.PTH` per-stroke chunking and calibration override --
   `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- Menu idle pump (`iter_until_kbd`) --
+- Menu idle pump --
   `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`.
 - Start/menu reveal helper and intro slide-loop call sites --
   `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`,
   `u5-decomp/functions/EGA_DRV/0x256B_lfsr_pixel_dissolve.md`, and
   `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+- Whole-program dissolve caller census, the separation of the entry's two carry
+  paths, and the endgame full-screen fade --
+  `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md`.
 - Title-flourish player, its animation script, the presentation step counts,
   and the calibrated per-step wait --
   `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`,
-  `u5-decomp/functions/EGA_DRV/0x1DE8_delay_with_animation_step.md`, and
-  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
+  `u5-decomp/functions/EGA_DRV/0x1DE8_delay_with_animation_step.md`,
+  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`, and
+  `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`
+  (independent re-derivation of the 85-step count and the calibrated wait's
+  shape).
 - Acknowledgement screen pacing --
   `u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`.
+- Return-to-View preview tick body, per-command tick counts, strip reveal
+  cadence, and the single-cell dissolve poll interval --
+  `u5-decomp/functions/FONT_OVL/0x02FC_animate_overworld_tick.md`,
+  `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md`, and
+  `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
