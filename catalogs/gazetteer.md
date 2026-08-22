@@ -215,7 +215,7 @@ stairs, possible hostility, and quest-specific scripts. Their resident order is:
 
 ### 5.1 Overworld entry / return coordinates
 
-Resident metadata at `DATA.OVL +0x1E9A` (X) and `+0x1EC2` (Y) carries one byte each for every scene's overworld entry / return coordinate. The full forty-entry table, indexed by `(scene - 1)`:
+Two resident one-byte-per-scene tables in `DATA.OVL` (one for X, one for Y) carry every scene's overworld entry / return coordinate. The full forty-entry table, indexed by `(scene - 1)`:
 
 | Scene | Name | X | Y |
 |---:|---|---:|---:|

@@ -198,13 +198,13 @@ presentation all use this byte to locate the active-object record that mirrors
 the combat descriptor.
 
 Do not store sleep, charm, casting, or other status bits in byte 4. The
-sleep/charm/disabled flag is byte 2 bit `0x08` (`DS:0xBA16 + slot * 8`).
+sleep/charm/disabled flag is byte 2 bit `0x08` of that slot's eight-byte combat descriptor.
 Using byte 4 as a bitfield will collide with ordinary active-object slot ids.
 
 The combat sleep/disabled bit has no traced per-slot duration counter. Player
 Sleep, Sleep Field contact, and any other combat path that marks a non-party
 actor asleep set descriptor byte 2 bit `0x08`; they do not seed a separate
-`DS:0x57C0 + slot` countdown for that descriptor state.
+per-slot countdown for that descriptor state.
 
 Wake timing is owned by the acting slot's dispatch. When a slot whose descriptor
 still has bit `0x08` set reaches its own action dispatch, the driver rolls a
