@@ -37,6 +37,31 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
 The dialog index is a 1-based identifier shared between the `.NPC` and `.TLK` files of the same location class. Index 0 means "no dialogue at all" (the NPC is a non-speaker — a guard, a child too young to talk to, an animal). Index 1 is the universal *sentinel* in shipped data: no live NPC uses it, and the first slot in every `.TLK` file is reserved as a placeholder.
 
+### 2.1 The reserved "not a real NPC" index
+
+One dialog index value is reserved to mean "this figure has no dialogue file at
+all". When the dispatcher sees it, it does not load a `.TLK` blob, does not run
+the keyword loop, and does not touch the conversation engine. Instead it calls a
+small scene-keyed handler and passes that handler's result straight out as the
+conversation's own result, with nothing running afterwards.
+
+The handler is a Blackthorn-regime shakedown, not a service counter. Its three
+branches are specified in `systems/blackthorn.md`. What matters at the
+conversation layer is the shape of the contract:
+
+- The handler's only durable side effect is on the party's gold. It writes no
+  character status byte, no hit points, and no karma, and it calls no healing,
+  resting, or curing routine.
+- It returns exactly two outcomes, "paid or passed" and "refused". The Talk
+  command surfaces that outcome as the conversation result.
+- There is no follow-on path. A reimplementation must not attach healing,
+  lodging, resurrection, or any other service to this index — there is nowhere
+  for one to hide, because the caller jumps straight to its exit with the
+  handler's return value.
+
+Inns, healers, and every other paid service are reached through the ordinary
+shop-trigger dialog-index values instead, and are owned by `systems/shops.md`.
+
 ## 3. The four `.TLK` files
 
 Conversation data is split across exactly four files, one per location class — `TOWNE.TLK`, `DWELLING.TLK`, `CASTLE.TLK`, `KEEP.TLK`. The class is determined by the current scene byte: it is `(scene_id − 1) >> 3`, mapping scenes `1..8` to towns, `9..16` to dwellings, `17..24` to castles, and `25..32` to keeps. The mapping is fixed; a given NPC's dialog index resolves only against the file matching their location class.
@@ -332,6 +357,12 @@ being spoken to — so a script can neither choose nor forge it.
   that names a live party member.
 - `0x8C` **tests** the current NPC's bit and branches on it.
 
+The bank has one further reader outside the script language: the conversation
+opener consults the same bit before any script byte runs, to decide whether the
+NPC greets the party as an acquaintance or behaves as a stranger. See Section 9
+step 3. An implementation must therefore treat the bit as engine-visible state,
+not as a private script variable.
+
 The `0x88` match rule is worth stating exactly, because it is looser than the
 top-level keyword match. For each active party slot in order, the engine takes
 the **first four characters** of that member's name and searches for them as a
@@ -526,14 +557,36 @@ Putting the pieces together, a single conversation runs through a fixed envelope
    lead-in, runs the Description entry (entry 2 of the five mandatory leading
    entries), and emits the blank-line spacing before the NPC greeting.
 
-3. **Opening theft check and greeting.** After the description, the engine
-   checks the active scene's TALK branch flag for this NPC and the shared
-   stolen-action status/target helpers. If both indicate that the just-addressed
-   NPC should react, it prints the stolen-action warning before continuing.
-   Otherwise it opens the normal quote wrapper. The Greeting entry (entry 3 of
-   the five mandatory leading entries) is then run through the byte runner. Most
-   greetings end with `0x82` (END-STREAM) so the runner returns control without
-   proceeding into the Job entry.
+3. **Opening: acquaintance test, then greeting or introduction.** After the
+   description, the engine consults the same per-scene "this NPC has been told
+   the party's name" bit that the ASK-WHO / IF-ELSE pair uses (Section 7 and
+   `systems/quest-flags.md` section 3). This is the bank's *second* reader, and
+   it runs before any script byte does.
+
+   - **Bit set (the NPC knows the party).** The engine opens the quote wrapper
+     and runs the Greeting entry (entry 3 of the five mandatory leading
+     entries) through the byte runner. Most greetings end with `0x82`
+     (END-STREAM) so the runner returns control without proceeding into the Job
+     entry.
+   - **Bit clear (a stranger).** The engine re-seeds the random generator from
+     the host clock and flips a fair coin. On one outcome the conversation
+     simply proceeds to the keyword prompt with nothing said after the
+     description. On the other the NPC introduces itself: the engine prints the
+     "I am called" lead-in and runs the **Name** entry (entry 1 of the five
+     mandatory leading entries) instead of the Greeting, then closes the quote.
+
+   So a stranger volunteers its name roughly half the time and is otherwise
+   silent after the description, while an NPC that already knows the party
+   always goes straight to its greeting. Note the consequence for
+   reproducibility: this is one of the sites that re-seeds the generator from
+   wall-clock time (`systems/prng.md` section 3).
+
+   An earlier revision of this spec described this step as a "stolen-action"
+   or theft check that printed a warning when the just-addressed NPC should
+   react. That is withdrawn: nothing in the opening step concerns stealing, and
+   the acquaintance test's sense is the opposite of what the older text
+   implied. The stolen-action warning belongs to the end-of-conversation
+   cleanup, not to the opener.
 
 4. **Keyword loop.** Section 6's loop runs until the player exits.
 
@@ -590,19 +643,35 @@ build a zero mask, so such tests read as clear and such setters are no-ops.
 `quest-flags.md` owns the non-karma branch flag boundary, while `karma.md` owns
 the moral-standing selector.
 
-**Conversation cleanup sentinel.** Final conversation cleanup also consults a
-shared town/conversation sentinel before running its stolen-action cleanup
-envelope. Nonzero suppresses the cleanup pass entirely; zero can run the
-stolen-action warning, play a fixed descending PC-speaker glissando, decrement
-at most one pending conversation signal with a zero floor, or fall through to a
-random gold adjustment and panel redraw. The visible warning and sound are not
-themselves a confirmed virtue-standing write. The byte is produced by town
-active-slot setup as a no-slot marker or one of three tracked town/Shadowlord
-slot indices; this cleanup reader only performs a zero-versus-nonzero test, and
-the current writer audit found no non-town writer. The same sentinel is visible
-to the shop surcharge helper, so implementations should keep it as shared
-mode/conversation state rather than creating a shop-only gate. `quest-flags.md`
-owns the cleanup ordering and producer summary.
+**Conversation cleanup: the Falsehood theft.** Final conversation cleanup
+first checks which Shadowlord, if any, is resident in the settlement the party
+is in — the value town entry records on arrival (`systems/town-mode.md`
+Section 13). Unless that value names the Shadowlord of Falsehood, the cleanup
+returns immediately and nothing is taken. This is the same gate the shop
+surcharge reads, so in ordinary play, away from Faulinei's hiding place, no
+conversation costs the party anything.
+
+While Faulinei is resident there, every completed conversation in that
+settlement ends with a theft. The cleanup prints the stolen-goods line, plays a
+fixed descending PC-speaker glissando, and then removes exactly one thing from
+the party, taking the first case that applies:
+
+1. If the party carries any keys, gems, or torches, one of those three counters
+   is chosen at random — re-drawing until it lands on a counter the party
+   actually has — and reduced by one.
+2. Otherwise the forty-eight-entry carried-equipment band is scanned from the
+   highest item id downward and the first nonzero entry is reduced by one.
+3. Otherwise the two eight-entry carried-item bands are scanned the same way,
+   highest index first, and the first nonzero entry is reduced by one.
+4. Only if the party has none of those does the thief take gold: a random
+   `1..15` is subtracted from the party's gold, floored at zero.
+
+The pass then redraws the gold/stats panel. Exactly one item, or one gold
+amount, is lost per conversation, and the loss is silent beyond the single
+stolen-goods line — the game never names what was taken. The warning line and
+sound are not a virtue-standing write, and none of this is karma-driven; it is
+purely a consequence of the resident Shadowlord. `quest-flags.md` owns the
+ordering summary and `systems/shops.md` owns the paired overcharge.
 
 **Curse state.** The CURSE-CHECK code (`0x8B`) ticks the resident curse logic. The conversation engine simply prods the routine; the curse logic itself owns the per-character byte counters.
 
@@ -618,6 +687,13 @@ quest-state specs.
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, status-tile gate, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
+- The reserved "not a real NPC" dialog index, the shape of the scene-keyed
+  handler it dispatches, that handler's complete write set (party gold only),
+  its two-valued result, and the absence of any follow-on path — derived from
+  `u5-decomp/functions/TALK_OVL/0x01E2_scene_service_dispatch.md` and
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`. Those notes
+  also retire the earlier reading that this index reached a healer or an
+  innkeeper; there is no cure, rest, or status write anywhere on the path.
 - The two concrete status-tile ids, their message assignment, the fact that the gate reads a live map tile rather than an NPC sprite, and the talk-through tile set — derived from `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, which re-derives both from the shipped binaries and reconciles an internal inconsistency in the earlier handler note.
 - The byte runner's full dispatch table, the multi-byte-command machinery, the GOTO-label semantics, the printable-text path, and the per-conversation state cluster — derived from `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.
 - The gold-payment, action-dispatch, and karma-threshold branch handlers -- derived from `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`, `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`, and `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
@@ -635,11 +711,24 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/TALK_OVL/0x0BD4_ask_npc_name_loop.md`, and
   `u5-decomp/functions/TALK_OVL/0x0728_scan_to_byte.md`, cross-checked
   against `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`.
-- The final cleanup pass, transient signal reconciliation, theft/covert-action
-  hook, warning glissando, and shared sentinel cross-use -- derived from
-  `u5-decomp/functions/TALK_OVL/0x111C_init_check_for_steal.md`,
-  `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md`, and
+- The final cleanup pass, its Falsehood gate, the theft cascade, and the
+  warning glissando -- derived from
+  `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x43AE_pc_speaker_glissando.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3 --
+  the cleanup gate is the resident-Shadowlord selector, so the cleanup pass is
+  the Shadowlord of Falsehood's conversation theft rather than a generic
+  transient-signal reconciliation.
+- Source provenance: derived from private analysis note
+  `u5-decomp/functions/TALK_OVL/0x111C_init_check_for_steal.md` (2026-08-22
+  re-read) -- the opening step is the conversation opener, not a theft check;
+  it tests the acquaintance bit, and a stranger takes a coin flip between
+  introducing itself by name and saying nothing. That note's original
+  "stolen-action warning" and inverted-polarity readings are superseded.
+  Cross-checked against
+  `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md` and
+  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md`.
 - The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
 - The on-disk `.TLK` file structure — header layout, blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`.
 - The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`, with the published word list in `catalogs/common-word-dictionary.md`.

@@ -26,12 +26,18 @@ The dispatcher expects one byte from the input pipeline:
   are legal dispatcher inputs.
 - Lowercase letters should already have been folded to uppercase by the input
   system.
-- Direction codes should normally have been consumed by the active mode loop.
-  The one confirmed dispatcher-visible direction/control code is the cursor-east
-  typeahead toggle described in Section 9.
-- Function-key remap codes are not part of the resident A-Z command table.
-  Mode loops or menu-specific prompts should consume or ignore them before
-  falling through to letter dispatch.
+- Direction codes never reach this dispatcher. Every mode loop consumes the four
+  cardinal direction codes in its own pre-dispatch stage, so the rule is
+  unconditional rather than a normal-case convention.
+- Exactly one non-letter code is accepted: the typeahead-buffer toggle described
+  in Section 9. It is a typed Control character — Control held with the second
+  letter of the alphabet — not a translated cursor or numpad code.
+- Everything else is rejected with the stock refusal and reported as "no
+  action": every other control character, the four diagonal codes produced by
+  the corner keys, and the ten function-key codes. No gameplay dispatcher in the
+  game accepts a diagonal *step*; the only consumer of diagonal input is the
+  combat targeting cursor (`combat.md`), and the corner keys otherwise act as
+  paging keys inside the full-screen stats/inventory and shop lists.
 
 Scene routing uses the resident scene byte:
 
@@ -50,20 +56,58 @@ letter described below.
 
 ## 3. Return Contract
 
-The returned status is a loop-control hint, not a gameplay result enum. The
-default normal result means "the handler completed normally"; mode loops then
-decide whether to run their per-turn epilogue. Other observed values cover:
+The returned status is a loop-control hint, not a gameplay result. It is a
+four-member enum, and there is no global "turn consumed" flag anywhere in the
+engine: turn cost travels entirely in this status word.
 
-- no-advance cases such as the typeahead-buffer toggle;
-- cancelled or refused prompts;
-- town-specific re-poll cases where the loop should continue without a full
-  redraw;
-- values forwarded directly from overlay handlers, especially movement,
-  attack, climb, and yell handlers.
+| Status | Meaning | Producers |
+|---:|---|---|
+| `1` | Acted. The default; the mode loop runs its per-turn epilogue. | The dispatcher's initial value, kept by every letter that does not forward or refuse. |
+| `0` | No action. The loop skips its epilogue, so no world time passes. | Unknown input, the two stock-refusal letters `D` and `W`, the save route `Q`, the typeahead toggle, dungeon `P`, and any forwarded handler that refused. |
+| `2` | A conversation happened. | One producer only: `T` in a town-family scene when the conversation engine reports it did something. |
+| `3` | Re-prompt immediately, without advancing the world. | One producer only: the town digit handler while the party stands at the harpsichord tile, so a player can key in a tune without burning turns. |
 
-A modern implementation should preserve the observable turn cost of each
-command rather than depend on the original numeric return values everywhere.
-Mode specs document the visible turn-cost rules for their command families.
+Only the town loop reads all four values. The other loops collapse the status to
+a boolean:
+
+- **Overworld.** Tests only "is it zero". Zero skips the whole per-turn
+  epilogue; every non-zero value is treated identically.
+- **Dungeon.** Tests only "is it non-zero", which selects the dungeon's
+  post-action pass. Note that the dungeon loop advances its own clock at the
+  head of the iteration, before the command is even parsed, so no dungeon
+  command is distinguished by this status for timekeeping purposes.
+- **Town.** `3` jumps straight back to the input parser with no turn and no
+  epilogue; `0` skips the epilogue; `1` runs the epilogue *including* the
+  hour-advance step; `2` or higher runs the epilogue without that step, and `2`
+  additionally fires the town post-action cleanup.
+- **Combat.** Never calls this dispatcher at all; the combat parser keeps its
+  own re-prompt flag (`combat.md`).
+
+Most letters discard whatever their handler returned and report the default
+"acted". Exactly six routes forward the handler's own value: `A` Attack,
+`B` Board, `C` Cast, overworld `E` Enter, town and dungeon `K` Klimb, and
+`Y` Yell. Each forwarded value is itself only "acted" or "no action":
+
+| Forwarded route | Value on each path |
+|---|---|
+| `A` overworld | Always "no action", including the successful attack that enters combat. |
+| `A` town | "Acted", except the on-foot refusal, which is "no action". The nothing-to-attack message still counts as acted. |
+| `A` dungeon | Always "no action". |
+| `B` Board | "Acted" on every path — all four mounts and both refusals — except the final unknown-target fallthrough, which is "no action". |
+| `C` Cast | "Acted", except one sub-handler branch that reports "no action". |
+| `E` overworld Enter | "Acted" by default, "no action" after its refusal, otherwise whatever the location-entry path returned. |
+| `K` town | "No action" by default, so both refusals cost nothing; "acted" for both ladder directions, for the no-actor early-out, and for a successful step. |
+| `K` dungeon | "Acted" when a climb, a pit fall, or a cancel is applied; "no action" on both "nothing to klimb here" refusals. Climbing where there is nothing to climb therefore costs the party nothing, and the two refusals are distinct: one for a cell that holds a climbable feature the party lacks the gear for, one for a cell with no feature at all. |
+| `Y` Yell | "Acted" for the word-of-power branch and its refusal; forwarded for the town Shadowlord branch. Three paths — hoisting sail, furling sail, and an empty yell — return an *undefined* value in the original, because the code skips the load of its own result slot and inherits whatever the shared string printer left behind. |
+
+The undefined Yell paths are compiler residue, not designed status codes. An
+implementation must not attempt to reproduce them; treat all three as "acted".
+Two of the three occur where the loop only tests zero-versus-non-zero anyway,
+but the empty-yell path can reach the town loop, which does discriminate.
+
+Beyond those six routes, a modern implementation should preserve each command's
+observable turn cost rather than depend on numeric equality everywhere. Mode
+specs document the visible turn-cost rules for their command families.
 
 ## 4. Command Table
 
@@ -83,7 +127,7 @@ handoffs.
 | `G` | Get. | Routes to the Search/Jimmy/Open/Get overlay's Get handler. Dungeon mode skips the surface/town Get prefix and falls into the underfoot chest path. |
 | `H` | Hole up / rest. | Overworld and dungeon use the rest-with-watch path. Town mode uses the inn/bed-hours path and refuses off bed tiles. The shared rest handler owns the hours prompt, sleep cleanup, HP recovery, rest-interruption checks, and the rare outdoor Lord British camp event; see `rest-and-camp.md`. |
 | `I` | Ignite. | Routes to the torch-lighting handler. It consumes one torch if available and then sets or extends the torch duration as described in `lighting.md`. |
-| `J` | Jimmy. | Routes to the lockpick handler for doors, chests, and pickpocket-like cases. |
+| `J` | Jimmy. | Routes to the lockpick handler for doors, restraint tiles, and locked containers. |
 | `K` | Klimb. | Mode-aware: overworld, town-family locations, and dungeons each have their own climb/Z-transition handler; the gear gate, on-foot check, ladder cases, and dungeon level rules are specified in `doors-and-z-transitions.md`. |
 | `L` | Look. | Dungeon scenes route to DNGLOOK. Overworld and town-family scenes route to LOOKOBJ and `LOOK2.DAT`; see `view.md`. |
 | `M` | Mix / shrine-command family. | Ordinary field use routes to CMDS reagent mixing. Shrine-family special tiles route through CAST2's shrine/urn entry handler, which then dispatches internally to virtue meditation or Codex urn reading. |
@@ -95,11 +139,18 @@ handoffs.
 | `S` | Search. | Routes to the Search handler, including secret-door and searchable-object paths. |
 | `T` | Talk. | Town-family scenes route to the conversation engine. Overworld and dungeon scenes refuse; the overworld path may still prompt for a direction before printing its refusal. |
 | `U` | Use. | Routes to the non-combat item-use handler. The implementation lives with the spell/item overlays rather than in the command dispatcher; usable-item families are specified in `inventory.md` and `catalogs/item-list.md`. |
-| `V` | View / gem. | The dispatcher checks gem count first. If none remain, it prints the no-gem refusal. Otherwise it decrements the count and routes to LOOKOBJ for overworld/town view or DNGLOOK for dungeon view. Combat `V` is label-only and does not consume a gem; see `view.md`. |
+| `V` | View / gem. | The dispatcher checks gem count first. If none remain, it prints the no-gem refusal. Otherwise it decrements the count and routes to LOOKOBJ for overworld/town view or DNGLOOK for dungeon view. Combat `V` is refused by the combat parser at no cost and does not consume a gem; see `view.md` and `combat.md`. |
 | `W` | Default refusal. | No resident world-command handler is currently confirmed; it falls through to the stock "What?" response when it reaches this dispatcher. |
-| `X` | X-it. | Routes to the vehicle-exit/dismount handler outside combat. Ordinary dungeon `X` is a refusal/no-op; combat `X` uses the combat-only escape handler specified in `combat.md`. |
+| `X` | X-it. | Routes to the vehicle-exit/dismount handler outside combat. Ordinary dungeon `X` is a refusal/no-op. Combat `X` is refused outright by the combat parser and does not leave a fight; the combat-only escape handler is bound to Escape instead, as specified in `combat.md`. |
 | `Y` | Yell. | Routes to the Yell handler described in Section 11. Shipboard Y toggles sails as specified in `vehicles.md` and `weather.md`; non-ship branches handle words of power and Shadowlord-name effects. |
 | `Z` | Z-stats. | Routes to the character/status display overlay. Character stat pages, equipment display, and shared-inventory browsing are specified in `inventory.md` and `text-output.md`. |
+
+`R` Ready and `Z` Z-stats are worth calling out against the return contract of
+Section 3: the status/equipment overlay produces no status word of its own, and
+the dispatcher discards whatever it returns, so both letters always report the
+default "acted". Opening either panel and immediately backing out therefore
+costs a turn in every non-combat mode, and a refused ready costs exactly what a
+successful one costs.
 
 ## 5. Verb Prefixes And Prompts
 
@@ -173,14 +224,28 @@ the underfoot cell: closed chest cells refuse until opened, open chest cells are
 consumed in the loaded dungeon image and roll the seven-row reward generator
 described in `containers.md`, and unrelated cells refuse.
 
-`J` Jimmy is the key-and-lock handler. Non-dungeon Jimmy checks key stock before
-ordinary door, visible-chest, and NPC pocket rolls. Those rolls use the
-selected member's lock-pick class byte against a `1..29` die; a failed roll
-breaks one key. Success rewrites the lock/container state or grants the
-pickpocket reward. A failed NPC pocket roll grants no reward and does not mark
-the NPC picked/thanked; a target cell with no active NPC refuses without a key
-loss. Per-map object chests and dungeon chests use separate formulas and key
-side effects. Detailed lock-state rules live in `doors-and-z-transitions.md`.
+`J` Jimmy is the key-and-lock handler. Non-dungeon Jimmy checks key stock first
+and refuses outright when it is zero. It then splits by target into exactly two
+rolls, both of which read the acting member's Dexterity and neither of which
+reads any class or profession field:
+
+- A **flat Dexterity test** for locked doors and for restraint tiles (stocks and
+  manacles). Success chance is Dexterity divided by thirty, clamped. On a door
+  it converts the door to its unlocked counterpart; on a restraint it frees the
+  NPC standing there, prints a thanks line, and raises the shared moral-standing
+  selector, transferring nothing to the party. Magically locked doors are
+  refused before this roll and still cost a key.
+- A **difficulty-versus-Dexterity threshold** for containers, used both for
+  per-map container objects on the surface and for dungeon chest cells. Success
+  clears the container's combined lock/trap flag, so a successful Jimmy also
+  disarms.
+
+Key accounting is uniform: success spends no key, and every failure or refusal
+spends exactly one. A failed pick changes nothing else, so container contents
+are never lost. There is no pickpocket branch in this command, and floor and
+town chests are container objects rather than tiles, so they always take the
+threshold roll. Detailed lock-state rules live in
+`doors-and-z-transitions.md`.
 
 `O` Open is the no-key counterpart. Non-dungeon Open runs the door auto-close
 tracker before probing the target tile. Already-open targets acknowledge that
@@ -235,10 +300,15 @@ visit-local loaded dungeon image. Those dungeon Search rewrites are specified
 in `dungeon-mode.md`. Inventory grants and chest contents belong to
 `containers.md` and `catalogs/item-list.md`.
 
-When a Search, Open, Jimmy, or container outcome selects the shared resident
-trap-effect resolver, the common party damage/revive effects are specified in
+When an Open or container outcome selects the shared resident trap-effect
+resolver, the common party damage and poisoning effects are specified in
 `systems/traps.md`. The command layer owns routing and prompt/refusal text; the
-trap spec owns the selected effect once the routing layer has chosen it.
+trap spec owns the selected effect once the routing layer has chosen it. The
+routing layer passes no trap flavour: a container is trapped or it is not, and
+the resolver picks the flavour itself. Search narration classifies traps but
+never enters that resolver, and Jimmy does not either — a successful Jimmy
+clears the same flag that marks the container trapped, so it disarms as well as
+unlocks.
 
 ## 8. P-Push Movable-Tile Command
 
@@ -284,15 +354,24 @@ a push or a pull:
 
 On any successful push or pull, the avatar advances one tile in the prompted
 direction and the map is marked dirty. The command mutates the live tile buffer;
-implementations should not model it as an overlay-only animation. The written
-floor/occupancy stamps are visit-local for top-down location scenes: they live
-in the runtime tile buffer, not in the saved top-down location files, and
-ordinary location entry reloads that buffer from the static scene data. A
-byte-compatible implementation should preserve the mutated live cells until the
-owning map or floor is reloaded, another traced command rewrites the cells, or
-temporary combat arena state is torn down. A save/load round trip does not
-create a durable P-Push furniture trail for towns, castles, keeps, dwellings,
-or overworld chunk windows. The generic stamp `0x44` and the cannon-family
+implementations should not model it as an overlay-only animation.
+
+**The stamp is never persistent.** This is now a certainty rather than a
+negative bound. The push writes through the shared tile accessor, which can
+only hand back a cell inside one of three live buffers: the combat arena grid,
+the overworld sliding chunk window, or the single location grid. Nothing the
+game ever writes to disk covers any of those three: the persisted state is the
+saved-state window, the two per-world object tables, and the live object list,
+and the saved-state window ends immediately below the live tile buffer. The load
+side matches — a load restores exactly the window that was written and nothing
+above it, location tiles are re-read wholesale from read-only location data on
+every entry, and overworld tiles are streamed a quadrant at a time from the
+read-only world data files. A stamp therefore lasts exactly as long as the
+current occupancy of the live tile buffer: until the location is re-entered,
+until the overworld window streams that region in again, until another command
+rewrites the cell, or until the combat framer tears the arena down. A pushed
+chair's trail cannot survive a save/load round trip in any scene class, and no
+tile mutation of any kind is durable. The generic stamp `0x44` and the cannon-family
 stamp `0x45` both resolve to the same cobble description in the
 LOOK2-backed tile catalog. The separate stamp byte is still load-bearing for
 P-Push's family-matching rule, but it does not require a distinct public
@@ -307,14 +386,43 @@ object state that the combat framer later tears down.
 
 ## 9. Special Non-Letter Dispatcher Input
 
-One translated control code that normally represents an eastward cursor/numpad
-direction can reach the dispatcher in at least one path. When it does, the
-dispatcher toggles the typeahead-buffer flag and prints the corresponding
-Buffer On / Buffer Off message. This action does not consume a game turn.
+The dispatcher accepts exactly one non-letter code: the typeahead-buffer toggle,
+produced by typing Control with the second letter of the alphabet. The
+dispatcher flips the typeahead setting, prints the corresponding Buffer On /
+Buffer Off message, and reports "no action", so the toggle never consumes a
+game turn. Combat owns a second, independent copy of the same toggle that writes
+the same setting (`combat.md`).
 
-Other direction/control codes are normally consumed by the active mode loop
-before letter dispatch. Their exact mode-by-mode pre-routing belongs to
-`input.md`, `overworld.md`, `town-mode.md`, and `dungeon-mode.md`.
+This code is a typed Control character, not a cursor or numpad code. The
+keyboard layer's rewrite of typed Control characters into the high pseudo-code
+range is suppressed for any key that arrived through the scancode table, so an
+arrow or numpad key can never be delivered as the toggle. Cursor and numpad
+direction keys produce the four cardinal movement codes, which the active mode
+loop consumes; the corner keys produce the four diagonal codes, and the function
+keys produce their own block. None of those reach letter dispatch, and all of
+them fall to the dispatcher's stock refusal if they somehow do.
+
+Every mode loop owns a small pre-dispatch control-code table of its own. The
+four shared bindings, all of them typed Control characters, are:
+
+| Binding | Behaviour |
+|---|---|
+| Control + `E` | Prompts "Exit to DOS?"; a yes answer leaves the game, anything else prints the refusal and continues. |
+| Control + `K` | Prints the party's scalar moral-standing value as a number. |
+| Control + `S` | Toggles sound, printing the new on/off state. |
+| Control + `V` | Prints the version banner. |
+
+None of the four consumes a turn in any mode. Beyond them the tables agree on
+the four cardinal direction codes, which route to that mode's movement handler,
+and differ only in the surrounding detail: which unrecognised codes are silent
+and which print the stock refusal, and what extra pre-dispatch stages the loop
+runs first — the overworld's water, party-capability and moongate probes and its
+under-sail cadence, town's drunkenness scrambler, dungeon's inlined poll.
+Dungeon mode also accepts Enter and the period key as movement, and treats
+digits as a solo-member select that always reports "no action". Combat replaces
+the scheme entirely with its own parser, which adds Escape, Space, the
+actor-select digits and its own buffer toggle. Per-mode detail belongs to
+`input.md`, `overworld.md`, `town-mode.md`, `dungeon-mode.md`, and `combat.md`.
 
 ## 10. H-Hole-Up Rest Contract
 
@@ -500,23 +608,28 @@ Two consequences an implementation must honour:
 The resident command-dispatch contract is complete at A-Z routing depth: mode
 pre-routing, scene-aware letter families, no-action fallthroughs, command
 prompt ownership, typeahead toggle, save route, major CMDS/SJOG/CAST/ZSTATS
-delegates, and command-family cross-references are fixed. Remaining work belongs
-to per-handler return compatibility, mode-local control-code tables, and
-P-Push stamp rendering, not to the resident dispatch table itself.
+delegates, per-handler return values, mode-local control-code tables, and
+P-Push stamp durability are all fixed. The items below are the residual
+boundaries.
 
-- **Per-handler return values.** The dispatcher-level status values are known
-  well enough for loop routing, but several overlay handlers forward their own
-  values. Exact numeric compatibility belongs with per-handler decomp passes.
-- **Full control-code pre-routing.** The dispatcher-visible typeahead toggle is
-  identified, but each mode loop has its own control-code table. These tables
-  should be documented in the mode specs rather than collapsed into the
-  resident command table.
-- **P-Push stamp rendering.** The command writes floor/occupancy stamp tiles
-  into the live map buffer. Save/load durability is bounded negatively for
-  top-down location and overworld buffers. The generic `0x44` stamp and the
-  cannon-family `0x45` stamp both resolve to cobble through LOOK2; the byte
-  distinction remains part of P-Push's family-matching rule rather than a
-  separate visual-label gap.
+- **Per-handler return values — closed.** The status is the four-member enum of
+  Section 3, only six routes forward a handler's own value, and each forwarded
+  value is itself only "acted" or "no action". The single wrinkle is the trio of
+  Yell paths that return an undefined value in the original; an implementation
+  treats those as "acted" and never reproduces the residue. There is no global
+  turn-consumed flag to model: an earlier reading that treated a shared resident
+  byte as a cross-mode turn sentinel is withdrawn — that byte is a stats-panel
+  repaint request, a rendering concern rather than a timekeeping one.
+- **Full control-code pre-routing — closed.** Each mode loop owns its own small
+  control-code table; the four tables agree on the four shared bindings and the
+  cardinal direction codes, and combat replaces the scheme with its own parser
+  (Section 9). The mode specs carry the per-mode detail.
+- **P-Push stamp durability — closed.** The stamp is a live-buffer mutation
+  only and can never survive a save/load round trip (Section 8). The remaining
+  question is presentational: the generic `0x44` stamp and the cannon-family
+  `0x45` stamp both resolve to cobble through LOOK2, and why the chair-style
+  family gets its own byte is a rendering question rather than a dispatch one.
+  The byte distinction is still load-bearing for P-Push's family-matching rule.
 
 ## 14. Sources
 
@@ -571,6 +684,11 @@ reproduced here.
   `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`,
   `u5-decomp/functions/SJOG_OVL/0x1374_sjog_open.md`, and
   `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`.
+- The two-roll J-Jimmy contract, its corrected target families, the Dexterity
+  operand shared by both rolls, the uniform key accounting, and the fact that no
+  trap flavour is chosen by any caller. Source provenance: derived from private
+  analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The Search coordinate-object fallback:
   `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
 - Corrected entry notes for the shared Look/View and Ready/Z-stats command
@@ -580,3 +698,17 @@ reproduced here.
   `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
 - The CAST-owned U-Use item route:
   `u5-decomp/functions/CAST_OVL/0x1792_use_item.md`.
+- The four-member status enum of Section 3, the per-route forwarded values, the
+  undefined Yell paths, the per-mode control-code tables and the single accepted
+  non-letter code of Sections 2 and 9, and the established save/load boundary
+  for the P-Push stamp in Section 8. Source provenance: derived from private
+  analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`, with
+  `../u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`,
+  `../u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md`,
+  `../u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, and
+  `../u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`.
+- The withdrawal of the global "turn consumed" flag reading, and the fact that
+  Ready and Z-stats always report the default status. Source provenance: derived
+  from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`.

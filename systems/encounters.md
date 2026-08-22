@@ -10,7 +10,7 @@ There are three arena-encounter trigger families in the running game:
 - **Scripted encounters.** A small, hand-authored set of locations and events force a specific encounter when reached: ambush tiles in story-driven keeps, the duel with Lord Blackthorn, a few unique boss meetings. Blackthorn's follow-on capture and rescue scenes are specified in `systems/blackthorn.md`.
 - **Dungeon room encounters.** Stepping onto certain dungeon-room cells loads a fixed dungeon arena from a separate on-disk bank.
 
-Once any arena trigger fires, the same combat-enter framing function runs - combat is a function call from the world or dungeon mode loop perspective (see `combat.md`). The encounter system's job ends when that call begins; everything after the framer's save phase belongs to combat. This spec covers the trigger-side mechanics, the arena-selection logic, the class-row spawn-count and companion-class pipeline, and the small set of side mechanics - sleep ambushes and "fortunes-of-war" doublings - that change encounter pacing.
+Once any arena trigger fires, the same combat-enter framing function runs - combat is a function call from the world or dungeon mode loop perspective (see `combat.md`). The encounter system's job ends when that call begins; everything after the framer's save phase belongs to combat. This spec covers the trigger-side mechanics, the arena-selection logic, the class-row spawn-count and companion-class pipeline, and the small set of side mechanics - sleep ambushes and the early-game encounter-size damper - that change encounter pacing.
 
 ## 2. The three triggers
 
@@ -339,8 +339,9 @@ from the default-spawn-count field of its combat-class stat row. The count is
 indexed by class id, never by arena index. Three values are sentinels and used
 unchanged: `1` (the single-attacker cases), `8`, and `16`. All other values are
 treated as a *maximum* and re-rolled to a uniform integer in `[1, max]`. If the
-"fortunes of war" flag is set, the count is re-rolled a second time, taking the
-second roll. The reroll arm ends with a defensive cap at twenty-six.
+early-game damper of Section 5 is set, the count is re-rolled a second time over
+the first roll's result and the second roll is taken, which can only lower it.
+The reroll arm ends with a defensive cap at twenty-six.
 
 **Reachable-count invariant.** With shipped class data the count never exceeds
 sixteen. The largest default spawn count in the forty-eight-row class stat
@@ -392,23 +393,38 @@ class was chosen.
 
 After the pipeline writes all `count` records to the active-object table, the framer enters the round loop and combat plays out as described in `combat.md`.
 
-## 5. The "fortunes of war" doubler
+## 5. The early-game encounter-size damper
 
-A single runtime byte in the data segment, the "double-encounter" flag, modifies the
-spawn-count roll when set. With the flag at zero, the engine behaves as
-described above. With the flag non-zero:
+A single saved byte modifies the spawn-count roll while it is set. It has been
+called the "fortunes of war" flag or the "double-encounter" flag; both names are
+backwards. With the byte at zero the engine behaves exactly as described above.
+With it non-zero:
 
-- Spawn-count rolls are re-rolled once and the second roll is taken. Because the second roll is also uniform on `[1, max]`, this is not a guaranteed increase. The compatibility rule is simply "replace the first count roll with the second while the flag is non-zero."
-- The flag is not part of the traced tile/Z/hour encounter-probe formula.
+- The spawn count is rolled a second time, and the second roll replaces the
+  first. Both rolls draw a uniform integer in `[1, max]` — the second one over
+  the first roll's result — so the effect can only *lower* the count. It is a
+  damper, not a doubler.
+- Encounter classes whose spawn-count field is one of the three exact-count
+  values one, eight and sixteen are unaffected, because those skip both rolls
+  entirely.
+- The byte is not part of the tile/Z/hour encounter-probe formula. It changes
+  how big a fight is, never whether one happens.
 
-Current traced notes prove a terrain-setup read and a clear in the 28-day
-month-boundary bundle. Broad static sweeps of the currently analysed binaries
-have not found a gameplay writer that sets the byte. The flag also lives in the
-flat `SAVED.GAM` image, so explicit save/load preserves its current byte value.
-The public compatibility contract is therefore: preserve the byte, clear it
-only at the 28-day rollover, and treat any non-zero value as the count-reroll
-modifier when terrain combat setup reads it. Sleep ambushes and scripted events
-must not be modeled as producers unless a future write site proves that path.
+The byte's life cycle is settled, and no player action participates in it. The
+factory seed ships it set, and character creation clones the seed image into the
+first save, so **every new game starts with the damper active**. Nothing in the
+engine ever sets it; the only write anywhere is the clear performed at the
+28-day calendar-month rollover. Because the shipped calendar starts partway
+through a month, a new game keeps the damper for its first twenty-four in-game
+days, after which it is off permanently — there is no way to switch it back on.
+Sleep ambushes and scripted events are not producers and must not be modelled as
+such.
+
+The compatibility contract is therefore: seed the byte set on a new game,
+preserve it across save and load, clear it at the month rollover, never set it
+from gameplay, and treat any non-zero value as the count-reroll modifier when
+terrain combat setup reads it. An engine that seeds it clear will produce
+noticeably larger wilderness fights during the opening month.
 
 ## 6. Sleep-ambush mechanics
 
@@ -518,7 +534,7 @@ tile"; that framing is withdrawn. The arena chooses the battlefield only. The
 only dynamic-adjustment knobs are:
 
 - The base spawn count gets re-rolled into `[1, max]` for non-sentinel max values (Section 4), so a class whose default spawn count is thirteen produces fights of one to thirteen monsters, while the sentinel counts 1, 8, and 16 are taken verbatim. No shipped class row carries a non-sentinel value above thirteen.
-- The "fortunes of war" doubler re-rolls the count (Section 5).
+- The early-game damper re-rolls the count downward while it is set, which is the first in-game month of a new game (Section 5).
 - The terrain setup helper's town-style count-one override applies whenever the
   pre-combat scene was a town, dwelling, castle, or keep and the base class is
   not Guard, which is the ordinary outcome for town-triggered arena fights
@@ -565,7 +581,7 @@ The encounter system is the connecting tissue between several other systems:
 - **Overworld.** The per-turn block runs the encounter probe; the overworld's per-turn animator walks the spawned monsters until they make contact with the party.
 - **Time.** The probe consumes a single RNG draw per overworld turn but does not advance time. Time advances are mediated by the per-turn cleanup, which the encounter system itself never calls (the world mode loops do).
 - **Active objects.** Spawning writes a new active-object record. The placement pipeline writes one record per spawned monster into the combat-instance overlay of the same table.
-- **Save / load.** Encounter state is *not* mid-flow saveable — the player cannot save during the probe, the framer's setup phase, or the round loop (the input system gates saves to the world mode loops' wait-for-input states). The "fortunes of war" flag is a save-image tail byte documented in `formats/saved-gam.md`, so explicit save/load preserves its resident value even though no gameplay setter is currently traced.
+- **Save / load.** Encounter state is *not* mid-flow saveable — the player cannot save during the probe, the framer's setup phase, or the round loop (the input system gates saves to the world mode loops' wait-for-input states). The early-game encounter-size damper is a save-image tail byte documented in `formats/saved-gam.md`, so explicit save/load preserves its value; it is seeded set by the new-game template and cleared only at the month rollover.
 - **Karma and rewards.** Combat computes a per-class raw reward value and temporary drop markers, but the framer does not propagate either as a post-combat award. Combat-local attack and spell/effect callers can consume the damage/status helper's return immediately by adding it to a living party attacker's experience with a `9999` cap. The ordinary terrain-target caller removes or rewrites the original trigger slot after the framer returns. No traced combat-exit path adds party gold, applies virtue deltas, promotes arbitrary killed-monster drops, or emits a separate victory bonus. Food/gold from a body-like post-combat result is deferred to later Search/Get interaction with the rewritten slot (see `containers.md` and `karma.md`).
 - **Visibility.** Off-screen monsters are pruned from the active-object table but stay alive conceptually — the engine's "thirty-two-cell sliding window" means the player's far-away wanderings are not tracking specific monsters' positions.
 
@@ -606,11 +622,11 @@ change the current encounter contract.
   selects from the dungeon arena bank. Keep any future chest-triggered combat
   route separate from the room-tile formula until a caller is identified.
 
-- **The "fortunes of war" flag.** The flag is read by the spawn-count reroll
-  path, saved/loaded as resident state, and cleared by the 28-day
-  month-boundary bundle. Current static sweeps found no gameplay setter, so the
-  public encounter rule is the read/save/load/month-clear/count-reroll
-  behaviour unless future evidence identifies a live producer.
+- **The encounter-size damper - closed.** The flag is read by the spawn-count
+  reroll path, saved and loaded as resident state, seeded set by the factory
+  new-game template, and cleared at the 28-day month boundary. There is no
+  gameplay setter and none is expected: the seed value and the month clear are
+  the whole write surface. Section 5 states the full contract.
 
 - **Town hostility boundary.** Town hostility is not an arena-encounter path in
   the traced town overlay. A-Attack, alarm scatter, guard arrest, pacify, death,
@@ -687,5 +703,12 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`,
   `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`, and
   `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
-- The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion roll, the town-style single-attacker override, and the "fortunes of war" double-roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+- The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion roll, the town-style single-attacker override, and the damper's second downward count roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
 - The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the single-plane arena model (one outdoor bank serving both the surface and the underworld, with no plane-specific variant records) — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
+
+- The identification of the spawn-count reroll flag as an early-game
+  encounter-size damper rather than a doubler, its factory-seed value, the
+  absence of any gameplay setter, and the month-rollover clear as the engine's
+  only write. Source provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` and
+  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.

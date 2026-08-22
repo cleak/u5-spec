@@ -63,6 +63,11 @@ The public contract is:
    runner falls through in-stream, and when it is set the runner transfers to
    the labelled record named by the argument (or, for the reserved argument
    value `0xFF`, ends the response and returns to the keyword prompt).
+6. **The tester has a second caller outside the byte runner.** The conversation
+   opener reads the same bit before any script byte executes, to decide whether
+   the addressed NPC greets the party as an acquaintance or behaves as a
+   stranger; see `systems/conversation.md` section 9 step 3. The bank is
+   therefore engine-visible state, not a private script variable.
 
 Because the index is engine-supplied and bounded by the thirty-two-slot NPC
 roster, it is always in range. The mask builder is a plain thirty-two-bit left
@@ -129,49 +134,55 @@ The confirmed public letter effects are:
 | `J` | Black Badge carried-item flag set. |
 | `K` | Skull/special-key counter raised to the capped grant value. |
 
-## 5. Conversation Exit Reconciliation
+## 5. Conversation Exit: The Falsehood Theft
 
 Every normal conversation calls a final cleanup pass after the keyword loop and
-Bye text finish. The pass first checks the shared town/conversation sentinel:
+Bye text finish. The pass is not quest-state reconciliation at all: it is the
+Shadowlord of Falsehood's theft, and it is gated on which Shadowlord, if any,
+is resident in the settlement the party is in — the value town entry records on
+arrival (`systems/town-mode.md` Section 13).
 
-- if the sentinel is nonzero, the cleanup returns immediately. No theft message,
-  one-shot signal reconciliation, or gold redraw is performed from this pass;
-- if the sentinel is zero, the cleanup prints the stolen-action warning, runs
-  the fixed stolen-action warning sound, and then reconciles one pending field.
+- If the recorded value is anything but the Shadowlord of Falsehood — the
+  Hatred value, the Cowardice value, or the no-host marker that every ordinary
+  settlement carries — the cleanup returns immediately. Nothing is printed and
+  nothing is taken.
+- If the Shadowlord of Falsehood is resident, the cleanup prints the
+  stolen-goods line, plays a fixed descending PC-speaker glissando, and removes
+  exactly one carried thing from the party.
 
-The sentinel is produced by town-entry active-slot setup, not by the
-conversation cleanup itself. Town setup initializes it to a no-slot marker, then
-may replace it with one of the three tracked town/Shadowlord slot indices when
-the active scene matches the three-slot Shadowlord-location table. Town setup
-treats the no-slot marker as special; the conversation cleanup does not. For
-cleanup, only the byte value matters: slot index `0` is the traced
-town-produced state that allows the warning/reconciliation pass, while slot
-indices `1` and `2` and the no-slot marker suppress it. The current writer
-audit found no non-town writer for this shared byte in the analyzed baseline.
+**Retraction.** Earlier revisions of this section described the pass as
+"reconciling one pending transient conversation signal" out of a three-slot
+special band, a generic signal array, and two eight-slot signal arrays. That
+reading is withdrawn. The bands it walks are ordinary inventory: the three-slot
+band is the party's keys, gems, and torches; the "generic array" is the
+forty-eight-entry carried-equipment band described in `systems/inventory.md`;
+and the two eight-slot arrays are two further carried-item bands. The pass
+subtracts one unit of a carried item; it does not consume conversation signals,
+and no conversation-signal band is published from it.
 
-The warning sound is a fixed descending PC-speaker glissando played immediately
-after the warning text. It is presentation only; the state reconciliation below
-is what mutates resources and transient signal fields.
+The theft order is fixed:
 
-The zero-sentinel reconciliation order is fixed. It first checks a three-slot
-resource/special band. The band uses the shared random stream after a
-time-derived reseed: while any of the three slots is nonzero, it chooses one of
-the three slots until it lands on a nonzero entry, then subtracts one from that
-slot with a zero floor. If the band has no nonzero slot, the pass scans the
-generic conversation signal array from high index to low index and subtracts one
-from the first nonzero entry, again floored at zero. If none exists, it scans
-the two eight-slot conversation signal arrays, also high to low, and subtracts
-one from the first nonzero entry. Only when no byte-sized signal was decremented
-does the cleanup subtract a random `1..15` gold from the party's gold total,
-floored at zero, and redraw the visible stats/gold panel.
+1. If the party carries any keys, gems, or torches, the shared random stream
+   picks among those three counters, re-drawing until it lands on one the party
+   actually has, and subtracts one with a zero floor.
+2. Otherwise the forty-eight-entry carried-equipment band is scanned from the
+   highest item id downward and the first nonzero entry is reduced by one.
+3. Otherwise the two eight-entry carried-item bands are scanned the same way,
+   highest index first, and the first nonzero entry is reduced by one.
+4. Only when no carried item was found does the cleanup subtract a random
+   `1..15` gold from the party's gold total, floored at zero.
 
-This makes the ownership boundary explicit: transient conversation signals do
-not themselves persist as durable quest state after the cleanup has processed
-them, but at most one byte-sized signal is consumed per cleanup call. The same
-sentinel is visible to the shop surcharge helper, where nonzero also suppresses
-the extra post-transaction gold debit. This cross-use does not make the
-sentinel a durable quest flag; treat it as transient mode/conversation state,
-and keep the surcharge behavior in `systems/shops.md`.
+The pass then redraws the visible stats/gold panel. At most one item, or one
+gold amount, is lost per conversation.
+
+The same resident-Shadowlord value gates the shop surcharge, where any value
+other than Falsehood likewise suppresses the extra post-transaction gold debit.
+It is per-visit mode state, not a durable quest flag; keep the surcharge
+behaviour in `systems/shops.md` and the presentation in
+`systems/conversation.md`.
+
+Source provenance: derived from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3.
 
 ## 6. Relationship To TLK Branches
 

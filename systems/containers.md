@@ -106,11 +106,13 @@ on how they are encoded:
   rewritten to the open-container tile, the visible map is marked dirty, and the
   chest helper determines whether the chest is empty, trapped, or grants
   contents.
-- A locked container must be Jimmied first. A successful pick rewrites the
-  container state or matched object lock state so a later Open/container helper
-  can enter the chest/content path. Ordinary visible-container failures can
-  break a key; per-map object chest failures clear that object's lock high bit
-  into the broken-lock state. The formulas and key side effects live in
+- A locked container must be Jimmied first. A successful pick clears the
+  matched object's lock/trap flag — preserving its content class — so a later
+  Open/container helper enters the chest/content path with no trap armed. A
+  failed pick breaks one key and changes nothing at all: the lock still stands,
+  the contents are intact, and the container can be attempted again while keys
+  remain. There is no "broken-lock" state and no way for a failed pick to
+  destroy a container's contents. The formulas and key side effects live in
   `doors-and-z-transitions.md`.
 - A too-heavy or otherwise non-openable foreground object refuses before the
   chest helper runs. A non-matching fallthrough can still enter the helper and
@@ -145,10 +147,17 @@ on how they are encoded:
 
 Trap handling is part of the chest helper. A trapped chest prints the trap
 result, applies the selected damage or status effect through the shared trap
-resolver described in `traps.md` when that resolver is selected, and then either
-grants contents or leaves the chest consumed according to the helper result.
-The surface/town chest content pools below use the chest's low seven-bit class
-after any trap bit is removed.
+resolver described in `traps.md`, and then either grants contents or leaves the
+chest consumed according to the helper result. The helper passes no trap
+flavour: the container is trapped or it is not, and `traps.md` owns the flavour
+choice. The surface/town chest content pools below use the chest's low
+seven-bit class after any trap bit is removed.
+
+The trapped flag and the locked flag are the same flag, so a container that has
+been successfully Jimmied is also disarmed and its later Open is trap-free.
+Whichever way the chest is entered, the low seven-bit content class survives
+every lock and trap interaction, so container contents can never be destroyed
+before they are generated.
 
 When the chest helper opens a matching surface/town object-table chest, it asks
 for the party member who opens it. It commits and clears the matched object
@@ -175,13 +184,21 @@ same threshold. Multiple rows can succeed for one chest.
 | 7 | Gold | 3 | Roll `1..(3 * chest_class)`. |
 | 8 | Chest marker | 25 | Roll `1..chest_class` as the staged context value. |
 
-The secondary pool runs after the primary pool. It performs
-`floor(chest_class / 2) + 1` independent attempts. Each attempt first chooses a
-pool index uniformly from `0..47`, then uses the selected row's threshold in
-the same two gates: threshold must be less than or equal to the chest class,
-and a `1..30` roll must be greater than or equal to the threshold. On success,
-the pool index itself is the equipment subtype passed to the inventory-add
-path. Rows marked disabled never succeed for ordinary chest classes.
+The secondary pool runs after the primary pool. It is not an opaque loot table:
+it is the game's **equipment array in save order** — four helms, five shields,
+seven armours, twenty-six weapons, three rings, and three amulets — so a pool
+index here is directly the save-file equipment index for that item, and the
+threshold column is simply a per-item rarity gate laid over that array. The
+rows marked disabled are exactly the unique and quest items, which no chest can
+ever produce.
+
+The pool performs `floor(chest_class / 2) + 1` independent attempts. Each
+attempt first chooses a pool index uniformly from `0..47`, then uses the
+selected row's threshold in the same two gates: threshold must be less than or
+equal to the chest class, and a `1..30` roll must be greater than or equal to
+the threshold. On success, the pool index itself is the equipment subtype passed
+to the inventory-add path. Rows marked disabled never succeed for any chest
+class.
 
 | Pool index | Result family | Threshold |
 |---:|---|---:|
@@ -409,12 +426,15 @@ rather than silently clamping the bound to one.
 
 Some Get results are not object-table entries:
 
-- **Borrowed objects.** Certain furniture/table cells can be "borrowed". The
-  cell is rewritten to the open/empty tile, the map redraw hint is set, and a
-  sound/feedback effect runs. This branch is a tile mutation, not an
-  inventory-add dispatch. The traced branch does not debit the shared
-  moral-standing selector; crop, table-food, and town-family chest handling own
-  the confirmed Get-side standing penalties.
+- **Borrowed objects.** Certain furniture/lit-fixture cells can be "borrowed".
+  The cell is rewritten to the open/empty tile, the map redraw hint is set, a
+  sound/feedback effect runs, and the party's torch counter is set to 100
+  counter units — borrowing a lit fixture is a light source, not an inventory
+  item, and it consumes no carried torch. See `systems/lighting.md` for the
+  counter's decay. This branch is a tile mutation, not an inventory-add
+  dispatch. The traced branch does not debit the shared moral-standing
+  selector; crop, table-food, and town-family chest handling own the confirmed
+  Get-side standing penalties.
 - **Crops.** Crop cells can be picked. The cell changes to the harvested crop
   tile, the party's grain/food-related counter is credited, the shared
   moral-standing selector is debited when nonzero, and a small food
@@ -543,8 +563,9 @@ Modern implementations should therefore separate:
 - **Commands.** `commands.md` owns dispatcher routing for `G`, `S`, `J`, and
   `O`.
 - **Doors and Z transitions.** `doors-and-z-transitions.md` owns lock states,
-  door opening, auto-close, Jimmy's key/lock rolls, and per-map object chest
-  broken-lock state.
+  door opening, auto-close, and both of Jimmy's key/lock rolls, including the
+  fact that a successful pick on a container clears the lock/trap flag while a
+  failed pick leaves the container untouched.
 - **Dungeon mode.** `dungeon-mode.md` owns dungeon cell classes and the fact
   that dungeon Get/Open act on the underfoot cell.
 - **Items.** `catalogs/item-list.md` names item families and records which use
@@ -596,6 +617,11 @@ does not reproduce decompiled code, assembly, or raw data dumps.
 - `u5-decomp/functions/SJOG_OVL/0x0F88_sjog_trap_dispatch.md`.
 - `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`.
 - `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`.
+- `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md` — source
+  provenance for the retraction of the "broken-lock" state, the guarantee that
+  a failed pick preserves a container's contents, the identification of the
+  secondary pool as the equipment array, and the absence of any caller-side
+  trap-selection table.
 - `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`.
 - `u5-decomp/functions/SJOG_OVL/0x02EA_sjog_search_object_handler.md`.
 - `u5-decomp/functions/SJOG_OVL/0x0514_sjog_hidden_treasure_scan.md`.

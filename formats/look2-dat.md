@@ -121,9 +121,12 @@ description-category translation step inside the file format.
 
 A few tile ids have command-specific handling around the table lookup:
 
-- `0x59` routes to LOOKOBJ's sky renderer (`systems/view.md` section 4.2) instead of
-  printing the base `LOOK2.DAT` string. Its final in-world catalog label is
-  intentionally left to `systems/view.md` and `catalogs/tile-catalog.md`.
+- `0x59` is a **telescope**, and it routes to LOOKOBJ's sky renderer
+  (`systems/view.md` section 4.2) instead of printing the base `LOOK2.DAT`
+  string. Its record is the shared placeholder for exactly that reason: the
+  handler produces the output, so the table has nothing to say. This is a
+  different tile from the wishing well below, and an earlier gloss calling it
+  one is withdrawn.
 - `0xA1` routes to the LOOKOBJ wishing-well handler and `0xD8..0xDB` routes to
   the LOOKOBJ fountain handler. Both replace the base string entirely rather
   than decorating it. The two differ in what they store: `0xD8..0xDB` share the

@@ -4,7 +4,7 @@
 
 Ultima V's overworld is the open-air mode the player spends the most time in. Two surfaces share the mode: **Britannia**, the surface world the game opens on, and the **Underworld**, the lightless mirror beneath it. Both are 256-by-256 tile grids driven by the same mode loop, the same camera, the same per-turn cadence. They differ only in which on-disk grid the engine reads tiles from, what default lighting the time system applies, and which surface features distinguish them: town and dungeon entries, runtime moongate presentation, and a confirmed falls trigger on Britannia, plus a uniformly dark and chasm-strewn cavern below.
 
-Within either surface the player commands a small party (or a vehicle carrying that party) and walks one cell per turn. Around the party live the *active objects* -- wandering monsters, vehicles, dropped items, and the player avatar slot itself -- while render-only effects such as traced moongate frames are stamped into the viewport scratch outside that table. Each turn, the engine reads a command, dispatches it, advances time by two minutes, ticks every animated entity, rolls the random-encounter check, refreshes the daylight value, and rebuilds the on-screen viewport. When the command is "Enter" on a fixed town-mode or dungeon location coordinate, the loop sets a scene byte that the resident main-game loop sees on its next iteration, and overworld mode exits back to the dispatcher, which spins up town mode or dungeon mode. Falling through the confirmed surface chasm is different: it swaps the world plane while staying in overworld mode. Gate-like world-transition branches are handled as explicit underfoot special cases rather than as part of the general scene-entry dispatch.
+Within either surface the player commands a small party (or a vehicle carrying that party) and walks one cell per turn. Around the party live the *active objects* -- wandering monsters, vehicles, dropped items, and the player avatar slot itself -- while render-only effects such as spell and projectile frames are stamped into the viewport scratch outside that table. Each turn, the engine reads a command, dispatches it, advances time by two minutes, ticks every animated entity, rolls the random-encounter check, refreshes the daylight value, and rebuilds the on-screen viewport. When the command is "Enter" on a fixed town-mode or dungeon location coordinate, the loop sets a scene byte that the resident main-game loop sees on its next iteration, and overworld mode exits back to the dispatcher, which spins up town mode or dungeon mode. Falling through the confirmed surface chasm is different: it swaps the world plane while staying in overworld mode. Gate-like world-transition branches are handled as explicit underfoot special cases rather than as part of the general scene-entry dispatch.
 
 The overworld is a thin shell over the resident systems. Almost everything that has its own spec — input, time, active objects, visibility, save/load — does the same work in this mode that it does anywhere else. The overworld's specific logic is small: which command goes where, when to load a chunk from disk, how to recognise the eight or nine tile types that mean "something special happens here", and a per-turn animator that is the dual of the town-mode NPC scheduler but does *not* consult the in-world hour. This spec describes those overworld-specific pieces and how they hook into the rest of the engine.
 
@@ -17,8 +17,16 @@ special-tile probes that run around that shared movement layer.
 
 Britannia and the Underworld are the two values the *world plane* selects between. The plane is a single byte in the save image — the party's *Z* coordinate — and is consumed almost everywhere that decides which on-disk file a tile-read should hit and which lighting model to apply. Z is zero on Britannia and the all-ones byte (signed −1) in the Underworld.
 
-The player crosses between planes through traced plane writers and unresolved
-transition candidates:
+Before reading the transition list, note that the plane byte is **overloaded**.
+It means "which world" only while the scene byte says the party is outdoors.
+Inside a building the same byte is the floor number, and inside a dungeon it is
+the level index. Every reader and writer of it has to be interpreted in that
+light, and an implementation that treats it as a global "which world" flag will
+corrupt town floors and dungeon levels.
+
+The player crosses between planes through exactly the routes below. The list is
+closed: it comes from a complete census of everything that writes the plane
+byte, not from a search that happened to stop.
 
 - **Falling.** The traced falls handler has a confirmed fixed trigger at Britannia coordinate `(54, 138)`. When the party steps onto that chasm cell, the handler prints a falls banner and an underworld-transition line, applies the Dexterity-gated fall-damage check described in Section 8 to each non-dead party member, restores the pre-fall transport marker after the presentation clear, swaps the world plane to the underworld value, and re-initialises the active-object table for the new plane. The coordinate is hard-wired and fixed across all playthroughs.
 
@@ -39,12 +47,23 @@ transition candidates:
 
 - **Gate-like world transition.** One traced surface coordinate owns a special narrative gate branch (Section 9). Ordinary natural moongates use the saved Moonstone slot live-terrain refresh and entry helper described separately in Section 9.
 
-- **Unresolved ascent/additional routes.** No clean public contract currently
-  publishes a mirror set of underworld-to-surface outdoor ascent coordinates,
-  and the current writer census found no additional outdoor plane writer beyond
-  the traced chasm, whirlpool, and interior-exit cases. Dungeon exit/reset paths
-  clear the dungeon scene through their owning helpers and are not general
-  outdoor ascent tiles.
+- **Dungeon exits.** Leaving a dungeon writes the plane as well as the scene:
+  off the topmost level the party surfaces on Britannia, and out through the
+  bottom of the lowest level they arrive in the Underworld. Either way they land
+  on that dungeon's own outdoor entrance cell. `systems/dungeon-mode.md` owns
+  the contract and `catalogs/gazetteer.md` Section 6.1 the per-dungeon detail.
+
+- **Moongates and Gate Travel.** Both resolve to a saved Moonstone slot and copy
+  that slot's recorded plane along with its coordinates. All eight slots ship
+  recorded on the surface, so in a stock game this is the ordinary way back up
+  from the Underworld.
+
+- **No outdoor ascent exists.** There is no Underworld terrain feature that
+  lifts the party to the surface - no mirror of the surface chasm, no upward
+  whirlpool, nothing. This is a closed negative result from a complete writer
+  census, not an unexplored area, and an implementation should not invent one.
+  The only ways back to the surface are a dungeon's top exit, a moongate or Gate
+  Travel to a surface Moonstone slot, and reloading a saved position.
 
 The mode loop itself does not branch on Z. The chunk loader, the visibility producer, the renderer, the daylight calculator, and the random-encounter spawner treat the two planes identically — what differs is the data the helpers consult: a different on-disk grid (Section 3), a forced full-darkness ambient light on the underworld plane, and a different active-object seed file.
 
@@ -108,11 +127,13 @@ Every iteration walks the same sequence:
 
 2. **Pre-loop tile probe.** Read the tile under the party. If it is the special underfoot tile byte `0xFF` and the current state tag is not the `0x0E` exemption, raise a latched underfoot-state flag and force the current ambient light/radius value to zero. On the first frame entering that state, mark the view dirty. When the state clears, run a zero-minute cleanup call so daylight is recomputed without advancing time.
 
-3. **Block on input.** Call into the input system's keystroke fetch. Sub-printable codes are control keys (cursor, special), printable letters are commands like A-attack, E-enter, T-talk, K-klimb, and digits go to the party-speed selector.
+3. **Block on input.** Call into the input system's keystroke fetch. Sub-printable codes are control keys (direction codes and the mode-local Control bindings), and printable bytes are commands like A-attack, E-enter, T-talk, K-klimb. Under sail on the wind-driven cadence, this step does not read the keyboard at all: the input helper returns the cached sail direction instead, which is how a ship keeps moving with no keypress.
 
 4. **Mode-switch exit check.** If the *scene byte* has gone non-zero since last iteration — because a sub-handler dispatched into a town-family scene or a dungeon-class scene — break out and return to the resident main-game loop. Combat is handled through a framer that restores the pre-combat scene before the outer loop sees it.
 
-5. **Dispatch the command.** Three layers: control codes go through a small dispatch table; digits go to the speed selector; everything else goes to the resident command dispatcher, which routes single-letter verbs to per-letter handlers in this overlay (Attack, Enter, ...) or to one of the action overlays (Cast, Talk, Look, Stats, ...). The dispatcher returns 0 for a no-op (or cancelled action) or 1 for an action that consumed a turn.
+5. **Dispatch the command.** Three layers: control codes go through a small dispatch table; digits go to the speed selector; everything else goes to the resident command dispatcher, which routes single-letter verbs to per-letter handlers in this overlay (Attack, Enter, ...) or to one of the action overlays (Cast, Talk, Look, Stats, ...). The overworld reads the returned status as a single boolean — zero skips the whole per-turn block, and every non-zero value is treated identically (`commands.md` Section 3).
+
+   The overworld's own control-code table is small. The four cardinal direction codes route to movement. Four typed Control bindings are shared with the other modes: an "Exit to DOS?" prompt, a moral-standing readout printed as a number, a sound toggle that prints its new state, and a version banner. None of the four consumes a turn. Every other control code prints the stock refusal. One table slot is synthetic — it can only be produced internally, reports "no action", and prints nothing.
 
 6. **Per-turn block (only when the action consumed a turn).**
    a. Run the per-turn cleanup (see `time.md`) with a minute increment of two — the standard outdoor turn cost.
@@ -147,9 +168,10 @@ Like every other gameplay mode, the overworld owns a 32-slot *active-object tabl
   while carrying the player. Balloon art is catalogued, but the analyzed
   baseline does not promote it as a live overworld transport object.
 - **Pre-placed objects** — chests, items dropped by previous play, plot-significant overworld props.
-- **Render-only effects.** Natural moongate frames are not active-object slots
-  in the traced animator. They are stamped directly into the rendered tile
-  buffer from the moongate scratch coordinates described in Section 9.
+- **Render-only effects.** Natural moongates are not active-object slots and
+  not render-only effects either: a gate is live terrain, written into the map
+  buffer by the once-per-turn refresh of Section 9 and drawn like any other
+  tile.
 
 Before the main loop begins, overworld entry also consumes a one-shot
 pending-action state shared with a few out-of-mode interactions. If that state
@@ -175,6 +197,67 @@ pendulum covers the traced horse/carpet marker pairs described in
 `vehicles.md`. This is the same mechanism town mode uses to slow NPCs to
 half-speed, but in overworld mode it gates active-object and encounter cadence
 rather than the clock directly.
+
+### 6.1 How a creature chooses its step
+
+Creature movement on the overworld is simpler than it is often assumed to be,
+and the simplification is part of the compatibility contract.
+
+A wandering creature reduces its offset from the party to a **direction on each
+axis** and ignores how far away the party is. The two distances are never
+formed and never compared with each other, so there is no "move along the longer
+axis first" rule and no special handling for a creature that stands exactly
+diagonal from the party.
+
+Each turn the creature flips a fair coin to decide whether to attempt the
+horizontal or the vertical move first, then takes whichever of the two is legal,
+preferring the one it tried first. On an exact diagonal this means it moves
+horizontally half the time and vertically half the time, re-rolled every turn.
+
+If neither directed move is legal, the creature instead attempts one randomly
+chosen cardinal move. That single attempt is why a blocked creature shuffles
+rather than freezing in place, and why it can work its way out of a dead end
+without any pathfinding.
+
+`active-objects.md` owns the validation steps a candidate cell must pass and the
+post-validation terrain chance gates. No outdoor "directed-step probe" or
+"path-clear scan" participates in creature movement; earlier drafts that
+described one were wrong, and the line-tracing routine they were thinking of
+belongs entirely to the ranged attacks below.
+
+### 6.2 Creature ranged attacks
+
+Some creatures attack the party at a distance instead of closing with it. Two
+outdoor cases exist, and they are resolved by the same procedure:
+
+| Attacker | Condition | Announcement |
+|---|---|---|
+| Sea serpent or dragon (first frame) | Within three cells of the party on **both** axes, then a one-in-eight roll each turn | None |
+| Hostile ship / water creature | Aligned on the party's row or column, within three cells | A boom message before the shot |
+
+The resolution is identical in both cases. A straight line is traced from the
+attacker's cell to the party's cell, drawn as an animated projectile travelling
+along that line, and tested cell by cell for obstructions as it goes. The
+attacker's own cell never obstructs its own shot. If the line reaches the party
+with no intervening blocker, the attack connects: the world tick runs and damage
+is applied to the party at its map coordinates. If an obstruction is met first,
+the shot stops there and nothing further happens.
+
+The player's own ranged attack uses the identical procedure with the endpoints
+exchanged, so **line-of-fire rules are symmetric between the party and the
+creatures**. An implementation should share one routine.
+
+Two presentation notes. The two outdoor cases share the flight machinery but
+differ in the figure drawn at each sampled point along the line, selected by a
+single index the caller supplies: the ship's broadside draws a small solid burst
+travelling along the line, while the breath attack paints a coloured spark cloud
+around each sampled point with no outline. The firing sound is played by the
+caller before the flight begins, not per cell during it. Neither the generic
+"attacked" message nor any melee narration belongs to these paths; that message
+is the adjacent-engagement case.
+
+None of this changes turn cadence, the encounter-spawn formula, or active-object
+pruning.
 
 ## 7. Random encounters
 
@@ -211,6 +294,14 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 
   On a match, the engine emits the dungeon-entry prompt, loads the selected 512-byte `DUNGEON.DAT` record into the active dungeon tile buffer, writes the scene byte to `matched_row + 1`, and seeds dungeon-mode level, X/Y, and facing. Surface-plane entry lands at level `0`, X `1`, Y `1`, facing east. Underworld-plane entry into non-Doom dungeons lands at level `7`, X `7`, Y `7`, facing west. Doom uses the surface-style entry seed even when reached from the underworld. If no dungeon row matches, E-Enter does not change mode.
 
+  Two gates sit in front of that seed. **Transport:** only a party travelling on
+  foot may enter; a mounted, sailing, or flying party is refused with the
+  on-foot message. **Doom:** entry into Doom additionally requires all three
+  Shadowlords to have been destroyed. A party that tries earlier is told it is
+  attacked at the entrance, an ambush object is spawned beside them, and the
+  scene byte is not written. Doom's coordinate carries an entrance tile in the
+  Underworld only, so in practice Doom is entered from below or not at all.
+
 - **Shrine.** A meditation prompt with its own subsystem handlers; from the overworld's perspective, the trigger is a tile-class match.
 
 - **Moongate.** Section 9.
@@ -235,10 +326,10 @@ A small set of tile classes triggers special handling in the per-turn block, rec
   | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | On-foot state is a no-op defensive branch. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached | No drowning damage is applied by the whirlpool branch. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
   | Water-creature / pirate active-object movement | Outdoor active-object slots in the water-creature/pirate frame family | Active objects move one cardinal cell when their cadence and validation allow it; they do not push the player along a current row | This is actor movement, not player transport. Wind cadence controls ship-like water-creature movement; ordinary player ship/skiff movement remains command-driven | May print the attack line or enter the ordinary engagement/combat path when adjacency/collision rules fire; it does not install a water-current sweep |
 
-- **Other plane-transition routes.** Current writer sweeps identify no
-  additional outdoor plane writer beyond the traced falls, whirlpool, and
-  interior-exit cases. Treat any future route as a new writer requiring its own
-  evidence.
+- **Other plane-transition routes.** None. Outside the falls cell, the
+  whirlpool engagement, the interior-exit branch, and the dungeon exit, nothing
+  writes the world plane during outdoor play. In particular there is no outdoor
+  Underworld ascent tile. Section 2 carries the closed inventory.
 
 - **Camp / wishing well.** The H (Hole-up) command runs a multi-screen UI for rest, eating, and per-camp event checks. Camp is its own mini-system; from the overworld it is a sub-handler that runs to completion and returns the party to the same cell. The Lord British level-up service is part of this camp event surface, not a throne-room Talk interaction. See `systems/rest-and-camp.md`.
 
@@ -270,40 +361,41 @@ waterfall sweep source.
 
 ## 9. Moongates
 
-Moongates are the surface plane's signature feature. At player-facing design level, eight virtue-linked gates appear and disappear according to the in-game calendar and provide fast travel between fixed Britannia locations. The binary-compatible contract below separates the saved-slot live-terrain refresh, the live entry hook, the render-frame animator, and the fixed narrative gate branch.
+Moongates are the surface plane's signature feature. At player-facing design level, eight gates appear and disappear with the clock and provide fast travel between fixed Britannia locations. The binary-compatible contract below has three parts and one retraction: the saved-slot live-terrain refresh that places and removes gates, the live entry hook that consumes one and warps the party, and the separate Shrine of the Codex approach branch - plus the withdrawal of the "render-frame animator" that earlier revisions described.
 
-The moongate animator reads a transient resident scratch block as four
-coordinate words plus one phase byte when the active owner has supplied
-moongate-style values:
+**There is no moongate animator.** Earlier revisions of this document
+described a per-render-frame animator that read a small resident scratch block
+as a gate origin, a gate destination and a sixteen-step animation phase, and
+stamped moongate frames into the rendered buffer. That reading is withdrawn in
+full, and an implementation carrying it should delete it rather than adapt it.
 
-- **Origin (X, Y).** Two coordinates marking the cell where the gate appears. The all-ones sentinel value means "no gate is currently active".
-- **Destination (X, Y).** The cell the gate teleports to. The all-ones sentinel means "single-ended" — a gate that exists for visual effect but does not teleport on landing.
-- **Animation phase counter.** A byte cycling through a 16-frame open/full/close animation. The all-ones value is the "uninitialised" state; the first valid call paints the open frames, subsequent calls advance the cycle, and on overflow the counter wraps.
+The scratch block it described belongs to the **night-time light beacon**
+specified in `systems/visibility.md` Section 12.6. Its coordinate words are
+light-source positions harvested from the loaded map, its phase byte is the
+beacon's current bearing, and it never holds a moongate. Three specific
+consequences follow:
 
-This render-frame moongate scratch is separate from the Moonstone slots used by
-*Vas Rel Por* / Gate Travel and by the natural live-tile refresh. Gate Travel
-selects one of eight persisted Moonstone destinations saved in `SAVED.GAM`.
-The traced Moonstone U-Use helper writes only the selected saved destination
-slot after validating the current scene and underfoot terrain; it does not
-write the animator scratch block or teleport the party. The same small resident
-coordinate block is reused by unrelated mode-entry and chunk-loader contexts.
-The current writer census finds the outdoor chunk loader using the first two
-coordinate words as scroll-position scratch, the town map setup using the four
-coordinate words as primary and secondary asterisk-marker positions, and combat
-exit resetting only the animation phase byte. Implementations should therefore
-treat these fields as mode-local scratch owned by the active subsystem, not as
-durable save state or the natural-moongate live-terrain schedule.
+- Natural moongates are ordinary **live terrain**, not a render effect. They are
+  written into the live map by the once-per-turn refresh below and drawn by the
+  normal renderer like any other tile, so nothing about a gate's appearance is
+  per-frame and nothing resets when a frame is skipped.
+- The supposed "daylight threshold" precondition was also inverted. The beacon
+  that owns that gate runs only **after dark**; nothing runs it by day.
+- The supposed "destination" coordinate pair was never a teleport target. A
+  gate's destination comes from the Moonstone slots.
 
-The moongate animator runs once per render frame from the overworld redraw orchestrator. It checks two preconditions: ambient light at or above the daytime threshold and an active origin (the all-ones sentinel skips the body). Below the daylight threshold, the animator resets its phase instead of stamping a frame; this is render eligibility, not proof of the placement schedule. When both preconditions pass, the animator marks visibility dirty, stamps the moongate frame into the rendered tile buffer at the origin (and at the destination if not the all-ones sentinel) using a compact frame plate indexed by the current phase, then bumps the counter.
+The Moonstone slots are eight persisted destinations in `SAVED.GAM`, shared by
+natural gates and by *Vas Rel Por* / Gate Travel. The traced Moonstone U-Use
+helper writes only the selected saved slot after validating the current scene
+and underfoot terrain; it does not teleport the party. Burying a moonstone is
+therefore how a gate relocates - the slot takes the party's current position,
+and both that gate's nightly appearance and every arrival that selects that slot
+move with it. The eight shipped slot positions are published in
+`catalogs/gazetteer.md` Section 8.1, and all eight ship as surface grass cells,
+which is exactly the terrain the daytime pass restores when a gate closes.
 
-The animator is self-contained — it writes directly to the rendered buffer
-rather than placing an active-object slot. This means the moongate appears and
-disappears based on the animator's two preconditions and the current scratch
-coordinates; the active-object animator and active-object slot allocator do not
-own natural moongate frame lifetime.
-
-The ordinary natural-gate live-tile refresh runs during the resident world tick
-for non-combat scenes, before the render-frame animator. It treats the eight
+The ordinary natural-gate live-tile refresh runs once per world turn during the
+resident world tick, for non-combat scenes. It treats the eight
 saved Moonstone slots as gate anchors. A slot is eligible when its saved scene
 and Z/floor match the current scene. On the overworld, the saved X/Y must also
 fall inside the active 32-by-32 loaded chunk window; interior and town-family
@@ -316,7 +408,14 @@ decreases toward zero; eligible slots remain `0xDC` while the counter is
 nonzero, then are restored to terrain byte `5` when it reaches zero. Any actual
 tile change marks the viewport dirty and refreshes local light. This covers the
 ordinary natural-gate placement and waning schedule at live-terrain level, and
-it is driven by saved Moonstone slots rather than by the animator scratch block.
+it is driven by saved Moonstone slots.
+
+**The moon phase plays no part in whether a gate is present.** Placement is
+gated on the hour alone, so all eligible gates open together at nightfall and
+fade together over the sixteen turns after dawn - one shared counter, not one
+per gate. The phase decides only *where* a gate leads, through the destination
+rule below. An implementation that opens gates one at a time as their moon
+waxes is modelling something the original does not do.
 
 The overworld command loop also has a live-gate entry hook before normal input
 dispatch. It reads the party's current live terrain cell and returns
@@ -334,26 +433,32 @@ uses the second. The glyph digit selects one of the saved Moonstone slots, and
 the hook calls the same saved-slot warp helper used by Gate Travel. If that
 warp changes scene, the outer loop exits through the normal scene-byte check.
 
-The traced fixed-coordinate narrative gate remains separate from the ordinary
-saved-slot natural moongates. It fires from the post-action special-tile pass
-after a consumed command has committed movement and the loop has sampled the
-party's underfoot world tile. The branch is checked only while still in
-overworld mode on the surface plane at the fixed world coordinate `(233, 235)`.
-It first prints the branch's opening narrative line, then reads the save-backed
-ordained progress bitmask, not a Codex-read mask, moon phase, or
-moongate-placement phase. If the ordained mask is nonzero, it prints the
-blocked narrative and leaves the party in place. If the mask is clear, it
-prints the two-line entry narration, moves the party one cell south, and then
-continues through the ordinary post-action cleanup. This branch is a special
-world-transition case, not the saved-slot live-tile refresh, not an
-animator-origin collision test, not a Moonstone-slot Gate Travel cast, and not
-a moon-phase display hook.
+The **Shrine of the Codex approach gate** is a separate fixed-coordinate
+branch and has nothing to do with moongates. It fires from the post-action
+special-tile pass after a consumed command has committed movement and the loop
+has sampled the party's underfoot world tile. The branch is checked only while
+still in overworld mode on the surface plane at the fixed world coordinate
+`(233, 235)`, two cells south of the Shrine of the Codex tile at `(233, 233)`.
+It prints the branch's opening narrative line, then reads the save-backed
+ordained progress bitmask - not a Codex-read mask, a moon phase, or any
+placement phase.
+
+The polarity is: **a nonzero ordained mask grants passage**, printing the
+seeker's welcome and leaving the party where they stand; **a clear mask refuses
+it**, printing the two-line refusal and then pushing the party one cell south,
+back the way they came. An earlier revision of this section had those two arms
+swapped and is corrected here. Either way the loop continues through the
+ordinary post-action cleanup.
+
+This branch is a special world-transition case, not the saved-slot live-tile
+refresh, not a Moonstone-slot Gate Travel cast, and not a moon-phase display
+hook. It is also not a dungeon exit: no dungeon-side Codex branch exists.
 
 The gates' destinations form Britannia's in-game fast travel at the player
 manual level. Placement and waning of live terrain, the live `0xDC` entry hook,
-and the saved-slot warp target are specified from the saved Moonstone slots.
-Do not infer natural-gate behavior from the render animator, the fixed
-narrative gate branch, or the sky/status moon display alone.
+and the saved-slot warp target are all specified from the saved Moonstone slots.
+Do not infer natural-gate behavior from the Codex approach branch or from the
+sky/status moon display alone, and do not reintroduce a render animator.
 
 One adjacent active-object rule is traced: if an outdoor active object commits a
 step onto live terrain byte `0xDC`, that active-object slot is cleared. This is
@@ -470,28 +575,38 @@ unresolved outdoor loop control flow.
   per-frame art labels or source-free reauthored-data tables are presentation
   and catalog QA, not overworld loop blockers.
 
-- **Plane-transition inventory.** The traced falls handler covers the fixed
-  Britannia chasm at `(54, 138)`, the outdoor active-object engagement path
-  covers whirlpool forced-underworld movement to `(34, 18)`, and the
-  town-family movement trace covers the special interior exit branch that
-  selects the underworld plane. Current writer sweeps do not identify a mirror
-  outdoor underworld-to-surface ascent set; if future evidence finds one, add it
-  as a new writer rather than deriving it from the surface fall.
+- **Plane-transition inventory.** *Closed.* Descent to the Underworld happens
+  three ways: the fixed Britannia chasm at `(54, 138)`, whirlpool engagement
+  while aboard a vessel (always landing at `(34, 18)`), and leaving a dungeon
+  through the bottom of its lowest level. The return has no outdoor counterpart
+  at all: a dungeon's top exit, a moongate or Gate Travel to a surface Moonstone
+  slot, and a saved-position reload are the only ways up. The interior-exit
+  branch that selects the Underworld belongs to one location, Ararat, which
+  exists only underground. Section 2 carries the full list, and the plane byte's
+  reuse as a building floor and a dungeon level is stated there as well.
 
-- **Transport marker values and timing tags.** The known foot, horse, carpet,
-  ship, and skiff transport-marker ranges and low-bit facing rules are
-  centralized in `vehicles.md`. Balloon art is not a traced live transport path
-  for the analyzed baseline. Separately, the time cleanup's `Q` and `T` tags
-  are documented as timing/state modifiers; `T` is not a proved vehicle
-  identity. Any values outside the named ranges remain opaque unless another
-  traced writer/reader promotes them.
+- **Transport marker values and timing tags.** *Closed for the marker.* The
+  complete persistent transport-marker value set and its facing rules are
+  centralized in `vehicles.md` section 2; an exhaustive sweep of every shipped
+  binary found no writer or reader outside it, so there are no opaque marker
+  values left to preserve and there is no live balloon transport path.
+  Separately, the time cleanup's `Q` and `T` tags are documented as
+  timing/state modifiers, and `T` is still not a proved vehicle identity.
 
-- **Moongate entry path.** The animator, the scratch-writer census, the
-  saved-slot live-terrain refresh, the live `0xDC` shimmer/entry hook, and the
-  fixed ordained-bitmask narrative gate branch are documented. Future evidence
-  may refine presentation timing or asset naming, but the outdoor-loop entry
-  contract no longer depends on the render animator or status-strip moon
-  display alone.
+- **Moongate entry path.** *Closed.* Placement is the once-per-turn live-terrain
+  refresh over the eight saved Moonstone slots, gated on the hour alone with no
+  moon-phase term; entry is the live `0xDC` shimmer hook, which consumes the
+  cell and warps to the slot named by the current moon glyph. The former "render
+  animator" is withdrawn: that scratch block is the night-time light beacon
+  (`systems/visibility.md` Section 12.6). The Shrine of the Codex approach gate
+  is a separate branch with its own corrected polarity. What is left is
+  presentation timing and asset naming, not entry behaviour.
+
+- **Outdoor light sources.** After dark the outdoor map lights one rotating
+  beacon from a lighthouse in the loaded window, and a location map lights up to
+  two from bright-light fixtures. The beam geometry, cadence and reset rule are
+  owned by `systems/visibility.md` Section 12.6; the four lighthouse coordinates
+  are in `catalogs/gazetteer.md` Section 8.1.
 
 - **Per-turn pendulum ownership.** The outdoor epilogue's live cadence gates are
   specified: the `T` timing/state tag skips the active-object and encounter
@@ -519,7 +634,17 @@ The behaviour described above was derived by reading the function and format not
 - The per-turn epilogue that walks the active-object table, animates and prunes, and rolls the random-encounter trigger — `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The OUTSUBS overlay's collection of overworld helpers — `u5-decomp/functions/OUTSUBS_OVL/OVERVIEW.md` and the eleven per-function notes in that directory: `0x0000_outsubs_water_check.md`, `0x004A_outsubs_chunk_classify.md`, `0x0098_outsubs_load_chunk.md`, `0x01B4_outsubs_load_4chunks.md`, `0x02C8_outsubs_scroll_chunks.md`, `0x0368_outsubs_world_filename.md`, `0x0388_outsubs_check_town_entry.md`, `0x0458_outsubs_falls_handler.md`, `0x0566_outsubs_actor_init.md`, `0x05FC_outsubs_check_status.md`, `0x0658_lord_british_dialogue.md`, and the superseded structural note `0x0658_outsubs_camp_or_save.md`.
 - The world-tile getter that reads from the chunk buffer with the four-quadrant 2-by-2 interpretation — `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`.
-- The moongate animator that paints the open / full / close cycle into the rendered buffer — `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md`.
+- The night-time rotating light beacon that owns the resident scratch block
+  formerly attributed to a moongate animator, its inverted light gate, and its
+  sixteen-bearing beam plate —
+  `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md` and
+  `u5-decomp/functions/ULTIMA_EXE/0x7040_light_beacon_stamp.md`.
+- Source provenance: the withdrawal of the moongate animator, the hour-only
+  placement schedule with no moon-phase term, the shipped Moonstone slot
+  positions, the closed plane-transition inventory, the overloaded plane byte,
+  Ararat's underworld-only exit, and the corrected Codex approach-gate polarity
+  are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - The saved Moonstone slot scene/window test, natural live-gate tile refresh,
   saved-slot warp helper, and live moongate-tile shimmer/entry helper -
   `u5-decomp/functions/ULTIMA_EXE/0x4702_npc_in_player_scene.md`,
@@ -527,8 +652,8 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/0x47F4_npc_warp_to_scene.md`, plus
   `u5-decomp/functions/ULTIMA_EXE/0x48A8_lockpick_or_unlock.md` (historical
   filename; note content now corrected).
-- The town setup marker harvest that reuses the moongate animator coordinate
-  scratch for primary and secondary asterisk markers — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
+- The location map setup that harvests up to two indoor light-source positions
+  into the same beacon coordinate scratch — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
 - The combat loop exit reset of the moongate animation phase byte —
   `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
 - The MAINOUT caller boundary for the live moongate-tile shimmer helper, as
@@ -537,9 +662,31 @@ The behaviour described above was derived by reading the function and format not
 - The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
 - The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - The on-disk format of the surface and underworld grids — `u5-decomp/formats/maps.md`.
-- The data-segment layout, including the shared scratch block read by the moongate animator, chunk-index tables, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
+- The data-segment layout, including the shared scratch block read by the light beacon, chunk-index tables, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
 - Public scene/name binding for town-mode location rows — `catalogs/gazetteer.md`,
   `formats/npc.md`, and `formats/data-ovl.md`.
 - Public dungeon scene/name/record binding — `systems/dungeon-mode.md`,
   `formats/dungeon-dat.md`, and the MAINOUT E-Enter helper re-derived from
   the private analysis workspace.
+- Source provenance: the creature step planner's absence of any distance
+  comparison, the coin flip's role as attempt ordering only, and the
+  single-attempt random-wander fallback are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md`, cross-checked
+  against `u5-decomp/notes/outdoor_npc_scheduling.md`.
+- Source provenance: the two outdoor ranged attacks, their trigger conditions,
+  the shared traced-line resolution with the launch-cell exemption, the
+  symmetry with the player's own ranged attack, the announcement assignment,
+  and the per-sample effect figures are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` and its verification
+  pass, cross-checked against
+  `u5-decomp/functions/COMSUBS_OVL/0x12DE_projectile_animate.md` and
+  `u5-decomp/functions/COMSUBS_OVL/0x0F4A_tile_effect_render.md`. Earlier
+  readings that treated the shared helper as a directed-step probe or a
+  path-clear scan, and the effect-class descriptions attached to them, are
+  superseded.
+
+- The overworld's pre-dispatch control-code table, its four shared Control
+  bindings, the synthetic table slot, the under-sail input substitution, and the
+  loop's boolean reading of the command status. Source provenance: derived from
+  private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`.

@@ -16,9 +16,10 @@ document is the compatibility layer those systems share.
 
 The input system translates cursor and keypad movement keys into compact
 direction codes before mode loops see them. World and town movement consume the
-four cardinal directions only: west, east, north, and south. Diagonal keypad
-inputs may exist as input codes for prompts or other subsystems, but normal
-top-down walking does not step diagonally.
+four cardinal directions only: west, east, north, and south. Diagonal codes
+exist in the input vocabulary, but the only consumer that treats one as a
+movement is the combat targeting cursor; elsewhere they page full-screen lists
+or are refused. No mode steps diagonally.
 
 The stationary keypad centre / pass input is not a movement command. It can be
 meaningful inside prompts such as spell direction selection, but it must not
@@ -99,6 +100,13 @@ Known top-down movement query families:
 | `0x20..0x23` | Ship under sail | Accepts only the low water/sentinel tile-id family used by ship travel. |
 | `0x24..0x27` | Furled or manually handled ship | Same static terrain predicate as the under-sail ship family; sail state changes cadence and X-Xit behavior, not the ship's ordinary terrain query. |
 | `0x28..0x2B` | Skiff | Uses the skiff/water predicate family, combining a small authored tile-id family, the glyph-family predicate, and auxiliary per-tile masks. |
+
+The table above names the caller-side query families as the dispatcher sees
+them, four values wide because the dispatcher matches on the family run rather
+than on a single facing. It is not a list of transport-marker values the party
+can actually hold: the horse and the carpet occupy only two of their four
+values, and only one of the on-foot values is ever written.
+`systems/vehicles.md` section 2 gives the complete persistent marker set.
 
 The table above names the caller-side query families and predicate shapes. The
 following table gives the exact accepted map-tile ranges for those named

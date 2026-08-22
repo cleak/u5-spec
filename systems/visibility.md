@@ -350,7 +350,7 @@ The cost of the cheap path is roughly one tile-fetch per consumed cell — a sma
 
 ## 11. Mode differences
 
-**Overworld and underworld.** Use the full producer pipeline as described above. The active map buffer is the streamed 2×2 chunk window. The producer is called when the visibility-dirty flag is set, which happens on every player step (the step handler dirties the flag), on lighting changes (the per-turn cleanup dirties the flag if the daylight value changed), and when the moongate animator stamps a live transient frame.
+**Overworld and underworld.** Use the full producer pipeline as described above. The active map buffer is the streamed 2×2 chunk window. The producer is called when the visibility-dirty flag is set, which happens on every player step (the step handler dirties the flag), on lighting changes (the per-turn cleanup dirties the flag if the daylight value changed), and when the night-time beacon of Section 12.6 changes a lit cell.
 
 **Town, dwelling, castle, keep.** Use the same producer pipeline with the active map buffer interpreted as a single 32×32 grid (no chunk streaming). Indoor lighting is computed against the local scene's lighting context, which may be different from the surrounding outdoor light. Some interiors are lit at night by candles and lamps; others are dark. The producer doesn't care which — it just consumes whatever light radius the lighting subsystem hands it.
 
@@ -449,18 +449,20 @@ consulting it. The combat entry and exit rebuilds exist because the same
 scratch region is reused as combat terrain storage while combat is running, so
 the mask must be re-established on both sides of a combat.
 
-Ordering inside a non-combat redraw is: **local-light refresh first, transient
-moongate frame stamps second, visibility carve third.** The producer consults
-the finished mask; the mask is not produced from the producer's output. An
-earlier statement that the local-light pass runs *after* the ordinary
-visibility producer and before the renderer compositors is retracted — it is
-backwards.
+Ordering inside a non-combat redraw is: **local-light refresh first, beacon
+stamps second, visibility carve third.** The producer consults the finished
+mask; the mask is not produced from the producer's output. An earlier statement
+that the local-light pass runs *after* the ordinary visibility producer and
+before the renderer compositors is retracted — it is backwards.
 
-The moongate animator is the mask's one other non-combat writer: it may stamp
-the current moongate frame into the same thirty-two-byte-stride scratch region
-and set the visibility-dirty flag. Those writes are transient visibility/render
-state, not durable map edits and not replacements for the ambient light-radius
-byte.
+The **night-time beacon** of Section 12.6 is the mask's one other non-combat
+writer: it lights and clears individual cells of the same thirty-two-by-
+thirty-two mask and sets the visibility-dirty flag. Those writes are transient
+visibility state, not durable map edits and not replacements for the ambient
+light-radius byte. An earlier revision of this section called that writer a
+"moongate animator" stamping moongate frames; that attribution is withdrawn in
+full — it is a light source, it never draws a gate, and natural moongates are
+ordinary live terrain owned by `systems/overworld.md`.
 
 ### 12.5 Dungeon mode
 
@@ -475,12 +477,65 @@ Implementations should keep this as an isolated local-light resource. It is
 part of visibility propagation state, not a permanent mutation of map bytes and
 not a replacement for the ambient daylight / torch / spell counters.
 
+### 12.6 Night-time rotating beacons
+
+Separately from the disc-shaped sources of Sections 12.1 to 12.3, the engine
+runs one **rotating beam** that writes into the same local-light mask. It is a
+distinct mechanism with its own state and its own cadence, and it is the true
+owner of the small resident scratch block that earlier revisions of the spec
+set attributed to a moongate animator.
+
+**Sources.** The beacon has at most two source positions, harvested by whichever
+map loader is active rather than by the light pass itself:
+
+- **Outdoors**, the chunk loader scans each freshly loaded thirty-two-by-
+  thirty-two window for the **lighthouse** tile and records the first hit as the
+  single beacon position, or records a "no beacon" sentinel when the window
+  holds none. It never fills the second position. The four lighthouses on the
+  Britannia surface are listed in `catalogs/gazetteer.md` Section 8.1; the
+  Underworld map contains none, so the outdoor beacon is a surface-only effect.
+- **Inside a location**, the map setup clears both positions and then records up
+  to **two** hits on the **bright-light** tile.
+- **Combat entry** switches the beacon off outright.
+
+The shipped data image starts with both positions at the "no beacon" sentinel,
+so nothing is lit until a loader finds a source.
+
+**Light gate.** The beacon runs only when the ambient light value is **below**
+the daylight threshold — that is, after dark. At or above it, the pass clears
+its state and draws nothing, and the rotation restarts from its initial bearing
+the next time darkness falls. An earlier revision of this spec set had this gate
+inverted, describing a daylight-only effect; that is withdrawn.
+
+**Beam shape.** The beam is a cone of lit cells reaching up to seven tiles from
+the source. There are sixteen bearings evenly spaced around the compass:
+bearing one points due north, five due east, nine due south, thirteen due west,
+four bearings fall on the diagonals, and the remaining eight sit halfway between
+those. Each bearing is a fixed set of at most sixteen cell offsets relative to
+the source, so a bearing is a stencil, not a computed sweep.
+
+**Cadence.** Three adjacent bearings are lit at any moment — a cone roughly
+three sixteenths of the compass wide, a little under seventy degrees. Once per
+world turn the trailing bearing is cleared and the next leading bearing is lit,
+so the cone advances one sixteenth of a revolution per turn and completes a full
+revolution every sixteen turns. The bearing counter wraps at sixteen.
+
+**Effect.** Lit cells are written straight into the local-light mask, so they
+become visible exactly as any other locally lit cell does, and the pass sets the
+visibility-dirty flag when it changes anything. The beacon does not read or
+write the ambient light-radius byte, does not create an active object, and does
+not modify map data.
+
+An implementation that omits the beacon loses only night-time illumination
+around lighthouses and indoor lamps; one that draws a moongate here is
+modelling something the original does not do.
+
 ## 13. Visibility Boundaries And Remaining Parity Work
 
 The visibility-grid contract is complete at gameplay depth: producer fill
 states, centre-out carve behavior, blocker rules, marker refinement,
 active-object compositing, renderer/effect read contract, cheap terrain refill,
-mode boundaries, local-light mask ownership, moongate-mask ordering, and the
+mode boundaries, local-light mask ownership, beacon-mask ordering, and the
 negative-light full-fill compatibility branch are fixed. Remaining work is
 visual parity or external-tool synchronization policy rather than ordinary
 gameplay visibility behavior.
@@ -527,9 +582,14 @@ The behaviour described above was derived by reading the function and format not
 - The Moonstone-slot live-gate refresh caller that rebuilds the local-light
   mask after in-scene tile rewrites -
   `u5-decomp/functions/ULTIMA_EXE/0x475A_npc_schedule_tick.md`.
-- The moongate sprite writer that stamps into the same mask-shaped scratch
-  region — `u5-decomp/functions/ULTIMA_EXE/0x7040_render_2x16_sprite.md` and
+- The night-time rotating beacon, its source harvest, its inverted light gate,
+  its sixteen-bearing stencil plate and its per-turn cadence —
+  `u5-decomp/functions/ULTIMA_EXE/0x7040_light_beacon_stamp.md` and
   `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md`.
+- Source provenance: the identification of that scratch block as beacon state
+  rather than moongate state, the complete writer census behind it, and the
+  correction of the light gate are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - The visibility-grid writer scan proving the renderer is read-only on the
   eleven-by-eleven grid and that zero cells are compositor-owned -
   `u5-decomp/notes/visibility_grid_zeroing_2026-05-08.md`.

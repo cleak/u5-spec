@@ -102,10 +102,10 @@ The full table:
 | 3      | In Zu Grav                | Sleep Field         | Place a sleep-tile field at a chosen cell.                 |
 | 3      | In Por                    | Blink               | Short teleport to a same-map cell.                         |
 | 4      | An Grav                   | Dispel Field        | Remove a placed field at a chosen cell.                    |
-| 4      | In Sanct                  | Protection          | Install a `P`/20 active effect that adds 3 to party defense. |
+| 4      | In Sanct                  | Protection          | Install a `P`/20 timed effect. The defense bonus it was meant to grant is never applied (Section 8). |
 | 4      | In Sanct Grav             | Energy Field        | Create an impenetrable field.                              |
-| 4      | Uus Por                   | Up                  | Move the party up one dungeon level.                       |
-| 4      | Des Por                   | Down                | Move the party down one dungeon level.                     |
+| 4      | Uus Por                   | Up                  | Move the party up one dungeon level; at the topmost level, out of the dungeon to Britannia. |
+| 4      | Des Por                   | Down                | Move the party down one dungeon level; at the lowest level, out of the dungeon into the Underworld. |
 | 4      | Wis Quas                  | Reveal              | Undo invisibility/illusion effects.                        |
 | 5      | In Bet Xen                | Swarm               | Summon insects.                                            |
 | 5      | An Ex Por                 | Magic Lock          | Apply a magical lock.                                      |
@@ -175,7 +175,7 @@ The world-mode `M` (Mix Reagents) command is the player's tool for converting ra
 
 **Step 1 — pre-flight check.** The handler verifies the player has at least one of any reagent. With an empty reagent inventory, it prints `No reagents owned!` and aborts.
 
-**Step 2 — pick a spell.** The handler prints `For what spell?` and uses the same compact letter-coded prompt as the C-Cast command. The spell name is parsed against the forty-eight-entry token table, returning the spell index 0..47. Blank input or Escape prints `None!` and aborts before reagent selection. A nonblank selector with no table match returns the shared parser's no-match value; M-Mix does not print C-Cast's `No effect!` at this point, so the player can still enter reagent selection. If they then choose a nonzero mix and quantity, the selected reagents are consumed and no charges are added.
+**Step 2 — pick a spell.** The handler prints `For what spell?` and uses the same compact letter-coded prompt as the C-Cast command. The spell name is parsed against the forty-eight-entry token table, returning the spell index 0..47. Blank input or Escape prints `None!` and aborts before reagent selection. A nonblank selector with no table match returns the shared parser's no-match value, which is distinct from the blank/cancel value; M-Mix does not print C-Cast's `No effect!` at this point, so the player can still enter reagent selection. That no-match value then takes the same path as a wrong recipe in Step 7: if the player chooses a nonzero mix and quantity, the selected reagents are consumed, no charges are added, **and the trap fires**. A mistyped incantation is therefore as expensive as a wrong recipe, not a free cancel.
 
 **Step 3 — select reagents.** The handler shows only the reagent rows whose
 inventory counters are nonzero and lets the player toggle a selected set. The
@@ -193,9 +193,19 @@ inventory change.
 
 **Step 5 — reject empty selection.** If the selected reagent mask is zero, the handler prints `Nothing to mix!` and exits through the cleanup path.
 
-**Step 6 — debit selected reagents.** The handler prints `Mixing...`, then subtracts the requested quantity from each selected raw reagent counter.
+**Step 6 — debit selected reagents.** The handler prints `Mixing...`, pauses
+briefly, then subtracts the requested quantity from each selected raw reagent
+counter. The pause is presentation only: outside combat and dungeon scenes it
+runs the animated-tile delay when tile animation is enabled, and elsewhere it
+runs a plain timer delay. Neither branch advances the clock.
 
-**Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, capped at 99. If the masks do not match, the selected reagents are already spent and no spell charges are added. The wrong-mix branch then emits a line break, refreshes a scratch target slot by scanning the travelling party for the first member whose status is Good or Poisoned, and invokes the shared trap-effect resolver described in `systems/traps.md` with that slot. If the scan finds no Good or Poisoned member, it does not replace the existing scratch slot before the trap-effect call; preserve that stale-slot edge rather than inventing a new fallback.
+Mixing costs no game time at all. This matters because almost every other
+world action advances the clock, and a port that charges a turn for M-Mix will
+drift on NPC schedules, light counters, and timed magic effects.
+
+**Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, then clamps that counter to a maximum of 99. The order is add-then-clamp, so an over-large mix is capped rather than refused; the player still loses the full reagent quantity for charges the cap discards. If the masks do not match, the selected reagents are already spent and no spell charges are added. The wrong-mix branch then emits a line break, refreshes a scratch target slot by scanning the travelling party for the first member whose status is Good or Poisoned, and invokes the shared trap-effect resolver described in `systems/traps.md` with that slot. If the scan finds no Good or Poisoned member, it does not replace the existing scratch slot before the trap-effect call, so the trap lands on whatever party index that scratch slot last held; preserve that stale-slot edge rather than inventing a new fallback, and treat it as undefined behaviour that a port should handle deliberately.
+
+The player-visible cost of a wrong mix is therefore: the reagents are gone, no charges are gained, an explosion sound plays, and one of the four trap effects lands. In non-combat scenes the trap rolls acid damage of one to thirty points on the chosen member with probability three-eighths, poisoning of that member with probability one-quarter, a blast dealing one to eight points to every living member with probability one-quarter, and a gas cloud poisoning the whole party with probability one-eighth. `systems/traps.md` owns the effect families and the combat-scene variant.
 
 The recipe list is fixed in the resident data segment. The full decoded recipe table is in `catalogs/spell-list.md`.
 
@@ -380,41 +390,132 @@ shops may immediately top the same member back up after invoking this helper.
 
 **Buff and debuff effects.** Repel Undead, Protection, Sleep, Quickness,
 Mass Charm, Negate Magic, Charm, Polymorph, Invisibility, and Cause Fear.
-These either mutate combat actor state or install a shared active-effect
-indicator that later combat logic consults. Protection, Quickness, Mass Charm,
-and Negate Magic share that active-effect path: each passes an
-animation/effect kind, a visible tag, and a counter value. The confirmed
-tag/counter pairs are Protection `P` / 20, Quickness `Q` / 30,
-Mass Charm `C` / 20, and Negate Magic `N` / 10. The helper stores one global
-visible tag/counter pair, runs the common effect animation, and refreshes the
-stats panel; it is not a per-character status byte. That shared runtime counter
-has an exact aging rule: zero and 255 are inert, other values decrement when an
-aging endpoint is reached, and expiry clears the tag and requests a redraw. The
-traced endpoints are command-dispatch cleanup outside combat and the combat
-active-player/selection cleanup path, not the clock/light cleanup. Do not model
-these units as one decrement per minute, one light-spell unit, or one complete
-actor-table pass. Do not conflate this runtime tag/counter with the carried
-equipment/use-item counter band used by inventory, R-Ready, and some
-combat/spell helper paths; those item counters are inventory stock, not combat
-effect timers. Four active-effect consumers are now confirmed.
-Protection's `P` tag adds 3 to the resident party-member defense helper after
-equipment defense is summed. Quickness's `Q` tag is consumed at the start of
-player-side combat dispatch: each ready dispatch rolls an inclusive 0..1
-random gate; a zero result consumes that ready dispatch without reading a
-command, while a one result continues through the normal command/status path.
-Mass Charm's `C` tag is consumed by monster AI target selection: each target
-pick rolls one uniform random byte in `[0, 255]` against the acting monster's
-class charm threshold. Rolls strictly greater than that threshold remap the
-acting monster to neutral group 0 before the friend/foe filter, making targets
-outside the monster's normal hostile set eligible for that AI decision. Negate
-Magic's `N` tag is consumed by the combat C-Cast path; while active, combat
-casts are absorbed before the shared cast dispatcher runs, so the premixed
-charge and MP debit gates are not reached. Polymorph removes the accepted
+These either mutate combat actor state directly or occupy the single shared
+timed-effect slot described next.
+
+**The shared timed-effect slot.** Ultima V has exactly one global timed
+magic-effect slot, not a bank of per-spell timers. The slot is a pair of
+values: an effect code naming the currently active effect (with a reserved
+"none" value), and a remaining duration counted in world turns, with a second
+reserved value meaning "permanent, never ages". Every timed magic effect in the
+game writes that same pair — the four timed buff spells, Negate Time, three of
+the spell scrolls, and the three worn regalia items. Three consequences follow,
+and all three must be reproduced:
+
+- **Effects never stack.** Installing a new effect overwrites whatever was in
+  the slot. Casting Quickness while Negate Magic is running simply replaces it,
+  and donning a permanent-aura item silently cancels an active buff.
+- **Exactly one effect code is active and visible at a time.** The installer
+  refreshes the stats panel, which displays that code.
+- **Nothing but the expiry tick reads the remaining duration.** A
+  reimplementation may store the countdown however it likes, as long as the
+  observable turn counts match.
+
+The confirmed codes and durations are:
+
+| Source | Code | Duration in turns | Sound cue on install |
+|---|:---:|---|---|
+| *In Sanct* — Protection (spell) | `P` | 20 | yes |
+| *Rel Tym* — Quickness (spell) | `Q` | 30 | yes |
+| *Quas An Wis* — Mass Charm (spell) | `C` | 20 | yes |
+| *In An* — Negate Magic (spell) | `N` | 10 | yes |
+| *An Tym* — Negate Time (spell) | `T` | 10 | none |
+| Protection scroll | `P` | 100 | yes |
+| Negate Magic scroll | `N` | 20 | yes |
+| Negate Time scroll | `T` | 20 | yes |
+| Amulet of Lord British (U-Use) | its own reserved code | permanent | yes |
+| Crown of Lord British (U-Use) | its own reserved code | permanent | yes |
+| Black Badge (U-Use) | its own reserved code | permanent | none |
+
+**Aging.** The countdown has an exact rule: the "none" value and the permanent
+sentinel are both inert, any other value decrements by one when an aging
+endpoint is reached, and expiry clears the effect code and requests a stats
+redraw. In effect the countdown loses exactly one unit per world turn. The
+traced endpoints are the per-turn cleanup that follows command dispatch outside
+combat and the combat active-player/selection cleanup path — not the
+clock/light cleanup.
+The Search/Jimmy/Open/Get mode loop carries its own behaviourally identical
+copy of the same tick for its own turns; that is a separate routine that
+behaves the same way rather than a shared one, so a port needs only one
+implementation of the rule. Do not model these units as one decrement per game
+minute, one light-counter unit, or one complete combat actor-table pass. Do not
+conflate this runtime code/counter with the carried equipment/use-item counter
+band used by inventory, R-Ready, and some combat/spell helper paths; those item
+counters are inventory stock, not effect timers.
+
+**Clear sites.** Three paths zero the whole slot outright, which also cancels
+the otherwise permanent regalia auras:
+
+- H-Hole up (camp or rest) clears it before the camp sequence begins; see
+  `systems/rest-and-camp.md`.
+- Entering the innkeeper's service menu clears it; see `systems/shops.md`.
+- The Blackthorn rescue/refuge restoration clears it, together with both light
+  counters; see `systems/blackthorn.md`.
+
+**What each code does.** The complete set of consumers is:
+
+- **`Q` Quickness.** Outside combat, the per-turn cleanup halves the
+  game-minute increment for the turn, with a floor of one minute, so the clock,
+  NPC schedules, and both light counters all advance at half rate. Inside
+  combat, each actor's turn is additionally subject to a coin flip, so enemies
+  act about half as often. On the player side the same tag gates ready
+  dispatch: each dispatch rolls an inclusive 0..1 value, and a zero consumes
+  that ready dispatch without reading a command while a one continues through
+  the normal command/status path.
+- **`T` Negate Time.** The per-turn cleanup skips the entire time advance, so
+  the clock is frozen and neither torches nor light spells burn down. In combat
+  the affected actor's turn is skipped outright.
+- **`N` Negate Magic.** The enemy-cast gate returns "no spell", and the combat
+  C-Cast path absorbs casts before the shared cast dispatcher runs, so the
+  premixed charge and MP debit gates are not reached.
+- **`C` Mass Charm.** Consumed by monster AI target selection: each target pick
+  rolls one uniform random byte in `[0, 255]` against the acting monster's
+  class charm threshold. Rolls strictly greater than that threshold remap the
+  acting monster to neutral group 0 before the friend/foe filter, making
+  targets outside the monster's normal hostile set eligible for that AI
+  decision. The player-visible result is a confused actor re-picking whom it
+  attacks.
+- **Crown of Lord British.** Shares the enemy-cast gate with `N`: while the
+  Crown occupies the slot it acts as a permanent Negate Magic aura.
+- **Amulet of Lord British.** Read by the overworld loop's void-tile handler,
+  which forces the effective light radius to zero on that tile unless the
+  Amulet's code is in the slot. The Amulet is what lets the party keep a light
+  radius in the void.
+- **Black Badge.** Read only by the conversation system's non-NPC guard
+  handler, where it is the disguise that unlocks the Blackthorn palace-gate
+  password exchange; see `systems/blackthorn.md`.
+- **`P` Protection.** No consumer with any effect — see immediately below.
+
+**Protection has no mechanical consequence in the original game.** The only
+place in the game that tests for the `P` value sits inside the party arm of the
+combat defence-value computation, where it would have added a small bonus to a
+summed defence total. That computation is dead twice over. Its per-item defence
+accumulations are each guarded by a comparison that is tautologically true, so
+none of them ever runs — the intended test was "this equipment slot does not
+hold the not-equipped sentinel", and the shipped test always passes instead.
+And the computed value is never consumed: one caller discards it outright, and
+the other is reachable only through an attribute-selector arm that no call site
+in the game ever selects. Protection and the Protection scroll therefore spend
+a charge, play their sound, print their message, occupy the timed-effect slot
+for 20 or 100 turns, and show `P` on the stat panel, while changing no combat
+number at all. This is an original-game defect rather than a gap in the
+analysis; a faithful reimplementation has to decide deliberately whether to
+ship the bug or grant the intended bonus. Note the scope carefully: what is
+established is that this particular per-item defence contribution is
+unreachable and that its total is never read. It is *not* established that worn
+equipment is irrelevant to combat generally — the surviving to-hit computation
+reads other character-record fields whose relationship to equipment has not
+been traced. See `systems/combat.md`.
+
+Polymorph removes the accepted
 creature target and places a class 20 Giant Rat at the target's same combat
 coordinates.
-Invisibility is active-caster only: it marks the current combat actor
-hidden/phase-shifted and updates the parallel visual actor state for that same
-slot. Cause Fear is not a single-target prompt; it sweeps all thirty-two combat slots
+Invisibility carries no timer of any kind and never touches the shared slot. It
+is active-caster only: it marks the current combat actor hidden/phase-shifted,
+updates the parallel visual actor state for that same slot, and sets a flag in
+that actor's combat-effect descriptor. It lasts until that flag is cleared, so
+any turn count a port assigns to Invisibility is invented.
+Cause Fear is not a single-target prompt; it sweeps all thirty-two combat slots
 and, for every monster-side actor that is not one of the three protected special
 classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the
 shared resistance check, drives that actor's combat HP counter to one and sets
@@ -641,14 +742,14 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Directional Blink | In Por | Outside combat, prompts for a cardinal direction, scans that ray through the active 32-by-32 loaded world window, and moves the party to the farthest grass tile (`0x05`) found. No random target, retry budget, occupancy check, or generic passability query is used; no matching grass tile reports ordinary spell failure after the shared charge/mana spend. |
 | Directed wind-cone effects | In Zu, In Nox Hur, In Vas Grav Corp, In Flam Hur | Prompt for a cardinal direction, build the widening clipped cone described in Section 8, and scan the combat actor table for actors whose arena coordinates match those cells. The normal cone starts one cell forward from the caster, widens by one cell on both sides per forward step, de-duplicates selected cells, and writes up to 63 coordinates. The common application layer skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common wind-cone layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors are eligible if their cells are in the directed area and they pass the non-faction gates. In Zu applies the sleep-status branch, In Nox Hur applies a resistance/random gate before the poison-status branch, In Vas Grav Corp uses the decimal `99` instant-kill sentinel through the shared damage/status path, and In Flam Hur rolls raw `[1, 30]` damage through that same damage/status path. The two damage winds credit returned monster-kill reward units to the caster's experience with the 9999 cap. |
 | Table-wide tremor damage | In Vas Por Ylem | Scans all thirty-two combat actor slots. For each non-empty slot that passes the generic damageability and resistance/random gates, the spell rolls 1..20 damage and feeds that roll plus the actor slot to the shared combat damage/status handler. The handler applies HP damage, death effects, split checks, and temporary drop markers as usual. Any raw monster-kill reward unit returned by the handler is added to the caster's experience word, capped at 9999. Tremor does not run a faction filter, so friendly-fire is allowed for any party actor that passes the common gates. |
-| Active-effect display wrapper | In Sanct, Rel Tym, Quas An Wis, In An | Pass an animation/effect kind, visible tag, and counter to a shared active-effect helper: In Sanct uses `P` / 20, Rel Tym uses `Q` / 30, Quas An Wis uses `C` / 20, and In An uses `N` / 10. The helper stores one global visible tag/counter pair, plays the common animation, and refreshes the stats panel; resident update helpers age the counter until expiry clears the tag. This aging is separate from torch/light-spell cleanup cadence. Confirmed consumers: `P` adds 3 to party-member defense, `Q` runs a 0..1 random gate before player-side combat command dispatch, `C` lets monster AI target selection roll a random byte against the acting monster's class charm threshold and remap the monster to neutral group 0 on a strictly greater roll, and `N` absorbs combat casts before the shared dispatcher consumes charge or MP. |
+| Active-effect display wrapper | In Sanct, Rel Tym, Quas An Wis, In An | Pass an animation/effect kind, visible tag, and counter to a shared active-effect helper: In Sanct uses `P` / 20, Rel Tym uses `Q` / 30, Quas An Wis uses `C` / 20, and In An uses `N` / 10. The helper stores one global visible tag/counter pair, plays the common animation, and refreshes the stats panel; resident update helpers age the counter until expiry clears the tag. This aging is separate from torch/light-spell cleanup cadence. Confirmed consumers: `P` has no consumer with any mechanical effect (the defence bonus it was meant to grant is never applied — see Section 8), `Q` runs a 0..1 random gate before player-side combat command dispatch, `C` lets monster AI target selection roll a random byte against the acting monster's class charm threshold and remap the monster to neutral group 0 on a strictly greater roll, and `N` absorbs combat casts before the shared dispatcher consumes charge or MP. |
 | Creature-prompt targeters | An Xen Ex, Rel Xen Bet, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, reject walls, empty cells, protected/immune classes, and same-faction targets, then apply the spell-specific result: Charm toggles the target's controlled/charmed marker — a second successful Charm on the same actor clears it, and the marker is not an allegiance change (`systems/combat.md` Section 6.1a) — Polymorph replaces the target with a class 20 Giant Rat at the same coordinates, and Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. No traced Clone helper installs a separate per-spell duration counter. |
 | Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
 | Table-wide fear sweeps | In Quas Corp, An Xen Corp | Not a prompt-driven target family. Sweeps all thirty-two combat actor slots and accepts every monster-side actor that is not one of the three protected special classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the shared resistance check. For each accepted actor **the spell itself** drives the combat HP counter to one and ORs in the fleeing bit `0x02`. The combat wound-score morale classifier does **not** perform that write; it only keeps re-asserting the flag from the resulting critical-HP state on later turns. Repel Undead (An Xen Corp) runs the identical sweep with one added condition, the undead class-flag bit, and writes the same two values. Neither spell places, re-types, tames, or repurposes an actor, and neither touches the controlled/charmed bit `0x01`. |
 | Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
 | Negate Time | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
-This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's active-effect defense bonus, Quickness's player-side dispatch gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-step boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
+This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's player-side dispatch gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-step boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
 
 ## 9. Casting in combat
 
@@ -771,9 +872,15 @@ There is no separate "magic state" file: every byte is part of the standard `.GA
 
 The magic contract is complete at player-spell behavioral depth: the
 forty-eight-entry player spell table, parser, charge/mana/level gates,
-scene masks, handler families, per-effect damage/status math, active-effect
-counters, field placement and contact lifetime, shrine/urn split, and
+scene masks, handler families, per-effect damage/status math, the single
+shared timed-effect slot with its full constant table and consumer census,
+field placement and contact lifetime, shrine/urn split, and
 save-image ownership are specified.
+
+The question of where per-spell buff durations live is closed and had a
+negative answer: there is no bank of per-spell timers to collect. Every timed
+magic effect in the game shares the one slot specified in Section 8, so a
+reimplementation should not build one countdown per spell.
 
 For ownership, monster-special row assignments belong to combat and
 monster-bestiary work and are public there for the analyzed baseline. This
@@ -860,6 +967,11 @@ The behaviour described here was derived by reading the private function and for
 - The active-target attack wrapper path for Magic Missile, Fireball, and Kill — aiming/projectile routing, spell-tag damage lookup, defense subtraction, and instant-kill sentinel — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
 - Create Food's 1..3 food/provisions delta and 9999 cap are derived from
   `u5-decomp/functions/CAST_OVL/0x05B4_cast_create_food.md`.
+- Source provenance: the identification of the Up and Down pair as the dungeon
+  level-change spells, their ladder-free level step, their destination-cell
+  refusal, their hand-off to the shared dungeon exit at a level edge, and their
+  outright refusal inside Doom are derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - Arena-field placement, contact, non-consuming markers, Poison/Sleep status
   gates, Dispel Field's dungeon live-cell rewrite and combat active-object
   removal path, and combat-exit marker lifetime are derived from local CAST,
@@ -873,7 +985,17 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`
   and the `DATA.OVL` class-flag table; it is summarized here only to separate
   those effects from the player spell dispatcher.
-- Protection's defense bonus, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Negate Time's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
+- Protection's inertness, Quickness's player-side dispatch gate, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Negate Time's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
+- The single shared timed-effect slot: its code/duration pair, the permanent
+  sentinel, the non-stacking replacement rule, the complete constant table for
+  the four timed buff spells, Negate Time, the three timed scrolls and the three
+  regalia auras, the per-turn aging rule and its duplicated mode-loop copy, the
+  three clear sites, the complete consumer census for each code, Protection's
+  two-fold deadness, and Invisibility's absence of any timer — derived from
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`,
+  `u5-decomp/notes/system-trace_magic.md`,
+  `u5-decomp/functions/CAST2_OVL/0x08F8_set_scene_flag_with_redraw.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/0x6DA8_compute_party_member_weight.md`.
 - The casting absorption pre-gate names combine `CAST.OVL` dispatcher analysis with the clean scene bindings in `catalogs/gazetteer.md` and the Crown ownership flag writer in `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`.
 - Moonstone Search/Get recovery is derived from `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`, `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`, and local SJOG helper analysis summarized without copying implementation text.
 - The CAST.OVL function inventory and the misclassification correction (CAST is the spell-cast overlay, not character creation) — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
@@ -884,6 +1006,12 @@ The behaviour described here was derived by reading the private function and for
   actor-dispatch/target-picker notes; current evidence does not support a
   general class-script table for player-spell purposes.
 - The M-Mix command's pre-flight check, spell-name prompt, reagent-selection UI, quantity prompt, wrong-mix resource loss, recipe-mask comparison, charge cap, charge increment, and wrong-mix trap-effect handoff — derived from `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`, `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md`, and `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md`.
+- The three refinements to that flow — that a spell name the parser cannot match
+  routes to the same wrong-recipe path and springs the trap, that the on-screen
+  mixing pause is presentation only and advances no clock, and that the charge
+  cap is an add-then-clamp rather than a refusal — derived from
+  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
+  `u5-decomp/notes/system-trace_magic.md`.
 - The low-circle status/HP restore helpers -- Awaken's first-Sleeping roster
   scan, Cure's selected-member Poisoned gate, selected-member Heal's Dead-only
   skip, small random HP recovery, maximum-HP clamp, status preservation,

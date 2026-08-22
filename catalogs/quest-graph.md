@@ -89,6 +89,12 @@ Blackthorn-aligned branch. A reimplementation should preserve the difference:
 the same "typed password" mechanic can be used, but the two passwords belong to
 opposite social graphs.
 
+`IMPERA` also has one gate outside the dialogue system: the guard at Lord
+Blackthorn's palace gate, which the party can only reach while wearing the
+Black Badge. That gate reads only the first four typed letters, folding case,
+so the full word passes and so does any word sharing that prefix.
+`systems/blackthorn.md` Section 7a owns the exchange.
+
 ## 4. Dungeon Words
 
 The Great Council chain teaches that eight Words of Power correspond to the
@@ -325,12 +331,14 @@ drawn uniformly from `1..8` and rejected when it equals the party's current
 scene byte or the value currently held by any of the three slots, including the
 slot being rerolled. When the player destroys a Shadowlord through the shared
 shard/spell destruction path, that slot becomes vanquished and is no longer
-rerolled. The same success path also ORs a per-Shadowlord bit into the
-save-backed quest-progress word: Falsehood/Faulinei sets `0x02`,
-Hatred/Astaroth sets `0x04`, and Cowardice/Nosfentor sets `0x08` in the low byte
-of `SAVED.GAM 0x0624`, and it clears the used shard's carried flag. The three
-Shadowlord slot bytes remain the authoritative alive/vanquished state for
-gameplay gates.
+rerolled. The same success path also marks that Shadowlord's NPC roster slot in
+Stonegate as permanently removed, so the vanquished Shadowlord is never placed
+there again, and it clears the used shard's carried flag. The removal record
+lives in the per-location removed-NPC bitmask table described in
+`formats/saved-gam.md` section 9.2; earlier revisions of this document called
+those bytes a "quest-progress word", which is withdrawn. The three Shadowlord
+slot bytes remain the authoritative alive/vanquished state for gameplay
+gates.
 
 Several user-visible behaviours consume the same state:
 

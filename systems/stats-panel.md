@@ -104,12 +104,13 @@ The confirmed semantic pieces are:
 | Middle counter area | Displays the saved party gold word in ordinary and combat scenes, right-aligned in the middle block. When the transport/action marker byte is in the ship family `0x20..0x27`, this slot instead displays a short ship-status label and the current ship hull condition from active-object byte `+5`. |
 | Calendar/year area | Displays month, day, and year from the saved calendar fields. Month and day are printed as a short `M-D` pair; the year is printed as a three-digit zero-padded value. |
 | Sky/status strip | In surface and town-family views, renders the twelve-cell fixed-hour-marker and moon strip described in `systems/moons.md`; dungeon-class and underworld views use their own lower-row presentation instead. |
-| Transport glyph area | Displays the timing/status tag byte as a glyph when that byte is nonzero, using the text-window border helpers to frame the slot above and below the glyph. When the byte is zero, draws the empty four-corner placeholder instead. This is adjacent to, but distinct from, the transport/action marker used by boarding and movement. |
+| Active-effect glyph area | Displays the shared timed-magic-effect code as a glyph when that code is nonzero, using the text-window border helpers to frame the slot above and below the glyph. When it is zero, draws the empty four-corner placeholder instead. This is the code owned by `systems/magic.md`, so the glyph is how the player sees which timed spell, scroll effect, or worn regalia aura is currently running; every installer and every clear site of that slot requests a stats redraw. It is adjacent to, but distinct from, the transport/action marker used by boarding and movement. |
 
-The timing/status glyph is rendered through the resident miniature tile-glyph
+The active-effect glyph is rendered through the resident miniature tile-glyph
 path described in `formats/tiles.md`, not by cropping `TILES.16` and not by the
-ordinary fixed-cell font. Its byte is a tile/glyph selector for that compact UI
-renderer; the transport/action marker byte remains a separate state field.
+ordinary fixed-cell font. Its byte doubles as a tile/glyph selector for that
+compact UI renderer; the transport/action marker byte remains a separate state
+field.
 
 The bottom-block layout pads fields to fixed columns, so shorter numbers do not
 leave stale digits from earlier larger values. The middle block is padded to the

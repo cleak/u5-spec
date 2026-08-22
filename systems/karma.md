@@ -86,7 +86,7 @@ Confirmed non-shrine scalar changes:
 | Town-family chest opening | Opening a matching surface/town object-table chest | Shared moral-standing selector -2, floored at zero |
 | Crop or table-food taking | Picking crop cells or eating reachable table food | Shared moral-standing selector -1 when nonzero |
 | Town-family cannon hit | F-Fire local cannon path after a successful active-object hit | Shared moral-standing selector -5, floored at zero |
-| Helped/pickpocket-style NPC thank-you path | Jimmy/NPC path that reaches the thankful response | Shared moral-standing selector +2, capped at ninety-nine |
+| Freeing a restrained prisoner | J-Jimmy succeeding on a stocks or manacles tile with an NPC standing on it, which frees that NPC and draws the thankful response. There is no pickpocket path; nothing is transferred to the party. On the large outdoor maps the same success clears the restraint tile instead and awards nothing. | Shared moral-standing selector +2, capped at ninety-nine |
 | Conversation standing-up control code | A dialogue script emits the raise-standing control byte | Shared moral-standing selector +1, capped at ninety-nine. Emits no text; scripts stack the byte to grant more than one |
 | Conversation standing-down control code | A dialogue script emits the lower-standing control byte | Shared moral-standing selector -1, floored at zero. Emits no text; scripts stack the byte to deduct more than one |
 | Almsgiving milestone | A three-digit conversation gold payment that the party can afford, made to an NPC of the qualifying sprite class, when the shared step counter has reached one hundred | Shared moral-standing selector +1, capped at ninety-nine; and, only on that same qualifying call, a further +2 if the debit left party gold at exactly zero |
@@ -229,6 +229,7 @@ Negative boundaries for unpromoted action families:
 | Refusing requested aid | Conversation refusal branch | No separate traced writer is promoted. Branch text may express virtue judgement without proving a runtime standing delta. |
 | Giving to a needy NPC | Conversation "give" path with gold or food | The traced three-digit conversation gold-payment control byte debits party gold and carries the narrowly gated milestone bump described in Section 4.1, but it is not a per-virtue Compassion writer. Do not turn every conversation gold debit into a charity-karma delta. |
 | Third-party healing | Healer shop or dialogue path for curing a stranger | Shop treatment costs and no-price exceptions are shop/town-scene rules. No karma-owned healer price or standing writer is promoted. |
+| Paying or refusing a regime guard | The Blackthorn guard-demand handler in `systems/blackthorn.md` Section 7a: the Minoc "charity" demand, the per-living-member tribute, and the palace-gate password | Resolved as a non-writer. The handler's only durable effect is on party gold; it writes no virtue standing, no scalar selector, and no character status, whether the party pays, refuses, or fails the password. Do not model consenting to the "charity" demand as a Compassion gain or refusing the tribute as a Honesty loss. |
 | Attacking a non-hostile NPC | Combat-mode strike on a peaceful or friendly actor | No combat-overlay write to the scalar selector or a per-virtue standing byte is promoted in the current census. Town-family cannon hits are the covered hostile/destructive scalar penalty. |
 | Initiating or refusing combat | Combat engagement or combat-end stay-and-fight branch | Combat framer, ordinary combat exit, reward, and flee paths have no traced post-combat virtue delta. |
 | Fleeing a winnable combat | Combat-end flee branch while advantaged | No scalar or per-virtue writer is promoted from the traced flee/exit paths. |
@@ -254,9 +255,11 @@ Characteristics that are firm even where non-shrine magnitudes are not:
   gold debit.
 - **Stolen-action warnings are not themselves the Honesty delta.** TALK entry
   can print a stolen-action warning when the active scene/NPC and shared
-  stolen-action status match, and final cleanup can print a matching warning,
-  play the fixed presentation sound, reconcile one-shot conversation signals,
-  or refresh the gold panel. The visible warning text, sound, and cleanup
+  stolen-action status match, and final cleanup can print the stolen-goods
+  line, play the fixed presentation sound, and take one carried item or a small
+  amount of gold — but only while the Shadowlord of Falsehood is resident in
+  that settlement, which is what gates the whole pass
+  (`systems/quest-flags.md` Section 5). The visible warning text, sound, and cleanup
   envelope do not by themselves identify the per-virtue standing byte, delta
   magnitude, or clamp policy. The warning sound is a pure PC-speaker glissando,
   not a hidden standing writer. No direct scalar or per-virtue standing write is
@@ -306,7 +309,19 @@ The live shrine meditation handler does not load `KARMA.DAT` in the traced CAST2
 
 ## 7. Shrine meditation
 
-Meditation runs when the player presses `M` while the party is standing on one of the shrine coordinates. The handler matches the party position to the shrine table, renders the kneeling avatar tile, prompts for a mantra, and reads up to twelve characters.
+Meditation runs when the player presses `M` while the party is standing on one of the shrine coordinates. The handler matches the party position against the single eight-row shrine coordinate table published in `catalogs/gazetteer.md` Section 7, renders the kneeling avatar tile, prompts for a mantra, and reads up to twelve characters.
+
+The match has one deliberate fall-through that an implementation must reproduce.
+Spirituality's row is a `(0, 0)` sentinel rather than a real position - the
+Shrine of Spirituality is not placed on the Britannia surface - and `(0, 0)` is
+open ocean, so no party can ever match it by position. When the scan of all
+eight rows finds no match, the handler resolves the meditation to
+**Spirituality**. Meditating at a shrine that is not one of the seven mapped
+ones *is* the test for Spirituality, and "no row matched" must not be treated as
+an error.
+
+Source provenance: derived from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 
 The eight expected mantras are fixed:
 
@@ -498,9 +513,11 @@ negative boundary are covered.
 - **Stolen-action warning boundary.** Conversation entry can recognize a
   previously stolen-action state for the addressed NPC and print the warning
   before the normal greeting. Final conversation cleanup can also print the
-  warning and perform presentation/transient-signal/gold-panel cleanup. Neither
-  visible TALK branch is enough to publish an Honesty delta; no direct scalar
-  or per-virtue standing write is promoted from those warning paths.
+  stolen-goods line and take one carried item, but that pass runs only while
+  the Shadowlord of Falsehood is resident in the settlement, so it is a
+  Shadowlord effect rather than a judgement on the party. Neither visible TALK
+  branch is enough to publish an Honesty delta; no direct scalar or per-virtue
+  standing write is promoted from those warning paths.
 - **Karma byte layout.** Save offset `0x02E2` is the traced scalar
   moral-standing selector. It is raised by shrine paths, consumed by the
   Blackthorn and Lord British-in-disguise verdict paths, and changed by several
@@ -522,6 +539,11 @@ negative boundary are covered.
 ## 13. Sources
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
+
+- The identity of the `+2` thank-you award as a prisoner release on a restraint
+  tile rather than a pickpocket, including the outdoor-map variant that clears
+  the tile and awards nothing. Source provenance: derived from private analysis
+  note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 
 - The corrected gold-payment milestone (sprite-class gate, step-counter
   threshold, nested zero-gold bonus, and the counter's real increment site and

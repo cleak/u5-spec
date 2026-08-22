@@ -6,7 +6,7 @@ Format specification for `UNDER.DAT`, the static Underworld map. Runtime movemen
 
 `UNDER.DAT` represents the Underworld, the dark lower plane beneath Britannia. It uses the same logical surface-map geometry as `BRIT.DAT`: a 256-by-256 grid of one-byte tile indices, divided into 256 chunks arranged as a 16-by-16 chunk grid. Each chunk is 16 cells wide by 16 cells tall, for 256 bytes per chunk.
 
-Unlike `BRIT.DAT`, `UNDER.DAT` is dense. All 256 logical chunks are present in the file in logical order. A reader can reconstruct any tile by arithmetic alone; no sparse chunk-index table is needed for the on-disk layout. The runtime may still route both surfaces through shared loader logic, but the file format itself is direct: logical chunk slot `n` is stored block `n`.
+Unlike `BRIT.DAT`, `UNDER.DAT` is dense. All 256 logical chunks are present in the file in logical order. A reader can reconstruct any tile by arithmetic alone; no sparse chunk-index table is needed for the on-disk layout, and none exists in resident data - the single resident chunk-index table accounts for the 205 stored `BRIT.DAT` chunks and nothing else. The runtime does route both surfaces through the same loader, and it tells them apart by the **first letter of the map filename** it is handed: the Britannia arm looks each chunk up in that table and synthesizes an all-deep-water chunk for a sentinel entry, while the underworld arm uses the caller's descriptor directly as a file offset. The file format itself is direct: logical chunk slot `n` is stored block `n`.
 
 The file stores terrain only. It does not store active monsters, vehicles, dropped items, party position, visibility state, transition metadata, or encounter definitions.
 
@@ -192,7 +192,11 @@ live-buffer substitution boundary are fixed. Remaining items belong to runtime
 transitions, tile cataloguing, encounter behavior, or mutation-audit work rather
 than the base file layout.
 
-- The exact set of ascent, dungeon, and scripted-transition coordinates in the Underworld belongs in system or gazetteer specs and is not enumerated here.
+- The Underworld's transition coordinates are published in
+  `catalogs/gazetteer.md` rather than here. Note in particular that there is no
+  outdoor ascent: no underworld terrain feature lifts the party to the surface,
+  and the routes up are a dungeon's top exit, a moongate or Gate Travel to a
+  surface Moonstone slot, and a saved-position reload.
 - The full tile-attribute tables for underworld passability, sight blocking, damage, and special triggers are not fully enumerated in the tile specs yet.
 - The semantic names for the chunk-loader substitution tile ids, and the
   classifier flags that gate the `0x19` case, remain tile-catalog and
@@ -216,3 +220,7 @@ This spec is a cleanroom prose rewrite derived from the project notes and existi
 - `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md` (retargeted as the shrine-ruin gate)
 - `u5-decomp/functions/OUTSUBS_OVL/0x0000_outsubs_water_check.md` (retargeted as the Word-of-Power seal gate)
 - `u5-decomp/notes/2026-08-22_quest-world-retrace.md`
+- Source provenance: the dense-layout confirmation, the filename-letter loader
+  discriminator, and the closed no-outdoor-ascent result are derived from
+  private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.

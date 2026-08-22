@@ -49,12 +49,19 @@ The mode-zero call exists because daylight is a function of hour and scene, and 
 
 ## 4. State-tag modifiers
 
-Two single-character state tags can change the per-turn minute cost before the minute counter is touched. This tag byte sits near the saved player-state fields, but it is not the same byte as the party's boarded vehicle/transport tile used by B-Board, X-Xit, movement, and rendering. Public specs should therefore treat it as a timing/state tag, not as a complete vehicle identity table.
+Two effect codes can change the per-turn minute cost before the minute counter
+is touched. The byte the cleanup reads is the single shared timed-magic-effect
+slot specified in `systems/magic.md` — the same byte that carries Protection,
+Mass Charm, Negate Magic, and the worn regalia auras, and that the stats panel
+displays. It is emphatically *not* the party's boarded vehicle/transport tile
+used by B-Board, X-Xit, movement, and rendering, and it is not a vehicle
+identity table of any kind; earlier drafts that associated these tags with
+skiffs, rafts, or the magic carpet were mistaken and that reading is retracted.
 
-- **`Q` tag.** The minute increment is *halved* before being applied. If the original increment was non-zero but halving rounds it down to zero, it is forced back to one. Existing notes associate this with skiff or raft-like water travel, so a v1 implementation should use it for the slow-water transport timing contract without treating `Q` as the whole vehicle table. The overworld epilogue also uses the same tag as an alternate-turn gate for active-object animation and random-encounter probes; `systems/overworld.md` and `systems/encounters.md` own that cadence effect.
-- **`T` tag.** The minute counter and the light-source counters are not advanced on this cleanup pass. The rest of cleanup still runs, especially daylight recomputation and visibility-dirty detection. Other mode-loop notes also use `T` as a town/transition-pending or scene-type tag, so this spec no longer maps it to the magic carpet or any named vehicle.
+- **`Q` — Quickness.** The minute increment is *halved* before being applied. If the original increment was non-zero but halving rounds it down to zero, it is forced back to one. Because everything downstream of the minute write scales with the applied increment, the clock, the NPC schedules, and both light counters all advance at half rate while Quickness is running. The overworld epilogue also reads the same code as an alternate-turn gate for active-object animation and random-encounter probes; `systems/overworld.md` and `systems/encounters.md` own that cadence effect.
+- **`T` — Negate Time.** The minute counter and the light-source counters are not advanced on this cleanup pass. The rest of cleanup still runs, especially daylight recomputation and visibility-dirty detection. A torch or light spell therefore burns no duration at all while time is negated.
 
-No other value in this tag byte alters the increment. Horses, ships, carpet travel, and on-foot travel use the unmodified increment supplied by the caller unless a separate movement handler explicitly sets one of the timing tags above.
+No other value in this byte alters the increment. Horses, ships, carpet travel, and on-foot travel use the unmodified increment supplied by the caller; a vehicle never sets one of these codes.
 
 The tag modifier is applied *before* the minute counter is touched. The cascade then runs against the modified value. There are also a few non-time per-turn counters that get the same effective increment after the tag modifier has been applied (light-source timers; see Section 6); those are bumped via a saturating-byte-arithmetic helper that the time system shares with the lighting system, except that the `T` tag skips that bump along with the minute write.
 
@@ -209,7 +216,7 @@ The dawn/dusk gradient levels are:
 | `40..49` | 34 | 5 |
 | `50..59` | 49 | 2 |
 
-**Stage two — light-source floors.** Two byte counters track the time remaining on the player's torch and on the active light spell. Either being non-zero raises the cached ambient value to at least a fixed personal-light floor: the torch floor is 18 and the light-spell floor is 10 on the original light scale. When both counters are zero, no floor applies. These floors only raise a darker value below their threshold; they do not lower daylight or other brighter ambient values. The visibility and dungeon renderers also read the light-source counters as state, so an implementation should preserve the counters separately rather than modelling personal light solely as a rewritten ambient byte.
+**Stage two — light-source floors.** Two byte counters track the time remaining on the player's torch and on the active light spell. Either being non-zero raises the cached ambient value to at least a fixed personal-light floor: the light-spell floor is 18 and the torch floor is 10 on the original light scale, so magic light is the brighter of the two. When both counters are zero, no floor applies. These floors only raise a darker value below their threshold; they do not lower daylight or other brighter ambient values. The visibility and dungeon renderers also read the light-source counters as state, so an implementation should preserve the counters separately rather than modelling personal light solely as a rewritten ambient byte.
 
 **Stage three — change detection.** The pre-recompute daylight value is saved on the local stack before stage one runs. After the personal-light floors, the new value is compared against the saved one; if they differ, a visibility-dirty flag is set so that the next render runs the full visibility recompute rather than reusing the cached one. Daylight that *did not* change does not force a visibility repaint.
 
@@ -363,7 +370,7 @@ The clock is part of the runtime save image and is flushed verbatim when the pla
 |-------------|------:|------------------|
 | `0x02CE` | 2 bytes | Year, little-endian. |
 | `0x02D0..0x02D3` | 4 bytes | Focus/direction scratch owned by movement, combat, look, and cutscene callers. Not clock state. |
-| `0x02D4` | 1 byte | Timing/state tag read by cleanup: `Q` halves the minute increment and `T` skips minute and light-counter writes. |
+| `0x02D4` | 1 byte | The shared timed-magic-effect code (see `systems/magic.md`). The time cleanup reads it for two values: `Q` halves the minute increment and `T` skips the minute and light-counter writes. |
 | `0x02D5` | 1 byte | Active-player slot. Not clock state. |
 | `0x02D6` | 1 byte | Transport/action marker. Not clock state. |
 | `0x02D7` | 1 byte | Month, one-based `1..13`. |
@@ -422,11 +429,12 @@ boundaries that are already fixed for engine behavior.
   provision for multi-millennial overflow, so this is not a normal play
   compatibility target. Implementations may clamp rather than modelling wrap.
 
-- **`Q` and `T` state-tag naming.** The time cleanup's local contract is fixed:
-  `Q` halves the minute increment and `T` skips the minute and light-counter
-  writes. Broader mode meaning belongs to the movement and mode-loop specs.
-  Do not map `T` to the magic carpet or any other specific vehicle identity at
-  the time-system layer.
+- **`Q` and `T` code naming.** Resolved. These are the Quickness and Negate
+  Time codes of the single shared timed-magic-effect slot owned by
+  `systems/magic.md`, not a vehicle or transport identity. The time cleanup's
+  local contract is fixed: `Q` halves the minute increment and `T` skips the
+  minute and light-counter writes. Do not map either code to the magic carpet,
+  a skiff, or any other vehicle at the time-system layer.
 
 - **Natural moongates.** The traced time cleanup does not own natural-gate
   placement or teleport handling. Its hour-change hook refreshes the

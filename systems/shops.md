@@ -352,8 +352,9 @@ directly:
 A shop purchase deducts the price (or price × quantity) from the party's gold
 word — the shared resident counter every gold-handling system reads and writes,
 including the conversation engine's bribe handler and the find-treasure
-handler. Most successful paid purchases then run the post-transaction surcharge
-described below. Arms sell-back runs in the other direction: it increases the
+handler. Most successful paid purchases then consult the post-transaction
+surcharge gate described below, which charges nothing unless the Shadowlord of
+Falsehood is hiding in that settlement. Arms sell-back runs in the other direction: it increases the
 gold word, capped by the normal gold limit, and decrements the sold equipment
 counter.
 
@@ -447,26 +448,38 @@ standalone commodity-stock field. The pending class byte and the pending
 coordinate pair all live inside the saved game image, so a queued delivery that
 has not yet been consumed survives a save and reload.
 
-### 6.2 Post-transaction surcharge
+### 6.2 Post-transaction surcharge (a Falsehood effect only)
 
-After a successful paid shop transaction, the shop family can charge an extra
-random surcharge of `1..64` gold. This surcharge is independent of the quoted
-headline price: the player sees and confirms the table/stat-derived price, the
-ordinary affordability gate and main debit run, then the extra charge is
-subtracted from the same party gold word.
+After a successful paid shop transaction, the shop family can deduct an extra
+random `1..64` gold. **This is not a universal sales tax, and in ordinary play
+it never runs.** It is one of the two effects of the Shadowlord of Falsehood:
+the extra charge is made only while Faulinei is hiding in the settlement the
+shop stands in.
 
-The surcharge helper first checks a shared town/conversation sentinel produced
-by town active-slot setup and also read by conversation cleanup. Town setup uses
-the byte as a no-slot marker or as one of three tracked town/Shadowlord slot
-indices, but the shop reader applies only a zero-versus-nonzero gate: the extra
-charge runs only for slot value `0`; slot values `1` and `2` and the no-slot
-marker suppress it. The current writer audit found no non-town writer for this
-shared byte in the analyzed baseline. This is not a shop-local transaction flag, and
-compatibility code should not model it as karma, shop kind, or healer identity.
-The Minoc no-price Cure/Heal branch remains separate: it bypasses the ordinary
-paid branch before the surcharge point.
+Town entry records which of the three Shadowlords, if any, is resident in the
+settlement being entered, by matching the three Shadowlord hideout slots
+against that settlement (`systems/town-mode.md` Section 13). The recorded value
+is the resident Shadowlord's identity, and every settlement that hosts none —
+which is every settlement but at most three, at any moment in a playthrough —
+records the no-host marker. The shop reader charges the extra gold only for the
+Falsehood value; the Hatred and Cowardice values and the no-host marker all
+suppress it, so the player normally pays exactly the displayed price. Hatred
+and Cowardice have their own, non-shop effects, described in the same
+town-mode section. The companion Falsehood effect — one carried item stolen at
+the end of a conversation — is specified in `systems/conversation.md`.
 
-Known traced surcharge callers include:
+The extra charge is independent of the quoted headline price and never scales
+with it: the player sees and confirms the table/stat-derived price, the
+ordinary affordability gate and main debit run, and only then is the extra
+amount subtracted from the same party gold word.
+
+Compatibility code should not model the gate as karma, shop kind, healer
+identity, or a shop-local transaction flag. The Minoc no-price Cure/Heal branch
+remains separate: it bypasses the ordinary paid branch before the surcharge
+point.
+
+Known traced surcharge callers — the branches that consult the gate, whether
+or not a Shadowlord is resident — include:
 
 | Shop family | Surcharge reach |
 |-------------|-----------------|
@@ -476,8 +489,9 @@ Known traced surcharge callers include:
 | Innkeeper room/guest charges | After successful payment |
 
 Because the surcharge is applied after the ordinary affordability check, a
-player with exactly enough gold for the quoted price can still lose additional
-gold afterward, floored by the shared word-subtract helper. This is a gold-side
+player shopping in Faulinei's hiding place with exactly enough gold for the
+quoted price can still lose additional gold afterward, floored by the shared
+word-subtract helper. This is a gold-side
 effect only; it does not change shop stock, item quantities, or the quoted
 record text.
 
@@ -545,16 +559,16 @@ a later dispatcher call draws again.
 | Arms entry | Resident/tokenized greeting plus a resident long-greeting variant | Long-greeting variant draws uniform `0..1` after the initial wait | Prints the entry greeting, waits for one key, then asks for `B`, `S`, or exit input | No inventory or gold mutation |
 | Arms `B` branch | Resident `Buy` echo and resident affirmation | Affirmation draws uniform `0..3` only after `B` is accepted | Renders the current stock list; Space or Escape exits the buy list; letters outside the displayed stock count are ignored without a refusal bark | No mutation until an item confirmation passes |
 | Arms buy quote | Deterministic `SHOPPE.DAT` record from the selected equipment id; mapping is published in Section 8.1 | Selected immediately after a valid stock letter is accepted | Renders the quote and a resident confirmation prompt; `N` declines and returns without a fresh quote, other non-accepted keys keep waiting at the same prompt | No mutation before confirmation, cap check, and affordability check |
-| Arms buy confirmation | Resident prompt chosen from four variants | Uniform `0..3` after the deterministic item quote | `N` prints the resident decline echo and returns. Counter-cap refusal prints a fixed resident refusal and waits for a key. Short funds prints one fresh resident no-credit bark from a four-entry pool and exits the shop flow | Successful payment deducts gold, charges tax, and then increments the equipment counter or fills arrows/quarrels to `99` |
+| Arms buy confirmation | Resident prompt chosen from four variants | Uniform `0..3` after the deterministic item quote | `N` prints the resident decline echo and returns. Counter-cap refusal prints a fixed resident refusal and waits for a key. Short funds prints one fresh resident no-credit bark from a four-entry pool and exits the shop flow | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and then increments the equipment counter or fills arrows/quarrels to `99` |
 | Arms `S` branch | Resident/menu literals and deterministic sell-back quote text | Selection is driven by the carried item being browsed | Empty inventory, unsellable items, and excluded ammunition are refused without changing inventory; accepted `N` responses leave the selected item unchanged | Successful sale adds gold and decrements the carried counter |
 | Guildmaster entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the guild stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted stock purchase |
 | Reagent-vendor entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the reagent stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted reagent purchase |
 | Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
-| Horse-trader sale | Shared non-arms preamble, deterministic horse quote record, resident confirmation/refusal text | Preamble draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the silent farewell mode. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote. Short funds prints resident refusal text and exits | Successful payment deducts gold, charges tax, and places a horse active object adjacent to the player |
+| Horse-trader sale | Shared non-arms preamble, deterministic horse quote record, resident confirmation/refusal text | Preamble draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the silent farewell mode. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote. Short funds prints resident refusal text and exits | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and places a horse active object adjacent to the player |
 | Tavern drink flow | Tavern entry bark and list `SHOPPE.DAT` records selected by the active tavern state | Entry/list records are deterministic from the current tavern state; sage-style success records draw only in the sage subflow described below | The tavern clears the conversation text window before its greeting. `N` or Space prints the resident pardon/refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
 | Tavern provision branch | Six-record quote pool, `SHOPPE.DAT` ordinals `77..82`, plus resident quantity prompt, refusal, and partial-purchase literals; the table-scraps outcome renders ordinal `90` | Uniform `0..5` draw when the quote is rendered, once per entry into the branch. The quantity prompt, the pay loop, and every outcome line are deterministic | The quote and quantity prompt append to the tavern text already on screen. The typed-quantity prompt waits for the number; the outcome line does not wait for a key before the branch returns | Gold and food move one unit at a time inside the pay loop. The surcharge runs only on the completed-purchase exit. The two nothing-served outcomes end the visit |
 | Sage rumour flow | `SHOPPE.DAT` record `84` for fee quote, records `85..88` for paid success, record `91` for short funds | Record `84` is deterministic after topic match. Paid success draws uniform `0..3` across records `85..88` only after confirmation and successful debit. Short funds deterministically uses record `91` | Refusal does not consume a success draw. Short funds does not consume a success draw | Gold is deducted before the success rumour record is drawn and rendered |
-| Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, charges tax, and queues the pending watercraft placement |
+| Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and queues the pending watercraft placement |
 | Inn flow | Resident innkeeper text and `SHOPPE.DAT` records from the inn record table | Room quote and registry text are deterministic from the current inn and branch | Room, leave-companion, and pickup-companion branches use branch-local prompts and registry screens; failed eligibility checks print resident refusal text and return without a fresh room quote | Rest charges and registry mutations occur only after the corresponding branch validation and accepted payment/selection |
 
 For frame-oriented rendering, the live transcript contract is:
@@ -1016,6 +1030,14 @@ Before the post-register selection and prompt loop, the helper restores active
 text window `2`. These are text-cell coordinates in the fixed 40-by-25 text
 grid, not pixel coordinates.
 
+Entering the inn's service menu unconditionally clears the single shared
+timed-effect slot specified in `systems/magic.md`, before the innkeeper's
+prompt is even printed. Because that slot holds one effect at a time, walking
+up to an innkeeper cancels an active Protection, Quickness, Mass Charm, Negate
+Magic, or Negate Time, and also strips the otherwise permanent Amulet of Lord
+British, Crown of Lord British, and Black Badge auras. This happens on entry
+and is not conditional on renting a room or on paying anything.
+
 The main menu accepts three actions:
 
 - `R` (Rest for the night) — the party sleeps in the inn's beds. The world clock
@@ -1344,8 +1366,8 @@ Arms purchases, horse purchases, and inn room quotes can vary with the speaking
 party member's Intelligence, but not with virtue standing. Reagent, treatment,
 guild, and other decoded headline prices come from their resident tables rather
 than from karma. The random post-transaction surcharge is also not a karma price
-modifier; it is gated by shared town/conversation state rather than by virtue
-standing. This is a deliberate departure from Ultima IV, where shopkeepers
+modifier; it is gated by the presence of the Shadowlord of Falsehood in the
+settlement rather than by virtue standing. This is a deliberate departure from Ultima IV, where shopkeepers
 cheated the dishonourable on prices and item availability.
 
 Related boundaries:
@@ -1486,6 +1508,8 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md`, and
   `u5-decomp/functions/SHOPPES3_OVL/0x08B4_inn_menu_dispatch.md` — innkeeper
   pricing, rest recovery, inn registry, and persistent guest-lodging state.
+- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the inn
+  menu's entry clear of the shared timed-effect slot.
 - `u5-decomp/formats/data-tables.md` — `SHOPPE.DAT` record layout, substitution placeholders, shared bark renderer.
 - `u5-decomp/formats/data-ovl.md` — 128-entry phrase-token dictionary; the
   published contents, biases, empty-slot census, and the shop renderer's own
@@ -1503,9 +1527,13 @@ The behaviour described here was derived from the private function and format no
   behaviour, and the two resident per-kind name tables that supply the shop-name
   and vendor-name substitutions published in Section 8.0.
 - `u5-decomp/formats/ds-bss-map.md`,
-  `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`, and
+  `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`,
+  `u5-decomp/functions/SHOPPES_OVL/0x019A_charge_random_tax.md`, and
   `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md` --
-  shared town/conversation sentinel context for the shop surcharge gate.
+  the resident-Shadowlord selector that gates the shop surcharge.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3, for
+  the surcharge's Falsehood-only gate.
 - Private SHOPPES horse-trader sale trace -- horse-trader sale helper and horse-object placement.
 - Shipped `.NPC` roster scan and resident shop name/scene tables -- high
   dialog-index shop triggers and local shop-instance resolution.

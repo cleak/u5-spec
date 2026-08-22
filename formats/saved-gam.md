@@ -67,7 +67,7 @@ Each thirty-two-byte record is laid out as follows.
 | `0x00`       | 9 bytes  | Name. ASCII, NUL-padded. The first character is the leading byte of the record and may be zero on an unused slot. |
 | `0x09`       | 1 byte   | Gender. `0x0B` for male, `0x0C` for female. Not ASCII; the values are private to the engine.             |
 | `0x0A`       | 1 byte   | Class. ASCII letter — `'A'` Avatar, `'B'` Bard, `'F'` Fighter, `'M'` Mage, `'D'` Druid, `'T'` Tinker, `'P'` Paladin, `'R'` Ranger, `'S'` Shepherd. |
-| `0x0B`       | 1 byte   | Status. ASCII letter — confirmed values include `'G'` good/alive, `'P'` poisoned or post-revive live state depending on caller, `'S'` sleeping, `'C'` charmed, `'D'` dead, and `'A'` ashes. |
+| `0x0B`       | 1 byte   | Status. ASCII letter — confirmed values include `'G'` good/alive, `'P'` poisoned, `'S'` sleeping, `'C'` charmed, `'D'` dead, and `'A'` ashes. |
 | `0x0C`       | 1 byte   | Strength.                                                                                                |
 | `0x0D`       | 1 byte   | Dexterity.                                                                                               |
 | `0x0E`       | 1 byte   | Intelligence.                                                                                            |
@@ -90,11 +90,13 @@ Three invariants are worth flagging. Slot zero is structurally the Avatar: charg
 The gender byte at `+0x09` is not ASCII, but the class and status bytes at `+0x0A` and `+0x0B` are: visual inspection of a save will see, for the recruited Avatar, a record whose tenth and eleventh bytes look like `'A' 'G'` for "Avatar class, alive". Earlier external references that swap the gender and class positions are wrong: the order is gender-then-class-then-status. Because the roster starts at file offset `0x0002`, the Avatar's class and status bytes are file offsets `0x000C` and `0x000D` respectively.
 
 The status byte is separate from the class byte. In particular, status `'P'`
-does not mean class Paladin; Paladin is class `'P'` at `+0x0A`. Status `'P'` is
-used by poison/cure paths and is also written by one revive-style helper when
-transitioning a dead slot back to a live state. Compatible tools should preserve
-the raw status letter even when their internal model separates poison from other
-post-revive conditions.
+does not mean class Paladin; Paladin is class `'P'` at `+0x0A`. Status `'P'`
+means poisoned, and only that. Earlier drafts of this document described a
+revive-style helper that writes `'P'` when transitioning a dead slot back to a
+live state; that reading is retracted. The helper in question is a poison
+primitive: it skips any member already marked dead and stamps `'P'` on living
+members only, so no path in the game moves a character from `'D'` to `'P'`.
+Compatible tools should still preserve the raw status letter.
 
 ### 3.3 The inn-guest registry
 
@@ -107,13 +109,13 @@ A handful of bytes later in the save image track party control state, transport/
 | Offset   | Width  | Field                  | Meaning                                                                                                        |
 |----------|--------|------------------------|----------------------------------------------------------------------------------------------------------------|
 | `0x02B5` | 1 byte | Party size             | Number of slots `1..6` that are currently in the travelling party. Iteration cap for any "for each party member" pass, and one of the inputs to inn rest quotes and pickup capacity checks. |
-| `0x02D4` | 1 byte | Timing/status tag      | Multi-consumer state byte. Non-zero values can draw the bottom-panel transport/status glyph; `Q` and `T` are also consumed by timing and mode-loop pendulum logic. Not the full boarded-vehicle enum. |
+| `0x02D4` | 1 byte | Timed magic-effect code | The single shared timed-magic-effect slot specified in `systems/magic.md`: it names the one magic effect, scroll effect, or worn regalia aura currently active, and zero means none. The stats panel draws the code as its bottom glyph when nonzero, and the time cleanup reads the Quickness and Negate Time codes as timing modifiers. Not a boarded-vehicle enum of any kind. |
 | `0x02D5` | 1 byte | Active player index    | Slot index `0..7` of the currently selected character. `0xFF` for "none selected" (overworld default).         |
 | `0x02D6` | 1 byte | Transport/action marker | Avatar or vehicle transport/action marker. B-Board writes this when the party boards horses, carpet, skiffs, or ships; other systems also mask it for light-source and alternate-turn presentation states. |
 
 The active-player byte is `0xFF` in the overworld and is set to a slot index when the player picks a character (typically on town entry, or at the start of a combat round). Town and combat modes update it as the player navigates; saving and loading preserves it as-is. The party-size field is the iteration cap that every "for each party member" pass uses; it is the number of records at the front of the roster that hold travelling characters, not the size of the roster (which is always sixteen), and not an inn-stay or calendar counter. New Order changes which active non-leader records occupy those front-of-roster positions, but it does not change party-size.
 
-The `0x02D4` and `0x02D6` bytes are deliberately separated here because different subsystems read them for different reasons. The timing system reads the `Q` and `T` values from the status-tag byte; the stats panel reads the same status-tag byte directly for the bottom glyph slot when it is nonzero. The boarding and dismount paths manipulate the transport/action marker, and the stats panel also reads that marker to choose the ship-hull middle-counter presentation when the marker is in the ship family `0x20..0x27`. Marker values outside that ship family do not select the stats-panel hull counter. A compatible save reader should preserve both bytes exactly even if its own engine keeps a cleaner internal transport model.
+The `0x02D4` and `0x02D6` bytes are deliberately separated here because they are unrelated fields. The byte at `0x02D4` is the timed magic-effect code: the timing system reads its Quickness and Negate Time values as minute-increment modifiers, and the stats panel draws the same code directly in the bottom glyph slot when it is nonzero. The paired remaining-duration counter is a separate byte and is not part of this cluster. The boarding and dismount paths manipulate the transport/action marker, and the stats panel also reads that marker to choose the ship-hull middle-counter presentation when the marker is in the ship family `0x20..0x27`. Marker values outside that ship family do not select the stats-panel hull counter. A compatible save reader should preserve both bytes exactly even if its own engine keeps a cleaner internal transport model.
 
 Known `0x02D6` families and ranges are documented in `systems/vehicles.md`:
 mounted horse, carpet, foot/avatar, ship under sail, furled ship, and skiff.
@@ -129,7 +131,7 @@ The world clock lives in a small group of bytes shared with movement, mode, comb
 |--------|------:|-------|---------|
 | `0x02CE` | 2 bytes | Year | In-world year. Little-endian word. |
 | `0x02D0..0x02D3` | 4 bytes | Focus/direction scratch | Owned by movement, combat, look, and cutscene callers; preserve on round trip. |
-| `0x02D4` | 1 byte | Timing/state tag | Read by the time cleanup for `Q` and `T` timing modifiers. |
+| `0x02D4` | 1 byte | Timed magic-effect code | Read by the time cleanup for its Quickness and Negate Time values; owned by `systems/magic.md`. |
 | `0x02D5` | 1 byte | Active-player slot | Not clock state. |
 | `0x02D6` | 1 byte | Transport/action marker | Not clock state. |
 | `0x02D7` | 1 byte | Month | One-based, range `1..13`. |
@@ -267,6 +269,13 @@ dungeon/map-cell working image. In a dungeon scene it holds the selected
 such as opened doors, dispelled fields, trap rewrites, and immediate
 room-trigger patches.
 
+The size is exactly one dungeon record and no more: a dungeon record is the
+eight levels of one dungeon, each an eight-by-eight grid of cells, one byte per
+cell, so the working buffer is exactly one of the eight records in the shipped
+dungeon file. Private descriptions that gave this buffer a two-kilobyte or
+four-kilobyte extent are wrong; a larger extent would overrun the per-location
+NPC bitmask tables of Section 9.2, which begin immediately afterwards.
+
 This region is saved because `SAVED.GAM` is a flat runtime image. It should not
 be interpreted as a cumulative automap or "all dungeons explored" record. On a
 fresh entry into a scene, the engine can rebuild the buffer from the static map
@@ -295,7 +304,7 @@ the resident image.
 | `0x0328` | 1 byte | Codex-visited mask | Same eight-bit layout. Bit set = "Codex page read for this virtue".                                                          |
 | `0x032A..0x0331` | 8 bytes | Word-of-Power seal flags | One byte per Word of Power, in the fixed word order Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, Doom. Zero means the word has not been spoken and that dungeon's entrance is sealed; a successful utterance toggles the byte's high bit. Region loading re-derives the sealed entrance tile from these flags, so they are the durable "dungeon opened" state, not scratch. Factory: all zero. See `systems/commands.md` Section 11. |
 | `0x0332..0x0339` | 8 bytes | Shrine ruin flags | One byte per shrine, in shrine order. A high-bit-set byte makes that shrine render and behave as a ruined shrine when its region is loaded. Factory: all zero. |
-| `0x0624..0x0625` | 2 bytes | Quest-progress flags | Save-backed quest bit word. Successful Shadowlord destruction ORs the low byte with `0x02` for Falsehood/Faulinei, `0x04` for Hatred/Astaroth, and `0x08` for Cowardice/Nosfentor. Preserve other bits. |
+| `0x0624..0x0625` | 2 bytes | *(not a quest word -- see below)* | These two bytes are **not** an independent quest-progress field. They are the low half of Stonegate's entry in the removed-NPC bitmask table of Section 9.2. Successful Shadowlord destruction sets the bit for that Shadowlord's NPC roster slot in Stonegate, which is what keeps the vanquished Shadowlord from being placed there again: roster slot 1 for Falsehood/Faulinei, slot 2 for Hatred/Astaroth, slot 3 for Cowardice/Nosfentor. Preserve the whole four-byte slot, and read it as a removal mask, not as a quest bitfield. |
 
 The two bitmasks together encode a four-state virtue quest: not started (both zero), ordained (ordained set, codex clear), codex-read (both set), complete (ordained clear, codex set — the ordained bit is cleared on shrine turn-in). All eight virtues use the same encoding, with the same bit-to-virtue map, so the layout is uniform. Ordinary post-completion shrine offerings leave these masks unchanged; they update gold and shrine standing instead.
 
@@ -303,10 +312,18 @@ The Shadowlord slot bytes are the gameplay-visible vanquish state: they gate
 Shadowlord re-rolls, name summons, town-entry Shadowlord installation, the
 Underworld shard placement, a view-side location marker, Stonegate atmosphere,
 and Doom entry. They are **not** read by the Sextant: the Sextant prints the
-party's own coordinates and has no Shadowlord readout. The quest-progress word at
-`0x0624` is also written by the same successful destruction path for
-byte-compatible state, but do not use it as a substitute for the three
-Shadowlord slot bytes when deciding whether a Shadowlord is alive.
+party's own coordinates and has no Shadowlord readout.
+
+An earlier revision of this spec described the two bytes at `0x0624` as a
+save-backed "quest progress" word written alongside the destruction. That
+framing is withdrawn. Those bytes lie inside the removed-NPC bitmask table of
+Section 9.2, and the write is an ordinary NPC-removal record against Stonegate:
+the destruction path marks the vanquished Shadowlord's roster slot in that
+location as permanently gone. It is hard-wired there because a Shadowlord's
+sprite class is rejected by the general removal filter (see
+`systems/town-mode.md`). Shadowlord alive/vanquished state remains owned by the
+three dedicated slot bytes above; the removal bit is a placement consequence,
+not a second source of truth.
 
 A successful destruction touches one further field: it clears the matching
 shard's carried flag in the special/quest-item band (`0x0210..0x0212`, Section
@@ -360,7 +377,7 @@ A loosely packed band of bytes before the dungeon/map-cell working buffer holds 
 | `0x0300`     | Light-spell counter         | Duration counter set by *In Lor* and *Vas Lor*.                                                                                                  |
 | `0x0301`     | Torch counter               | Duration counter set or extended by I-Ignite.                                                                                                    |
 | `0x0302..0x0327` | Per-mode scratch / casting flags | Cast-spell handshake, scene-tag pre-combat, fall-through flags, and other transient mode state. Most are transient; saved because they sit in resident memory. |
-| `0x03B3`     | Fortunes-of-war flag        | Encounter spawn-count reroll flag. Terrain combat reads non-zero as "replace the first random monster-count roll with a second roll"; the 28-day month rollover clears it. No traced gameplay setter is currently known. |
+| `0x03B3`     | Early-game encounter-size damper | Wilderness encounter spawn-count reroll flag, historically mislabelled the "fortunes of war" or "double encounter" flag. Terrain combat reads non-zero as "replace the first random monster-count roll with a second roll of the same shape", which can only lower the count. **The factory seed sets this byte to `1`** — it is the only non-zero byte in the tail of `INIT.GAM` — so every new game begins with the damper active, and save/load carries it. Nothing in gameplay ever sets it; the only write anywhere in the engine is the clear performed at the 28-day month rollover. Because the shipped calendar starts partway through a month, it survives the first twenty-four in-game days and is then off permanently. See `systems/combat.md` Section 5. |
 
 The per-turn flags are not part of the format's "stable" surface — different dot releases of the original game might have set or cleared bytes here for reasons not modelled in any external spec. An implementation that wants a byte-compatible save can pass these through unchanged: the engine reads the relevant ones during boot, ignores the rest, and rewrites them as it plays.
 
@@ -383,11 +400,15 @@ Several fields in the band have higher-level meaning:
   room-helper cells when rebuilding the loaded dungeon image from
   `DUNGEON.DAT`; the bitmap is durable, while the cell-byte rewrite itself is
   not stored as a patched dungeon map.
-- **Fortunes-of-war flag.** The byte at `0x03B3` is part of the flat save
-  image and therefore round-trips through save/load like any other resident
-  tail byte. Encounter setup reads it only as a non-zero count-reroll flag, and
-  the 28-day month-boundary cleanup clears it. Current traced gameplay code has
-  not identified a setter.
+- **Early-game encounter-size damper.** The byte at `0x03B3` is part of the flat
+  save image and round-trips through save/load like any other resident tail
+  byte. Encounter setup reads it only as a non-zero count-reroll flag, and the
+  28-day month-boundary cleanup clears it. There is no setter, and the absence
+  is by design rather than a gap in the analysis: the factory seed ships the
+  byte at `1`, character creation copies the seed image wholesale into the first
+  save, and the month rollover is the engine's only write to it. A save tool
+  should preserve whatever value it finds; a new-game producer must emit `1`
+  here, or early wilderness encounters will be larger than the original's.
 
 ## 11. Worked example
 
@@ -472,9 +493,10 @@ roster stride, inventory/counter regions, spell stocks, clock fields, scalar
 moral-standing selector, map/dungeon working buffer, mixed runtime-state band
 boundary, active-object table, room-clear bitmap, timing/status glyph byte,
 transport/action marker, and companion `.OOL` relationship are fixed. The
-remaining work is runtime ownership naming for opaque bytes and
-transport/action marker values outside known live ranges, not a change to the
-base file layout.
+remaining work is runtime ownership naming for the remaining opaque bytes, not a
+change to the base file layout. The two items that previously headed this
+section -- ownership of the `0x05B4..0x06B3` band and the transport/action
+marker's value set -- are both closed below.
 
 - **`0x05B4..0x06B3` ownership.** Resolved. The band is two back-to-back
   per-location bitmask tables — NPC removed, then NPC name known — each
@@ -482,15 +504,21 @@ base file layout.
   Section 9.2 gives the split and the bit numbering, and withdraws the older
   "mixed world, quest, and mode state" framing for this span.
 
-- **Transport/action marker values.** Offsets `0x02D4` and `0x02D6` are
-  separate fields, not one enum. The stats panel reads `0x02D4` as the bottom
-  glyph byte. Known `0x02D6` transport-marker ranges are public in
-  `systems/vehicles.md`, and only that marker's ship family `0x20..0x27`
-  selects the stats-panel hull display from active-object byte `+5`.
-  Unrecognized `0x02D6` marker values are opaque transport/action state:
-  preserve them in byte-compatible save tools, and do not reinterpret them as
-  timing/status glyphs or balloon mechanics without a traced writer and
-  consumer.
+- **Transport/action marker values.** Resolved. Offsets `0x02D4` and `0x02D6`
+  are separate fields, not one enum; `0x02D4` is the timed magic-effect code,
+  which the stats panel draws as the bottom glyph byte. The byte at `0x02D6`
+  is the sprite the party is drawn as: the viewport composer copies it verbatim into the tile and frame bytes of the
+  party's own entry in the active-object table every time the view is composed.
+  Its persistent value set is complete and closed, and `systems/vehicles.md`
+  section 2 publishes it in full: on foot; mounted horse in two frames; magic
+  carpet in two frames; frigate with sails hoisted in four facings; frigate with
+  sails furled in four facings; skiff in four facings; and a sprite-suppressed
+  value reached only by drowning. Four further values exist solely as
+  single-frame animation overrides that one routine saves and restores around
+  itself, so the save path can never observe them and a byte-compatible
+  implementation never has to persist them. There is no balloon family and no
+  sixth vehicle family. The factory seed carries the on-foot value. Only the
+  ship family selects the stats-panel hull display from active-object byte `+5`.
 
 - **Equipment and defense values.** The six equipment slot bytes per character
   record are mapped and hold equipment item ids or the empty sentinel.
@@ -530,7 +558,11 @@ The byte-level layout described here was derived from the project's private save
   `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`.
 - The overworld per-turn animator's `Q`/`T` and transport-marker pendulum reads — `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
 - The stats-panel transport/status glyph readers — `u5-decomp/functions/ULTIMA_EXE/0x2900_redraw_full_stats.md`.
-- The status-byte revive helper that writes status `'P'` after a dead-slot transition — `u5-decomp/functions/ULTIMA_EXE/0x2FA6_party_revive_slot.md`.
+- The shared status helper that stamps status `'P'` (poisoned) on living party
+  members and skips dead ones — `u5-decomp/functions/ULTIMA_EXE/0x2FA6_party_revive_slot.md`
+  (the note's filename predates the correction). The correction retracting the
+  earlier revive reading is source provenance: derived from private analysis
+  note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The spell-charge stock index order is derived from the shared player
   spell-token parser used by C-Cast and M-Mix, the per-spell stock readers and
   writers in the CAST/CMDS overlay notes, and the public 48-row spell table:
@@ -558,4 +590,20 @@ The byte-level layout described here was derived from the project's private save
   item-id order in `u5-spec/catalogs/item-list.md`.
 - The save and load systems' overall semantics, file roles, and mirror-write contract — `u5-spec/systems/save-load.md`.
 - The active-object record layout and the in-memory table semantics — `u5-spec/systems/active-objects.md`.
+- Source provenance: derived from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the
+  exhaustive attribution of the disputed band, the exact extent of the dungeon
+  working buffer, the two per-location NPC bitmask tables, and the finding that
+  the two bytes formerly called a quest-progress word are Stonegate's
+  removed-NPC mask. Cross-checked against
+  `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`,
+  `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`,
+  `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`, and
+  `u5-decomp/formats/saves.md`.
 - The calendar and clock fields' cascade rules and persistence — `u5-spec/systems/time.md`.
+- Source provenance: derived from private analysis note
+  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` -- the
+  identification of `0x03B3` as the early-game encounter-size damper, its
+  factory-seed value, the absence of any gameplay setter, and the month-rollover
+  clear as the engine's only write. Cross-checked against
+  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.

@@ -6,6 +6,10 @@ This spec covers the Blackthorn-specific cinematic overlay: the capture
 audience, the virtue or Word-of-Power challenge, the punishment animation, and
 the later rescue or refuge sequence.
 
+It also covers the regime's everyday guard demands: the scene-keyed shakedown
+handler that the conversation dispatcher reaches through its reserved
+"not a real NPC" dialog index.
+
 It does not own ordinary conversation with Blackthorn's castle NPCs, ordinary
 combat AI for the Blackthorn monster class, magic absorption in Blackthorn's
 castle, or the endgame victory sequence. Those remain in
@@ -16,30 +20,37 @@ castle, or the endgame victory sequence. Those remain in
 
 The Blackthorn overlay exposes two player-visible scene families:
 
-| Family | Visible role | Remaining trigger gap |
-|--------|--------------|-----------------------|
-| Audience / capture | The party is subdued, taken before Blackthorn, challenged, and then routed to captivity or release state | Town-side direct entry predicate is traced; the earlier defeat/capture context that selects that captive state remains open |
-| Rescue / refuge | A darkness-and-thunder cinematic restores the party and moves it to a refuge scene | Traced caller families are town-mode, overworld-mode, and dungeon-mode; exact per-mode story predicates remain open |
+| Family | Visible role | Entry condition |
+|--------|--------------|-----------------|
+| Audience / capture | The party is subdued, taken before Blackthorn, challenged, and then routed to captivity or release state | Town guards arrest the party while it is inside Lord Blackthorn's Castle and at least one member can still act or is merely asleep |
+| Rescue / refuge | A darkness-and-thunder cinematic restores the party and moves it to a refuge scene | No party member can act and none is asleep — the same check in town, overworld, and dungeon mode |
 
 Both families are cinematic handlers. They replace the ordinary map loop while
 they run, manage their own text and timing, and hand control back through an
 explicit scene/position transition rather than by restoring the prior map.
 
-The current cross-overlay call inventory identifies the audience entry as a
-town-mode Blackthorn handler and the rescue/refuge entry as reachable from
-town, overworld, and dungeon mode. The audience entry's town-side direct
-predicate is now known: when the town post-action NPC event cleanup reaches
-the arrest/unconscious handler while the current scene is the Blackthorn
-captive scene, that handler enters the Blackthorn audience instead of asking
-the ordinary Yew-arrest surrender question. The broader upstream condition
-that placed the party into that captive context, including the death-route
-marker described below, remains caller-owned.
+**The audience is reached from the town arrest path, and from nowhere else.**
+Town post-action cleanup can hand a guard-catch outcome to the town
+arrest/unconscious handler, and that handler splits on the current location.
+Inside Lord Blackthorn's Castle — scene byte eighteen, the gazetteer's
+`CASTLE:1` — and with at least one party member still able to act or merely
+asleep, it plays this audience and afterwards re-runs town entry setup for the
+same location. Everywhere else the same handler asks the ordinary surrender
+question: accepting prints the knockout line, fades, and wakes the party in the
+Yew jail cell at 08:00; refusing turns the guards hostile. There is no
+combat-defeat entry into the audience, no capture flag staged by an earlier
+fight, and no alternate death outcome. Being "captive" means nothing more than
+being arrested inside Blackthorn's castle, which the player normally reaches by
+walking in; the only path that ever selects that location as a handoff target
+is the tail of this same cinematic, which returns the party there.
 
-For the rescue/refuge entry, the traced evidence identifies the mode families
-that can hand control to the cinematic: town, overworld, and dungeon. That is
-a call-family fact, not a story-predicate fact. The exact local gate in each
-mode remains owned by the corresponding mode system until those callers are
-fully traced.
+**The rescue/refuge cinematic is the total-party-defeat handler.** It has no
+mode-local predicate at all. Town, overworld, and dungeon mode each open a turn
+with the same shared party-capability check described in Section 7, and its
+"nobody can act and nobody is asleep" result is the only condition that enters
+the cinematic, identically in all three modes. Losing a fight reaches it
+indirectly: a combat wipe returns to whichever exploration loop framed the
+fight, and that loop's next capability check reports the wipe.
 
 ## 3. Audience Setup
 
@@ -67,19 +78,28 @@ The active-object writes in this flow are presentation state. They do not
 describe the live town map and should not be saved back as ordinary world
 objects.
 
-During the opening capture pass, the handler skips party members already marked
-as jailed. A separate capture death-route marker can turn the same presentation
-into a death outcome instead of the ordinary "dragged away" imprisonment
-branch; the traced overlay reads that marker but does not own the combat or
-town predicate that set it. Treat the marker as caller-provided capture context,
-not as a general Blackthorn AI flag.
+During the opening capture pass, the handler narrates the first party slot —
+scanning from the leader through all eight slots — whose per-member
+Blackthorn-jail flag is still clear. If every slot is already flagged, the whole
+capture narration is skipped and the flow jumps directly to the audience proper.
 
-The town-side direct entry runs through the ordinary town NPC-event cleanup,
-but the captive-scene branch bypasses the normal arrest prompt. In ordinary
-towns, the same arrest helper can ask whether the party will surrender and then
-send the party to Yew or trigger guard hostility. In the Blackthorn captive
-scene, it instead transfers to this audience/capture cinematic and then
-re-enters town setup after the cinematic returns.
+**Retraction.** Earlier revisions of this section described a "capture
+death-route marker" that could turn the same presentation into a death outcome.
+That is withdrawn in full: there is no death branch and no second outcome here.
+The byte formerly described that way is the game's global sound on/off setting,
+and its only effect inside this cinematic is the length of one scroll pause
+between two lines of the capture narration — a long pause when sound is on, a
+short one when it is off.
+
+The entry runs through the ordinary town NPC-event cleanup, but the
+Blackthorn-castle branch bypasses the normal arrest prompt. In every other
+location the same arrest helper asks whether the party will surrender and then
+sends the party to Yew or turns the guards hostile. Inside Lord Blackthorn's
+Castle, and only while the party-capability check of Section 7 reports that
+somebody can act or is asleep, it transfers to this audience/capture cinematic
+instead and re-enters town entry setup for the same location afterwards. If the
+party is arrested there with nobody able to act and nobody asleep, the arrest
+takes the ordinary surrender branch rather than the audience.
 
 After the challenge resolves, the handler can run a final throne cleanup beat
 and then hands control to a captive-cell scene. The traced handoff uses scene
@@ -222,6 +242,34 @@ overworld resource file to be available, switches into cutscene mode, prints a
 darkness/refuge/thunder sequence, runs timed animation passes, places the
 rescue scene tiles, then prints a selected `KARMA.DAT` verdict message.
 
+**Entry condition: the shared party-capability check.** Every exploration mode
+opens each turn by asking the same resident question of the party roster, and
+the answer decides whether the turn proceeds, is slept through, or ends the
+party's run of bad luck here. A member *can act* when their status is Good or
+Poisoned; every other status — dead, asleep, ashes, charmed, and the rest —
+counts as unable.
+
+| Roster scan result | Effect |
+|--------------------|--------|
+| At least one member can act | Ordinary turn. The scan also records which member that was, for callers that need a member able to act. |
+| Nobody can act, but at least one member is asleep | The mode prints the sleep line ("Zzzzzz...") and the turn passes with nothing else happening. |
+| Nobody can act and nobody is asleep | This rescue/refuge cinematic runs. |
+
+That third case is the only entry condition. There is no quest gate, no
+moonstone requirement, no location test, and no per-mode variation: town,
+overworld, and dungeon mode all use the identical check and the identical
+result mapping, and combat reaches it only indirectly, when the exploration
+loop that framed the fight runs its next check. The mode-local work around the
+check is bookkeeping rather than predicate — the overworld, when the party is
+above ground, asks for the surface map disc and runs its active-object
+maintenance pass first, and the dungeon runs its own view-helper pass first. An
+empty roster also falls into the third case.
+
+Because this cinematic restores the party and returns it to play, an ordinary
+party wipe in Ultima V is not a terminal game-over: the run continues from Lord
+British's Castle, with a verdict on the party's moral standing read out along
+the way.
+
 The rescue contract:
 
 1. Enter cutscene mode and suppress ordinary map play.
@@ -230,19 +278,75 @@ The rescue contract:
 4. Run the timed scene animation and tile placement passes.
 5. Select and print one `KARMA.DAT` record through the five-band rescue
    selector.
-6. Restore or update party members so the party can continue play.
+6. Restore every party member: the member's status is reset to able-bodied and
+   their current hit points are set to their maximum.
 7. Print the disorientation or vertigo beat.
 8. Fade out and hand control to scene byte seventeen, the gazetteer's
-   `CASTLE:0` location associated with Lord British's Castle, at local
-   position `(10, 10)`.
-9. Clamp the related story progression counter upward so the rescue cannot
-   regress the save state.
+   `CASTLE:0` location associated with Lord British's Castle, on logical floor
+   one at local position `(10, 10)`, with the clock spun forward until the hour
+   reads 06:00.
+9. Raise the moral-standing selector to a floor of seventy-five if it was
+   below that, so the rescue cannot regress the save state. The verdict record
+   printed in step 5 is chosen from the standing *before* this raise.
+
+The restoration in steps 8 and 9 also wipes the party's magical state. As it
+sets the destination scene and position it clears the single shared
+timed-effect slot specified in `systems/magic.md`, so an active Protection,
+Quickness, Mass Charm, Negate Magic, or Negate Time is cancelled and any worn
+Amulet of Lord British, Crown of Lord British, or Black Badge aura is stripped.
+Once the clock has been spun forward it also zeroes both light counters, so a
+burning torch and an active light spell are both extinguished; see
+`systems/lighting.md`. A party rescued from a wipe therefore arrives with no
+buffs, no worn regalia aura, and no light.
 
 `KARMA.DAT` is reused here as player-facing verdict text. This does not make
 the file a numeric karma table. The rescue selector divides a one-byte verdict
 input into five twenty-point bands: `0..19`, `20..39`, `40..59`, `60..79`, and
 `80..99`, selecting records zero through four respectively. The shipped sixth
 record is not selected by this traced rescue/refuge table.
+
+## 7a. Regime Guard Demands
+
+Separately from the two cinematics, the regime has a small everyday presence in
+ordinary play: the guards who stop the party and demand something. These are not
+NPCs with dialogue files. They are reached from the conversation dispatcher's
+reserved "not a real NPC" dialog index, described in
+`systems/conversation.md`, which hands off to one scene-keyed handler instead of
+loading a `.TLK` blob.
+
+That handler has exactly three branches, chosen by the current scene, and its
+only durable effect is on the party's gold. It writes no character status, no
+hit points, and no karma, and it returns one of two results — "paid or passed",
+or "refused" — which becomes the conversation's result. Nothing runs afterwards.
+
+**Branch 1 — the palace gate password.** In Lord Blackthorn's Castle, and only
+while the Black Badge aura is the party's active timed magic effect (see
+`systems/magic.md`), the guard asks the party to give the password as a bearer
+of the Badge and prompts for a response. The player may type up to fourteen
+characters, but only the **first four** are compared, and the comparison folds
+letter case. The expected answer is the Oppression-side password that
+`catalogs/quest-graph.md` Section 3 names, and that word is longer than four
+letters — so the truncation is what lets the full word pass, and it also means
+any word sharing those first four letters is accepted. A match prints a short "pass, friend" acknowledgement
+and returns success; anything else simply refuses. Because the gate reads the
+shared timed-effect slot, this branch is unreachable until the party actually
+uses the Black Badge, and it becomes unreachable again the moment anything
+clears that slot — camping or resting, entering an innkeeper's menu, using the
+Badge a second time to take it off, or donning the Amulet or Crown instead.
+
+**Branch 2 — the Minoc charity demand.** In Minoc, the guard announces that the
+party will give half its gold to charity. On a yes, the party's gold word is
+halved. On a no, nothing is taken.
+
+**Branch 3 — the default tribute.** In every other scene the handler reaches,
+the guard demands a tribute to Blackthorn of ten gold per **living** party
+member; members marked Dead are not counted, so the amount is a head tax on the
+survivors. The demanded amount is printed in the line. On a yes, and only if the
+party can afford the full amount, that amount is subtracted; if the party cannot
+pay, the handler refuses and takes nothing.
+
+None of the three branches touches karma, party status, quest flags, or the
+inventory. Gold is the entire mechanical consequence.
 
 ## 8. State Boundaries
 
@@ -256,22 +360,24 @@ The Blackthorn overlay uses several kinds of state with different lifetimes:
 | `MISCMSG.DAT` audience records | Temporary message source |
 | `KARMA.DAT` rescue record | Temporary verdict text source |
 | Scene byte and local position handoff | Next ordinary gameplay location |
-| Capture death-route marker | Caller-provided branch context for the audience presentation |
-| Conversation Blackthorn signal | Transient one-conversation cleanup signal produced by TALK action handling; not the capture predicate or rescue trigger |
+| Timed magic-effect slot and both light counters | Cleared by the rescue restoration; see `systems/magic.md` and `systems/lighting.md` |
+| Carried-key count zeroed by the audience cleanup | Durable inventory effect of the capture |
 | Captive-cell duration/progression counter | Durable or semi-durable post-capture state; initialized if empty by the rescue path |
 | Standing/progression byte clamp | Durable rescue/story floor |
 
 Implementations should not conflate these. In particular, the active-object
 table is repurposed for cinematic drawing, while party jail flags, the
 post-capture counter, and the rescue progression counter are the durable
-gameplay outputs. The death-route marker is read by the audience presentation
-but should be set by the caller that decides the party's capture outcome.
+gameplay outputs.
 
-The conversation-side Blackthorn signal belongs to the transient conversation
-cleanup band described in `systems/quest-flags.md`. It can be produced by TALK
-action handling and cleared by later cleanup or arrest/audience flows, but it
-is not itself the upstream defeat/capture predicate, the death-route marker, or
-the per-mode rescue/refuge trigger.
+**Retraction.** An earlier revision of this table also listed a "capture
+death-route marker" and a "conversation Blackthorn signal". Both are withdrawn.
+There is no death-route marker (Section 3). The byte previously called a
+Blackthorn conversation signal is the party's ordinary carried-key counter —
+the same counter the conversation letter-grant table fills and the lockpicking
+paths spend — and the audience's cleanup simply zeroes it, so the party leaves
+the capture without its keys. Nothing in that band is a capture predicate or a
+rescue trigger.
 
 ## 9. Relationship To Other Systems
 
@@ -280,7 +386,13 @@ the per-mode rescue/refuge trigger.
 - **Encounters.** `systems/encounters.md` owns scripted-fight framing before a
   Blackthorn-specific caller chooses capture, cancellation, or ordinary combat.
 - **Conversation.** `systems/conversation.md` owns normal NPC Talk and `.TLK`
-  execution. The Blackthorn challenge here is a separate cinematic prompt loop.
+  execution, and owns the reserved dialog index that routes to the guard
+  demands in Section 7a. The Blackthorn challenge in Sections 4 and 5 is a
+  separate cinematic prompt loop.
+- **Magic and inventory.** `systems/magic.md` owns the single shared
+  timed-effect slot that the Black Badge aura occupies and that gates the
+  palace-gate password branch; `catalogs/item-list.md` owns wearing and
+  removing the Badge itself.
 - **Karma.** `systems/karma.md` owns numeric virtue standings. This overlay
   can read virtue language and `KARMA.DAT` text but does not publish a traced
   in-overlay karma-score adjustment.
@@ -299,16 +411,20 @@ release branches, byte-script movement semantics, rescue/refuge restoration,
 `KARMA.DAT` verdict selection, durable state writes, and the direct town-side
 audience entry predicate are public.
 
-Remaining exactness belongs to entry predicates and pixel parity:
+Both entry predicates are now published. The audience is entered only from the
+town arrest handler, on the location test plus the party-capability test of
+Section 2; the rescue/refuge cinematic is entered only from the shared
+party-capability check of Section 7, with no mode-local condition of any kind.
+Neither a defeat/capture context byte nor a death-route marker exists.
 
-- Pin the upstream defeat/capture predicate that sets the Blackthorn captive
-  context and any death-route marker before the town-side audience entry.
-- Pin the exact town, overworld, and dungeon story predicates that enter the
-  rescue/refuge handler. The current overlay and cross-call evidence proves
-  reachability from those mode families, but not the mode-local conditions.
+Remaining exactness is presentation parity and one shared-state question:
+
 - Verify the exact visual identities of the cutscene tile-write bytes and the
   exact cursor/glyph effects of the output-byte commands if pixel-level
   Blackthorn cutscene parity is required.
+- The per-member Blackthorn-jail flag band is claimed by more than one reader
+  in the private analysis; a compatible implementation should keep it a
+  Blackthorn-owned band until that overlap is resolved.
 
 ## 11. Sources
 
@@ -324,8 +440,16 @@ tables, raw script bytes, or implementation-specific addresses.
 - `u5-decomp/functions/BLCKTHRN_OVL/0x054A_virtue_challenge_loop.md`.
 - `u5-decomp/functions/BLCKTHRN_OVL/0x060E_blackthorn_audience.md`.
 - `u5-decomp/functions/BLCKTHRN_OVL/0x0910_blackthorn_rescue.md`.
+- `u5-decomp/functions/TALK_OVL/0x01E2_scene_service_dispatch.md` — the
+  three guard-demand branches, the four-character password comparison, the
+  living-member head count, and the handler's complete set of writes.
+- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the
+  independent re-verification of that handler, and the Black Badge aura gate on
+  the password branch.
 - `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`.
 - `u5-decomp/functions/TOWN_OVL/0x1352_town_post_action_cleanup.md`.
+- `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md` — the
+  shared party-capability check of Section 7.
 - `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
 - `u5-decomp/formats/data-ovl.md`.
 - `u5-decomp/notes/subsystem_coupling_matrix.md`.
@@ -336,3 +460,9 @@ tables, raw script bytes, or implementation-specific addresses.
 - `formats/location-dat.md`.
 - `formats/miscmsg-dat.md`.
 - `formats/karma-dat.md`.
+
+Source provenance: derived from private analysis note
+`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, sections Q1 and
+Q2, for the audience entry path, the withdrawal of the death-route marker, the
+shared party-capability check that enters the rescue/refuge cinematic, and that
+cinematic's restoration, standing-floor, and handoff effects.
