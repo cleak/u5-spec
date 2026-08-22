@@ -26,7 +26,7 @@ The world has thirty-two named non-overworld locations divided evenly into four 
 | 17–24            | Castle   |
 | 25–32            | Keep     |
 
-The engine tracks the active scene in a single resident byte. Zero means "overworld"; values one through thirty-two put the engine in town mode for one named location; values outside that range do not select a town-family location. Walking onto an enclosed cell sets the scene byte; leaving via a boundary tile clears it.
+The engine tracks the active scene in a single resident byte. Zero means "overworld"; values one through thirty-two put the engine in town mode for one named location; values outside that range do not select a town-family location. Walking onto an enclosed cell sets the scene byte; stepping off the edge of the interior grid and confirming the leave prompt clears it.
 
 Per-location data lives in four parallel families of files — one tile-grid file per class, one NPC roster file per class, one dialogue file per class. The roster and dialogue files use the per-class location index directly; the tile-grid file uses the same physical ordering but active floor pages are selected through the resident base-page table described below. The engine resolves the file family from `(scene - 1) >> 3` against a four-entry pointer table.
 
@@ -40,43 +40,76 @@ The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID 
 
 - **NPC start markers** (`0x48` or `0x49`) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and exact marker byte.
 - **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). Locations with no asterisk inherit a default per-scene spawn coordinate.
-- **Farmland and orchard terrain** (the standing-crop and fruit-tree tile values) is not marker data at all, but it is rewritten in place by a depletion pass that runs at the end of the map load. See the harvest scatter below.
+- **Farmland and orchard terrain** (the standing-crop and fruit-tree tile values) is not marker data at all, but in a settlement that is currently hiding a Shadowlord it is rewritten in place by a blight pass at the end of the map load. In every other settlement that pass does nothing. See the Shadowlord blight below.
 - **NPC floor-link markers** (`0xC8` and `0xC9`) are consumed by the NPC scheduler's tile-ID pathfinder after map load. They must remain distinguishable in the live tile buffer for the schedule processor.
 
 Marker processing is in-memory only: the on-disk `.DAT` floor is unchanged. By the time normal play begins, runtime passes have harvested the markers needed for spawn/NPC state and may have rewritten selected marker cells, while visible actors are represented through the dynamic sprite layer. Some markers, notably the `0xC8`/`0xC9` floor-link pair, remain meaningful to runtime consumers after the initial load pass.
 
-### Harvest scatter on farmland and orchards
+### Shadowlord blight on farmland and orchards
 
-At the end of the map load — after the player's own actor slot has been
-assigned, so it does not run on a bare map load — a depletion pass walks the
-whole live floor buffer and thins out farmland and orchards. It is not an NPC
-waypoint load and it is not path or grass texturing.
+A second-tier pass walks the whole live floor buffer and thins out farmland and
+orchards. It is not an NPC waypoint load, it is not path or grass texturing,
+and it is not an unconditional harvest. The pass first reads the entry-time
+record of *which Shadowlord is resident in the location being entered* (Section
+13) and returns immediately when that record says "none". In an ordinary
+settlement — any location that is not currently one of the three Shadowlord
+hideouts, and any hideout whose Shadowlord has already been vanquished — the
+pass does nothing at all and the authored farmland is drawn exactly as shipped.
+The row-`4` guard of Section 5 suppresses the blight for the same reason it
+suppresses the install: with no host recorded there is nothing for the pass to
+act on.
 
 The shipped location files store every farm cell as standing crops and every
-orchard cell as a fruit tree. The pass knocks most of them down to their
-harvested counterparts:
+orchard cell as a fruit tree. Where the pass does run, it knocks most of them
+down to their spoiled counterparts:
 
 | Authored terrain | Becomes | Chance |
 |---|---|---|
 | Standing crops | Plowed patch | Seven times in eight |
 | Fruit tree | Hollow stump | Seven times in eight |
 
-So on any given visit roughly one farm cell in eight is still bearing and
-roughly one orchard cell in eight still has its tree. The in-game look-at
-descriptions name all four tiles, so this is a visible world-state statement
-rather than a texture flourish. Nothing is written back to the location file;
-the rewrite is confined to the live floor buffer.
+So in the settlement hosting the Shadowlord roughly one farm cell in eight is
+still bearing and roughly one orchard cell in eight still has its tree, while
+every other settlement keeps all of them. The in-game look-at descriptions name
+all four tiles, so this is a visible world-state statement — the ground around
+a hiding Shadowlord reads as blighted — and not a texture flourish. Nothing is
+written back to the location file; the rewrite is confined to the live floor
+buffer.
+
+Two places invoke the pass, and the resident-host test applies at both:
+
+- **The end of every floor load**, after marker harvest and the dawn/dusk
+  substitution. On a fresh town entry this invocation does nothing, because the
+  entry sequence clears the resident-host record immediately before the map
+  load and only re-derives it afterwards. On an in-town floor change — a
+  stairway or ladder between the location's own floors — the record is still
+  standing, so each newly loaded floor of a hideout town is blighted as it
+  arrives.
+- **The first step of the Shadowlord install** (Section 13), which runs after
+  the host has been recorded and *before* the install's one-at-a-time reject.
+  A hideout town whose install is cancelled because a Shadowlord summoned
+  elsewhere is still standing in the active-object table is therefore blighted
+  anyway.
+
+One consequence of that pairing is worth naming rather than inheriting by
+accident: the in-town floor reload that follows an NPC death does not clear the
+host record and then re-runs the install, so on that path a hideout town's
+floor gets the pass twice in a row. The second run can only touch cells that
+survived the first, so the standing fraction after it is smaller than a single
+seven-in-eight rule predicts.
 
 The pass runs on a deterministic stream: immediately before the walk the
 gameplay PRNG is seeded from the **calendar day of the month**, and immediately
 after the walk it is re-seeded from the host clock. Two consequences follow.
-First, the scatter is identical for every entry to every town on the same
-in-game day and re-rolls when the date advances, making "which crops and trees
-are still standing" a stable, date-keyed property of the world; every town
-visited on the same day shares one scatter stream. Second, the bracketing is
-**not** a save-and-restore of the PRNG: entering a town discards whatever
-generator state was running and replaces it with fresh clock entropy. See
-`systems/prng.md` section 3.
+First, the result is a pure function of the day byte and the floor content, so
+every load of a given floor on the same in-game day produces the same pattern,
+and the pattern re-rolls when the date advances — "which crops and trees are
+still standing" is a stable, date-keyed property of the hosting town. (The
+hideouts themselves are re-rolled at the midnight day rollover described in
+`catalogs/quest-graph.md`, so which town is blighted and how it is blighted
+change together.) Second, the bracketing is **not** a save-and-restore of the
+PRNG: the pass discards whatever generator state was running and leaves fresh
+clock entropy behind it. See `systems/prng.md` section 3.
 
 The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a scene place its ground floor in the middle of nearby authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
 
@@ -221,7 +254,7 @@ On entry and floor reload, the loader runs the pass only in the night band: hour
 After entry, control sits in a tight loop that reads one command per iteration and runs it to completion:
 
 1. **Read a command.** The input pipeline blocks until a keystroke arrives, applies its translation rules (key-to-command, numpad-to-direction, queue handling), and returns a single byte.
-2. **Pre-dispatch checks.** A short setup step handles meta-states (combat in progress, turn already in flight) and the cursed-by-spell timer. If the scene byte has been cleared during the previous turn — meaning the player just walked across a boundary tile — the loop breaks out (Section 15).
+2. **Pre-dispatch checks.** A short setup step handles meta-states (combat in progress, turn already in flight) and the cursed-by-spell timer. If the scene byte has been cleared during the previous turn — meaning the player just stepped off the edge of the interior grid and confirmed the leave prompt — the loop breaks out (Section 15).
 3. **Dispatch.** Movement commands use a small direction dispatch table; letter commands flow into the shared per-letter dispatcher described in the commands spec. Many handlers live in the town-mode overlay (Attack, Klimb); others are shared across modes (Cast, Get, Look, Talk, Use) and resolve to the appropriate cross-mode handler after a scene-byte check.
 4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, runs the underfoot-effect handler described in Section 10, ticks down the curse/buff counter, copies the party's current map coordinates into slot zero, and calls the NPC schedule processor with the current hour byte. The underfoot-effect handler is called unconditionally on every consumed turn and it re-reads the tile the party is standing on, so it is not gated on the party having moved; its last act is to run the shared party status/provision pass specified in `systems/time.md`.
 5. **Render.** If the schedule processor reported any NPC moved, or the visibility-dirty flag is set, a full render runs. Otherwise the screen is left as-is and the loop reads the next command.
@@ -264,7 +297,7 @@ and "no action" for the deselect-to-whole-party case.
 
 Cardinal movement in town is a mode-owned wrapper around the shared movement layer. It computes a bounded destination in the current 32-by-32 floor, prints the direction phrase, optionally prefixes it with the active vehicle verb ("Ride", "Row", or "Fly"), samples the target terrain, and asks the shared passability classifier with the current transport marker. A rejected destination prints the standard blocked feedback and leaves the avatar in place.
 
-Successful movement commits the avatar coordinate, marks the view dirty, and then runs immediate tile effects. The traced town-family exit threshold is tile id `0x59`; stepping onto it prompts before leaving. Accepting clears the scene byte and maps the interior exit back to the location's overworld coordinate. Town stair tiles are the `0xC4..0xC7` family. Their low two bits are compared with the movement wrapper's normalized facing code: matching the movement code moves up one floor, matching that code's opposite-facing value moves down one floor, and crossing the stair from either side is just a normal walk. Floor changes reload the active floor and rerun the load-time passes for that floor.
+Successful movement commits the avatar coordinate, marks the view dirty, and then runs immediate tile effects. Leaving a town-family location is a **map-boundary event, not a tile effect**: the handler raises the leave prompt when the requested step would carry the party off the thirty-two-by-thirty-two floor grid — that is, when the party is standing on the outermost row or column and steps outward. The ordinary passability and occupancy tests run first and still win, so a destination the classifier rejects prints the blocked feedback instead of prompting. Accepting the prompt clears the scene byte and maps the interior exit back to the location's overworld coordinate. Town stair tiles are the `0xC4..0xC7` family. Their low two bits are compared with the movement wrapper's normalized facing code: matching the movement code moves up one floor, matching that code's opposite-facing value moves down one floor, and crossing the stair from either side is just a normal walk. Floor changes reload the active floor and rerun the load-time passes for that floor.
 
 The schedule tick is unconditional on consumed turns — every action that costs a turn advances NPCs by one tick — so an NPC walks at most one cell per player action.
 
@@ -548,6 +581,14 @@ State). One guard applies before anything else: the whole check is skipped when
 the party's Y coordinate at that moment is `4`, in which case no host is
 recorded and no Shadowlord is installed.
 
+The first thing the entry path does with a recorded host is the
+farmland and orchard blight described in Section 3: the hosting town's live
+floor buffer is walked and most of its standing crops and fruit trees are
+rewritten to a plowed patch and a hollow stump. That pass runs before the
+cancel condition below, so it applies even on an entry whose install is
+rejected, and it is the only visible effect a resident Shadowlord has on the
+terrain itself.
+
 Once a host is recorded, exactly one condition can still cancel the install.
 The entry path walks the whole 32-record active-object table and abandons the
 install if any live record already carries the Shadow Lord actor tile `0xFC`.
@@ -641,14 +682,32 @@ After each schedule tick, town mode interprets the walker's event bytes. A non-a
 
 ## 15. Exit
 
-The player leaves a town by walking onto the traced town-family exit threshold,
-tile id `0x59`. The handler prompts before leaving. Accepting the prompt clears
-the scene byte, computes the player's overworld coordinate from the fixed
-world-location coordinate tables, writes the destination plane (`0` for
-ordinary scenes, the underworld value for scene byte `0x19`), clears the
-town-local curse/state latch, and signals the loop to break. Refusing the
-prompt leaves town mode active and does not move the party out to the
-overworld.
+The player leaves a town by walking off the edge of the interior grid. There is
+no exit tile. The movement handler flags a step whose destination would fall
+outside the thirty-two-by-thirty-two floor — north from the top row, south from
+the bottom row, west from the leftmost column, east from the rightmost column —
+and, once the step has otherwise passed the ordinary terrain and occupancy
+tests, asks whether the party wishes to leave instead of committing the step. A
+destination that fails those ordinary tests prints the blocked feedback and the
+prompt is never raised, so a location whose outer ring is impassable in some
+direction cannot be left that way.
+
+The prompt is a yes/no question. Accepting prints the affirmative and the
+destination plane, clears the scene byte, computes the player's overworld
+coordinate from the fixed world-location coordinate tables, writes the
+destination plane (Britannia for ordinary scenes, the Underworld for scene byte
+`0x19`), clears the town-local curse/state latch, and signals the loop to
+break. Declining — by answering no or by cancelling — prints the refusal,
+clears the pending-exit flag, leaves town mode active, and does not move the
+party; the step itself is discarded either way, so a declined exit never nudges
+the avatar onto the boundary cell.
+
+**Withdrawn label.** Earlier revisions of this spec named "the town-family exit
+threshold, tile id `0x59`" as the trigger. That is withdrawn. Tile `0x59` is the
+telescope (`catalogs/tile-catalog.md`), a Look trigger that occurs in exactly
+three interior cells across all shipped maps and never on a location boundary;
+the value was a misreading of the affirmative keystroke consumed by the leave
+prompt. No tile id participates in the town-family exit decision.
 
 The town turn loop's per-turn epilogue checks the scene byte each iteration. When the byte clears, the loop returns to the main game loop, which reloads the overworld map, restores the overworld active-object table from the on-disk overlay, and resumes overworld mode at the location's overworld cell.
 
@@ -705,14 +764,15 @@ The exact free-roaming object contract is:
 **Movement.** The shared movement spec owns direction-code routing,
 the resident terrain-query layer, dynamic occupancy, and commit rules. This
 town-mode spec owns the current floor buffer, NPC collision/scheduling side,
-boundary-tile exit, and floor-transition hooks around successful movement.
+the grid-boundary exit prompt, and floor-transition hooks around successful
+movement.
 
 **Save / load.** A save inside town freezes the scene byte, the floor byte, the player position, the active-object table, and the world-state clock. On load, the engine notices the non-zero scene byte, re-runs the entry pass, and snaps the player and NPCs to saved-or-re-derived positions. The runtime NPC block is not persisted as a chunk; it is re-derived from the schedule and the saved hour, producing NPCs at their currently-scheduled location regardless of mid-route progress. The dawn/dusk gate pass runs at load time using the saved hour.
 
 ## 17. Town Boundaries And Remaining Data Work
 
 Town/interior mode is complete at behavioral-contract depth: entry, map load,
-marker harvest, dawn/dusk substitution, farmland/orchard harvest scatter, movement and
+marker harvest, dawn/dusk substitution, the resident-Shadowlord farmland blight, movement and
 floor/exit transitions, command hooks, alarm/arrest handling, NPC schedule
 integration, active-object ownership, free-roaming object movement, entry-mode
 preservation behavior, and save/load entry reconstruction are specified.
@@ -755,12 +815,17 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/0x47F4_npc_warp_to_scene.md`.
 - The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
 - The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md` and `u5-decomp/functions/TOWN_OVL/0x0170_town_dawn_dusk_pass.md`.
-- Source provenance: derived from private analysis note
-  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
-  farmland/orchard harvest scatter, its two substitutions, its seven-in-eight
-  rate, its day-of-month seed, and the clock re-seed that follows it. That
-  note's earlier "grass/path texturing", "six-in-seven" and
-  "save/restore the PRNG" readings are superseded.
+- Source provenance: derived from private analysis notes
+  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` and
+  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
+  farmland/orchard blight, its resident-Shadowlord gate and its two call sites,
+  its two substitutions, its seven-in-eight rate, its day-of-month seed, and
+  the clock re-seed that follows it. That note's earlier "grass/path
+  texturing", "six-in-seven", "save/restore the PRNG" and
+  "runs once the player's actor slot has been assigned" readings are all
+  superseded; the gate is the resident-Shadowlord record of Section 13, not an
+  actor-slot sentinel, and the substitution is therefore a hideout-town blight
+  rather than a generic harvest.
 - The town-entry Shadowlord install — its hideout-slot match, its
   one-at-a-time reject, its actor-index choice, and its placement and schedule —
   `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md` (see that
@@ -774,7 +839,7 @@ The behaviour described above was derived by reading the function and format not
   regalia in, guards and creatures out), the two hard-wired removal writers, and
   the exhaustive accessor sweep showing the mask has no other owners.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/0x011E_npc_find_idle.md`.
-- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md`, `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
+- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md`, `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler note as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - The town Attack and Open handlers - `u5-decomp/functions/TOWN_OVL/0x09E6_town_attack_handler.md` and `u5-decomp/functions/TOWN_OVL/0x0B82_town_open_handler.md`.
 - The town alarm, pacify/fortify, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/0x085E_npc_set_state_fortified.md`, `u5-decomp/functions/TOWN_OVL/0x08D4_npc_set_state_pacified.md`, `u5-decomp/functions/TOWN_OVL/0x0958_npc_scatter.md`, `u5-decomp/functions/TOWN_OVL/0x09BC_npc_death_handler.md`, `u5-decomp/functions/TOWN_OVL/0x10DA_npc_print_killed.md`, `u5-decomp/functions/TOWN_OVL/0x10F2_npc_should_pacify.md`, `u5-decomp/functions/TOWN_OVL/0x1156_town_setup_post_npc.md`, `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`, and `u5-decomp/functions/TOWN_OVL/0x1352_town_post_action_cleanup.md`.
 - The Lord British castle chord handler - `u5-decomp/functions/TOWN_OVL/0x0E34_lb_audience_chord.md`.

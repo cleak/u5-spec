@@ -653,8 +653,10 @@ conversation costs the party anything.
 
 While Faulinei is resident there, every completed conversation in that
 settlement ends with a theft. The cleanup prints the stolen-goods line, plays a
-fixed descending PC-speaker glissando, and then removes exactly one thing from
-the party, taking the first case that applies:
+fixed descending PC-speaker glissando, re-seeds the random generator from the
+host clock (this is one of the re-seed sites listed in `systems/prng.md`
+section 3, so what is taken is not reproducible from game state), and then
+removes exactly one thing from the party, taking the first case that applies:
 
 1. If the party carries any keys, gems, or torches, one of those three counters
    is chosen at random — re-drawing until it lands on a counter the party

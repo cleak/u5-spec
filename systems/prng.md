@@ -66,20 +66,21 @@ Two consequences follow, and both are part of the contract:
   coarser than the hundredth-of-a-second field suggests.)
 
 **Play-time re-seeds.** Four further events re-assign the state during a
-session:
+session; the last of them seeds twice, in immediate succession:
 
 | Event | Seed source | Effect |
 |---|---|---|
 | An hour elapses while camping | Host clock | Fresh entropy immediately before the camp-event roll. |
 | A conversation's script runner reaches its coin-flip step | Host clock | Fresh entropy immediately before that coin flip. |
-| A conversation ends (teardown) | Host clock | Fresh entropy. |
-| A town map is entered | Calendar day-of-month | Deterministic; makes the town's crop and orchard scatter identical for every entry on the same in-game day. Immediately afterwards the same entry pass re-seeds from the host clock, so the deterministic seed does not leak into later gameplay rolls. |
+| A conversation in the settlement where the Shadowlord of Falsehood is hiding reaches its theft step | Host clock | Fresh entropy immediately before the roll that chooses which item is stolen. This is that one Shadowlord's conversation effect, not a generic conversation teardown. |
+| A location that is currently hiding a Shadowlord is entered, or one of its floors is loaded | Calendar day-of-month | Deterministic; it makes that location's farmland and orchard blight a pure function of the day byte and the floor content, so the pattern is identical for every load of that floor on the same in-game day. It does not fire on entry to an ordinary location: the pass that seeds it returns immediately when no Shadowlord is resident. Immediately after the blight walk the same pass re-seeds from the host clock, so the deterministic seed does not leak into later gameplay rolls. |
 
-Note that the town-entry pair is a deterministic seed followed by a clock
-re-seed, **not** a save-and-restore of the previous stream position. The state
-in effect before town entry is lost.
+Note that the pair around the blight walk is a deterministic seed followed by a
+clock re-seed, **not** a save-and-restore of the previous stream position. The
+state in effect before the walk is lost. `systems/town-mode.md` section 3 owns
+the blight's gate and call sites.
 
-**Determinism contract.** Because three ordinary gameplay events re-seed from
+**Determinism contract.** Because ordinary gameplay events re-seed from
 the host clock, the roll stream is not reproducible from game state alone. The
 state word is not part of the saved game, and even if it were, re-seeding would
 destroy reproducibility at the next camp hour or conversation. An
@@ -129,8 +130,8 @@ address tables.
   separate, never-seeded audio jitter state.
 - Source provenance: derived from private analysis note
   `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
-  deterministic day-of-month seed at town entry and the clock re-seed that
-  follows it.
+  deterministic day-of-month seed taken by the farmland blight pass, its
+  resident-Shadowlord gate, and the clock re-seed that follows it.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - Earlier engine-wide call-site identification for the routine historically named `make_tag` -- `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.

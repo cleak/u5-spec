@@ -42,7 +42,7 @@ clamping to Calm or another valid direction.
 The idle redraw tick includes a random wind selector. This is not a spell cast,
 does not consume a turn by itself, and does not run from the time cleanup. It is
 part of the redraw-side subsystem bundle that also handles active-object visual
-animation, lighting refresh, and moongate-frame painting.
+animation, lighting refresh, and the night-time light beacon's beam stamps.
 
 On an eligible redraw tick, the selector first rolls in `0..63`. Any non-zero
 roll does nothing. On a zero roll, it chooses a candidate wind in `0..4`.
@@ -200,7 +200,7 @@ Weather presentation is deliberately small:
 - Idle redraws can occasionally choose and display a new wind state.
 - Wind gates hoisted-sail player ship movement.
 - Wind does gate non-player water-creature / pirate active-object cadence.
-- Wind does not darken the map, spawn clouds, change the dawn/dusk curve, or alter moongate daylight gating.
+- Wind does not darken the map, spawn clouds, change the dawn/dusk curve, alter the night-time beacon's light gate, or affect moongate placement.
 - Wind does not affect dungeon lighting.
 - Wind does not currently have a confirmed direct effect on random encounter probability.
 - Wind does not change town NPC schedules.

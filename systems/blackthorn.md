@@ -54,9 +54,11 @@ fight, and that loop's next capability check reports the wipe.
 
 ## 3. Audience Setup
 
-The audience path starts from a captured-party state. It counts the active
-party members that are still eligible for the challenge, records the target
-party slot, and then switches into a cutscene presentation.
+The audience path starts from the arrest outcome of Section 2 — the party is
+seized by guards inside Lord Blackthorn's Castle, never as the result of losing
+a fight. It counts the active party members that are still eligible for the
+challenge, records the target party slot, and then switches into a cutscene
+presentation.
 
 The setup contract is:
 
@@ -260,10 +262,10 @@ moonstone requirement, no location test, and no per-mode variation: town,
 overworld, and dungeon mode all use the identical check and the identical
 result mapping, and combat reaches it only indirectly, when the exploration
 loop that framed the fight runs its next check. The mode-local work around the
-check is bookkeeping rather than predicate — the overworld, when the party is
-above ground, asks for the surface map disc and runs its active-object
-maintenance pass first, and the dungeon runs its own view-helper pass first. An
-empty roster also falls into the third case.
+check is bookkeeping rather than predicate — the overworld asks for the surface
+map disc first when the party is above ground, and runs its active-object
+maintenance pass on either surface, while the dungeon runs its own view-helper
+pass first. An empty roster also falls into the third case.
 
 Because this cinematic restores the party and returns it to play, an ordinary
 party wipe in Ultima V is not a terminal game-over: the run continues from Lord
@@ -381,10 +383,15 @@ rescue trigger.
 
 ## 9. Relationship To Other Systems
 
-- **Combat.** `systems/combat.md` owns ordinary Blackthorn class behavior and
-  the defeat result that some callers can translate into capture.
-- **Encounters.** `systems/encounters.md` owns scripted-fight framing before a
-  Blackthorn-specific caller chooses capture, cancellation, or ordinary combat.
+- **Combat.** `systems/combat.md` owns ordinary Blackthorn monster-class
+  behavior and the combat defeat result. That result never enters the audience
+  of Sections 2 and 3: a wipe returns to the exploration loop that framed the
+  fight, and only that loop's next party-capability check can reach the
+  rescue/refuge cinematic of Section 7.
+- **Encounters.** `systems/encounters.md` owns scripted-fight framing,
+  including the scripted Blackthorn duel. No encounter or fight outcome selects
+  this overlay's audience; the audience has exactly one entry, the town arrest
+  path of Section 2.
 - **Conversation.** `systems/conversation.md` owns normal NPC Talk and `.TLK`
   execution, and owns the reserved dialog index that routes to the guard
   demands in Section 7a. The Blackthorn challenge in Sections 4 and 5 is a

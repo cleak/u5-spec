@@ -177,6 +177,10 @@ gold amount, is lost per conversation.
 
 The same resident-Shadowlord value gates the shop surcharge, where any value
 other than Falsehood likewise suppresses the extra post-transaction gold debit.
+Any non-empty value — not just Falsehood — also gates the farmland and orchard
+blight applied to the hosting town's floor buffer (`systems/town-mode.md`
+Section 3) and the town-wide NPC state sweep selected by which Shadowlord is
+hosted (`systems/town-mode.md` Section 13).
 It is per-visit mode state, not a durable quest flag; keep the surcharge
 behaviour in `systems/shops.md` and the presentation in
 `systems/conversation.md`.

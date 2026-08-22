@@ -351,6 +351,11 @@ Several user-visible behaviours consume the same state:
   this: a party entering on row `4` skips the hideout comparison entirely, so
   no Shadowlord is installed and the accompanying NPC sweep does not run. See
   `systems/town-mode.md` Section 13.
+- The same recorded host drives a terrain effect in the hosting town: most of
+  its standing crops and fruit trees are rewritten to a plowed patch and a
+  hollow stump when the floor is brought up, so a hideout town's farmland looks
+  blighted while its Shadowlord lives. No other town is touched. See
+  `systems/town-mode.md` Section 3.
 - Entering Stonegate reads the same three slots as presentation state: every
   non-vanquished slot contributes that Shadowlord's "air of" atmospheric line,
   while vanquished slots are silent.

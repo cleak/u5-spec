@@ -126,7 +126,7 @@ and the seed half to `UNDER.OOL`; it does not rotate or normalize the halves.
 
 ### 5.1 Trigger
 
-The save flow is invoked when the player presses `Q` for Quit-and-Save while a non-combat game mode is active. The keystroke is routed by the gameplay mode loops to the resident command dispatcher, which loads the save-handler overlay (the same overlay that holds several spell effects) and calls into its save entry point. Combat has its own `Q` branch; it abandons the fight through the combat defeat path and does not enter this save flow.
+The save flow is invoked when the player presses `Q` for Quit-and-Save while a non-combat game mode is active. The keystroke is routed by the gameplay mode loops to the resident command dispatcher, which loads the save-handler overlay (the same overlay that holds several spell effects) and calls into its save entry point. Combat has no route into this save flow: the combat parser refuses `Q` like the other verbs that mean nothing in a fight — it prints the verb label with a refusal tail and returns the player to the combat prompt at no turn cost — so the save handler is never reached from inside a fight. See `combat.md` Section 8.
 
 The save handler is a callable function, distinct from the inline load flow. The asymmetry reflects the boot architecture: at the title screen, the intro overlay is already resident and embedding the load is cheap; at gameplay time, the save handler lives in a rotating overlay slot and must be brought into memory on demand.
 
@@ -249,7 +249,7 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
   rebuilt from `DUNGEON.DAT`; save/load restores room completion by replaying
   the cleared-room demotion pass, not by saving patched dungeon geometry.
 
-- **Combat.** Combat state is *not* in the save image. Combat has its own Q/Quit parser branch: it abandons the current fight through the combat defeat path and is separate from the resident save writer. An implementation that wants to allow mid-combat saves must extend the save format.
+- **Combat.** Combat state is *not* in the save image, and there is no way to reach the save writer while a fight is running. The combat parser has its own `Q` branch, but that branch is a plain refusal: it prints the verb label with a refusal tail and re-prompts without ending the combatant's action. It neither saves nor ends the fight. An implementation that wants to allow mid-combat saves must both extend the save format and add a combat-side entry point that the original does not have.
 
 - **Chargen.** New games and U4 transfers both produce the first `SAVED.GAM` of a fresh playthrough. See `chargen.md`.
 

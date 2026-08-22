@@ -500,8 +500,10 @@ DATA.OVL also provides reusable runtime buffers:
   marker.
 - A player/avatar active-object mirror refreshed from scene, map-position,
   floor/plane, and avatar-tile state immediately before object compositing.
-- Scroll-origin, dirty/redraw, daylight, light-radius, torch, and spell-light
-  flags. The Search/Jimmy/Open/Get command family distinguishes at least two
+- Scroll-origin, dirty/redraw, daylight, effective-light-radius, torch-counter,
+  and spell-light-counter state. The torch and spell-light entries are
+  remaining-duration counters; only the effective-light value is a radius.
+  The Search/Jimmy/Open/Get command family distinguishes at least two
   redraw-hint roles: tile-map mutations that require the visible map to be
   refreshed, and inventory or party-state changes that require status refresh.
   The exact bit-level encoding is an implementation-compatibility detail, but
