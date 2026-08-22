@@ -412,8 +412,11 @@ offsets, raw dialogue text, or private note prose.
 Private analysis sources used:
 
 - `u5-decomp/formats/npc-tlk-pth.md` - `.NPC` block structure, `.TLK`
-  leading-pair/header structure, name-entry decoding rules, AI-byte
-  enumeration, type-byte sprite-class interpretation, and file counts.
+  header structure, name-entry decoding rules, AI-byte
+  enumeration, type-byte sprite-class interpretation, and file counts. That
+  note's leading-pair reading of the `.TLK` header is superseded by the
+  corrected contract in `formats/tlk.md` Section 6; the bindings in Section 3
+  above were re-derived against the corrected reading.
 - `u5-decomp/formats/maps.md` - scene-byte to storage-family/sub-map mapping
   and the Lord British / Blackthorn / Gorn roster peculiarities.
 - `u5-spec/catalogs/gazetteer.md` - public scene-name bindings for the roster

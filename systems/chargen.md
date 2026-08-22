@@ -424,7 +424,7 @@ The behaviour described here was derived from the private function and format no
   discipline — derived from
   `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - The intro menu key dispatch, the trampoline into the chargen routine on `C`, and the scene-byte handshake on return — derived from `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
-- The Transfer-from-Ultima-IV path's character-roster screen, disk-swap reads, and abort-versus-commit dispatch — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- The Transfer-from-Ultima-IV path's single-character comparison screen, disk-swap reads, and abort-versus-commit dispatch — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - The misclassification correction that placed chargen in the proportional-font overlay rather than the spell-casting overlay — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
 - The in-game save/quit writer (referenced for context; the chargen writer is a separate path) — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`.
 - The `QUESTION.DAT` file's thirty-record layout and the markup conventions shared with the intro narrative — derived from `u5-decomp/formats/data-tables.md`.

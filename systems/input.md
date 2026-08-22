@@ -316,7 +316,7 @@ The internals of the tick belong in a separate spec. From the input system's per
   remains responsive.
 - The wait-for-input routine, on entry, also sets a one-shot "first-tick after mode entry" hint when it detects entry to town mode; the world tick uses this to do a fuller initial re-paint. The hint write is the only piece of world-tick state the input system touches directly.
 
-A modern implementation can time-slice (cap the tick to one per render frame, or once every fixed number of milliseconds) without losing fidelity — the game does not depend on precise wall-clock pacing of the idle redraw ticks, and the game clock is advanced only by committed-turn cleanup.
+A modern implementation can time-slice (cap the tick to one per render frame, or once every fixed number of milliseconds) without losing fidelity — the game does not depend on precise wall-clock pacing of the idle redraw ticks, and the game clock is advanced only by the per-turn cleanup that the mode loops call, never by the idle tick. Do not read that as "the clock advances only on a consumed turn": the overworld, town, and combat loops gate their cleanup call on a consumed turn, but the dungeon loop's call is ungated and costs a minute every iteration (`systems/main-loop.md` Section 6, `systems/dungeon-mode.md` Section 15). An earlier revision of this paragraph said the clock is advanced only by committed-turn cleanup; that framing is withdrawn.
 
 ## 13. Input Boundaries, Variations, And Remaining Entry-Stamp Work
 

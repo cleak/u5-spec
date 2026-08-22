@@ -75,7 +75,7 @@ Each thirty-two-byte record is laid out as follows.
 | `0x10`       | 2 bytes  | Hit points current. Little-endian word.                                                                  |
 | `0x12`       | 2 bytes  | Hit points maximum. Little-endian word.                                                                  |
 | `0x14`       | 2 bytes  | Experience points. Little-endian word.                                                                   |
-| `0x16`       | 1 byte   | Level. `0xFF` on unset / not yet computed.                                                               |
+| `0x16`       | 1 byte   | Level. Every shipped seed record carries a real level in the range 1..5, and across all sixteen seeds the value is maximum hit points divided by thirty. Earlier wording calling `0xFF` an unset / not-yet-computed level here is **withdrawn**: no shipped record carries `0xFF` in this byte, and the `0xFF` unset sentinel of a seed record sits in the per-character month counter at `+0x17`. |
 | `0x17`       | 1 byte   | Per-character month counter. The time system increments every character-record slot at the 28-day month rollover, capped at 25. The traced gameplay consumer is inn billing for lodged guest records; no separate active-party consumer is identified. |
 | `0x18`       | 1 byte   | Party-member combat defense byte used by the combat damage path's random defense subtraction. Factory-seed records carry value `7`; no traced writer currently recomputes this byte from readied equipment. |
 | `0x19`       | 6 bytes  | Equipment slot bytes: helm, body armour, weapon hand, shield/off hand, ring, and amulet/neck item. Each non-empty slot byte is an equipment item id (see Section 7). The live empty-slot sentinel is `0xFF`. |
@@ -422,7 +422,7 @@ The first record is the Avatar:
 - Byte `09`: gender; byte `0A`: class; byte `0B`: status.
 - Bytes `0C..0F`: STR, DEX, INT, and MP.
 - Bytes `10..15`: current HP, maximum HP, and experience.
-- Byte `16`: level or unset-level sentinel.
+- Byte `16`: level.
 - Byte `17`: month counter / inn stay counter.
 - Byte `18`: cached party combat-defense byte.
 - Bytes `19..1E`: equipment fields.
@@ -584,7 +584,7 @@ The byte-level layout described here was derived from the project's private save
   snapshot and display path:
   `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`
   and `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
-- The save handler's open-write-close sequence, byte-image flush to `SAVED.GAM`, per-plane `.OOL` staging reads, unconditional mirror writes, entry-mode-gated second underworld mirror flush, and canonical `SAVED.OOL` write -- `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`.
+- The save handler's open-write-close sequence, byte-image flush to `SAVED.GAM`, the absence of any per-plane `.OOL` read on the save path, unconditional mirror writes, entry-mode-gated second underworld mirror flush, and canonical `SAVED.OOL` write -- `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`.
 - The load handler's byte-image read of `SAVED.GAM` into the same region, the empty-save guard, the `SAVED.OOL` read, and the mirror-write of `BRIT.OOL` and `UNDER.OOL` — `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - The chargen flow's per-record write to roster slot zero (name, gender, STR, DEX, INT, and MP) and preservation of seed class/status/HP/experience fields — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 - The equipment slot order, empty sentinel, carried-equipment counter band, and

@@ -4,7 +4,7 @@
 
 Ultima V persists the entire run-time game state by writing one contiguous slab of memory directly to disk. The save is not a structured serialisation — no record header, no field-by-field marshalling, no version stamp. It is a byte-image dump of a fixed-length region of the engine's data segment, paired with a smaller companion buffer holding the per-map active-object table. Loading is the inverse: read the same bytes back into the same memory region and let the running engine pick up where it left off.
 
-Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` so older plane-entry paths can read the per-plane files directly. The save path stages data through the per-plane files, writes both mirrors, performs a second underworld-mirror flush unless it entered with disk-prompt mode already set to mode 1, and then writes the canonical files. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
+Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` so older plane-entry paths can read the per-plane files directly. The save path writes both mirrors from the resident staging halves rather than reading the per-plane files back in, performs a second underworld-mirror flush unless it entered with disk-prompt mode already set to mode 1, and then writes the canonical files. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
 
 The save flow is gated by non-combat Quit-and-Save (`Q`) and returns to the caller after the save prompt completes; it is not the DOS-exit path by itself. The load flow is the `J` "Journey Onward" branch of the title-menu dispatcher. Transfer uses the same disk-I/O layer but is documented as a fresh-save producer rather than a load variant.
 
@@ -68,7 +68,7 @@ The mnemonic "Object Overlay Layer" is a working guess; the actual extension exp
 
 ### 3.2 Why three files for two halves
 
-Naively, the engine could carry only `SAVED.OOL` and never touch `BRIT.OOL` / `UNDER.OOL` after the install. Empirically, the load path refreshes both per-plane files from `SAVED.OOL`: the surface half is written to `BRIT.OOL`, the underworld half is written to `UNDER.OOL`, and the underworld half may be written again after the underworld disk-swap probe. The save path also refreshes both mirror files: it reads the per-plane files into staging, writes both mirrors from that staging, writes the underworld mirror a second time unless the save handler's entry disk-prompt mode was already mode 1, and writes the canonical `SAVED.OOL`.
+Naively, the engine could carry only `SAVED.OOL` and never touch `BRIT.OOL` / `UNDER.OOL` after the install. Empirically, the load path refreshes both per-plane files from `SAVED.OOL`: the surface half is written to `BRIT.OOL`, the underworld half is written to `UNDER.OOL`, and the underworld half may be written again after the underworld disk-swap probe. The save path also refreshes both mirror files: it writes both mirrors from the resident staging halves - it performs no per-plane read of its own - writes the underworld mirror a second time unless the save handler's entry disk-prompt mode was already mode 1, and writes the canonical `SAVED.OOL`.
 
 The file split is not just archival. Traced overworld helper paths choose
 `BRIT.OOL` or `UNDER.OOL` from the current world-plane byte and hand that
@@ -138,7 +138,7 @@ The save handler is a callable function, distinct from the inline load flow. The
 
 3. **Open the save channel.** The handler asks the I/O layer to set up the save-disk channel. On a system that requires a disk swap to the player disk, this is where the swap prompt fires.
 
-4. **Refresh object-overlay staging buffers.** The handler reads the underworld and surface per-plane `.OOL` files into the two staging halves that will become the canonical `SAVED.OOL` payload.
+4. **Object-overlay staging halves are already live.** The two staging halves that become the canonical `SAVED.OOL` payload are the resident surface and underworld active-object buffers the running game has been mutating all along; the handler performs no `.OOL` read of its own before writing. An earlier revision of this step said the handler reads the per-plane `.OOL` files back into the staging halves first; that read does not exist in the traced save handler and the claim is withdrawn.
 
 5. **Refresh both per-plane mirrors.** The underworld staging half is written to `UNDER.OOL` first, then the surface staging half is written to `BRIT.OOL`. (That is the traced order; it matters only for a reader reconstructing the write sequence, since both writes are unconditional.) The handler then checks the disk-prompt mode it had on entry. If that entry mode was not mode 1, it writes the same underworld staging half to `UNDER.OOL` a second time as a defensive re-flush. If the entry mode was already mode 1, this second underworld write is skipped.
 
@@ -178,8 +178,10 @@ leading transferable character, and then writes a new Ultima V save pair.
 
 The transfer flow loads the same fresh-game seed pair the questionnaire uses,
 `INIT.GAM` / `INIT.OOL`,
-paints the character-roster preview screen, and accepts or aborts the player's
-confirmation. Once committed, the transferred Avatar's fields overwrite roster
+paints the two-panel single-character comparison preview screen, and walks the
+player through its fixed confirmation stages. The only abort in the path is at
+drive selection, before any source data has been read; the confirmation stages
+have no cancel key (`u4-transfer.md` sections 6.4, 6.5 and 8). Once committed, the transferred Avatar's fields overwrite roster
 slot zero in the seed image and the result is written as `SAVED.GAM` plus
 `SAVED.OOL`. From that point onward, the player's progress is saved and loaded
 through the standard `J` / `Q` paths.
@@ -192,7 +194,7 @@ first working `SAVED.GAM` / `SAVED.OOL` pair.
 
 ## 7. The I/O layer
 
-The save and load paths sit on top of two small disk-I/O wrappers in the resident core. Both wrappers are also used by other systems — the bitmap loader for the endgame cinematic, the character-roster preview for the U4 transfer, and the look-and-talk overlays for in-mission `.DAT` reads.
+The save and load paths sit on top of two small disk-I/O wrappers in the resident core. Both wrappers are also used by other systems — the bitmap loader for the endgame cinematic, the U4 transfer's character comparison preview, and the look-and-talk overlays for in-mission `.DAT` reads.
 
 ### 7.1 The read wrapper
 
@@ -258,7 +260,7 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
   that view; the marker byte, month/stay counter, and copied character payload
   round-trip as ordinary save-image bytes.
 
-- **Bitmap and resource loading.** The same I/O layer is used by the endgame cinematic loader and the character-roster preview. The disk-prompt and retry contracts apply uniformly across all reads.
+- **Bitmap and resource loading.** The same I/O layer is used by the endgame cinematic loader and the U4 transfer's character comparison preview. The disk-prompt and retry contracts apply uniformly across all reads.
 
 ## 11. Compatibility Boundaries And Extensions
 
@@ -293,7 +295,7 @@ Naming note: the older retry-wrapper note still carries a loader-style working
 name, but the later `read_file_seek` analysis establishes that the inner path is
 generic DOS file I/O, not an LZW decompressor.
 
-- Save handler — confirmation prompt, status messages, per-plane `.OOL` staging reads, unconditional mirror writes, entry-mode-gated second underworld mirror flush, canonical `SAVED.GAM` / `SAVED.OOL` writes, and disk-prompt mode branching — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`, with helper roles cross-checked against `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+- Save handler — confirmation prompt, status messages, the absence of any per-plane `.OOL` read on the save path, unconditional mirror writes, entry-mode-gated second underworld mirror flush, canonical `SAVED.GAM` / `SAVED.OOL` writes, and disk-prompt mode branching — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`, with helper roles cross-checked against `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 
 - Load flow — byte-image read, empty-save guard, dual-half `SAVED.OOL` read, unconditional mirror-write of both per-plane seed files, underworld disk-swap loop, and final commit — derived from `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - Underworld-disk presence test — open-then-close existence semantics, present/absent result, error-cell update, and routing of a failed test through the critical-error/disk-prompt dispatch — derived from `u5-decomp/functions/ULTIMA_EXE/0x1674_probe_file_present.md`.
@@ -303,7 +305,7 @@ generic DOS file I/O, not an LZW decompressor.
   `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md`, and
   `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md`.
 
-- U4-Transfer companion path and character-roster preview — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- U4-Transfer companion path and character comparison preview — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 
 - Read-and-write retry wrapper, disk-prompt contract, wait-cursor phase signalling, and write-side critical-error handler ownership — derived from `u5-decomp/functions/ULTIMA_EXE/0x82DE_load_lzw_image.md`, `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`, and `u5-decomp/notes/system-trace_save-load.md`.
 

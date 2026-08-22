@@ -803,9 +803,20 @@ trap-effect resolver remain separate systems.
 
 **Pit, secret-passage, and bomb traps.** The `0x6?` family is a trap family,
 not a uniform Z-transition class. Exact byte `0x60` is a plain pit for
-inspection, but K-Klimb treats it as a direct fall/exit cell: it bypasses the
-ordinary ladder apply path and invokes the dungeon surface-reset helper
-described in Section 13.
+inspection. Under K-Klimb the pit family behaves as an ordinary climb-*down*
+feature: the dispatcher masks the underfoot cell to its high nibble before any
+comparison, so the whole `0x6?` family - not just the exact byte `0x60`, and
+including the marked/fired variants - enables the down arm. That arm calls the
+same level-step helper a down ladder uses, so the party simply descends one
+level; the shared exit contract of Section 13.2 runs only when that helper
+reports a level edge, i.e. when the pit is on the deepest level. There is no
+pit-specific fall-to-surface branch. An earlier revision of this section
+claimed that exact `0x60` bypassed the ordinary ladder apply path and invoked
+the surface-reset helper directly; that claim is withdrawn. It is contradicted
+by shipped data as well as by the traced control flow: Destard level zero
+carries `0x60` at `(7, 3)` and `(1, 7)` and Deceit level zero at `(1, 3)`, and
+klimbing there descends to level one rather than ejecting the party to
+Britannia.
 
 Exact bytes `0x61` and `0x69` are automatic fall traps. Stepping on either
 prints the pit/fall messages, clears the fired marker bits on the departure
@@ -864,8 +875,10 @@ revision of this paragraph said the apply path "rejects attempts to move above
 level zero or below level seven" and that ordinary ladders publish no
 deepest-level handoff; both halves are withdrawn — they contradict Section 1,
 Section 13.2, `systems/doors-and-z-transitions.md` Sections 9 and 12, and
-`catalogs/gazetteer.md` Section 6.1. Exact pit byte `0x60` is a *further*
-non-ladder K-command route into the same exit contract, not the only one.
+`catalogs/gazetteer.md` Section 6.1. The pit family `0x6?` is a *further*
+non-ladder K-command route down, and it reaches the exit contract the same
+indirect way a down ladder does - only when the level-step helper reports the
+deepest-level edge.
 
 **Door-like dungeon classes.** High nibbles `0xA`, `0xE`, and `0xF` all have door-like presentation in parts of the dungeon renderer and minimap, but they are not interchangeable storage states. `0xF?` is the stock room-trigger family, with the low nibble selecting the `DUNGEON.CBT` room id. `0xA?` is the runtime room-helper / cleared-room state produced both after room combat and by the save-image room-clear demotion pass on reload. `0xE?` is a separate door-presentation variant used by other runtime wall/search paths; it is not produced by cleared-room replay.
 
@@ -1291,8 +1304,11 @@ as an open question; both readings are withdrawn.
 
 Two further mechanical notes on the exit path:
 
-- The exact pit byte `0x60` is the special non-ladder K-Klimb case: it bypasses
-  the ordinary level-step helper and invokes the exit contract directly.
+- The pit family `0x6?` is a non-ladder K-Klimb *descent* case, not a shortcut
+  into this contract. It runs the ordinary level-step helper exactly as a down
+  ladder does, so it reaches the exit contract only from the deepest level. An
+  earlier revision said exact byte `0x60` bypassed the level-step helper and
+  invoked the exit contract directly; that is withdrawn.
 - The **pit-chain off-bottom path** is genuinely separate. When a chain of
   automatic fall traps increments the level past the deepest one, the scene byte
   is cleared with the off-bottom level and the party's current X/Y still in

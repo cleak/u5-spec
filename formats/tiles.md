@@ -67,7 +67,7 @@ After the LZW envelope is stripped, every file's body is one of three small layo
 
 The flat atlas is the simplest layout: the body is exactly five hundred twelve back-to-back tiles, each tile sixteen pixels wide by sixteen pixels tall, no header, no directory, no padding between tiles. The first tile occupies bytes zero through tile-stride minus one of the body; the second tile occupies the next tile-stride bytes; and so on through tile five hundred eleven. The tile stride is one hundred twenty-eight bytes for `.16` (Section 3) and sixty-four bytes for `.4` (Section 4).
 
-A decoder enumerates tiles by index by simply multiplying the index by the tile stride. There is no per-tile metadata — no width, no height, no animation flag, no class hint. The renderer applies its own tile-class table (held in the resident data slab) when it needs to know whether a given tile index represents a wall, a floor, an animated water surface, or a pickup item.
+A decoder enumerates tiles by index by simply multiplying the index by the tile stride. There is no per-tile metadata — no width, no height, no animation flag, no class hint. The renderer applies its own tile-class table (held in the resident data slab) when it needs to know whether a given tile index represents a wall, a floor, a water surface, or a pickup item.
 
 This layout is used by the world tile atlas only. Every other file uses one of the variable-shape directory layouts.
 

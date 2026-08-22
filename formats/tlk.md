@@ -318,7 +318,7 @@ The first two bytes of `TOWNE.TLK` are the count word `0x0030` (forty-eight). A 
 
 The next four bytes are the first header entry: the NPC id `0x0001` followed by that NPC's blob offset. Subsequent four-byte entries cover NPC ids two, three, and so on, sorted ascending, up to the last NPC at id `0x0030` (forty-eight). The header ends at byte one hundred ninety-four (`4 × 48 + 2`), which is also the value in the first entry's offset field.
 
-After the header — at the offset given by the first entry — the first NPC's blob begins. The first byte is an obfuscated text byte encoding the first letter of the NPC's name. For "Mariah", the first byte is `0xCD` (obfuscated `'M'`); for "Iolo", `0xC9`. Subsequent bytes encode the rest of the name, terminated by NUL.
+After the header — at the offset given by the first entry — the first NPC's blob begins. The first byte is an obfuscated text byte encoding the first letter of the NPC's name. `TOWNE.TLK`'s id-1 blob is "Zachariah", so its first byte is `0xDA` (obfuscated `'Z'`); `KEEP.TLK`'s "Mariah" blob starts with `0xCD` (obfuscated `'M'`). Subsequent bytes encode the rest of the name, terminated by NUL.
 
 After the Name entry's NUL comes Description, then Greeting, then Job, then Bye, each NUL-terminated. Greetings typically carry control bytes such as PRINT-AVATAR-NAME or END-STREAM. After the five leading entries comes the keyword body: a keyword string such as `JOIN`, a NUL, the response stream, an END-OF-RESPONSE marker, and so on for additional pairs.
 

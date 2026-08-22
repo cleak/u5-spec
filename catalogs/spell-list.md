@@ -333,11 +333,13 @@ charge or mana.
   is no caster-centred ring and no jitter retry. Every actor placed by Conjure or
   Swarm is stamped with the controlled/charmed descriptor bit `0x01`, and Summon
   stamps it only when its caster self-check succeeds, but all three place through
-  the ordinary monster path, so the creature is a monster-side, AI-driven,
-  hostile actor. The bit is not an allegiance flag and
-  does not hand the creature to the player; it only redirects that actor's
-  attack action into the fixed magic-strike branch, which additionally requires
-  an adjacent target.
+  the ordinary monster path, so the creature is a monster-side, AI-driven
+  actor. The bit does not hand the creature to the player, but it is the team
+  toggle the combat slot-to-group helper reads, so a stamped creature groups
+  with the party rather than with the monsters for the same-faction filter
+  (`systems/combat.md` Section 6.1a); it also redirects that actor's attack
+  action into the fixed magic-strike branch, which additionally requires an
+  adjacent target.
   Clone duplicates an accepted creature into
   paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor

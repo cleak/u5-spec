@@ -427,8 +427,12 @@ boundaries that are already fixed for engine behavior.
 
 - **Time during prompts and idle waits.** Prompt waits and open command-cursor
   waits do not advance in-world time by themselves. Idle redraw work is visual
-  and animation-facing only; the clock advances only when an action commits and
-  a mode loop or time-elapsing command calls the per-turn cleanup.
+  and animation-facing only; the clock advances only when a mode loop or a
+  time-elapsing command calls the per-turn cleanup. In the overworld, town, and
+  combat loops that call follows a committed action; in the dungeon loop it is
+  ungated and happens once per iteration regardless of whether the previous
+  command consumed a turn (Section 3). Earlier wording here that made the
+  advance conditional on an action committing in every mode is withdrawn.
 
 - **Year overflow.** The year is a 16-bit word. The original game makes no
   provision for multi-millennial overflow, so this is not a normal play

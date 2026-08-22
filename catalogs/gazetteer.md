@@ -179,9 +179,9 @@ The service flow is documented in `systems/shops.md`.
 Dwelling rows use `DWELLING:n` keys and load `DWELLING.DAT`,
 `DWELLING.NPC`, and `DWELLING.TLK`. Dwellings are small town-mode locations:
 homes, isolated sites, villages, or special residences. Current NPC roster rows
-identify several dwelling-associated named inhabitants, including Jennifer,
-Jotham, Windmire, Emilly, Anthony, Charlotte, Smith, Lord Kenneth, David,
-Gregory, Grendel, Jacqueline, Sutek, and Sin'Vraal.
+identify the fifteen dwelling-associated named inhabitants: Jennifer, Jotham,
+Windmire, Emilly, Anthony, Charlotte, Smith, Lord Kenneth, Sir Arbuthnot,
+David, Gregory, Grendel, Jacqueline, Sutek, and Sin'Vraal.
 
 The first five dwelling rows have resident names; the last three rows have
 blank resident name strings and should be displayed through their stable keys
