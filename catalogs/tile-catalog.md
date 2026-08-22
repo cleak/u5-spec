@@ -669,13 +669,13 @@ Some class-specific encodings layer on top:
 
 The tile sprite sheet ships in two parallel files — `TILES.16` for sixteen-color EGA and `TILES.4` for four-color CGA — each holding the same five hundred and twelve sprites at the appropriate depth. Both files are LZW-wrapped; after decompression each is a flat array of sprite bytes with no per-tile header.
 
-The EGA file decompresses to exactly sixty-five thousand five hundred and thirty-six bytes — five hundred and twelve sprites at one hundred and twenty-eight bytes each. Each sprite is sixteen rows of eight bytes; each byte holds two pixels high-nibble first; each four-bit value indexes the standard sixteen-entry IBM EGA hardware palette.
+The EGA file decompresses to exactly sixty-five thousand five hundred and thirty-six bytes — five hundred and twelve sprites at one hundred and twenty-eight bytes each. Each sprite is sixteen rows of eight bytes; each byte holds two pixels high-nibble first; each four-bit value indexes the sixteen-entry palette the display driver installs at mode setup — the stock set for the mode, with index six substituted to dark yellow (`formats/tiles.md` section 7).
 
-The CGA file decompresses to thirty-two thousand seven hundred and sixty-eight bytes — five hundred and twelve sprites at sixty-four bytes each. Each sprite is sixteen rows of four bytes; each byte holds four pixels MSB-first; each two-bit value indexes one of the IBM CGA four-color sub-palettes (the executable selects the palette per scene).
+The CGA file decompresses to thirty-two thousand seven hundred and sixty-eight bytes — five hundred and twelve sprites at sixty-four bytes each. Each sprite is sixteen rows of four bytes; each byte holds four pixels MSB-first; each two-bit value indexes the four-colour CGA sub-palette the CGA driver fixes at mode setup — black, cyan, magenta, white at low intensity. That choice is made once and never varies by scene; see `formats/tiles.md` section 7.
 
 To address a tile by id, the renderer multiplies the id by the per-tile byte size. There are no offsets, no inner directory, no per-tile headers — tile id alone is the file offset divided by the tile byte size. This is the simplest of the LZW-wrapped graphics families.
 
-Palettes are not stored in the file. EGA uses the standard IBM EGA hardware palette; CGA is selected at scene-init time. The driver overlays (`EGA.DRV`, `CGA.DRV`, `T1K.DRV`, `HER.DRV`) handle palette and blit.
+Palettes are not stored in the file. The sixteen-entry set for the EGA-class path lives in the resident screen descriptor and is loaded into the adapter once at mode setup; the four-entry CGA set is fixed at mode setup as well. Neither changes at scene-init time or at any other point in the run. The driver overlays (`EGA.DRV`, `CGA.DRV`, `T1K.DRV`, `HER.DRV`) handle palette and blit.
 
 The graphics file, the look-at table, and the resident terrain-query tables are
 the three siblings that together specify the base static-tile contract. The

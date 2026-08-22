@@ -188,11 +188,24 @@ the driver produces into a visible colour for its output target.
 ### 5.2 Default palette
 
 For the v1 baseline, the palette loaded during mode setup is the
-sixteen-entry CGA-compatible default that ships in the resident image. This
-is the palette that title art, world tiles, text glyphs, and most cutscenes
-draw against. Scene-specific palette changes are not part of the standard
-draw path; they are confined to the intro and to display-effect entries that
-mutate the loaded asset data rather than the palette itself.
+sixteen-entry table that ships in the resident image. It is the stock set for
+the mode in fifteen of its sixteen slots; the one deviation is index six,
+which the shipped table sets to dark yellow rather than the stock brown
+(`formats/tiles.md` section 7). This is the palette that title art, world
+tiles, text glyphs, and every cutscene draw against.
+
+**Nothing reprograms the palette after mode setup.** The palette-register
+load happens once, inside the mode-set entry, and no other entry in any of the
+four drivers and no code path in the resident image or in any overlay — the
+intro included — issues a further palette request or writes palette hardware
+directly. An earlier revision of this section said scene-specific palette
+changes were "confined to the intro"; that is withdrawn, because the intro
+makes none either. Apparent recolouring in the shipped presentation is always
+one of two other things: a draw performed under a restricted plane write mask,
+so the pixels land at a different index (`systems/intro.md` section 3), or a
+display-effect entry that mutates the *loaded asset data* — the red/green
+plane-swap mode of `display-driver-abi.md` section 10 — rather than the
+palette.
 
 A compatible engine may either reproduce the same sixteen entries verbatim
 for exact visual parity, or remap them to a representation that matches its
