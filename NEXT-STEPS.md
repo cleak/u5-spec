@@ -1626,6 +1626,11 @@ obstacles. The spec also now states the exact `.NPC` roster selector formula:
 `(scene - 1) >> 3` chooses the file family and `(scene - 1) & 7` chooses the
 sub-map, while gameplay keeps the original one-based scene id.
 
+**Superseded 2026-08-22:** "block/floor stride" below refers to the withdrawn
+per-location block-stride model. A class file is a flat sixteen-page array and
+the entry page comes from the per-scene base-page table published in
+`formats/location-dat.md` Section 4.1; it is not twice the sub-map index.
+
 **Current location DAT format-boundary cleanup:** 2026-05-13 -
 `formats/location-dat.md` now separates the fixed per-class location file
 layout from catalog, validation, and visual-parity work. File partitioning,
