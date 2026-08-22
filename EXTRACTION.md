@@ -4,7 +4,7 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-05-13.
+Last updated: 2026-08-22.
 
 ## Status Legend
 
@@ -26,13 +26,34 @@ and the primary asset/data formats needed by those systems.
 
 The public spec set currently contains:
 
-- 48 system specs in `systems/`.
+- 49 system specs in `systems/`.
 - 26 file-format specs in `formats/`.
-- 7 cross-cutting catalogs in `catalogs/`.
+- 9 cross-cutting catalogs in `catalogs/`.
 
 The specs are cleanroom prose. They may cite private analysis notes by path, but
 they must not include source code, assembly excerpts, copied decompiler output,
 or raw copyrighted data dumps.
+
+## Status Of The Engine Issue Queue
+
+As of 2026-08-22 the `cleak/u5-spec` issue queue is **empty**: all eighty-three
+issues filed by the clean engine are closed. Seventy-two of them were re-audited
+in a single pass that verified each thread's answer against the spec working
+tree and against the shipped binaries; twenty-four were confirmed already
+resolved and forty-eight were corrected, with the earlier wrong answers
+explicitly retracted in the thread. The remaining eleven (the intro, gameplay
+screen, floor-page, dungeon presentation, endgame and lighting issues raised
+from black-box runtime observation) were traced and published the same day.
+
+Two classes of error recurred often enough to be worth stating as process
+lessons for whoever works here next. First, several earlier answers were
+**anchored wrongly in the resident data image**, producing plausible tables that
+did not survive re-derivation; any table published from a byte walk should be
+cross-checked against an independent consumer of the same data. Second, a
+correction that lands in the normative doc is not finished: the same withdrawn
+wording usually survives in two or three sibling docs that were never opened.
+Grep the whole spec for the retracted phrasing before treating a correction as
+propagated.
 
 ## Known V1 Deferrals
 
