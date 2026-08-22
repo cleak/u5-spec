@@ -1249,10 +1249,11 @@ extraction marks the conversation runtime complete.
 
 **Current TALK NPC-1 sentinel cleanup:** 2026-05-12 -
 `systems/conversation.md`, `formats/tlk.md`, and `formats/npc.md` now specify
-the corrupted-data edge for dialog index `1`: shipped rosters never use it, but
-the runtime does not reject it. If a talkable NPC is forced to index `1`, the
-loader matches the leading sentinel id and aliases to the first real `.TLK`
-blob rather than using the index-zero no-dialogue stub.
+the corrupted-data edge for dialog index `1`. **Superseded 2026-08-22:** the
+"leading sentinel id" reading is withdrawn. A `.TLK` header is a two-byte count
+followed by that many id/offset entries with no sentinel row, and every id from
+one to the count addresses a real blob — so index `1` is an ordinary, occupied
+dialogue id rather than a corrupted-data edge. See `formats/tlk.md` Section 6.
 
 **Current TALK warning-presentation cleanup:** 2026-05-12 - conversation, quest-flags, and extraction now split the opening conversation preamble from exit cleanup: Talk entry prints the description lead-in before greeting and only then applies the opening stolen-action warning check, while final cleanup's zero-sentinel stolen-action presentation is a fixed descending PC-speaker glissando followed by the already-specified one-signal reconciliation or random gold fallback. The warning presentation is now specified, and the shared sentinel producer path is covered by the town-entry active-slot audit.
 
