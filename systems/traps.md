@@ -137,13 +137,18 @@ families are specified in `systems/dungeon-mode.md` and
 `systems/doors-and-z-transitions.md`.
 
 **Town underfoot damage tiles.** Town mode's per-turn underfoot handler is not
-this resolver either. Its trapdoor/chair family and rune/lever family apply an
+this resolver either. Its trapdoor / loose-brick tile (`0x8C`) and its burning
+family (`0xBC` a fireplace and `0x8F` molten lava) each apply an
 independently rolled `1..8` hit points to every non-Dead party slot, and its
 poison-gas terrain case applies a Dexterity save that sets Poisoned status
 without dealing damage. All three run once per turn-consuming action while the
 party occupies the tile, not once per step, and none of them selects an effect
 family from this document. They are specified in `systems/town-mode.md`, with
-the tile identities catalogued in `catalogs/tile-catalog.md`.
+the tile identities catalogued in `catalogs/tile-catalog.md`. (Earlier revisions
+of this paragraph called these the "chair family" and the "rune/lever family".
+Both names are **withdrawn**: the shipped description table names `0x8C` a loose
+brick, the separate `0x90..0x93` chair family carries no step trigger at all, and
+`0xBC`/`0x8F` are the fireplace and molten lava of the burning family.)
 
 **Combat post-pass tile restoration.** The combat wrapper samples a resident
 tile-restoration flag as it restores the suspended world state. That

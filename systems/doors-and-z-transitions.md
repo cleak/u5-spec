@@ -12,7 +12,7 @@ Doors live in two parallel encodings — one for the surface and town tile maps,
 
 In the surface and town encoding, the tile codes J-Jimmy and O-Open care about fall into these groups:
 
-- **Closed door pair.** Each door orientation has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the plain-door pair ("a wooden door" / "a locked door") and
+- **Closed door pair.** Each door *family* has an adjacent code pair: the lower byte is closed-and-unlocked and the next is closed-and-locked, so a successful Jimmy simply decrements the byte one rung and reaches the openable form. `0xB8`/`0xB9` is the plain-door pair ("a wooden door" / "a locked door") and
   `0xBA`/`0xBB` the windowed pair ("a wooden door with a window" / "a locked
   door with a window"). **The two families are plain versus windowed, not two
   orientations**; an earlier revision of this document labelled them the
@@ -367,9 +367,12 @@ up-ladder or two-way cell, and also on a cell marked climbable-with-equipment
 while the party carries the climbing gear; down is offered on a down-ladder,
 two-way, or pit cell; when both are available the handler prompts for a
 direction. Up decrements the level Z, down increments it, and X and Y on the new
-level are the same as on the old. Exact pit byte `0x60` is the special
-non-ladder K path: it bypasses the ladder apply helper and invokes the dungeon
-surface-reset helper. Other cells return without a level change, and they
+level are the same as on the old. Because the handler compares only the high
+nibble, the whole pit family `0x6?` offers down, not just the exact byte
+`0x60`, and it descends through the same apply helper a down ladder uses; an
+earlier revision claimed exact `0x60` bypassed that helper and invoked the
+dungeon surface-reset helper directly, and that claim is withdrawn. Other cells
+return without a level change, and they
 consume no turn: the two "nothing to klimb here" refusals - one for a
 climbable-with-equipment cell the party lacks the gear for, one for a cell with
 no climbable feature - both report "no action" to the dungeon loop, while every
@@ -388,7 +391,7 @@ bottom. `systems/dungeon-mode.md` Section 13 owns both contracts.
 
 Three movement events change Z without a Klimb:
 
-- **Dungeon fall traps.** Exact bytes `0x61` and `0x69` trigger an automatic drop. Each fired step prints the pit/fall messages, increments Z by one, and lands the party at the same X and Y on the next level. The handler rewrites the loaded dungeon image as it falls: it clears marker bits on the departure cell and, when the destination byte is below the wall/door band (`< 0x90`), marks bit `0x08` in that destination cell. If the destination is another `0x61` or `0x69`, the fall repeats, so multi-level drops are vertical trap chains rather than a direct subtype-to-distance table. If the chain increments past the deepest level, the dungeon scene byte is cleared with the off-bottom level byte and same X/Y still in resident state; this is not the surface-reset helper. Exact `0x60` is the K-Klimb surface-reset pit path. Bomb traps `0x62` and `0x6A` share the high-nibble family but do not change Z.
+- **Dungeon fall traps.** Exact bytes `0x61` and `0x69` trigger an automatic drop. Each fired step prints the pit/fall messages, increments Z by one, and lands the party at the same X and Y on the next level. The handler rewrites the loaded dungeon image as it falls: it clears marker bits on the departure cell and, when the destination byte is below the wall/door band (`< 0x90`), marks bit `0x08` in that destination cell. If the destination is another `0x61` or `0x69`, the fall repeats, so multi-level drops are vertical trap chains rather than a direct subtype-to-distance table. If the chain increments past the deepest level, the dungeon scene byte is cleared with the off-bottom level byte and same X/Y still in resident state; this is not the surface-reset helper. The pit family `0x6?` is not a fall trap at all under K-Klimb: it is a climb-down feature that descends one level through the ordinary apply helper and reaches the surface-reset helper only from the deepest level (§ 9). Bomb traps `0x62` and `0x6A` share the high-nibble family but do not change Z.
 - **Overworld chasms.** The traced surface chasm trigger is Britannia
   coordinate `(54, 138)`. Walking onto it prints the falls/underworld
   transition messages, applies fall-damage, swaps the world plane to the
@@ -617,7 +620,7 @@ The behaviour described here was derived from the private function notes listed 
   spells' route to the same exit, and the closed plane-writer census are derived
   from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
-- The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with boundary refusals separated from surface-reset and pit-chain off-bottom exits, together with that handler's turn cost - applied climbs, pit falls, and a cancelled prompt count as an action while both "nothing to klimb here" refusals do not, and the two refusals are distinct (`systems/dungeon-mode.md` Section 13.1) — derived from `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
+- The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with level-edge exits (which are not refusals) separated from the pit-chain off-bottom path, together with that handler's turn cost - applied climbs, pit falls, and a cancelled prompt count as an action while both "nothing to klimb here" refusals do not, and the two refusals are distinct (`systems/dungeon-mode.md` Section 13.1) — derived from `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
 - The shared resident trap-effect resolver used after a chest trap has been
   selected, including the fact that the caller passes no trap flavour -- derived
   from `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md` and sibling

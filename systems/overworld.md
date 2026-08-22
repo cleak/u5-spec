@@ -512,7 +512,7 @@ the session.
 
 ## 11. Vehicles
 
-The party's transport state lives in the resident player record as an avatar/vehicle tile or transport marker. A nearby scene/action tag participates in timing and animation pendulums. These are related during movement, but they are not one byte and should not be collapsed into a single vehicle enum.
+The party's transport state lives in the resident player record as an avatar/vehicle tile or transport marker. A separate neighbouring byte is the **timing/state tag**, which carries the timed magic effects `Q` (Quickness) and `T` (Negate Time) that modify the per-turn clock increment; no vehicle writes it. An earlier revision called that byte a "nearby scene/action tag" and let it stand for vehicle-specific timing; that label is withdrawn (Section 12, `systems/time.md` Section 4). The alternate-turn animation pendulum keys off the transport marker itself. The two bytes are related during movement, but they are not one byte and should not be collapsed into a single vehicle enum.
 
 This section is the overworld summary. The command-level vehicle contract
 for B-Board, X-Xit, ship broadsides, cannon fire, and vehicle object
@@ -573,7 +573,7 @@ overworld effects that consume a successful movement.
 
 **Time.** Per-turn cleanup runs once per consumed turn at increment 2; mode-zero recomputes run from the per-tick init at entry. Hour changes refresh the sky/status row through the time/status-panel path. Natural moongate live-terrain refresh and entry remain overworld-owned behavior, not a time-system or moon-display hook.
 
-**Save / load.** The full state - party position, plane, active-object table, transport marker, scene/action tag - sits in the save-image region described in `save-load.md`. `SAVED.OOL` is the canonical per-plane object-overlay companion. The load path refreshes `BRIT.OOL` and `UNDER.OOL` from it so plane-entry paths can read the appropriate per-plane file; the save path stages from the per-plane files, refreshes both per-plane mirrors, repeats the `UNDER.OOL` mirror write unless the save handler entered with disk-prompt mode already set to mode 1, and writes the canonical `SAVED.OOL`.
+**Save / load.** The full state - party position, plane, active-object table, transport marker, timing/state tag - sits in the save-image region described in `save-load.md`. `SAVED.OOL` is the canonical per-plane object-overlay companion. The load path refreshes `BRIT.OOL` and `UNDER.OOL` from it so plane-entry paths can read the appropriate per-plane file; the save path stages from the per-plane files, refreshes both per-plane mirrors, repeats the `UNDER.OOL` mirror write unless the save handler entered with disk-prompt mode already set to mode 1, and writes the canonical `SAVED.OOL`.
 
 **Combat.** Entered when a movement command targets a hostile monster's tile, when the per-turn block matches a pirate-ship trigger, or when an ambush event fires. The framer suspends the active-object table, runs a self-contained fight, and restores the table on return. See `combat.md`.
 
@@ -703,7 +703,7 @@ The behaviour described above was derived by reading the function and format not
 - The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
 - The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - The on-disk format of the surface and underworld grids — `u5-decomp/formats/maps.md`.
-- The data-segment layout, including the shared scratch block read by the light beacon, chunk-index tables, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
+- The data-segment layout, including the shared scratch block read by the light beacon, the single Britannia chunk-index table, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
 - Public scene/name binding for town-mode location rows — `catalogs/gazetteer.md`,
   `formats/npc.md`, and `formats/data-ovl.md`.
 - Public dungeon scene/name/record binding — `systems/dungeon-mode.md`,

@@ -707,7 +707,7 @@ The behaviour described here was derived from the private function and format no
   action usage.
 - The Talk-entry shop dispatch and shared shop caller context -- cross-checked
   against `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
-- The `.TLK` file loader, the four-class dispatch by scene byte, the header walk, the leading-pair-as-count encoding, and the 1024-byte blob read — derived from `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
+- The `.TLK` file loader, the four-class dispatch by scene byte, the header walk, the two-byte count prefix ahead of the `(id, offset)` entries, and the 1024-byte blob read — derived from `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
 - The keyword input loop, the empty-input-as-BYE shortcut, the fixed reserved-keyword table, the ordinary per-NPC keyword scan, the profanity rebuke/pause branch, and the no-match diagnostic -- derived from `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`, `u5-decomp/functions/TALK_OVL/0x09D8_tlk_find_keyword_match.md`, `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, and `u5-decomp/functions/ULTIMA_EXE/0x20FA_delay_with_int1c.md`, cross-checked against `u5-decomp/CORRECTIONS.md`.
 - The labelled-block and scoped-prompt mechanics -- derived from
   `u5-decomp/functions/TALK_OVL/0x0C5C_tlk_seek_to_label_then_run.md`,

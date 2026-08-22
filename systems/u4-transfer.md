@@ -17,8 +17,8 @@ written, every later load and save uses the standard `SAVED.GAM` /
 created by transfer rather than by the questionnaire.
 
 This spec covers the intro entry, media handling, seed loading, source-save
-validation, roster/status preview, character mapping, commit and abort
-behavior, save-state effects, and relationship to chargen.
+validation, the single-character comparison preview, character mapping, commit
+and abort behavior, save-state effects, and relationship to chargen.
 
 ## 2. Entry From The Intro Menu
 
@@ -239,7 +239,7 @@ Note that validation runs on the raw predecessor values, before any of the
 translations in Section 7. A source Strength of 70 passes the gate and is then
 put through the attribute translator; the gate does not see U5-side values.
 
-## 6. Roster And Status Preview
+## 6. Character Comparison And Status Preview
 
 The transfer screen is built entirely from the resident fixed-cell text system
 described in `text-output.md`. It uses no proportional font, no screen-panel
@@ -637,11 +637,18 @@ A compatible implementation should model transfer as:
 
 1. Enter from the intro menu's transfer command.
 2. Locate and read the Ultima V transfer seed image and object seed.
-3. Locate and read the Ultima IV player disk's `PARTY.SAV` source save.
-4. Build an in-memory Ultima V save image from the seed.
-5. Patch only the Avatar-facing fields that transfer owns.
-6. Render a roster/status preview and allow name/gender correction.
-7. Abort without disk writes if the player cancels before commit.
+3. Select the Ultima IV source media. This is the single abort point in the
+   whole path: `Esc` here restores the intro scene state and returns to the
+   menu with nothing read and nothing written (Section 6.4).
+4. Locate and read the Ultima IV player disk's `PARTY.SAV` source save. If it
+   fails the validation gate, print the bad-data page and return to the menu
+   without writing anything (Section 6.3).
+5. Build an in-memory Ultima V save image from the seed.
+6. Patch only the Avatar-facing fields that transfer owns.
+7. Render the two-panel single-character comparison screen and walk its fixed
+   confirmation and conversion stages, which allow name and gender correction
+   but offer no cancel key: once the drive has been selected, no key aborts
+   the transfer (Sections 6.5 and 8).
 8. On commit, write `SAVED.OOL` and `SAVED.GAM`.
 9. Return through the intro/menu redraw path and let a later Journey Onward
    load enter gameplay from the save.
@@ -716,7 +723,7 @@ private offsets, or binary text dumps are reproduced.
   per-stage redraw scope, input acceptance, and commit ordering:
   `u5-decomp/notes/u4_transfer_screen_trace_2026-08-22.md`.
 - Transfer seed reads, `PARTY.SAV` source-save filename, disk-state setup,
-  roster/status preview, confirmation loop, XP/level/HP recalculation, field
+  comparison preview, confirmation loop, XP/level/HP recalculation, field
   writes, and final `SAVED.GAM` / `SAVED.OOL` commit:
   `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
 - Transfer preview slot-heading count and column-label helper behavior:

@@ -451,7 +451,7 @@ these confirmed conversation edges:
 | Justice | `BEH` | Chamfort |
 | Honor | `SUMM` | Gruman |
 | Spirituality | `OM` | Kindor |
-| Humility | `LUM` | Katrina |
+| Humility | `LUM` | Wartow |
 
 Other mantra and shrine details belong primarily in `systems/karma.md` and the
 shrine portions of `systems/overworld.md`. This catalog's role is to ensure the
@@ -498,9 +498,12 @@ rules from `systems/conversation.md`; it only records that companion
 conversation branches are part of the quest graph.
 
 Confirmed conversation join paths include Gwenno, Jaana, Katrina, Johne,
-Mariah, Toshi, Dupre, Sentri, Maxwell, and other rostered companions cataloged
-in `catalogs/npc-roster.md`. Some join branches are virtue- or story-flavored,
-but the general implementation requirement is uniform: the relevant keyword
+Mariah, Toshi, Dupre, Sentri, Maxwell, Geoffrey, and Julia, plus other rostered
+companions cataloged in `catalogs/npc-roster.md`. Geoffrey and Julia are two of
+the four NPCs the withdrawn `.TLK` header reading dropped entirely
+(`catalogs/npc-roster.md` Section 1), so earlier revisions of this list omitted
+them. Some join branches are virtue- or story-flavored, but the general
+implementation requirement is uniform: the relevant keyword
 must route into the party-join prompt and obey party capacity and acceptance
 rules.
 

@@ -364,10 +364,14 @@ propagate exactly one cell.
 `0xD0..0xD3` Headless frames, `0xF8` a Rot Worm frame, `0xFE..0xFF` Shadow Lord
 frames, `0x4A..0x4B` and `0x4D..0x4F` bookshelf/dresser/vanity/trunk variants,
 and `0x5A` a sign post. All of those names are **withdrawn**. They were read out
-of the nominal index ranges of `catalogs/tile-catalog.md` Sections 2 and 3, which
-that document itself flags as unconfirmed working hypotheses above index 128,
-and they conflicted with ids the same catalog has confirmed from the shipped
-description table. The carve reads a **terrain-layer byte in `0..255`**; an
+of the nominal index ranges of `catalogs/tile-catalog.md` Sections 2 and 3.
+That catalog's Section 3.1 precedence rule marks those range names as working
+hypotheses for **every** band that has not been confirmed index by index — the
+low furniture bands at decimal 74..79 exactly as much as the bands above index
+128 — and a confirmation from the shipped description table or the shipped art
+wins over the range name in all of them. These names also conflicted with ids
+the same catalog has confirmed from the shipped description table, and that
+catalog's 74..79 row has since been corrected to match. The carve reads a **terrain-layer byte in `0..255`**; an
 actor's stored byte reaches the catalogue only after the renderer adds `256`
 (`catalogs/tile-catalog.md` Section 3.1), so no monster frame can appear in this
 list at all. The **tile-id membership of both groups is unchanged** — only the

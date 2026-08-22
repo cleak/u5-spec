@@ -79,7 +79,7 @@ Five hundred and twelve tiles split cleanly into fourteen classes, each occupyin
 | Effect      | 448..495            | 48          | Projectile sprites, splash, explosion and impact frames           |
 | Avatar      | 496..511            | 16          | Player and party-member sprites with directional / vehicle frames |
 
-The boundaries above are nominal and rounded to byte-boundary chunks for description; an implementation should treat the class boundaries as deltas from the in-engine special-trigger comparisons and the active-object class-range tests, not as fixed power-of-two splits. Section 3 gives a finer breakdown.
+The boundaries above are nominal and rounded to byte-boundary chunks for description; an implementation should treat the class boundaries as deltas from the in-engine special-trigger comparisons and the active-object class-range tests, not as fixed power-of-two splits. Section 3 gives a finer breakdown. For the actor half, Sections 3.1 and 7 take precedence over the rows above: the `256..383` "Monster" row is superseded, and the bestiary's monster runs resolve at `384..511`.
 
 The fourteen classes split into three super-categories:
 
@@ -115,7 +115,7 @@ The full breakdown by contiguous index range. The ranges below correspond to run
 | 48..63      | wall            | Decorative walls (cracked, mossy, runed)                                 |
 | 64..71      | furniture       | Tables                                                                   |
 | 72..73      | furniture       | Bed (head and foot pair)                                                 |
-| 74..79      | furniture       | Bookshelves, dressers, vanities, trunks                                  |
+| 74..79      | wall / opening  | Arrow slit `0x4A`, window `0x4B`, pile of rocks `0x4C`, wall variants `0x4D..0x4F` — confirmed from the shipped description table. The earlier nominal "Bookshelves, dressers, vanities, trunks" naming for this row is **withdrawn**; see Section 3.1 and `systems/visibility.md` Section 6. |
 | 80..87      | furniture       | Stairs / ladders (up and down pairs)                                     |
 | 88..91      | furniture       | Sign posts                                                               |
 | 92..95      | furniture       | Wells, brazier, fireplace                                                |
@@ -195,8 +195,9 @@ The nominal rows "320..335 Daemon, dragon (greater)" and
 "368..383 Reserved / boss-monster slots" are therefore **withdrawn**: both of
 those bands are person sprites. Decoding the atlas shows the actor half runs
 roughly as objects and vehicles, then people, then monsters, rather than as one
-long monster run followed by items — but the exact seams have not been fixed,
-so no replacement range table is published here.
+long monster run followed by items — but most of the exact seams have not been
+fixed, so no replacement range table is published here. One seam is fixed from
+the combat side: Section 7 places the bestiary's monster runs at `384..511`.
 
 The same caveat applies to the terrain half above index 128, and this document
 already contradicts itself there: the nominal row "192..255 NPC — Townspeople,
@@ -219,7 +220,8 @@ over the nominal range it falls in above. Ids confirmed this way so far, and
 used as behavioural predicates elsewhere in this spec set, are: crystal sphere
 `0x29`; metal grate `0x86`; loose brick `0x8C`; chair `0x90..0x93`; mirror
 `0x9D`, mirror-with-reflection `0x9E`, broken mirror `0x9F`; deep well `0xA1`;
-bed `0xAB`; stairway family `0xC4..0xC7`; ascend/descend floor links `0xC8` and
+bed `0xAB`; arrow slit `0x4A`, window `0x4B`, pile of rocks `0x4C` and the wall
+variants `0x4D..0x4F`; window shelf `0x5A`; stairway family `0xC4..0xC7`; ascend/descend floor links `0xC8` and
 `0xC9`; wooden fence `0xCA..0xCB`; waterfall family `0xD4..0xD7`; moon gate
 `0xDC`; shrine flame `0xDE`;
 collapsed dungeon entrance `0xDF`; shop-sign family `0xF0..0xF7` and `0xF9`;
@@ -258,9 +260,9 @@ sixteen-step cycle it described belongs to the night-time light beacon
 
 | Tile ids | Family | Cycle length | Animator |
 |---|---|---|---|
-| `0xD4..0xD7` | Waterfall | 4 | Per-turn world-tick tile animator |
-| `0xD8..0xDB` | Fountain | 4 | Per-turn world-tick tile animator |
-| `0xEC..0xEF` | The standard of Britannia | 4 | Per-turn world-tick tile animator |
+| `0xD4..0xD7` | Waterfall | 4 (every tick, ungated) | Per-turn world-tick tile animator |
+| `0xD8..0xDB` | Fountain | 4 (every tick, ungated) | Per-turn world-tick tile animator |
+| `0xEC..0xEF` | The standard of Britannia | 4 (half rate — same gate as the pendulum) | Per-turn world-tick tile animator |
 | `0x80..0x83` | Pendulum | 2 (paired toggle, half rate) | Per-turn world-tick tile animator |
 | `0xFA..0xFD` | Grandfather clock, bellows | 2 (paired toggle, quarter rate) | Per-turn world-tick tile animator |
 | — | Moongate | None | Not animated; live terrain (see note above) |
@@ -272,7 +274,10 @@ sixteen-step cycle it described belongs to the night-time light beacon
 fire/brazier as four-frame families driven by the per-turn world-tick animator,
 and added a "wind / gust visuals" row. That family list is **withdrawn**: the
 world-tick tile animator touches exactly the five id ranges above and no others,
-and **no water, lava, torch or brazier tile is among them**. `systems/animation.md`
+and **no water, lava, torch or brazier tile is among them**. The same revision
+left the flag row without a rate note, which implied it advanced every tick;
+that too is **withdrawn** — only the waterfall and fountain rows are ungated, and
+the remaining three sit behind nested gates. `systems/animation.md`
 Section 6 carries the full contract and the same correction.
 
 The active-object animator runs as part of the per-turn epilogue. It walks the
@@ -793,16 +798,21 @@ The data here is drawn from four sources. Each tile's position in the partition 
   brush / desert subdivisions, door variants, barrier family, `0xDC`
   terrain-domain moongate boundary, shrine ids, and town marker ownership boundaries are specified at
   gameplay depth.
-- **Actor and vehicle tiles (~220 tiles, indices `160..383`).** Vehicle, NPC,
-  and monster ranges are established by the animator's class-range tests and by
-  their owning movement, roster, and bestiary catalogs. Exact sprite-frame
-  labels inside a run are renderer/catalog attribution unless a system spec
-  names a tile id as a gameplay gate.
-- **Item, effect, and avatar tiles (~130 tiles, indices `384..511`).** Item,
+- **Actor and vehicle tiles (~220 tiles, indices `160..383`).** Vehicle and NPC
+  ranges are established by the animator's class-range tests and by their owning
+  movement and roster catalogs, and the person sprites confirmed from the
+  shipped art sit at the top of this span (Section 3.1). The bestiary's monster
+  runs are *not* in this span; they resolve above it (Section 7). Exact
+  sprite-frame labels inside a run are renderer/catalog attribution unless a
+  system spec names a tile id as a gameplay gate.
+- **Upper actor-half tiles (~130 tiles, indices `384..511`).** This is the band
+  the bestiary's combat classes resolve into once the renderer's actor-byte rule
+  is applied (Section 7). The "item, effect, and avatar" labels Sections 2 and 3
+  give these indices are nominal and provisional (Section 3.1); the item,
   inventory, magic, combat, command, and presentation specs cover the gameplay
-  consumers. Remaining per-frame art labels, pixel ordering checks, and
-  render-only sentinel names are presentation/catalog QA, not unresolved command
-  ownership.
+  consumers of that art wherever its indices finally land. Remaining per-frame
+  art labels, pixel ordering checks, and render-only sentinel names are
+  presentation/catalog QA, not unresolved command ownership.
 
 All five hundred and twelve indices have a class assignment and storage-domain
 contract. The tile catalog is complete for passability, LOOK2 ownership,

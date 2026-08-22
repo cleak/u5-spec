@@ -401,13 +401,18 @@ on a timer.
    succeeds, so a freshly summoned creature normally starts life in the same
    controlled state a charmed monster is in. Summon's rebound branch is the one
    exception: it leaves the Daemon on the arena with the bit clear. They are still placed through the ordinary monster
-   placement path, so their faction byte is the monster-side one and monster AI
-   drives their turns; the bit changes their attack, not their allegiance or
-   who commands them. See `systems/magic.md`, Summoning and conjuration. The
+   placement path, so their class byte is the monster-side one and monster AI
+   drives their turns — the bit never hands a creature to the player's prompt —
+   but because the bit is the group helper's team toggle, a stamped creature
+   groups with the party rather than with the monsters for the same-faction
+   filter (see the dispatch and grouping paragraphs below). See `systems/magic.md`, Summoning and conjuration. The
    monster AI's own summon-daemon ability does *not* set this bit (Section 9).
-4. **The Sword of Chaos compulsion.** The round walker sends a slot down the
-   player-driven path when the active-player sentinel is unset, or when the slot
-   is party-side and its owner/character byte equals the sentinel. On that path,
+4. **The Sword of Chaos compulsion.** The command-path handler (Section 8)
+   takes its player-driven branch for a slot when the active-player sentinel is
+   unset, or when the slot is party-side and its owner/character byte equals the
+   sentinel. That sentinel test lives inside the handler, not in the round
+   walker, which selects between the two handlers through the slot-to-group
+   helper described below. On the player-driven branch,
    if the slot is party-side and its character has item id 35 (Sword of Chaos)
    readied in either the weapon-hand
    or shield-hand slot, the engine sets this bit on that party descriptor,
@@ -415,7 +420,10 @@ on a timer.
    actor driver instead of reading a command from the player. Any other readied
    equipment takes the ordinary interactive path and never sets the bit.
 
-**Readers.** There are exactly three.
+**Readers.** Three paths consume the bit directly, and a fourth — the
+slot-to-group helper — reads it as the combat team toggle, which is what puts it
+in the round walker's dispatch decision and in the friendly-fire filter (see the
+dispatch paragraph below and Section 9). The three direct consumers are:
 
 - **The attack driver.** When an actor whose bit `0x01` is set takes an attack
   action, the attack resolves as a fixed magic strike instead of running the
@@ -441,13 +449,22 @@ on a timer.
   status letter `C` in place of the roster status letter, for as long as that
   descriptor still points back at the same roster slot.
 
-**Not a dispatch gate.** The round walker chooses the player-driven path from
-the active-player sentinel — unset, or matching the slot's owner/character byte
-— plus the equipment test above; it never reads bit `0x01` to decide who acts.
-Earlier drafts of this spec said the walker dispatched any slot with the bit set
-through the player command parser. That is withdrawn: a possessed party member
-keeps taking turns in slot order, and the visible consequences are the `C`
-status letter and the redirected attack branch, not a change of who is prompted.
+**A dispatch input.** The round walker does not read this bit directly, but the
+slot-to-group helper it dispatches on does: for a party-side slot the helper
+returns bit `0x01` itself (subject to the traitor-roster override of Section 9),
+and for a monster-side slot it returns that bit inverted. The walker sends the
+group ordinarily occupied by seated party members to the keystroke/command path
+(Section 8) and the other group to the automatic actor driver (Section 9). A
+party-side actor carrying this bit therefore takes its turns through the
+automatic driver instead of the player's prompt — which is exactly the Sword of
+Chaos behaviour described above — while a monster carrying it lands in the
+party's group. Two earlier readings are withdrawn: that the walker dispatched
+any slot with the bit set through the *player* command parser (the routing is
+the other way round for party-side slots), and that the walker never consults
+the bit at all and picks the player path from the active-player sentinel (that
+sentinel test is real but lives one level down, inside the command-path handler
+itself). A possessed party member still keeps its place in slot order, still
+draws the `C` status letter, and still uses the redirected attack branch.
 
 **Sleep is a different bit.** Bit `0x08` is the asleep/magically-disabled
 state and has nothing to do with charm, possession, or any other external
@@ -458,10 +475,14 @@ instead of redirecting its attack, and will never draw the `C` status letter:
 the panel's test is "party-side set, monster-side clear, dead clear,
 controlled `0x01` set", and `0x08` is not part of it.
 
-**Faction is a different byte.** The friend/foe resolver reads bit `0x40` to
-recognise a monster-side slot, and the team-override flag it consults lives in
-the per-monster-class flag word, not in this descriptor byte. Do not reuse
-`0x80` or `0x01` as a faction toggle.
+**The class bits are not the toggle.** The slot-to-group helper reads the
+party-class bit `0x80` only to choose which rule applies, and then keys on bit
+`0x01` as the team toggle, so this bit — not `0x80` — is what moves an actor
+between combat groups for the friendly-fire filter and the walker's dispatch.
+Do not reuse `0x80` as a faction toggle. The separate team resolver used on the
+target picker's special pre-combat-scene branch (Section 9) is the one that
+reads bit `0x40` plus a team-override flag living in the per-monster-class flag
+word rather than in this descriptor byte.
 
 **Lifetime.** The bit lives only in the combat-instance descriptor table. It
 survives rounds, is cleared by a second successful Charm, by the slot-clear path
@@ -783,9 +804,11 @@ synthesis, optional step/teleport logic, and finally the same command parser
 used by player turns.
 
 **Active-effect gates at the head of the automatic driver.** Before any of
-that, this driver reads the single shared active-effect tag (Section 12) twice,
-and these are the only two combat consumers of that tag outside the `C`-Cast
-absorption check:
+that, this driver reads the single shared active-effect tag (Section 12) twice.
+These two are the driver's only reads of that tag; they are not the tag's only
+consumers in combat. The `C`-Cast absorption check reads it for Negate Magic's
+`N` (Section 10), and the AI target picker reads it for Mass Charm's `C` later
+in this section:
 
 - **Negate Time (`T`).** The driver returns immediately. The actor's whole
   turn is skipped — no status tick, no ability hook, no target pick, no attack,
@@ -856,12 +879,14 @@ After this hook, the AI target picker and direction synthesis run as normal.
 - Not on the same *faction* - friend/foe is decided by a "slot-to-group"
   helper that maps each slot to a small group id.
 - Grouping note: ordinary placed party actors and ordinary placed monsters
-  start in opposite combat groups. The resolver recognises a monster-side actor
-  from descriptor flags bit `0x40`, and the team-override that can invert a
-  monster's default group lives in that monster's **per-class flag word**, not
-  in the descriptor byte. The controlled bit `0x01` is not consulted here at
-  all, so charming or possessing an actor does not by itself move it between
-  factions. One shipped roster template is hard-wired hostile: whenever a
+  start in opposite combat groups, because the slot-to-group helper reads the
+  party-class bit `0x80` to pick its rule and then keys on the controlled/charmed
+  bit `0x01` as a team toggle — returning that bit for a party-side slot and its
+  inverse for a monster-side slot (Section 6.1a). Charming or possessing an
+  actor therefore does move it to the opposite group for this filter. A
+  *separate* team resolver, consulted only on a special pre-combat-scene branch,
+  reads descriptor bit `0x40` and a team-override flag that lives in the
+  monster's **per-class flag word** rather than in the descriptor byte. One shipped roster template is hard-wired hostile: whenever a
   party-class actor stands in for the game's traitor character - the last
   record of the shipped sixteen-record roster - the resolver forces it into
   the monster-side group however it reached the field (charm, summon, or
@@ -1519,11 +1544,14 @@ The behaviour described here was derived from the private function and format no
   direction output with flee inversion — derived from
   `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the sibling
   COMBAT damage/death note that identifies the same random-byte helper.
-- The combat slot-to-group helper, including party/monster default inversion,
-  the monster-side descriptor bit `0x40` test, and the per-class team-override
-  flag, derived from
+- The combat slot-to-group helper, including the party-class rule keyed on the
+  controlled/charmed bit `0x01`, the monster-side inversion of that same bit,
+  the dead-slot collapse, and the round walker's use of the helper's result as
+  its two-way dispatch gate, derived from
   `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` and
-  `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`.
+  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`; the secondary
+  team resolver's descriptor bit `0x40` test and per-class team-override flag,
+  derived from `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`.
 - Source provenance: derived from private analysis note
   `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` -- the hard-wired
   hostile roster template, the guard that keeps roster record zero out of the
@@ -1546,8 +1574,10 @@ The behaviour described here was derived from the private function and format no
   behaviourally equivalent; the distinction matters only to code that validates
   or migrates save files.
 - The controlled/charmed bit contract in Section 6.1a — its four writers, its
-  three readers, the Charm toggle as the only in-combat clear, the fact that the
-  round walker does not dispatch on it, and the separation of the
+  three direct readers plus the slot-to-group helper that reads it as the team
+  toggle, the Charm toggle as the only in-combat clear, the routing consequence
+  that a party-side actor carrying the bit is dispatched to the automatic actor
+  driver rather than the player's prompt, and the separation of the
   asleep/magically-disabled bit from the controlled/charmed bit (including the
   exact five-term condition the stats panel uses to draw the `C` override:
   party-side set, monster-side clear, dead clear, controlled bit set, owner

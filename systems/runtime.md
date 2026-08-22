@@ -45,7 +45,11 @@ Two resident helpers dominate cross-overlay behaviour:
 - The wrap-aware string printer is the central text primitive. Overlays call the
   resident text system directly; there is no per-overlay text thunk layer.
 - The per-turn cleanup is the central time/light/state cleanup primitive reached
-  by every active gameplay mode after consumed turns.
+  by every active gameplay mode. The overworld, town, and combat loops reach it
+  after a consumed turn; the dungeon loop reaches it unconditionally at the head
+  of each iteration, so its call is not gated on the previous command having
+  consumed a turn (`systems/main-loop.md` Section 6, `systems/time.md`
+  Section 3).
 
 These are architectural facts for prioritising compatibility: most visible
 gameplay eventually crosses one or both of these shared helpers.

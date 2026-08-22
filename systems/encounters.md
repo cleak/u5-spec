@@ -144,7 +144,7 @@ Monster selection is terrain-bucketed before the active-object write:
 | Terrain tile 7 | One-in-three chance of the outdoor sea-serpent adjacency class; a failed special roll rejects the candidate. |
 | Terrain tile 4 on the full underworld plane marker | Directly selects the Rot Worm sprite run. Other tile-4 cases continue to the land bucket selected by plane. |
 | Surface mountain tiles `0x0C` (mountains) and `0x0D` (high peaks) | Reject. |
-| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the animated-water family `0xE4..0xE7` | Run an extra one-in-four allowance die before any bucket selection; a failed die rejects. Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
+| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the open-water family `0xE4..0xE7` (the shipped description table names all four ids "water"; despite the earlier "animated-water" label they are static tiles — no water family is animated, see `systems/animation.md` Section 6) | Run an extra one-in-four allowance die before any bucket selection; a failed die rejects. Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
 | Tile ids below `0x10` after the special and hard-reject cases, plus tile ids `0x30..0x33` | Use the land bucket selected by plane: surface land on the surface, underworld land below. |
 | Other tile ids at or above `0x10` | Reject. |
 
@@ -534,9 +534,13 @@ only silent no-spawn outcome traced in the spawner itself is the coordinate
 loop giving up after one hundred twenty-eight rejected candidate cells
 (Section 4).
 
-The table size is still the natural cap on visible monster density — the player
-never sees more than thirty-one hostile or neutral entities on the overworld at
-once — but the mechanism is eviction of the least interesting existing object,
+The allocator's slot range is still the natural cap on visible monster density,
+but the number is smaller than the table: the ordinary acquisition path searches
+only slots one through twenty-three, with slot zero reserved for the player and
+slots twenty-four through thirty-one reserved for setup paths outside the
+allocator (`active-objects.md` Section 4). Spawner-driven density therefore tops
+out at twenty-three hostile or neutral entities on the overworld at once, and
+the mechanism at the cap is eviction of the least interesting existing object,
 not refusal of the new one.
 
 Spawned monsters live in the table the same way as any other active-object: the per-tick animator (see `active-objects.md`) walks them every turn, advancing animation phase and stepping them along their AI path. Off-screen pruning runs at the end of each turn; a monster that wanders far enough from the party's viewport (more than about thirty-two cells from the scroll base) is silently removed from the table. In effect, the engine maintains a sliding window of active monsters around the party — far-distant encounters are forgotten without ceremony.

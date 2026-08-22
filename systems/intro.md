@@ -736,7 +736,7 @@ The six entries, in row order, with the label each one shows on screen:
 |---:|---|---|---|
 | 0 | `J` | `Journey Onward` | Load the active save and return to the main loop if valid. |
 | 1 | `C` | `Create New Character` | Enter character creation through the proportional-font/chargen flow. |
-| 2 | `T` | `Transfer from Ultima IV` | Enter the transfer/roster path and commit or abort from there. |
+| 2 | `T` | `Transfer from Ultima IV` | Enter the Ultima IV character-transfer path and commit or abandon from there. |
 | 3 | `U` | `Ultima V Introduction` | Play the story slide sequence, then return to the intro menu. |
 | 4 | `A` | `Acknowledgements` | Show credits/acknowledgements, then return to the intro menu. |
 | 5 | `R` | `Return to the View` | Run the non-interactive Return-to-View preview, restore the menu surface, then remain in intro mode. |
@@ -1019,7 +1019,7 @@ detail.
 The U4-to-U5 character-field translation is specified in
 `systems/u4-transfer.md`. It belongs with the transfer spec because it
 determines the contents of the resulting save, not the intro menu's control
-flow. The roster-preview and disk-swap behaviour are included here because the
+flow. The comparison-preview and disk-swap behaviour are included here because the
 intro overlay owns that screen and its polling loop.
 
 ## 10. Ultima V Introduction (`U`)

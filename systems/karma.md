@@ -29,7 +29,7 @@ Britannia's eight virtues, in the canonical order the engine numbers them (zero 
 7. **Spirituality** — pursuit of inner truth; kept by Shamino, embodied by the ranger's solitary contemplation.
 8. **Humility** — recognition that no one virtue is a virtue alone, and that pride in any of the others is itself a flaw; kept by Katrina, embodied by the shepherd's quiet labour.
 
-The set, the order, and the companion-virtue pairings are inherited from Ultima IV with no changes; the in-engine virtue index zero through seven matches the order above. Every per-virtue table the engine indexes — mantras, shrine coordinates, prefix strings, virtue-failing curse phrases, virtue-aphorism paragraphs, the symmetric pair table the questionnaire reads — uses this same eight-entry layout in this same order.
+The set, the order, and the companion-virtue pairings are inherited from Ultima IV with no changes; the in-engine virtue index zero through seven matches the order above. The class each entry above names — mage, bard, fighter, druid, tinker, paladin, ranger, shepherd — is likewise the Ultima IV pairing and is **not** a reading of the shipped Ultima V roster: the seed save gives its companions only three class letters, so Shamino, whom the list pairs with the ranger, carries the fighter letter in his record (Section 9). Every per-virtue table the engine indexes — mantras, shrine coordinates, prefix strings, virtue-failing curse phrases, virtue-aphorism paragraphs, the symmetric pair table the questionnaire reads — uses this same eight-entry layout in this same order.
 
 The eight virtues sit alongside three "principles" (Truth, Love, Courage) and
 an eighth-virtue meta-principle. The principles are referenced indirectly by
@@ -104,11 +104,12 @@ inside a routed record rather than on a path every conversation takes:
   for the name if it is clear, and only then reaches a duplicated record that
   carries the five raise bytes. Because the successful name prompt is what sets
   that bit, each of the two `+5` grants is reachable **once per NPC per
-  savegame**. One of the two (a Minoc NPC) has no payment in it at all; the
-  other (the Cove NPC of Section 4.1) puts the five raise bytes immediately
-  after a five-gold demand inside the bonus record only, so a repeat payment to
-  that NPC goes down the plain record and gets nothing from the script (the
-  separately gated milestone below is then its only possible source of standing).
+  savegame**. One of the two (a Minoc NPC, not the Minoc beggar of Section 4.1)
+  has no payment in it at all; the other (the Cove NPC of Section 4.1) puts the
+  five raise bytes immediately after a five-gold demand inside the bonus record
+  only, so a repeat payment to that NPC goes down the plain record and gets
+  nothing from the script (the separately gated milestone below is then its only
+  possible source of standing).
 - The **lower** byte occurs eight times across five NPCs, and every occurrence
   is a *reaction* record rather than a reward: five bytes sit at the head of the
   "no" arm of a request prompt (a run of three ahead of a "Scoundrel!" rebuke
@@ -139,10 +140,14 @@ three independent gates, all of which must pass on the same payment:
    sprite class — the class whose four-tile run begins at the type value one
    hundred eight. The engine reads this from the speaking NPC's live
    active-object entry, not from anything in the dialogue script. Only three
-   NPCs in shipped content carry that class. Nine NPCs across the four dialogue
-   files demand gold; exactly one of them — the Cove NPC who asks for a
-   five-gold offering — also carries the qualifying class. The other eight gold
-   demands cannot move standing at all.
+   NPCs in shipped content carry that class — the beggar sprite class. Nine
+   NPCs across the four dialogue files demand gold; exactly **two** of them also
+   carry the qualifying class: the Cove temple NPC who asks for a five-gold
+   offering, and the Minoc beggar who asks for a few gold crowns (a three-gold
+   demand, repeated on each of three separate branches of his script). The
+   third NPC of that class — the Cove NPC's sister — demands no gold, and the
+   other seven gold demands sit on NPCs of other classes and cannot move
+   standing at all.
 3. **Step-counter threshold.** A shared one-byte counter must have reached one
    hundred. On success the counter is reset to zero and the selector is raised by
    one under the ninety-nine cap.
@@ -168,8 +173,8 @@ only a three-digit amount; nothing marks a payment as toll, bribe, or donation.
 The narrowing that makes the milestone feel like almsgiving comes from the
 sprite-class gate, not from any intent field.
 
-**Scale check.** An earlier revision of this section said that the qualifying
-NPC's own script grants `+5` on *every* affordable payment with no cooldown.
+**Scale check.** An earlier revision of this section said that the Cove NPC's
+own script grants `+5` on *every* affordable payment with no cooldown.
 That is wrong and is withdrawn. Her blob carries **two** five-gold payment
 records, and the introduce-yourself branch decides which one runs:
 
@@ -199,8 +204,8 @@ Three implementation consequences follow:
    NPC lets a player farm standing to the cap for five gold a visit. This is the
    most damaging way to get this section wrong.
 2. An implementation that applies the milestone to every gold payment will be
-   wrong on eight of the nine gold-demanding NPCs, and wrong on cadence for the
-   ninth.
+   wrong on seven of the nine gold-demanding NPCs, and wrong on cadence for the
+   other two.
 3. The introduce-yourself routing must be implemented before either grant is
    meaningful, because both shipped raise-byte runs sit behind it. Treat
    `systems/conversation.md`'s introduce-yourself idiom and

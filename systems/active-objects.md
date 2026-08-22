@@ -212,7 +212,7 @@ The animation cycle uses byte 6's low nibble. It counts down each tick:
 | any non-zero  | Mid-cycle. Decrement and write back. The renderer combines the phase with the tile class to pick a frame.     |
 | zero          | Cycle ended. Eligible for an AI tick: roll RNG, possibly turn or move, possibly reseed phase.                 |
 
-Animated tile classes include water (a four-frame cycle), lava, torches, and a small handful of "special" tiles. Each animated class has its current-frame index in a separate animation-frame table; the renderer combines the tile class with that counter to pick the actual byte to paint.
+Each animated class has its current-frame index in a separate animation-frame table; the renderer combines the tile class with that counter to pick the actual byte to paint. The classes this per-slot pass animates are actor classes — vehicles, monsters and the other sprite-only tiles that live in the table. (An earlier revision of this paragraph listed "water (a four-frame cycle), lava, torches, and a small handful of 'special' tiles" as the animated classes. That list is **withdrawn**: no water, lava, brazier or torch tile animates through any per-tick pass. The separate world-tick tile animator touches exactly five terrain families — waterfall, fountain, pendulum, the standard of Britannia, and the clock/bellows pair — and none of them is a water or fire terrain family. See `systems/animation.md` Section 6 and `catalogs/tile-catalog.md` Section 4.)
 
 Two responsibilities sit slightly outside the per-slot loop. A *frame-counter advance* runs at the end of the pass, incrementing a shared frame counter and toggling a few alternate-frame tile classes. A *video-driver flush* runs immediately after, sending the post-tick frame to the display driver. Both are part of the "advance one tick of on-screen state and present it" contract.
 
@@ -435,7 +435,7 @@ said the round walker reads slot zero for the player and slots one and up for
 monsters; that is withdrawn, and it is the same withdrawn "reserved player
 slot" claim Section 7 corrects.
 
-**Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. Also drives water, lava, and torch animation cycles via per-tile-class frame indices.
+**Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. It animates only the actor classes held in the table; it drives no water, lava or torch terrain cycle. Animated *terrain* belongs to the separate world-tick tile animator and its five families (`systems/animation.md` Section 6).
 
 **Save / load.** The table is a persistent region in the save image, byte-for-byte.
 

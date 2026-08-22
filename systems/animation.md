@@ -6,9 +6,11 @@ Ultima V has two animation layers that run during normal play:
 
 - **Active-object animation**, which advances the per-slot phase for visible
   actors, vehicles, monsters, and other slot-backed dynamic entities.
-- **Global tile animation**, which advances shared frame selectors for terrain
-  and effect tiles such as water, lava, torches, and other repeating map
-  artwork. Natural moongates are **not** one of these families; see Section 8.
+- **Global tile animation**, which advances shared frame selectors for a small,
+  fixed set of decorative terrain families — waterfall, fountain, pendulum, the
+  standard of Britannia, and the grandfather clock / bellows pair. Water, lava
+  and torch/brazier tiles are **not** among them (Section 6), and natural
+  moongates are **not** one of these families either; see Section 8.
 
 Both layers are visual and turn-paced. They are not independent real-time
 threads, and they are not driven directly by the in-world clock. They advance
@@ -30,7 +32,7 @@ intro/display contract, not from this gameplay animation system.
 
 The animation system runs from the resident world-tick path. The input system
 calls that path while polling for a command, so idle time is not visually
-frozen: cursor blinking, animated water, monster wandering, and viewport
+frozen: cursor blinking, animated terrain, monster wandering, and viewport
 refreshes can continue while the player has not pressed a key.
 
 The world-tick path may be suppressed for one initial handoff frame after a
@@ -148,15 +150,35 @@ map cell. Instead, a small resident table says, for each animated tile family,
 "which tile id should this family display right now?"
 
 There are exactly **five** such families, and the pass that advances them is
-short and unconditional. Named from the shipped description table:
+short. Two families advance unconditionally; the other three sit behind two
+**nested** gates on the shared phase counter, so the pass is not a flat list of
+independently gated families. Named from the shipped description table, except
+the fountain band, whose description record is the shared placeholder and whose
+name comes from its Look handler (`systems/view.md` Section 3):
 
 | Tile ids | Family | Behaviour |
 |---|---|---|
-| `0xD4..0xD7` | Waterfall | Four-frame cycle, advanced every tick. |
-| `0xD8..0xDB` | Fountain | Four-frame cycle, advanced every tick. |
-| `0x80..0x83` | Pendulum | Two-frame toggle in adjacent pairs, gated by bit 0 of the shared phase counter. |
-| `0xEC..0xEF` | The standard of Britannia (a flag) | Four-frame cycle, advanced every tick. |
-| `0xFA..0xFD` | Grandfather clock (`0xFA..0xFB`) and bellows (`0xFC..0xFD`) | Two-frame toggle in adjacent pairs, gated by bit 1 of the shared phase counter. |
+| `0xD4..0xD7` | Waterfall | Four-frame cycle, advanced every tick. Ungated. |
+| `0xD8..0xDB` | Fountain | Four-frame cycle, advanced every tick. Ungated. |
+| `0x80..0x83` | Pendulum | Two-frame toggle in adjacent pairs. Inside the bit-0 gate, so it changes at half rate. |
+| `0xEC..0xEF` | The standard of Britannia (a flag) | Four-frame cycle. Inside the same bit-0 gate as the pendulum, so it advances at half rate, **not** every tick. |
+| `0xFA..0xFD` | Grandfather clock (`0xFA..0xFB`) and bellows (`0xFC..0xFD`) | Two-frame toggle in adjacent pairs. Inside the bit-1 gate, which is itself nested inside the bit-0 gate, so it changes at quarter rate. |
+
+The gate structure, in order: advance the waterfall family, advance the fountain
+family, then test bit 0 of the shared phase counter. If bit 0 is clear, the pass
+skips **everything** that follows — pendulum, flag and clock/bellows alike — and
+goes straight to incrementing the counter. If bit 0 is set, the pendulum and the
+flag advance, and only then is bit 1 tested; the clock/bellows family advances
+only when both bits are set. The counter is incremented once at the end of the
+pass, whichever path was taken.
+
+**Correction.** An earlier revision of this table listed `0xEC..0xEF` as
+"advanced every tick" and summarised the pass as "short and unconditional" with
+"three families advancing on every tick" and "the two toggling families reading
+one bit each". All of that is **withdrawn**. Only two families are ungated, the
+flag is gated exactly as the pendulum is, and the two gates are nested rather
+than independent. The quarter rate of `0xFA..0xFD` is a consequence of that
+nesting (bit 0 *and* bit 1), not of a lone bit-1 test.
 
 Each id inside a family owns its own selector byte, so the four ids of a
 four-frame family are permanently a quarter-cycle apart and a wall of waterfall
@@ -178,9 +200,10 @@ through the family's current selector at draw time. This keeps the map stable
 and makes one selector update affect every visible cell in the same family.
 
 The global tile-animation step increments a shared frame counter after updating
-the selectors. Three families advance on every tick; the two toggling families
-read one bit each of the counter, so they change at a half and a quarter of that
-rate. The public contract is that animated terrain is family-wide, selector-based,
+the selectors. Two families — waterfall and fountain — advance on every tick.
+The pendulum and the flag advance on every second tick, behind the shared bit-0
+gate. The clock/bellows family advances on every fourth tick, behind the bit-1
+gate nested inside the bit-0 gate. The public contract is that animated terrain is family-wide, selector-based,
 deterministic, and driven by the same tick cadence as active objects — never a
 per-cell sweep of the rendered tile buffer.
 
@@ -209,8 +232,9 @@ render/present the frame that observes both updates.
 
 ### Overworld
 
-The overworld is the main consumer of ambient animation. Water, lava-like
-terrain, vehicles, and random outdoor monsters all use the animation tick.
+The overworld is the main consumer of ambient animation. Waterfalls, vehicles,
+and random outdoor monsters all use the animation tick. Open water and lava-like
+terrain do not: no water or lava family is animated at all (Section 6).
 Natural moongates do not: a gate is a live terrain byte written and removed by
 the once-per-turn saved-slot refresh, with no frame cycle of its own. The overworld's per-turn epilogue can also prune off-screen
 active objects; pruning is separate from animation and may remove slots that
@@ -223,15 +247,18 @@ The animator only advances the visible active-object slots after the scheduler
 has updated them. If an NPC is off the player's floor and therefore has no
 active-object slot, the animator has nothing to advance for that NPC.
 
-Furniture, torches, water, and other animated environmental tiles use the
-global tile-animation layer exactly as they do outdoors.
+The decorative fixtures that do animate indoors — the fountain, the pendulum,
+the standard of Britannia, and the grandfather clock / bellows pair — use the
+global tile-animation layer exactly as they do outdoors. Torches, braziers,
+fireplaces and interior water are static tiles; they do not animate.
 
 ### Dungeons
 
 Dungeon mode has less confirmed use of the active-object table outside combat,
 but dungeon rendering still consumes animated tile families where applicable.
 Dungeon dark-out, the torch counter, and light spells are lighting concerns, not
-animation concerns, even though torch artwork may animate at the same time.
+animation concerns; the torch artwork itself does not animate through this
+layer.
 
 ### Combat
 
@@ -337,8 +364,11 @@ decompiler output, implementation listings, and raw private tables.
   cycle lengths and phase gating, and their per-id selector bytes were re-read
   from the shipped executable for this revision; their names come from decoding
   the shipped description table (`u5-spec/formats/look2-dat.md`). Both private
-  notes above still carry the older water/lava/torch labels for those ranges;
-  those labels were guesses and are superseded.
+  notes above still carry the older water/lava/torch labels for those ranges,
+  and the tile-animator note additionally lists `0xEC..0xEF` as a plain
+  four-frame cycle with no gate; those labels and that cadence were guesses,
+  and both are superseded by the nested two-gate structure re-read from the
+  shipped executable for this revision.
 - Caller relationship from the resident world-tick path -
   `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
 - NPC scheduler separation -
