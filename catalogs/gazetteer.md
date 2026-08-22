@@ -600,7 +600,11 @@ A content loader or audit tool should enforce these rules:
 - The class implied by a scene byte matches the row's class.
 - Every town-mode row points to the matching `*.DAT`, `*.NPC`, and `*.TLK`
   family and a sub-map index in `0..7`.
-- The paired `*.DAT`, `*.NPC`, and `*.TLK` sub-map indexes match for a row.
+- The paired `*.NPC` and `*.TLK` sub-map indexes match for a row. Do **not**
+  extend this check to the class `*.DAT` file: its floor pages are selected
+  through the per-scene base-page table of `formats/location-dat.md`
+  Section 4.1, and for twenty-two of the thirty-two locations that base page
+  is not twice the sub-map index.
 - Dungeon rows use dungeon-mode data, not town-mode data.
 - Dungeon indexes are unique and in `0..7`.
 - Shrine rows are exactly the eight virtues, in the karma system's virtue
@@ -673,9 +677,9 @@ Public specs used:
   terrain cells and resident location metadata.
 - `u5-spec/formats/under-dat.md` - Underworld map shape and plane-transition
   relationship.
-- `u5-spec/formats/location-dat.md` - four per-class location files, sub-map
-  partition, floor-page layout, markers, and the authoritative per-scene base
-  floor-page table that Section 5.2 summarises.
+- `u5-spec/formats/location-dat.md` - four per-class location files, the flat
+  sixteen-page array in each, floor-page layout, markers, and the authoritative
+  per-scene base floor-page table that Section 5.2 summarises.
 - `u5-spec/formats/npc.md` - `.NPC` scene partition, scene-to-storage-key
   order, and blank resident-name rows.
 - `u5-spec/catalogs/npc-roster.md` - current named NPC rows and roster-based
