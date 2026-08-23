@@ -430,6 +430,29 @@ The rewrite clears the chest class and preserves the dungeon visit-marker bit,
 so an already-looted chest becomes passage-like for the rest of the current
 dungeon entry. The on-disk dungeon record is not patched.
 
+**The generator is the whole contract. There is no authored per-chest override.**
+
+Nothing per-chest, per-room, per-level or per-coordinate is consulted. The
+generator's complete input set is: the party's dungeon depth; the party's X and Y
+**used only to index the underfoot cell**; the cell byte itself, which is masked
+so that its low nibble is discarded and cannot reach content generation; three
+fixed seven-entry tables in the resident data image; and the shared uniform
+random helper.
+
+Two structural facts make that negative safe rather than merely unobserved.
+**The routine contains no pointer load at all** - every memory operand is an
+absolute-displacement form, so there is no table that could be reached
+indirectly and no place an authored index could enter. And **chest identity is
+not available downstream either**: the grant dispatcher receives three values
+only, none of which carries a position, a depth or a chest id, so it could not
+consult per-chest data even if such data existed.
+
+An implementation carrying an authored per-chest content sidecar has no
+counterpart for it in the original and should retire it. This is scoped to the
+container this section specifies - the underfoot dungeon-cell chest reached by
+Get while standing in a dungeon corridor - and says nothing about other
+container kinds.
+
 The reward generator is table-driven. It iterates seven reward rows in order.
 Each row has a gate threshold, a quantity/subtype rule, and an inventory family
 to grant when the row succeeds.

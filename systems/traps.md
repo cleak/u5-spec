@@ -237,12 +237,26 @@ confirmed:
   associated world-object entry". Both descriptions are withdrawn as wrong. The
   combatant record is **not** removed, cleared, or freed - it stays in place with
   one additional bit set - and the world-object entry is **not** blanked: a
-  specific constant is written into it. **What that constant denotes is an
-  explicit gap**: it was not established, and it is plausibly a remains or corpse
-  marker but that is a guess. A port should reproduce the write as an opaque
-  stamp rather than infer a meaning from it; identifying the constant against the
-  tile/object catalogue would settle it. The third step is correct as previously
+  specific constant is written into it. The third step is correct as previously
   published and was re-derived.
+
+  **The constant is now established, and the gap is closed.** An earlier revision
+  called it opaque and guessed it was "plausibly a remains or corpse marker". The
+  guess was right, and it is now derived rather than guessed: the value is
+  **decimal thirty**, written as two separate byte stores of the same value into
+  **both leading bytes** of the record, and it is a **corpse**.
+
+  **It is an object/actor class id, not a terrain tile id** - and that
+  distinction is the whole point, because this specification has twice published
+  errors from conflating those two spaces. The shipped description table settles
+  it directly, since it holds the two domains separately: in the **object**
+  domain that value reads "a corpse", while in the **terrain** domain the same
+  number reads an unrelated landscape description. Three independent consumers
+  key on the object reading, two of them by way of shipped data files, and the
+  L-Look chain resolves it end to end through the object domain.
+
+  So a port should write the value **as a corpse-class object**, not as an opaque
+  stamp and not as a tile. The step is fully implementable.
 - The trap conditions differ in kind, matching the two storage forms named
   above: a single flag on the container object versus a non-zero lock/trap
   sub-type on the dungeon chest cell.
