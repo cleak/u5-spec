@@ -63,6 +63,43 @@ absence of any producer of the Ashes status, and the inertness of the
 combat-class scene boundary disagreement. The `R`-costs-a-turn rule and the
 Sextant's Underworld refusal both survived challenge unchanged.
 
+**Addendum — 2026-08-23, outdoor ranged-attack contract re-verified and
+published.** Three gaps around the outdoor creature ranged attacks were traced
+and adversarially re-derived from the shipped binaries, and the result is now in
+`systems/overworld.md` Section 6.2, which is the **single normative owner** of
+both the trace procedure and the damage payload;
+`systems/active-objects.md` Section 8, `systems/vehicles.md` and
+`systems/encounters.md` point at it rather than restating it.
+
+Newly published: the two-stage payload (impact presentation, then an
+impact-absorption stage that branches only on the party transport marker), the
+frigate hull roll over the closed interval `[1, 30]` with its strictly-less-than
+survival test, the whole-party damage pass with an independent closed-interval
+`[1, 8]` draw per living member, the exact field list the per-member helper
+writes, the sub-tile line generation with its column-driven accumulator, the
+fixed sampling interval and the never-tested last sample, and the exact-equality
+breath recognition.
+
+Withdrawn as wrong: "tested cell by cell for obstructions" in Section 6.2; the
+claim that line-of-fire rules are symmetric between party and creatures; the
+on-foot whirlpool "no-op" and "no drowning damage is applied by the whirlpool
+branch" in Section 8 and in `systems/active-objects.md` Section 8; the label
+"outdoor sea-serpent adjacency family" for `0xE0..0xE3` in
+`systems/encounters.md` and `systems/movement.md` (it is the Sand Trap run,
+bestiary class 40); and three probability figures that carried an
+inclusive/exclusive off-by-one in the shared range draw — the surface tile-1
+special is one-in-eight, the parched-desert special one-in-four, and the
+low-water allowance die sixteen-in-sixty-five.
+
+Ten items were published as **explicit named gaps** in a new Section 6.2.5
+rather than left silent, including the unread tail of the stats-panel repaint
+(the one hole in the "these fields and no others" claim), the status-byte
+domain, the drowning loop's exit-test asymmetry, the two impact-absorption call
+sites whose triggers are unestablished (a sailing collision and a per-turn
+"rough seas" event), and the near-call-only limit of every caller census on this
+path. Interior, dungeon and combat modes are explicitly out of scope: the
+sampling interval differs there and none of Section 6.2.2 may be carried across.
+
 
 
 **Last updated:** 2026-05-13 - Weapon range/effect table cleanup, CMDS meditate status sync, Balloon baseline negative closure, Item/combat attack-routing cleanup, Endgame END.DAT fixed-window correction, endgame refusal-tableau random local wander, Active-target attack-wrapper damage math, Polymorph Giant Rat replacement, Tremor exact damage/reward formula and actor-scan behavior, shared active-effect tag/counter values, high-circle spell handler details, spell handler-family mapping, directed spell wind-cone duplicate/prefilter cleanup, combat post-round terrain/effect maintenance cleanup, proportional paragraph renderer cleanup, endgame final-presentation cleanup, EGA driver primitive cleanup, combat default drop-marker byte cleanup, intro story rectangle-transition contract, intro story rectangle helper boundary, shrine meditation state-machine cleanup, intro story-step transition/draw mapping, intro title tick/menu idle contract, intro title tick destination/source ownership, vehicles/ship-fire spec, containers/pickups spec, command routing cleanup, input idle-redraw timing cleanup, active-object idle animator placement, input blink/key mapping cleanup, text-output control/gate cleanup, visibility viewport-buffer cleanup, dungeon entry/data-record order, dungeon trap/pit subtype cleanup, magic field-placement byte cleanup, lighting counter duration cleanup, display rendering contract, spell parser correction, location floor-page rules, MISCMAPS record/trailer cleanup, MISCMAPS Return-to-View stream binding, MISCMAPS Return-to-View command table, MISCMAPS Return-to-View helper schedule, NPC floor-link marker IDs, OOL save-staging/mirror correction, U4 transfer source filename cleanup, U4 transfer exact mapping cleanup, overworld underfoot-latch cleanup, directed spell wind-cone friendly-fire boundary cleanup, combat active-object restore/loot-reconciliation boundary cleanup, combat reward-unit caller-propagation cleanup, combat descriptor-vs-active-object byte cleanup, dungeon active-object boundary cleanup, PTH open-question cleanup, save active-object persistence boundary cleanup, NPC schedule-Z unsigned cleanup, vehicle timing state-tag cleanup, save transport/status byte cleanup, vehicle transport-marker range cleanup, Blackthorn audience-entry predicate cleanup, rest/camp ambush presentation cleanup, shared arithmetic caller-census cleanup, shared arithmetic boundary cleanup, presentation/quest boundary cleanup, END.DAT format boundary cleanup, SHOPPE.DAT format-boundary cleanup, BIT format-boundary cleanup, boot sentinel boundary cleanup, movement predicate boundary cleanup, Blackthorn conversation-signal boundary cleanup, screen-mode write-error handler ownership cleanup, font high-bit caller-policy cleanup, LOOK2.DAT open-heading cleanup, weather ownership-boundary cleanup, conversation runtime-boundary cleanup, QUESTION.DAT variant-boundary cleanup, lighting/TLK boundary-label cleanup, Search trap caller-boundary cleanup, M-command split cleanup, OOL open-item cleanup, balloon negative-boundary cleanup, inventory runtime-boundary cleanup, SIGNS.DAT macro-boundary cleanup, input variation-boundary cleanup, text-output gate/eraser cleanup, time boundary cleanup, DUNGEON.DAT format-boundary cleanup, CBT format-boundary cleanup, NPC format-boundary cleanup, location DAT format-boundary cleanup, OOL format-boundary cleanup, save-format boundary cleanup, vehicle boundary cleanup, U4 transfer boundary cleanup, view boundary cleanup, command dispatcher boundary cleanup, doors/Z boundary cleanup, main-loop boundary cleanup, visibility boundary cleanup, shop boundary cleanup, overworld boundary cleanup, screen-mode boundary cleanup, animation boundary cleanup, SIGNS.DAT content-boundary cleanup, Blackthorn boundary cleanup, chargen boundary cleanup, inventory boundary cleanup, display ABI boundary cleanup, graphics archive boundary cleanup, DATA.OVL cleanroom-boundary cleanup, intro visual-boundary cleanup, encounter boundary cleanup, karma storage-boundary cleanup, magic effect-boundary cleanup, and town data-boundary cleanup added.
@@ -2254,7 +2291,7 @@ class-attribute entries and special movement-gate visual identities.
 
 **Current combat command-dispatch cleanup:** 2026-05-12 - combat and extraction docs now clarify that the dispatcher-level combat command map is complete for all twenty-six letters plus seven special inputs; most delegated overlay targets are named (SJOG Get/Jimmy/Open/Search/Klimb, CMDS X-it/Yell/Push, ZSTATS Ready/Z-stats), combat U-Use is a label-only abort rather than a CAST item-use continuation, combat Yell enters CMDS but falls through the no-effect scene path, combat Q-Quit abandons the fight through the defeat path rather than saving, combat X-it is distinguished from out-of-bounds fleeing, and combat P-Push directly enters the shared movable-tile handler using the active actor's combat coordinate anchor. Remaining command work is shared command-family edge cases.
 
-**Current encounter probability cleanup:** 2026-05-12 - overworld, encounters, and extraction docs now align on the resolved random-encounter probability contract: a 1..30 roll spawns only when the tile/Z/hour threshold exceeds the roll; the traced formula does not include transport state or the fortunes-of-war flag. The same cleanup now publishes the outdoor spawn-coordinate retry loop, terrain selector, weighted active-object payload picker, active-object payload family names including whirlpool/sea-serpent special cases, shore sea-creature filter, active-object initialization, sea-creature animation seed, and H-Hole-Up rest-loop interruption boundary including caller-side status restoration and selected-row handoff. Later rest/camp cleanup moves low-level CMDS alternate setup sound, delay, or prompt-control helper identity after sleep-ambush row selection to presentation QA.
+**Current encounter probability cleanup:** 2026-05-12 - overworld, encounters, and extraction docs now align on the resolved random-encounter probability contract: a 1..30 roll spawns only when the tile/Z/hour threshold exceeds the roll; the traced formula does not include transport state or the fortunes-of-war flag. The same cleanup now publishes the outdoor spawn-coordinate retry loop, terrain selector, weighted active-object payload picker, active-object payload family names including the whirlpool and parched-desert Sand Trap special cases (the latter was published as a "sea-serpent" family and corrected on 2026-08-23), shore sea-creature filter, active-object initialization, sea-creature animation seed, and H-Hole-Up rest-loop interruption boundary including caller-side status restoration and selected-row handoff. Later rest/camp cleanup moves low-level CMDS alternate setup sound, delay, or prompt-control helper identity after sleep-ambush row selection to presentation QA.
 
 **Current encounter boundary cleanup:** 2026-05-13 - `systems/encounters.md`
 now treats the former partial-information section as a boundary list. Random
@@ -2316,8 +2353,12 @@ both the active-object allocator and the render-frame animator.
 **Current random-spawn bucket cleanup:** 2026-05-12 - `systems/encounters.md`,
 `formats/data-ovl.md`, and extraction now publish the corrected random-spawn
 terrain selector, the four ordered weighted bucket memberships, and the direct
-special branches for whirlpool/forced-underworld, outdoor sea-serpent adjacency,
-and Rot Worm payloads. The outdoor arena selection range table is also now
+special branches for whirlpool/forced-underworld, parched-desert Sand Trap
+(named "outdoor sea-serpent adjacency" in that 2026-05-12 cleanup and corrected
+on 2026-08-23 - the run is `0xE0..0xE3`, bestiary class 40), and Rot Worm
+payloads. The three probability figures published alongside them were also
+corrected on 2026-08-23 for an inclusive/exclusive off-by-one in the shared
+range draw. The outdoor arena selection range table is also now
 public for trigger class bytes `0x40..0x7F` plus the skiff/pirate-ship special
 case. Later rest/camp cleanup moves the low-level CMDS alternate setup
 presentation helper identity after sleep-ambush row selection to presentation

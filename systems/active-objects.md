@@ -198,6 +198,13 @@ line, renders the shot or impact directly, and then mutates the hit terrain or
 hit active-object slot only if the trace finds one. The projectile visual
 itself has no persistent table lifetime.
 
+The flight routine also carries no damage payload of its own. It was read from
+entry to exit: it builds the line into two scratch coordinate buffers, walks it
+drawing a figure per sampled step, and returns a clear/blocked result. It writes
+no character record and reaches no damage routine. Damage, where there is any,
+is applied by the caller **after** the trace returns clear — for the outdoor
+ranged attacks that is the payload in `systems/overworld.md` Section 6.2.4.
+
 The split keeps combat-only state out of the world-mode table. When combat exits, the framer restores the live active-object table from its pre-combat backup, so combat movement, deaths, and loot-marker writes in the temporary table do not directly merge back into world objects. Durable combat outcomes travel through character records, clock/status globals, resources consumed by combat actions, and any encounter-side reconciliation traced outside the table restore. The combat round walker, described in the combat spec, iterates the combat-effect descriptor table for action selection and reads the active-object table for sprite rendering.
 
 ## 8. Animation
@@ -227,26 +234,64 @@ walks overworld slots from high to low, skips slot zero, and applies only to the
 outdoor animated/monster predicate: ship-like water-creature frames plus most
 monster-range tiles, excluding the small environment-animation ranges handled by
 the resident frame animator. Its first phase handles immediate hostile
-reactions:
+reactions. Orthogonal adjacency is tested **before** any class test, so an
+adjacent creature engages rather than firing.
 
-- Orthogonally adjacent hostile slots engage the player immediately.
-- Sea Serpent and Dragon first-frame hostile classes within three cells of the
-  player on **both** axes roll a one-in-eight trigger, and on success loose a
-  breath attack: a line is traced from the creature's cell to the party's, drawn
-  as an animated projectile, and tested for obstructions. If the line reaches
-  the party, the same per-turn finishers as other outdoor encounter effects
-  run and damage is applied. See `systems/overworld.md` for the shared
-  ranged-attack contract.
-- Adjacent whirlpool engagement is a plane-transition effect when the party is
-  not on foot: it announces the whirlpool, runs the swallow presentation, moves
-  the party to underworld coordinate `(34, 18)`, and re-enters overworld setup
-  for the new plane. The same branch is a no-op if reached while the party
-  marker is the ordinary on-foot avatar.
-- Ship-like water-creature and pirate frames aligned with the player on the same
-  row or column within three cells fire a broadside: they print the boom message
-  and then resolve the same traced-line ranged attack as the breath attack
-  above. The generic "attacked" message belongs to the adjacent-engagement path,
-  not to this one.
+The adjacency reactions, in the order the handler tests them:
+
+- **Adjacent whirlpool engagement** is a plane-transition effect when the party
+  is not on foot: it announces the whirlpool, runs the swallow presentation,
+  applies the Section 6.2.4 payload, moves the party to underworld coordinate
+  `(34, 18)`, and re-enters overworld setup for the new plane.
+
+  *Corrected:* an earlier revision said "the same branch is a no-op if reached
+  while the party marker is the ordinary on-foot avatar". **That is withdrawn.**
+  The on-foot arm reaches the same impact-absorption stage, which under a foot
+  marker means every living party member takes damage. It skips the plane
+  transition, not the damage. See the forced-movement table in
+  `systems/overworld.md` Section 8.
+- **Sand Trap family, orthogonally adjacent.** The sprite run `0xE0..0xE3`
+  reaches the shared impact-absorption stage directly and **silently** — no
+  message of any kind — so an adjacent sand trap applies exactly the payload the
+  ranged attacks apply: the whole-party damage pass, or the frigate hull roll
+  when the party is aboard a ship. The payload is specified once, in
+  `systems/overworld.md` Section 6.2.4.
+
+  *Corrected:* an earlier revision of this document, of `systems/encounters.md`
+  and of `systems/movement.md` called `0xE0..0xE3` the "outdoor sea-serpent
+  adjacency family". **That is withdrawn and was backwards.** `0xE0..0xE3` is
+  the Sand Trap sprite run in every domain, exactly as
+  `catalogs/monster-bestiary.md` class 40 already published; the Sea Serpent run
+  is `0x88..0x8B`. An implementation that spawned sand traps as sea serpents
+  would also silently never fire their breath attack, because the breath test is
+  exact equality against `0x88`.
+- **Every other adjacent hostile, Sea Serpent included, takes the generic arm.**
+  It rebuilds the viewport, prints the "attacked" line, and then reads the tile
+  under the party. It reaches the same impact payload **only** when that tile is
+  in the low water/void family **and** the party marker is a carpet or a skiff;
+  otherwise it enters the encounter/combat entry, which looks the slot's class up
+  for its banner name. An orthogonally adjacent sea serpent therefore does *not*
+  apply the ranged payload on ordinary terrain.
+
+The ranged reactions, reached only when no adjacency reaction fired:
+
+- **Sea Serpent and Dragon breath.** Entered when the slot's type byte **equals**
+  the first frame of the Sea Serpent run (`0x88`) or of the Dragon run (`0xDC`) —
+  exact equality on the unmasked byte, not a range and not a masked family, so
+  frames `0x89..0x8B` and `0xDD..0xDF` never enter it. Within three cells of the
+  player on **both** axes, inclusive, a one-in-eight roll triggers the shot.
+  Trace, sampling and payload are all specified in `systems/overworld.md`
+  Section 6.2; that section is normative and this one does not restate it.
+  *Corrected:* the earlier wording "the same per-turn finishers as other outdoor
+  encounter effects run and damage is applied" is **withdrawn** as too vague to
+  implement; the payload is now published in full at the reference above.
+- **Ship-like water-creature and pirate frames** aligned with the player on the
+  same row or column within three cells fire a broadside: they print the boom
+  message and then run the same trace and the same payload as the breath attack,
+  per `systems/overworld.md` Section 6.2. Unlike the breath test, this
+  recognition **is** a masked family test on `0x2C..0x2F`; do not generalise
+  either form to the other. The generic "attacked" message belongs to the
+  adjacent-engagement path, not to this one.
 
 If none of those immediate reactions fires, the cleanup phase decides ordinary
 movement. Whirlpool-class slots toggle a two-frame swirl and occasionally take
@@ -543,6 +588,21 @@ The behaviour described above was derived by reading the function and format not
   directed step planner, and proximity helper -
   `u5-decomp/functions/MAINOUT_OVL/`, and
   `u5-decomp/functions/MAINOUT_OVL/`.
+- Source provenance: the exact-equality breath recognition, the
+  adjacency-before-class ordering, the identification of `0xE0..0xE3` as the
+  Sand Trap run and of its adjacency arm as silent-but-damaging, the generic
+  adjacent arm's terrain-and-marker condition for reaching the shared payload,
+  and the withdrawal of the on-foot whirlpool no-op, were **re-derived from the
+  shipped binaries** in a verification pass that read each routine from entry to
+  exit and did not use any private note as evidence. Sprite-run identity was
+  fixed two independent ways: the shipped description strings for the sprite
+  pages, and the published `class * 4 + 0x40` actor-byte rule of
+  `catalogs/tile-catalog.md` Section 7 applied to
+  `catalogs/monster-bestiary.md` class numbers. Working directories:
+  `u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
+  Private notes in the first of those that name the `0xE0` adjacency arm after
+  the sea serpent are contradicted by this pass and should be corrected on the
+  private side.
 - The resident tile-class dispatcher and reverse active-object lookup used by
   outdoor step validation -
   `u5-decomp/functions/ULTIMA_EXE/`.

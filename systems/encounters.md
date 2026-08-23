@@ -133,18 +133,23 @@ The spawner is retry-based:
 
 On success, the spawner acquires or evicts an active-object slot and initializes
 it as a monster record with tile, tile mirror, X, Y, current Z plane, and a
-zero auxiliary byte. Sea-creature class spawns receive an auxiliary value of one
-hundred, which seeds their outdoor animation/wander counter.
+zero auxiliary byte. The picked base frame is written into **both** the type byte
+and the frame byte. Only the ship/pirate water-creature family `0x2C..0x2F`
+receives the auxiliary value of one hundred that seeds the outdoor
+animation/wander counter. (*Corrected:* an earlier revision of this paragraph
+said "sea-creature class spawns" receive it, which reads as covering the squid,
+shark and sea-serpent runs as well. That is withdrawn; the payload-family table
+below already stated the narrower rule correctly.)
 
 Monster selection is terrain-bucketed before the active-object write:
 
 | Candidate terrain | Selection rule |
 |---|---|
-| Surface tile 1 after the low-tile allowance gate | One-in-seven chance of a special animated active-object class whose outdoor engagement is the whirlpool/forced-underworld branch; otherwise use the surface default/aquatic bucket. |
-| Terrain tile 7 | One-in-three chance of the outdoor sea-serpent adjacency class; a failed special roll rejects the candidate. |
+| Surface tile 1 after the low-tile allowance gate | **One-in-eight** chance of a special animated active-object class whose outdoor engagement is the whirlpool/forced-underworld branch; otherwise use the surface default/aquatic bucket. (*Corrected:* an earlier revision said one-in-seven. That is withdrawn: the shared range draw is inclusive on both bounds, so a draw over the closed interval `[0, 7]` accepted on one value is one in eight.) |
+| Terrain tile 7 (parched desert) | **One-in-four** chance of the **Sand Trap** sprite run `0xE0..0xE3`; a failed special roll rejects the candidate. (*Corrected:* an earlier revision said "one-in-three chance of the outdoor sea-serpent adjacency class". **Both halves are withdrawn.** The draw is over the closed interval `[0, 3]` accepted on one value, which is one in four; and `0xE0..0xE3` is the Sand Trap run, `catalogs/monster-bestiary.md` class 40 — the Sea Serpent run is `0x88..0x8B`.) |
 | Terrain tile 4 on the full underworld plane marker | Directly selects the Rot Worm sprite run. Other tile-4 cases continue to the land bucket selected by plane. |
 | Surface mountain tiles `0x0C` (mountains) and `0x0D` (high peaks) | Reject. |
-| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the open-water family `0xE4..0xE7` (the shipped description table names all four ids "water"; despite the earlier "animated-water" label they are static tiles — no water family is animated, see `systems/animation.md` Section 6) | Run an extra one-in-four allowance die before any bucket selection; a failed die rejects. Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
+| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the open-water family `0xE4..0xE7` (the shipped description table names all four ids "water"; despite the earlier "animated-water" label they are static tiles — no water family is animated, see `systems/animation.md` Section 6) | Run an extra allowance die before any bucket selection; a failed die rejects. The die is a draw over the closed interval `[0, 64]`, inclusive, accepted when the result is below sixteen — **sixteen outcomes in sixty-five**. (*Corrected:* an earlier revision called this "one-in-four". That is withdrawn as an approximation; the exact figure is slightly under one in four.) Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
 | Tile ids below `0x10` after the special and hard-reject cases, plus tile ids `0x30..0x33` | Use the land bucket selected by plane: surface land on the surface, underworld land below. |
 | Other tile ids at or above `0x10` | Reject. |
 
@@ -216,7 +221,7 @@ The currently named payload families are:
 | `0x2C..0x2F` | Pirate-ship / water-creature facing frames. The spawner seeds the auxiliary wander counter for this family and rejects its first frame on shore/harbor high-nibble terrain. |
 | `0x80..0x83` | Sea Horse sprite run. |
 | `0x84..0x87` | Squid sprite run. |
-| `0x88..0x8B` | Sea Serpent sprite run. |
+| `0x88..0x8B` | Sea Serpent sprite run. Its **first frame only**, `0x88`, is one of the two classes that fire the outdoor breath attack; see `systems/overworld.md` Section 6.2. |
 | `0x8C..0x8F` | Shark sprite run. |
 | `0x90..0x93` | Giant Rat sprite run. |
 | `0x94..0x97` | Bat sprite run. |
@@ -229,8 +234,8 @@ The currently named payload families are:
 | `0xD0..0xD3` | Headless sprite run. |
 | `0xD4..0xD7` | Wisp sprite run. |
 | `0xD8..0xDB` | Daemon sprite run. |
-| `0xDC..0xDF` | Dragon sprite run; the first frame also participates in a special outdoor near-range pull/effect path. |
-| `0xE0..0xE3` | Outdoor sea-serpent adjacency family. Do not infer the combat Sand Trap row from this overworld-active-object behavior without an explicit combat spawn. |
+| `0xDC..0xDF` | Dragon sprite run. Its **first frame only**, `0xDC`, is the other class that fires the outdoor breath attack (`systems/overworld.md` Section 6.2). *Corrected:* an earlier revision described this as "a special outdoor near-range pull/effect path"; that wording is withdrawn — it is the ranged breath attack, and nothing on the path pulls the party. |
+| `0xE0..0xE3` | **Sand Trap sprite run** (`catalogs/monster-bestiary.md` class 40), in the overworld active-object domain exactly as in the combat class table. *Corrected:* an earlier revision called this the "outdoor sea-serpent adjacency family" and warned against inferring the combat Sand Trap row from it. **That is withdrawn and was backwards.** Do not confuse the two runs: Sea Serpent is `0x88..0x8B` and is drawn only from the water buckets; Sand Trap is `0xE0..0xE3` and is not in any weighted bucket at all — it is reachable only through the parched-desert special branch above. Its outdoor adjacency reaction is specified in `systems/active-objects.md` Section 8. |
 | `0xE4..0xE7` | Troll sprite run. |
 | `0xEC..0xEF` | Outdoor whirlpool / forced-underworld animated family. Do not treat this as a normal random Wisp encounter despite its byte proximity to monster sprite runs. |
 | `0xF0..0xF3` | Mongbat sprite run. |
@@ -692,6 +697,22 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/MAINOUT_OVL/`, with
   DATA.OVL address conversion cross-checked against
   `u5-decomp/formats/data-ovl.md`.
+- Source provenance: the three corrected probabilities (one-in-eight for the
+  surface tile-1 special, one-in-four for the parched-desert special, and
+  sixteen-in-sixty-five for the low-water allowance die), the identification of
+  `0xE0..0xE3` as the Sand Trap sprite run, and the narrowing of the
+  auxiliary-counter seed to the `0x2C..0x2F` family, were **re-derived from the
+  shipped binaries** in a verification pass. The probabilities follow from
+  reading the shared range draw from entry to exit and confirming it is
+  inclusive on both bounds — the same off-by-one had reached at least three
+  published figures. Sprite-run identity was fixed two independent ways: the
+  shipped description strings for the sprite pages, and the published
+  `class * 4 + 0x40` actor-byte rule of `catalogs/tile-catalog.md` Section 7
+  applied to `catalogs/monster-bestiary.md` class numbers. All four weighted
+  bucket tables were decoded to their full reachable length and reproduce the
+  weights and orderings already published above; `0xE0` appears in none of them.
+  Working directories: `u5-decomp/functions/MAINOUT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Random-spawn active-object payload behavior and special outdoor animated
   families:
   `u5-decomp/functions/MAINOUT_OVL/`, and
