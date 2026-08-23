@@ -267,7 +267,15 @@ runic script.
 | 0x81  | PRINT-AVATAR-NAME  | Emit the player's saved name (the name chosen during character creation) into the output stream. Used in greetings like "Hail, ${name}!". |
 | 0x82  | END-STREAM         | Stop the current stream and signal the caller "this stream is finished". Used to terminate the fixed leading entries (Name, Description, Greeting, Job, Bye) without ending the whole conversation. |
 
-`0x81` interpolates the avatar's name as if it were a literal text run, including word-boundary handling. `0x82` is distinct from `0xFF` (end-of-response): `0x82` is what the engine reads at the end of a leading entry that runs as a unit (e.g. when the engine emits the greeting at conversation start), while `0xFF` returns control to the keyword input loop after a keyword response completes.
+`0x81` interpolates the avatar's name as if it were a literal text run, including word-boundary handling. **It occurs sixty times across the four shipped
+dialogue files** - sixteen, thirty-five, seven and two - and always in a vocative
+position: after a comma in a greeting, or after an address like "again,". An
+implementation that fails to dispatch it renders those sixty lines with the name
+simply missing ("Greetings, , nice"), which is visible to the player but
+produces no error, no crash and no failing assertion unless a test compares
+rendered output against a shipped blob. That count is a usable regression
+target: a correct implementation substitutes a name sixty times over a full
+sweep of the shipped dialogue. `0x82` is distinct from `0xFF` (end-of-response): `0x82` is what the engine reads at the end of a leading entry that runs as a unit (e.g. when the engine emits the greeting at conversation start), while `0xFF` returns control to the keyword input loop after a keyword response completes.
 
 ### 7.3. Pause and key-wait codes
 
