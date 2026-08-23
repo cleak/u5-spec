@@ -670,6 +670,16 @@ map loader is active rather than by the light pass itself:
   Underworld map contains none, so the outdoor beacon is a surface-only effect.
 - **Inside a location**, the map setup clears both positions and then records up
   to **two** hits on the **bright-light** tile.
+
+  **The two tile ids are `0x1B` for the lighthouse and `0x2A` for the bright
+  light.** Both are fixed against the shipped description table, which is the
+  method `catalogs/tile-catalog.md` itself sanctions: `0x1B` reads "a
+  lighthouse" and `0x2A` reads "a bright light". The neighbouring ids are
+  given here because they were the source of an earlier ambiguity: `0x27` and
+  `0x28` **both** read "a roof", `0x29` is the crystal sphere and `0x2B` the
+  hollow stump. An earlier revision of `systems/npc-schedules.md` listed four
+  names across those five ids, which left `0x27` and `0x28` unresolved; that
+  table now enumerates each id separately.
 - **Combat entry** switches the beacon off outright.
 
 The shipped data image starts with both positions at the "no beacon" sentinel,
