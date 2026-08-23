@@ -777,7 +777,23 @@ interfering adjacent target skips the dispatcher entirely.
 
 **Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. The combat target map used by the interference gate is not a replacement for spell-specific targeting. Several spells still take an explicit target separately from the caster, and active-target combat spells still use their own aiming/targeting path.
 
-**Scene gate selects spells.** The four-bit scene allow-mask uses `0x01` for dungeon scenes, `0x02` for combat-class scenes, `0x04` for indoor/town-mode scenes, and `0x08` for overworld. Spells without the active scene bit are rejected with `Not here!`; for example, combat-only attack spells reject outside combat, while overworld-only utility such as Wind Change rejects inside combat.
+**Scene gate selects spells.** The four-bit scene allow-mask uses `0x01` for combat-class scenes, `0x02` for dungeon scenes, `0x04` for indoor/town-mode scenes, and `0x08` for overworld. Spells without the active scene bit are rejected with `Not here!`; for example, combat-only attack spells reject outside combat, while overworld-only utility such as Wind Change rejects inside combat.
+
+**Correction (supersedes earlier revisions of this section).** Earlier
+revisions published the dungeon and combat bits transposed, as `0x01` = dungeon
+and `0x02` = combat. That was wrong. The dispatcher classifies the scene byte
+before it tests the mask, and each class selects exactly one bit: an overworld
+scene byte selects `0x08`, a combat-class scene byte selects `0x01`, an
+indoor/town-mode scene byte selects `0x04`, and a dungeon-class scene byte
+selects `0x02`. The corrected assignment is the one stated above, and it is
+confirmed by the shipped mask values themselves — the two dungeon-only
+level-change spells (Up, Down) carry `0x02` alone, while the combat-only
+attack spells such as Magic Missile, Repel Undead and Kill carry `0x01` alone.
+The scene-byte classification bands were published correctly throughout, as
+were the per-spell `C`/`D`/`I`/`O` labels in `catalogs/spell-list.md`; only the
+bit legend was transposed, so the error was harmless to a reader who used the
+labels and inverted combat-only against dungeon-only for a reader who decoded
+the resident mask bytes.
 
 **Directed utility tile spells in combat.** Vanish, Open, Magic Lock and Unlock
 Magic all carry the combat scene bit, and in combat they run their real handlers

@@ -97,8 +97,8 @@ in the spell's mask.
 
 | Bit | Short | Scene class |
 |---:|:---:|---|
-| `0x01` | D | Dungeon scenes |
-| `0x02` | C | Combat |
+| `0x01` | C | Combat |
+| `0x02` | D | Dungeon scenes |
 | `0x04` | I | Indoor/town-mode scenes, including towns, dwellings, castles, keeps, and special indoor states |
 | `0x08` | O | Overworld |
 
@@ -124,6 +124,21 @@ Two indoor scene states short-circuit before the mask comparison:
 
 In those states the dispatcher prints `Absorbed!` and aborts before consuming a
 charge or mana.
+
+**Correction (supersedes earlier revisions of this section).** Earlier
+revisions of this catalog published the dungeon and combat bits transposed,
+as `0x01` = dungeon and `0x02` = combat. That was wrong, and it is the mapping
+a reader would have used when decoding the resident mask table directly. The
+dispatcher's scene gate classifies the scene byte first and then tests exactly
+one bit per class: overworld selects `0x08`, combat-class selects `0x01`,
+indoor/town-mode selects `0x04`, and the dungeon-class band selects `0x02`.
+The corrected assignment is the one in the table above. The scene-byte
+classification bands and every `Allowed` entry in the Section 5 table were
+published correctly throughout and are unchanged by this correction — the
+defect was confined to the bit legend, so any reader who stayed inside the
+`C`/`D`/`I`/`O` labels was unaffected, while any reader who decoded the
+resident mask bytes through the old legend would have swapped the
+combat-only and dungeon-only spells.
 
 ## 5. Spell Table
 
@@ -426,7 +441,8 @@ High-confidence engine-derived data:
   forty-seven-entry display aid, not the authoritative spell-id table.
 - Reagent bit order and charge cap.
 - Scene mask bit order and scene-byte classification, including the `0xFF`
-  combat marker.
+  combat marker. The dungeon and combat bits were published transposed in
+  earlier revisions; see the correction at the end of Section 4.
 
 Manual/player-facing data:
 

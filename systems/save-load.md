@@ -60,9 +60,9 @@ Alongside the save image, the engine maintains a smaller buffer for the active-o
 | `SAVED.OOL` | 512 bytes | Runtime working copy. Surface object table in the first 256 bytes; underworld in the second 256 bytes. |
 | `BRIT.OOL` | 256 bytes | Surface seed, load-time mirror, and save-time mirror of the surface half of `SAVED.OOL`. |
 | `UNDER.OOL` | 256 bytes | Underworld seed, load-time mirror, and save-time mirror of the underworld half of `SAVED.OOL`; save writes it a second time unless the entry disk-prompt mode was already mode 1. |
-| `INIT.OOL` | 256 bytes | Factory seed for the surface (companion to `INIT.GAM`). Read-only at runtime. |
+| `INIT.OOL` | 256 bytes | Factory seed for the underworld (companion to `INIT.GAM`); byte-identical to the shipped `UNDER.OOL`. Read-only at runtime. |
 
-The on-disk record layout matches the in-memory eight-byte layout exactly: `(tile, frame, x, y, z, depends1, depends2, depends3)`, with `z = 0xFF` as the "above-ground / no z" sentinel. The surface seed contains a small fixed set of pre-placed objects — canonical Britannia ferry-skiffs and a few clustered objects — and the rest of its records are zero. The underworld seed is all zeros: there are no objects on the seed underworld map.
+The on-disk record layout matches the in-memory eight-byte layout exactly: `(tile, frame, x, y, z, depends1, depends2, depends3)`, with `z = 0xFF` as the "above-ground / no z" sentinel. The shipped seeds run the opposite way from what an earlier revision of this section claimed: the **surface** seed `BRIT.OOL` is all zeros — a fresh Britannia has no pre-placed overlay objects at all — while the **underworld** seed `UNDER.OOL` holds a small fixed set of five records (one skiff and a four-corpse cluster) with the rest zero. The earlier wording, which put the ferry-skiffs and clustered objects in the surface seed and called the underworld seed empty, is withdrawn. `formats/ool.md` section 7 enumerates the five underworld records.
 
 The mnemonic "Object Overlay Layer" is a working guess; the actual extension expansion is unknown. The role, however, is unambiguous: an object-table companion to the save image, split by world plane.
 
@@ -116,11 +116,13 @@ The subsequent save-read sequence is:
 
 The load flow does not load the world map data files (`BRIT.DAT`, `UNDER.DAT`, `LOOK.DAT`, `.TLK`, `.NPC`, `.PTH`). Those are loaded on demand by the gameplay mode loops when the player crosses scene boundaries. If the empty-save guard fires, the intro returns to its menu loop and the title menu re-renders. There is no "auto-create" fallback — a fresh install or a wiped save requires the player to explicitly pick `C` or `T`.
 
-The load flow also does not special-case the fresh-save `.OOL` ordering emitted
-by chargen or transfer. It always treats `SAVED.OOL` as surface first and
-underworld second. If a fresh-save producer wrote a blank first half followed
-by a surface seed, Journey Onward mirrors that blank first half to `BRIT.OOL`
-and the seed half to `UNDER.OOL`; it does not rotate or normalize the halves.
+The load flow needs no special case for the `.OOL` ordering emitted by chargen
+or transfer, because those writers already use the canonical order. It always
+treats `SAVED.OOL` as surface first and underworld second. A fresh-save producer
+writes a blank first half followed by the `INIT.OOL` underworld seed, so Journey
+Onward mirrors the blank half to `BRIT.OOL` and the seed half to `UNDER.OOL` —
+which reproduces the shipped state of both files exactly. It does not rotate or
+normalize the halves, and no rotation would be correct.
 
 ## 5. The save flow
 
@@ -270,7 +272,8 @@ in the order described above. `INIT.GAM` / `INIT.OOL` are the fresh-game seeds f
 questionnaire and the Ultima IV transfer path. Earlier text here named a
 separate `BRIT.GAM` / `BRIT.OOL` transfer seed pair; that was wrong, and no
 `BRIT.GAM` exists in the shipped data. `BRIT.OOL` is only the surface-plane
-object mirror described above. Transfer specifics are owned by
+object mirror described above, and it ships empty; `INIT.OOL` is the underworld
+seed and matches `UNDER.OOL` byte for byte. Transfer specifics are owned by
 `u4-transfer.md`.
 The items below are compatibility boundaries for modern ports or low-level
 floppy UI emulation, not gaps in the save-file layout.

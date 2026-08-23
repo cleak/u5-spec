@@ -23,7 +23,7 @@ The hand-off is a one-way call: chargen runs in its own scope, never returns con
 Ultima V ships with a pair of factory-seed files that hold the starting world state for a brand-new game:
 
 - `INIT.GAM` — a 4,192-byte image with all sixteen party-roster slots pre-populated. Records 1 through 15 are the canonical companion roster (Shamino, Iolo, Mariah, Geoffrey, Jaana, Julia, Dupre, Katrina, Sentri, Gwenno, Johne, Gorn, Maxwell, Toshi, Saduj). Their names, classes, genders, stats, equipment, and inventory are all baked into this file. Record 0 is the Avatar seed slot: name field empty, class set to Avatar, status good, and the non-questionnaire fields already populated.
-- `INIT.OOL` — a 256-byte image of the surface map's pre-placed movable objects (a skiff and a small handful of other markers).
+- `INIT.OOL` — a 256-byte image of the **underworld** map's pre-placed movable objects: one skiff and a cluster of four corpses, with the remaining twenty-seven record slots zero. It is byte-identical to the shipped `UNDER.OOL`. (An earlier revision of this line called it a surface-map image; that is withdrawn. The shipped surface seed `BRIT.OOL` is all zeros.)
 
 Both files are read-only seeds shipped with the game. They are never overwritten at runtime; the engine only ever reads them. The corresponding read/write working files are `SAVED.GAM` (4,192 bytes) and `SAVED.OOL` (512 bytes — surface concatenated with underworld). The save system writes the latter pair on quit and re-reads them on load.
 
@@ -330,9 +330,10 @@ starts the party with food 63, gold 150, keys 2, gems 0, torches 4, magic powder
 mandrake 0, nightshade 3, spider silk 0, and sulfurous ash 0. The travelling
 party size is 3, the save clock starts at year 139, month 4, day 5, 08:35, and
 the starting map tuple is scene 13 (Iolo's Hut), saved-scene scratch 0, floor/Z
-0, X 15, Y 15. The seeded surface-map object overlay places a small handful of
-pre-positioned objects (a skiff and a few cargo-shaped tiles) at fixed
-coordinates.
+0, X 15, Y 15. The seeded surface-map object overlay is empty — a fresh
+Britannia has no pre-placed movable objects. The handful of pre-positioned
+seed objects (a skiff and a four-corpse cluster) belongs to the underworld
+overlay instead; `formats/ool.md` section 7 enumerates them.
 
 The factory seed also supplies every roster member's readied equipment. The
 six equipment columns below use the save-record order: helm, body armour,
@@ -373,9 +374,9 @@ A modern reimplementation that wants a fresh-game start without shipping `INIT.G
 
 ## 9. Persistence
 
-Once the avatar's record has been customised, chargen commits the result to disk in a single sequence: it reads `INIT.OOL` into the second half of the object-overlay scratch region, zeroes the first 256-byte half, writes the full 512-byte block as `SAVED.OOL`, and finally writes the 4,192-byte `SAVED.GAM` from the in-memory save image. Every companion record, every inventory byte, every world flag — all bytes the seed shipped — are written verbatim alongside the eight bytes of avatar customisation.
+Once the avatar's record has been customised, chargen commits the result to disk in a single sequence: it reads `INIT.OOL` into the second half of the object-overlay scratch region — which is the underworld staging half — zeroes the first 256-byte half, writes the full 512-byte block as `SAVED.OOL`, and finally writes the 4,192-byte `SAVED.GAM` from the in-memory save image. Every companion record, every inventory byte, every world flag — all bytes the seed shipped — are written verbatim alongside the eight bytes of avatar customisation.
 
-This traced chargen writer therefore emits `SAVED.OOL` as a blank 256-byte half followed by the 256 bytes from `INIT.OOL`. That is the opposite of the canonical `SAVED.OOL` interpretation in `formats/ool.md` - surface plane first, underworld plane second - and the opposite of the clean-install seeded `SAVED.OOL` shape. A byte-compatible chargen implementation should preserve this emitted order. The later Journey Onward load does not repair or rotate the halves; it reads the first half as surface, reads the second half as underworld, and mirrors those interpreted halves to `BRIT.OOL` and `UNDER.OOL`.
+This traced chargen writer therefore emits `SAVED.OOL` as a blank 256-byte half followed by the 256 bytes from `INIT.OOL`. That is exactly the canonical `SAVED.OOL` interpretation in `formats/ool.md` - surface plane first, underworld plane second - because the blank half is the empty surface seed and `INIT.OOL` is the underworld seed. An earlier revision of this paragraph described the emitted order as "the opposite of the canonical interpretation" and treated it as a writer exception; that is withdrawn. It rested on mislabelling `INIT.OOL` as a surface seed, and there is no exception here. The result also matches the clean-install shape of the shipped pair: an empty `BRIT.OOL` and a populated `UNDER.OOL`. The later Journey Onward load needs no repair or rotation; it reads the first half as surface, reads the second half as underworld, and mirrors those interpreted halves back to `BRIT.OOL` and `UNDER.OOL`, restoring both files to their shipped contents.
 
 Both writes are unconditional once the player has confirmed a name. There is no "are you sure?" Y/N prompt; commit is implicit in completing the questionnaire.
 
