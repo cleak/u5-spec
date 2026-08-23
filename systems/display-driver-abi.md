@@ -123,12 +123,12 @@ without visible effect.
 | `0x0F` | 5 | Set the descriptor render-target selector. |
 | `0x12` | 6 | No-op. |
 | `0x15` | 7 | No-op. |
-| `0x18` | 8 | Carry-flag-gated dispatcher to whole-screen plane-copy helpers. Under the resident core's `clc`-bracketed dispatch convention this entry is effectively a no-op; older calling conventions could set carry to request a flush. |
+| `0x18` | 8 | Carry-flag-gated rectangle copy between the two drawing surfaces. With carry set it copies the requested rectangle from the hidden surface to the visible one; with carry clear it only points the driver's working segment register at the hidden surface and returns. See section 9.4. |
 | `0x1B` | 9 | Two-direction full-screen plane copy used by back-buffer-touching paths to refresh or seed the alternate buffer. |
 | `0x1E` | 10 | Full-screen front-buffer and back-buffer in-place swap, row by row, using a driver-internal scanline scratch. This is a swap, not a one-way transfer. |
 | `0x21` | 11 | No-op. |
 | `0x24` | 12 | Read one pixel and return its 4-bit colour. |
-| `0x27` | 13 | Scroll the right-side text panel upward by exactly eight scanlines. See section 9.5 for the precise region and exposed-band policy. |
+| `0x27` | 13 | Scroll a rectangle vertically by a signed row distance, on whichever surface the render-target selector names, blanking the vacated band. A hardwired fast path handles the message panel's eight-scanline scroll-up without blanking. See section 9.5. |
 | `0x2A` | 14 | No-op. |
 | `0x2D` | 15 | Set the current 4-bit drawing colour. |
 | `0x30` | 16 | Plot one pixel with the current drawing colour, on whichever surface the descriptor's render-target selector currently names. The back-buffer path is a real write: it modifies the pixel's bit in all four back-buffer plane slices. See section 9.2. |
@@ -398,12 +398,33 @@ release-then-prepare in sequence; there is no atomic replace.
 
 ### 9.4 Buffer Maintenance
 
-Dispatch offset `0x18` is a carry-flag-gated entry that dispatches between two
-internal whole-screen plane-copy helpers. The resident core's dispatch sites
-clear carry before issuing the far call, so the entry as it is reached in
-practice is a no-op. Modern implementations need not expose this entry at all
-unless they intend to drive an alternate carry-set path that the shipped
-binary does not exercise.
+Dispatch offset `0x18` is a carry-flag-gated entry with two behaviours.
+
+**Correction: this entry is not a no-op, and it is not whole-screen.** An
+earlier revision of this document said the entry dispatched between two
+whole-screen plane-copy helpers, that the resident core always cleared carry
+before the far call, and that implementations therefore "need not expose this
+entry at all". All three statements are withdrawn.
+
+With carry **set**, the entry copies a **rectangle** — the same inclusive
+left/top/right/bottom rectangle the fill entries take — from the hidden
+surface to the visible one, using the same edge-mask and row-table machinery
+as the rectangle fill, and restores the plane-select state it disturbed before
+returning. With carry **clear**, it performs no copy; it only loads the
+driver's working segment register with the hidden surface's segment and
+returns, which is inert for any caller that does not go on to use that
+register.
+
+Carry is not fixed by the calling convention. The resident core reaches this
+entry through a wrapper that takes the rectangle plus a source-surface and a
+destination-surface index, rejects calls where the two indices are equal or
+where either exceeds one, and sets carry exactly when the source surface is
+the hidden one. That carry-set path is live in the shipped game: it is how the
+intro's start/menu loader reveals the title logo rectangle immediately on the
+path where the player has already pressed a key and the pseudo-random dissolve
+is skipped — `intro.md` section 3, loader step 4, "the plain caller path copies
+the rectangle in one step". An implementation that treats this entry as a no-op
+loses that reveal and leaves the logo region blank on the skipped path.
 
 Dispatch offset `0x1B` performs a two-direction full-screen plane copy. It is
 used after back-buffer effects to refresh or seed the alternate buffer so a
@@ -418,30 +439,55 @@ relies on it. The shipped resident core does not appear to call this entry on
 its mainline paths, but its presence in the dispatch table is part of the
 public ABI.
 
-### 9.5 Text Panel Scroll
+### 9.5 Vertical Rectangle Scroll
 
-Dispatch offset `0x27` is the text-panel scroll entry. It scrolls a fixed
-window upward by eight scanlines:
+Dispatch offset `0x27` is the vertical scroll entry. It has two bodies, chosen
+by the rectangle's left edge.
+
+**Correction: this is a general scroll-rectangle entry.** An earlier revision
+of this document said the entry checked that its primary argument named the
+message panel's left edge and that "calls with any other left-edge value return
+without visible effect", concluding that the entry was "strictly a
+right-side-text-panel scroll, not a general scroll-rectangle helper", and that
+any per-call distance argument was "vestigial". Those statements are withdrawn.
+The left-edge test selects between two live bodies; it does not gate the entry.
+
+**General path — every left edge except the message panel's.** The entry takes
+an inclusive rectangle and a **signed row distance**: positive moves the
+rectangle's contents one way, negative the other, and the sign is folded into
+the row-walk direction so the copy never overlaps itself destructively. The
+horizontal extent is resolved through the same sub-byte edge-mask machinery the
+rectangle fill uses, so unaligned left and right edges are honoured. The entry
+reads the descriptor's render-target selector and has a **separate, complete
+body for the hidden surface**, exactly like the fill, tile and glyph entries.
+When the copy finishes, the entry **blanks the vacated band**: it saves the
+current drawing colour, fills the band the contents moved out of with colour
+index `0`, and restores the colour. The band is computed from the distance and
+its sign, so it is the correct edge of the rectangle in either direction.
+
+**Message-panel fast path — left edge at pixel column 192.** This path is
+hardwired and ignores both the rest of the rectangle and the distance argument:
 
 | Property | Value |
 |---|---|
 | Horizontal extent | Pixel columns 192 through 319 inclusive (a 128-pixel-wide right-side text panel, 16 character cells wide). |
 | Vertical extent | Pixel rows 88 through 199, advanced one row per inner iteration; iterations that reach beyond the visible 200 rows write to non-visible video memory and are harmless. |
-| Scroll distance | Exactly eight scanlines upward. The distance is a driver-internal constant; any per-call distance argument is vestigial and is not honoured by the entry. |
-| Exposed band | Not blanked by this entry. After the scroll, the bottom eight scanlines of the panel inherit whatever pixels happened to lie immediately below the panel before the scroll. The caller paints fresh content into the bottom row immediately after the scroll, which masks the un-blanked content. |
+| Scroll distance | Exactly eight scanlines upward, hardcoded. The caller's distance argument is not read on this path. |
+| Exposed band | Not blanked. After the scroll, the bottom eight scanlines of the panel inherit whatever pixels happened to lie immediately below the panel before the scroll. The caller paints fresh content into the bottom row immediately after the scroll, which masks the un-blanked content. |
 | Caller responsibility | Callers that need a clear bottom row must request a fill or a fresh glyph draw for those scanlines after the scroll completes. |
 
-The entry checks that the primary register argument names the panel's left
-edge before proceeding; calls with any other left-edge value return without
-visible effect. This makes the entry strictly a right-side-text-panel scroll,
-not a general scroll-rectangle helper. The panel it scrolls is the gameplay
-message window, text cells columns 24..39 rows 11..23 — see `text-output.md`
-sections 10.1 and 10.5. The resident text layer's scroll-by-N helper computes a
-larger pixel distance but issues this same entry, so on the EGA baseline it also
-moves exactly one cell row. A compatible engine may either match
-the hardcoded extent and exposed-band policy exactly, or expose a more general
-scroll-rectangle operation and reduce it to this one when the resident core
-asks for it.
+The panel this fast path serves is the gameplay message window, text cells
+columns 24..39 rows 11..23 — see `text-output.md` sections 10.1 and 10.5. The
+resident text layer converts its scroll requests to pixel rectangles before
+dispatching, and the message window's rectangle always presents that same left
+edge, so on the shipped EGA baseline the fast path is the one the text layer
+observes and every text scroll moves exactly one cell row regardless of the
+distance the resident helper computed.
+
+A compatible engine should implement the general signed-distance,
+render-target-aware, band-blanking scroll and then special-case the message
+panel to the eight-scanline, no-blank behaviour above. Implementing only the
+panel case — or treating other rectangles as no-ops — is not ABI-faithful.
 
 ### 9.6 Rectangle Dissolve Visit Order
 

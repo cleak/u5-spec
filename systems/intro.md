@@ -489,8 +489,11 @@ The loader runs the following sequence:
 7. On the still-animated path only: load `WD.BIT`, run the driver's
    subtitle ignition transition with it, then release it. On the plain path this
    step is skipped entirely.
-8. Select the visible page, run one title tick, and clear the intro text window
-   so the menu frame and labels can be drawn over the lower screen.
+8. Select the visible page, run one title tick, and draw the lower intro text
+   window over the bottom of the screen so the menu labels can be rendered into
+   it. That step **draws** the window's frame band and inner rule; it is not a
+   clear. Section 6.1 owns the full three-pass construction, including which
+   pass clears the interior.
 
 Whether the loader takes the animated or the plain path is decided by the same
 "player skipped the title sequence" flag described in section 3: an unskipped
@@ -1821,7 +1824,7 @@ Private analysis directories consulted:
 |---|---|
 | Boot, title orchestration, start/menu screen loading and composition, menu rendering, key dispatch, acknowledgements page, story slide loop, Journey Onward load path, transfer/continue path | `u5-decomp/functions/INTRO_OVL/` |
 | Resident title-mark flourish presenter, display-driver loading and mode setup, font loading and active-font selection, text-window descriptor initialisation, text output and cursor-poll primitives, compressed-bitmap draw, game-screen frame, outer main loop | `u5-decomp/functions/ULTIMA_EXE/` |
-| Driver-side presentation: the calibrated delay-with-animation-step entry, the one-bit silhouette stamp, back-buffer publish and invalidate, filled rectangle, compressed-bitmap draw, and the pseudo-random pixel dissolve in both its plain and carry-set forms | `u5-decomp/functions/EGA_DRV/` |
+| Driver-side presentation: the calibrated delay-with-animation-step entry, the one-bit silhouette stamp, the directional full-screen buffer copy in both its publish and seed directions, filled rectangle, compressed-bitmap draw, and the pseudo-random pixel dissolve in both its plain and carry-set forms | `u5-decomp/functions/EGA_DRV/` |
 | Proportional-font paragraph renderer, character creation, Return-to-View preview runtime and its map-strip loader | `u5-decomp/functions/FONT_OVL/` |
 | Cross-cutting retraces: the visible phase order and per-phase ink, the flourish's presentation script and its verification, the four `BRITISH.PTH` pen origins, the free-running band-frame counter, the two-pass masked subtitle reveal, the menu window's drawing passes, the dissolve-entry caller census, the Return-to-View pixel geometry and command schedule, and the paragraph-box retrace | `u5-decomp/notes/` |
 | Container and data-file formats: the paired graphics archives, the one-bit bitmap family, `BRITISH.PTH` as a title-screen path stream rather than an NPC schedule, the EGA driver's own layout, and the shared data overlay's string tables | `u5-decomp/formats/` |

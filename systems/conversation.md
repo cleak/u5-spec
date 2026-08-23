@@ -313,7 +313,7 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 
 | Code  | Mnemonic        | Argument bytes following | Effect                                                                                                                          |
 |-------|-----------------|-------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| 0x84  | ASK-PARTY-NAME  | none                    | Prompt the player to type a party member's name. The typed name is matched against each live member with a case-insensitive, bit-7-stripping compare; the match index (0 if no match) is available to the surrounding response. Used by the JOIN sequence and any "name a companion" prompt. |
+| 0x84  | RECRUIT-SPEAKER | none                    | Recruit the speaking NPC into the active party. **There is no player prompt and no input read.** The engine takes the speaker's *own* name from the Name entry of the loaded blob, and matches its opening characters — case-insensitively, with bit 7 stripped — against the reserve portion of the sixteen-slot character roster, scanned from the last slot downwards. On a match the matched roster record is swapped into the active-party insertion slot, that record's inn-lodging marker is cleared, and the party-size byte is incremented; the engine then removes the NPC from the live scene. If the party is already at the six-member cap the engine prints the "no room for me in thy party / seek me again if one of thy members doth leave thee" refusal and recruits nobody. If no reserve record matches the speaker's name the engine prints its no-match diagnostic. This is the whole of the JOIN mechanism: the visible `JOIN` topic is an ordinary per-NPC keyword whose response stream emits this code. |
 | 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes, mask each to seven bits, interpret them as ASCII decimal digits, and run the gold-payment routine against that three-digit amount. Used for tolls, bribes, and donations. |
 | 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
 | 0x87  | KEYWORD-ALIAS   | none                    | Save the current stream position; skip forward past the remainder of the current record, past any run of terminators, and past the whole record that follows; run the record after that as a nested stream. If the nested stream signals stop, the outer stream stops too; otherwise the saved position is restored and the outer stream continues where it left off. No keyword matching, no player input, no flag write. |
@@ -611,12 +611,14 @@ Talk entry newline has been emitted. Shop-specific clear, append, or side-panel
 behaviour is therefore owned by the selected shop flow, not by a separate
 conversation-to-shop window setup layer.
 
-**Free-text input.** The keyword prompt and the ASK-PARTY-NAME / ASK-WHO prompts use the free-text input variant described in `input.md`. The engine clears the buffer-flush gate on entry to allow type-ahead and restores it on exit. The fifteen-character cap is the engine's invariant; the input pipeline itself does not know about it.
+**Free-text input.** The keyword prompt and the ASK-WHO name prompt use the free-text input variant described in `input.md`. (RECRUIT-SPEAKER reads no input and is not a prompt; see Section 7.6.) The engine clears the buffer-flush gate on entry to allow type-ahead and restores it on exit. The fifteen-character cap is the engine's invariant; the input pipeline itself does not know about it.
 
 **Single-keystroke input.** The PAUSE and WAIT-KEY codes use the single-keystroke "wait for the next command" routine — the same one that drives the per-mode loops — but in *prompt mode*, with the prompt-character byte set so that the world tick is suppressed. Time does not pass while the player is reading.
 
-**Party state.** The JOIN sequence is scripted by NPC responses that ask for a
-party member name and then run action-dispatch side effects. The gold-payment
+**Party state.** The JOIN sequence is scripted by NPC responses that emit the
+recruit-speaker code; the engine matches the speaking NPC against the reserve
+roster itself and never asks the player to name anybody. Action-dispatch side
+effects may accompany a recruitment in the same response. The gold-payment
 routine (triggered by `0x85`) and the action-dispatch handler (triggered by
 `0x86`) also mutate party state. The gold-payment path decodes a three-digit
 demand and debits party gold when affordable. It can also raise the shared

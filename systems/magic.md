@@ -1094,7 +1094,10 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/COMBAT_OVL/0x120E_pick_random_arena_coord.md`,
   `u5-decomp/functions/COMBAT_OVL/0x0000_combat_damage_test_at_coord.md`,
   `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_random_short_delay.md`.
+  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_random_short_delay.md` (filename
+  predates that note's 2026-08-22 naming correction; the helper is a `1..30`
+  roll and introduces no delay - see the sibling note
+  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_roll_1_to_30.md`).
 - The resurrection helper used by In Mani Corp and paid healer resurrection
   side effects -- dead-status gating, current-HP result, class-based mana
   rebuild, conditional experience rescale, level recomputation, and maximum-HP

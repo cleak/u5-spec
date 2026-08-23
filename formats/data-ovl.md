@@ -336,10 +336,14 @@ global combat metadata that is not stored in arena files:
 - A fixed 48-row combat-class stat table shared by party combat classes,
   special actor classes, NPC-role classes, and monster classes. Each row is
   eight bytes wide. The public row schema is: combat tier, speed seed used for
-  phase timing, an HP-comparison byte used by chest/encounter team-flip
-  checks, defense rating, attack-damage cap, maximum HP, default spawn count,
-  and default kill/drop cap. Maximum HP also supplies the monster spawn HP and
-  the raw reward-unit input. A separate per-class flag table immediately
+  phase timing, an endurance rating, defense rating, attack-damage cap,
+  maximum HP, default spawn count, and default kill/drop cap. The tier and
+  endurance ratings are the two class-side inputs the shared actor-rating
+  selector can return, and they reach the to-hit and resistance scores through
+  it; earlier revisions of this section described them as inputs to a
+  "chest/encounter team-flip" comparison, which is withdrawn — no such
+  comparison exists and no caller flips an actor's faction on these bytes.
+  Maximum HP also supplies the monster spawn HP and the raw reward-unit input. A separate per-class flag table immediately
   follows the class records and should be modeled as class traits, not as
   executable scripts.
   Terrain-combat setup indexes the default spawn-count field with the
@@ -408,10 +412,10 @@ The combat-class stat row is interpreted field-by-field:
 
 | Byte | Clean field | Consumer-facing meaning |
 |------|-------------|--------------------------|
-| `+0` | Combat tier | Class level used by the chest/encounter team-flip comparison. |
+| `+0` | Combat tier | Class level. One of the two class-side ratings the shared actor-rating selector can return, so it can act as either the attacker or the defender term of the to-hit and resistance scores. |
 | `+1` | Speed seed | Base input for combat phase timing when an actor is placed. Higher values refresh the phase counter sooner after randomization and clamping. |
-| `+2` | HP comparison | Class endurance input used by the chest/encounter team-flip comparison. It is separate from maximum HP. |
-| `+3` | Defense rating | Target-side defense input for attack resolution and a team-flip comparison arm. Higher values make ordinary damage harder to land. |
+| `+2` | Endurance rating | The other class-side rating the shared actor-rating selector can return, used the same way as the tier byte and separate from maximum HP. |
+| `+3` | Defense rating | Target-side defense input for attack resolution: it bounds the roll subtracted from the attacker's damage. Higher values make ordinary damage harder to land. The actor-rating selector also has an arm that would return this byte, but no call site in the game selects that arm, so it never reaches a hit or resistance score. |
 | `+4` | Attack cap | Attacker-side maximum for ordinary monster attack damage; the boss-scale maximum has its own special hit behavior in combat. |
 | `+5` | Maximum HP | Spawn HP for monsters, wound-threshold basis, and raw reward-unit input. |
 | `+6` | Default spawn count | Terrain and dungeon encounter count seed, with special exact-count sentinels handled by encounter setup. |
@@ -760,7 +764,9 @@ cross-checked against
 `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`, and
 `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md`.
 Moon sky-strip table ownership was cross-checked against
-`u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`.
+`u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md` (filename
+predates that note's 2026-08-22 naming correction; the routine draws the moon /
+time-of-day row and is not combat-scoped).
 Source provenance: the dense-underworld resolution, the 205-entry surface chunk
 index, the filename-letter loader discriminator, and the single shrine
 coordinate table are derived from private analysis notes

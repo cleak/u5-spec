@@ -610,8 +610,11 @@ magic-ring vanish roll, whose internals are read only from its call shape.
 
 This is a cleanroom prose rewrite derived from semantic notes in the updated
 ZSTATS overlay analysis: the overlay overview, R-Ready top-level handler,
-inventory picker, forward/backward inventory scans, six-slot ownership helper,
-two-handed classifier, and equip/unequip cascade. It also cross-checks the
+inventory picker, forward/backward inventory scans, the six-slot
+already-equipped check (which tests the six equipment slots of one character,
+not what the party owns), the free-hand classifier (which reports which of a
+character's hands are free, and is not a test of whether an item is
+two-handed), and the equip/unequip cascade. It also cross-checks the
 public save-image and item-catalog specs. No decompiled source, assembly
 listing, or raw binary dump is reproduced here.
 

@@ -289,9 +289,13 @@ The behavior described here was derived from cleanroom reading of the following 
 - The world-entry/load note identifying the wind-direction display helper and
   the helper trace used for valid and out-of-range wind banner behavior -
   `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x2E96_announce_scene.md`.
+  `u5-decomp/functions/ULTIMA_EXE/0x2E96_announce_scene.md` (that note's
+  filename predates its 2026-08-22 naming correction; the routine sets and
+  announces the prevailing wind and has nothing to do with scene entry).
 - The idle-redraw random wind selector that feeds the same display/setter
   helper - `u5-decomp/functions/ULTIMA_EXE/0x2F62_event_random_scene_transition.md`
+  (filename likewise predates its 2026-08-22 naming correction; it selects a
+  wind, not a scene transition)
   and `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
 - The Rel Hur / Wind Change spell's prompt-to-state handoff and calm/no-effect
   boundaries - `u5-decomp/functions/CAST2_OVL/0x040A_set_wind.md`.

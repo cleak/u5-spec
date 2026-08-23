@@ -222,8 +222,11 @@ initial pass may request a full viewport blit; later passes can suppress
 redundant blits when the current dungeon presentation flavour does not require
 them.
 
-**Active-object setup.** Dungeon view initialisation can either reuse the
-current active dungeon object or roll a fresh one. A fresh roll selects one of
+**Active-object setup.** Dungeon active-object setup is its own step, distinct
+from the view initialiser that allocates the dungeon view's buffers and clears
+the side panel; it runs on dungeon entry, on every level change, and on return
+from a fight. It can either reuse the current active dungeon object or roll a
+fresh one. A fresh roll selects one of
 eight dungeon monster presentation records, installs that record's display
 sprite byte and its **combat class id**, resets the visibility flag, stamps the
 current Z level, and lazily loads the sprite source if placement succeeds. The
@@ -1032,9 +1035,9 @@ same surface-exit helper, which in that case drops them into the Underworld.
 Other combat results keep the party on the current level. This is the same
 polarity as K-Klimb in Section 13: a smaller level byte is nearer the surface.
 If the scene is still a dungeon after this post-combat step, the handler
-re-initialises the dungeon view, rolls a replacement active monster, and
-redraws the first-person view. Both surface-exit arms clear the dungeon scene,
-which is exactly why that gate exists.
+runs the active-object setup step of Section 4.1, which rolls a replacement
+active monster, and redraws the first-person view. Both surface-exit arms clear
+the dungeon scene, which is exactly why that gate exists.
 
 Before letters reach that dispatcher, the dungeon command parser intercepts
 mode-local controls: the four cardinal direction codes plus Enter and the period
@@ -1587,7 +1590,7 @@ on this path.
    path, recovering the same class the painter encoded.
 
 **Monster class derivation.** The active dungeon monster's class byte is not a
-sprite id and needs no shift arithmetic. Dungeon view initialisation rolls one of
+sprite id and needs no shift arithmetic. Dungeon active-object setup rolls one of
 eight presentation records and copies that record's combat class directly into
 the active-object slot; the eight classes are Giant Rat, Bat, Giant Spider,
 Ghost, Slime, Gremlin, Gazer, and Reaper. Their spawn-count stat bytes are ten,
@@ -1724,7 +1727,7 @@ specified, and stock data cannot produce that edge.
   ladder cell under the party, since an up-or-down request raised inside a room
   feeds the same machinery as K-Klimb.
 - **Wandering-monster cadence and monster set.** Closed, and not an encounter
-  probe: the dungeon rolls one active monster per view initialisation from the
+  probe: the dungeon rolls one active monster per active-object setup from the
   eight presentation records of Section 4.1, and `encounters.md` Section 2.3
   records that the random-encounter probe is overworld-only. What remains is
   art naming for those eight records.
