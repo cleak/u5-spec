@@ -257,8 +257,13 @@ The event's public contract:
   sleep-ambush branch and not the paid/town rest branch.
 - The trigger roll is `random(0, 99)`. Results `0..24` run the old-man event;
   results `25..99` skip it. The event chance is therefore 25%.
-- It iterates active party members. Dead members do not receive the level-up
-  narration or stat reward.
+- It iterates active party members. Dead members do not receive the heal, the
+  cure, the level recomputation, the narration or the stat reward. They are
+  **not** passed over entirely, though: the class-keyed magic-point refresh
+  described below still runs for them, so a dead Bard's magic points are still
+  rewritten. *Clarified 2026-08-23; the earlier wording named only the
+  narration and reward, which invited implementers to skip dead members
+  outright.*
 - **Every member who is not dead is silently full-healed and cured before the
   level check.** Current hit points are set to that member's maximum, and the
   status is forced to the healthy value, clearing poison, sleep and any other
@@ -286,9 +291,19 @@ The event's public contract:
   moral-standing bands select records zero through three; the top band selects
   the sixth record. This differs from Blackthorn rescue/refuge, whose top band
   selects record four.
+- **Each living member's turn in the pass is presented, not just the ones who
+  gain a level.** Before the level check, the handler restamps that member's
+  map sprite from a class-keyed tile and plays a short two-tone sting with a
+  brief flashing pause. This runs for every living member on every occurrence
+  of the event. *Added 2026-08-23; an implementation built from the previous
+  text would have played the sting only on a level-up.*
 - It refreshes the party/status display before returning to the caller.
-- It removes the temporary old-man presentation state before normal play
-  resumes.
+- The old man's on-screen figure is an ordinary temporary entry in the world's
+  active-object table, placed at the centre cell of the viewport — the party's
+  own cell — for the duration of the scene, and cleared to an empty tile at the
+  end. It is not a separate presentation layer.
+- It removes the temporary old-man presentation state and advances the turn
+  clock before normal play resumes.
 
 Implementations should keep the event outdoor-camp-only and separate from Lord
 British's castle services.
@@ -348,8 +363,11 @@ tables, or implementation-specific addresses.
   continuity).
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/OUTSUBS_OVL/`.
-- `u5-decomp/functions/OUTSUBS_OVL/`
-  (superseded identity note; structural observations only).
+- `u5-decomp/functions/OUTSUBS_OVL/` (the camp-event handler's note; on
+  2026-08-23 a second, competing note that had existed at the same routine was
+  merged into it and removed, so this contract now rests on one analysis rather
+  than two disagreeing ones, and Section 7 carries the corrections that merge
+  produced).
 - `u5-decomp/notes/lord_british_dialogue.md`.
 - `u5-decomp/notes/npc_walker_callers_2026-05-08.md`.
 - `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`

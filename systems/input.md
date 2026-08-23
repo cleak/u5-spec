@@ -266,6 +266,17 @@ callers normally treat that as a silent cancellation with no tile mutation. A
 compatibility implementation should preserve the cardinal-only filter rather
 than treating diagonals as valid adjacent targets.
 
+**Escape does not cancel this prompt.** Space is the only pass key here. The
+original contains a cancel arm for Escape, but its accept filter never releases
+the key to that arm, so pressing Escape simply causes another read like any
+other rejected key. The two are easy to conflate because Escape *does* cancel
+several other prompts in this system, including the selection prompts described
+above. An implementation that lets Escape out of the adjacent-tile direction
+prompt gives the player an exit the original never offered. *Added 2026-08-23
+from a complete re-read of the prompt routine, tracing every loop-exit path;
+earlier private analysis had recorded Escape alongside Space here, and that is
+withdrawn.*
+
 This adjacent-tile prompt is distinct from the spell direction prompt below.
 The spell prompt owns a target coordinate chosen from party or combat-actor
 origin state, while command handlers usually interpret the cached vector
