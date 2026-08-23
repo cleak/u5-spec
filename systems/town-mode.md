@@ -144,6 +144,16 @@ Five authored cell families change the floor while the party is inside a locatio
 
 **Every floor change is a full reload.** A transition re-runs the whole location load against the new page: read the page, harvest NPC start markers and the beacon's light sources (Section 5 step 3 - **not** spawn markers), run the dawn/dusk substitution if the hour is in the night band, run the Shadowlord blight pass, relink the active-object table for the new floor, and mark visibility dirty. It is never a partial update, and the announcement (`Up!` / `Down!`) is printed before the reload.
 
+**A floor change preserves the party's column and row.** Only the floor index
+changes - incremented or decremented by the stairway handler - and the new
+floor's page is loaded in place. The party lands on the *corresponding cell* of
+the new page. The entry cell is **not** recomputed on a floor change; it applies
+only to entry from the overworld.
+
+A separate path within the Klimb command moves the party one cell in its facing
+when climbing a fence or wall tile. That is a move within a floor, not a page
+change, and it does not interact with the rule above.
+
 ### The floor byte has two roles
 
 The floor byte is interpreted as signed eight-bit for map loading. Values `0..127` are non-negative floors; values `128..255` are negative offsets from the base page. This lets a location place its entry floor in the middle of its authored pages and reach a basement with `0xFF`, while still using the same 32×32 tile encoding for every floor.
@@ -242,12 +252,31 @@ Entering a town is a single setup pass that runs once per entry, before the per-
    its record from the ordinary monster-slot allocator (which never returns
    slot zero), and stamps the Shadow Lord actor tile. Section 13 now owns those
    coordinates, and Section 8 records the withdrawal of the phantom NPC itself.
-   The player's own default town-entry cell is therefore **not currently
-   established** by this spec. Note the old wording framed it as "the fallback
-   used when the map's asterisk markers supply none" - but since those markers
-   are the beacon's and appear on no town floor, there was never a primary rule
-   for the fallback to fall back *from*. The entry cell is unsourced outright,
-   not merely defaulted.
+   **The entry cell is now established.** On entering a town, castle, keep or
+   dwelling from the overworld, the party is placed at **column 15, row 30, on
+   floor 0**. Three fixed values, written by the overworld *Enter* path before
+   the mode switch, for every such location.
+
+   It does **not** depend on the location, on the direction of approach, or on
+   the party's overworld position beyond identifying which location was
+   entered. There is no table lookup and no per-scene variation. The town entry
+   setup and the map loader write nothing to the party's column or row - what
+   town mode starts with is exactly what the overworld path wrote.
+
+   **The maps are authored around it.** Reading that cell on the floor-0 page of
+   all thirty-two locations, using this specification's own published base-page
+   table and the shipped map files, gives walkable ground in every one -
+   cobble, grass, road or parched desert. Most locations lay a paved approach
+   at columns 14 to 16 running up from the map's bottom edge.
+
+   *On the earlier confusion:* the withdrawn wording gave "(column 15, a
+   per-scene row, floor 0)" and the withdrawal was correct - those were the
+   **Shadowlord install** helper's coordinates, written into a mob record rather
+   than into the party position, with a per-scene row from a table. **Both
+   fifteens are real.** They are unrelated writes to different storage that
+   agree, which stands the Shadowlord in the entrance column. An implementation
+   should keep the column, add the row and floor beside it, and source all three
+   to the overworld entry path rather than to the Shadowlord helper.
 
 After these six steps return, the entry pass calls a final screen redraw and hands off to the per-turn loop. The player is in town mode until the loop's per-turn epilogue notices that the scene byte has been cleared (Section 15).
 
