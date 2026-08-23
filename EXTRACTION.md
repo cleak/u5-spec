@@ -147,6 +147,69 @@ multiple review passes because reviewers checked the spec against the private
 notes, which agreed with it. Only re-derivation from the shipped binaries
 distinguishes "the spec matches our notes" from "the spec matches the game".
 
+**A repair pass can breach a boundary the original error did not.** On
+2026-08-23 the clean engine reported that one document sourced its claims by
+private note filename. The sweep found the pattern repo-wide: **1056 citations
+across 77 files, exposing 440 distinct private entry points**, because a note
+filename encodes a routine's load offset and its private label. That is a
+private address table distributed through public prose, and it accumulated
+without anyone noticing because it arrived a few citations at a time in a shape
+that reads like diligent sourcing. No single line looked like a table.
+
+It was introduced by an earlier **name-audit repair pass** - a pass whose whole
+purpose was to improve rigour, and which cited its work as it went. That pass
+has now produced three distinct classes of damage: wrong names introduced while
+fixing wrong names, a spec regression from a retracted correction, and this. Its
+defect record is worse than the errors it was cleaning up. **Audit repair passes
+against the same rules as the thing they repair** - they arrive framed as the
+fix rather than as a change, and so escape review.
+
+All citations are now condensed to their directory, which is permitted
+provenance and keeps the useful signal. Five historical issue comments carrying
+the same leak were redacted; GitHub comment and issue text is clean.
+
+**A mechanical check now exists**: `scripts/check_contamination.py`, seven rules
+covering offset-bearing citations, segment- and binary-relative addresses,
+assembly with and without operands, and raw byte dumps. It carries a self-test
+and runs it before every scan, because a checker reporting "clean" from broken
+rules is the failure it exists to prevent. That self-test immediately caught a
+rule silently matching nothing after a mangled escape, and a gap where
+operandless instructions were invisible.
+
+## Names are unreviewed assertions
+
+A name is a claim that no review checks, because reviewers read a name as a
+label and audit the code beneath it. False claims in a name therefore live
+*above* the level being audited, and they are load-bearing: a later reader
+reasons from the name whenever the behaviour is unobvious.
+
+Two measured instances. A clean-side constant named for a moongate animator's
+daytime threshold made four claims - that an animator existed, that it belonged
+to moongates, that it gated on daytime, and that the gate was a threshold.
+**Three were false**; the real mechanism belonged to a different subsystem and
+its polarity was inverted. On this side, a field named for a combat magic effect
+timer asserted an owner and a mechanism, **both false** - it is the moon-gate
+presence counter, and nothing in combat reads it. An entire invented spec
+section was built on top of that name.
+
+Of 636 private routine names, 53 were found wrong and 16 had reached published
+prose. A wrong name is more durable than a wrong sentence: prose gets re-read,
+names get trusted.
+
+**Three mechanical tests**, all cheap and none dependent on the analyst being
+right:
+
+| Test | Catches | Why it is mechanical |
+|---|---|---|
+| Does anything read this? | Contracts that are not real | A reference count, not an impression |
+| Is this byte inside the save window? | Real contracts at the wrong scope | One subtraction |
+| Does this name assert something nobody checked? | Wrong owner, polarity, mechanism, units | Names decompose into separate claims |
+
+The second settles every lifetime question for resident state, and it overturned
+an answer given confidently twice from control flow alone. The third is the
+weakest - it needs a person to enumerate the claims - but has the widest blast
+radius, because a name propagates into every document that cites it.
+
 ## Known V1 Deferrals
 
 These items are intentionally not treated as blockers for the v1 visible-MVP
