@@ -518,7 +518,7 @@ The one exception to the read-only model is the **inn registry**, which *is* per
 
 ## 8. Per-shop-kind flow
 
-Each Talk-driven shop kind follows a common shape: a randomised greeting, a Y/N or letter-driven menu, a per-action sub-loop, an "anything else?" re-prompt for shops that allow multiple sub-actions, and a randomised farewell. The kinds vary in their inner steps.
+Each Talk-driven shop kind follows a common shape: a randomised entry greeting, a Y/N or letter-driven menu, a per-action sub-loop, an "anything else?" re-prompt for shops that allow multiple sub-actions, and a randomised closing bark. The kinds vary in their inner steps. The closing bark is chosen by how the visit ended rather than by where it sits in the flow: a visit that bought nothing draws from a curt no-sale row, a completed purchase draws from a courteous farewell row, and one exit path renders nothing at all.
 
 ### 8.A Live dialogue selection, waits, and mutation timing
 
@@ -539,7 +539,7 @@ ordinal is not retained in shared state; a caller that re-polls input without
 recalling the bark dispatcher reuses the visible text already on screen, while
 a later dispatcher call draws again.
 
-| Shop trigger / role | Shared preamble records | Initial-greeting records | Farewell records |
+| Shop trigger / role | Entry-greeting records | Exit records, nothing bought | Exit records, purchase completed |
 |---|---|---|---|
 | `0x81` Weaponsmith / armourer | Not used by the ordinary arms entry path | `0, 1, 2, 3` | `4, 5, 6, 7` |
 | `0x82` Tavern / meal counter / sage | `57, 58, 59, 60` | `61, 62, 63, 64` | `65, 66, 67, 68` |
@@ -550,11 +550,25 @@ a later dispatcher call draws again.
 | `0x87` Healer / sanctum | `165, 166, 167, 168` | `169, 170, 171, 172` | `169, 170, 171, 172` |
 | `0x88` Innkeeper | `174, 175, 176, 177` | `178, 179, 180, 181` | `182, 183, 184, 185` |
 
+**Correction, 2026-08-22.** Earlier revisions of this table headed the middle
+column "initial-greeting records" and described it as text a shop prints on
+arrival. That was wrong. Only the first column is entry text. The second and
+third columns are both *exit* rows, rendered by one shared closing-bark step at
+the end of a visit and selected by a transaction-outcome code: the middle
+column when the party leaves without buying anything, the right column after a
+completed purchase, and neither when the flow passes the silent outcome. The
+middle column's shipped text makes the reading unambiguous - the weaponsmith
+row snubs the party for buying nothing, the guildmaster row tells it to get
+lost in guild slang, and the ship broker row calls it a landlubber. No shop
+greets an arriving party that way. The genuine arrival text is the first column, whose
+records are full welcome lines naming the shop, the shopkeeper, and the time of
+day.
+
 | Flow point | Text source | Selection timing | Wait, clear, and retry behavior | State effects |
 |---|---|---|---|---|
-| Shared non-arms shop preamble | One of four `SHOPPE.DAT` records from the current shop-kind preamble row, followed by resident tail text | Uniform `0..3` draw when the preamble is rendered | Printed once on entry for guild, reagent, healer, and horse-trader flows; arms does not use this preamble | No inventory, gold, or object mutation |
-| Shared initial greeting | One of four `SHOPPE.DAT` records from the current shop-kind initial-greeting row | Uniform `0..3` draw when called with initial-greeting mode | Caller-owned; only calls that request this mode render text | No inventory, gold, or object mutation |
-| Shared farewell | One of four `SHOPPE.DAT` records from the current shop-kind farewell row | Uniform `0..3` draw when called with farewell mode; other modes may be silent | Caller-owned; silent modes exit without rendering a fresh farewell | No inventory, gold, or object mutation |
+| Shared non-arms entry greeting | One of four `SHOPPE.DAT` records from the current shop-kind entry-greeting row, followed by resident tail text | Uniform `0..3` draw when the entry greeting is rendered | Printed once on entry for guild, reagent, healer, and horse-trader flows; arms does not use this shared entry greeting | No inventory, gold, or object mutation |
+| Shared closing bark, nothing bought | One of four `SHOPPE.DAT` records from the current shop-kind nothing-bought exit row | Uniform `0..3` draw when the closing-bark step runs with the nothing-bought outcome | Rendered at the tail of a visit that completed no purchase, including a refused entry prompt or a declined quote | No inventory, gold, or object mutation |
+| Shared closing bark, purchase completed | One of four `SHOPPE.DAT` records from the current shop-kind purchase-completed exit row | Uniform `0..3` draw when the closing-bark step runs with the purchase-completed outcome | Rendered at the tail of a visit that completed a purchase. A third, silent outcome code renders no bark and no attribution tail | No inventory, gold, or object mutation |
 | Shared `Y`/`N` prompt primitive | Resident literals for the accepted echo | No `SHOPPE.DAT` selection | Loops until uppercase `Y` or `N`; `Y` echoes the resident `Yes` literal and `N` echoes the resident `No` literal; other keys are ignored and do not redraw or advance | Returns only the accepted key |
 | Arms entry | Resident/tokenized greeting plus a resident long-greeting variant | Long-greeting variant draws uniform `0..1` after the initial wait | Prints the entry greeting, waits for one key, then asks for `B`, `S`, or exit input | No inventory or gold mutation |
 | Arms `B` branch | Resident `Buy` echo and resident affirmation | Affirmation draws uniform `0..3` only after `B` is accepted | Renders the current stock list; Space or Escape exits the buy list; letters outside the displayed stock count are ignored without a refusal bark | No mutation until an item confirmation passes |
@@ -564,7 +578,7 @@ a later dispatcher call draws again.
 | Guildmaster entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the guild stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted stock purchase |
 | Reagent-vendor entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the reagent stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted reagent purchase |
 | Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
-| Horse-trader sale | Shared non-arms preamble, deterministic horse quote record, resident confirmation/refusal text | Preamble draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the silent farewell mode. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote. Short funds prints resident refusal text and exits | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and places a horse active object adjacent to the player |
+| Horse-trader sale | Shared non-arms entry greeting, deterministic horse quote record, resident confirmation/refusal text | Entry greeting draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the nothing-bought closing bark. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote and also exits through the nothing-bought bark. Short funds prints resident refusal text and takes the silent exit, rendering no closing bark at all | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and places a horse active object adjacent to the player |
 | Tavern drink flow | Tavern entry bark and list `SHOPPE.DAT` records selected by the active tavern state | Entry/list records are deterministic from the current tavern state; sage-style success records draw only in the sage subflow described below | The tavern clears the conversation text window before its greeting. `N` or Space prints the resident pardon/refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
 | Tavern provision branch | Six-record quote pool, `SHOPPE.DAT` ordinals `77..82`, plus resident quantity prompt, refusal, and partial-purchase literals; the table-scraps outcome renders ordinal `90` | Uniform `0..5` draw when the quote is rendered, once per entry into the branch. The quantity prompt, the pay loop, and every outcome line are deterministic | The quote and quantity prompt append to the tavern text already on screen. The typed-quantity prompt waits for the number; the outcome line does not wait for a key before the branch returns | Gold and food move one unit at a time inside the pay loop. The surcharge runs only on the completed-purchase exit. The two nothing-served outcomes end the visit |
 | Sage rumour flow | `SHOPPE.DAT` record `84` for fee quote, records `85..88` for paid success, record `91` for short funds | Record `84` is deterministic after topic match. Paid success draws uniform `0..3` across records `85..88` only after confirmation and successful debit. Short funds deterministically uses record `91` | Refusal does not consume a success draw. Short funds does not consume a success draw | Gold is deducted before the success rumour record is drawn and rendered |
@@ -585,7 +599,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Tavern / meal entry | Per-shop tavern greeting and menu records selected by the tavern state | Clears the inherited conversation text window before the greeting, then appends | No shop-local cursor origin after the clear | Entry accepts `Y`, `N`, or Space. Other keys leave the greeting visible and keep polling |
 | Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
 | Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input returns; unknown topics print the no-help line and re-prompt. `N` exits before a success draw; short funds exits without a success draw |
-| Horse-trader entry and quote | Shared non-arms preamble row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space exits silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
+| Horse-trader entry and quote | Shared non-arms entry-greeting row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space echoes the resident `No` literal and exits through the nothing-bought closing bark, not silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
 | Shipwright entry and branch | Shared shipwright bark rows, resident Frigate/Skiff menu text, deterministic local quote text | The shipwright body clears the inherited conversation text window before its prompt body, then appends branch text | No shop-local cursor origin after the clear | Invalid outer choices re-poll the menu. Delivery-pending and short-funds refusals print branch text and return without queueing a vehicle |
 | Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Branch-local prompts wait according to the selected room, leave, or pickup path; failed eligibility checks print their refusal and return to the inn prompt path |
 | Inn multi-guest pickup register | Resident register frame/list text and guest names copied from the inn registry | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
@@ -609,8 +623,8 @@ Prompt redraw rules are intentionally narrow. A prompt redraw occurs only when
 the flow explicitly calls the prompt/menu renderer again, such as healer service
 re-prompting or sage no-match re-prompting. Plain ignored-key waits do not clear
 the inherited window, do not re-render the visible quote or menu, and do not
-consume a random bark draw. Shared preamble, initial-greeting, and farewell
-random barks are not retained in hidden state: the visible text remains only
+consume a random bark draw. The shared entry-greeting and closing-bark
+selections are not retained in hidden state: the visible text remains only
 because the caller keeps polling without calling the bark dispatcher again.
 A later dispatcher call selects a fresh row ordinal.
 
@@ -702,10 +716,12 @@ because its exact wording does not change engine behaviour or menu geometry.
 Where the same wording is needed in a future flow, publish it here rather than
 inventing an ordinal for it.
 
-One shipped-data oddity is worth calling out so it is not "fixed": the
-healer/sanctum initial-greeting and farewell rows in the table above name the
-same four records. That is what the shipped selector tables hold; a healer
-therefore greets and says goodbye from one pool.
+One shipped-data detail is worth calling out so it is not "fixed": the
+healer/sanctum row names the same four records in both exit columns of the
+table above. That is what the shipped selector tables hold, and under the
+corrected reading it is not even anomalous - both columns are exits, so a
+sanctum blesses the party on the way out either way, whether or not it was paid
+for a treatment.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -1257,7 +1273,7 @@ the shipwright menu:
   Skiff purchase and leaves the pending state and gold unchanged.
 
 The shipwright dialogue is drawn from the ship-broker record cluster. Beyond
-the shared preamble/greeting/farewell rows in Section 8.A, the deterministic
+the shared entry-greeting and closing-bark rows in Section 8.A, the deterministic
 records this flow renders are: the menu/prompt body at the top of each loop
 pass (record `119`), the Frigate quote (`117`), the Skiff quote (`118`), the
 shared take-it confirmation (`126`), the limited-dock-space quote used when a
@@ -1561,8 +1577,8 @@ The behaviour described here was derived from the private function and format no
   `SHOPPE.DAT` record inspection -- Frigate/Skiff labels, boardable ship/skiff
   families, and ship hull/skiff-count auxiliary semantics.
 - `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` -- shared
-  preamble, initial-greeting, and farewell random-bark record ordinals by
-  shop trigger.
+  entry-greeting and closing-bark random-bark record ordinals by shop trigger,
+  including the 2026-08-22 correction of the row labels.
 - `u5-decomp/notes/shoppe_window_geometry_call_sweep_2026-05-24.md` and
   `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md` -- overlay call
   sweep and the later whole-build census of the text-window selector,

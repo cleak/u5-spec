@@ -265,13 +265,13 @@ renderer table are relative to the cell anchor and use `(x,y)` order.
 | `7` | frame-line bank | Direct frame-chain variant. It selects the same frame-line source family used by class `0x5A`, then draws the ordinary filled cell frame. |
 | `8` | dedicated rough-terrain bank | Upper-left two-by-two block plus lower-right two-by-two block: `(0,0)..(1,0)`, `(0,1)..(1,1)`, `(2,2)..(3,2)`, `(2,3)..(3,3)`. |
 | `9` | secondary terrain bank | Hybrid pattern: horizontal line `(0,0)..(3,0)`, horizontal line `(0,2)..(3,2)`, plus two lower-half micro-blits rooted at `(1,2)` and `(0,3)`. |
-| `0xA` | modal terrain banks | Four-corner/ring renderer rooted at `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)`. Source selection is per corner and may switch among normal, secondary, and peer/blue families according to the view-mode flag and the cell's low-nibble class. |
+| `0xA` | modal terrain banks | The water class: shoals, fourteen of the sixteen river/shoreline variants, and open water. Four micro-blits rooted at `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)`. Source selection is per corner. A corner takes the secondary terrain family only when the cell is one of the river ids **and** that corner's bit is clear in the cell's four-bit low-nibble shoreline mask; in every other case it takes the peer/blue family under peer/gem view and the normal terrain family otherwise. |
 | `0xB` | modal terrain banks | Two diagonal micro-blits rooted at `(0,0)` and `(2,2)`. Normal and peer/gem-view modes select different source families. |
-| `0xC` | none | Table-mapped no-op/default class for tile id `0x01`; it falls through without a dedicated renderer. |
+| `0xC` | modal terrain banks | Deep water (tile id `0x01`) is the sole member. A single micro-blit at `(2,2)` and nothing else. The source is the peer/blue family under peer/gem view and the normal terrain family otherwise. *Corrected:* an earlier revision published this class as a table-mapped no-op with no renderer. It does render. |
 | `0xD` | fixed plus modal terrain banks | Four micro-blits. The top pair `(1,0)` and `(3,1)` always use the fixed secondary terrain source; the bottom pair `(0,2)` and `(2,3)` use the modal normal/peer source. |
 | `0xE` | frame-line bank | Vertical line `(1,0)..(1,3)` and vertical line `(2,0)..(2,3)`. |
 | `0xF` | normal terrain bank | Direct peer/gem-view variant using the normal terrain source with the ordinary cell-frame chain. |
-| `0x10` | frame-fill and frame-line banks | Fence/wall renderer. It first paints a center fill `(1,1)..(2,2)`. Edge bits then add top `(1,0)..(2,0)`, right `(3,1)..(3,2)`, bottom `(1,3)..(2,3)`, and left `(0,1)..(0,2)`. Tile ids `0x22..0x25` add one interior orientation marker at `(1,2)`, `(1,1)`, `(2,1)`, or `(2,2)` respectively. |
+| `0x10` | secondary terrain, frame-fill and frame-line banks | The road class; its seven tile ids are the whole road family and nothing else maps here. The cell opens with the class-`1` sparse checker, then a centre fill `(1,1)..(2,2)` — the road body. A per-tile four-bit connection mask then adds a stub out to each connected cell edge: top `(1,0)..(2,0)`, right `(3,1)..(3,2)`, bottom `(1,3)..(2,3)`, left `(0,1)..(0,2)`. The shipped masks are north-south for `0x20`, east-west for `0x21`, the four single elbows for `0x22`, `0x23`, `0x24` and `0x25`, and all four edges for `0x26`. For the four elbow ids only, one further micro-cell is stamped with the blank source over the quarter of the centre fill diagonally opposite the elbow — `(1,2)`, `(1,1)`, `(2,1)` and `(2,2)` respectively — which rounds the unused corner off the road body. *Corrected:* an earlier revision called this a fence/wall renderer whose last stamp was an interior orientation marker. It is neither. |
 | `0x5A` | frame-line bank | Compatibility/direct-call class. It uses the same source family and filled-cell frame chain as class `7`; no shipped tile-id table entry maps here. |
 
 The resident view-class table maps tile ids to these classes as compact ranges:
@@ -306,9 +306,9 @@ addresses. The renderer uses these families consistently:
 |---|---|
 | Frame fill | Class `3` and the center fill in class `0x10`. |
 | Frame line / structure outline | Classes `4`, `5`, `6`, `7`, `0xE`, and compatibility class `0x5A`. |
-| Normal terrain | Class `0xF` and the normal-mode branches of `0xA`, `0xB`, and `0xD`. |
-| Secondary terrain | Classes `1`, `2`, `9`, the fixed top layer of class `0xD`, and one class-`0xA` branch. |
-| Peer/blue terrain | Peer/gem-view branches of classes `0xA`, `0xB`, and `0xD`. |
+| Normal terrain | Class `0xF` and the normal-mode branches of `0xA`, `0xB`, `0xC`, and `0xD`. |
+| Secondary terrain | Classes `1`, `2`, `9`, the fixed top layer of class `0xD`, the opening checker of class `0x10`, and the river-shoreline branch of class `0xA`. |
+| Peer/blue terrain | Peer/gem-view branches of classes `0xA`, `0xB`, `0xC`, and `0xD`. |
 | Dedicated rough terrain | Class `8` only. |
 
 ### 4.2 The Sky Renderer
@@ -681,6 +681,18 @@ private address maps.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x0DDA_view_classB_two_blits_modal.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x0E16_view_classD_two_pair_modal_split.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x0E7A_view_creature_marker.md`.
+- Source provenance: the road identity of view class `0x10` together with its
+  connection-mask stub set and its diagonal corner notch; the water identity of
+  view class `0xA` together with its per-corner river shoreline mask; and the
+  correction of view class `0xC` from a table-mapped no-op to a single
+  micro-blit -- re-derived on 2026-08-22 from the shipped view-class table and
+  the two per-class renderers, and recorded in the dated correction banners on
+  the private analysis notes
+  `u5-decomp/functions/LOOKOBJ_OVL/0x0E7A_view_creature_marker.md` and
+  `u5-decomp/functions/LOOKOBJ_OVL/0x0CF4_view_dungeon_room_tile.md`. Both
+  filenames are historical: those two working names are withdrawn in the notes
+  themselves, and neither a creature marker nor a dungeon-room tile exists in
+  this overlay.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x0F7E_view_dispatch.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/0x10FC_local_view_render.md`.
 - `u5-decomp/functions/DNGLOOK_OVL/_OVERVIEW.md`.

@@ -128,9 +128,9 @@ behavior, with these traced shared rules:
 
 | Flow point | Selection rule | Random draw timing |
 |---|---|---|
-| Shared shop noticing bark | Pick one of four records from the current shop-kind row of the noticing-bark table. | One uniform `0..3` draw when the preamble is rendered. |
-| Shared initial greeting | Pick one of four records from the current shop-kind row of the initial-greeting table. | One uniform `0..3` draw when the greeting dispatcher is called in greeting mode. |
-| Shared farewell | Pick one of four records from the current shop-kind row of the farewell table. | One uniform `0..3` draw when the greeting dispatcher is called in farewell mode. |
+| Shared shop entry greeting | Pick one of four records from the current shop-kind row of the entry-greeting table. | One uniform `0..3` draw when the entry greeting is rendered. |
+| Shared closing bark, nothing bought | Pick one of four records from the current shop-kind row of the nothing-bought exit table. | One uniform `0..3` draw when the closing-bark step runs with the nothing-bought outcome. |
+| Shared closing bark, purchase completed | Pick one of four records from the current shop-kind row of the purchase-completed exit table. | One uniform `0..3` draw when the closing-bark step runs with the purchase-completed outcome. A third, silent outcome renders nothing. |
 | Arms long greeting | Pick one of two resident literal greeting variants, then print the fixed arms prompt literals. | One uniform `0..1` draw during arms entry. |
 | Arms buy affirmation | Pick one of four resident literal affirmation variants before entering the buy menu. | One uniform `0..3` draw only after the player selects Buy. |
 | Arms buy item quote | Select the item-description record from the chosen equipment id; the public mapping is in `systems/shops.md`. | No random draw. |
@@ -152,12 +152,15 @@ selecting a `SHOPPE.DAT` record. Individual shop arms may also print resident
 literals before or after a `SHOPPE.DAT` record, so a clean implementation
 should not assume every visible shop line comes from this file.
 
-The shared preamble, initial-greeting, and farewell random-bark rows have
-public record-id tables in `systems/shops.md`. The rows in that table are taken
-from the shipped selector tables as they stand, including one case that looks
-like a mistake and is not: the healer/sanctum kind names the same four records
-for its initial greeting and its farewell. That is the shipped data and should
-be reproduced, not repaired.
+The shared entry-greeting and closing-bark rows have public record-id tables
+in `systems/shops.md`. **Correction, 2026-08-22:** this section previously
+called the middle row an "initial greeting". It is not entry text. Of the three
+shared rows, only the first is rendered on arrival; the other two are both
+rendered on the way out of a shop by one closing-bark step, chosen by whether
+the visit completed a purchase. The rows in that table are taken from the
+shipped selector tables as they stand, including the healer/sanctum kind, which
+names the same four records in both of its exit rows - which is consistent
+rather than anomalous once both rows are understood as exits.
 
 Selector tables in the resident data hold each record's start position rather
 than its ordinal. The two are interchangeable because records are stored
