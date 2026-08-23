@@ -200,7 +200,7 @@ Callers pair record 0 with one of the others to compose a two-word heading. The 
 
 **Retraction.** Earlier revisions of this section described `TEXT` as "the bitmap font and other glyph artwork ... a row of glyphs laid out side-by-side ... which the renderer slices per-character at draw time", and listed "printable ASCII, runic glyphs, status-bar bitmaps, party-status icons" as candidate per-strip roles. All of that is **withdrawn**. The printable and runic fixed-cell fonts live in the `.CH` character files (`formats/font-ch.md`) and the proportional font in `PROPORT.PCS` (`formats/font-pcs.md`); no font data of any kind is in `TEXT`.
 
-The **dungeon wall billboards** in `DNG1`, `DNG2`, and `DNG3` carry the pre-rendered three-dimensional perspective views the dungeon mode composites onto the player's view. Each file carries twenty-eight slots in a fixed directory, with two slots empty (offset zero) and the rest filled. The three files correspond to the three dungeon presentation flavour bytes, selected on dungeon-mode entry from a three-entry filename table indexed by that byte; the flavour-to-dungeon binding is published in `systems/dungeon-mode.md` section 2. All three directories are byte-identical - same slot count, same empty slots, same per-image dimensions - so the three files are pure texture variants over one shared geometry.
+The **dungeon wall billboards** in `DNG1`, `DNG2`, and `DNG3` carry the pre-rendered three-dimensional perspective views the dungeon mode composites onto the player's view. Each file carries twenty-eight slots in a fixed directory, with two slots empty (offset zero) and the rest filled. The three files correspond to the three dungeon presentation flavour bytes, selected on dungeon-mode entry from a three-entry filename table indexed by that byte; the flavour-to-dungeon binding is published in `systems/dungeon-mode.md` section 2. All three directories are byte-identical - same slot count, same empty slots, same per-image dimensions - while every slot's pixel block differs between the three files, so they are pure texture variants over one shared geometry. The slot-to-role mapping is in Section 10.
 
 The **screen panels** in `STARTSC`, `ENDSC`, `END1`, `END2`, `STORY1` through `STORY6`, `ULTIMA`, and `CREATE` carry full-screen or partial-screen artwork for the title and menu screens, the acknowledgement/credits page, the end-game sequence, the story screens, and the character-creation screen. Note the split inside the title sequence: `ULTIMA` holds the start/menu banner and its animated bands, while `STARTSC` holds only the acknowledgement page and its two ornamental pillars and is used by no other path (`systems/intro.md` sections 3 and 11.1). These are the files whose decompressed sizes can rival or exceed the tile atlas itself, because each panel is a single large bitmap rather than a packed atlas of small tiles.
 
@@ -300,7 +300,19 @@ archive decoding:
 
 - **Per-strip roles in `TEXT`.** Closed. The six records are whole-image chapter headings, not glyph strips; their sizes, words and consumers are published in Section 6. There is nothing to slice and no font data in this file.
 
-- **Per-slot mapping in `DNG1`/`DNG2`/`DNG3`.** *Closed.* The twenty-eight slots are four families of four side images (wall, door, opening, flavour wall), three families of forward images at the three farther depth bands, and one wide image used for any blocker at point-blank range; the two empty slots are the point-blank entries of two forward families, which the renderer never requests because it overrides them. The slot roles, their widths, and the destination rule are published in `systems/dungeon-mode.md` section 6.2 and 6.3, and the file-to-flavour assignment in section 6.2.
+- **Per-slot mapping in `DNG1`/`DNG2`/`DNG3`.** *Closed.* The twenty-eight slots are seven families of four, one image per depth band, addressed as `slot = family_base + band`:
+
+  | Slot | Role |
+  |---|---|
+  | 0-3 | Side wall |
+  | 4-7 | Side door |
+  | 8-11 | Forward wall |
+  | 12-15 | Forward door |
+  | 16-19 | Side opening |
+  | 20-23 | Side flavour wall |
+  | 24-27 | Forward flavour wall |
+
+  The two empty slots are 8 and 24, the band-0 entries of the forward wall and forward flavour wall families: at point-blank range the renderer substitutes slot 12 for every blocker class, so nothing ever requests them. The same table with per-band widths, the visual signature of each family, and the class-to-family selection rule are in `systems/dungeon-mode.md` sections 6.2 and 6.4; the placement rule is in section 6.3 and the file-to-flavour assignment in section 6.2.
 
 - **`MON0`–`MON7` monster category mapping.** Each of the eight files carries three sprites; which file holds which monster category (animals, undead, demons, dragons, and so on) is a property of the resident monster table, not of the file format. A content tool that wants to extract a named monster's sprites must consult the monster table.
 

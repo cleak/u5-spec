@@ -350,6 +350,12 @@ flavour 3 the third. The file is chosen once, on dungeon-mode entry, from a
 three-entry filename table indexed by the flavour byte, and the object sprite
 file is loaded alongside it.
 
+The art corroborates that ordering independently of any table: the second
+file's corridor is a timbered mine shaft with support beams and props, which is
+the presentation class Section 2 labels *Mine*; the first is a natural rock
+cavern with hanging formations, the *Normal* class; and the third is dressed
+masonry with wall fittings, the class Section 2 leaves unnamed.
+
 **All three corridor files have byte-identical directories**; only the pixels
 differ. That is the whole of the "different dungeons look different" mechanism:
 a clean implementation needs one geometry and three texture sets. Both banks are
@@ -360,15 +366,66 @@ absent** (Section 6.4 explains why). Every image is **164 rows tall** and is
 drawn at a **fixed vertical origin of y = 14**, so the only per-image variable
 is horizontal placement.
 
-| Role | Band 0 | Band 1 | Band 2 | Band 3 |
-|---|---|---|---|---|
-| Side wall | 24 wide | 32 wide | 16 wide | 8 wide |
-| Side door | 24 | 32 | 16 | 8 |
-| Side opening | 24 | 32 | 16 | 8 |
-| Side flavour wall | 24 | 32 | 16 | 8 |
-| Forward wall | *absent* | 56 | 24 | 8 |
-| Forward door | **80** | 56 | 24 | 8 |
-| Forward flavour wall | *absent* | 56 | 24 | 8 |
+The twenty-eight entries are **seven families of four**, laid out contiguously
+in family order. The addressing rule is the whole of the mapping:
+
+> **slot = family_base + band**, where `band` is 0 through 3 and every
+> `family_base` is a multiple of four.
+
+Equivalently, `family = slot / 4` and `band = slot % 4` - the low two bits of a
+slot index *are* the depth band, and the renderer forms every slot index by
+adding the band to a per-role constant. The seven bases, with the width of each
+band's image:
+
+| Slot | Role | Band 0 | Band 1 | Band 2 | Band 3 |
+|---|---|---|---|---|---|
+| **0-3** | Side wall | 24 wide | 32 wide | 16 wide | 8 wide |
+| **4-7** | Side door | 24 | 32 | 16 | 8 |
+| **8-11** | Forward wall | *absent* | 56 | 24 | 8 |
+| **12-15** | Forward door | **80** | 56 | 24 | 8 |
+| **16-19** | Side opening | 24 | 32 | 16 | 8 |
+| **20-23** | Side flavour wall | 24 | 32 | 16 | 8 |
+| **24-27** | Forward flavour wall | *absent* | 56 | 24 | 8 |
+
+The two absent entries are therefore **slot 8** and **slot 24**. Slot **12** is
+the point-blank image that stands in for all three forward families at band 0.
+
+The side and forward roles are not interleaved by accident: a slot in
+`0-7` or `16-23` is a **side** image and a slot in `8-15` or `24-27` is a
+**forward** image, and the renderer relies on exactly that range test when it
+decides where to put the mirrored copy (Section 6.3). An implementation that
+stores the seven bases as one named constant should keep them in this order,
+because the ranges - not the roles - are what the placement rule reads.
+
+There is no forward *opening* family. A forward cell that is not a blocker
+paints nothing at all and the sweep simply advances to the next band, so the
+forward side of the table has three families where the side has four. Nor is
+any family a "far wall" or "end wall": depth is carried by the band index
+within a family, never by a separate family, and the deepest image in every
+family is just that family's 8-wide band-3 entry.
+
+**Recognising the families by eye.** An implementation that has just decoded
+the three corridor files can confirm the table above without running anything,
+because the seven families are visually distinct at a glance. Tiling all four
+bands of one side family across the left half of the view and mirroring it
+gives a complete corridor wall; doing that for each side family in turn shows:
+
+| Family | What the shipped art shows |
+|---|---|
+| Side wall (0-3) | An unbroken receding wall surface with no fittings. |
+| Side door (4-7) | A framed doorway set into the wall at each band, in a material that contrasts with the wall - dressed masonry, metal, or timber depending on the flavour. |
+| Side opening (16-19) | The wall interrupted by a recessed bay: the near wall stops, a darker surface stands further back, and the floor runs out sideways into it. |
+| Side flavour wall (20-23) | The plain wall of family 0-3 with scenery composited on: hanging formations, floor debris, wall fittings, or a chained figure, depending on the flavour. |
+| Forward wall (8-11) | A flat blocking face, half the aperture wide, with no fittings. |
+| Forward door (12-15) | The same face carrying a framed doorway. The band-0 entry is the wide point-blank image: a full-height frame filling the aperture around an unlit interior, which is what standing *in* a doorway looks like. |
+| Forward flavour wall (24-27) | The forward wall of family 8-11 with the same scenery treatment as 20-23. |
+
+The two decorated families are the strongest check available, because they are
+their plain counterparts *plus* an overlay rather than independent artwork: a
+per-pixel comparison of slots 20-23 against 0-3, and of slots 25-27 against
+9-11, differs over well under a tenth of the image in every band, while any
+other pairing of families differs far more. A reader who has mixed up the plain
+and decorated families will see that ratio invert.
 
 Two invariants make the widths self-checking:
 
@@ -417,12 +474,12 @@ rules; no further tables are needed.
 cell to the right, using the perpendicular of the facing direction. The image is
 chosen from the side cell's high nibble:
 
-| Side cell | Image family |
-|---|---|
-| Any class below the door families - passage, ladders, chest, fountain, pit, open chest, energy field, and the unused `0x9?` class | Side **opening** |
-| `0xA?` heavy door, `0xE?` heavy door, `0xF?` room trigger | Side **door** |
-| `0xC?` flavour wall | Side **flavour wall**, plus the decoration of Section 6.8 |
-| `0xB?`, `0xD?` plain wall | Side **wall** |
+| Side cell | Image family | Slot |
+|---|---|---|
+| Any class below the door families - passage, ladders, chest, fountain, pit, open chest, energy field, and the unused `0x9?` class | Side **opening** | `16 + band` |
+| `0xA?` heavy door, `0xE?` heavy door, `0xF?` room trigger | Side **door** | `4 + band` |
+| `0xC?` flavour wall | Side **flavour wall**, plus the decoration of Section 6.8 | `20 + band` |
+| `0xB?`, `0xD?` plain wall | Side **wall** | `0 + band` |
 
 Note that class `0x9?` selects the *opening* image, not the wall image; every
 class below the door families does.
@@ -431,18 +488,32 @@ class below the door families does.
 the door families, and the sweep continues to the next band. Otherwise it paints
 a blocker twice - left copy then mirrored copy - and reports "blocked":
 
-| Forward cell | Band 1 | Band 2 | Band 3 |
-|---|---|---|---|
-| `0xA?` heavy door | forward door | forward door | forward door |
-| `0xB?` wall | forward wall | forward wall | forward wall |
-| `0xC?` flavour wall | forward flavour wall | forward flavour wall | forward flavour wall |
-| `0xD?` wall | same as `0xB?` | same | same |
-| `0xE?` heavy door | forward door | forward door | forward door |
-| `0xF?` room trigger | forward door | forward door | forward door |
+| Forward cell | Image family | Slot at bands 1-3 |
+|---|---|---|
+| `0xA?` heavy door | forward **door** | `12 + band` |
+| `0xB?` wall | forward **wall** | `8 + band` |
+| `0xC?` flavour wall | forward **flavour wall** | `24 + band` |
+| `0xD?` wall | forward **wall**, same as `0xB?` | `8 + band` |
+| `0xE?` heavy door | forward **door** | `12 + band` |
+| `0xF?` room trigger | forward **door** | `12 + band` |
 
-**At band 0 every blocker family uses the single point-blank image**, whatever
-its class - the override is unconditional, and it is the reason the three band-0
-forward directory entries do not exist.
+The blocker's high nibble is the only input; the low nibble never affects the
+choice. Note that the six classes collapse onto three families - `0xB?` and
+`0xD?` share the plain wall, and `0xA?`, `0xE?` and `0xF?` all share the door -
+so a reader who expects six distinct forward looks will not find them.
+
+**At band 0 every blocker family uses the single point-blank image, slot 12**,
+whatever its class - the override is unconditional and happens before the
+family lookup is consulted at all. It is the reason the band-0 entries of the
+forward wall and forward flavour wall families, slots 8 and 24, do not exist:
+they are the only two slots no code path can ever request.
+
+The override costs nothing in practice, because band 0 is the party's own cell
+(Section 6.5) and the party cannot be standing inside a plain or flavour wall.
+The only blockers that occur underfoot are the door classes, so the one image
+the point-blank case ever needs to depict is a doorway - which is exactly what
+slot 12 draws. An implementation may treat "band 0 forward blocker" as a single
+special case and never look at the family table there.
 
 Two special cases at band 0:
 
