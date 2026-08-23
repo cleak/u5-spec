@@ -64,8 +64,10 @@ The setup contract is:
 
 1. Print the capture narration: the party is overcome, blinded, and dragged
    away by guards.
-2. Skip party members already marked as jailed or otherwise outside the
-   current challenge target set.
+2. Select which shrine the interrogation will demand a mantra for: scan the
+   eight shrine ruin flags in shrine order and take the first whose flag is
+   *exactly* clear — never ruined and never restored. If every flag is
+   non-zero the whole audience is abandoned.
 3. Clear the active-object table so the audience scene can reuse those records
    as temporary cinematic actors.
 4. Load the Blackthorn audience map from `MISCMAPS.DAT`.
@@ -80,10 +82,16 @@ The active-object writes in this flow are presentation state. They do not
 describe the live town map and should not be saved back as ordinary world
 objects.
 
-During the opening capture pass, the handler narrates the first party slot —
-scanning from the leader through all eight slots — whose per-member
-Blackthorn-jail flag is still clear. If every slot is already flagged, the whole
-capture narration is skipped and the flow jumps directly to the audience proper.
+> **Withdrawal.** Earlier revisions of this section said the handler "narrates
+> the first party slot, scanning from the leader through all eight slots, whose
+> per-member Blackthorn-jail flag is still clear". **There is no per-member jail
+> flag.** The eight bytes that reading was built on are the game's **shrine ruin
+> flags** — the same durable save field this spec already documents in
+> `formats/saved-gam.md` and `systems/quest-flags.md`. The eight-slot scan
+> selects a *shrine*, not a party member: the first shrine that is neither
+> ruined nor restored. If every flag is non-zero the flow jumps directly past
+> the block. The spec previously contradicted itself on these bytes; the shrine
+> reading is correct and the jail reading is withdrawn in full.
 
 **Retraction.** Earlier revisions of this section described a "capture
 death-route marker" that could turn the same presentation into a death outcome.
@@ -120,47 +128,86 @@ Compatibility rules:
 - The prompt input accepts at most fourteen typed characters before comparison.
 - Answer comparison is case-insensitive and substring-style: the expected word
   may appear anywhere in the typed buffer rather than being the entire input.
-- The loop uses four fixed prompt ordinals. The active party-slot argument
-  changes the prompt framing and the jailed target, but the traced answer
-  lookup is indexed by prompt ordinal rather than by party slot.
-- The four live prompt ordinals use the first four virtue names and answer
-  syllables in paired order:
+- **The loop asks about ONE shrine, up to four times.** The shrine index is
+  fixed before the loop starts and never changes inside it. The four prompt
+  ordinals change only the *wording*, which escalates from a plain question, to
+  a repeat, to an impatient demand, to a shouted final demand.
+- **The expected answer is the selected shrine's mantra, and it is the same on
+  all four prompts.** All eight virtue/mantra pairs are live:
 
-  | Prompt word | Accepted answer |
-  |-------------|-----------------|
+  | Shrine | Accepted answer |
+  |--------|-----------------|
   | Honesty | `Ahm` |
   | Compassion | `Mu` |
   | Valour | `Ra` |
   | Justice | `Beh` |
+  | Sacrifice | `Cah` |
+  | Honor | `Summ` |
+  | Spirituality | `Om` |
+  | Humility | `Lum` |
 
-  The resident tables also carry later virtue/mantra pairs, but this traced
-  challenge loop only iterates the first four ordinals.
-- A correct answer marks the current target party member as jailed or handled.
-- If more than one eligible party member remains after a correct answer, the
-  flow can silently route that member into jail state and continue.
-- If the active count is too low, correct or wrong answers can end the loop
-  through a reply-and-pause branch rather than continuing to another prompt.
-- The challenge does not directly adjust numeric karma in the traced overlay.
-  It reads moral or quest language for presentation, while durable virtue-score
-  changes remain owned by the karma system.
+- **A correct answer ruins that shrine and costs five points of moral
+  standing.** The shrine's durable ruin flag is set, so the shrine thereafter
+  renders and behaves as a ruined shrine until the player restores it by
+  meditating there. The moral-standing debit is a clamped subtraction of five,
+  floored at zero.
+- **A correct answer also decides a companion's fate.** If more than one
+  companion is still alive, Blackthorn thanks the player for their honesty and
+  **kills** one companion as "a merciful death". If only one remains, he spares
+  the player instead.
+- **A wrong answer, when few companions remain, ends the interrogation** with a
+  mocking line about lying and a threat of the dungeon.
+- **A wrong answer otherwise escalates.** The first wrong answer produces a
+  threat naming the companion at risk. Later wrong answers stamp a tile into
+  the cutscene map, and the fourth wrong answer **kills** the named companion
+  with the pendulum-blade narration.
 
-The loop's party-slot argument is semantic: it names which companion is at
-risk in the current capture branch. A compatible implementation should keep
-the challenge party-targeted rather than treating it as a global yes/no quiz.
+> **Withdrawal.** Earlier revisions of this section said the answer lookup was
+> "indexed by prompt ordinal rather than by party slot", that "this traced
+> challenge loop only iterates the first four ordinals", that "a correct answer
+> marks the current target party member as jailed or handled", that the flow
+> "can silently route that member into jail state", that "the challenge does not
+> directly adjust numeric karma", and that "the loop's party-slot argument is
+> semantic: it names which companion is at risk". **All six claims are
+> withdrawn.** The answer is indexed by shrine, not by prompt ordinal; the four
+> ordinals are four wordings of one question, not four different questions; the
+> flag set is a shrine's, not a party member's; the "silent routing" is a
+> companion being killed; and the interrogation *does* debit moral standing.
 
 ## 5. Failure Reaction
 
-When the challenge fails on a branch that can punish a companion, Blackthorn
-prints a reaction, runs a punishment animation, and names the party's second
-visible member as the dragged-away victim.
+When the interrogation fails on a branch that can punish a companion, Blackthorn
+prints a reaction, runs the punishment animation, and names the party's second
+living member as the victim.
 
 The visible sequence is:
 
 1. Build and print the failure reaction text.
-2. Play the failed-challenge cutscene beat.
+2. Play the failed-demand cutscene beat.
 3. Move Blackthorn and the victim through the audience scene.
 4. Print the static punishment fragments around the named victim.
 5. Wait for player acknowledgement before returning to the caller branch.
+
+**The punishment is an execution, and it is durable.** Earlier revisions of this
+section described only "a punishment animation" and "a dragged-away victim" and
+omitted the consequence entirely. The victim is the second living party member
+(the first living companion behind the Avatar), and the routine:
+
+- erases that companion's on-screen actor;
+- lifts their roster record out of the party, compacts the remaining records
+  up, and decrements the party count;
+- parks the lifted record in the last roster slot with a **whereabouts value
+  that matches no location**.
+
+That whereabouts field is the same one the innkeeper uses when a companion is
+left at an inn; the value written here matches no inn and no scene, so no inn
+can ever retrieve them, and nothing else in the game reads it back. The refuge/
+rescue sequence does not restore them either. **The companion is dead and gone,
+and the effect survives saving and reloading.**
+
+The same execution runs on the *correct*-answer branch whenever more than one
+companion is alive, under a different message — Blackthorn thanking the player
+for their honesty and granting the companion "a merciful death".
 
 The exact reaction-string builder and every static fragment's text remain
 data-owned. This spec intentionally records the behavior and actor roles
@@ -356,7 +403,9 @@ The Blackthorn overlay uses several kinds of state with different lifetimes:
 
 | State | Lifetime |
 |-------|----------|
-| Jailed or handled party-member flags | Durable story/capture state |
+| Shrine ruin flags | Durable world state, shared with `systems/quest-flags.md` and `formats/saved-gam.md`. **Correction:** this row previously read "Jailed or handled party-member flags"; those bytes are the shrine ruin flags. |
+| Roster removal of an executed companion | Durable and irreversible: record lifted from the party, party count decremented, record parked with an unmatchable whereabouts value |
+| Moral standing | Durable; debited five per correct interrogation answer, floored to seventy-five by the rescue path |
 | Active-object table during audience/rescue | Temporary cinematic actors |
 | `MISCMAPS.DAT` cutscene map | Temporary scene background |
 | `MISCMSG.DAT` audience records | Temporary message source |
@@ -368,9 +417,9 @@ The Blackthorn overlay uses several kinds of state with different lifetimes:
 | Standing/progression byte clamp | Durable rescue/story floor |
 
 Implementations should not conflate these. In particular, the active-object
-table is repurposed for cinematic drawing, while party jail flags, the
-post-capture counter, and the rescue progression counter are the durable
-gameplay outputs.
+table is repurposed for cinematic drawing, while the shrine ruin flags, the
+roster removal, the moral-standing debit, the post-capture counter, and the
+rescue progression counter are the durable gameplay outputs.
 
 **Retraction.** An earlier revision of this table also listed a "capture
 death-route marker" and a "conversation Blackthorn signal". Both are withdrawn.
@@ -429,9 +478,11 @@ Remaining exactness is presentation parity and one shared-state question:
 - Verify the exact visual identities of the cutscene tile-write bytes and the
   exact cursor/glyph effects of the output-byte commands if pixel-level
   Blackthorn cutscene parity is required.
-- The per-member Blackthorn-jail flag band is claimed by more than one reader
-  in the private analysis; a compatible implementation should keep it a
-  Blackthorn-owned band until that overlap is resolved.
+- ~~The per-member Blackthorn-jail flag band is claimed by more than one
+  reader.~~ **Resolved.** That band is the shrine ruin flags. It is *shared*
+  world state, not a Blackthorn-owned band: the interrogation sets a shrine's
+  flag, shrine meditation clears it, and region loading reads it to choose
+  between the intact and ruined shrine tile.
 
 ## 11. Sources
 

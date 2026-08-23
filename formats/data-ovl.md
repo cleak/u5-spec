@@ -31,8 +31,8 @@ resident data segment containing:
   plus state that is mirrored through the `.OOL` object-overlay files.
 - Transient runtime buffers: map tiles, visibility grids, text-window state,
   combat scratch, NPC schedule state, disk I/O buffers, the display-driver
-  dispatch cell, the separate resident screen-mode dispatch cell,
-  disk-prompt/mode-loop scratch, redraw flags, and other per-session working
+  dispatch cell, the separate resident disk-prompt/disk-error dispatch cell,
+  disk-prompt scratch, redraw flags, and other per-session working
   memory.
 - Compiler/runtime support data emitted by the Microsoft C runtime. This data
   is part of the loaded image but is not gameplay data.
@@ -547,25 +547,37 @@ The text system keeps four resident window descriptors. Each descriptor holds:
   behaviour.
 
 The resident image also holds the active-window index, cached style fields, the
-display-driver dispatch cell, and the separate resident screen-mode dispatch
-cell. `systems/text-output.md` owns text behaviour, `display-driver-abi.md`
-owns the driver ABI, `screen-mode-dispatch.md` owns the resident screen-mode
-controller, and DATA.OVL owns the storage.
+display-driver dispatch cell, and the separate resident disk-prompt/disk-error
+dispatch cell. `systems/text-output.md` owns text behaviour,
+`display-driver-abi.md` owns the driver ABI, `disk-prompt.md` owns the resident
+disk-prompt handler, and DATA.OVL owns the storage.
 
-### 6.5 Disk-Prompt And Presentation Scratch
+> **Correction.** Earlier revisions of this section called that second cell a
+> "resident screen-mode dispatch cell" owned by a "presentation controller".
+> It is the disk-error handler cell; see `systems/screen-mode-dispatch.md` for
+> the withdrawal notice.
 
-The resident image keeps session-only prompt and mode-loop bytes alongside the
-screen-mode dispatch cell. This family includes the running disk-prompt context
-used by disk-swap and retry paths, the small prompt-state table read by the
-presentation controller, and the cached rendered-mode marker used to suppress
-redundant setup. These bytes are live orchestration state only: they survive
-across calls during one process, but they are not part of the saved-game image.
-The disk-prompt request path normalizes historical prompt modes two and five to
-mode one before updating this context; the storage remains a resident
-presentation table, not saved-game or scene state.
+### 6.5 Disk-Prompt Scratch
 
-`systems/screen-mode-dispatch.md` owns the presentation-controller behaviour,
-and `systems/save-load.md` owns the disk-prompt and retry contract.
+The resident image keeps session-only disk bytes alongside the disk-error
+dispatch cell. This family is: the **required-disk index** (which distribution
+disk is currently needed), a small **per-disk drive-letter table** (with a marker
+meaning "unknown, must ask the user"), a floppy-drive count, a two-valued
+presentation-context byte deciding whether the prompt is drawn over a picture,
+and a cached already-prompted marker used to suppress redundant prompting.
+These bytes are live orchestration state only: they survive across calls during
+one process, but they are not part of the saved-game image. The disk request
+path normalizes two historical alias disk indices onto the Britannia index
+before storing.
+
+> **Correction.** Earlier revisions called these "prompt and mode-loop bytes",
+> the required-disk index a "running disk-prompt context" or "presentation-mode
+> byte", and the drive-letter table a "prompt-state table read by the
+> presentation controller" or "UI text table". All of that is withdrawn. The
+> prompt strings live in the resident string pool, not in this byte family.
+
+`systems/disk-prompt.md` owns the handler behaviour, and
+`systems/save-load.md` owns the retry contract.
 
 ### 6.6 Input Runtime State
 
@@ -662,7 +674,7 @@ Current specs that consume DATA.OVL facts:
 | `systems/overlay-abi.md` | Overlay residency metadata, shared-buffer grouping, and loader-facing state. |
 | `systems/main-loop.md` | Scene byte, overlay dispatch state, time/redraw state. |
 | `systems/display-driver.md` | Display-driver filename pool, the display-driver dispatch cell, text-cell state, and rendering contract. |
-| `systems/screen-mode-dispatch.md` | Separate resident screen-mode dispatch cell and presentation controller. |
+| `systems/disk-prompt.md` | Separate resident disk-error dispatch cell, required-disk index, and per-disk drive-letter table. |
 | `systems/text-output.md` | Text-window descriptors, active-window cache, and display-driver-facing text state. |
 | `systems/input.md` | Cursor-blink state, keyboard translation tables, prompt-state gate, typeahead flush gate. |
 | `systems/active-objects.md` | Shared 32-slot active-object table and combat backup/restore. |

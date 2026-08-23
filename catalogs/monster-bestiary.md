@@ -89,7 +89,7 @@ The following table publishes the eight stat-record fields for the hostile and
 special classes covered by this catalog. Columns are the clean field names from
 the fixed class-stat layout:
 
-| Class | Actor / creature | Tier | Speed | Flip HP | Defense | Attack cap | HP | Spawn count | Drop cap |
+| Class | Actor / creature | Tier | Speed | Endurance | Defense | Attack cap | HP | Spawn count | Drop cap |
 |------:|------------------|-----:|------:|--------:|--------:|-----------:|---:|------------:|---------:|
 | 0 | Mage | 10 | 15 | 20 | 0 | 15 | 10 | 3 | 20 |
 | 1 | Bard | 15 | 20 | 10 | 4 | 12 | 15 | 9 | 10 |

@@ -504,8 +504,10 @@ refresh helper identity.
 process-loader compatibility boundary, not gameplay state. `systems/launcher.md`
 now delegates no-selector display fallback and EGA sentinel policy to boot, and
 it corrects the old extra dispatch-cell wording by pointing the resident
-screen-mode controller to `systems/screen-mode-dispatch.md` and the loaded
-driver ABI to `systems/display-driver-abi.md`.
+disk-error handler to `systems/disk-prompt.md` and the loaded
+driver ABI to `systems/display-driver-abi.md`. (Superseded 2026-08-22: that
+second cell was called the "resident screen-mode controller" here; the name is
+withdrawn.)
 
 **Current boot sentinel boundary cleanup:** 2026-05-13 -
 `systems/boot.md` now treats the EGA sentinel as a startup-environment edge:
@@ -722,7 +724,7 @@ and extraction now cover the remaining promoted TOWN.OVL slice at behavioral
 depth: per-scene NPC activation/death masks, deterministic terrain variation,
 movement direction/exit/stair handling, town-local Open and Attack policy,
 Lord British basement chord state, Stonegate and underfoot effects, alarm
-pacify/fortify sweeps, arrest/jail outcome, post-scheduler event dispatch,
+forced-pursuit / forced-flight schedule-rewrite sweeps, arrest/jail outcome, post-scheduler event dispatch,
 and the free-roaming animal/object walker. Remaining town exactness is mostly
 data-table naming and byte-for-byte sequence verification, not the public
 mode contract.
@@ -1384,25 +1386,25 @@ traced gameplay, with no separate magic-powder consumer confirmed. Conversation
 now owns the fixed grant mechanics; quest graph validation owns shipped-data
 reachability for branches that invoke them.
 
-**Current screen-mode cell wording cleanup:** 2026-05-12 - `formats/data-ovl.md` and extraction now avoid grouping the resident screen-mode dispatch cell with the display-driver ABI cell. The screen-mode controller remains owned by `systems/screen-mode-dispatch.md`; the display-driver ABI owns the actual loaded-driver dispatch cell.
+**~~Current screen-mode cell wording cleanup~~ (SUPERSEDED 2026-08-22):** 2026-05-12 - `formats/data-ovl.md` and extraction now avoid grouping the second resident dispatch cell with the display-driver ABI cell. That separation still holds, but the cell is the **disk-prompt / disk-error handler** cell, now owned by `systems/disk-prompt.md`; there is no "screen-mode controller".
 
-**Current screen/prompt mode-state cleanup:** 2026-05-13 - `systems/screen-mode-dispatch.md` and `formats/data-ovl.md` now describe the dispatch input as resident session-only presentation and disk-prompt mode-loop state, not a save-backed world flag or the gameplay scene selector. The public contract still leaves the exact per-mode setup/prompt branch table open.
+**~~Current screen/prompt mode-state cleanup~~ (SUPERSEDED 2026-08-22):** 2026-05-13 - the "session-only, not a save-backed world flag" half was right. The rest is withdrawn: the dispatch input is the **required-disk index**, and the table it selects holds **drive letters**, not presentation state. There is no "per-mode setup/prompt branch table" left to decode. See `systems/disk-prompt.md`.
 
-**Current disk-prompt presentation cleanup:** 2026-05-13 -
-`systems/screen-mode-dispatch.md` now specifies the decoded disk-prompt
-request and retry presentation layer: active disk hints feed the shared
-prompt-state table, prompt modes two and five normalize to mode one, visible
-swap prompts are conditional on that state, retry helpers may bypass prompts
-for full-install/no-swap cases, and file semantics remain owned by
-`systems/save-load.md`. Remaining exactness is the historical per-entry
-disk-label/user-facing prompt table.
+**Current disk-prompt cleanup:** 2026-05-13, corrected 2026-08-22 -
+`systems/disk-prompt.md` specifies the disk request and retry layer: the
+required-disk index selects a per-disk drive-letter entry, two historical alias
+disk indices normalize onto the Britannia index, visible prompts are conditional
+on that entry being the unknown marker, retry helpers bypass the prompt when the
+drive is already known, and file semantics remain owned by
+`systems/save-load.md`. The historical disk labels are now decoded and published
+in `systems/disk-prompt.md`.
 
-**Current screen-mode write-error handler cleanup:** 2026-05-13 -
-`systems/screen-mode-dispatch.md` and `systems/save-load.md` now identify the
+**Current write-error handler cleanup:** 2026-05-13, corrected 2026-08-22 -
+`systems/disk-prompt.md` and `systems/save-load.md` identify the
 dispatch cell's alternate resident target as the write-side critical-error
-handler installed only around inner file writes. It is not a separate
-screen-mode branch; remaining screen-mode exactness is still the per-mode
-setup/prompt table and low-level prompt helper identities.
+handler installed only around inner file writes; it prints a write-protect
+message and waits for a key. There is no "per-mode setup/prompt table" left
+open — that item is withdrawn.
 
 **Current font high-bit caller-policy cleanup:** 2026-05-13 -
 `formats/font-ch.md` and `formats/font-hcs.md` no longer treat high-bit
@@ -1786,9 +1788,9 @@ paths.
 **Current main-loop disk-prompt cross-reference cleanup:** 2026-05-13 -
 `systems/main-loop.md` no longer describes between-mode disk handling as a
 generic file-probe callback. The outer loop now delegates visible disk-prompt
-state to `systems/screen-mode-dispatch.md` and read/write retry semantics to
-`systems/save-load.md`, preserving only the between-mode presentation-glue
-boundary at this layer.
+state to `systems/disk-prompt.md` and read/write retry semantics to
+`systems/save-load.md`, preserving only the between-mode boundary at this
+layer.
 
 **Current KARMA.DAT selector cleanup:** 2026-05-13 - `formats/karma-dat.md`, `systems/karma.md`, `systems/rest-and-camp.md`, and extraction now publish both traced verdict selectors: Blackthorn rescue/refuge selects records zero through four, while the Lord British-in-disguise camp event selects records zero through three for lower bands and the sixth record for the top band. The stale shrine-side `KARMA.DAT` caller gap has been removed; traced shrine/urn paths use shrine-local text and `MISCMSG.DAT`.
 
@@ -1860,11 +1862,15 @@ has been removed.
 
 **Current Blackthorn cleanup:** 2026-05-12 - a new
 `systems/blackthorn.md` specifies the BLCKTHRN capture audience, local
-cutscene script VM, four-question challenge shape, failed-challenge punishment
-beat, rescue/refuge restoration sequence, `MISCMAPS.DAT` / `MISCMSG.DAT` /
-`KARMA.DAT` data boundaries, the rescue five-band verdict selector, temporary
-cinematic active-object reuse, durable jail/progression state, and post-scene
-handoff coordinates. Later challenge-table, script-VM, audience-entry, and
+cutscene script VM, the four-prompt mantra interrogation, the failed-demand
+punishment beat, rescue/refuge restoration sequence, `MISCMAPS.DAT` /
+`MISCMSG.DAT` / `KARMA.DAT` data boundaries, the rescue five-band verdict
+selector, temporary cinematic active-object reuse, durable shrine-ruin /
+roster-removal / moral-standing / progression state, and post-scene handoff
+coordinates. (Corrected 2026-08-22: this entry previously said "four-question
+challenge shape" and "durable jail/progression state". There are no jail flags;
+the eight-byte band is the shrine ruin flags, the four prompts are four
+wordings of one question, and the punishment is an irreversible execution.) Later challenge-table, script-VM, audience-entry, and
 status passes complete the BLCKTHRN overlay contract at cinematic depth. Any
 remaining exactness is external caller predicates or pixel-level
 tile-write/output-byte identities, not a Blackthorn overlay blocker.
@@ -1890,8 +1896,9 @@ publishes the selector, payload, and scene-resistance row values.
 
 **Current monster stat-row cleanup:** 2026-05-13 -
 `catalogs/monster-bestiary.md` now publishes the full eight-field stat rows for
-hostile and special combat classes, including tier, speed, team-flip HP byte,
-defense, attack cap, HP, spawn count, and drop cap. The older wording that class
+hostile and special combat classes, including tier, speed, endurance rating
+(published as "team-flip HP byte" in the original entry; that name is
+withdrawn), defense, attack cap, HP, spawn count, and drop cap. The older wording that class
 43 had unresolved nonzero stat bytes is corrected: classes 42 and 43 are both
 unnamed all-zero reserved rows in the analyzed table.
 
@@ -2069,15 +2076,13 @@ contract instead of carrying the arithmetic rule only as local prose.
 shop food/shipwright correction: the SHOPPES2 `F`/`S` flow is shipwright-owned,
 not a food/provisions merchant.
 
-**Current screen-mode boundary cleanup:** 2026-05-13 -
-`systems/screen-mode-dispatch.md` separates the resident screen-mode controller
-from the display-driver ABI. The public contract now covers the resident
-dispatch cell, recursion guard, presentation-mode/state-cache transition rule,
-presentation helper sequencing, disk-prompt mode-state persistence boundary,
-write-error handler swap, and the compatibility boundary for hiding historical
-disk-swap prompts in modern installs. Remaining work is presentation parity:
-the final per-mode setup/prompt table, prompt helper effects, and disk-label
-text.
+**~~Current screen-mode boundary cleanup~~ (SUPERSEDED 2026-08-22):** 2026-05-13 -
+the separation of the second resident dispatch cell from the display-driver ABI
+still holds, and so does the recursion guard and the session-only lifetime.
+Everything else in this entry is withdrawn: there is no "screen-mode
+controller", no "presentation-mode/state-cache transition rule", and no
+remaining "presentation parity" work. See `systems/disk-prompt.md` and the
+withdrawal notice in `systems/screen-mode-dispatch.md`.
 
 **Current stats-panel cleanup:** 2026-05-12 - A new
 `systems/stats-panel.md` specifies the full-panel refresh model, six party-row
@@ -2257,7 +2262,7 @@ in current sweeps.
 **Current town-hostility encounter correction:** 2026-05-13 - encounter and
 combat docs now separate hostile-NPC town routing from the ordinary terrain
 setup helper. The resolved `0x7C3E` target is DNGLOOK room-NPC setup, while the
-traced town overlay handles hostile NPCs through attack, alarm, arrest, pacify,
+traced town overlay handles hostile NPCs through attack, alarm, arrest, forced flight,
 death, and slot-clear paths without arena combat. The terrain helper's indoor
 single-attacker override remains documented only as a bounded helper behavior.
 
@@ -2758,7 +2763,7 @@ or seed, combat branches, and non-shrine clamp policy.
   `systems/launcher.md`, `systems/animation.md`, `systems/display-driver.md`,
   `systems/prng.md`, `systems/timing.md`, `systems/moons.md`,
   `systems/runtime.md`, `systems/stat-arithmetic.md`,
-  `systems/screen-mode-dispatch.md`, `systems/stats-panel.md`,
+  `systems/disk-prompt.md`, `systems/stats-panel.md`,
   `systems/quest-flags.md`, `systems/boot.md`, `systems/overlay-abi.md`,
   `systems/movement.md`, `systems/rest-and-camp.md`,
   `systems/blackthorn.md`,

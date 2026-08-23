@@ -432,10 +432,10 @@ waypoint.
 | `0` | Stationary. The NPC remains at the selected waypoint unless another state, such as floor transition routing, is already in progress. |
 | `1` | Bounded random wander. The NPC occasionally takes a random cardinal step but rejects moves that would leave a small radius around the waypoint. |
 | `2` | Unbounded random wander. The NPC occasionally takes a random cardinal step without the waypoint-radius limit. |
-| `3` | Follow or shadow the player at distance. If the player is too close, it falls into the chase/engagement family rather than standing still. |
+| `3` | **Flee.** The NPC acts only while the player is within about four tiles, and then chooses the neighbouring square that **maximises** distance to the player. It is the only value in this table that moves away; every other acting mode minimises distance. **Correction:** earlier revisions of this row said "follow or shadow the player at distance" and described it as falling into the chase family when the player closes. That was exactly inverted. Values `3` and `6` share a dispatch handler, so they have the same *trigger* — act within four tiles — but the step chooser tests the mode again and gives them opposite directions. |
 | `4` | Approach-and-attack family. While the player is far enough away, the NPC uses the wander step with a shrinking range around the waypoint; when close, it can raise the town-mode attack event. |
 | `5` | Randomized chase with the attack event. Fully implemented, but unused by shipped `.NPC` data. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test raises the same town-mode attack event as value `4` rather than the guard event. It is not a reserved hole or a no-op: an implementation that treats value `5` as inert would diverge from the engine on any authored or modified roster that used it. |
-| `6` | Guard/blocking event family. It shares the follow-distance movement path but raises the non-attack guard event when adjacent. |
+| `6` | Guard/blocking event family. It **approaches** the player, acting only while the player is within about four tiles, and raises the non-attack guard event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. |
 | `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation. |
 
 Values greater than `7` fall through to the no-action/default case. The AI byte

@@ -714,9 +714,10 @@ spell path.
 This spell path uses the helper's self-checking mode after a Daemon has been
 placed and animated. The threshold it checks against is a concrete stat: the
 **Intelligence** value of the acting caster's character record when the caster
-is a party member, or the class row's flip-HP field — the third of the eight
-class-stat fields published in `catalogs/monster-bestiary.md` Section 2 — when
-the caster is a monster. The party case is the only one a player C-Cast can
+is a party member, or the class row's **endurance rating** — the third of the
+eight class-stat fields published in `catalogs/monster-bestiary.md` Section 2 —
+when the caster is a monster. (Earlier revisions called that field "flip-HP";
+that name is withdrawn along with the team-flip mechanic it referred to.) The party case is the only one a player C-Cast can
 reach. The roll it compares is formed the same way the game forms
 its other small rolls — a uniform inclusive `0..60` value halved with the
 fraction discarded and floored to a minimum of one, giving `1..30`. The `Oops...`

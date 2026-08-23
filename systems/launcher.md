@@ -173,10 +173,12 @@ not part of this IBM PC engine baseline.
   ends at "no explicit selector was supplied"; `boot.md` owns machine/display
   detection, selector reconciliation, and the remaining EGA sentinel policy.
 - There is one resident display-driver dispatch cell. The separate resident
-  screen-mode dispatch cell is a resident executable controller, not a second
-  driver ABI. Its contract is specified in `screen-mode-dispatch.md` and its
-  separation from the loaded driver ABI is specified in
-  `display-driver-abi.md`.
+  cell is the **disk-prompt / disk-error handler** cell, not a second driver
+  ABI and not a presentation controller. Its contract is specified in
+  `disk-prompt.md` and its separation from the loaded driver ABI is specified
+  in `display-driver-abi.md`. (Earlier revisions called it the "resident
+  screen-mode dispatch cell"; that framing is withdrawn — see
+  `systems/screen-mode-dispatch.md`.)
 - This document covers the analyzed DOS/GOG file set. Other historical PC
   distributions should be compared before making cross-version claims.
 
@@ -196,6 +198,6 @@ raw executable bytes.
   `u5-decomp/functions/ULTIMA_EXE/`.
 - Intro overlay's boot initialization, title/menu loop, and handoff into
   normal play - `u5-decomp/functions/INTRO_OVL/`.
-- Resident screen-mode dispatch ownership and its separation from the loaded
-  display driver ABI - `systems/screen-mode-dispatch.md` and
+- Resident disk-prompt dispatch ownership and its separation from the loaded
+  display driver ABI - `systems/disk-prompt.md` and
   `systems/display-driver-abi.md`.
