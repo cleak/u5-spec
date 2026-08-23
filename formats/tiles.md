@@ -92,6 +92,57 @@ sixteen-bearing beam stencil of the night-time rotating light beacon specified i
 Section 8, where the timed-effect glyph is now specified as an ordinary
 fixed-cell font character.
 
+#### The beam stencil table itself
+
+The table is now published, so an implementation can anchor to it rather than
+rediscover it. It lives in the shared data overlay at file offset `0x1F8E` and
+is **512 bytes**: sixteen consecutive 32-byte records, each sixteen signed byte
+pairs `(dx, dy)`, `dx` east-positive and `dy` south-positive. Live pairs are
+contiguous from the start of a record; every remaining pair is exactly `(0, 0)`
+and means "no cell". No component exceeds seven in magnitude, and no record
+repeats a pair.
+
+Record *r* carries the heading `(r - 1) x 22.5` degrees clockwise from north, so
+record 1 is north, 5 is east, 9 is south, 13 is west, and record 0 holds bearing
+sixteen — which is what "indexed modulo sixteen" means in practice.
+
+Cell counts follow the heading class exactly: the four **cardinals** (records 1,
+5, 9, 13) light **fifteen** cells, the four **diagonals** (3, 7, 11, 15) light
+**eleven**, and the eight **halfway** bearings light **nine**.
+
+| Record | Heading | Cells | Offsets `(dx, dy)` |
+|---|---|---|---|
+| 0 | NNW | 9 | `(-1,-2) (-1,-3) (-2,-3) (-2,-4) (-2,-5) (-2,-6) (-2,-7) (-3,-5) (-3,-6)` |
+| 1 | N | 15 | `(0,-1)..(0,-7)`, `(-1,-4)..(-1,-7)`, `(1,-4)..(1,-7)` |
+| 2 | NNE | 9 | `(1,-2) (1,-3) (2,-3) (2,-4) (2,-5) (2,-6) (2,-7) (3,-5) (3,-6)` |
+| 3 | NE | 11 | `(1,-1) (2,-2) (3,-3) (3,-4) (4,-3) (4,-4) (4,-5) (4,-6) (5,-4) (5,-5) (6,-4)` |
+| 4 | ENE | 9 | `(2,-1) (3,-1) (3,-2) (4,-2) (5,-2) (5,-3) (6,-2) (6,-3) (7,-2)` |
+| 5 | E | 15 | `(1,0)..(7,0)`, `(4,-1)..(7,-1)`, `(4,1)..(7,1)` |
+| 6 | ESE | 9 | `(2,1) (3,1) (3,2) (4,2) (5,2) (5,3) (6,2) (6,3) (7,2)` |
+| 7 | SE | 11 | `(1,1) (2,2) (3,3) (4,3) (4,4) (4,5) (5,4) (5,5) (6,4) (3,4) (4,6)` |
+| 8 | SSE | 9 | `(1,2) (1,3) (2,3) (2,4) (2,5) (2,6) (2,7) (3,5) (3,6)` |
+| 9 | S | 15 | `(0,1)..(0,7)`, `(1,4)..(1,7)`, `(-1,4)..(-1,7)` |
+| 10 | SSW | 9 | `(-1,2) (-1,3) (-2,3) (-2,4) (-2,5) (-2,6) (-2,7) (-3,5) (-3,6)` |
+| 11 | SW | 11 | `(-1,1) (-2,2) (-3,3) (-3,4) (-4,3) (-4,4) (-4,5) (-4,6) (-5,4) (-5,5) (-6,4)` |
+| 12 | WSW | 9 | `(-2,1) (-3,1) (-3,2) (-4,2) (-5,2) (-6,2) (-7,2) (-5,3) (-6,3)` |
+| 13 | W | 15 | `(-1,0)..(-7,0)`, `(-4,1)..(-7,1)`, `(-4,-1)..(-7,-1)` |
+| 14 | WNW | 9 | `(-2,-1) (-3,-1) (-3,-2) (-4,-2) (-5,-2) (-6,-2) (-7,-2) (-5,-3) (-6,-3)` |
+| 15 | NW | 11 | `(-1,-1) (-2,-2) (-3,-3) (-3,-4) (-4,-3) (-4,-4) (-4,-5) (-4,-6) (-5,-4) (-5,-5) (-6,-4)` |
+
+Two notes for an implementation. The stamp always runs **all sixteen iterations**
+of a record - there is no early exit on the `(0, 0)` padding, so a padded pair
+writes at the record's own origin cell, which is harmless because that cell is
+the source. And the table has exactly **one** reader in the whole shipped code
+base, the stamp routine itself, so nothing else depends on its layout.
+
+**Locating it structurally is unnecessary but safe.** Searching the shipped
+overlay for a 512-byte region matching the structural rules above - sixteen
+records, contiguous live pairs then exact `(0, 0)` padding, every component
+within seven - yields **exactly one** candidate, and it is this table. That has
+been reproduced independently twice. An implementation that prefers a search to
+a fixed offset will therefore find the right table, but it should fail loudly on
+zero candidates rather than silently lighting nothing.
+
 Consequently `TILES.{16,4}` is the **only** tile-shaped graphics source in the
 game, and this document specifies it completely. There is no second resident
 tile representation to reproduce.

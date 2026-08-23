@@ -146,7 +146,7 @@ Within the catalogue, tiles cluster by visual class — wall tiles in one range,
 
 Several tile values are *not* ordinary terrain at all but markers consumed by load-time passes. Section 6 covers them.
 
-## 6. NPC and spawn markers
+## 6. NPC start markers and the beacon light source
 
 A location's tile grid carries authored markers — tile values that load-time or schedule-processing passes scan for and convert into runtime state, conditional tile rewrites, or pathfinding goals. The known marker classes are:
 
@@ -165,17 +165,69 @@ The low-bit distinction between the two marker values is preserved in the record
 
 The per-NPC start-X, start-Y, and start-tile arrays each have thirty-two entries — one per slot in the per-class NPC roster, less the sentinel slot. A roster with fewer NPCs than markers, or markers without corresponding roster entries, is a content error in the source data; the load pass does not validate counts.
 
-### Spawn markers
+### The `0x2A` marker — corrected
 
-A single tile value — the ASCII byte for the asterisk character (`0x2A`, decimal 42) — encodes "a player spawn or stairway-up landing point". The load pass tracks two slots: the *primary* spawn and the *secondary* spawn. The first asterisk encountered in loader order (column 0 north-to-south, then column 1, and so on) fills the primary slot with `(column, row)`; the second asterisk encountered fills the secondary slot. Subsequent asterisks (if any) are silently ignored.
+**`0x2A` is not a player spawn marker. It is the night beacon's indoor light
+source.** An earlier revision of this section read it as "a player spawn or
+stairway-up landing point", harvested into primary and secondary spawn slots.
+**That reading is withdrawn.**
 
-The primary spawn is typically the cell directly inside the location's main entrance from the overworld — the gate cell, the doorway cell, the threshold the player crosses to enter. The secondary spawn is typically the cell where the player lands after climbing a stairway from a floor above or below — i.e., the floor's stair-landing cell.
+Two independent lines settle it, and the first needs no code at all:
 
-Both slots are initialised to a sentinel "no spawn" value before the walk. Whatever default the engine uses when no asterisk was harvested is not stored in the `.DAT` file.
+- **`0x2A` appears in zero town, castle and keep floors.** It occurs **five
+  times across four floors, every one of them dwelling-class** — and those four
+  are the lantern rooms of the game's four lighthouses. A player town-entry
+  spawn marker that exists in no town is not a spawn marker.
+- The shipped description table gives tile `0x2A` as "a bright light", which is
+  what `systems/visibility.md` Section 12.6 resolves as the beacon's indoor
+  source.
 
-Earlier wording here named that default as "column fifteen, a per-scene row from the resident entry-row table, floor zero". That rule has been retracted: it is traced from the helper that installs a resident Shadowlord in a hideout town, not from any player placement (`systems/town-mode.md` Section 5 step 6 and Section 13). The player's fallback town-entry cell is currently an open item, and no part of the withdrawn rule should be implemented for the player.
+The load pass does harvest the byte into two coordinate slots during its single
+grid walk, which is what the spawn reading was built on — but those slots are
+the beacon's, not the player's. **One walk, two purposes**: the same pass also
+harvests NPC start markers, and only the NPC half concerns placement.
 
-The marker is harvested into runtime spawn coordinates. Any visual replacement is handled by the broader town load pipeline, not by the spawn-coordinate harvest itself.
+**The harvest rule, corrected.** The walk tests only whether the *first* slot is
+still empty. So the **first** hit takes slot one and, once slot one is filled,
+**every later hit overwrites slot two** — meaning the **last** hit wins slot
+two, not the second. No shipped floor carries three, so behaviour is unchanged
+today; it matters only for custom data.
+
+**Exactly one shipped floor carries two.** Three of the four carry one. So the
+second slot is exercised in exactly one place in the whole shipped data set, and
+an implementation that silently handles one source per floor is correct on three
+floors and wrong on the fourth.
+
+**Ordering cannot disarm it, and the reason matters more than the fact.** The
+harvest converts tile positions into resident coordinate *words* at load time,
+and the beacon never re-reads the map afterwards. A later pass that rewrites the
+cell therefore cannot switch the source off. An implementation that instead
+harvests from a normalised or scrubbed copy of the floor **loses this property**,
+and will find the source present on one entry path and absent on another. Since
+a lantern room is reached by climbing, the stairs path is the only one reachable
+in play.
+
+### Player spawn placement
+
+**There is no asterisk-based spawn marker, and the two slots this section used
+to describe are the beacon's.** Earlier revisions described a *primary* and
+*secondary* spawn harvested from `0x2A` cells, with the first occurrence taking
+the primary slot; they also named, and later retracted, a positional default for
+when no asterisk was found. **All of that is withdrawn** - it was the beacon's
+light-source harvest read as player placement, and the retracted default was a
+symptom of trying to explain what happens when a marker that is not a spawn
+marker is absent.
+
+The two slots are initialised to a sentinel before the grid walk and are filled
+only from `0x2A` cells, which exist on four dwelling-class floors and nowhere
+else. They never carry a player position.
+
+**Marker handling remains in-memory only** and the on-disk file is unchanged by
+a load, which is the one claim from the old wording that survives intact.
+
+This document does not specify where the player is placed on entering a
+location. That is mode behaviour rather than file format, and it is **not
+established here** - an implementation should not infer it from this file.
 
 ### Farmland and orchard blight in a Shadowlord hideout
 
@@ -258,7 +310,9 @@ Bytes 0 through 31 (decimal) are the first row of the ground floor — the row a
 - A floor tile, painted as interior flooring, walkable.
 - A door tile, painted as a closed door, openable via the O-Open command.
 - An NPC start marker (`0x48` or `0x49`), to be harvested as an NPC coordinate.
-- An asterisk byte (`0x2A`), the primary or secondary spawn marker.
+- An asterisk byte (`0x2A`) - **not** a spawn marker; it is the night beacon's
+  indoor light source, and it occurs only on the four dwelling-class lantern
+  floors. See the corrected subsection above.
 
 A typical first row of an outdoor town is dominated by city-wall tiles (the town's perimeter) interspersed with a single gate tile (the entrance) and possibly an NPC start marker representing a guard standing at the gate. The asterisk is usually placed at the cell immediately inside the gate, so that the player arrives directly on the threshold.
 
