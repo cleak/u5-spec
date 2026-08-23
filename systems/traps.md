@@ -183,25 +183,19 @@ This cleanroom spec was derived from private analysis notes. It intentionally
 does not reproduce decompiled code, assembly, raw tables, string dumps, or
 private address maps.
 
-- `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md`.
-- `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/CMDS_OVL/`.
 - `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the
   wrong-mix branch's exact three steps, the stale victim-index edge, and the
   unmatched-spell-name route into the same branch.
-- `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md`.
-- `u5-decomp/functions/SJOG_OVL/0x02EA_sjog_search_object_handler.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2A52_party_take_damage.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2FA6_party_revive_slot.md` (the note's
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/SJOG_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/ULTIMA_EXE/` (the note's
   filename predates the correction; the helper it describes applies Poisoned
   status and does not revive).
-- `u5-decomp/functions/SJOG_OVL/0x0F88_sjog_trap_dispatch.md`.
-- `u5-decomp/functions/SJOG_OVL/0x12D4_sjog_open_inner.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3ABE_random_short_delay.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3AAE_prng_roll_max.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+- `u5-decomp/functions/SJOG_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 
 Source provenance: the effect-1/effect-3 polarity correction, the absence of
 any caller-side trap-class table, and the three-call-site census are derived

@@ -588,46 +588,45 @@ behavior.
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The J-Jimmy command's tile cascade, dungeon-mode routing, and the encoding of the door tile pairs — derived from `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`, `u5-decomp/functions/SJOG_OVL/0x0C3E_sjog_jimmy_inner.md`, and `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
+- The J-Jimmy command's tile cascade, dungeon-mode routing, and the encoding of the door tile pairs — derived from `u5-decomp/functions/SJOG_OVL/`, and `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
 - The reconciliation of the two lock-pick rolls into one contract: that both read the acting member's Dexterity rather than any class field; the thirty-outcome zero-based die and its clamped Dexterity-over-thirty success chance; the corrected target families (locked doors and restraints on the flat test, containers on the threshold test, the magic-locked door refused with no roll, and no pickpocket anywhere in the command); the strictly-greater comparison on the threshold test; the depth doubling existing only on the dungeon path; the uniform "success spends no key, failure spends one" accounting; and the restraint case's prisoner-release outcome. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The per-map container's lock/trap flag, its threshold formula, and the fact
   that a failed pick leaves the container completely untouched while a
   successful pick clears the lock/trap flag and preserves the content class --
-  derived from `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`
+  derived from `u5-decomp/functions/SJOG_OVL/`
   and `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
-- The O-Open command's tile cascade, the auto-close countdown's record format and decrement, the pre-flight gate shared with Jimmy and Search, and the route to the chest-on-floor helper — derived from `u5-decomp/functions/SJOG_OVL/0x1374_sjog_open.md`.
+- The O-Open command's tile cascade, the auto-close countdown's record format and decrement, the pre-flight gate shared with Jimmy and Search, and the route to the chest-on-floor helper — derived from `u5-decomp/functions/SJOG_OVL/`.
 - The magic Open/Unlock helper's ordinary wooden-door tile rewrites,
   Space/Pass no-effect branch, dirty marking, and separation from O-Open's
   auto-close/chest/trap handling -- derived from
-  `u5-decomp/functions/CAST2_OVL/0x0768_open_door.md` and the CAST spell map in
+  `u5-decomp/functions/CAST2_OVL/` and the CAST spell map in
   `u5-decomp/functions/CAST_OVL/all_spells.md`.
-- The S-Search command's secret-door reveal path, the per-map object table layout, and the dungeon-mode high-nibble cascade — derived from `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`.
-- The CMDS overlay's overworld K-Klimb handler, including its gear gate, on-foot check, target-tile refusals, fall rolls, and final climb/move call — derived from `u5-decomp/functions/CMDS_OVL/0x1C20_cmds_klimb.md`.
+- The S-Search command's secret-door reveal path, the per-map object table layout, and the dungeon-mode high-nibble cascade — derived from `u5-decomp/functions/SJOG_OVL/`.
+- The CMDS overlay's overworld K-Klimb handler, including its gear gate, on-foot check, target-tile refusals, fall rolls, and final climb/move call — derived from `u5-decomp/functions/CMDS_OVL/`.
 - The conversation byte-action mapping that sets the Grapple/Klimb gear flag
   and the conversation graph that points from Bidney to Lord Michael's grant --
-  derived from `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`,
-  `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and
+  derived from `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/notes/tlk-quest-graph.md`.
 - The CMDS overlay's X-Xit vehicle handler with its scene refusal, vehicle
   family branches, nearby-land validation, ship skiff/carpet transfer cases,
   and parked-object state preservation -- derived from
-  `u5-decomp/functions/CMDS_OVL/0x0EB4_cmds_xit_vehicle.md`.
+  `u5-decomp/functions/CMDS_OVL/`.
 - The combat-only ownership of the "Escape" / "Not here!" / "Not yet!" wording,
   which belongs to the Escape-key handler rather than to the `X` letter, used
   here only to avoid conflating it with dungeon Z transitions -- derived from
-  `u5-decomp/functions/CMDS_OVL/0x17EC_cmds_escape.md`.
-- The mode-aware routing of K-Klimb across CMDS, TOWN, and DUNGEON overlays; the "BOOOM!" / "Door destroyed!" string association with F-Fire's ship-cannon path; and the verb-prefix scheme that the dispatcher prints before each per-letter handler — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
+  `u5-decomp/functions/CMDS_OVL/`.
+- The mode-aware routing of K-Klimb across CMDS, TOWN, and DUNGEON overlays; the "BOOOM!" / "Door destroyed!" string association with F-Fire's ship-cannon path; and the verb-prefix scheme that the dispatcher prints before each per-letter handler — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the shared dungeon exit contract and its plane rule, the
   correction that a climb does not test its destination cell, the level-change
   spells' route to the same exit, and the closed plane-writer census are derived
   from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
-- The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with level-edge exits (which are not refusals) separated from the pit-chain off-bottom path, together with that handler's turn cost - applied climbs, pit falls, and a cancelled prompt count as an action while both "nothing to klimb here" refusals do not, and the two refusals are distinct (`systems/dungeon-mode.md` Section 13.1) — derived from `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
+- The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with level-edge exits (which are not refusals) separated from the pit-chain off-bottom path, together with that handler's turn cost - applied climbs, pit falls, and a cancelled prompt count as an action while both "nothing to klimb here" refusals do not, and the two refusals are distinct (`systems/dungeon-mode.md` Section 13.1) — derived from `u5-decomp/functions/DUNGEON_OVL/`, and `u5-decomp/functions/DNGLOOK_OVL/`.
 - The shared resident trap-effect resolver used after a chest trap has been
   selected, including the fact that the caller passes no trap flavour -- derived
-  from `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md` and sibling
+  from `u5-decomp/functions/ULTIMA_EXE/` and sibling
   resident party-damage and status helper notes.
-- The town-mode per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
+- The town-mode per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
   town climb handler's actual cell set and refusal text, the absence of a
@@ -638,13 +637,13 @@ The behaviour described here was derived from the private function notes listed 
 - The town-family grid-boundary exit prompt (and the withdrawal of the earlier
   "exit threshold tile" reading of it), its scene clear, exterior coordinate
   lookup, and scene-`0x19` underworld-plane selection -- derived from
-  `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
+  `u5-decomp/functions/TOWN_OVL/`.
 - The facing-sensitive town stair family and floor-change reload path --
-  derived from `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`,
-  cross-checked against `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
+  derived from `u5-decomp/functions/TOWN_OVL/`,
+  cross-checked against `u5-decomp/functions/TOWN_OVL/`.
 - The chasm and underworld transition encoding — derived from sibling spec
   `u5-spec/systems/overworld.md` and the traced OUTSUBS falls-handler note in
-  `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md`.
+  `u5-decomp/functions/OUTSUBS_OVL/`.
 - The active-object table contract that vehicle dismount and floor changes consult — derived from sibling spec `u5-spec/systems/active-objects.md`.
 - The broader vehicle command and persistence contract — derived from sibling spec `u5-spec/systems/vehicles.md`.
 - The world-clock advance contract that doors, climb, and dismount each consume — derived from sibling spec `u5-spec/systems/time.md`.

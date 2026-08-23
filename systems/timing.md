@@ -233,34 +233,33 @@ analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
 or private address tables.
 
 - Boot-time calibration helper and calibrated delay consumers --
-  `u5-decomp/functions/ULTIMA_EXE/0x11B4_timer_calibrate.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Calibrated busy waits, hardware-tick waits, and bounded prompt/input waits --
-  `u5-decomp/functions/ULTIMA_EXE/0x20C8_delay_calibrated.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x20FA_delay_with_int1c.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x1DDA_delay_with_input_check.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Title-tick helper (one-tick built-in wait, slot-0x69 dispatch) --
-  `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - `BRITISH.PTH` per-stroke chunking and calibration override --
-  `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Menu idle pump --
-  `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Start/menu reveal helper and intro slide-loop call sites --
-  `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`,
-  `u5-decomp/functions/EGA_DRV/0x256B_lfsr_pixel_dissolve.md`, and
-  `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+  `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/EGA_DRV/`, and
+  `u5-decomp/functions/INTRO_OVL/`.
 - Whole-program dissolve caller census, the separation of the entry's two carry
   paths, and the endgame full-screen fade --
   `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md`.
 - Title-flourish player, its animation script, the presentation step counts,
   and the calibrated per-step wait --
-  `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`,
-  `u5-decomp/functions/EGA_DRV/0x1DE8_delay_with_animation_step.md`,
+  `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/EGA_DRV/`,
   `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`, and
   `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`
   (independent re-derivation of the 85-step count and the calibrated wait's
   shape).
 - Acknowledgement screen pacing --
-  `u5-decomp/functions/INTRO_OVL/0x072E_ack_render.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - The per-phase title holds (eighteen ticks plus a bounded poll before the
   `Presents` frame, bounded twenty-tick polls after the ornament and the
   finished composition), the un-paced logo dissolve, and the subtitle
@@ -268,6 +267,6 @@ or private address tables.
   `u5-decomp/notes/intro_title_sequence_2026-08-22.md`.
 - Return-to-View preview tick body, per-command tick counts, strip reveal
   cadence, and the single-cell dissolve poll interval --
-  `u5-decomp/functions/FONT_OVL/0x02FC_animate_overworld_tick.md`,
+  `u5-decomp/functions/FONT_OVL/`,
   `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md`, and
   `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.

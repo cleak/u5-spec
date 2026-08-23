@@ -219,7 +219,5 @@ cross-reference alignment.
 - The chargen flow, virtue tournament, pair-table selection semantics,
   pair-to-record ordinal mapping, proportional-font renderer role, stat
   effects, and save-writing context --
-  derived from `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`,
-  `u5-decomp/functions/FONT_OVL/0x09C8_questionnaire_iter.md`,
-  `u5-decomp/functions/FONT_OVL/0x0998_pick_random_unused_virtue.md`, and
-  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
+  derived from `u5-decomp/functions/FONT_OVL/`, and
+  `u5-decomp/functions/FONT_OVL/`.

@@ -173,8 +173,8 @@ full in each blob.
 Source provenance: derived from private analysis notes
 `../u5-decomp/notes/talk_group_retrace_2026-08-22.md` (the pointer-run walk, the
 populated/empty census, the token-range boundary, and the emission order),
-`../u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md` (the conversation
-token path), `../u5-decomp/functions/SHOPPES_OVL/0x0026_format_record_with_tokens.md`
+`../u5-decomp/functions/TALK_OVL/` (the conversation
+token path), `../u5-decomp/functions/SHOPPES_OVL/`
 (the shop token path and its bias), and `../u5-decomp/formats/data-ovl.md` (the
 resident data layout). The word list is a derived data extraction from the
 shipped resident data resource, in the same class as the published item, spell,

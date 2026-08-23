@@ -143,12 +143,11 @@ text, while the latter is Lord British dialogue records.
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/maps.md` (`END.DAT` reclassification and text-marker observations).
-- `u5-decomp/functions/ULTIMA_EXE/0x82DE_load_lzw_image.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
-- `u5-decomp/functions/ENDGAME_OVL/0x0000_endgame_load_party_roster.md` — the
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/ENDGAME_OVL/` — the
   filename records a superseded reading; the function is the six-window
   narrative sequencer, not a roster lookup.
-- `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`.
+- `u5-decomp/functions/ENDGAME_OVL/`.
 - `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md` — the fixed
   read length, the brace-as-indent correction, the absence of a closing brace,
   the per-record brace counts and leading line feeds, and the binding of window

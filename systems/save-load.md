@@ -307,25 +307,24 @@ generic DOS file I/O, not an LZW decompressor.
   path, which reaches the same two wrappers in the opposite roles. This
   supersedes `u5-decomp/notes/dosbox_probes_2026-05-07.md` Probe 1 and the
   "unconditional mirror writes, no per-plane read" reading in
-  `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`, both of which had the
+  `u5-decomp/functions/CAST2_OVL/`, both of which had the
   direction of the per-plane transfers inverted. Helper roles cross-checked
-  against `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+  against `u5-decomp/functions/FONT_OVL/`.
 
-- Load flow — byte-image read, empty-save guard, dual-half `SAVED.OOL` read, unconditional mirror-write of both per-plane seed files, underworld disk-swap loop, and final commit — derived from `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
-- Underworld-disk presence test — open-then-close existence semantics, present/absent result, error-cell update, and routing of a failed test through the critical-error/disk-prompt dispatch — derived from `u5-decomp/functions/ULTIMA_EXE/0x1674_probe_file_present.md`.
+- Load flow — byte-image read, empty-save guard, dual-half `SAVED.OOL` read, unconditional mirror-write of both per-plane seed files, underworld disk-swap loop, and final commit — derived from `u5-decomp/functions/INTRO_OVL/`.
+- Underworld-disk presence test — open-then-close existence semantics, present/absent result, error-cell update, and routing of a failed test through the critical-error/disk-prompt dispatch — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - OUTSUBS overworld transition paths that select and consume the per-plane
   mirror filenames - derived from
-  `u5-decomp/functions/OUTSUBS_OVL/0x0368_outsubs_world_filename.md`,
-  `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md`, and
-  `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md`.
+  `u5-decomp/functions/OUTSUBS_OVL/`, and
+  `u5-decomp/functions/OUTSUBS_OVL/`.
 
-- U4-Transfer companion path and character comparison preview — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- U4-Transfer companion path and character comparison preview — derived from `u5-decomp/functions/INTRO_OVL/`.
 
-- Read-and-write retry wrapper, disk-prompt contract, wait-cursor phase signalling, and write-side critical-error handler ownership — derived from `u5-decomp/functions/ULTIMA_EXE/0x82DE_load_lzw_image.md`, `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`, and `u5-decomp/notes/system-trace_save-load.md`.
+- Read-and-write retry wrapper, disk-prompt contract, wait-cursor phase signalling, and write-side critical-error handler ownership — derived from `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/INTRO_OVL/`, and `u5-decomp/notes/system-trace_save-load.md`.
 
-- Inner read primitive — open, optional absolute seek, zero-count default, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-read edge — derived from `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
+- Inner read primitive — open, optional absolute seek, zero-count default, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-read edge — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 
-- Inner write primitive — create-or-truncate, write, close, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-write edge — derived from `u5-decomp/functions/ULTIMA_EXE/0xF0C6_write_file.md`.
+- Inner write primitive — create-or-truncate, write, close, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-write edge — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 
 - Save-image layout, `SAVED.OOL` split, the `BRIT.OOL` / `UNDER.OOL` / `INIT.OOL` / `INIT.GAM` family, and the object-record structure — derived from `u5-decomp/formats/saves.md`.
 
@@ -334,4 +333,4 @@ generic DOS file I/O, not an LZW decompressor.
   it the impossibility of any durable tile mutation. Source provenance: derived
   from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
-  `../u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`.
+  `../u5-decomp/functions/CMDS_OVL/`.

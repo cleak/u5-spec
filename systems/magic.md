@@ -980,12 +980,12 @@ The behaviour described here was derived by reading the private function and for
 
 - The absence of any time-driven magic-point regeneration, and the withdrawal of the earlier "full restoration on rest" claim in Section 11, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 
-- The C-Cast dispatcher itself — its prompt, the forty-eight-entry token table, the charges/mana/level gate cascade, the scene gate, the per-spell handler dispatch, the light-spell duration writes, the field-placement byte mapping, the handler-family map, and the print-on-success and print-on-failure narration — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`, local CAST/CAST2 helper analysis, and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+- The C-Cast dispatcher itself — its prompt, the forty-eight-entry token table, the charges/mana/level gate cascade, the scene gate, the per-spell handler dispatch, the light-spell duration writes, the field-placement byte mapping, the handler-family map, and the print-on-success and print-on-failure narration — derived from `u5-decomp/functions/CAST_OVL/`, local CAST/CAST2 helper analysis, and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/`.
 - The directed wind-cone and actor-scan family used by several combat spells,
   including the cardinal cone geometry, 63-coordinate cap, and absence of
   top-level and per-effect friend/foe filters in the Sleep/Poison Wind/Death
   Wind/Flame Wind branches, is derived from
-  `u5-decomp/functions/CAST_OVL/0x1C36_spell_target_walk.md` and the clean
+  `u5-decomp/functions/CAST_OVL/` and the clean
   semantic trace of the related COMBAT/COMSUBS helper calls.
 - The local handlers for Tremor, Charm, Polymorph, Conjure, Swarm, Clone,
   Summon, Cause Fear, Repel Undead, Gate Travel,
@@ -993,10 +993,10 @@ The behaviour described here was derived by reading the private function and for
   helper analysis summarized here without copying assembly or source. Cause
   Fear's critical-HP flee setup is cross-checked against the combat current-HP
   field and wound-score classifier in `u5-decomp/formats/data-ovl.md` and
-  `u5-decomp/functions/COMBAT_OVL/0x1A5C_compute_wound_score.md`.
+  `u5-decomp/functions/COMBAT_OVL/`.
 - The active-target attack wrapper path for Magic Missile, Fireball, and Kill — aiming/projectile routing, spell-tag damage lookup, defense subtraction, and instant-kill sentinel — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
 - Create Food's 1..3 food/provisions delta and 9999 cap are derived from
-  `u5-decomp/functions/CAST_OVL/0x05B4_cast_create_food.md`.
+  `u5-decomp/functions/CAST_OVL/`.
 - Source provenance: the identification of the Up and Down pair as the dungeon
   level-change spells, their ladder-free level step, their destination-cell
   refusal, their hand-off to the shared dungeon exit at a level edge, and their
@@ -1006,24 +1006,23 @@ The behaviour described here was derived by reading the private function and for
   gates, Dispel Field's dungeon live-cell rewrite and combat active-object
   removal path, and combat-exit marker lifetime are derived from local CAST,
   COMSUBS, COMBAT, active-object tick, and combat-framer helper analysis plus
-  `u5-decomp/functions/CAST2_OVL/0x07BC_dispel_field.md`.
+  `u5-decomp/functions/CAST2_OVL/`.
 - Mass Charm's active-effect target-selection consumer and class-threshold
   random remap are derived by linking the CAST2 active-effect helper to
-  `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the COMBAT
+  `u5-decomp/functions/COMBAT_OVL/` and the COMBAT
   damage/death note that identifies the same random-byte helper.
 - The monster possess/blink/summon-daemon hook is derived from
-  `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`
+  `u5-decomp/functions/COMSUBS_OVL/`
   and the `DATA.OVL` class-flag table; it is summarized here only to separate
   those effects from the player spell dispatcher.
 - Protection's inertness, Quickness's automatic-actor-driver gate and Negate Time's matching turn skip, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Negate Time's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
 - The correction that the `Q` gate and the `T` skip are a single pair of tests
   at the head of the automatic actor driver, not an every-actor coin flip plus
   a separate player-side ready gate -- derived from a 2026-08-22 re-read of
-  `u5-decomp/functions/COMBAT_OVL/0x03F4_actor_action_driver.md` and
-  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md` against the
+  `u5-decomp/functions/COMBAT_OVL/` against the
   round walker's two-way dispatch in
-  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md`, which together
+  `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, which together
   show the keystroke parser reads no active-effect code except Negate Magic's
   `N`.
 - The single shared timed-effect slot: its code/duration pair, the permanent
@@ -1034,18 +1033,18 @@ The behaviour described here was derived by reading the private function and for
   two-fold deadness, and Invisibility's absence of any timer — derived from
   `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`,
   `u5-decomp/notes/system-trace_magic.md`,
-  `u5-decomp/functions/CAST2_OVL/0x08F8_set_scene_flag_with_redraw.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x6DA8_compute_party_member_weight.md`.
-- The casting absorption pre-gate names combine `CAST.OVL` dispatcher analysis with the clean scene bindings in `catalogs/gazetteer.md` and the Crown ownership flag writer in `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`.
-- Moonstone Search/Get recovery is derived from `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`, `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`, and local SJOG helper analysis summarized without copying implementation text.
+  `u5-decomp/functions/CAST2_OVL/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
+- The casting absorption pre-gate names combine `CAST.OVL` dispatcher analysis with the clean scene bindings in `catalogs/gazetteer.md` and the Crown ownership flag writer in `u5-decomp/functions/SJOG_OVL/`.
+- Moonstone Search/Get recovery is derived from `u5-decomp/functions/SJOG_OVL/`, and local SJOG helper analysis summarized without copying implementation text.
 - The CAST.OVL function inventory and the misclassification correction (CAST is the spell-cast overlay, not character creation) — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
-- The shared spell-name input helper — accepted selector letters, order-insensitive compact-token matching, blank/cancel/no-match returns, and M-Mix's no-match fall-through — derived from local CAST2 helper analysis and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
-- The combat C-Cast adjacent-target interference gate - mapped target, target validity, target awakeness, Negate Time suppression, and adjacency - is derived from `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
+- The shared spell-name input helper — accepted selector letters, order-insensitive compact-token matching, blank/cancel/no-match returns, and M-Mix's no-match fall-through — derived from local CAST2 helper analysis and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/`.
+- The combat C-Cast adjacent-target interference gate - mapped target, target validity, target awakeness, Negate Time suppression, and adjacency - is derived from `u5-decomp/functions/COMSUBS_OVL/`.
 - The monster AI boundary correction is derived from the corrected COMSUBS
   actor-name note, the COMSUBS monster-special hook, and the COMBAT
   actor-dispatch/target-picker notes; current evidence does not support a
   general class-script table for player-spell purposes.
-- The M-Mix command's pre-flight check, spell-name prompt, reagent-selection UI, quantity prompt, wrong-mix resource loss, recipe-mask comparison, charge cap, charge increment, and wrong-mix trap-effect handoff — derived from `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`, `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md`, and `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md`.
+- The M-Mix command's pre-flight check, spell-name prompt, reagent-selection UI, quantity prompt, wrong-mix resource loss, recipe-mask comparison, charge cap, charge increment, and wrong-mix trap-effect handoff — derived from `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/functions/ULTIMA_EXE/`.
 - The three refinements to that flow — that a spell name the parser cannot match
   routes to the same wrong-recipe path and springs the trap, that the on-screen
   mixing pause is presentation only and advances no clock, and that the charge
@@ -1057,16 +1056,16 @@ The behaviour described here was derived by reading the private function and for
   skip, small random HP recovery, maximum-HP clamp, status preservation,
   Great Heal's dungeon combat-active refusal, and stats-redraw dirty marking --
   are derived from
-  `u5-decomp/functions/CAST2_OVL/0x03C2_heal_one_member.md` and the CAST spell
+  `u5-decomp/functions/CAST2_OVL/` and the CAST spell
   map in `u5-decomp/functions/CAST_OVL/all_spells.md`.
 - The Locate/sextant coordinate printer -- nibble-to-letter formatting,
   Y-before-X ordering, and display-only side effects -- is derived from
-  `u5-decomp/functions/CAST2_OVL/0x06EC_print_party_position.md` and the CAST
+  `u5-decomp/functions/CAST2_OVL/` and the CAST
   spell map in `u5-decomp/functions/CAST_OVL/all_spells.md`.
 - The non-combat Blink contract -- direction prompt, straight-ray scan,
   farthest-grass landing rule, no random/retry/passability/occupancy checks,
   and no refund from handler failure -- is derived from
-  `u5-decomp/functions/CAST_OVL/0x05DC_cast_in_por_blink.md`.
+  `u5-decomp/functions/CAST_OVL/`.
 - The directed utility tile helpers -- Vanish, Open, Magic Lock and Unlock
   Magic: their shared direction prompt, the combat-versus-world prompt origin,
   the combat-arena terrain resolution, the exact accepted tile sets and
@@ -1074,12 +1073,9 @@ The behaviour described here was derived by reading the private function and for
   and the arena tile census that shows which shipped arenas contain eligible
   tiles -- are derived from
   `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
-  `u5-decomp/functions/CAST_OVL/0x0230_cast_vanish.md`,
-  `u5-decomp/functions/CAST_OVL/0x02D2_cast_open.md`,
-  `u5-decomp/functions/CAST_OVL/0x0846_cast_magic_lock.md`,
-  `u5-decomp/functions/CAST2_OVL/0x0768_open_door.md`,
-  `u5-decomp/functions/CAST2_OVL/0x0306_prompt_direction.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`, and
+  `u5-decomp/functions/CAST_OVL/`,
+  `u5-decomp/functions/CAST2_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and
   `u5-decomp/formats/maps.md`.
 - The shared random arena probe, the sixteen-outcome Conjure selector, Swarm's
   single-cell-then-stack placement, the controlled-bit stamp on placed actors,
@@ -1090,26 +1086,23 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`,
   `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
   `u5-decomp/functions/CAST_OVL/all_spells.md`,
-  `u5-decomp/functions/CAST2_OVL/0x04C2_spell_target_animate.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x120E_pick_random_arena_coord.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x0000_combat_damage_test_at_coord.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_random_short_delay.md` (filename
+  `u5-decomp/functions/CAST2_OVL/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and
+  `u5-decomp/functions/ULTIMA_EXE/` (filename
   predates that note's 2026-08-22 naming correction; the helper is a `1..30`
   roll and introduces no delay - see the sibling note
-  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_roll_1_to_30.md`).
+  `u5-decomp/functions/ULTIMA_EXE/`).
 - The resurrection helper used by In Mani Corp and paid healer resurrection
   side effects -- dead-status gating, current-HP result, class-based mana
   rebuild, conditional experience rescale, level recomputation, and maximum-HP
   recomputation -- derived from
-  `u5-decomp/functions/CAST2_OVL/0x05E0_resurrect_member.md` and the clean
+  `u5-decomp/functions/CAST2_OVL/` and the clean
   CAST/SHOPPES caller traces.
 - The shrine meditation and Codex urn handlers -- their M-command dispatch,
   mantra prompt, quest-mask state machine, Codex-read bit stamping,
   post-completion offering path, Codex-turn-in reward table, and
   ordained/Codex bitmap updates -- derived from
-  `u5-decomp/functions/CAST2_OVL/0x0E76_enter_shrine_or_urn.md`,
-  `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`, and
-  `u5-decomp/functions/CAST2_OVL/0x0D24_read_urn.md`.
+  `u5-decomp/functions/CAST2_OVL/`, and
+  `u5-decomp/functions/CAST2_OVL/`.
 - The twenty-four-entry rune-syllable dictionary, the forty-eight-entry resident long-incantation display phrase table and its per-id pointer table, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/data-ovl.md`, `u5-decomp/notes/system-trace_magic.md`, and local `DATA.OVL` table reads.
 - The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine quest masks — derived from `u5-decomp/formats/saves.md`.

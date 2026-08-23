@@ -99,7 +99,7 @@ while the endgame overlay uses quest/state flags.
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/data-tables.md` (`KARMA.DAT` section).
-- `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x0910_blackthorn_rescue.md`.
-- `u5-decomp/functions/OUTSUBS_OVL/0x0658_lord_british_dialogue.md`.
+- `u5-decomp/functions/CAST2_OVL/`.
+- `u5-decomp/functions/BLCKTHRN_OVL/`.
+- `u5-decomp/functions/OUTSUBS_OVL/`.
 - `u5-spec/systems/karma.md`.

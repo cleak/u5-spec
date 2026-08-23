@@ -760,11 +760,11 @@ This is a cleanroom prose rewrite derived from the private resident-data
 dissection in `u5-decomp/formats/data-ovl.md`, cross-checked against the public
 specs listed in Section 7. The shared coordinate-scratch boundary was
 cross-checked against
-`u5-decomp/functions/OUTSUBS_OVL/0x01B4_outsubs_load_4chunks.md`,
-`u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`, and
-`u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md`.
+`u5-decomp/functions/OUTSUBS_OVL/`,
+`u5-decomp/functions/TOWN_OVL/`, and
+`u5-decomp/functions/ULTIMA_EXE/`.
 Moon sky-strip table ownership was cross-checked against
-`u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md` (filename
+`u5-decomp/functions/ULTIMA_EXE/` (filename
 predates that note's 2026-08-22 naming correction; the routine draws the moon /
 time-of-day row and is not combat-scoped).
 Source provenance: the dense-underworld resolution, the 205-entry surface chunk
@@ -773,25 +773,22 @@ coordinate table are derived from private analysis notes
 `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md` and
 `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 Intro/story presentation metadata ownership was cross-checked against
-`u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`.
+`u5-decomp/functions/INTRO_OVL/`.
 Viewport-buffer semantics were cross-checked against
-`u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`. Combat class-table
+`u5-decomp/functions/ULTIMA_EXE/`. Combat class-table
 semantics were cross-checked against
-`u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`,
-`u5-decomp/functions/COMBAT_OVL/0x12B0_attacker_defender_score.md`,
-`u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md`, and
-`u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`.
+`u5-decomp/functions/COMBAT_OVL/`, and
+`u5-decomp/functions/COMSUBS_OVL/`.
 Ambush/camp reveal-table shape was cross-checked against
-`u5-decomp/functions/COMBAT_OVL/0x111A_reveal_ambush_at_coord.md`.
+`u5-decomp/functions/COMBAT_OVL/`.
 The removal of the old class-script-table hypothesis was cross-checked against
 the corrected COMSUBS actor-name and monster-special notes plus the COMBAT
 actor-dispatch, target-picker, and movement notes. Combat cast target mapping
 was cross-checked against
-`u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`. Input runtime
+`u5-decomp/functions/COMSUBS_OVL/`. Input runtime
 state was cross-checked against
-`u5-decomp/functions/ULTIMA_EXE/0x266C_get_command.md`,
-`u5-decomp/functions/ULTIMA_EXE/0x1B38_poll_with_blink_cursor.md`, and
-`u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md`. It omits decompiled
+`u5-decomp/functions/ULTIMA_EXE/`, and
+`u5-decomp/functions/ULTIMA_EXE/`. It omits decompiled
 code, assembly, private offsets, raw address tables, and copied string dumps.
 
 For byte-compatible offsets and unresolved raw table boundaries, work in

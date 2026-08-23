@@ -1510,35 +1510,18 @@ fixed.
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x017A_render_shoppe_record.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x01B6_shop_greeting_preamble.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x0202_farewell_dispatch.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x0280_yes_no_prompt.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x019A_charge_random_tax.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x04A2_guild_main.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x075E_reagent_main.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x07BE_find_shopkeeper.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x09AC_arms_buy_confirm.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x0B30_arms_buy_menu.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x0F64_arms_sell_inventory.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x14F8_healer_main.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x12B2_arms_main.md`, and the private
+  `u5-decomp/functions/SHOPPES_OVL/`, and the private
   SHOPPES healer-main trace — weaponsmith / armourer, guildmaster, healer /
   sanctum, herbalist, horse-trader sale, and post-transaction surcharge
   behavior.
 - `u5-decomp/functions/SHOPPES2_OVL/_OVERVIEW.md`,
-  `u5-decomp/functions/SHOPPES2_OVL/0x066C_tavern_main.md`,
-  `u5-decomp/functions/SHOPPES2_OVL/0x0508_sage_main.md`,
-  `u5-decomp/functions/SHOPPES2_OVL/0x0450_food_pay_and_serve.md`,
-  `u5-decomp/functions/SHOPPES2_OVL/0x0000_accumulate_party_cost.md`, and
+  `u5-decomp/functions/SHOPPES2_OVL/`, and
   local SHOPPES2 shipwright control-flow analysis — tavernkeeper, ship broker,
   sage, and the correction that the traced `F`/`S` pending-action flow belongs
   to shipwright sales rather than a provisions merchant.
 - `u5-decomp/functions/SHOPPES3_OVL/_OVERVIEW.md`,
-  `u5-decomp/functions/SHOPPES3_OVL/0x0072_inn_rest_for_night.md`,
-  `u5-decomp/functions/SHOPPES3_OVL/0x02AE_leave_companion.md`,
-  `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md`, and
-  `u5-decomp/functions/SHOPPES3_OVL/0x08B4_inn_menu_dispatch.md` — innkeeper
+  `u5-decomp/functions/SHOPPES3_OVL/`, and
+  `u5-decomp/functions/SHOPPES3_OVL/` — innkeeper
   pricing, rest recovery, inn registry, and persistent guest-lodging state.
 - `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the inn
   menu's entry clear of the shared timed-effect slot.
@@ -1547,21 +1530,20 @@ The behaviour described here was derived from the private function and format no
   published contents, biases, empty-slot census, and the shop renderer's own
   spacing rule were re-derived in
   `u5-decomp/notes/talk_group_retrace_2026-08-22.md` and
-  `u5-decomp/functions/SHOPPES_OVL/0x0026_format_record_with_tokens.md`
+  `u5-decomp/functions/SHOPPES_OVL/`
   location, byte-range bias, shop-kind trigger table, and SHOPPES2 shipwright
   dispatch correction.
-- `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`,
-  `u5-decomp/functions/TALK_OVL/0x00E6_shop_dispatch.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md` -- conversation-side
+- `u5-decomp/functions/TALK_OVL/`, and
+  `u5-decomp/functions/ULTIMA_EXE/` -- conversation-side
   shop dispatch, current shop selector, and shared caller context.
 - `u5-decomp/notes/shop_instance_binding_2026-08-22.md` -- the mounted-party
   entry gate and its literal, the scene-to-row search and its out-of-range
   behaviour, and the two resident per-kind name tables that supply the shop-name
   and vendor-name substitutions published in Section 8.0.
 - `u5-decomp/formats/ds-bss-map.md`,
-  `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`,
-  `u5-decomp/functions/SHOPPES_OVL/0x019A_charge_random_tax.md`, and
-  `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md` --
+  `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/SHOPPES_OVL/`, and
+  `u5-decomp/functions/TALK_OVL/` --
   the resident-Shadowlord selector that gates the shop surcharge.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3, for
@@ -1569,11 +1551,11 @@ The behaviour described here was derived from the private function and format no
 - Private SHOPPES horse-trader sale trace -- horse-trader sale helper and horse-object placement.
 - Shipped `.NPC` roster scan and resident shop name/scene tables -- high
   dialog-index shop triggers and local shop-instance resolution.
-- `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`, and local
+- `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, and local
   MAINOUT outer-loop analysis -- command routing and overworld pending vehicle
   placement.
-- `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md` and direct
+- `u5-decomp/functions/CMDS_OVL/` and direct
   `SHOPPE.DAT` record inspection -- Frigate/Skiff labels, boardable ship/skiff
   families, and ship hull/skiff-count auxiliary semantics.
 - `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` -- shared
@@ -1584,14 +1566,14 @@ The behaviour described here was derived from the private function and format no
   sweep and the later whole-build census of the text-window selector,
   rectangle, cursor, and colour primitives; the census supersedes the earlier
   sweep's claim that the inn register was the only shop-owned panel.
-- `u5-decomp/functions/SHOPPES2_OVL/0x0ABC_shipwright_main.md` -- shipwright
+- `u5-decomp/functions/SHOPPES2_OVL/` -- shipwright
   menu, per-row Frigate/Skiff prices, per-row delivery coordinates, pending
   acquisition encoding, and the post-sale tail.
-- `u5-decomp/functions/SHOPPES2_OVL/0x0380_tavern_provision_quote.md` --
+- `u5-decomp/functions/SHOPPES2_OVL/` --
   tavern/meal-counter provision branch: state-indexed provision letter, the
   Intelligence-adjusted per-unit quote, the six-record quote pool, the
   twenty-five-serving pack size, the per-unit pay loop with its gold floor and
   food ceiling, surcharge timing, and the five outcome cases including the
   table-scraps gift.
-- `u5-decomp/functions/SHOPPES_OVL/0x0F64_arms_sell_inventory.md` -- arms sell
+- `u5-decomp/functions/SHOPPES_OVL/` -- arms sell
   browser and its side-panel geometry.

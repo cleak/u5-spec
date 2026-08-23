@@ -221,10 +221,10 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 
 - First-pass map and arena survey, including the dungeon file dimensions and packed-nibble cell model: `u5-decomp/formats/maps.md`.
 - Dungeon record/name/scene binding and selected-record load: derived from the MAINOUT E-Enter helper and the DATA.OVL world-location table in the private analysis workspace.
-- Internal dungeon turn-loop analysis, including the loaded dungeon image, current-level indexing, renderer relationship, and room-trigger relationship to combat arenas: `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
-- Internal dungeon post-action and fall-trap helper analysis, including the exact observed fall-trap and bomb-trap bytes and visit-local trap rewrites: `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`.
-- Internal dungeon movement destination-effect analysis: `u5-decomp/functions/DUNGEON_OVL/0x0502_dungeon_move_dispatch.md`.
-- Internal dungeon Look analysis, including the relative-focus helper handoff, high-nibble class switch, and fountain/field subtype behaviour: `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`, `u5-decomp/functions/SJOG_OVL/0x006C_sjog_dir_step.md`, and `u5-decomp/functions/SJOG_OVL/0x002A_sjog_apply_dir_step.md`.
+- Internal dungeon turn-loop analysis, including the loaded dungeon image, current-level indexing, renderer relationship, and room-trigger relationship to combat arenas: `u5-decomp/functions/DUNGEON_OVL/`.
+- Internal dungeon post-action and fall-trap helper analysis, including the exact observed fall-trap and bomb-trap bytes and visit-local trap rewrites: `u5-decomp/functions/DUNGEON_OVL/`.
+- Internal dungeon movement destination-effect analysis: `u5-decomp/functions/DUNGEON_OVL/`.
+- Internal dungeon Look analysis, including the relative-focus helper handoff, high-nibble class switch, and fountain/field subtype behaviour: `u5-decomp/functions/DNGLOOK_OVL/`, `u5-decomp/functions/SJOG_OVL/`, and `u5-decomp/functions/SJOG_OVL/`.
 - Internal CAST overlay field-placement analysis, including the live-map field byte mapping and marker-bit preservation used by dungeon field spells.
 - Internal dungeon View analysis, including the top-down level view relationship to the same dungeon cell data.
 - Existing dungeon-mode system prose used for cross-checking runtime semantics: `u5-spec/systems/dungeon-mode.md`.

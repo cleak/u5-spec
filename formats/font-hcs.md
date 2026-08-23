@@ -161,5 +161,5 @@ This is a cleanroom prose rewrite derived from
 `u5-decomp/formats/fonts-bitmaps.md`, cross-checked against
 `u5-spec/systems/text-output.md` and `u5-spec/formats/tiles.md`. High-bit
 caller handling is cross-checked against
-`u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`. It omits decompiled code,
+`u5-decomp/functions/ULTIMA_EXE/`. It omits decompiled code,
 assembly, private offsets, raw address tables, and copied binary dumps.

@@ -306,12 +306,9 @@ This cleanroom spec was derived from private analysis notes and sibling public
 specs. It intentionally does not reproduce decompiled code, assembly, raw data
 tables, or implementation-specific addresses.
 
-- `u5-decomp/functions/ULTIMA_EXE/0x2BD4_class_bitmask_test.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2C4C_tile_class_dispatch.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2C2E_tile_glyph_check.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
-- `u5-decomp/functions/MAINOUT_OVL/0x1482_tile_walkable_check.md`.
-- `u5-decomp/functions/NPC_OVL/0x0ADC_is_tile_walkable_for_npc.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/MAINOUT_OVL/`.
+- `u5-decomp/functions/NPC_OVL/`.
 - `u5-decomp/notes/system-trace_movement.md`.
 - `systems/overworld.md`.
 - `systems/town-mode.md`.

@@ -374,8 +374,7 @@ decompiler output, implementation listings, and raw private tables.
 - Input idle-loop relationship to world ticks - `systems/input.md`.
 - Time-system separation and per-turn cleanup cadence - `systems/time.md`.
 - Per-slot animator, global tile selector update, and display-driver flush -
-  `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x44B8_animate_tiles.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the five global tile-animation families of Section 6, their
   cycle lengths and phase gating, and their per-id selector bytes were re-read
   from the shipped executable for this revision; their names come from decoding
@@ -386,14 +385,14 @@ decompiler output, implementation listings, and raw private tables.
   and both are superseded by the nested two-gate structure re-read from the
   shipped executable for this revision.
 - Caller relationship from the resident world-tick path -
-  `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - NPC scheduler separation -
-  `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
+  `u5-decomp/functions/NPC_OVL/`.
 - Combat save/restore interaction -
-  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md` and
-  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
+  `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/functions/COMBAT_OVL/`.
 - `FLAMES.OVL` non-animation role and title-effect ownership -
-  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`.
+  `u5-decomp/functions/FLAMES_OVL/`.
 - Source provenance: the boundary between this document's two animation layers
   and the moongate presence phase - that the phase is not a tile-animation
   family, is not advanced by the animation tick, and is not per-frame - is

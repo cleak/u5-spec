@@ -120,12 +120,10 @@ depend on the owning system's selector contract rather than hardcoded prose.
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/data-tables.md` (`MISCMSG.DAT` section).
-- `u5-decomp/functions/BLCKTHRN_OVL/0x060E_blackthorn_audience.md`.
+- `u5-decomp/functions/BLCKTHRN_OVL/`.
 - `u5-decomp/functions/BLCKTHRN_OVL/OVERVIEW.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x054A_virtue_challenge_loop.md`.
-- `u5-decomp/functions/CAST2_OVL/0x0E76_enter_shrine_or_urn.md`.
-- `u5-decomp/functions/CAST2_OVL/0x0D24_read_urn.md`.
-- `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`.
+- `u5-decomp/functions/BLCKTHRN_OVL/`.
+- `u5-decomp/functions/CAST2_OVL/`.
 - `u5-spec/systems/karma.md`.
 - `u5-spec/systems/blackthorn.md`.
 - `u5-spec/systems/text-output.md`.

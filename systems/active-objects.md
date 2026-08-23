@@ -458,48 +458,37 @@ lifecycle or reclassify projectile and impact visuals as active-object records.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The dungeon loop's first-person rendering path and its absence of NPC/active-object population during exploration — `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- The dungeon loop's first-person rendering path and its absence of NPC/active-object population during exploration — `u5-decomp/functions/DUNGEON_OVL/`.
 
-- The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+- The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/`.
 - The compositor's companion-band write, the renderer's zero-grid-cell branch,
   the `+256` actor index rule and the reserved transparent value —
   `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - The resident active-object acquisition cascade and slot initialiser -
-  `u5-decomp/functions/ULTIMA_EXE/0xB714_acquire_object_slot.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The `0xB5` actor-class interpretation is cross-checked against the shipped
   NPC roster analysis in `u5-decomp/formats/npc-tlk-pth.md`.
 - The overworld per-turn slot walker, outdoor animated/monster predicate,
   hostile reaction dispatch, water-creature step path, post-animate cleanup,
   directed step planner, and proximity helper -
-  `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x105C_mainout_tile_classifier.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x131A_active_object_animate.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x1248_active_object_engage.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x1168_active_object_step.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x198C_post_animate.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x17D4_slot_advance.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x1482_tile_walkable_check.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x14C8_target_cell_check.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x1578_apply_step.md`, and
-  `u5-decomp/functions/MAINOUT_OVL/0x14EA_range_check_5x6.md`.
+  `u5-decomp/functions/MAINOUT_OVL/`, and
+  `u5-decomp/functions/MAINOUT_OVL/`.
 - The resident tile-class dispatcher and reverse active-object lookup used by
   outdoor step validation -
-  `u5-decomp/functions/ULTIMA_EXE/0x2C4C_tile_class_dispatch.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
-- The compositor that walks the table backwards to stamp on-screen sprites into the viewport, plus the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
-- The world-mutation helper that links logical NPC state to a slot in the table when an NPC arrives on or leaves the player's floor — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
-- The town-entry Shadowlord install that allocates an active-object slot and a parallel high-indexed NPC slot for a resident Shadowlord — `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md` (see that note's 2026-08-22 repair-round correction, which supersedes its original "player attach" framing) and `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
+- The compositor that walks the table backwards to stamp on-screen sprites into the viewport, plus the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/`.
+- The world-mutation helper that links logical NPC state to a slot in the table when an NPC arrives on or leaves the player's floor — `u5-decomp/functions/TOWN_OVL/`.
+- The town-entry Shadowlord install that allocates an active-object slot and a parallel high-indexed NPC slot for a resident Shadowlord — `u5-decomp/functions/TOWN_OVL/` (see that note's 2026-08-22 repair-round correction, which supersedes its original "player attach" framing) and `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
 - The NPC pathfinding workspace builder that overlays active-object obstacles
   and the current player cell for collision avoidance -
-  `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
-- The combat round loop that operates on the table during combat — `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
-- The combat enter/exit framer that backs up and restores the table — `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+  `u5-decomp/functions/NPC_OVL/`.
+- The combat round loop that operates on the table during combat — `u5-decomp/functions/COMBAT_OVL/`.
+- The combat enter/exit framer that backs up and restores the table — `u5-decomp/functions/ULTIMA_EXE/`.
 - The resident terrain-target wrapper and SJOG post-combat object reconciler
   that clear or rewrite the original trigger slot after combat --
-  `u5-decomp/functions/ULTIMA_EXE/0x6150_combat_target_describe.md` and
-  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
-- The NPC per-tick walker that drives schedule-based NPC movement and feeds the world-mutation helper — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
+  `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/functions/SJOG_OVL/`.
+- The NPC per-tick walker that drives schedule-based NPC movement and feeds the world-mutation helper — `u5-decomp/functions/NPC_OVL/`.
 - The save image's region holding the table and the on-disk overlay files — `u5-decomp/formats/saves.md`.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` -- the confirmation
@@ -509,12 +498,9 @@ The behaviour described above was derived by reading the function and format not
   and the identification of the shared five-argument helper as the ranged
   projectile animator rather than a movement probe or path-clear scan.
 - The combat/spell projectile visual path and per-cell effect renderer -
-  `u5-decomp/functions/COMSUBS_OVL/0x12DE_projectile_animate.md` and
-  `u5-decomp/functions/COMSUBS_OVL/0x0F4A_tile_effect_render.md`.
+  `u5-decomp/functions/COMSUBS_OVL/`.
 - The F-Fire and ship-broadside projectile traces -
-  `u5-decomp/functions/CMDS_OVL/0x0AEA_cmds_fire.md` and
-  `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.
+  `u5-decomp/functions/CMDS_OVL/`.
 - Vehicle byte interpretation for ship boarding, X-it parking, and broadside
-  damage -- `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`,
-  `u5-decomp/functions/CMDS_OVL/0x0EB4_cmds_xit_vehicle.md`, and
-  `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.
+  damage -- `u5-decomp/functions/CMDS_OVL/`, and
+  `u5-decomp/functions/CMDS_OVL/`.

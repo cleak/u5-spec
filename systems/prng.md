@@ -116,23 +116,23 @@ This public description is a cleanroom prose rewrite from private analysis. It
 does not reproduce decompiled source, assembly listings, raw bytes, or private
 address tables.
 
-- PRNG range helper semantics and state-advance formula -- `u5-decomp/functions/ULTIMA_EXE/0x2092_prng_range.md`.
+- PRNG range helper semantics and state-advance formula -- `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/ULTIMA_EXE/0x207E_prng_seed.md` -- the state-assignment
+  `u5-decomp/functions/ULTIMA_EXE/` -- the state-assignment
   primitive, its shipped zero initial value, the complete list of seeding
   events, and the boot-seed placement in the intro sequence.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/ULTIMA_EXE/0x2056_prng_time_seed.md` -- the clock-derived
+  `u5-decomp/functions/ULTIMA_EXE/` -- the clock-derived
   seed value and its twelve-bit width. This note supersedes the earlier
   "sound-only jitter" characterisation of that helper.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/ULTIMA_EXE/0x223C_pc_speaker_random_rumble.md` -- the
+  `u5-decomp/functions/ULTIMA_EXE/` -- the
   separate, never-seeded audio jitter state.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` -- the
+  `u5-decomp/functions/TOWN_OVL/` -- the
   deterministic day-of-month seed taken by the farmland blight pass, its
   resident-Shadowlord gate, and the clock re-seed that follows it.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
-- Earlier engine-wide call-site identification for the routine historically named `make_tag` -- `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- Earlier engine-wide call-site identification for the routine historically named `make_tag` -- `u5-decomp/functions/ULTIMA_EXE/`.
 - Library fingerprint confirming integer-only game logic and absence of floating-point/runtime allocation dependencies -- `u5-decomp/functions/ULTIMA_EXE/_LIBRARY_FIDB.md`.

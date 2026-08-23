@@ -329,8 +329,7 @@ The format described above was derived from the analysis notes listed below. Non
 - The first-pass survey of every tile, sprite, font, and screen-panel file in both depths, the LZW envelope identification and verification, the three container layouts, the sprite-and-mask budget arithmetic, and the cross-file size and ratio audits — `u5-decomp/formats/tile-graphics.md`.
 - The resident LZW bit-reader and loader wrapper notes that confirm the
   variable-width code stream contract -
-  `u5-decomp/functions/ULTIMA_EXE/0x135A_buffered_stream_read.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x82DE_load_lzw_image.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Fresh local sprite-mask verification over `ITEMS` and `MON0` through `MON7`
   in both `.16` and `.4` forms confirmed matching image/mask dimensions and
   the "set bit = transparent" polarity.
@@ -340,9 +339,9 @@ The format described above was derived from the analysis notes listed below. Non
 - The withdrawal of the "resident miniature tile-glyph rendering path" of
   Section 5.1.1: the routine that reading rested on is the night-time light
   beacon's stencil stamp, re-read from the shipped executable for this revision
-  and written up in `u5-decomp/functions/ULTIMA_EXE/0x7040_light_beacon_stamp.md`
+  and written up in `u5-decomp/functions/ULTIMA_EXE/`
   and `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`. The stale
-  reading survives as `u5-decomp/functions/ULTIMA_EXE/0x7040_render_2x16_sprite.md`
+  reading survives as `u5-decomp/functions/ULTIMA_EXE/`
   and in a `u5-decomp/CORRECTIONS.md` entry; both are superseded.
 - Per-record inventories and roles for `ULTIMA`, `STARTSC` and `ENDSC`, the depth difference in `ULTIMA`'s last record, and the `STARTSC`-is-not-the-start-screen correction — `u5-decomp/notes/intro_title_sequence_2026-08-22.md`, with every record shape re-decoded from the shipped files before publication.
 - The active-object table whose per-slot tile byte indexes the world tile atlas — `u5-spec/systems/active-objects.md`.

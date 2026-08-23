@@ -329,21 +329,19 @@ and any source-shaped representation of the original code.
 
 - EGA dispatch ABI, slot inventory, and slot-1 mode-set semantics:
   `u5-decomp/formats/ega-driver.md` and
-  `u5-decomp/functions/EGA_DRV/0x0868_set_video_mode.md`.
+  `u5-decomp/functions/EGA_DRV/`.
 - Back-buffer allocation, plane-image layout, and release semantics:
-  `u5-decomp/functions/EGA_DRV/0x08E4_alloc_back_buffer.md` and
-  `u5-decomp/functions/EGA_DRV/0x0920_free_back_buffer.md`.
+  `u5-decomp/functions/EGA_DRV/`.
 - Asset-segment registration and the in-place packed-to-planar rewrite:
-  `u5-decomp/functions/EGA_DRV/0x17A9_pack_to_back_buffer.md` and the
+  `u5-decomp/functions/EGA_DRV/` and the
   packed-to-plane helper notes referenced therein.
 - Drawing-colour register and pixel-level primitives:
-  `u5-decomp/functions/EGA_DRV/0x0E66_set_color.md`,
-  `u5-decomp/functions/EGA_DRV/0x0E6C_plot_pixel.md`, and
-  `u5-decomp/functions/EGA_DRV/0x0A78_get_pixel.md`.
+  `u5-decomp/functions/EGA_DRV/`, and
+  `u5-decomp/functions/EGA_DRV/`.
 - Front-buffer scanline-fill helper (rectangle inner loop):
-  `u5-decomp/functions/EGA_DRV/0x04F6_front_buffer_scanline_fill.md`.
+  `u5-decomp/functions/EGA_DRV/`.
 - Packed-to-planar preparation entry and asset-segment layout:
-  `u5-decomp/functions/EGA_DRV/0x1226_draw_compressed_bitmap.md` (the note file
+  `u5-decomp/functions/EGA_DRV/` (the note file
   keeps its original filename; the entry is not a codec) and
   `u5-decomp/CORRECTIONS.md`.
 - Per-driver hardware modes, framebuffer shapes, drawing-colour reduction,
@@ -352,11 +350,9 @@ and any source-shaped representation of the original code.
   `u5-decomp/formats/cga-driver.md`, `u5-decomp/formats/tandy-driver.md`,
   `u5-decomp/formats/hercules-driver.md`,
   `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md`, and
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Tile-blit and glyph entries:
-  `u5-decomp/functions/EGA_DRV/0x1637_tile_blit_16x16.md`,
-  `u5-decomp/functions/EGA_DRV/0x12B4_tile_blit_general.md`,
-  `u5-decomp/functions/EGA_DRV/0x19D2_glyph_8x8.md`.
+  `u5-decomp/functions/EGA_DRV/`.
 - Resident screen-descriptor palette table field:
   `u5-decomp/formats/data-ovl.md` (descriptor layout) and
   `u5-decomp/formats/ega-driver.md` (palette-load step in slot 1).

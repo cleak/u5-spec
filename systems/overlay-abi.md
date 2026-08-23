@@ -175,7 +175,7 @@ excerpts, raw dumps, linker tables, private address tables, or implementation
 listings.
 
 - Overlay loader and trampoline analysis:
-  `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Architecture orientation and PLINK86 attribution:
   `u5-decomp/notes/engine-architecture.md`.
 - Overlay call graph cross-check:

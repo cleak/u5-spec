@@ -665,16 +665,16 @@ pixel-parity work.
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The per-cell emitter, its extended controls, and its glyph and scroll helpers — derived from `u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`, `u5-decomp/functions/ULTIMA_EXE/0x17F4_glyph_to_cell_buffer.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1F77_descriptor_to_pixel_rect.md`.
-- The wrap-aware string printer and its centring branch — derived from `u5-decomp/functions/ULTIMA_EXE/0x1850_print_string.md`.
-- The padded numeric printer — derived from `u5-decomp/functions/ULTIMA_EXE/0x1A3E_print_number.md`.
-- The cursor accessors — derived from `u5-decomp/functions/ULTIMA_EXE/0x1F12_get_cursor_x.md`, `u5-decomp/functions/ULTIMA_EXE/0x1CEE_get_cursor_y.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1BF2_set_cursor_pos.md`.
-- The window-descriptor initialisation, rectangle configuration, and active-window selection — derived from `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`, `u5-decomp/functions/ULTIMA_EXE/0x1C22_set_text_descriptor_rect.md`, and `u5-decomp/functions/ULTIMA_EXE/0x1B94_set_display_mode.md` (the latter, despite its filename, is the active-window selector).
+- The per-cell emitter, its extended controls, and its glyph and scroll helpers — derived from `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/functions/ULTIMA_EXE/`.
+- The wrap-aware string printer and its centring branch — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The padded numeric printer — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The cursor accessors — derived from `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/functions/ULTIMA_EXE/`.
+- The window-descriptor initialisation, rectangle configuration, and active-window selection — derived from `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/functions/ULTIMA_EXE/` (the latter, despite its filename, is the active-window selector).
 - The overlay-side census of which windows are reshaped transiently — derived from `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`. Its "window 2 is never configured" conclusion is corrected in section 9 step 3 and section 10.1.
 - Source provenance: the three standing gameplay window rectangles and their attributes and initial cursors, the absence of a fourth gameplay window, the command-echo cycle and its newline-first ordering, the echoed verb strings and their punctuation contract, the unrecognised-key response and its no-turn result, the blank-row mechanism, the un-blanked scroll, the input-cursor animation, and the three typed-input readers are derived from private analysis note `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked against a fresh local re-read of the shipped executable, overlays and shared data overlay.
 - The selectable fixed-cell font slot, the two boot-loaded fonts and their shared code points, and the three framed-border-label slots with their differing centring and blanking rules — derived from private analysis note `../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
-- The driver-load step in boot-time setup — derived from `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
-- The C-runtime string-length utility used at some call sites for label width — derived from `u5-decomp/functions/ULTIMA_EXE/0x216C_string_length.md`. This utility is the standard NUL-terminated string length function and does not warrant a dedicated spec section.
+- The driver-load step in boot-time setup — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The C-runtime string-length utility used at some call sites for label width — derived from `u5-decomp/functions/ULTIMA_EXE/`. This utility is the standard NUL-terminated string length function and does not warrant a dedicated spec section.
 - Cross-overlay call-frequency and no-thunk text-output architecture — derived
   from `u5-decomp/notes/hot_path_analysis.md` and
   `u5-decomp/notes/engine_idioms.md`.
@@ -683,12 +683,11 @@ The behaviour described here was derived from the private function notes listed 
   exclusive right-edge test, the plus-one inter-glyph gap, the backtracking
   break rule, the justification arithmetic, and the fixed nine-pixel line
   advance -- derived from
-  `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md` and
+  `u5-decomp/functions/FONT_OVL/` and
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 2.
 - The typed-input space eraser and cursor-advance gate preservation -- derived
-  from `u5-decomp/functions/ULTIMA_EXE/0x1FA0_print_n_spaces.md` and
+  from `u5-decomp/functions/ULTIMA_EXE/` and
   cross-checked against
-  `u5-decomp/functions/ULTIMA_EXE/0x1E38_read_text_input.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Intro-frame decoration as another cursor-advance gate writer -- derived from
-  `u5-decomp/functions/INTRO_OVL/0x04E0_clear_intro_text_window.md` and
-  `u5-decomp/functions/INTRO_OVL/0x1E62_clear_continue_window.md`.
+  `u5-decomp/functions/INTRO_OVL/`.

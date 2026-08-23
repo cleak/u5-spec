@@ -288,40 +288,36 @@ The behavior described here was derived from cleanroom reading of the following 
 - Saved runtime state survey noting the wind field - `u5-decomp/formats/saves.md`.
 - The world-entry/load note identifying the wind-direction display helper and
   the helper trace used for valid and out-of-range wind banner behavior -
-  `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x2E96_announce_scene.md` (that note's
+  `u5-decomp/functions/INTRO_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/` (that note's
   filename predates its 2026-08-22 naming correction; the routine sets and
   announces the prevailing wind and has nothing to do with scene entry).
 - The idle-redraw random wind selector that feeds the same display/setter
-  helper - `u5-decomp/functions/ULTIMA_EXE/0x2F62_event_random_scene_transition.md`
+  helper - `u5-decomp/functions/ULTIMA_EXE/`
   (filename likewise predates its 2026-08-22 naming correction; it selects a
   wind, not a scene transition)
-  and `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
+  and `u5-decomp/functions/ULTIMA_EXE/`.
 - The Rel Hur / Wind Change spell's prompt-to-state handoff and calm/no-effect
-  boundaries - `u5-decomp/functions/CAST2_OVL/0x040A_set_wind.md`.
+  boundaries - `u5-decomp/functions/CAST2_OVL/`.
 - Overworld movement, ship state, and active-object epilogue boundaries -
-  `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md` and
-  `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
+  `u5-decomp/functions/MAINOUT_OVL/`.
 - The resolved overworld pause helper that rules out the former wrapped-call
   candidate as a wind-cadence routine -
-  `u5-decomp/functions/ULTIMA_EXE/0x3AE6_world_tick_pause.md` and
-  `u5-decomp/functions/MAINOUT_OVL/0x007A_mainout_proximity_yell_check.md`.
+  `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/functions/MAINOUT_OVL/`.
 - Player-ship movement dispatch, under-sail direction cache, wind-vector
   cadence, and stalled-sailing feedback boundary -
-  `u5-decomp/functions/MAINOUT_OVL/0x0490_mainout_letter_dispatch.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x0598_mainout_input_helper.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
+  `u5-decomp/functions/MAINOUT_OVL/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Active-object pirate, water-creature, whirlpool, and monster behavior used to
   separate mapped actor AI from player-ship sailing and to derive the
   non-player water-creature wind cadence -
-  `u5-decomp/functions/MAINOUT_OVL/0x131A_active_object_animate.md` and
-  `u5-decomp/functions/MAINOUT_OVL/0x198C_post_animate.md`.
-- Ship boarding, sail toggling, and ship command behavior - `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`, `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`, and `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.
-- Rel Hur's identity as Wind Change in the spell-cast system - `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`.
+  `u5-decomp/functions/MAINOUT_OVL/`.
+- Ship boarding, sail toggling, and ship command behavior - `u5-decomp/functions/CMDS_OVL/`, and `u5-decomp/functions/CMDS_OVL/`.
+- Rel Hur's identity as Wind Change in the spell-cast system - `u5-decomp/functions/CAST_OVL/`.
 - Wind Change's direction prompt handoff, prompt-result mapping, calm no-op
   rule, wind sound trigger, and saved/runtime wind values -
-  `u5-decomp/functions/CAST2_OVL/0x0306_prompt_direction.md` and
-  `u5-decomp/functions/CAST2_OVL/0x040A_set_wind.md`.
+  `u5-decomp/functions/CAST2_OVL/`.
 - Source provenance: the wind banner's fixed cell layout, its bracket end-caps,
   the five stored five-character direction labels and the shared suffix's leading
   space, the resulting double-space rendering for Calm, East and West, the

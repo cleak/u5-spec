@@ -234,10 +234,10 @@ cross-reference alignment.
   from `u5-decomp/formats/data-tables.md`.
 - The scene directory, coordinate scan, hard-coded wanted-poster exception, and
   scene-block read window -- derived from
-  `u5-decomp/functions/LOOKOBJ_OVL/0x07E4_wanted_poster_render.md`.
+  `u5-decomp/functions/LOOKOBJ_OVL/`.
 - The per-record formatter controls, macro substitution, pause behavior, and
   high-bit presentation-mode semantics -- derived from
-  `u5-decomp/functions/LOOKOBJ_OVL/0x06F8_signs_dat_print.md`.
+  `u5-decomp/functions/LOOKOBJ_OVL/`.
 - Shipped `SIGNS.DAT` header, alias-bridge layout, decorator macros, and
   separator-glyph usage were cross-checked against the traced directory offsets
   and record scanner.

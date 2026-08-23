@@ -85,6 +85,6 @@ supplies the dialogue records only; it does not encode that branch rule.
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/data-tables.md` (`ENDMSG.DAT` section).
-- `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`.
+- `u5-decomp/functions/ENDGAME_OVL/`.
 - `u5-spec/systems/endgame.md`.
 - `u5-spec/systems/text-output.md`.

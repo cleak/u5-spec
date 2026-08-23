@@ -313,10 +313,10 @@ data.
   and `u5-decomp/formats/ega-driver.md`.
 - Intro title and story consumers, the one-bit stamp entry used to draw these
   records, per-record roles, and the whole-page publish ordering:
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`,
-  `u5-decomp/functions/EGA_DRV/0x190E_silhouette_stamp_back_buffer.md`,
-  `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md`, and
+  `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/EGA_DRV/`,
+  `u5-decomp/functions/INTRO_OVL/`, and
   `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
 - Which palette index each drawn record ends up wearing on the EGA path, and
   why the seven flourish records differ from the rest:

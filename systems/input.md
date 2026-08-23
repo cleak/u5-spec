@@ -357,31 +357,31 @@ runtime gap: the full recognised set for the game-mode-specific entry stamp.
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The top-level wait-for-input loop, idle vs prompt switching, case folding, numpad-to-direction translation, and the cardinal-direction renumbering — derived from `u5-decomp/functions/ULTIMA_EXE/0x266C_get_command.md`.
-- The cursor-blink animation, blink-base / blink-modulus parameters, cursor-advance gate save/restore, and erase-or-rewind step — derived from `u5-decomp/functions/ULTIMA_EXE/0x1B38_poll_with_blink_cursor.md`.
-- The keyboard hardware abstraction, the three input classes (regular ASCII, function-key remap, extended-scancode translation), the scancode-to-direction tables, the function-key block, the numpad-equivalent flag, and the buffer-flush gate — derived from `u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md`.
-- The ASCII-only case-fold helper used between the keyboard peek and the caller — derived from `u5-decomp/functions/ULTIMA_EXE/0x2032_to_upper.md`.
-- The central per-letter command dispatcher, the mode-aware routing, the verb-prefix printing, and the cross-overlay call model — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`. Per-letter handler behaviour is covered by `systems/commands.md`; only the input-side interface appears here.
+- The top-level wait-for-input loop, idle vs prompt switching, case folding, numpad-to-direction translation, and the cardinal-direction renumbering — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The cursor-blink animation, blink-base / blink-modulus parameters, cursor-advance gate save/restore, and erase-or-rewind step — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The keyboard hardware abstraction, the three input classes (regular ASCII, function-key remap, extended-scancode translation), the scancode-to-direction tables, the function-key block, the numpad-equivalent flag, and the buffer-flush gate — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The ASCII-only case-fold helper used between the keyboard peek and the caller — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The central per-letter command dispatcher, the mode-aware routing, the verb-prefix printing, and the cross-overlay call model — derived from `u5-decomp/functions/ULTIMA_EXE/`. Per-letter handler behaviour is covered by `systems/commands.md`; only the input-side interface appears here.
 - The resident adjacent-tile command direction prompt, including cardinal-only
   filtering, shared vector output, direction echo labels, and Space/Pass
   cancellation -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x35EC_direction_prompt.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Direction-code consumer boundaries, including cardinal-only world, town,
   dungeon, and combat movement plus diagonal fallthrough behavior -- derived from
   `u5-decomp/notes/system-trace_movement.md` and
   `u5-decomp/notes/cross_mode_behavior_matrix.md`.
 - The standard party-member target wrapper and selector return families --
   selected active slot, cancel, and explicit none -- derived from
-  `u5-decomp/functions/CAST2_OVL/0x009E_prompt_party_member.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x2D7A_input_party_select.md`.
+  `u5-decomp/functions/CAST2_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The shared spell direction prompt -- origin selection, cardinal target
   adjustment, Space/Pass no-direction result, and re-prompt on other keys --
-  derived from `u5-decomp/functions/CAST2_OVL/0x0306_prompt_direction.md`.
-- An example per-command handler (Hole up) showing how a handler reads further input, calls back into prompts, and returns a status word — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
-- The world-tick orchestrator that runs during idle iterations — derived from `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`. Only the input-facing contract (the suppression gate and the per-iteration trigger) is described here; the tick's internal subsystems are properly the subject of separate specs.
+  derived from `u5-decomp/functions/CAST2_OVL/`.
+- An example per-command handler (Hole up) showing how a handler reads further input, calls back into prompts, and returns a status word — derived from `u5-decomp/functions/CMDS_OVL/`.
+- The world-tick orchestrator that runs during idle iterations — derived from `u5-decomp/functions/ULTIMA_EXE/`. Only the input-facing contract (the suppression gate and the per-iteration trigger) is described here; the tick's internal subsystems are properly the subject of separate specs.
 - The free-text reader's printable-byte, Backspace, Enter, Escape, echo, and
   NUL-termination behavior -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x1E38_read_text_input.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 
 - The corrected direction-code assignments of Section 5, the mutual exclusion
   between scancode translation and the typed-Control pseudo-code rewrite, the
@@ -389,5 +389,5 @@ The behaviour described here was derived from the private function notes listed 
   the closure of the function-key and diagonal-code consumer questions. Source
   provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`, with
-  `../u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md` and
-  `../u5-decomp/functions/COMSUBS_OVL/0x0504_arena_cursor_picker.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/` and
+  `../u5-decomp/functions/COMSUBS_OVL/`.

@@ -117,5 +117,5 @@ choose a specific success record.
 ## 5. Sources
 
 Source provenance: derived from private analysis note
-`u5-decomp/functions/SHOPPES2_OVL/0x0508_sage_main.md`. The clean table
+`u5-decomp/functions/SHOPPES2_OVL/`. The clean table
 contains only semantic topic data and published SHOPPE.DAT record identities.

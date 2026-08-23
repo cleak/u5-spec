@@ -80,7 +80,7 @@ Source provenance: derived from private analysis notes
 validates the decoder against a `.16` archive and then against the three
 enveloped `.BIT`/`.PCS` files), cross-checked against the later generic
 file-read correction in
-`u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`, which confirms that
+`u5-decomp/functions/ULTIMA_EXE/`, which confirms that
 plain `.DAT`, `.GAM`, and `.OOL` file reads are not LZW decoding paths.
 
 This public spec describes the compression contract in clean prose and does not

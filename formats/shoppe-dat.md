@@ -236,7 +236,7 @@ full-screen default).
 This is a cleanroom prose specification derived from:
 
 - `u5-decomp/formats/data-tables.md` (`SHOPPE.DAT` section).
-- `u5-decomp/functions/SHOPPES_OVL/0x0026_format_record_with_tokens.md` and
+- `u5-decomp/functions/SHOPPES_OVL/` and
   `u5-decomp/notes/talk_group_retrace_2026-08-22.md` (the token bias, the
   published dictionary contents and empty-slot census, and the renderer's
   leading/trailing space rule).
@@ -245,8 +245,7 @@ This is a cleanroom prose specification derived from:
 - `u5-decomp/functions/SHOPPES3_OVL/_OVERVIEW.md`.
 - `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` (shared bark rows
   and the record-start to ordinal conversion).
-- `u5-decomp/functions/SHOPPES2_OVL/0x0ABC_shipwright_main.md` and
-  `u5-decomp/functions/SHOPPES2_OVL/0x066C_tavern_main.md` (per-flow record
+- `u5-decomp/functions/SHOPPES2_OVL/` (per-flow record
   ids for the shipwright, horse-trader and tavern flows).
 - `u5-spec/systems/shops.md`.
 - `u5-spec/formats/data-ovl.md`.

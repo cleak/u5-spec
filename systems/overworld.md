@@ -202,10 +202,12 @@ Like every other gameplay mode, the overworld owns a 32-slot *active-object tabl
   while carrying the player. Balloon art is catalogued, but the analyzed
   baseline does not promote it as a live overworld transport object.
 - **Pre-placed objects** — chests, items dropped by previous play, plot-significant overworld props.
-- **Render-only effects.** Natural moongates are not active-object slots and
-  not render-only effects either: a gate is live terrain, written into the map
-  buffer by the once-per-turn refresh of Section 9 and drawn like any other
-  tile.
+- **Render-only effects.** Natural moongates are not active-object slots: a gate
+  is live terrain, written into the map buffer by the once-per-turn refresh of
+  Section 9. It is not a "render-only effect" in the sense of something the
+  renderer invents and the map does not know about - but neither is it drawn
+  like any other tile, because the renderer resolves it through the presence
+  phase of Section 9.1.
 
 Before the main loop begins, overworld entry also consumes a one-shot
 pending-action state shared with a few out-of-mode interactions. If that state
@@ -497,6 +499,39 @@ Three properties follow, and all three are contract:
   authored tile while a gate is on screen. The same id doubles as the
   party-vanishing sprite in Section 9.2.
 
+**The exact tile inventory, and its boundary.** The whole effect uses **three**
+tile ids and no others: the moon-gate tile `0xDC` as the thing that rises, one
+ground tile (`5` in ordinary play, `0x44` in the endgame chamber) as what it
+rises out of, and `0x116` as the scratch the composed frame is built in. The
+composition reads exactly two source tiles and writes exactly one destination,
+so this is a closed set rather than a summary of the ids that happen to appear.
+
+Stating the boundary explicitly, because the neighbours are inviting:
+
+| Nearby id | What it actually is | Not part of the gate effect because |
+|---|---|---|
+| `0xD8..0xDB` | The **fountain** family, a genuine four-frame animated family (`systems/animation.md` Section 6) | It is adjacent to `0xDC` and really does animate, which makes "the gate is the fifth frame of that band" an easy and wrong guess. `0xDC` is not in that family and has no selector. |
+| `0xDD` | Not a gate frame | Nothing in the composition or the placement refresh references it. |
+| `0xDE` | The **shrine flame** | A separate special tile with its own handler. |
+| `0x114`, `0x115` | The **magic carpet**, two facings | Immediately below the scratch slot in the atlas; a transport sprite, unrelated. |
+| `0x117` | A **ladder** | Immediately above the scratch slot; unrelated. |
+
+There is no run of consecutive gate-frame ids anywhere in the atlas. If an
+implementation finds itself wanting one, it has mistaken the draw-time
+composition for authored art.
+
+**The phase model is display-independent.** This is a checked result, not an
+assumption from the EGA path. All four shipped display drivers implement the
+composition, and all four agree on everything that is contract here: the same
+sixteen phases, the same "phase `N` means `N` rows", the same three tile ids
+(`0xDC`, the ground tile, and `0x116` as scratch), and the same scene-byte
+choice between the two ground plates. They differ only in pixel encoding - the
+two four-plane drivers move twice as many bytes per row as the two lower-depth
+ones - and that difference cancels exactly, because both scale their row count
+by the phase. An engine may therefore treat the sixteen-row rise as a property
+of the game rather than of the EGA renderer, and `0x116` as the scratch id on
+every display path.
+
 **Lifetime of the presence counter: persistent, not turn-scoped and not
 call-scoped.** There is exactly one such byte in the whole engine, it is
 save-backed at `SAVED.GAM` offset `0x02E1`, and it survives turns, mode changes,
@@ -517,6 +552,48 @@ check itself against:
 The counter is **not** a member of the global tile-animation families in
 `systems/animation.md` Section 6. It is not advanced by the animation tick, it
 has no frame selector, and skipping a rendered frame does not advance it.
+
+Everything that touches it, in the whole engine:
+
+| User | Access | Cadence |
+|---|---|---|
+| The natural-gate placement refresh, above | advances by one, up or down | once per world turn, every non-combat scene |
+| The viewport tile-painting pass | reads it to choose each moon-gate cell's appearance | every compose, every scene including combat |
+| The gate-transit sequence, Section 9.2 | sets it to fifteen, drives it to zero | once, blocking, per gate entered |
+| The endgame gate ramps, `systems/endgame.md` | drives it one to sixteen, then fifteen to zero | twice during the closing rite |
+
+**And, deliberately, what does not touch it.** The list above is a complete
+census, established by scanning every shipped executable and overlay for
+accesses to that byte - both direct accesses and sites that pass its address to
+a helper - and then confirming each candidate against the surrounding code. It
+found **fourteen sites in two files** and nothing else, so the following are
+positive findings rather than inferences from silence:
+
+| Does **not** touch the counter | Why an implementer might expect it to |
+|---|---|
+| The per-turn clock cleanup | It is the obvious home for a per-turn counter, and it does advance other timed state. The gate counter is advanced by the placement refresh instead. |
+| Any combat routine, and the combat round loop | The tile-painting pass runs during combat and reads the counter there, which can look like combat ownership. It is not: combat neither reads nor writes it. |
+| The global tile-animation pass | Gates are not one of its five families, so it has no selector for them and never advances this value. |
+| Any spell, command handler, or NPC path | Nothing in the magic, command-dispatch or scheduler paths references it. |
+| Every overlay except the endgame one | Twenty-one of the twenty-three overlays contain no reference at all. |
+
+One negative is worth stating carefully, because the obvious phrasing is wrong.
+**No code path writes this byte into the save image by name** - there is no
+per-field save or load handler for it. It is nonetheless **fully persisted**,
+because it lives inside the resident state region that the save is a bulk image
+of (Section 5 of `formats/saved-gam.md`). "Nothing saves it" is therefore true
+about *code* and false about *behaviour*, and an implementation that concludes
+from the first that it may drop the value on save will be wrong.
+
+An implementation should provide exactly one such value and exactly one
+composition routine, and let those four callers share both; building the effect
+separately for gates and for the endgame is duplicated work that will drift.
+
+**How to falsify this section.** If your engine ends up with a second gate-phase
+value, with a per-gate phase, with a phase that a combat round or the clock
+cleanup advances, or with a phase that does not survive a save/load round trip,
+then either your implementation or this section is wrong - and this section is
+written so you can tell which.
 
 ### 9.2 The transit transition
 
@@ -544,8 +621,13 @@ The sequence, in order:
    melodic cue.
 2. **Stage A, the party is swallowed.** The party sprite is switched to tile
    `0x116`, and the party's view cell is dissolved into the moon-gate tile
-   pixel by pixel: the cell is first cleared to colour zero, then its remaining
-   255 pixels are plotted in a fixed pseudo-random order, one pixel per step.
+   pixel by pixel: the cell is first cleared to colour zero, then **255** of its
+   256 pixels are plotted in a fixed pseudo-random order, one pixel per step.
+   The count is 255, not 256 - the shuffle that orders the pixels never reaches
+   one of them, so a single pixel of the cell is left at colour zero when the
+   stage ends. It is repainted a moment later by step 4 and is not worth
+   engineering around, but an implementation that plots all 256 and then wonders
+   why its step count is off by one should know the original does not.
    The stage is paced by a world tick every eight steps rather than by a fixed
    wait, so it also advances ambient animation while it runs.
 3. **Stage B, the gate closes.** The party sprite is suppressed entirely, and
@@ -785,25 +867,24 @@ unresolved outdoor loop control flow.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
+- The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/`.
 - The shared per-turn party-capability check that precedes the overworld input
   block, its three-way result mapping, and the surface-only map-file prompt and
   active-object maintenance pass that precede the total-party-defeat sequence.
   Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
 - The pre-loop special-underfoot latch that forces zero light and gates outdoor
-  movement commit — `u5-decomp/functions/MAINOUT_OVL/0x0A1A_mainout_pre_loop_water_check.md`.
+  movement commit — `u5-decomp/functions/MAINOUT_OVL/`.
 - Local MAINOUT outer-loop analysis -- one-shot pending vehicle-acquisition
   active-object placement before normal outdoor input.
-- The per-tick init that recomputes the scroll base and refreshes redraw flags — `u5-decomp/functions/MAINOUT_OVL/0x0000_mainout_entry.md`.
-- The per-turn epilogue that walks the active-object table, animates and prunes, and rolls the random-encounter trigger — `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
+- The per-tick init that recomputes the scroll base and refreshes redraw flags — `u5-decomp/functions/MAINOUT_OVL/`.
+- The per-turn epilogue that walks the active-object table, animates and prunes, and rolls the random-encounter trigger — `u5-decomp/functions/MAINOUT_OVL/`.
 - The OUTSUBS overlay's collection of overworld helpers — `u5-decomp/functions/OUTSUBS_OVL/OVERVIEW.md` and the per-function notes in that directory covering water and chunk classification, chunk loading and scrolling, world filename selection, town-entry checks, the falls handler, per-plane actor setup, status checks, and the outdoor-camp Lord British service.
-- The world-tile getter that reads from the chunk buffer with the four-quadrant 2-by-2 interpretation — `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`.
+- The world-tile getter that reads from the chunk buffer with the four-quadrant 2-by-2 interpretation — `u5-decomp/functions/ULTIMA_EXE/`.
 - The night-time rotating light beacon that owns the resident scratch block
   formerly attributed to a moongate animator, its inverted light gate, and its
   sixteen-bearing beam plate —
-  `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x7040_light_beacon_stamp.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the withdrawal of the moongate animator, the hour-only
   placement schedule with no moon-phase term, the shipped Moonstone slot
   positions, the closed plane-transition inventory, the overloaded plane byte,
@@ -812,10 +893,9 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
 - The saved Moonstone slot scene/window test, natural live-gate tile refresh,
   saved-slot warp helper, and live moongate-tile shimmer/entry helper -
-  `u5-decomp/functions/ULTIMA_EXE/0x4702_npc_in_player_scene.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x475A_npc_schedule_tick.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x47F4_npc_warp_to_scene.md`, plus
-  `u5-decomp/functions/ULTIMA_EXE/0x48A8_lockpick_or_unlock.md` (historical
+  `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`, plus
+  `u5-decomp/functions/ULTIMA_EXE/` (historical
   filename; note content now corrected).
 - Source provenance: the sixteen-phase gate render and its composition rule,
   the persistence and save offset of the shared presence counter, the complete
@@ -825,17 +905,26 @@ The behaviour described above was derived by reading the function and format not
   the same counter are derived from private analysis note
   `u5-decomp/notes/moongate_transition_2026-08-23.md`.
 - The viewport rasterizer that resolves moon-gate cells against the presence
-  counter — `u5-decomp/functions/ULTIMA_EXE/0x56AC_combat_post_round.md`
+  counter — `u5-decomp/functions/ULTIMA_EXE/`
   (historical filename; the routine is the eleven-by-eleven rasterizer).
+- Source provenance: the two-directional consumer census in Section 9.1 — both
+  the four users and the explicit non-users — is a positive result, not an
+  inference from silence. It comes from an exhaustive scan of all twenty-eight
+  shipped executables, overlays and drivers for every access to the counter's
+  byte, including sites that pass its address to a helper rather than touching
+  it directly, with each candidate confirmed or excluded against the surrounding
+  code. Fourteen genuine sites were found, in two files; one further textual
+  match, in a third file, was confirmed to be an unrelated instruction and is
+  excluded. Recorded in `u5-decomp/notes/moongate_transition_2026-08-23.md`.
 - The location map setup that harvests up to two indoor light-source positions
-  into the same beacon coordinate scratch — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
+  into the same beacon coordinate scratch — `u5-decomp/functions/TOWN_OVL/`.
 - The combat loop exit reset of the light beacon's bearing byte —
-  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
+  `u5-decomp/functions/COMBAT_OVL/`.
 - The MAINOUT caller boundary for the live moongate-tile shimmer helper, as
-  captured in `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
-- The render-loop orchestrator — `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
-- The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
-- The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+  captured in `u5-decomp/functions/MAINOUT_OVL/`.
+- The render-loop orchestrator — `u5-decomp/functions/ULTIMA_EXE/`.
+- The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/`.
+- The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/`.
 - The on-disk format of the surface and underworld grids — `u5-decomp/formats/maps.md`.
 - The data-segment layout, including the shared scratch block read by the light beacon, the single Britannia chunk-index table, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
 - Public scene/name binding for town-mode location rows — `catalogs/gazetteer.md`,
@@ -854,8 +943,7 @@ The behaviour described above was derived by reading the function and format not
   and the per-sample effect figures are derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` and its verification
   pass, cross-checked against
-  `u5-decomp/functions/COMSUBS_OVL/0x12DE_projectile_animate.md` and
-  `u5-decomp/functions/COMSUBS_OVL/0x0F4A_tile_effect_render.md`. Earlier
+  `u5-decomp/functions/COMSUBS_OVL/`. Earlier
   readings that treated the shared helper as a directed-step probe or a
   path-clear scan, and the effect-class descriptions attached to them, are
   superseded.

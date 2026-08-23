@@ -358,21 +358,20 @@ complete in this spec; conversation runtime behavior is tracked in
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
 - The first-pass survey of the four `.TLK` files, the per-class NPC counts, the obfuscation verification against decoded names, and the control-byte prevalence analysis — `u5-decomp/formats/npc-tlk-pth.md`. That note's leading-pair-as-count reading of the header is superseded; see the retraction in Section 4.
-- The corrected header contract — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, the `4N + 2` header size that matches the first blob offset in all four files, and the consequent withdrawal of the "index 1 sentinel" — re-derived directly from the shipped `.TLK` files and from the runtime header walk in `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`, cross-checked against the shipped `.NPC` dialog-index arrays and against the sprite-class description strings of `LOOK2.DAT`.
-- The conversation-engine entry point — the dialog-index dispatch from the Talk command, the dispatch into the file loader, and the conversation envelope — `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
-- The `.TLK` file loader — the four-class file dispatch by scene byte, the header read into a working buffer, the linear header walk for the matched NPC id, and the second blob read at the matched offset — `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
-- The byte runner's full dispatch table — the control-code semantics, the multi-byte command machinery, the dictionary substitution, the GOTO-label search, and the per-conversation state cluster — `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.
+- The corrected header contract — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, the `4N + 2` header size that matches the first blob offset in all four files, and the consequent withdrawal of the "index 1 sentinel" — re-derived directly from the shipped `.TLK` files and from the runtime header walk in `u5-decomp/functions/TALK_OVL/`, cross-checked against the shipped `.NPC` dialog-index arrays and against the sprite-class description strings of `LOOK2.DAT`.
+- The conversation-engine entry point — the dialog-index dispatch from the Talk command, the dispatch into the file loader, and the conversation envelope — `u5-decomp/functions/TALK_OVL/`.
+- The `.TLK` file loader — the four-class file dispatch by scene byte, the header read into a working buffer, the linear header walk for the matched NPC id, and the second blob read at the matched offset — `u5-decomp/functions/TALK_OVL/`.
+- The byte runner's full dispatch table — the control-code semantics, the multi-byte command machinery, the dictionary substitution, the GOTO-label search, and the per-conversation state cluster — `u5-decomp/functions/TALK_OVL/`.
 - The labelled-block separator and scoped-prompt record mechanics —
-  `u5-decomp/functions/TALK_OVL/0x0C5C_tlk_seek_to_label_then_run.md`,
-  `u5-decomp/functions/TALK_OVL/0x0BD4_ask_npc_name_loop.md`, and
-  `u5-decomp/functions/TALK_OVL/0x0728_scan_to_byte.md`.
-- The multi-byte command handlers for gold payment, action dispatch, and karma-threshold branching — `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`, `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`, and `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
+  `u5-decomp/functions/TALK_OVL/`, and
+  `u5-decomp/functions/TALK_OVL/`.
+- The multi-byte command handlers for gold payment, action dispatch, and karma-threshold branching — `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.
 - The special-item identities named for action-dispatch letter arguments are
   cross-checked against the Z-stats special-item display path:
-  `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`
-  and `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
-- The keyword input loop, reserved-keyword table, ordinary keyword scan, and profanity/default branch -- `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`, `u5-decomp/functions/TALK_OVL/0x09D8_tlk_find_keyword_match.md`, `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, and the summary correction in `u5-decomp/CORRECTIONS.md`.
-- The case-insensitive bit-7-stripping string-equality routine used by the keyword match and the JOIN-name compare — `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
+  `u5-decomp/functions/ZSTATS_OVL/`
+  and `u5-decomp/functions/ZSTATS_OVL/`.
+- The keyword input loop, reserved-keyword table, ordinary keyword scan, and profanity/default branch -- `u5-decomp/functions/TALK_OVL/`, and the summary correction in `u5-decomp/CORRECTIONS.md`.
+- The case-insensitive bit-7-stripping string-equality routine used by the keyword match and the JOIN-name compare — `u5-decomp/functions/TALK_OVL/`.
 - The resident common-word dictionary and shop-side use of the same logical token order — `u5-decomp/formats/data-ovl.md`.
-- The 2026-08-22 retrace that corrected the `0x87`, `0x88`, `0x89`, `0x8A`, and `0x8E` control-code rows, the `0x8C` argument role, the dictionary token range, and the dictionary emission/spacing order — `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, with the supporting per-function notes `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`, `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.
+- The 2026-08-22 retrace that corrected the `0x87`, `0x88`, `0x89`, `0x8A`, and `0x8E` control-code rows, the `0x8C` argument role, the dictionary token range, and the dictionary emission/spacing order — `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, with the supporting per-function notes `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.
 - The conversation-system spec covering the runtime semantics this format spec only references — `u5-spec/systems/conversation.md`.

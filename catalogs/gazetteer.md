@@ -710,10 +710,10 @@ Private analysis provenance:
 - `u5-decomp/formats/data-ovl.md` - confirms the resident image contains
   location coordinate tables, shrine coordinate tables, location/name
   vocabulary, and map metadata. This catalog cites only those semantic facts.
-- `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md` -
+- `u5-decomp/functions/OUTSUBS_OVL/` -
   confirms that overworld location-table index plus one becomes the town-mode
   scene byte for entries one through thirty-two.
-- `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md` -
+- `u5-decomp/functions/OUTSUBS_OVL/` -
   confirms the traced surface falls coordinate and underworld plane swap.
 - Source provenance: the uniform dungeon exit rule, the per-dungeon climbable
   exit table, Doom's entry gate and one-way descent, the closed

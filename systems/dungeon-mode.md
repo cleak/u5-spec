@@ -1744,34 +1744,26 @@ The behaviour described here was derived by reading the private function notes l
 
 - The withdrawal of the per-hour "HP regeneration" step in Section 11, and the confirmation that the dungeon H path converges on the same shared hole-up handler as the overworld, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 
-- The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, the status-gated post-action helper, the ungated party-capability check, and the epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+- The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, the status-gated post-action helper, the ungated party-capability check, and the epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/`.
 - The wandering-monster combat contract in Section 14.1 -- ambush entry mode,
   arena and metadata-band synthesis, party-entry and source coordinate tables,
   source-band construction, class derivation, active-object slot handling, and
   the post-combat bracket -- derived from private analysis note
   `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md` and the function notes it
-  cites: `u5-decomp/functions/DUNGEON_OVL/0x1D4A_dungeon_attack_forward.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x0B7E_dungeon_encounter_face.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x0134_dungeon_view_init.md`,
-  `u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md`,
-  `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+  cites: `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/DNGLOOK_OVL/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The room-clear bitmap's index derivation and the six-pair writer deny-list --
-  derived from `u5-decomp/functions/DNGLOOK_OVL/0x0844_set_room_cleared.md`,
-  `u5-decomp/functions/DNGLOOK_OVL/0x08D4_is_room_cleared.md`, and
-  `u5-decomp/functions/DNGLOOK_OVL/0x093A_demote_cleared_room_markers.md`.
+  derived from `u5-decomp/functions/DNGLOOK_OVL/`, and
+  `u5-decomp/functions/DNGLOOK_OVL/`.
 - The dungeon chrome bands, their exact cell layouts, the two border-label
   literals and the invalid-facing fallback, the status refresh cadence, and the
   walk-in-only entry facing seed -- derived from private analysis note
   `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
 - The dungeon viewport frame, status row redraw, render-and-poll helper,
   active-object setup and placement, and room-entry state handoff -- derived
-  from `u5-decomp/functions/DUNGEON_OVL/0x0332_draw_view_panel.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x01D2_dungeon_status_redraw.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x03D6_dungeon_render_and_poll.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x0134_dungeon_view_init.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x0252_dungeon_place_active_object.md`,
-  and `u5-decomp/functions/DUNGEON_OVL/0x0000_dungeon_room_enter.md`.
+  from `u5-decomp/functions/DUNGEON_OVL/`,
+  and `u5-decomp/functions/DUNGEON_OVL/`.
 - The first-person renderer's billboard model, half-aperture frustum, per-band
   destination rules, cell-class-to-image mapping, sprite families and placement,
   fountain-water and wall-decoration animations, two-sweep ordering, and binary
@@ -1786,12 +1778,11 @@ The behaviour described here was derived by reading the private function notes l
   klimb-versus-spell split on destination testing, and the per-dungeon
   climbable-exit table are derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
-- The mode-aware letter dispatch table including the dungeon-specific routes for A-Attack, K-Klimb, L-Look, T-Talk, V-View, and the H-Hole-up overworld path — derived from `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
-- The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/0x006C_sjog_dir_step.md` and `u5-decomp/functions/SJOG_OVL/0x002A_sjog_apply_dir_step.md`. The View handler's centred flood map, its twenty-two by twenty-two eight-pixel cell grid, wrap rule, flood bound, font-based glyph source, and wait/clear/restore flow — derived from the DNGLOOK function notes under `u5-decomp/functions/DNGLOOK_OVL/` and from private analysis note `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, which withdraws the earlier peer-spell tint reading.
+- The mode-aware letter dispatch table including the dungeon-specific routes for A-Attack, K-Klimb, L-Look, T-Talk, V-View, and the H-Hole-up overworld path — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/`. The View handler's centred flood map, its twenty-two by twenty-two eight-pixel cell grid, wrap rule, flood bound, font-based glyph source, and wait/clear/restore flow — derived from the DNGLOOK function notes under `u5-decomp/functions/DNGLOOK_OVL/` and from private analysis note `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, which withdraws the earlier peer-spell tint reading.
 - The wrapped dungeon cell reader's class-sensitive `0x08` normalization and
   the front-cell renderer's extra-glyph/active-object overlay use of that bit
-  -- derived from `u5-decomp/functions/DUNGEON_OVL/0x10DC_dungeon_get_cell.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x1952_dungeon_draw_outer_cell.md`, and
+  -- derived from `u5-decomp/functions/DUNGEON_OVL/`, and
   `u5-decomp/notes/system-trace_dungeon-rendering.md`.
 - The first-person renderer helper contracts -- billboard bank selection and
   directory roles, per-band destination placement and the mirror rule,
@@ -1808,9 +1799,9 @@ The behaviour described here was derived by reading the private function notes l
 - The dungeon Search handler's light gate, high-nibble feature descriptions,
   chest trap-tier narration, pit-family secret reveal, `0xC?`/`0xD?`
   visit-local rewrites, and bomb branch - derived
-  from `u5-decomp/functions/SJOG_OVL/0x0646_sjog_search_inner.md`.
+  from `u5-decomp/functions/SJOG_OVL/`.
 - The dungeon Get open-chest consumption and seven-row reward-generator shape -
-  derived from `u5-decomp/functions/SJOG_OVL/0x179E_sjog_get_dungeon_chest.md`.
+  derived from `u5-decomp/functions/SJOG_OVL/`.
 - The closed/open/looted chest lifecycle as one preserve-variant-bit rewrite
   idiom, the identification of the `0x7?` class as the open chest rather than a
   passage variant, the absence of any second write that could re-promote a
@@ -1822,27 +1813,25 @@ The behaviour described here was derived by reading the private function notes l
 - The dungeon post-action tile-effect pass, including exact `0x61`/`0x69`
   fall traps, exact `0x62`/`0x6A` bomb traps, visit-local trap-cell rewrites,
   sleep-field one-shot resolution, and poison-field repeat resolution --
-  derived from `u5-decomp/functions/DUNGEON_OVL/0x0C76_dungeon_post_action.md`,
-  `u5-decomp/functions/DUNGEON_OVL/0x0948_dungeon_field_sleep.md`, and
-  `u5-decomp/functions/DUNGEON_OVL/0x09E6_dungeon_field_poison.md`.
-- The dungeon movement destination-effect boundary and electric-field force-step path -- derived from `u5-decomp/functions/DUNGEON_OVL/0x0502_dungeon_move_dispatch.md` and `u5-decomp/functions/DUNGEON_OVL/0x0470_dungeon_field_force_step.md`.
+  derived from `u5-decomp/functions/DUNGEON_OVL/`, and
+  `u5-decomp/functions/DUNGEON_OVL/`.
+- The dungeon movement destination-effect boundary and electric-field force-step path -- derived from `u5-decomp/functions/DUNGEON_OVL/`.
 - The DUNGEON.DAT layout (eight dungeons by eight levels by eight by eight cells, packed nibbles per cell) and the DUNGEON.CBT layout (combat arenas indexed by adjusted dungeon scene and room low nibble) — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
 - The stock `DUNGEON.DAT` fall-trap reachability boundary -- fall traps exist,
   but no level-seven trap or same-column vertical fall-trap run reaches level
   seven -- derived from a local semantic scan of
   `C:\Games\U5-Clean\DUNGEON.DAT`.
-- The per-scene tile buffer interpretation that dungeon mode shares with the rest of the engine for non-overworld scenes — derived from `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`.
-- The dungeon command parser, K-Klimb dispatch/apply paths, pit-chain fall path, dungeon attack-forward handler, and surface-reset exit helper - derived from `u5-decomp/functions/DUNGEON_OVL/0x06C4_dungeon_command_handler.md`, `u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, `u5-decomp/functions/DUNGEON_OVL/0x1C6A_dungeon_klimb_apply.md`, `u5-decomp/functions/DUNGEON_OVL/0x0A4C_dungeon_pit_chain.md`, `u5-decomp/functions/DUNGEON_OVL/0x1D4A_dungeon_attack_forward.md`, and `u5-decomp/functions/DUNGEON_OVL/0x1D08_dungeon_fall_pit.md`.
+- The per-scene tile buffer interpretation that dungeon mode shares with the rest of the engine for non-overworld scenes — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The dungeon command parser, K-Klimb dispatch/apply paths, pit-chain fall path, dungeon attack-forward handler, and surface-reset exit helper - derived from `u5-decomp/functions/DUNGEON_OVL/`, and `u5-decomp/functions/DUNGEON_OVL/`.
 - The dungeon active-monster step, auto-facing contact path, and automatic
   dungeon-combat launch bracket -- derived from
-  `u5-decomp/functions/DUNGEON_OVL/0x07E2_dungeon_monster_step.md` and
-  `u5-decomp/functions/DUNGEON_OVL/0x0B7E_dungeon_encounter_face.md`.
+  `u5-decomp/functions/DUNGEON_OVL/`.
 - The destination passability test shared by the dungeon level-change routes,
   which Section 13.1 records as enforced for the level-change spells and skipped
   by K-Klimb, is derived from
-  `u5-decomp/functions/DUNGEON_OVL/0x1C0C_dungeon_cell_passable.md`.
-- The DNGLOOK minimap cell painter, passage/room painters, room-clear bitmap reader/writer, cleared-room demotion pass, room NPC setup, and view teardown/init helpers - derived from `u5-decomp/functions/DNGLOOK_OVL/0x0340_v_view_paint_cell.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0284_paint_stair_glyph.md`, `u5-decomp/functions/DNGLOOK_OVL/0x097E_paint_passage_full.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0A48_paint_passage_short.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0AEE_paint_passage_medium.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0B9E_paint_passage_from_party.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0C6C_paint_room_layout.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0FDA_apply_movement.md`, `u5-decomp/functions/DNGLOOK_OVL/0x0844_set_room_cleared.md`, `u5-decomp/functions/DNGLOOK_OVL/0x08D4_is_room_cleared.md`, `u5-decomp/functions/DNGLOOK_OVL/0x093A_demote_cleared_room_markers.md`, `u5-decomp/functions/DNGLOOK_OVL/0x109E_init_dungeon_view.md`, `u5-decomp/functions/DNGLOOK_OVL/0x1130_teardown_dungeon_view.md`, and `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`.
-- The H-Hole-up code path's per-slot rest, ambush check, and HP regeneration — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
+  `u5-decomp/functions/DUNGEON_OVL/`.
+- The DNGLOOK minimap cell painter, passage/room painters, room-clear bitmap reader/writer, cleared-room demotion pass, room NPC setup, and view teardown/init helpers - derived from `u5-decomp/functions/DNGLOOK_OVL/`, and `u5-decomp/functions/DNGLOOK_OVL/`.
+- The H-Hole-up code path's per-slot rest, ambush check, and HP regeneration — derived from `u5-decomp/functions/CMDS_OVL/`.
 - The world-clock advance contract and the integration with combat for room-trigger and wandering-monster encounters — derived from sibling specs `u5-spec/systems/time.md` and `u5-spec/systems/combat.md`.
 
 - The dungeon mode-local control-code table, the Enter/period movement
@@ -1850,7 +1839,7 @@ The behaviour described here was derived by reading the private function notes l
   shifted-digit direction translation underground, and the corrected return
   values of dungeon Klimb. Source provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
-  `../u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`.
+  `../u5-decomp/functions/DUNGEON_OVL/`.
 
 - The Section 7 light-source correction: the two dungeon light bytes are
   remaining-duration counters rather than radii, the renderer consults them
@@ -1859,7 +1848,7 @@ The behaviour described here was derived by reading the private function notes l
   the Blackthorn clear) rules out the previously claimed per-turn spellbook
   bump. Source provenance: derived from private analysis notes
   `../u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
-  `../u5-decomp/functions/CAST2_OVL/0x08EA_set_torch_radius.md`, and from the
+  `../u5-decomp/functions/CAST2_OVL/`, and from the
   sibling spec `u5-spec/systems/lighting.md`.
 
 - The Section 4 turn-loop tail and the Section 13.4 wipe route: the dungeon's
@@ -1868,4 +1857,4 @@ The behaviour described here was derived by reading the private function notes l
   routing of a total party wipe to the rescue/refuge sequence rather than to a
   death or game-over path. Source provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2, and
-  `../u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+  `../u5-decomp/functions/DUNGEON_OVL/`.

@@ -199,11 +199,11 @@ cross-reference alignment.
   and consumer attribution -- derived from
   `u5-decomp/formats/data-tables.md`.
 - The direct tile-id lookup, two-stage file read, and print handoff -- derived
-  from `u5-decomp/functions/LOOKOBJ_OVL/0x0000_lookobj_print_tile_string.md`.
+  from `u5-decomp/functions/LOOKOBJ_OVL/`.
 - The upper object-domain lookup and shared print handoff -- derived from
-  `u5-decomp/functions/LOOKOBJ_OVL/0x06A4_lookobj_print_object_string.md`.
+  `u5-decomp/functions/LOOKOBJ_OVL/`.
 - The look-command layer resolution and special-tile fall-through context --
-  derived from `u5-decomp/functions/LOOKOBJ_OVL/0x0502_lookobj_describe.md`.
+  derived from `u5-decomp/functions/LOOKOBJ_OVL/`.
 - Which handler-driven tile ids carry the placeholder record and which carry a
   real record (the deep-well and desert cases) -- derived from
   `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`.

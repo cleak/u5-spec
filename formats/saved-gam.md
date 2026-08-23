@@ -32,6 +32,7 @@ after the roster.
 | Calendar (year/month/day/hour/min)  | `0x02CE` – `0x02DE`   | ~17 bytes   | 5       |
 | Party status / active-player bytes  | `0x02D4` – `0x02D6`   | 3 bytes     | 4       |
 | Food gauge / mode scratch           | `0x02DF` – `0x02EB`   | 13 bytes    | 10      |
+| — of which: moongate presence phase | `0x02E1`              | 1 byte      | 10      |
 | Wind state                          | `0x02EC`              | 1 byte      | 6       |
 | Scene byte and saved-scene scratch  | `0x02ED` – `0x02EE`   | 2 bytes     | 6, 10   |
 | Party position (z/x/y)              | `0x02EF` – `0x02F1`   | 3 bytes     | 6       |
@@ -552,42 +553,47 @@ The byte-level layout described here was derived from the project's private save
   cap, its single reset site, and the cadence of the pass that advances it —
   `u5-decomp/notes/talk_group_retrace_2026-08-22.md`,
   `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`, and
-  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`.
+  `u5-decomp/functions/TALK_OVL/`.
 - The fresh-seed counter, reagent, clock, and location values were cross-checked
   against a clean local asset image by reading the named fields documented
   above; this spec does not reproduce the raw seed bytes.
-- The B-Board transport marker writes — `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`.
+- The B-Board transport marker writes — `u5-decomp/functions/CMDS_OVL/`.
 - The moral-standing selector byte and its distinction from the party food word --
   `u5-decomp/notes/system-trace_inventory.md`.
+- The moongate presence phase at `0x02E1` — its identification within the
+  previously unnamed mode-scratch band, its range and factory seed, the complete
+  census of its readers and writers, and the confirmation that it is a single
+  world-global byte rather than per-gate or per-mode scratch —
+  `u5-decomp/notes/moongate_transition_2026-08-23.md`.
 - The N-New Order command's active non-leader whole-record swaps, slot-zero
   refusal, and party-size non-mutation are derived from
-  `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`.
-- The overworld per-turn animator's `Q`/`T` and transport-marker pendulum reads — `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
-- The stats-panel transport/status glyph readers — `u5-decomp/functions/ULTIMA_EXE/0x2900_redraw_full_stats.md`.
+  `u5-decomp/functions/CMDS_OVL/`.
+- The overworld per-turn animator's `Q`/`T` and transport-marker pendulum reads — `u5-decomp/functions/MAINOUT_OVL/`.
+- The stats-panel transport/status glyph readers — `u5-decomp/functions/ULTIMA_EXE/`.
 - The shared status helper that stamps status `'P'` (poisoned) on living party
-  members and skips dead ones — `u5-decomp/functions/ULTIMA_EXE/0x2FA6_party_revive_slot.md`
+  members and skips dead ones — `u5-decomp/functions/ULTIMA_EXE/`
   (the note's filename predates the correction). The correction retracting the
   earlier revive reading is source provenance: derived from private analysis
   note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The spell-charge stock index order is derived from the shared player
   spell-token parser used by C-Cast and M-Mix, the per-spell stock readers and
   writers in the CAST/CMDS overlay notes, and the public 48-row spell table:
-  `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`,
-  `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`,
+  `u5-decomp/functions/CAST_OVL/`,
+  `u5-decomp/functions/CMDS_OVL/`,
   `u5-decomp/formats/data-ovl.md`, and
   `u5-spec/catalogs/spell-list.md`.
 - The Moonstone gate-slot writer, special/use-item byte identities, and
   Search/Get recovery behaviour --
-  `u5-decomp/functions/CAST_OVL/0x153C_use_moonstone.md` plus local SJOG
+  `u5-decomp/functions/CAST_OVL/` plus local SJOG
   helper analysis summarized without copying implementation text.
 - The Spyglass, Sextant, Pocket Watch, Black Badge, and Wooden/Sandalwood Box
   special-item byte identities are cross-checked from the Z-stats special-item
   snapshot and display path:
-  `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`
-  and `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
-- The save handler's open-write-close sequence and byte-image flush to `SAVED.GAM` -- `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`. The per-plane `.OOL` half of that note (two unconditional mirror writes and no read) is superseded: a 2026-08-22 re-derivation from the shipped save overlay shows the two per-plane operations are reads and the single underworld write is the entry-mode-gated one. `systems/save-load.md` section 5 owns the corrected order.
-- The load handler's byte-image read of `SAVED.GAM` into the same region, the empty-save guard, the `SAVED.OOL` read, and the mirror-write of `BRIT.OOL` and `UNDER.OOL` — `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
-- The chargen flow's per-record write to roster slot zero (name, gender, STR, DEX, INT, and MP) and preservation of seed class/status/HP/experience fields — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+  `u5-decomp/functions/ZSTATS_OVL/`
+  and `u5-decomp/functions/ZSTATS_OVL/`.
+- The save handler's open-write-close sequence and byte-image flush to `SAVED.GAM` -- `u5-decomp/functions/CAST2_OVL/`. The per-plane `.OOL` half of that note (two unconditional mirror writes and no read) is superseded: a 2026-08-22 re-derivation from the shipped save overlay shows the two per-plane operations are reads and the single underworld write is the entry-mode-gated one. `systems/save-load.md` section 5 owns the corrected order.
+- The load handler's byte-image read of `SAVED.GAM` into the same region, the empty-save guard, the `SAVED.OOL` read, and the mirror-write of `BRIT.OOL` and `UNDER.OOL` — `u5-decomp/functions/INTRO_OVL/`.
+- The chargen flow's per-record write to roster slot zero (name, gender, STR, DEX, INT, and MP) and preservation of seed class/status/HP/experience fields — `u5-decomp/functions/FONT_OVL/`.
 - The equipment slot order, empty sentinel, carried-equipment counter band, and
   R-Ready stock mutations are derived from the updated ZSTATS overlay notes
   and summarized publicly in `u5-spec/systems/inventory.md`.
@@ -602,9 +608,8 @@ The byte-level layout described here was derived from the project's private save
   working buffer, the two per-location NPC bitmask tables, and the finding that
   the two bytes formerly called a quest-progress word are Stonegate's
   removed-NPC mask. Cross-checked against
-  `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`,
-  `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`,
-  `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`, and
+  `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/formats/saves.md`.
 - The calendar and clock fields' cascade rules and persistence — `u5-spec/systems/time.md`.
 - Source provenance: derived from private analysis note
@@ -612,4 +617,4 @@ The byte-level layout described here was derived from the project's private save
   identification of `0x03B3` as the early-game encounter-size damper, its
   factory-seed value, the absence of any gameplay setter, and the month-rollover
   clear as the engine's only write. Cross-checked against
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`.

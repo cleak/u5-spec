@@ -143,6 +143,16 @@ halves are withdrawn - gates are ordinary live terrain placed by the clock hour
 alone (`systems/overworld.md` Section 9), and the light gate's sense is the
 opposite of what that wording implied.
 
+Two clarifications, because this withdrawal has been over-read in both
+directions. First, it is a withdrawal of the *daylight* link only: a gate's
+appearance does change over time, through the presence phase in
+`systems/overworld.md` Section 9.1, and nothing here says a gate is a static
+tile. Second, there is no surviving "moongate render-eligibility" gate of any
+kind - not here, not under another name, and not with the sense flipped. An
+implementation still carrying a symbol for one is carrying a retracted contract
+and should delete it rather than repoint it. Ambient light has **no** input to
+moongate placement, appearance, or entry at any point.
+
 ## 4. Personal Light
 
 Torches and light spells modify visibility after the base ambient value has been chosen. They do not replace the clock. Outdoors at noon, daylight is already sufficient; at night, in the Underworld, and in dungeons, a personal light source is what lets the party see around itself.
@@ -364,7 +374,7 @@ name attached to it inherits the gazetteer's accuracy.
 
 The behavior described here was derived from cleanroom reading of the following notes and sibling specs. No assembly excerpts, raw offsets, or implementation-specific byte tables are reproduced here.
 
-- Ambient daylight recomputation, dawn/dusk behavior, the Z-based forced-dark test, torch and spell counter decay, and visibility dirtying - `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- Ambient daylight recomputation, dawn/dusk behavior, the Z-based forced-dark test, torch and spell counter decay, and visibility dirtying - `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the finding that the ambient value and the two personal-light
   floors are squared-distance thresholds passed to the visibility carve
   unmodified, the hour-by-hour clock schedule and the ten-minute dawn/dusk step
@@ -386,18 +396,17 @@ The behavior described here was derived from cleanroom reading of the following 
   `u5-decomp/notes/critical_state_lifecycles.md`.
 - Overworld entry and loop behavior relevant to lighting refresh and the
   special-underfoot zero-light override -
-  `u5-decomp/functions/MAINOUT_OVL/0x0000_mainout_entry.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`, and
-  `u5-decomp/functions/MAINOUT_OVL/0x0A1A_mainout_pre_loop_water_check.md`.
+  `u5-decomp/functions/MAINOUT_OVL/`, and
+  `u5-decomp/functions/MAINOUT_OVL/`.
 - Saturating counter decrement and Ignite's torch debit/start rules - local helper analysis of the resident counter helpers and the CMDS Ignite command path.
-- Light spell counter writes for *In Lor* and *Vas Lor* - `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`, `u5-decomp/functions/CAST2_OVL/_OVERVIEW.md`, and the CAST2 helper reached through the overlay dispatch map in `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+- Light spell counter writes for *In Lor* and *Vas Lor* - `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/CAST2_OVL/_OVERVIEW.md`, and the CAST2 helper reached through the overlay dispatch map in `u5-decomp/functions/ULTIMA_EXE/`.
 - The corrected assignment of the two floors to their counters (spell light 18,
   torch 10), the Light scroll's 240-minute write, the complete writer census
   for both counters including the G-Get borrow branch and the Blackthorn
   restoration clear, the minute-based drain, and the Negate Time / Quickness
   interaction with that drain -
   `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
-  `u5-decomp/functions/CAST2_OVL/0x08EA_set_torch_radius.md`. This supersedes
+  `u5-decomp/functions/CAST2_OVL/`. This supersedes
   the counter labelling in the private DS/BSS map notes, in which the two
   counter names were swapped and both were misdescribed as radii.
 - Dungeon first-person blackout when both light counters are zero, and the
@@ -405,7 +414,7 @@ The behavior described here was derived from cleanroom reading of the following 
   the shared per-turn cleanup does all the decay - a whole-binary scan for
   readers and writers of both counters, recorded in
   `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`, together
-  with `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`. An
+  with `u5-decomp/functions/DUNGEON_OVL/`. An
   earlier reading here described a dungeon-local light upkeep hook; that is
   withdrawn.
 - Shared resident data model and relevant string/table regions - `u5-decomp/formats/data-ovl.md`.

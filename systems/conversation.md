@@ -691,51 +691,49 @@ quest-state specs.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, status-tile gate, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`.
+- The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, status-tile gate, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/`.
 - The reserved "not a real NPC" dialog index, the shape of the scene-keyed
   handler it dispatches, that handler's complete write set (party gold only),
   its two-valued result, and the absence of any follow-on path — derived from
-  `u5-decomp/functions/TALK_OVL/0x01E2_scene_service_dispatch.md` and
+  `u5-decomp/functions/TALK_OVL/` and
   `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`. Those notes
   also retire the earlier reading that this index reached a healer or an
   innkeeper; there is no cure, rest, or status write anywhere on the path.
 - The two concrete status-tile ids, their message assignment, the fact that the gate reads a live map tile rather than an NPC sprite, and the talk-through tile set — derived from `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, which re-derives both from the shipped binaries and reconciles an internal inconsistency in the earlier handler note.
-- The byte runner's full dispatch table, the multi-byte-command machinery, the GOTO-label semantics, the printable-text path, and the per-conversation state cluster — derived from `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.
-- The gold-payment, action-dispatch, and karma-threshold branch handlers -- derived from `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`, `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`, and `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
+- The byte runner's full dispatch table, the multi-byte-command machinery, the GOTO-label semantics, the printable-text path, and the per-conversation state cluster — derived from `u5-decomp/functions/TALK_OVL/`.
+- The gold-payment, action-dispatch, and karma-threshold branch handlers -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.
 - The Spyglass, Sextant, and Black Badge action-letter identities --
   cross-checked against the Z-stats special-item display path in
-  `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`,
-  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`, and shipped `.TLK`
+  `u5-decomp/functions/ZSTATS_OVL/`, and shipped `.TLK`
   action usage.
 - The Talk-entry shop dispatch and shared shop caller context -- cross-checked
-  against `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
-- The `.TLK` file loader, the four-class dispatch by scene byte, the header walk, the two-byte count prefix ahead of the `(id, offset)` entries, and the 1024-byte blob read — derived from `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
-- The keyword input loop, the empty-input-as-BYE shortcut, the fixed reserved-keyword table, the ordinary per-NPC keyword scan, the profanity rebuke/pause branch, and the no-match diagnostic -- derived from `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`, `u5-decomp/functions/TALK_OVL/0x09D8_tlk_find_keyword_match.md`, `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, and `u5-decomp/functions/ULTIMA_EXE/0x20FA_delay_with_int1c.md`, cross-checked against `u5-decomp/CORRECTIONS.md`.
+  against `u5-decomp/functions/ULTIMA_EXE/`.
+- The `.TLK` file loader, the four-class dispatch by scene byte, the header walk, the two-byte count prefix ahead of the `(id, offset)` entries, and the 1024-byte blob read — derived from `u5-decomp/functions/TALK_OVL/`.
+- The keyword input loop, the empty-input-as-BYE shortcut, the fixed reserved-keyword table, the ordinary per-NPC keyword scan, the profanity rebuke/pause branch, and the no-match diagnostic -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`, cross-checked against `u5-decomp/CORRECTIONS.md`.
 - The labelled-block and scoped-prompt mechanics -- derived from
-  `u5-decomp/functions/TALK_OVL/0x0C5C_tlk_seek_to_label_then_run.md`,
-  `u5-decomp/functions/TALK_OVL/0x0BD4_ask_npc_name_loop.md`, and
-  `u5-decomp/functions/TALK_OVL/0x0728_scan_to_byte.md`, cross-checked
-  against `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`.
+  `u5-decomp/functions/TALK_OVL/`, and
+  `u5-decomp/functions/TALK_OVL/`, cross-checked
+  against `u5-decomp/functions/TALK_OVL/`.
 - The final cleanup pass, its Falsehood gate, the theft cascade, and the
   warning glissando -- derived from
-  `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x43AE_pc_speaker_glissando.md`.
+  `u5-decomp/functions/TALK_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3 --
   the cleanup gate is the resident-Shadowlord selector, so the cleanup pass is
   the Shadowlord of Falsehood's conversation theft rather than a generic
   transient-signal reconciliation.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/TALK_OVL/0x111C_init_check_for_steal.md` (2026-08-22
+  `u5-decomp/functions/TALK_OVL/` (2026-08-22
   re-read) -- the opening step is the conversation opener, not a theft check;
   it tests the acquaintance bit, and a stranger takes a coin flip between
   introducing itself by name and saying nothing. That note's original
   "stolen-action warning" and inverted-polarity readings are superseded.
   Cross-checked against
-  `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md` and
+  `u5-decomp/functions/TALK_OVL/` and
   `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md`.
-- The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/0x0000_strncmp_uppercase.md`.
+- The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/`.
 - The on-disk `.TLK` file structure — blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`. That note's header reading is superseded.
-- The corrected `.TLK` header contract of Section 3 — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, dialog index `1` as an ordinary NPC, and the withdrawal of the sentinel/alias reading — re-derived from the shipped `.TLK` and `.NPC` files against the header walk in `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`, and cross-checked against the sprite-class description strings of `LOOK2.DAT`.
+- The corrected `.TLK` header contract of Section 3 — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, dialog index `1` as an ordinary NPC, and the withdrawal of the sentinel/alias reading — re-derived from the shipped `.TLK` and `.NPC` files against the header walk in `u5-decomp/functions/TALK_OVL/`, and cross-checked against the sprite-class description strings of `LOOK2.DAT`.
 - The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`, with the published word list in `catalogs/common-word-dictionary.md`.
-- The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`, `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.
+- The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.

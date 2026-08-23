@@ -187,19 +187,19 @@ private source, decompiler output, assembly excerpts, raw dumps, private address
 tables, or implementation listings.
 
 - DOS MZ entry and runtime transfer to resident main:
-  `u5-decomp/functions/ULTIMA_EXE/0x81D0_boot_entry.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Machine and graphics detection:
-  `u5-decomp/functions/ULTIMA_EXE/0x0DE0_detect_machine_type.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Intro boot-initialization root:
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Display-driver loading and selected-driver dispatch setup:
-  `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Startup command-line boundary and absence of a required launcher wrapper:
   `systems/launcher.md`.
 - Timing calibration boundary:
   `systems/timing.md`.
 - CPU-speed calibration and BIOS conventional-memory capture:
-  `u5-decomp/functions/ULTIMA_EXE/0x11B4_timer_calibrate.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Local MZ relocation-table check against the shipped DOS `ULTIMA.EXE`, used
   only to confirm that startup-stub arithmetic is a process-loader boundary
   rather than gameplay state.

@@ -120,16 +120,12 @@ helper notes. It does not reproduce private source, decompiler output,
 assembly excerpts, raw dumps, private address tables, or implementation
 listings.
 
-- Byte capped-add behavior: `u5-decomp/functions/ULTIMA_EXE/0x3EF0_sat_add_byte.md`.
-- Word capped-add behavior and signed comparison: `u5-decomp/functions/ULTIMA_EXE/0x3F14_sat_add_word.md`.
-- Byte floor-subtract behavior: `u5-decomp/functions/ULTIMA_EXE/0x3F36_sat_sub_byte.md`.
-- Word floor-subtract behavior and signed comparison: `u5-decomp/functions/ULTIMA_EXE/0x3F54_sat_sub_word.md`.
+- Byte capped-add behavior: `u5-decomp/functions/ULTIMA_EXE/`.
+- Word capped-add behavior and signed comparison: `u5-decomp/functions/ULTIMA_EXE/`.
+- Byte floor-subtract behavior: `u5-decomp/functions/ULTIMA_EXE/`.
+- Word floor-subtract behavior and signed comparison: `u5-decomp/functions/ULTIMA_EXE/`.
 - Module-level caller census and helper idiom inventory:
   `u5-decomp/notes/engine_idioms.md`.
 - Publicly named caller-family evidence:
-  `u5-decomp/functions/ULTIMA_EXE/0x2AE8_per_turn_party_damage.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x2D7A_input_party_select.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x475A_npc_schedule_tick.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`, and
-  `u5-decomp/functions/CAST2_OVL/0x03C2_heal_one_member.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/CAST2_OVL/`.

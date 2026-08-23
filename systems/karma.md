@@ -555,8 +555,7 @@ The behaviour described here was derived from the private function and format no
   cadence) and the two conversation control codes that raise and lower the
   shared selector directly — derived from
   `u5-decomp/notes/talk_group_retrace_2026-08-22.md`,
-  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`,
-  `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and
+  `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
 - The record-level routing of the two shipped raise-standing runs (both on the
   bonus arm of the introduce-yourself branch, hence once per NPC per savegame),
@@ -564,53 +563,48 @@ The behaviour described here was derived from the private function and format no
   for the standing selector and the step counter, and the census caveat that
   replaced the earlier "only writer in the game" absolutes — derived from
   `u5-decomp/notes/talk_group_retrace_2026-08-22.md` section 8,
-  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md`,
-  `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`, and
+  `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/formats/saves.md`.
 
-- The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md` and the local CAST2 shrine-handler trace.
+- The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/` and the local CAST2 shrine-handler trace.
 - The shared shrine/word presentation effect boundary -- low randomized rumble
   plus turbulent viewport flash, no direct quest-state mutation -- derived from
-  `u5-decomp/functions/CMDS_OVL/0x70F2_shrine_effect.md` and cross-checked
+  `u5-decomp/functions/CMDS_OVL/` and cross-checked
   against the Word-of-Power path in `systems/commands.md`.
 - The M-command shrine/urn dispatcher and urn reader's Codex-read bit stamping,
   prophecy display, completed branch, active-object suspension, and restore/redraw
   wrapper -- derived from
-  `u5-decomp/functions/CAST2_OVL/0x0E76_enter_shrine_or_urn.md` and
-  `u5-decomp/functions/CAST2_OVL/0x0D24_read_urn.md`.
-- The `KARMA.DAT` six-record tier-verdict layout, the lack of numeric deltas in the file, the Blackthorn five-band selector, and the Lord British-in-disguise camp-event top-band selector for the sixth record — derived from `u5-decomp/formats/data-tables.md` (`KARMA.DAT` section), `u5-decomp/functions/BLCKTHRN_OVL/0x0910_blackthorn_rescue.md`, and `u5-decomp/functions/OUTSUBS_OVL/0x0658_lord_british_dialogue.md`.
+  `u5-decomp/functions/CAST2_OVL/`.
+- The `KARMA.DAT` six-record tier-verdict layout, the lack of numeric deltas in the file, the Blackthorn five-band selector, and the Lord British-in-disguise camp-event top-band selector for the sixth record — derived from `u5-decomp/formats/data-tables.md` (`KARMA.DAT` section), `u5-decomp/functions/BLCKTHRN_OVL/`, and `u5-decomp/functions/OUTSUBS_OVL/`.
 - The save-backed scalar moral-standing selector, shrine standing adjustments,
   Blackthorn rescue selector, Lord British-in-disguise selector, ruled-out
   party-gold high-byte hypothesis, and broader per-virtue storage
   boundary -- derived from `u5-decomp/formats/saves.md`,
   `u5-decomp/formats/ds-bss-map.md`,
   `u5-decomp/notes/system-trace_inventory.md`, the shrine handler,
-  `u5-decomp/functions/BLCKTHRN_OVL/0x0910_blackthorn_rescue.md`, and
-  `u5-decomp/functions/OUTSUBS_OVL/0x0658_lord_british_dialogue.md`.
+  `u5-decomp/functions/BLCKTHRN_OVL/`, and
+  `u5-decomp/functions/OUTSUBS_OVL/`.
 - The ordained / Codex visited bitmasks following the inventory section — derived from `u5-decomp/formats/saves.md` (shrine quest progress region).
 - The eight-virtue ordering, per-virtue mantra and prefix tables — derived from `u5-decomp/formats/data-ovl.md` and the shrine handler note.
-- The chargen-time seeding of stat tallies and the lack of avatar-class write — derived from `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and `u5-decomp/functions/FONT_OVL/0x09C8_questionnaire_iter.md`.
+- The chargen-time seeding of stat tallies and the lack of avatar-class write — derived from `u5-decomp/functions/FONT_OVL/`.
 - The shop pricing model (not karma-modulated, with arms Intelligence adjustment handled in the shop spec) — derived from `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md` (Karma / reputation interactions section).
-- The sage topic/fee/destination/template path, and the absence of a confirmed sage-shop karma selector — derived from `u5-decomp/functions/SHOPPES2_OVL/0x0508_sage_main.md`.
-- The conversation profanity/default reserved-keyword rebuke and negative karma-write boundary -- derived from `u5-decomp/functions/TALK_OVL/0x0A54_ask_party_join_logic.md`, `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and `u5-decomp/functions/ULTIMA_EXE/0x20FA_delay_with_int1c.md`, and cross-checked against `u5-decomp/CORRECTIONS.md`.
+- The sage topic/fee/destination/template path, and the absence of a confirmed sage-shop karma selector — derived from `u5-decomp/functions/SHOPPES2_OVL/`.
+- The conversation profanity/default reserved-keyword rebuke and negative karma-write boundary -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`, and cross-checked against `u5-decomp/CORRECTIONS.md`.
 - The conversation gold-payment scalar boundary -- derived from
-  `u5-decomp/functions/TALK_OVL/0x05B6_process_gold_payment.md` and
-  `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
+  `u5-decomp/functions/TALK_OVL/`.
 - The TALK moral-standing threshold branch -- derived from
-  `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md` and
-  `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`.
+  `u5-decomp/functions/TALK_OVL/`.
 - The resurrection moral-standing XP penalty -- derived from
-  `u5-decomp/functions/CAST2_OVL/0x05E0_resurrect_member.md`.
+  `u5-decomp/functions/CAST2_OVL/`.
 - The Get-side object-taking scalar boundaries -- town-family chest debit,
   crop/table-food debit, and borrowed-furniture no-debit behavior -- are
-  derived from `u5-decomp/functions/SJOG_OVL/0x112C_sjog_inner_chest_open.md`,
-  `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`, and
+  derived from `u5-decomp/functions/SJOG_OVL/`, and
   `u5-decomp/notes/system-trace_object-interaction.md`.
 - The stolen-action warning and no-promoted-standing-writer boundary --
-  derived from `u5-decomp/functions/TALK_OVL/0x111C_init_check_for_steal.md`
-  and `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md`,
+  derived from `u5-decomp/functions/TALK_OVL/`
+  and `u5-decomp/functions/TALK_OVL/`,
   with the presentation-sound boundary cross-checked against
-  `u5-decomp/functions/ULTIMA_EXE/0x43AE_pc_speaker_glissando.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The Blackthorn audience flow's lack of in-overlay karma adjustment and the rescue/refuge `KARMA.DAT` reuse — derived from `u5-decomp/functions/BLCKTHRN_OVL/OVERVIEW.md` and summarized in `systems/blackthorn.md`.
 - The per-companion class assignments and the avatar-as-class-Avatar invariant — derived from `u5-decomp/formats/saves.md` (character roster) and cross-checked against the shrine handler note.
 - The MISCMSG.DAT virtue-aphorism and "failing of virtue" record clusters printed during meditation and certain dialogue branches — derived from `u5-decomp/formats/data-tables.md` (MISCMSG.DAT section, records twelve through twenty-seven).
