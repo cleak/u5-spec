@@ -480,9 +480,22 @@ party-class bit `0x80` only to choose which rule applies, and then keys on bit
 `0x01` as the team toggle, so this bit — not `0x80` — is what moves an actor
 between combat groups for the friendly-fire filter and the walker's dispatch.
 Do not reuse `0x80` as a faction toggle. The separate team resolver used on the
-target picker's special pre-combat-scene branch (Section 9) is the one that
-reads bit `0x40` plus a team-override flag living in the per-monster-class flag
-word rather than in this descriptor byte.
+target picker's special pre-combat-scene branch (Section 9) reads only
+**descriptor** bytes plus one roster byte.
+
+> *Corrected (2026-08-23).* Earlier revisions described class-flag bit `0x0080` as a **team / faction override** consulted by target selection. **That is withdrawn.** An exhaustive scan of every shipped code file for accesses to the per-class flag table finds exactly one instruction anywhere that tests this bit, and it is inside the shared stat-selector helper. It fires only when that helper is handed a monster slot **together with a selector value of exactly zero**, and its entire effect is to change which byte of the class stat row the helper returns for that zero selector: the row's first byte instead of a value from the combat-weight helper. The helper computes no side, writes nothing outside its own frame, and returns a single byte its callers use as a scalar threshold.
+>
+> The confusion had a specific cause worth recording: the real friend/foe resolver also tests a bit called `0x80`, but that is a bit of the **per-actor combat descriptor**, a different byte in a different binary from the per-class flag word. The resolver never reads the class-flag table at all - the table's address does not occur anywhere in the resident image.
+>
+> Scope of the re-derivation: the negative ("no other site tests this bit") is bounded to accesses that name the table by a literal displacement; an access through a base register loaded arithmetically would not appear. The other bits of the flag word were classified only by their test masks, not re-read.
+>
+> The same correction removes a second error from this paragraph: the resolver's
+> first test is descriptor bit `0x20`, not bit `0x40`. Read whole, it returns
+> "no side" when that bit is set; otherwise, for a party-linked descriptor, it
+> returns the hostile side when the linked roster record is the shipped traitor
+> template and the descriptor's link byte is non-zero, and otherwise the
+> descriptor's low bit; for a non-party descriptor it returns the inverse of
+> that low bit.
 
 **Lifetime.** The bit lives only in the combat-instance descriptor table. It
 survives rounds, is cleared by a second successful Charm, by the slot-clear path
@@ -911,8 +924,12 @@ After this hook, the AI target picker and direction synthesis run as normal.
   inverse for a monster-side slot (Section 6.1a). Charming or possessing an
   actor therefore does move it to the opposite group for this filter. A
   *separate* team resolver, consulted only on a special pre-combat-scene branch,
-  reads descriptor bit `0x40` and a team-override flag that lives in the
-  monster's **per-class flag word** rather than in the descriptor byte. One shipped roster template is hard-wired hostile: whenever a
+  reads **descriptor** bytes only - it never consults the per-class flag word.
+  (**Corrected 2026-08-23**: this sentence previously said it "reads descriptor
+  bit `0x40` and a team-override flag that lives in the monster's per-class flag
+  word". Both halves are withdrawn - the test is on descriptor bit `0x20`, and
+  the class-flag table is not read by that routine, or by any resident routine,
+  at all. See Section 6.1a.) One shipped roster template is hard-wired hostile: whenever a
   party-class actor stands in for the game's traitor character - the last
   record of the shipped sixteen-record roster - the resolver forces it into
   the monster-side group however it reached the field (charm, summon, or
@@ -1338,7 +1355,7 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 |----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | Combat-class spawn-count byte    | The default spawn count field of the eight-byte class stat row, indexed by the encounter's base class id (never by the arena index). Combined with the random reroll it decides how many monsters spawn; the largest shipped value is sixteen. |
 | Per-class companion class        | Forty-eight entries indexed by class id, values are class ids. Early spawned monsters roll a one-in-nine chance to be created as the base class's companion class instead of the base class. Published in `catalogs/monster-bestiary.md`. |
-| Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, vanish-on-death, special death checks, the turnable-attack flag consumed by Amulet/Turning, ranged/effect branch selection, the magic-immune ranged/effect gate, teleport-capable movement, and the turn special bits for possess, blink/phase, and summon-daemon. |
+| Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, the zero-selector stat-row select (**corrected 2026-08-23** from "faction-override"), vanish-on-death, special death checks, the turnable-attack flag consumed by Amulet/Turning, ranged/effect branch selection, the magic-immune ranged/effect gate, teleport-capable movement, and the turn special bits for possess, blink/phase, and summon-daemon. |
 | Ordinary AI helper state         | Not a class script table. Ordinary monster decisions use the combat actor/effect records, target-selection scratch, per-class flag/stat tables, and shared helper outputs such as the AI step vector. Slot-local position, target, phase, flee, and visibility data remain in the combat actor/effect tables. |
 | Per-class display/narration data | Pointer data used by combat narration and class labels; this is not an AI behavior table.                                                        |
 | Per-class stat record            | Eight bytes per class: combat tier, speed seed/base-step input, endurance rating, defense rating, attack-damage cap, maximum HP, default spawn count, and default kill/drop cap. The tier and endurance bytes are the two class-side ratings the shared actor-rating selector returns into the to-hit and resistance scores; the "chest/encounter team-flip" reading of them in earlier revisions is withdrawn. Maximum HP initializes monster HP and supplies the reward-unit input. The attack and defense bytes are consumed by the computed attack resolver; this row is not a flat damage/hit lookup matrix. |
@@ -1351,10 +1368,14 @@ combat classes, special NPC classes, and monsters share the same eight-byte row
 shape. The ordinary friend/foe filter uses the combat slot index range and
 descriptor faction tag rather than a separate class-family table.
 
-The grouping helper therefore combines actor-family defaults (descriptor flags
-bit `0x40` identifies the monster side), the per-class team-override flag from
-the monster's class flag word, and the single hard-wired hostile roster template
-described in Section 9, rather than consulting a separate faction table. That
+The grouping helper therefore combines actor-family defaults read from the
+**descriptor** bytes with the single hard-wired hostile roster template
+described in Section 9, rather than consulting a separate faction table.
+*Corrected 2026-08-23:* this paragraph previously said the helper combines
+"descriptor flags bit `0x40`" with "the per-class team-override flag from the
+monster's class flag word". Both are withdrawn - the helper's first test is
+descriptor bit `0x20`, and it never reads the class flag word; see the
+correction in Section 6.1a for what that flag bit actually does. That
 last override is guarded so that it can never apply to the player's own
 character.
 
@@ -1411,7 +1432,7 @@ without independent behavioral consumers remain opaque metadata.
 
 - **Per-class flag word policy.** The common combat flag
   consumers are decoded: damage modifiers, the poison/status cluster,
-  ranged/effect branch selection and resistance gating, faction override,
+  ranged/effect branch selection and resistance gating, the zero-selector stat-row select (**corrected 2026-08-23** from "faction override"),
   death behaviour, target selection, the turnable-attack branch used by
   Amulet/Turning, teleport-capable movement, and the possess/blink/summon-daemon
   turn hook. The decoded row assignments for the published traits are in
@@ -1585,8 +1606,9 @@ The behaviour described here was derived from the private function and format no
   its two-way dispatch gate, derived from
   `u5-decomp/functions/ULTIMA_EXE/` and
   `u5-decomp/functions/COMBAT_OVL/`; the secondary
-  team resolver's descriptor bit `0x40` test and per-class team-override flag,
-  derived from `u5-decomp/functions/COMBAT_OVL/`.
+  team resolver's descriptor-byte tests - **corrected 2026-08-23**: it tests
+  descriptor bit `0x20`, not `0x40`, and reads no per-class flag - derived from
+  `u5-decomp/functions/COMBAT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: derived from private analysis note
   `u5-decomp/functions/ULTIMA_EXE/` -- the hard-wired
   hostile roster template, the guard that keeps roster record zero out of the

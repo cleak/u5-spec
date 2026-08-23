@@ -315,7 +315,8 @@ Town mode has one pre-dispatch stage no other mode has. Over-drinking at a
 tavern arms a counter at twenty-five; while that counter is non-zero, every
 command the player enters is subject to an even-odds scramble. When the scramble
 fires, the engine discards the entered command and substitutes a random cardinal
-step, prints the short hiccup line, scatters nearby NPCs, and decrements the
+step, prints the short hiccup line, runs the same one-shot schedule-rewrite
+sweep over the NPC roster that Section 14 describes, and decrements the
 counter by one; when it does not fire, the entered command runs normally and the
 counter is untouched. The counter therefore drains only on scrambled commands,
 not on every turn. Entering a town clears it outright, so the effect never
@@ -738,6 +739,22 @@ NPCs whose hostile predicate is always true remain schedule-driven town actors b
 
 Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, an eligible NPC's stored schedule is overwritten in one of two ways.
 
+> *Corrected (2026-08-23).* An earlier revision of Section 7.1 said the
+> drunkenness stage "scatters nearby NPCs", and the source list below called the
+> same effect an "NPC scatter"; that wording is **withdrawn**. Nothing in the
+> sweep displaces an NPC. A fresh full re-read of the sweep and of both of the
+> helpers it calls found that none of the three writes a coordinate anywhere:
+> what changes is the NPC's persisted per-period behaviour modes, its
+> time-of-day boundaries, and (on the flight path) its dialogue index. An
+> implementer must not move any actor on this path.
+>
+> Two further limits on what has been established, recorded so they are not
+> over-read: the coin flip on the non-special path was re-confirmed as a draw
+> compared against a mid-range threshold, but the draw's exact range was not
+> re-verified, so "half" is approximate rather than an exact one-in-two; and the
+> meaning of the individual behaviour-mode values written by the two helpers
+> comes from the separate analysis of those helpers, not from the sweep itself.
+
 - **Forced pursuit.** All three of the NPC's per-period behaviour modes are set to an approach mode, and all four of its time-of-day boundaries are zeroed so the schedule can never advance past its first period. The NPC's waypoint coordinates are left alone. Two approach modes are used, chosen by the NPC's class: one acts only while the party is within about four tiles, the other acts every turn and adds an occasional random step. Both step toward the party and both raise the "reached the party" event on adjacency, which this section's cleanup turns into the attack path.
 - **Forced flight.** All three behaviour modes are set to the engine's only *retreating* mode — it acts only while the party is within about four tiles, and then steps to whichever neighbouring square is **further** from the party — and the NPC's dialogue index is overwritten with a sentinel that makes conversation produce a single canned cowering line instead of the NPC's real script. This is destructive: the real dialogue index is gone.
 
@@ -958,8 +975,8 @@ harpsichord's arming condition, key-to-pitch mapping, thirteen-note tune,
 mistake re-sync, and completion effect.
 
 - The town drunkenness stage (the tavern-armed counter, the even-odds command
-  substitution with its hiccup line and NPC scatter, the decrement rule, and the
-  town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
+  substitution with its hiccup line and NPC schedule-rewrite sweep, the decrement
+  rule, and the town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
   status, and the town loop's four-way reading of the command status. Source
   provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`.

@@ -226,12 +226,20 @@ Implementations should preserve the behavior, not necessarily the exact original
 
 ## 7. Active Ships
 
-The overworld active-object cleanup path applies prevailing wind to the
+The overworld per-slot movement dispatch applies prevailing wind to the
 ship-like water-creature class, including pirate-ship frames. This is not the
-adjacent/short-range attack path; it runs only when the earlier active-object
-animator did not already handle the slot.
+adjacent/short-range attack path.
 
-Calm wind suppresses this post-animate movement. For non-calm wind, the object
+> *Corrected (2026-08-23).* This section called that path the "active-object
+> cleanup path" and said it "runs only when the earlier active-object animator
+> did not already handle the slot". Both are withdrawn. The path performs no
+> cleanup and no animation - it dispatches movement - and its gate is a running
+> total of the reaction pass's results across the whole slot walk, not a
+> per-slot test: once any earlier slot in the turn produced a reaction, this
+> path is skipped for every remaining slot that turn. `systems/active-objects.md`
+> carries the full contract.
+
+Calm wind suppresses this movement. For non-calm wind, the object
 uses its current frame and the prevailing wind to select a cadence cap:
 
 | Current frame | North wind | South wind | East wind | West wind |
@@ -242,8 +250,9 @@ uses its current frame and the prevailing wind to select a cadence cap:
 | West-facing frame | every turn | every turn | 3 of 4 turns | 2 of 3 turns |
 
 The cadence counter is stored per active-object slot. A "2 of 3" entry means
-the slot moves on two eligible cleanup passes, then resets and skips one. A
-"3 of 4" entry moves on three eligible passes, then resets and skips one.
+the slot moves on two eligible passes, then resets and skips one. A
+"3 of 4" entry moves on three eligible passes, then resets and skips one. The
+cadence counter is persisted with the object, so it survives save and reload.
 "Every turn" bypasses the counter and immediately allows the slot's movement
 helper to run.
 
