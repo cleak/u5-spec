@@ -399,13 +399,10 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
   companion-class table, and the party-seating pass that runs before monster
   placement. Source provenance: derived from private analysis notes
   `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
-  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`, and
+  `../u5-decomp/functions/ULTIMA_EXE/`.
 - First-pass map and arena survey, including `.CBT` record size, terrain-grid dimensions, row stride, outdoor record count, and dungeon record count: `u5-decomp/formats/maps.md`.
-- Outdoor combat arena loader analysis, including the four metadata slices copied from each selected `BRIT.CBT` record into resident combat setup tables: `u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`.
+- Outdoor combat arena loader analysis, including the four metadata slices copied from each selected `BRIT.CBT` record into resident combat setup tables: `u5-decomp/functions/ULTIMA_EXE/`.
 - Internal combat enter/exit framer and arena setup analysis.
 - Internal terrain-combat setup analysis, including outdoor arena selection, per-class monster-count lookup, party-entry and placement-slot tables, and companion-class roll rules.
 - Internal combat round-loop analysis, including runtime terrain-grid consumption.
@@ -413,13 +410,13 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 - Internal dungeon-mode room-trigger analysis for the exact scene/low-nibble relationship to `DUNGEON.CBT`.
 - Internal DNGLOOK room setup analysis for the dungeon-room metadata scan and
   special active-object placement path. Source provenance: derived from private
-  analysis notes `../u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`
-  and `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`, whose
+  analysis notes `../u5-decomp/functions/DNGLOOK_OVL/`
+  and `../u5-decomp/functions/ULTIMA_EXE/`, whose
   2026-08-22 retraces establish that the `0xEC..0xEF` family stays on the
   ordinary placement path and that the special path allocates an active-object
   record without a combat descriptor.
 - Arena synthesis for the ambush entry mode: derived from private analysis notes
-  `../u5-decomp/functions/DNGLOOK_OVL/0x0D3E_paint_room.md` and
+  `../u5-decomp/functions/DNGLOOK_OVL/` and
   `../u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
 - Stock-content census of the dungeon-room source band, counting the
   `0xEC..0xEF` family and each special setup id across all one hundred twelve

@@ -260,7 +260,7 @@ above, ids `6`, `10`, `42`, `43`, `44`, `45`, and `46` appear in shipped
 arms-shop stock rows; `15`, `35`, and `40` do not.
 
 Source provenance: derived from private analysis note
-`../u5-decomp/functions/SHOPPES_OVL/0x0B30_arms_buy_menu.md`.
+`../u5-decomp/functions/SHOPPES_OVL/`.
 
 ### 5.2 Armour, helms, and shields
 
@@ -645,60 +645,35 @@ This catalog is a cleanroom prose rewrite from the following source notes and sa
 
 - `u5-decomp/formats/data-ovl.md`
 - `u5-decomp/formats/saves.md`
-- `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md`
-- `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`
-- `u5-decomp/functions/CMDS_OVL/0x1C20_cmds_klimb.md`
-- `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`
-- `u5-decomp/functions/COMBAT_OVL/0x014E_apply_ranged_attack.md`
-- `u5-decomp/functions/COMBAT_OVL/0x0226_actor_attack_target.md`
-- `u5-decomp/functions/COMBAT_OVL/0x14D6_attack_to_hit_roll.md`
-- `u5-decomp/functions/COMSUBS_OVL/0x0C52_dispatch_spell_or_weapon.md`
-- `u5-decomp/functions/COMSUBS_OVL/0x0A68_cast_spell_effect.md`
-- `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`
-- `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`
+- `u5-decomp/functions/CMDS_OVL/`
+- `u5-decomp/functions/SJOG_OVL/`
+- `u5-decomp/functions/COMBAT_OVL/`
+- `u5-decomp/functions/COMSUBS_OVL/`
+- `u5-decomp/functions/TALK_OVL/`
 - `u5-decomp/notes/tlk-quest-graph.md`
 - `u5-decomp/notes/system-trace_inventory.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`
+- `u5-decomp/functions/ULTIMA_EXE/`
 - `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`
-- `u5-decomp/functions/CAST_OVL/0x1792_use_item.md`
-- `u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`
+- `u5-decomp/functions/CAST_OVL/`
 - local CAST scroll subhandler analysis
 - local CAST potion subhandler analysis
-- `u5-decomp/functions/CAST2_OVL/0x046C_animate_visibility_loop.md`
-- `u5-decomp/functions/CAST_OVL/0x153C_use_moonstone.md`
+- `u5-decomp/functions/CAST2_OVL/`
+- `u5-decomp/functions/CAST_OVL/`
 - `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`
-- `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`
-- `u5-decomp/functions/SJOG_OVL/0x045A_sjog_search_lookup_b.md`
-- `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`
-- `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`
-- `u5-decomp/functions/SJOG_OVL/0x179E_sjog_get_dungeon_chest.md`
-- `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0366_gem_world_map_renderer.md`
-- `u5-decomp/functions/LOOKOBJ_OVL/0x10FC_local_view_render.md`
-- `u5-decomp/functions/DNGLOOK_OVL/0x06A8_dnglook_v_view.md`
+- `u5-decomp/functions/SJOG_OVL/`
+- `u5-decomp/functions/TOWN_OVL/`
+- `u5-decomp/functions/LOOKOBJ_OVL/`
+- `u5-decomp/functions/DNGLOOK_OVL/`
 - `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`
-- `u5-decomp/functions/SHOPPES_OVL/0x04A2_guild_main.md`
-- `u5-decomp/functions/SHOPPES_OVL/0x12B2_arms_main.md`
-- `u5-decomp/functions/SHOPPES_OVL/0x075E_reagent_main.md`
-- `u5-decomp/functions/SHOPPES_OVL/0x07BE_find_shopkeeper.md`
-- `u5-decomp/functions/SHOPPES2_OVL/0x066C_tavern_main.md`
-- `u5-decomp/functions/SHOPPES2_OVL/0x0450_food_pay_and_serve.md`
-- `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md`
-- `u5-decomp/functions/COMBAT_OVL/0x12B0_attacker_defender_score.md`
-- `u5-decomp/functions/ZSTATS_OVL/0x0278_render_equipment_name.md`
-- `u5-decomp/functions/ZSTATS_OVL/0x02A8_draw_zstats_page2_equip.md`
-- `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`
-- `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`
-- `u5-decomp/functions/ZSTATS_OVL/0x0C0A_classify_two_handed.md`
-- `u5-decomp/functions/ZSTATS_OVL/0x0C5C_ready_apply_or_unequip.md`
+- `u5-decomp/functions/SHOPPES_OVL/`
+- `u5-decomp/functions/SHOPPES2_OVL/`
+- `u5-decomp/functions/SHOPPES3_OVL/`
+- `u5-decomp/functions/COMBAT_OVL/`
+- `u5-decomp/functions/ZSTATS_OVL/`
 - `u5-decomp/notes/engine_idioms.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x6794_combatant_set_carrier.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x6DA8_compute_party_member_weight.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x6E60_remove_inventory_match.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`
-- `u5-decomp/functions/BLCKTHRN_OVL/0x0910_blackthorn_rescue.md`
+- `u5-decomp/functions/ULTIMA_EXE/`
+- `u5-decomp/functions/ENDGAME_OVL/`
+- `u5-decomp/functions/BLCKTHRN_OVL/`
 - `u5-spec/systems/containers.md`
 - `u5-spec/systems/hidden-treasures.md`
 - `u5-spec/systems/conversation.md`

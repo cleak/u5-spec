@@ -640,16 +640,9 @@ This cleanroom spec was derived from private analysis notes. It intentionally
 does not reproduce decompiled code, assembly, raw tables, string dumps, or
 private address maps.
 
-- `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/LOOKOBJ_OVL/_OVERVIEW.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x099C_lookobj_master.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0000_lookobj_print_tile_string.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0042_wishing_well.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0162_fountain_drinker.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0502_lookobj_describe.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x06A4_lookobj_print_object_string.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x06F8_signs_dat_print.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x07E4_wanted_poster_render.md`.
+- `u5-decomp/functions/LOOKOBJ_OVL/`.
 - The dungeon map's cell size and origin, its twenty-two by twenty-two extent,
   the modulo-eight wrap rule, the fixed frontier bound, the two eight-by-eight
   one-bit fonts that supply its glyphs, the per-class font selection, the
@@ -660,27 +653,14 @@ private address maps.
 - The sky renderer's two presentation paths, the eight rows, the calendar-driven
   column rule, the per-row body and Shadowlord-marker geometry, and the
   retraction of the chunk-map/party-marker reading —
-  `u5-decomp/functions/LOOKOBJ_OVL/0x0366_gem_world_map_renderer.md` and
+  `u5-decomp/functions/LOOKOBJ_OVL/` and
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 5.
 - Source provenance: the telescope identity of tile `0x59`, its three shipped
   placements, the placeholder-description reconciliation, the separation from
   the wishing-well tile, and the absence of any gem or item precondition on the
   Look route are derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x01AC_view_blit_tile.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x024C_view_party_marker.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0A9C_set_view_origin.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0ABE_view_class1_corners.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0B04_view_class2_fill.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0B60_view_class4_two_horizontals.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0B98_view_class5_center_bars.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0BD0_view_class6_full_box.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0C36_view_class8_diagonal_steps.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0C9C_view_class9_lines_blits.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0CF4_view_dungeon_room_tile.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0DDA_view_classB_two_blits_modal.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0E16_view_classD_two_pair_modal_split.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0E7A_view_creature_marker.md`.
+- `u5-decomp/functions/LOOKOBJ_OVL/`.
 - Source provenance: the road identity of view class `0x10` together with its
   connection-mask stub set and its diagonal corner notch; the water identity of
   view class `0xA` together with its per-corner river shoreline mask; and the
@@ -688,16 +668,13 @@ private address maps.
   micro-blit -- re-derived on 2026-08-22 from the shipped view-class table and
   the two per-class renderers, and recorded in the dated correction banners on
   the private analysis notes
-  `u5-decomp/functions/LOOKOBJ_OVL/0x0E7A_view_creature_marker.md` and
-  `u5-decomp/functions/LOOKOBJ_OVL/0x0CF4_view_dungeon_room_tile.md`. Both
+  `u5-decomp/functions/LOOKOBJ_OVL/`. Both
   filenames are historical: those two working names are withdrawn in the notes
   themselves, and neither a creature marker nor a dungeon-room tile exists in
   this overlay.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x0F7E_view_dispatch.md`.
-- `u5-decomp/functions/LOOKOBJ_OVL/0x10FC_local_view_render.md`.
+- `u5-decomp/functions/LOOKOBJ_OVL/`.
 - `u5-decomp/functions/DNGLOOK_OVL/_OVERVIEW.md`.
-- `u5-decomp/functions/DNGLOOK_OVL/0x0000_dnglook_l_look.md`.
-- `u5-decomp/functions/DNGLOOK_OVL/0x06A8_dnglook_v_view.md`.
+- `u5-decomp/functions/DNGLOOK_OVL/`.
 - The complete top-down trigger set, the dispatch order, the redirect tiles,
   the clock/shrine/dungeon appenders, and the confirmation that the tested
   byte is a live terrain tile rather than an active-object class —

@@ -497,22 +497,15 @@ This cleanroom spec was derived from private analysis notes and sibling public
 specs. It intentionally does not reproduce decompiled code, assembly, raw data
 tables, or implementation-specific addresses.
 
-- `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`.
-- `u5-decomp/functions/CMDS_OVL/0x0EB4_cmds_xit_vehicle.md`.
-- `u5-decomp/functions/CMDS_OVL/0x073E_xit_nearby_landing_probe.md`.
-- `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.
-- `u5-decomp/functions/CMDS_OVL/0x0AEA_cmds_fire.md`.
-- `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
-- `u5-decomp/functions/CAST_OVL/0x1792_use_item.md`.
+- `u5-decomp/functions/CMDS_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/CAST_OVL/`.
 - Local SHOPPES2 shipwright control-flow analysis and direct `SHOPPE.DAT`
   record inspection.
-- `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
-- `u5-decomp/functions/MAINOUT_OVL/0x0490_mainout_letter_dispatch.md`.
-- `u5-decomp/functions/MAINOUT_OVL/0x0598_mainout_input_helper.md`.
+- `u5-decomp/functions/MAINOUT_OVL/`.
 - `u5-decomp/notes/system-trace_movement.md`.
 - Local MAINOUT outer-loop analysis for pending shipwright delivery placement.
-- `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/formats/ds-bss-map.md`.
 - `u5-decomp/formats/saves.md`.
 - Source provenance: derived from private analysis note
@@ -523,7 +516,7 @@ tables, or implementation-specific addresses.
   auto-furl, the furled precondition for exiting a ship into a skiff, and the
   ship-loss fallback ladder.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md` -- the vehicle
+  `u5-decomp/functions/TOWN_OVL/` -- the vehicle
   prefix strings and the facing-compose bound. That note's earlier
   skiff/carpet prefix assignment was swapped and is superseded.
 - `systems/overworld.md`.

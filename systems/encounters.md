@@ -678,55 +678,47 @@ The behaviour described here was derived from the private function and format no
   companion-class table, and the party-seating pass that runs before monster
   placement. Source provenance: derived from private analysis notes
   `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
-  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`, and
+  `../u5-decomp/functions/ULTIMA_EXE/`.
 - The H-Hole-Up rest handler, including scene routing, party status cleanup,
   capped HP recovery, camp marker writes, the 1-in-64 interruption predicate,
   the eight-row sleep-ambush monster chooser, ambush-message/status restoration
   ordering, and the hours-loop interruption boundary -- derived from
-  `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md` and cross-checked
+  `u5-decomp/functions/CMDS_OVL/` and cross-checked
   against `u5-decomp/notes/npc_walker_callers_2026-05-08.md`.
 
 - Random-spawn placement and terrain bucket provenance:
-  `u5-decomp/functions/MAINOUT_OVL/0x0FC4_encounter_spawn.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x0F4E_encounter_pick_coord.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x0E4E_encounter_pick_monster.md`, and
-  `u5-decomp/functions/MAINOUT_OVL/0x0E04_table_weighted_pick.md`, with
+  `u5-decomp/functions/MAINOUT_OVL/`, and
+  `u5-decomp/functions/MAINOUT_OVL/`, with
   DATA.OVL address conversion cross-checked against
   `u5-decomp/formats/data-ovl.md`.
 - Random-spawn active-object payload behavior and special outdoor animated
   families:
-  `u5-decomp/functions/MAINOUT_OVL/0x105C_mainout_tile_classifier.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x131A_active_object_animate.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x1248_active_object_engage.md`,
-  `u5-decomp/functions/MAINOUT_OVL/0x1578_apply_step.md`, and
+  `u5-decomp/functions/MAINOUT_OVL/`, and
   the public sprite-run cross-checks in `catalogs/monster-bestiary.md` and
   `catalogs/tile-catalog.md`.
 
-- The 30-sided per-turn random-encounter probe in the overworld loop's per-turn block, including the call-out to the encounter spawner — derived from `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
+- The 30-sided per-turn random-encounter probe in the overworld loop's per-turn block, including the call-out to the encounter spawner — derived from `u5-decomp/functions/MAINOUT_OVL/`.
 - The DOSBox probe that pinned the tile/Z/hour threshold formula -- `u5-decomp/notes/dosbox_probes_2026-05-07.md`.
-- The shared integer PRNG used for the 30-sided roll -- `u5-decomp/functions/ULTIMA_EXE/0x2092_prng_range.md`.
-- The combat enter/exit framer with its three-way entry-mode dispatch (terrain, ambush, alternate), the active-object backup-and-restore around the round loop, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+- The shared integer PRNG used for the 30-sided roll -- `u5-decomp/functions/ULTIMA_EXE/`.
+- The combat enter/exit framer with its three-way entry-mode dispatch (terrain, ambush, alternate), the active-object backup-and-restore around the round loop, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The absence of a traced post-fight SJOG loot handoff from COMBAT call
   coverage -- derived from `u5-decomp/functions/COMBAT_OVL/_OVERVIEW.md` and
   `u5-decomp/notes/system-trace_combat-round.md`.
 - The resident terrain-target wrapper's post-combat original-slot reconciler
-  -- derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`
-  and `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
+  -- derived from `u5-decomp/functions/ULTIMA_EXE/`
+  and `u5-decomp/functions/SJOG_OVL/`.
 - The ambush/camp-attack reveal-slot helper, including mode gating, one-shot
   reveal-coordinate consumption, terrain stamping, and redraw ordering --
   derived from
-  `u5-decomp/functions/COMBAT_OVL/0x111A_reveal_ambush_at_coord.md`.
+  `u5-decomp/functions/COMBAT_OVL/`.
 - The framer's ambush entry branch -- its resolved setup target, the fact that
   it loads no arena and discards the caller's slot argument, and its only traced
   live callers -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`,
-  `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/DNGLOOK_OVL/`, and
   `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
-- The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion roll, the town-style single-attacker override, and the damper's second downward count roll — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+- The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion roll, the town-style single-attacker override, and the damper's second downward count roll — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the single-plane arena model (one outdoor bank serving both the surface and the underworld, with no plane-specific variant records) — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
 
 - The identification of the spawn-count reroll flag as an early-game
@@ -734,4 +726,4 @@ The behaviour described here was derived from the private function and format no
   absence of any gameplay setter, and the month-rollover clear as the engine's
   only write. Source provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` and
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`.

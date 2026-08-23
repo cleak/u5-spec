@@ -1522,42 +1522,37 @@ The behaviour described here was derived from the private function and format no
   companion-class table, and the party-seating pass that runs before monster
   placement. Source provenance: derived from private analysis notes
   `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
-  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
-- The combat enter/exit framer with its three-way entry-mode dispatch, save-and-restore of player position and the dynamic-objects table, the scene-byte sentinel, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`, and
+  `../u5-decomp/functions/ULTIMA_EXE/`.
+- The combat enter/exit framer with its three-way entry-mode dispatch, save-and-restore of player position and the dynamic-objects table, the scene-byte sentinel, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat-exit tile-graphics restoration dispatch reached from the framer's
   sampled restoration flag -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
-- The terrain-combat setup, the class-row spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion-class roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`.
-- The combat monster-placement writer that initializes renderer-facing and combat descriptor records -- derived from `u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
+- The terrain-combat setup, the class-row spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion-class roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The combat monster-placement writer that initializes renderer-facing and combat descriptor records -- derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The ambush/camp-attack reveal-slot helper, including mode gating, one-shot
   reveal-coordinate consumption, arena terrain stamping, and redraw ordering --
   derived from
-  `u5-decomp/functions/COMBAT_OVL/0x111A_reveal_ambush_at_coord.md`.
-- The per-round walk over the thirty-two-slot actor table, the phase-counter mechanic, the round-counter wrap, the dispatch to player vs. monster handlers, and the three exit conditions — derived from `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
+  `u5-decomp/functions/COMBAT_OVL/`.
+- The per-round walk over the thirty-two-slot actor table, the phase-counter mechanic, the round-counter wrap, the dispatch to player vs. monster handlers, and the three exit conditions — derived from `u5-decomp/functions/COMBAT_OVL/`.
 - The retraction of the "post-round combat terrain/effect sweep", and the
   player-cursor blink marker and secondary-marker hook that survive it as the
   shared rasterizer's combat-only tail -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x56AC_combat_post_round.md` (the note's
+  `u5-decomp/functions/ULTIMA_EXE/` (the note's
   filename predates its 2026-08-22 naming correction; the routine is the shared
   viewport rasterizer, not a combat post-round pass).
 - The per-actor turn dispatcher, complete dispatcher-level combat command map
   for all twenty-six letters and seven special inputs, the AI synthesis path for
   monster turns, the verb-stitching narration buffer, and the unified
   per-letter parser — derived from
-  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
+  `u5-decomp/functions/COMBAT_OVL/`.
 - Delegated combat command targets and edge behaviour for SJOG
   Get/Jimmy/Open/Search/Klimb, CMDS escape/Yell/Push, and ZSTATS
   Ready/Z-stats - derived from
   the corresponding COMBAT command table plus
   `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
-  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`,
-  `u5-decomp/functions/CMDS_OVL/0x17EC_cmds_escape.md`,
-  `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`,
-  `u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`, and
+  `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/CMDS_OVL/`, and
   `u5-decomp/functions/ZSTATS_OVL/_OVERVIEW.md`, with
   `u5-decomp/notes/cross_mode_behavior_matrix.md` as a cross-mode check.
 - The negative post-combat SJOG boundary -- COMBAT reaches SJOG for in-round
@@ -1566,35 +1561,34 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/notes/system-trace_combat-round.md`.
 - The special combat absorption marker producer that bridges qualifying dungeon
   room cleanup into ENDGAME -- derived from
-  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md` and the
+  `u5-decomp/functions/SJOG_OVL/` and the
   ENDGAME caller census in
-  `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The caller-side post-combat original-slot reconciler -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md` and
-  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
+  `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/functions/SJOG_OVL/`.
 - The absence of combat-exit gold/karma/victory-bonus writes is derived from
   the traced combat framer, COMBAT round loop, and relevant COMBAT-to-SJOG call
   coverage; later body food/gold staging is owned by
-  `u5-decomp/functions/SJOG_OVL/0x01F2_sjog_corpse_grant.md` and
-  `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`.
+  `u5-decomp/functions/SJOG_OVL/`.
 - The AI target-selection helper, the backwards walk and filter chain, the Mass
   Charm active-effect tag remap with class-threshold random gate, the
   Doom and Shadow Lord phase/hidden suppression exceptions, the ordinary invisibility filter, the
   first-five-party-slot fallback guard, centre fallback flee-marker writer,
   linear truncated Euclidean distance scoring with closest-wins tie-break, and the unit-step
   direction output with flee inversion — derived from
-  `u5-decomp/functions/COMBAT_OVL/0x0D30_target_picker.md` and the sibling
+  `u5-decomp/functions/COMBAT_OVL/` and the sibling
   COMBAT damage/death note that identifies the same random-byte helper.
 - The combat slot-to-group helper, including the party-class rule keyed on the
   controlled/charmed bit `0x01`, the monster-side inversion of that same bit,
   the dead-slot collapse, and the round walker's use of the helper's result as
   its two-way dispatch gate, derived from
-  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` and
-  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`; the secondary
+  `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/functions/COMBAT_OVL/`; the secondary
   team resolver's descriptor bit `0x40` test and per-class team-override flag,
-  derived from `u5-decomp/functions/COMBAT_OVL/0x13E2_slot_team_resolve.md`.
+  derived from `u5-decomp/functions/COMBAT_OVL/`.
 - Source provenance: derived from private analysis note
-  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md` -- the hard-wired
+  `u5-decomp/functions/ULTIMA_EXE/` -- the hard-wired
   hostile roster template, the guard that keeps roster record zero out of the
   override, the census of shipped roster names confirming exactly one match, and
   the confirmation that character creation and the Ultima IV import name only
@@ -1603,10 +1597,9 @@ The behaviour described here was derived from the private function and format no
   and New Order -- were each checked to confirm that none of them can move the
   player-named record out of record zero and that none writes player-supplied
   text into another record; see
-  `u5-decomp/functions/SHOPPES3_OVL/0x02AE_leave_companion.md`,
-  `u5-decomp/functions/SHOPPES3_OVL/0x04E6_inn_main.md`,
-  `u5-decomp/functions/BLCKTHRN_OVL/0x03AE_jail_party_member.md` and
-  `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`. Cross-checked against
+  `u5-decomp/functions/SHOPPES3_OVL/`,
+  `u5-decomp/functions/BLCKTHRN_OVL/` and
+  `u5-decomp/functions/CMDS_OVL/`. Cross-checked against
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - Note for save-tooling authors: a hand-edited save could in principle make one
   of the other roster records match the shipped traitor template's name shape
@@ -1627,78 +1620,72 @@ The behaviour described here was derived from the private function and format no
   derived from
   `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`,
   `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
-  `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x0226_actor_attack_target.md`, and
-  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`.
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and
+  `u5-decomp/functions/COMBAT_OVL/`.
 - The HP-bucket wound-score classifier, low-HP morale writer for the fleeing
   flag, and fear/panic spell route that forces combat current HP into the
   critical bucket — derived from
-  `u5-decomp/functions/COMBAT_OVL/0x1A5C_compute_wound_score.md` and
+  `u5-decomp/functions/COMBAT_OVL/` and
   `u5-decomp/formats/data-ovl.md`.
 - Protection's equipped-item-statistic bonus, Negate Magic's combat-cast absorption path, Negate Time's `T`/10 runtime tag, and the active-effect counter-aging rule — derived from local ULTIMA.EXE, COMBAT, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
 - The placement of Quickness's `Q` 0..1 gate and Negate Time's `T` outright
   turn skip at the head of the automatic actor driver rather than in the player
   command handler, and the correction of the earlier "player-side dispatch
   gate" reading — derived from a 2026-08-22 re-read of
-  `u5-decomp/functions/COMBAT_OVL/0x03F4_actor_action_driver.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md`, and
+  `u5-decomp/functions/COMBAT_OVL/`, and
   `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`, with the
   round walker's two-way dispatch confirmed against
-  `u5-decomp/functions/ULTIMA_EXE/0xD476_slot_to_group_id.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The seating-time placement of both magic-ring behaviours (one regeneration
   tick, one 1-in-16 vanish check, both inside the per-encounter setup pass and
   neither repeated by the round loop) -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`, whose
+  `u5-decomp/functions/ULTIMA_EXE/`, whose
   2026-08-22 retrace identifies that function as the per-encounter setup pass
   rather than a round engine.
 - Equipped Ring of Invisibility and Ring of Regeneration combat behaviour,
   including hidden-flag marking, wearer healing, and combat-round removal checks
-  -- derived from `u5-decomp/functions/ULTIMA_EXE/0x6794_combatant_set_carrier.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x6E60_remove_inventory_match.md`.
-- The damage application and status transitions, the per-monster-class flag word's effect on damage and death, the special-class death paths, the slime-divide replication path, and the combat-local attacker experience credit — derived from `u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`, `u5-decomp/functions/COMBAT_OVL/0x194A_resolve_attack_damage.md`, `u5-decomp/functions/COMBAT_OVL/0x18BA_apply_party_status_or_damage.md`, and `u5-decomp/functions/ULTIMA_EXE/0x3F14_sat_add_word.md`.
+  -- derived from `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
+- The damage application and status transitions, the per-monster-class flag word's effect on damage and death, the special-class death paths, the slime-divide replication path, and the combat-local attacker experience credit — derived from `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`.
 - Amulet/Turning's combat passive branch and ranged/effect scatter boundary —
-  derived from `u5-decomp/functions/COMBAT_OVL/0x0226_actor_attack_target.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x014E_apply_ranged_attack.md`, and
-  `u5-decomp/functions/COMSUBS_OVL/0x0822_attack_geometry_resolver.md`.
+  derived from `u5-decomp/functions/COMBAT_OVL/`, and
+  `u5-decomp/functions/COMSUBS_OVL/`.
 - The weapon/spell damage-row split, target selection handoff, item-id keyed
   range/effect rows, ranged/projectile apply path, and shared to-hit formula --
   derived from
-  `u5-decomp/functions/COMSUBS_OVL/0x0C52_dispatch_spell_or_weapon.md`,
-  `u5-decomp/functions/COMSUBS_OVL/0x0A68_cast_spell_effect.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x0226_actor_attack_target.md`,
-  `u5-decomp/functions/COMBAT_OVL/0x014E_apply_ranged_attack.md`, and
-  `u5-decomp/functions/COMBAT_OVL/0x14D6_attack_to_hit_roll.md`.
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and
+  `u5-decomp/functions/COMBAT_OVL/`.
 - Monster ranged/effect side-table row values and row attribution -- derived
   from `u5-decomp/formats/data-ovl.md` and cross-checked against the COMBAT and
   COMSUBS ranged/effect consumers above.
-- Shared saturating byte/word arithmetic used by stat and inventory mutation paths — derived from `u5-decomp/functions/ULTIMA_EXE/0x3EF0_sat_add_byte.md` and sibling helper notes.
+- Shared saturating byte/word arithmetic used by stat and inventory mutation paths — derived from `u5-decomp/functions/ULTIMA_EXE/` and sibling helper notes.
 - The monster movement fallback, teleport-capable movement bit, random legal
   arena-cell candidate path, surrounded check, in-arena step test, and linked
   combat-record/active-object coordinate updates — derived from
-  `u5-decomp/functions/COMBAT_OVL/0x0EE4_monster_step_or_teleport.md` and
-  `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
-- The step-or-attack primitive — direction-to-unit-step translation, arena range check, on-success and on-failure narration, and the post-step effect gate — derived from `u5-decomp/functions/SJOG_OVL/0x1C56_actor_step_or_attack.md`.
+  `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/SJOG_OVL/`.
+- The step-or-attack primitive — direction-to-unit-step translation, arena range check, on-success and on-failure narration, and the post-step effect gate — derived from `u5-decomp/functions/SJOG_OVL/`.
 - The dungeon-room special source conversion for the final Doom absorbable
   marker -- derived from
-  `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`, and local
+  `u5-decomp/functions/DNGLOOK_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and local
   binary verification of `DUNGEON.CBT`.
 - The monster special-ability hook, including possess, blink/phase,
   summon-daemon, branch ordering, chance gates, and baseline class-flag
   assignments, derived from
-  `u5-decomp/functions/COMSUBS_OVL/0x00F4_monster_special_ability_tick.md`
+  `u5-decomp/functions/COMSUBS_OVL/`
   and the `DATA.OVL` class-flag table.
 - The combat-side C-Cast interference gate -- target mapping, target validity,
   visibility/awakeness, Negate Time suppression, and adjacency -- derived from
-  `u5-decomp/functions/COMSUBS_OVL/0x09FC_check_spell_prereqs.md`.
-- The shared spell dispatcher used by combat casts — derived from `u5-decomp/functions/CAST_OVL/0x0DBA_cast_main_loop.md`.
+  `u5-decomp/functions/COMSUBS_OVL/`.
+- The shared spell dispatcher used by combat casts — derived from `u5-decomp/functions/CAST_OVL/`.
 - The combat spell-damage wrapper used by Magic Missile, Fireball, and Kill — derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
 - The Clone spell's allocation and random legal arena placement behaviour — derived from local CAST and COMBAT helper analysis summarized without copying implementation text.
-- The dynamic-objects table that combat overlays and the sprite animator that walks it during world ticks — derived from `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
-- The fog/visibility post-pass that consumes the same active-object table during world rendering — derived from `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md`.
-- The combat AI target-range primitive, which computes truncated linear Euclidean distance between two arena coordinates — derived from `u5-decomp/functions/ULTIMA_EXE/0xDC42_range_to_target.md`.
+- The dynamic-objects table that combat overlays and the sprite animator that walks it during world ticks — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The fog/visibility post-pass that consumes the same active-object table during world rendering — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The combat AI target-range primitive, which computes truncated linear Euclidean distance between two arena coordinates — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The data-region correction that rules out a combat damage/hit-chance matrix and identifies the combat-instance faction tagging and per-class stat-record shape — derived from `u5-decomp/formats/data-ovl.md`.
 - The combat-arena file layout — 352-byte record stride, 11×11 terrain grid, metadata band, outdoor and dungeon-encounter banks — derived from `u5-decomp/formats/maps.md`.
 - The character-record layout consulted by damage application and the active-player restore — derived from `u5-decomp/formats/saves.md`.
@@ -1706,15 +1693,14 @@ The behaviour described here was derived from the private function and format no
   and vanish class-flag arms, the Gazer and Gargoyle exceptions, the arena
   terrain gate, which branches release the slot, and the drop-cap byte written
   into the active-object auxiliary byte -- derived from the 2026-08-22 retrace in
-  `u5-decomp/functions/COMBAT_OVL/0x1574_narrate_status_change.md`.
+  `u5-decomp/functions/COMBAT_OVL/`.
 - The `1..30` range of the roll helper used by both drop gates -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x3ABE_roll_1_to_30.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x2092_random_byte_in_range.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The three placement modes, the party-side versus monster-side flag-bit
   assignment, and the marker-only mode -- derived from the 2026-08-22 retrace in
-  `u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The framer's ambush entry branch, its setup target, and its discarded slot
-  argument -- derived from `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`
+  argument -- derived from `u5-decomp/functions/ULTIMA_EXE/`
   and `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
 - The per-letter combat command map of Section 8 — the two shared delegate
   shapes, the three refusal tails, the direct-call letters, the exact re-prompt
@@ -1722,12 +1708,12 @@ The behaviour described here was derived from the private function and format no
   the encounter-size damper's full life cycle in Section 5. Source provenance:
   derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
-  `../u5-decomp/functions/COMBAT_OVL/0x0544_prompt_with_string.md`,
-  `../u5-decomp/functions/SJOG_OVL/0x1F26_sjog_verb_not_here.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
-  `../u5-decomp/functions/CAST_OVL/0x1792_use_item.md`.
+  `../u5-decomp/functions/COMBAT_OVL/`,
+  `../u5-decomp/functions/SJOG_OVL/`,
+  `../u5-decomp/functions/ULTIMA_EXE/`, and
+  `../u5-decomp/functions/CAST_OVL/`.
 - Combat's own typeahead toggle, its Escape / Space / actor-select bindings, and
   the arena targeting cursor as the game's only eight-way input surface. Source
   provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
-  `../u5-decomp/functions/COMSUBS_OVL/0x0504_arena_cursor_picker.md`.
+  `../u5-decomp/functions/COMSUBS_OVL/`.

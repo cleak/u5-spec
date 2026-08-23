@@ -627,43 +627,27 @@ This cleanroom spec was derived from private analysis notes. It intentionally
 does not reproduce decompiled code, assembly, or raw data dumps.
 
 - `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
-- `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`.
-- `u5-decomp/functions/SJOG_OVL/0x179E_sjog_get_dungeon_chest.md`.
-- `u5-decomp/functions/SJOG_OVL/0x1374_sjog_open.md`.
-- `u5-decomp/functions/SJOG_OVL/0x12D4_sjog_open_inner.md`.
-- `u5-decomp/functions/SJOG_OVL/0x112C_sjog_inner_chest_open.md`.
-- `u5-decomp/functions/SJOG_OVL/0x1040_sjog_trap_apply_a.md`.
-- `u5-decomp/functions/SJOG_OVL/0x10B8_sjog_trap_apply_b.md`.
-- `u5-decomp/functions/SJOG_OVL/0x0F88_sjog_trap_dispatch.md` (filename is
+- `u5-decomp/functions/SJOG_OVL/`.
+- `u5-decomp/functions/SJOG_OVL/` (filename is
   historical; the note's 2026-08-22 banner withdraws the "trap" reading and
   establishes the routine as the object-slot grant).
 - Source provenance: the per-row commit through an acquired active-object slot,
   the downward scan of the slot table, and the index-zero collision that makes
   slot zero unreachable and silently drops rows when the table is full --
   re-derived on 2026-08-22 and recorded in the banner and addendum on
-  `u5-decomp/functions/SJOG_OVL/0x0000_sjog_per_party_check.md` (filename is
+  `u5-decomp/functions/SJOG_OVL/` (filename is
   historical; the routine is the slot allocator, not a party check).
-- `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`.
-- `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`.
+- `u5-decomp/functions/SJOG_OVL/`.
 - `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md` — source
   provenance for the retraction of the "broken-lock" state, the guarantee that
   a failed pick preserves a container's contents, the identification of the
   secondary pool as the equipment array, and the absence of any caller-side
   trap-selection table.
-- `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`.
-- `u5-decomp/functions/SJOG_OVL/0x02EA_sjog_search_object_handler.md`.
-- `u5-decomp/functions/SJOG_OVL/0x0514_sjog_hidden_treasure_scan.md`.
-- `u5-decomp/functions/SJOG_OVL/0x045A_sjog_search_lookup_b.md`.
-- `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`.
-- `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
+- `u5-decomp/functions/SJOG_OVL/`.
 - Source provenance: the corpse-search arm structure -- the majority arm's
   slot clear happening ahead of the plague-or-narration roll, and the minority
   arm being the only one that stages a pickup -- re-derived on 2026-08-22 from
   the shipped overlay and recorded in the banner and Behavior section of
-  `u5-decomp/functions/SJOG_OVL/0x01F2_sjog_corpse_grant.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x6150_combat_target_describe.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x2FD0_trap_effect.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
+  `u5-decomp/functions/SJOG_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/formats/saves.md`.

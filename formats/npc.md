@@ -382,22 +382,22 @@ Remaining work belongs to catalog naming rather than to this file format.
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
 - The first-pass survey of the four `.NPC` files, file size, sub-map partition, schedule stride, and slot-zero sentinel — `u5-decomp/formats/npc-tlk-pth.md`.
-- The schedule processor's entry point — class-to-file dispatch, sub-map indexing, and the three back-to-back reads of schedule, type, and dialog arrays — `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md`.
+- The schedule processor's entry point — class-to-file dispatch, sub-map indexing, and the three back-to-back reads of schedule, type, and dialog arrays — `u5-decomp/functions/NPC_OVL/`.
 - Shipped roster scan of the four clean `.NPC` files and Talk shop-dispatch
-  evidence from `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md` -- high
+  evidence from `u5-decomp/functions/TALK_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/` -- high
   dialog-index shop-trigger values.
 - Resident world-location table verification that binds scene bytes 1 through
   32 to storage-family sub-map keys and resident location-name strings:
-  `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md` and
+  `u5-decomp/functions/OUTSUBS_OVL/` and
   `u5-decomp/formats/data-ovl.md`.
 - Scene-byte lifecycle audit confirming that the NPC loader's arithmetic
   scene-byte write is only a temporary one-based-to-zero-based conversion:
   `u5-decomp/notes/critical_state_lifecycles.md`.
-- The per-tick walker — per-NPC state machine, AI-byte dispatch, type-byte occupancy use, pathfinding, and cross-overlay sprite-position writeback — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
-- The waypoint selection routine — four-boundary, three-waypoint, wraparound-through-waypoint-one rule — `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
-- Runtime schedule field semantics confirmed against the schedule processor's read sites — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
-- Runtime initialisation that snapshots schedule waypoints to per-NPC runtime fields — `u5-decomp/functions/NPC_OVL/0x00D6_npc_init_runtime_state.md`.
+- The per-tick walker — per-NPC state machine, AI-byte dispatch, type-byte occupancy use, pathfinding, and cross-overlay sprite-position writeback — `u5-decomp/functions/NPC_OVL/`.
+- The waypoint selection routine — four-boundary, three-waypoint, wraparound-through-waypoint-one rule — `u5-decomp/functions/NPC_OVL/`.
+- Runtime schedule field semantics confirmed against the schedule processor's read sites — `u5-decomp/functions/NPC_OVL/`.
+- Runtime initialisation that snapshots schedule waypoints to per-NPC runtime fields — `u5-decomp/functions/NPC_OVL/`.
 - The waypoint `Z` floor convention of Section 5.2 — the signed reading, the
   shipped five-value alphabet, the forty-one basement waypoints, and the
   correction that sub-map index is not a `.DAT` page index. Source provenance:

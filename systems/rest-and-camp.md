@@ -333,19 +333,14 @@ This cleanroom spec was derived from private analysis notes and sibling public
 specs. It intentionally does not reproduce decompiled code, assembly, raw data
 tables, or implementation-specific addresses.
 
-- `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`.
-- `u5-decomp/functions/CMDS_OVL/0x0552_cmds_holeup_hours.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3C9A_party_view_screen.md`
+- `u5-decomp/functions/CMDS_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/ULTIMA_EXE/`
   (resident H-Hole-up rest-with-watch handler; private filename retained for
   continuity).
-- `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x6360_exit_combat.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x3EF0_sat_add_byte.md`.
-- `u5-decomp/functions/OUTSUBS_OVL/0x0658_lord_british_dialogue.md`.
-- `u5-decomp/functions/OUTSUBS_OVL/0x0658_outsubs_camp_or_save.md`
+- `u5-decomp/functions/ULTIMA_EXE/`.
+- `u5-decomp/functions/OUTSUBS_OVL/`.
+- `u5-decomp/functions/OUTSUBS_OVL/`
   (superseded identity note; structural observations only).
 - `u5-decomp/notes/lord_british_dialogue.md`.
 - `u5-decomp/notes/npc_walker_callers_2026-05-08.md`.

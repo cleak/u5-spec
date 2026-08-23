@@ -845,75 +845,65 @@ reproduced here.
 
 - The resident A-Z dispatcher, scene-aware letter routing, verb-prefix scheme,
   gem gate, save-game route, typeahead toggle, and return-value categories:
-  `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The save-game handler reached by `Q`, including its prompt, save/cancel
   branches, file writes, and return-to-caller behaviour:
-  `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`.
+  `u5-decomp/functions/CAST2_OVL/`.
 - The overworld mode loop's pre-dispatch control-code table and separate quit
-  prompt path: `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
+  prompt path: `u5-decomp/functions/MAINOUT_OVL/`.
 - The dungeon mode loop's pre-dispatch handling of digits, sound toggle, and
   explicit exit prompt:
-  `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+  `u5-decomp/functions/DUNGEON_OVL/`.
 - The CMDS overlay command-family inventory and corrected F/J/O/G/S ownership:
-  `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md`,
-  `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`,
-  `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`, and
-  `u5-decomp/functions/CMDS_OVL/0x0AEA_cmds_fire.md`.
+  `u5-decomp/functions/CMDS_OVL/`, and
+  `u5-decomp/functions/CMDS_OVL/`.
 - The M-family split between CMDS reagent mixing and CAST2 shrine/urn entry:
-  `u5-decomp/functions/CMDS_OVL/0x1AD8_cmds_mix_reagents.md` and
+  `u5-decomp/functions/CMDS_OVL/` and
   `u5-decomp/functions/CAST2_OVL/_INDEX_2026-05-08.md`.
 - The New Order active-party record exchange, leader refusal, cancel paths, and
   same-slot self-swap behaviour:
-  `u5-decomp/functions/CMDS_OVL/0x0DDC_cmds_new_order.md`.
+  `u5-decomp/functions/CMDS_OVL/`.
 - The Y-Yell sail toggle, free-text prompt, Shadowlord-name branch,
   Word-of-Power seal predicate, saved per-word seal flags and the region-load
   pass that re-applies them, and the ruined-shrine mantra hand-off:
   `u5-decomp/notes/2026-08-22_quest-world-retrace.md`,
-  `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`,
-  `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`,
-  `u5-decomp/functions/CMDS_OVL/0x70F2_shrine_effect.md`, and
-  `u5-decomp/functions/CMDS_OVL/0x1202_cmds_meditate.md`.
+  `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`,
+  `u5-decomp/functions/CMDS_OVL/`, and
+  `u5-decomp/functions/CMDS_OVL/`.
 - The P-Push direction prompt, pushable tile families, push/pull branch
   conditions, facing rewrite, overworld coordinate-frame side effects, and
   live-tile mutations:
-  `u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`. The non-durable
+  `u5-decomp/functions/CMDS_OVL/`. The non-durable
   save/load boundary for top-down live buffers also uses
   `u5-decomp/notes/system-trace_save-load.md` and
-  `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
+  `u5-decomp/functions/TOWN_OVL/`.
 - The Search/Jimmy/Open/Get overlay overview and public command handlers:
   `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
-  `u5-decomp/functions/SJOG_OVL/0x095C_sjog_search.md`,
-  `u5-decomp/functions/SJOG_OVL/0x0646_sjog_search_inner.md`,
-  `u5-decomp/functions/SJOG_OVL/0x02EA_sjog_search_object_handler.md`,
-  `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`,
-  `u5-decomp/functions/SJOG_OVL/0x0C3E_sjog_jimmy_inner.md`,
-  `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`,
-  `u5-decomp/functions/SJOG_OVL/0x1374_sjog_open.md`, and
-  `u5-decomp/functions/SJOG_OVL/0x18CE_sjog_get.md`.
+  `u5-decomp/functions/SJOG_OVL/`, and
+  `u5-decomp/functions/SJOG_OVL/`.
 - The two-roll J-Jimmy contract, its corrected target families, the Dexterity
   operand shared by both rolls, the uniform key accounting, and the fact that no
   trap flavour is chosen by any caller. Source provenance: derived from private
   analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
 - The Search coordinate-object fallback:
-  `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Corrected entry notes for the shared Look/View and Ready/Z-stats command
-  families: `u5-decomp/functions/LOOKOBJ_OVL/0x099C_lookobj_master.md`,
-  `u5-decomp/functions/LOOKOBJ_OVL/0x10FC_local_view_render.md`,
-  `u5-decomp/functions/ZSTATS_OVL/0x1296_ready_main.md`, and
-  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
+  families: `u5-decomp/functions/LOOKOBJ_OVL/`,
+  `u5-decomp/functions/ZSTATS_OVL/`, and
+  `u5-decomp/functions/ZSTATS_OVL/`.
 - The CAST-owned U-Use item route:
-  `u5-decomp/functions/CAST_OVL/0x1792_use_item.md`.
+  `u5-decomp/functions/CAST_OVL/`.
 - The four-member status enum of Section 3, the per-route forwarded values, the
   undefined Yell paths, the per-mode control-code tables and the single accepted
   non-letter code of Sections 2 and 9, and the established save/load boundary
   for the P-Push stamp in Section 8. Source provenance: derived from private
   analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`, with
-  `../u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x1D5E_keyboard_poll.md`,
-  `../u5-decomp/functions/DUNGEON_OVL/0x1E10_dungeon_klimb_dispatch.md`, and
-  `../u5-decomp/functions/CMDS_OVL/0x161A_cmds_push.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`,
+  `../u5-decomp/functions/DUNGEON_OVL/`, and
+  `../u5-decomp/functions/CMDS_OVL/`.
 - The withdrawal of the global "turn consumed" flag reading, and the fact that
   Ready and Z-stats always report the default status. Source provenance: derived
   from private analysis note

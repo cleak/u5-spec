@@ -441,23 +441,17 @@ tables, raw script bytes, or implementation-specific addresses.
 
 - `u5-decomp/functions/BLCKTHRN_OVL/bytecode_scripts.md`.
 - `u5-decomp/functions/BLCKTHRN_OVL/OVERVIEW.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x00BE_bytecode_interpreter.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x0510_challenge_pause_script.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x051C_challenge_reaction_text.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x054A_virtue_challenge_loop.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x060E_blackthorn_audience.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/0x0910_blackthorn_rescue.md`.
-- `u5-decomp/functions/TALK_OVL/0x01E2_scene_service_dispatch.md` — the
+- `u5-decomp/functions/BLCKTHRN_OVL/`.
+- `u5-decomp/functions/TALK_OVL/` — the
   three guard-demand branches, the four-character password comparison, the
   living-member head count, and the handler's complete set of writes.
 - `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the
   independent re-verification of that handler, and the Black Badge aura gate on
   the password branch.
-- `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`.
-- `u5-decomp/functions/TOWN_OVL/0x1352_town_post_action_cleanup.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md` — the
+- `u5-decomp/functions/TOWN_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/` — the
   shared party-capability check of Section 7.
-- `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/formats/data-ovl.md`.
 - `u5-decomp/notes/subsystem_coupling_matrix.md`.
 - `catalogs/gazetteer.md`.

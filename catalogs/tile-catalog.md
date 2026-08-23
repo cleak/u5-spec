@@ -425,10 +425,19 @@ The full closed inventory is published in `systems/overworld.md` Section 2 and
 **Moongate cells.** Terrain byte `0xDC` is LOOK2-named as a moon
 gate and is accepted by movement and local-light systems as
 moon-gate-family state. Saved Moonstone slots drive the live-terrain
-placement and waning schedule, and that terrain byte is the whole of a gate's
-presentation - there is no separate frame plate and no animator. General
-underfoot entry is specified in `systems/overworld.md`; this catalog only names
-storage-domain semantics. The `0x80..0x87` special range is a
+placement and waning schedule. `0xDC` is the only terrain byte a gate cell ever
+holds - there is no family of gate frame tiles and no animator - but it is not
+the whole of a gate's presentation. **Correction:** an earlier revision of this
+paragraph said it was. While the shared presence phase is between one and
+fifteen, the renderer composes the cell from `0xDC` and the ground tile rather
+than drawing `0xDC` outright, writing the result into the scratch tile id
+`0x116`. That scratch slot is saved and restored around each composition, so its
+own shipped artwork - which also serves as the party-vanishing sprite during a
+gate transit - is preserved; but an implementation must not treat `0x116` as a
+stable authored tile while a gate is on screen, and must not read the composed
+frames as a separate authored gate family. The phase model is
+`systems/overworld.md` Section 9.1. General underfoot entry is specified in
+`systems/overworld.md`; this catalog only names storage-domain semantics. The `0x80..0x87` special range is a
 pendulum/restraint/grate/archway fixture range in the LOOK2-backed catalog, not
 the traced natural-moongate terrain byte; do not infer teleport behavior from a
 tile id merely because the tile reads as gate-like artwork.
@@ -686,13 +695,24 @@ Effect sprites occupy indices `448..495`. Effects are short-lived sprites compos
 
 The principal effect families:
 
-- **Moongate frames.** *None exist.* An earlier revision of this catalog listed
-  a bespoke transient frame plate driven by an overworld moongate animator and
-  selected by that animator's phase counter. Both the plate and the animator are
-  withdrawn: a natural gate is the live terrain byte `0xDC`, written and removed
-  by the saved-slot refresh and drawn by the ordinary renderer. The
-  sixteen-position cycle that reading described belongs to the night-time light
-  beacon in `systems/visibility.md` Section 12.6.
+- **Moongate frames.** *No authored frame family exists.* An earlier revision of
+  this catalog listed a bespoke transient frame plate driven by an overworld
+  moongate animator and selected by that animator's phase counter. Both the
+  plate and the animator are withdrawn: a natural gate is the live terrain byte
+  `0xDC`, written and removed by the saved-slot refresh, and the
+  sixteen-position *bearing* cycle that reading described belongs to the
+  night-time light beacon in `systems/visibility.md` Section 12.6.
+
+  **What does exist**, and what the withdrawal overshot, is a sixteen-*phase*
+  gate presence model with **no authored frames behind it**: the renderer builds
+  each intermediate frame at draw time by combining the moon-gate tile `0xDC`
+  with the cell's ground tile, and writes the result into the scratch tile id
+  `0x116` for the duration of one blit. Nothing is loaded from an effect plate
+  and no id in the effect range participates. `0x116` is genuinely authored - it
+  is the party-vanishing sprite of a gate transit - but its contents are
+  overwritten and restored around every composed frame, so it must not be
+  catalogued as a gate frame or relied on mid-transition. The phase model,
+  including which ground tile is used, is `systems/overworld.md` Section 9.1.
 - **Projectile frames.** Arrow, axe, sling, magic missile sprites in flight. The combat handler walks a projectile from caster to target one cell per render frame.
 - **Splash / explosion / impact.** Multi-frame sprites for fireball impact, lightning hit, explosion clouds, smoke. The effect handler runs through the frames and clears.
 - **Fields.** Fire field, poison field, sleep field, energy field, electric field. Dungeon field placement writes the field terrain bytes documented in `systems/magic.md` into the live dungeon image, optionally preserving the dungeon visit marker bit. Combat arena fields are handled by the arena-field helper instead of direct dungeon terrain writes; contact is checked after a successful step commits, then routes to the per-field status or damage/value helper.
@@ -776,6 +796,11 @@ The data here is drawn from four sources. Each tile's position in the partition 
   withdrawal of the moongate-animation plate are derived from private analysis
   notes `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` and
   `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+- Source provenance: that no authored moongate frame family exists but a
+  draw-time sixteen-phase composition does, the identity and dual role of the
+  scratch tile `0x116`, and the scene-dependent choice of ground tile are
+  derived from private analysis note
+  `u5-decomp/notes/moongate_transition_2026-08-23.md`.
 
 **From the published Ultima V manual** (`The Book of Lore`, `The Book of Play`):
 

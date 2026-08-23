@@ -169,18 +169,17 @@ It does not reproduce private source, decompiler output, assembly excerpts, raw
 dumps, private address tables, or implementation listings.
 
 - Resident screen-mode controller and dispatch-cell ownership:
-  `u5-decomp/functions/ULTIMA_EXE/0x2322_screen_mode_dispatch.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Disk-prompt mode-state interpretation and save/load persistence boundary:
   `u5-decomp/notes/dosbox_probes_2026-05-07.md`,
   `u5-decomp/notes/system-trace_save-load.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x251E_disk_swap_request.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x256E_disk_swap_inner.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Write-side critical-error handler ownership:
-  `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0xF0C6_write_file.md`, and
+  `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and
   `u5-decomp/notes/system-trace_save-load.md`.
 - Display-driver dispatch separation:
-  `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x2322_screen_mode_dispatch.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Text-output and display-driver helper boundaries:
   `systems/text-output.md` and `systems/display-driver-abi.md`.

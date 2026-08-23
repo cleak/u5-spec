@@ -741,7 +741,7 @@ The behaviour described above was derived by reading the function and format not
 
 - The visibility producer's three-stage shape (hidden-fill, visibility-carve
   delegation, post-pass), the negative-light full-fill path, and the branching
-  on the lighting value's sign — `u5-decomp/functions/ULTIMA_EXE/0x5D0A_visibility_producer.md`.
+  on the lighting value's sign — `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the finding that the lighting byte is the squared-distance
   threshold itself rather than a sight radius, the unaltered four-hop chain of
   custody from the per-turn ambient computation to the carve's comparison, the
@@ -758,8 +758,7 @@ The behaviour described above was derived by reading the function and format not
   older private lighting/visibility system trace.
 - The queue-based visibility carve, propagation-blocker set, and special-case
   adjacent-only propagation rule
-  — `u5-decomp/functions/ULTIMA_EXE/0x5A28_visibility_buffer_setup.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x5DFE_visibility_tile_class.md`.
+  — `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the names of the nineteen propagation blockers and the five
   adjacent-only ids in Section 6, and of the ten local-light source ids in
   Section 12.3, were re-derived by decoding the shipped description table with
@@ -769,23 +768,21 @@ The behaviour described above was derived by reading the function and format not
 - The local-light mask refresh pass, source-candidate lookup, per-source carve
   radius, its squared-distance semantics, the three trigger points, and the
   final untouched-cell zeroing —
-  `u5-decomp/functions/ULTIMA_EXE/0x5E4A_light_radius_lookup.md` and
+  `u5-decomp/functions/ULTIMA_EXE/` and
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 4.
 - The carve's two caller modes, the per-source visited grid, the stop-at-the-
   disc-boundary rule for local light, the fact that a blocker cell inside the
   disc is itself lit, and the folded squared-distance lookup being exactly
   `dx * dx + dy * dy` - `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md`
   sections 6.2 through 6.4, cross-checked against
-  `u5-decomp/functions/ULTIMA_EXE/0x5A28_visibility_buffer_setup.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x5DFE_visibility_tile_class.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x6FF0_range_to_player.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The Moonstone-slot live-gate refresh caller that rebuilds the local-light
   mask after in-scene tile rewrites -
-  `u5-decomp/functions/ULTIMA_EXE/0x475A_npc_schedule_tick.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The night-time rotating beacon, its source harvest, its inverted light gate,
   its sixteen-bearing stencil plate and its per-turn cadence —
-  `u5-decomp/functions/ULTIMA_EXE/0x7040_light_beacon_stamp.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x70A6_moongate_or_event.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Source provenance: the identification of that scratch block as beacon state
   rather than moongate state, the complete writer census behind it, and the
   correction of the light gate are derived from private analysis note
@@ -793,17 +790,16 @@ The behaviour described above was derived by reading the function and format not
 - The visibility-grid writer scan proving the renderer is read-only on the
   eleven-by-eleven grid and that zero cells are compositor-owned -
   `u5-decomp/notes/visibility_grid_zeroing_2026-05-08.md`.
-- The fog post-pass — squared-distance marker toggling, active-object compositing, and compositor-owned visibility-grid zeroing for cells that need terrain refetch — `u5-decomp/functions/ULTIMA_EXE/0x5394_fog_post_pass.md` and `u5-decomp/notes/visibility_grid_zeroing_2026-05-08.md`.
-- The 6×6 folded squared-distance helper used by the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/0x6FF0_range_to_player.md`. Combat AI target scoring uses a separate computed range primitive covered in `systems/combat.md`.
-- The redraw orchestrator that calls the producer on dirty frames, takes the cheap path on clean frames, blat-copies the combat terrain on combat frames, and clears the dirty flag after the producer returns — `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
-- The world-tile getter that dispatches between combat, overworld 2×2 chunk window, and town/dungeon-explore single-grid buffers, including the out-of-bounds sentinel — `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`.
+- The fog post-pass — squared-distance marker toggling, active-object compositing, and compositor-owned visibility-grid zeroing for cells that need terrain refetch — `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/visibility_grid_zeroing_2026-05-08.md`.
+- The 6×6 folded squared-distance helper used by the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/`. Combat AI target scoring uses a separate computed range primitive covered in `systems/combat.md`.
+- The redraw orchestrator that calls the producer on dirty frames, takes the cheap path on clean frames, blat-copies the combat terrain on combat frames, and clears the dirty flag after the producer returns — `u5-decomp/functions/ULTIMA_EXE/`.
+- The world-tile getter that dispatches between combat, overworld 2×2 chunk window, and town/dungeon-explore single-grid buffers, including the out-of-bounds sentinel — `u5-decomp/functions/ULTIMA_EXE/`.
 - The default active-object compositor helper and its 0..3 variant selector -
-  `u5-decomp/functions/ULTIMA_EXE/0x51B8_monster_spawn_table.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x51A0_combat_class_roll.md`. Both filenames
+  `u5-decomp/functions/ULTIMA_EXE/`. Both filenames
   predate their naming corrections: neither routine spawns monsters and neither
   is combat-scoped or class-related; the second returns the variant index used
   by the first.
-- The cross-overlay alias and callsite census for the same world-tile getter -- `u5-decomp/functions/ULTIMA_EXE/0xC232_tile_at_world_coord.md`.
+- The cross-overlay alias and callsite census for the same world-tile getter -- `u5-decomp/functions/ULTIMA_EXE/`.
 - The overworld map family's chunk layout (BRIT.DAT sparse, UNDER.DAT dense), the four-class location-DAT format, and the combat arena format that combat pre-composites — `u5-decomp/formats/maps.md`.
 - The resident data segment's fixed locations for the visibility grid, the terrain band, and the per-cell scrap regions — `u5-decomp/formats/data-ovl.md`.
 - The visibility-system analysis notebook from the companion-app project, used as a starting reference for buffer addresses, scene-to-routine map, and the asynchronous-read race observations — `ninth-virtue/docs/visibility-re.md:11-352`.

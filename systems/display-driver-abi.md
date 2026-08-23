@@ -704,7 +704,7 @@ Cleanroom prose derived from these private analysis notes:
   independent re-derivation of the animation-script entry's helper bodies, its
   presentation-step counts, its centring and fill-direction rules, its
   keystroke-abort tail, and its two-plane presentation mask.
-- `u5-decomp/functions/ULTIMA_EXE/0x0D72_title_flourish_player.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/notes/rect_dissolve_abort_and_sound_2026-08-22.md` — the dissolve
   entry's abort gate and its one-shot disable through the glyph entry.
 - `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md` — the
@@ -720,9 +720,8 @@ Cleanroom prose derived from these private analysis notes:
   per-driver status of the packed-to-planar preparation entry and the reason
   the other three families implement it as a no-op.
 
-- `u5-decomp/functions/EGA_DRV/0x0E6C_plot_pixel.md`,
-  `u5-decomp/functions/EGA_DRV/0x1637_tile_blit_16x16.md`, and
-  `u5-decomp/functions/EGA_DRV/0x19D2_glyph_8x8.md` — re-read in full for the
+- `u5-decomp/functions/EGA_DRV/`, and
+  `u5-decomp/functions/EGA_DRV/` — re-read in full for the
   2026-08-22 correction that the pixel-plot, 16-by-16 tile, and fixed-cell
   glyph entries are render-target aware and each carry a complete back-buffer
   body, withdrawing the earlier "no-op"/"returns without drawing" wording in
@@ -733,6 +732,4 @@ Cleanroom prose derived from these private analysis notes:
 - Per-slot notes for every dispatch entry the engine reaches, and the
   load-bearing helper notes behind them, under
   `u5-decomp/functions/EGA_DRV/` (indexed by that folder's overview note).
-- `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+- `u5-decomp/functions/ULTIMA_EXE/`.

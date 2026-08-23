@@ -216,9 +216,9 @@ This spec is a cleanroom prose rewrite derived from the project notes and existi
 - `u5-spec/systems/encounters.md`
 - `u5-spec/formats/tiles.md`
 - `u5-spec/catalogs/tile-catalog.md`
-- `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`
-- `u5-decomp/functions/OUTSUBS_OVL/0x004A_outsubs_chunk_classify.md` (retargeted as the shrine-ruin gate)
-- `u5-decomp/functions/OUTSUBS_OVL/0x0000_outsubs_water_check.md` (retargeted as the Word-of-Power seal gate)
+- `u5-decomp/functions/OUTSUBS_OVL/`
+- `u5-decomp/functions/OUTSUBS_OVL/` (retargeted as the shrine-ruin gate)
+- `u5-decomp/functions/OUTSUBS_OVL/` (retargeted as the Word-of-Power seal gate)
 - `u5-decomp/notes/2026-08-22_quest-world-retrace.md`
 - Source provenance: the dense-layout confirmation, the filename-letter loader
   discriminator, and the closed no-outdoor-ascent result are derived from

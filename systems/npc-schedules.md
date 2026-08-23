@@ -726,44 +726,43 @@ low-visibility presentation parity outside the scheduler contract.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The roster-load sub-step that runs on location entry — `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md`.
-- The hour-to-waypoint selection rule and the wraparound-to-waypoint-1 behaviour — `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
-- The per-tick walker, the eight-state machine, the runtime block, the move queue, the stuck counter, and the per-tick scratch flags — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
-- The location-entry initialisation pass — `u5-decomp/functions/NPC_OVL/0x00D6_npc_init_runtime_state.md`.
+- The roster-load sub-step that runs on location entry — `u5-decomp/functions/NPC_OVL/`.
+- The hour-to-waypoint selection rule and the wraparound-to-waypoint-1 behaviour — `u5-decomp/functions/NPC_OVL/`.
+- The per-tick walker, the eight-state machine, the runtime block, the move queue, the stuck counter, and the per-tick scratch flags — `u5-decomp/functions/NPC_OVL/`.
+- The location-entry initialisation pass — `u5-decomp/functions/NPC_OVL/`.
 - The boundary-trigger sub-step and the floor-classification table, including
   the signed width of the above/below ordering test and the plain-equality width
-  of the on-this-floor test — `u5-decomp/functions/NPC_OVL/0x0938_npc_should_act.md`.
+  of the on-this-floor test — `u5-decomp/functions/NPC_OVL/`.
 - The signed floor convention the classification rests on, and the shipped
   per-location floor values. Source provenance: derived from private analysis
   note `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`.
-- The flood-fill BFS, the workspace cell encoding, and the high-nibble inbound-direction trail — `u5-decomp/functions/NPC_OVL/0x032C_npc_pathfinder.md`.
+- The flood-fill BFS, the workspace cell encoding, and the high-nibble inbound-direction trail — `u5-decomp/functions/NPC_OVL/`.
 - The tile-ID floor-link variant's two-marker dispatch, the per-state marker
-  selection, and the up/down identity of the two markers — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`
+  selection, and the up/down identity of the two markers — `u5-decomp/functions/NPC_OVL/`
   and `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, the latter
   cross-checking the markers against the shipped tile-description table and
   against the town climb handler's floor-index change, and against the town step
-  handler's separate `0x8C` trigger in `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
+  handler's separate `0x8C` trigger in `u5-decomp/functions/TOWN_OVL/`.
 - The on-floor floor-transition gate, its direction-matching acceptance test,
-  and its wider stairway band — `u5-decomp/functions/NPC_OVL/0x0A4A_npc_floor_transition_gate.md`.
-- The five-phase workspace builder, the walkability predicate, and the dynamic-obstacle overlay — `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`.
+  and its wider stairway band — `u5-decomp/functions/NPC_OVL/`.
+- The five-phase workspace builder, the walkability predicate, and the dynamic-obstacle overlay — `u5-decomp/functions/NPC_OVL/`.
 - The dedicated NPC pathfinding predicate, its three-way answer, the
   out-of-bounds resolution, and the tile-set polarity (set bit means obstacle) —
-  `u5-decomp/functions/NPC_OVL/0x0ADC_is_tile_walkable_for_npc.md`,
-  `u5-decomp/functions/NPC_OVL/0x0B9E_npc_can_enter_cell.md`, and
+  `u5-decomp/functions/NPC_OVL/`, and
   `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md` section 5, which
   re-derives the tile set directly and reconciles two private notes that stated
   the polarity in opposite directions.
 - The early return that ends a whole walker pass when a drained route re-enters
   a floor-transition state — `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`
   sections 1.6 and 5.
-- The world-mutation helper, the hidden-NPC bitmask, and the default-human tile sentinel — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
+- The world-mutation helper, the hidden-NPC bitmask, and the default-human tile sentinel — `u5-decomp/functions/TOWN_OVL/`.
 - The shipped hidden-mask scene/slot catalogue was re-derived from the resident
   mask table together with the mask index computation in
-  `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`, which scales the live
+  `u5-decomp/functions/TOWN_OVL/`, which scales the live
   one-based scene byte directly; the earlier zero-based reading of that table is
   superseded. Roster keys from `catalogs/gazetteer.md`; slot roles from the
   shipped sprite classes published in `catalogs/npc-roster.md` Section 4.
-- The town turn loop's once-per-turn invocation of the scheduler — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
+- The town turn loop's once-per-turn invocation of the scheduler — `u5-decomp/functions/TOWN_OVL/`.
 - The on-disk `.NPC` file layout — `u5-decomp/formats/npc-tlk-pth.md`.
 - The save-format omission of NPC runtime state and the location-entry re-initialisation that fills its place — `u5-decomp/formats/saves.md`.
 - The scene-byte lifecycle audit that resolves the NPC loader's temporary

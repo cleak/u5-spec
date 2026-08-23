@@ -740,7 +740,7 @@ assembly, decompiled code, raw jump tables, driver binary bytes, and private
 addresses.
 
 - Driver selection and load sequence:
-  `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The title-tick entry's slot-to-frame mapping and free-running counter, its
   carry-set two-pass masked band reveal, the filled-rectangle entry's honouring
   of the descriptor render target, and the single-plane masked publish that
@@ -750,9 +750,9 @@ addresses.
 - Shared game-screen frame — zone layout, deterministic paint, absence of any
   gameplay-state dependency, and the correction that the frame is common to all
   gameplay modes rather than combat-specific:
-  `u5-decomp/functions/ULTIMA_EXE/0x637E_combat_screen_layout.md` (the note file
+  `u5-decomp/functions/ULTIMA_EXE/` (the note file
   keeps its original filename; its contents were corrected on 2026-05-24) and
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Source provenance: the frame's three-phase paint order, the eight filled
   rectangles, the three rounded-corner glyph cells, the four rule polylines, the
   filled-versus-visible overpaint relationship, the two chrome pens and their
@@ -771,36 +771,31 @@ addresses.
   `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md`,
   `u5-decomp/formats/cga-driver.md`, `u5-decomp/formats/tandy-driver.md`,
   `u5-decomp/formats/hercules-driver.md`, and
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Text descriptor initialization, cell rendering, rectangle conversion, and
   scroll/clear dispatch:
-  `u5-decomp/functions/ULTIMA_EXE/0x1184_init_text_descriptor_table.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x16BA_putchar.md`, and
-  `u5-decomp/functions/ULTIMA_EXE/0x1F77_descriptor_to_pixel_rect.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Pixel-rectangle normalization and bitmap draw dispatch:
-  `u5-decomp/functions/ULTIMA_EXE/0x0AA6_draw_compressed_bitmap.md`, plus
+  `u5-decomp/functions/ULTIMA_EXE/`, plus
   fresh local rectangle-normalization verification.
 - Redraw, animation, and frame-presentation ordering:
-  `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Combat-exit tile-graphics restoration dispatch:
-  `u5-decomp/functions/ULTIMA_EXE/0x6FBC_post_combat_trap.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/`, and
   `u5-decomp/formats/ega-driver.md`.
 - Title display tick, intro call-site cadence, driver-side frame-counter
   evidence, the identification of the four idle frames as `ULTIMA` archive
   records `1..4` and of their 50-row staging pitch in the back buffer, and
   signature delay/poll separation:
-  `u5-decomp/functions/INTRO_OVL/0x2090_title_tick.md`,
-  `u5-decomp/functions/INTRO_OVL/0x0010_four_row_helper.md`,
-  `u5-decomp/functions/INTRO_OVL/0x05B0_startsc_loader.md`,
-  `u5-decomp/functions/EGA_DRV/0x282D_animate_flames_strip.md`,
-  `u5-decomp/functions/INTRO_OVL/0x094E_iter_until_kbd.md`,
-  `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`,
+  `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/EGA_DRV/`,
+  `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/FLAMES_OVL/`,
   `u5-decomp/formats/ega-driver.md`, and
   `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
 - Story panel draw ordering and the local rectangle transition:
-  `u5-decomp/functions/INTRO_OVL/0x014E_intro_slide_loop.md` and fresh
+  `u5-decomp/functions/INTRO_OVL/` and fresh
   local rectangle-transition helper analysis.
 - Return-to-View preview ownership of `MISCMAPS.DAT` map strips, command
   stream, actor draw scheduling, and effect steps:

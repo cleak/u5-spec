@@ -191,11 +191,11 @@ raw executable bytes.
 - DOS entry into the executable, runtime transfer to the resident main
   function, and machine/display detection - `systems/boot.md`.
 - Command-line display selector parsing, intro-overlay call, and resident
-  mode-dispatch loop - `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
+  mode-dispatch loop - `u5-decomp/functions/ULTIMA_EXE/`.
 - Display-driver loading from startup flags -
-  `u5-decomp/functions/ULTIMA_EXE/0x0E94_load_display_driver.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Intro overlay's boot initialization, title/menu loop, and handoff into
-  normal play - `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+  normal play - `u5-decomp/functions/INTRO_OVL/`.
 - Resident screen-mode dispatch ownership and its separation from the loaded
   display driver ABI - `systems/screen-mode-dispatch.md` and
   `systems/display-driver-abi.md`.

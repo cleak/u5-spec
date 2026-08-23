@@ -428,17 +428,16 @@ Private analysis sources used:
   and the Lord British / Blackthorn / Gorn roster peculiarities.
 - `u5-spec/catalogs/gazetteer.md` - public scene-name bindings for the roster
   keys, including blank resident-name boundaries.
-- `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md` - class-family roster load,
+- `u5-decomp/functions/NPC_OVL/` - class-family roster load,
   schedule/type/dialogue array loading, and slot-zero convention.
-- `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md` - the
+- `u5-decomp/functions/NPC_OVL/` - the
   three-waypoint/four-boundary schedule selection rule.
-- `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md` - schedule
+- `u5-decomp/functions/NPC_OVL/` - schedule
   consumer, type-byte occupancy use, and per-tick movement model.
-- `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`,
-  `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`, and
-  `u5-decomp/functions/TOWN_OVL/0x0958_npc_scatter.md` - town activation,
+- `u5-decomp/functions/TOWN_OVL/`, and
+  `u5-decomp/functions/TOWN_OVL/` - town activation,
   guard/alarm, and death-mask type filters.
-- `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md` - dialogue id lookup
+- `u5-decomp/functions/TALK_OVL/` - dialogue id lookup
   against the `.TLK` header and blob load. The corrected `(id, offset)` header
   binding of Sections 1 and 3 was re-derived from this walk together with a
   direct re-scan of the shipped `.TLK` and `.NPC` files; the earlier
@@ -446,7 +445,7 @@ Private analysis sources used:
 - Sprite-class role names in Section 4 are read from the object-description
   domain of the shipped `LOOK2.DAT` (see `u5-spec/formats/look2-dat.md`) rather
   than inferred from neighbouring roster names.
-- `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md` - text-byte
+- `u5-decomp/functions/TALK_OVL/` - text-byte
   classification and common-word dictionary behaviour used to recover display
   names.
 

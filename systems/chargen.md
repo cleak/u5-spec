@@ -412,22 +412,22 @@ file lifecycle.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The chargen entry point, the eight-phase flow, the abort path, the per-virtue stat-delta tables, the seed file relationships, the gender encoding, the class byte's preservation, and the STR floor — derived from `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
-- The confirmation that character creation reaches no further overlay — every call the routine makes is either local to the proportional-font overlay or a resident core routine, with none reaching the spell-casting overlay — derived from the callee inventory in `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` (2026-05-24).
+- The chargen entry point, the eight-phase flow, the abort path, the per-virtue stat-delta tables, the seed file relationships, the gender encoding, the class byte's preservation, and the STR floor — derived from `u5-decomp/functions/FONT_OVL/`.
+- The confirmation that character creation reaches no further overlay — every call the routine makes is either local to the proportional-font overlay or a resident core routine, with none reaching the spell-casting overlay — derived from the callee inventory in `u5-decomp/functions/FONT_OVL/` (2026-05-24).
 - The per-virtue stat-delta weights and the pair-to-record table's properties — a zero diagonal, symmetry about that diagonal, and exactly twenty-eight distinct non-zero entries, one per unordered virtue pair — were re-verified on 2026-05-24 by reading the shipped resident data image directly, independently of the function notes.
-- The per-question logic, the random-draw sort into A/B slots, the symmetric eight-by-eight pair-to-record table, the tournament's three-round structure, and the two flag arrays — derived from `u5-decomp/functions/FONT_OVL/0x09C8_questionnaire_iter.md`.
-- The rejection-sampled random virtue picker — derived from `u5-decomp/functions/FONT_OVL/0x0998_pick_random_unused_virtue.md`.
-- The proportional-font paragraph renderer and its paragraph-pacing conventions — derived from `u5-decomp/functions/FONT_OVL/0x0000_render_paragraph.md`.
+- The per-question logic, the random-draw sort into A/B slots, the symmetric eight-by-eight pair-to-record table, the tournament's three-round structure, and the two flag arrays — derived from `u5-decomp/functions/FONT_OVL/`.
+- The rejection-sampled random virtue picker — derived from `u5-decomp/functions/FONT_OVL/`.
+- The proportional-font paragraph renderer and its paragraph-pacing conventions — derived from `u5-decomp/functions/FONT_OVL/`.
 - The three paragraph screens' layout descriptors, the nine-pixel line advance,
   the justification rule, the absence of a glyph shadow, the prompt cell
   positions, the single menu-interior clear, the left/right panel orientation,
   the absence of drawn option letters, and the compose-off-screen-then-publish
   discipline — derived from
   `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
-- The intro menu key dispatch, the trampoline into the chargen routine on `C`, and the scene-byte handshake on return — derived from `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
-- The Transfer-from-Ultima-IV path's single-character comparison screen, disk-swap reads, and abort-versus-commit dispatch — derived from `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- The intro menu key dispatch, the trampoline into the chargen routine on `C`, and the scene-byte handshake on return — derived from `u5-decomp/functions/INTRO_OVL/`.
+- The Transfer-from-Ultima-IV path's single-character comparison screen, disk-swap reads, and abort-versus-commit dispatch — derived from `u5-decomp/functions/INTRO_OVL/`.
 - The misclassification correction that placed chargen in the proportional-font overlay rather than the spell-casting overlay — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
-- The in-game save/quit writer (referenced for context; the chargen writer is a separate path) — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`.
+- The in-game save/quit writer (referenced for context; the chargen writer is a separate path) — derived from `u5-decomp/functions/CAST2_OVL/`.
 - The `QUESTION.DAT` file's thirty-record layout and the markup conventions shared with the intro narrative — derived from `u5-decomp/formats/data-tables.md`.
 - The `SAVED.GAM` image layout, the 32-byte character record fields, the seed-file shipping equivalences, and the gender-byte encoding — derived from `u5-decomp/formats/saves.md`.
 - The fresh-seed supplies, reagent counters, clock, and location tuple were

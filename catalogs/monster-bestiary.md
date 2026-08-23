@@ -570,11 +570,8 @@ offsets, raw private addresses, binary dumps, or private note prose.
   companion-class table, and the party-seating pass that runs before monster
   placement. Source provenance: derived from private analysis notes
   `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6150_combat_enter_terrain.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x60EC_load_combat_audio.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/0x6BC2_combat_setup_terrain.md`, and
-  `../u5-decomp/functions/ULTIMA_EXE/0x6506_combat_monster_place.md`.
+  `../u5-decomp/functions/ULTIMA_EXE/`, and
+  `../u5-decomp/functions/ULTIMA_EXE/`.
 - The Cause Fear and Repel Undead sweeps described in the monster-AI section
   (the shared exclusion of the three protected special classes, Repel Undead's
   extra undead class-flag condition, the combat-HP-to-one plus fleeing-bit

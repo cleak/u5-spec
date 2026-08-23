@@ -131,6 +131,6 @@ These points are intentionally outside the format contract:
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, implementation-specific identifiers, source code, disassembly, or original path bytes from those notes appear in this spec.
 
 - The first-pass survey of `BRITISH.PTH`, the nibble-histogram observation, and the discovery of exactly four NUL bytes at internal offsets and end-of-file - `u5-decomp/formats/npc-tlk-pth.md`.
-- The path walker's behavioural analysis - nibble decode, sign-and-magnitude split, pen-up threshold, keyboard early-exit, sole consumer, and four call-site origins - `u5-decomp/functions/INTRO_OVL/0x0050_pth_walker.md`.
-- The intro title-screen orchestration that supplies the four origins and calls the walker once per segment - `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+- The path walker's behavioural analysis - nibble decode, sign-and-magnitude split, pen-up threshold, keyboard early-exit, sole consumer, and four call-site origins - `u5-decomp/functions/INTRO_OVL/`.
+- The intro title-screen orchestration that supplies the four origins and calls the walker once per segment - `u5-decomp/functions/INTRO_OVL/`.
 - Fresh local title-sequence verification identified the four screen-space pen origins; no original path bytes or implementation excerpts are reproduced here.

@@ -731,19 +731,18 @@ private offsets, or binary text dumps are reproduced.
 - Transfer seed reads, `PARTY.SAV` source-save filename, disk-state setup,
   comparison preview, confirmation loop, XP/level/HP recalculation, field
   writes, and final `SAVED.GAM` / `SAVED.OOL` commit:
-  `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Transfer preview slot-heading count and column-label helper behavior:
-  `u5-decomp/functions/INTRO_OVL/0x1E22_print_slot_label.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Transfer preview lower prompt window and paired character-info panels:
-  `u5-decomp/functions/INTRO_OVL/0x1E62_clear_continue_window.md` and
-  `u5-decomp/functions/INTRO_OVL/0x1F26_render_charinfo_window.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - `PARTY.SAV` region geometry, record stride, validated field identities,
   slot-0 transfer target, name/gender/status/class import, and first-pass
   source-field copy:
-  `u5-decomp/functions/INTRO_OVL/0x1016_transfer_u4_disk.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - File-read parameter contract used to establish the two read regions
   (seek position and read length per read):
-  `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Independent second-pass re-derivation of the validated field set, the record
   stride, the derived-level source field, and the identity of the eight tested
   party-wide values as the virtue standings:
@@ -754,14 +753,14 @@ private offsets, or binary text dumps are reproduced.
   maximum-hit-points-derived level shown on the summary page:
   `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
 - U4-to-U5 primary-attribute translator:
-  `u5-decomp/functions/INTRO_OVL/0x12EA_u4_attr_to_u5.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Intro menu entry and return-to-menu context:
-  `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Standard Journey Onward load, empty-save guard, object-overlay mirror
   behavior, and media retry context:
-  `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
+  `u5-decomp/functions/INTRO_OVL/`.
 - Character creation seed and commit behavior used for comparison:
-  `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+  `u5-decomp/functions/FONT_OVL/`.
 - Save-image and object-overlay file roles:
   `u5-decomp/formats/saves.md`.
 - Public Ultima IV `PARTY.SAV` semantic layout, used only to attach names to

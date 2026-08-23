@@ -461,55 +461,54 @@ The behaviour described here was derived from the private function notes listed 
   `u5-decomp/notes/critical_state_lifecycles.md` and cross-checked against
   `systems/lighting.md`.
 
-- The per-turn cleanup routine itself — its mode-argument handling, the state-tag modifiers, the minute-to-year cascade, the day-rollover bundle, the daylight recompute, and the hour-change hooks — derived from `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- The per-turn cleanup routine itself — its mode-argument handling, the state-tag modifiers, the minute-to-year cascade, the day-rollover bundle, the daylight recompute, and the hour-change hooks — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The resolved hour-change presentation call - formerly suspected as
   overworld gameplay logic, now identified as the sky/status row renderer -
-  derived from `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`
+  derived from `u5-decomp/functions/ULTIMA_EXE/`
   (that note's filename predates its 2026-08-22 naming correction; the routine
   is not combat-scoped and reads no status letters).
 - The party status and provision pass - including the per-invocation walk, the
   Dead/Sleeping consumer exclusion, the one-point poison tick, the hour-gated
   starvation and 06:00/12:00/18:00 food branches, and the pass's own trailing
   counters - derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x2AE8_per_turn_party_damage.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The starvation roll's range, per-slot independence, six-slot bound, and
   Dead-only exclusion - derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The shared party-damage path's damage feedback, zero-clamp, Dead-status
   write, active-member clear, and stats repaint - derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x2A52_party_take_damage.md` and
+  `u5-decomp/functions/ULTIMA_EXE/` and
   re-verified in
   `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - The Ring of Regeneration predicate and +1 HP capped-add effect - derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x400C_party_random_jolt.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The corrected cadence of the party status pass, its four call sites, and the
   combat and wilderness-camp exclusions - derived from
   `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
-- The Shadowlord-location table consumed by the day-rollover bundle — derived from `u5-decomp/formats/data-ovl.md` and cross-checked against `u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`.
-- The distinction between the timing/state tag byte and the boarded vehicle/transport byte — derived from `u5-decomp/formats/ds-bss-map.md` and `u5-decomp/functions/MAINOUT_OVL/0x1A60_mainout_per_turn_epilogue.md`.
-- The selection of an NPC's active waypoint from the four-byte time field, including the wrap-back-to-waypoint-1 behaviour — derived from `u5-decomp/functions/NPC_OVL/0x12E0_time_to_waypoint.md`.
-- The per-tick NPC scheduler's consumption of the shared hour byte — derived from `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
-- The overworld mode loop's per-turn invocation of the cleanup with the two-minute increment, including the mode-zero entry calls used for daylight refresh — derived from `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
+- The Shadowlord-location table consumed by the day-rollover bundle — derived from `u5-decomp/formats/data-ovl.md` and cross-checked against `u5-decomp/functions/CAST_OVL/`.
+- The distinction between the timing/state tag byte and the boarded vehicle/transport byte — derived from `u5-decomp/formats/ds-bss-map.md` and `u5-decomp/functions/MAINOUT_OVL/`.
+- The selection of an NPC's active waypoint from the four-byte time field, including the wrap-back-to-waypoint-1 behaviour — derived from `u5-decomp/functions/NPC_OVL/`.
+- The per-tick NPC scheduler's consumption of the shared hour byte — derived from `u5-decomp/functions/NPC_OVL/`.
+- The overworld mode loop's per-turn invocation of the cleanup with the two-minute increment, including the mode-zero entry calls used for daylight refresh — derived from `u5-decomp/functions/MAINOUT_OVL/`.
 - The overworld special-underfoot latch clear zero-minute refresh - derived
   from
-  `u5-decomp/functions/MAINOUT_OVL/0x0A1A_mainout_pre_loop_water_check.md`.
-- The town mode loop's per-turn invocation of the cleanup with the one-minute increment, the rest/wait command's twenty-minute call, and the entry-time mode-zero refresh — derived from `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
+  `u5-decomp/functions/MAINOUT_OVL/`.
+- The town mode loop's per-turn invocation of the cleanup with the one-minute increment, the rest/wait command's twenty-minute call, and the entry-time mode-zero refresh — derived from `u5-decomp/functions/TOWN_OVL/`.
 - The ordinary town arrest surrender path's wait-to-morning loop - derived
-  from `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`.
-- The dungeon mode loop's per-turn invocation of the cleanup with the one-minute increment, its single call site at the head of the loop iteration ahead of the input read, and the fact that it is not gated on the command status word — derived from `u5-decomp/functions/DUNGEON_OVL/0x0E2E_dungeon_turn_loop.md`.
+  from `u5-decomp/functions/TOWN_OVL/`.
+- The dungeon mode loop's per-turn invocation of the cleanup with the one-minute increment, its single call site at the head of the loop iteration ahead of the input read, and the fact that it is not gated on the command status word — derived from `u5-decomp/functions/DUNGEON_OVL/`.
 - The hour-rollover decrement of the camp cooldown byte, and the withdrawal of
   the earlier "incremented once-per-hour spell timer" reading of the same site —
-  derived from `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md` and
+  derived from `u5-decomp/functions/ULTIMA_EXE/` and
   `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
 - The exhaustive writer census of the shared timed-magic-effect byte, which
   contains no vehicle, boarding, or movement writer and therefore withdraws the
   "skiff halves the increment" reading everywhere it appeared — derived from
   `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` section 27.
 - The combat-exit non-cleanup lighting path - derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x6360_exit_combat.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x5F86_combat_enter_exit.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The Journey Onward save-load path's handoff back to top-level dispatch -
-  derived from `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
-- The Hole-up command's repeated cleanup invocations and town-hours scheduler burst — derived from `u5-decomp/functions/CMDS_OVL/0x0000_cmds_dispatch.md` and `u5-decomp/functions/CMDS_OVL/0x0552_cmds_holeup_hours.md`.
+  derived from `u5-decomp/functions/INTRO_OVL/`.
+- The Hole-up command's repeated cleanup invocations and town-hours scheduler burst — derived from `u5-decomp/functions/CMDS_OVL/`.
 - The save-image layout for year/month/day/hour/minute, including adjacent persistent state in the same resident neighbourhood — derived from `u5-decomp/formats/saves.md`.
 - The runtime byte assignments for the clock fields and the surrounding per-turn variables — derived from `u5-decomp/formats/ds-bss-map.md`.

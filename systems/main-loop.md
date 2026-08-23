@@ -207,18 +207,17 @@ gaps in the playable scene router.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The DOS/runtime startup note that separates compiler setup from game-owned startup — `u5-decomp/functions/ULTIMA_EXE/0x81D0_boot_entry.md`.
-- The `main` function and the forever-loop scene-byte dispatch — `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md`.
-- The intro overlay's boot-init, title screen, and menu dispatch — `u5-decomp/functions/INTRO_OVL/0x0986_intro_main.md`.
-- Overlay dispatch, loader behaviour, and the buffer-sharing partition — `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`.
-- The shared per-letter command dispatcher and its mode-aware routing — `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
-- The redraw orchestrator that drives the world tick — `u5-decomp/functions/ULTIMA_EXE/0x5910_world_tick.md`.
-- The per-turn cleanup that advances time and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
-- The shared per-turn party-capability check that opens each exploration turn and routes a total-party defeat — `u5-decomp/functions/ULTIMA_EXE/0x39FC_find_paladin_or_shepherd.md`. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
+- The DOS/runtime startup note that separates compiler setup from game-owned startup — `u5-decomp/functions/ULTIMA_EXE/`.
+- The `main` function and the forever-loop scene-byte dispatch — `u5-decomp/functions/ULTIMA_EXE/`.
+- The intro overlay's boot-init, title screen, and menu dispatch — `u5-decomp/functions/INTRO_OVL/`.
+- Overlay dispatch, loader behaviour, and the buffer-sharing partition — `u5-decomp/functions/ULTIMA_EXE/`.
+- The shared per-letter command dispatcher and its mode-aware routing — `u5-decomp/functions/ULTIMA_EXE/`.
+- The redraw orchestrator that drives the world tick — `u5-decomp/functions/ULTIMA_EXE/`.
+- The per-turn cleanup that advances time and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/`.
+- The shared per-turn party-capability check that opens each exploration turn and routes a total-party defeat — `u5-decomp/functions/ULTIMA_EXE/`. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
 - The data-segment layout of the scene byte, time clock, daylight value, and disk-swap state — `u5-decomp/formats/data-ovl.md`.
 - Disk-prompt presentation state and retry ownership —
-  `u5-decomp/functions/ULTIMA_EXE/0x251E_disk_swap_request.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x256E_disk_swap_inner.md`, and
+  `u5-decomp/functions/ULTIMA_EXE/`, and
   `systems/screen-mode-dispatch.md`.
 - The save-image encoding of the scene byte and the resumption rules — `u5-decomp/formats/saves.md`.
 - The lifecycle trace that corrects the scene-byte value set and combat marker semantics — `u5-decomp/notes/critical_state_lifecycles.md`.

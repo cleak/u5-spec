@@ -166,7 +166,6 @@ This cleanroom table was derived from private analysis and rewritten as
 semantic records. It does not reproduce decompiled source, assembly, raw data
 dumps, or private address tables.
 
-- `u5-decomp/functions/SJOG_OVL/0x0514_sjog_hidden_treasure_scan.md`.
-- `u5-decomp/functions/SJOG_OVL/0x012A_sjog_print_object_name.md`.
-- `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
+- `u5-decomp/functions/SJOG_OVL/`.
+- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-spec/catalogs/gazetteer.md`.

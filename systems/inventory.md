@@ -620,38 +620,36 @@ listing, or raw binary dump is reproduced here.
 
 Additional provenance for the equipment-weight note: the resident
 `compute_party_member_weight` analysis in
-`u5-decomp/functions/ULTIMA_EXE/0x6DA8_compute_party_member_weight.md` and the
+`u5-decomp/functions/ULTIMA_EXE/` and the
 inventory trace in `u5-decomp/notes/system-trace_inventory.md`; the discarded
 call return is visible in the resident
-`u5-decomp/functions/ULTIMA_EXE/0x6E60_remove_inventory_match.md` note.
+`u5-decomp/functions/ULTIMA_EXE/` note.
 
 R-Ready burden and strength-refusal provenance: the ZSTATS equip/unequip
-cascade at `u5-decomp/functions/ZSTATS_OVL/0x0C5C_ready_apply_or_unequip.md`,
+cascade at `u5-decomp/functions/ZSTATS_OVL/`,
 cross-checked against the clean local resident item metadata table.
 
 Combat R-Ready provenance: the combat command dispatcher and prompt helper at
-`u5-decomp/functions/COMBAT_OVL/0x063E_actor_ai_or_command.md` and
-`u5-decomp/functions/COMBAT_OVL/0x0544_prompt_with_string.md`, cross-checked
+`u5-decomp/functions/COMBAT_OVL/`, cross-checked
 with the ZSTATS active-actor selector at
-`u5-decomp/functions/ZSTATS_OVL/0x0000_select_player_for_zstats.md`.
+`u5-decomp/functions/ZSTATS_OVL/`.
 
 Magic-ring vanish provenance: the same ZSTATS equip/unequip cascade, corrected
 with the Buffer-D `prng_range` thunk mapping in
 `u5-decomp/notes/engine_idioms.md`, and the resident combat ring consumers in
-`u5-decomp/functions/ULTIMA_EXE/0x6936_combat_round_engine.md`,
-`u5-decomp/functions/ULTIMA_EXE/0x6794_combatant_set_carrier.md`, and
-`u5-decomp/functions/ULTIMA_EXE/0x6E60_remove_inventory_match.md`.
+`u5-decomp/functions/ULTIMA_EXE/`, and
+`u5-decomp/functions/ULTIMA_EXE/`.
 
 Counter saturation provenance: resident byte/word capped-add and floor-subtract
-helper analysis in `u5-decomp/functions/ULTIMA_EXE/0x3EF0_sat_add_byte.md` and
+helper analysis in `u5-decomp/functions/ULTIMA_EXE/` and
 sibling helpers, summarized publicly in `systems/stat-arithmetic.md`.
 
 U-Use provenance: CAST overlay use-item dispatch at
-`u5-decomp/functions/CAST_OVL/0x1792_use_item.md`, scroll/potion
+`u5-decomp/functions/CAST_OVL/`, scroll/potion
 subhandlers in the same overlay, the Shadowlord shard handler at
-`u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`, and the
+`u5-decomp/functions/CAST_OVL/`, and the
 Moonstone slot writer at
-`u5-decomp/functions/CAST_OVL/0x153C_use_moonstone.md`, cross-checked against
+`u5-decomp/functions/CAST_OVL/`, cross-checked against
 Search/Get Moonstone recovery notes.
 
 Combat-lock scope, silent-ammunition, and turn-cost provenance: the in-combat
@@ -660,11 +658,10 @@ outcome has been announced; ammunition rows exit the cascade silently; and a
 refused R-Ready costs exactly what a successful one costs, in every mode.
 Source provenance: derived from private analysis note
 `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
-`../u5-decomp/functions/ZSTATS_OVL/0x0C5C_ready_apply_or_unequip.md` and
-`../u5-decomp/functions/ZSTATS_OVL/0x1296_ready_main.md`.
+`../u5-decomp/functions/ZSTATS_OVL/`.
 
 Combat U-Use correction provenance: combat routes `U` into the same item-use
 handler the world modes use, after the live-actor gate. Source provenance:
 derived from private analysis note
 `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` and
-`../u5-decomp/functions/COMBAT_OVL/0x0544_prompt_with_string.md`.
+`../u5-decomp/functions/COMBAT_OVL/`.

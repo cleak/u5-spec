@@ -254,24 +254,22 @@ This is a cleanroom behavioral rewrite from the private TALK overlay notes. It
 does not reproduce private source, decompiler output, assembly excerpts, raw
 dumps, private address tables, or implementation listings.
 
-- Per-scene branch flag setter: `u5-decomp/functions/TALK_OVL/0x0D42_set_npc_quest_flag.md`.
+- Per-scene branch flag setter: `u5-decomp/functions/TALK_OVL/`.
 - The in-stream setter's call site, the engine-supplied bit index, and the
   corrected IF-ELSE argument role:
   `u5-decomp/notes/talk_group_retrace_2026-08-22.md` and
-  `u5-decomp/functions/TALK_OVL/0x0E78_ask_who_join_loop.md`.
-- Per-scene branch flag tester: `u5-decomp/functions/TALK_OVL/0x0D7A_test_npc_quest_flag.md`.
+  `u5-decomp/functions/TALK_OVL/`.
+- Per-scene branch flag tester: `u5-decomp/functions/TALK_OVL/`.
 - Branch-mask shift helper identity:
   `u5-decomp/functions/ULTIMA_EXE/_LIBRARY_FIDB.md`.
-- Action-dispatch transient and fixed action paths: `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`.
-- Special-item action-letter identities: `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`,
-  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`, and shipped `.TLK`
+- Action-dispatch transient and fixed action paths: `u5-decomp/functions/TALK_OVL/`.
+- Special-item action-letter identities: `u5-decomp/functions/ZSTATS_OVL/`, and shipped `.TLK`
   action usage.
-- Multi-byte branch/action dispatch context: `u5-decomp/functions/TALK_OVL/0x0DBE_multi_byte_command_handler.md`.
-- Final conversation cleanup: `u5-decomp/functions/TALK_OVL/0x1180_final_conversation_cleanup.md`.
+- Multi-byte branch/action dispatch context: `u5-decomp/functions/TALK_OVL/`.
+- Final conversation cleanup: `u5-decomp/functions/TALK_OVL/`.
 - Shared town-entry sentinel producer:
-  `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`,
-  `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md`, and
+  `u5-decomp/functions/TOWN_OVL/`, and
   `u5-decomp/formats/data-ovl.md`.
 - Warning sound presentation:
-  `u5-decomp/functions/ULTIMA_EXE/0x43AE_pc_speaker_glissando.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - Public save-backed state cross-checks: `formats/saved-gam.md`, `systems/karma.md`, `systems/inventory.md`, and `catalogs/quest-graph.md`.

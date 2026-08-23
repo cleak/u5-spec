@@ -568,22 +568,18 @@ prompts all have public behavioral owners in `systems/conversation.md` and
 
 - Derived from `u5-decomp/notes/tlk-quest-graph.md`.
 - Action-letter item grants are cross-checked against
-  `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`,
-  `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`,
-  `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`, and shipped `.TLK`
+  `u5-decomp/functions/TALK_OVL/`,
+  `u5-decomp/functions/ZSTATS_OVL/`, and shipped `.TLK`
   action usage.
 - TLK file structure and keyword semantics: `u5-decomp/formats/npc-tlk-pth.md`,
-  `u5-decomp/functions/TALK_OVL/0x041C_talk_main.md`,
-  `u5-decomp/functions/TALK_OVL/0x0B04_conversation_loop.md`,
-  `u5-decomp/functions/TALK_OVL/0x0682_action_command_dispatch.md`,
-  `u5-decomp/functions/TALK_OVL/0x0F32_tlk_byte_runner.md`, and
-  `u5-decomp/functions/TALK_OVL/0x127E_load_npc_blob.md`.
+  `u5-decomp/functions/TALK_OVL/`, and
+  `u5-decomp/functions/TALK_OVL/`.
 - Resident word and name pools: `u5-decomp/formats/data-ovl.md`.
 - Runtime Shadowlord hideout, vanquish, Yell, Word-of-Power, and Doom-gate
   semantics:
   `u5-decomp/formats/data-ovl.md`,
-  `u5-decomp/functions/CMDS_OVL/0x1418_cmds_yell.md`, and
-  `u5-decomp/functions/CAST_OVL/0x15B4_cast_destroy_shadowlord.md`; the
+  `u5-decomp/functions/CMDS_OVL/`, and
+  `u5-decomp/functions/CAST_OVL/`; the
   Doom-side `VERAMOCOR` route is also summarized in
   `u5-decomp/notes/system-trace_quest-endgame.md`.
 - Public cross-references: `formats/tlk.md`, `systems/conversation.md`,

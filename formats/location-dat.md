@@ -574,12 +574,12 @@ or visual parity.
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
 - The first-pass survey of every map and arena file shipped with the game, including per-file size verification, the four-class location partition, the two-floor-per-block reading, the verified `MISCMAPS.DAT` section sizes, and cross-file consistency checks — `u5-decomp/formats/maps.md`.
-- The Blackthorn audience cutscene note that verifies the first cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/BLCKTHRN_OVL/0x060E_blackthorn_audience.md`.
-- The endgame entry note that verifies a later cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`.
+- The Blackthorn audience cutscene note that verifies the first cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/BLCKTHRN_OVL/`.
+- The endgame entry note that verifies a later cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/ENDGAME_OVL/`.
 - The FONT overlay overview and Return-to-View trace that bind the four 4-row by 19-column map strips plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
 - The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
-- The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/0x7234_read_file_seek.md`.
-- The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
+- The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/`.
+- The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
   complete per-scene base floor-page binding of Section 4.1, the sign convention
@@ -592,18 +592,18 @@ The format described above was derived from the analysis notes listed below. Non
   a skiff, per the closed transport-marker set in `systems/vehicles.md`
   Section 2.
 - Source provenance: derived from private analysis notes
-  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` and
+  `u5-decomp/functions/TOWN_OVL/` and
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
   farmland/orchard blight, its resident-Shadowlord gate, the direction of both
   substitutions, the seven-in-eight rate, the day-of-month seed, and the clock
   re-seed that follows the pass. That note's earlier "grass/path texturing",
   "six-in-seven", "save/restore the PRNG" and "gated on the player's actor slot
   already being assigned" readings are all superseded.
-- The town-mode entry orchestrator that calls the loader once per location entry and re-entry — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md`.
-- The world-mutation primitive that links logical NPC state to active-object slots, consuming the harvested NPC start positions — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
+- The town-mode entry orchestrator that calls the loader once per location entry and re-entry — `u5-decomp/functions/TOWN_OVL/`.
+- The world-mutation primitive that links logical NPC state to active-object slots, consuming the harvested NPC start positions — `u5-decomp/functions/TOWN_OVL/`.
 - The facing-sensitive town stair family and floor-change reload path -
-  `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, cross-checked
-  against `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`.
+  `u5-decomp/functions/TOWN_OVL/`, cross-checked
+  against `u5-decomp/functions/TOWN_OVL/`.
 - The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, their ascend/descend identity, and the town step handler's separate `0x8C` trigger — the path-probe, flood-fill workspace and floor-transition-gate notes under `u5-decomp/functions/NPC_OVL/`, the town step-interaction note under `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, and `u5-decomp/formats/maps.md`.
-- The overworld main loop providing the cross-mode contract under which the location loader is invoked, including the scene-byte-driven mode switch — `u5-decomp/functions/MAINOUT_OVL/0x0A84_mainout_main_loop.md`.
-- The overworld chunk loader establishing the convention that per-class files are addressed by filename pointer through a small resident table — `u5-decomp/functions/OUTSUBS_OVL/0x0098_outsubs_load_chunk.md`.
+- The overworld main loop providing the cross-mode contract under which the location loader is invoked, including the scene-byte-driven mode switch — `u5-decomp/functions/MAINOUT_OVL/`.
+- The overworld chunk loader establishing the convention that per-class files are addressed by filename pointer through a small resident table — `u5-decomp/functions/OUTSUBS_OVL/`.

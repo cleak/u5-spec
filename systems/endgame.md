@@ -400,27 +400,39 @@ actor identities of section 4, is:
    A blocking key read and a speaker sting follow.
 8. Clear slot 6, and write the moongate terrain tile into the scene grid at
    cell (5, 4). The gate now owns that cell.
-9. **Ramp the gate up.** The gate cell is drawn at a brightness level that the
-   sequence raises through 1, 2, ... 15, running one world tick at each of those
-   fifteen levels. The level then steps once more, to 16, which is outside the
-   brightness range below, and the sequence holds there for **four** world ticks
-   with the cell drawn as the ordinary gate tile — the flare's bright top of
-   arc, and the pause before Lord British moves.
+9. **Raise the gate.** The gate cell is drawn at the shared moongate presence
+   phase, which the sequence raises through 1, 2, ... 15, running one world tick
+   at each of those fifteen phases. The phase then steps once more, to 16, which
+   is outside the composed range, and the sequence holds there for **four**
+   world ticks with the cell drawn as the ordinary gate tile — the gate at full
+   height, and the pause before Lord British moves.
 10. Step slot 31 — Lord British — to (5, 4), then clear it. He enters the gate.
 11. For each live party slot in ascending order, step that slot to (5, 4), then
     clear it, running a world tick between actors. The party follows one by one.
-12. **Ramp the gate down**: the level is reset to 15 and stepped down, one world
-    tick at each of the levels 15 through 1, finishing at 0 with no further
-    tick. The down-ramp has no top-of-arc hold.
+12. **Lower the gate**: the phase is reset to 15 and stepped down, one world
+    tick at each of the phases 15 through 1, finishing at 0 with no further
+    tick. The down-ramp has no full-height hold.
 13. Repaint the gate cell (viewport column 5, row 4) with the plain chamber
     floor tile, drawn from the terrain bank rather than the actor bank.
 
-The gate cell's terrain byte is the moongate value; the renderer routes that
-value through the driver's brightness entry using the ramp level while the level
-is inside its 1..15 range, which is what produces the pulsing flare. An engine
-that models the flare as a palette animation rather than as a per-cell
-brightness level will not be able to leave the rest of the tableau steady while
-the gate pulses.
+The gate cell's terrain byte is the moongate value, and the phase counter the
+two ramps drive is **the same world-global moongate presence phase** that
+overworld gates use — not a private endgame effect. The renderer composes the
+cell exactly as `systems/overworld.md` Section 9.1 describes: for phase `N` in
+1..15 it draws the ground tile with its bottom `N` pixel rows replaced by the
+top `N` rows of the moon-gate tile, so the ramps read as the gate rising out of
+the throne-room floor and then sinking back into it. The one endgame-specific
+detail is the ground half of that composition: this scene substitutes its own
+chamber floor tile for the grass the overworld uses, which is why step 13's
+repaint matches the ground the gate rose from.
+
+Two consequences for implementation. First, an engine that models this as a
+palette animation, a brightness level, or a dedicated endgame effect will not
+reproduce it and will duplicate work it already owns — build one phase
+composition and let the overworld refresh, the overworld transit, and both
+endgame ramps drive it. Second, because the counter is the shared save-backed
+byte, these ramps write world state; an engine that keeps the endgame's copy
+separate will diverge from the original's save image.
 
 The step helper moves one cell per call and runs one display tick after each
 movement. It prefers the axis with greater remaining distance; equal remaining
@@ -925,23 +937,24 @@ The original uses the active-object renderer for cinematic movement. A modern en
 
 This document is a cleanroom prose rewrite from the following source notes. It intentionally omits assembly, decompiled code, private offsets, and copied binary text dumps.
 
-- `u5-decomp/functions/ENDGAME_OVL/0x0648_endgame_entry.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x0000_endgame_load_party_roster.md` — the
+- `u5-decomp/functions/ENDGAME_OVL/`
+- `u5-decomp/functions/ENDGAME_OVL/` — the
   final narrative presentation helper, including the full-screen dissolve it
   issues before its first draw. Its filename records a superseded reading; the
   function is not a party-roster retirement lookup.
-- `u5-decomp/functions/ENDGAME_OVL/0x023A_fn_buffer_print.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x028C_print_number_word.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x02D6_print_day_ord.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x0326_print_scroll.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x0510_prompt_yes_no.md`
-- `u5-decomp/functions/ENDGAME_OVL/0x05A2_character_anim_scene.md`
+- `u5-decomp/functions/ENDGAME_OVL/`
 - `u5-decomp/functions/ENDGAME_OVL/_OVERVIEW.md`
-- `u5-decomp/functions/ULTIMA_EXE/0x75CC_overlay_loader.md`
-- `u5-decomp/functions/DUNGEON_OVL/0x0000_dungeon_room_enter.md`
-- `u5-decomp/functions/DNGLOOK_OVL/0x117E_setup_room_npcs.md`
-- `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`
-- `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`
+- Source provenance: that the two gate ramps drive the same world-global,
+  save-backed moongate presence phase the overworld uses, that the phase
+  composes a rise-and-sink rather than a brightness level, and that this scene
+  substitutes its own ground tile into that composition, are derived from
+  private analysis note
+  `u5-decomp/notes/moongate_transition_2026-08-23.md`. The "brightness level"
+  wording in earlier revisions of Section 6 is superseded by the same note.
+- `u5-decomp/functions/ULTIMA_EXE/`
+- `u5-decomp/functions/DUNGEON_OVL/`
+- `u5-decomp/functions/DNGLOOK_OVL/`
+- `u5-decomp/functions/SJOG_OVL/`
 - local binary checks against `C:\Games\U5-Clean\DUNGEON.DAT`,
   `DUNGEON.CBT`, and `DATA.OVL` for the Doom final-room trigger and
   setup marker plus Word-of-Power coordinate binding.

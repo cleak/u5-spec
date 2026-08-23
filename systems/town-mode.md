@@ -857,15 +857,14 @@ town-loop mechanism.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and calls the Shadowlord install — `u5-decomp/functions/TOWN_OVL/0x11F0_town_entry_setup.md` (its own step describing the coordinate guard is stated inverted there and is superseded by the 2026-08-22 repair-round correction in the install's note).
+- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and calls the Shadowlord install — `u5-decomp/functions/TOWN_OVL/` (its own step describing the coordinate guard is stated inverted there and is superseded by the 2026-08-22 repair-round correction in the install's note).
 - The top-level dispatcher and resident NPC-location warp helper that supply
   the traced fresh-versus-preserving town setup arguments -
-  `u5-decomp/functions/ULTIMA_EXE/0x0000_main_game_loop.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x47F4_npc_warp_to_scene.md`.
-- The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/0x141E_town_turn_loop.md`.
-- The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md` and `u5-decomp/functions/TOWN_OVL/0x0170_town_dawn_dusk_pass.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
+- The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/`.
+- The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis notes
-  `u5-decomp/functions/TOWN_OVL/0x0212_town_load_npc_waypoints.md` and
+  `u5-decomp/functions/TOWN_OVL/` and
   `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
   farmland/orchard blight, its resident-Shadowlord gate and its two call sites,
   its two substitutions, its seven-in-eight rate, its day-of-month seed, and
@@ -877,18 +876,18 @@ The behaviour described above was derived by reading the function and format not
   rather than a generic harvest.
 - The town-entry Shadowlord install — its hideout-slot match, its
   one-at-a-time reject, its actor-index choice, and its placement and schedule —
-  `u5-decomp/functions/TOWN_OVL/0x02AE_town_attach_player_slot.md` (see that
+  `u5-decomp/functions/TOWN_OVL/` (see that
   note's 2026-08-22 repair-round correction, which supersedes its original
   "player attach" framing) and
   `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
-- The per-scene NPC removal mask reader/writer and runtime slot free helper - `u5-decomp/functions/TOWN_OVL/0x0000_npc_in_class_filter.md`, `u5-decomp/functions/TOWN_OVL/0x0052_npc_set_class_bit.md`, and `u5-decomp/functions/TOWN_OVL/0x00B0_npc_clear_slot.md`.
+- The per-scene NPC removal mask reader/writer and runtime slot free helper - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the
   corrected sprite-class filter for recorded removals (townspeople and royal
   regalia in, guards and creatures out), the two hard-wired removal writers, and
   the exhaustive accessor sweep showing the mask has no other owners.
-- The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/0x011E_npc_find_idle.md`.
-- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/0x052E_town_movement_log.md`, `u5-decomp/functions/TOWN_OVL/0x057C_town_movement_print.md`, `u5-decomp/functions/TOWN_OVL/0x0600_town_movement_handler.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler note as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+- The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/`.
+- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler note as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
 - The town Attack handler and the town K-Klimb handler - the corresponding command-handler notes under `u5-decomp/functions/TOWN_OVL/`. The climb-handler note predates the 2026-08-22 retrace and is filed under a different command name than the one it actually analyses; the retrace note above supersedes its labelling.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
@@ -899,24 +898,24 @@ The behaviour described above was derived by reading the function and format not
   full-reload semantics of a floor change, and the two roles of the saved floor
   byte. It also fixes the floor of the harpsichord puzzle: floor `2` is two
   storeys above the castle's entry floor, not a basement.
-- The town alarm, pacify/fortify, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/0x085E_npc_set_state_fortified.md`, `u5-decomp/functions/TOWN_OVL/0x08D4_npc_set_state_pacified.md`, `u5-decomp/functions/TOWN_OVL/0x0958_npc_scatter.md`, `u5-decomp/functions/TOWN_OVL/0x09BC_npc_death_handler.md`, `u5-decomp/functions/TOWN_OVL/0x10DA_npc_print_killed.md`, `u5-decomp/functions/TOWN_OVL/0x10F2_npc_should_pacify.md`, `u5-decomp/functions/TOWN_OVL/0x1156_town_setup_post_npc.md`, `u5-decomp/functions/TOWN_OVL/0x12AE_town_arrest_or_unconscious.md`, and `u5-decomp/functions/TOWN_OVL/0x1352_town_post_action_cleanup.md`.
-- The Lord British castle chord handler - `u5-decomp/functions/TOWN_OVL/0x0E34_lb_audience_chord.md`.
-- The Stonegate setup helper audio/presentation pattern - `u5-decomp/functions/TOWN_OVL/0x11B8_town_setup_helper.md`.
-- The free-roaming animal/object walker and its narrow town terrain predicate - `u5-decomp/functions/TOWN_OVL/0x0C78_town_object_walker.md` and `u5-decomp/functions/TOWN_OVL/0x0C4A_tile_walkable_predicate.md`.
-- The town input parser, including command refresh and modal override behavior - `u5-decomp/functions/TOWN_OVL/0x0DC4_town_input_parser.md`.
-- The town NPC reseat pass that runs on entry and after every floor reload - it clears the dynamic-object records, then re-places every occupied NPC at the waypoint its schedule selects for the current hour and resets that NPC's walk state - `u5-decomp/functions/TOWN_OVL/0x1694_town_npc_visibility_pass.md` (see that note's 2026-08-22 naming correction: the pass touches no visibility state, and the earlier "visibility pass" wording here inherited the stale private filename).
-- The world-mutation primitive that links logical NPC state to active-object slots — `u5-decomp/functions/TOWN_OVL/0x1726_place_npc_at.md`.
-- The NPC roster loader for one location — `u5-decomp/functions/NPC_OVL/0x0000_npc_main.md`.
-- The per-tick NPC walker invoked once per turn from the town loop — `u5-decomp/functions/NPC_OVL/0x0DB4_npc_per_tick_walker.md`.
-- The NPC pathfinder notes that bind the ascend/descend marker IDs `0xC8` and `0xC9` to the scheduler's tile-ID goal path, plus the town step handler's separate `0x8C` trigger — `u5-decomp/functions/NPC_OVL/0x01A0_npc_path_probe.md`, `u5-decomp/functions/NPC_OVL/0x01D2_npc_floodfill_workspace_prep.md`, and `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`.
-- The shared per-letter command dispatcher routed by mode — `u5-decomp/functions/ULTIMA_EXE/0x3178_command_dispatcher.md`.
-- The per-turn cleanup that advances the clock and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
+- The town alarm, pacify/fortify, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`.
+- The Lord British castle chord handler - `u5-decomp/functions/TOWN_OVL/`.
+- The Stonegate setup helper audio/presentation pattern - `u5-decomp/functions/TOWN_OVL/`.
+- The free-roaming animal/object walker and its narrow town terrain predicate - `u5-decomp/functions/TOWN_OVL/`.
+- The town input parser, including command refresh and modal override behavior - `u5-decomp/functions/TOWN_OVL/`.
+- The town NPC reseat pass that runs on entry and after every floor reload - it clears the dynamic-object records, then re-places every occupied NPC at the waypoint its schedule selects for the current hour and resets that NPC's walk state - `u5-decomp/functions/TOWN_OVL/` (see that note's 2026-08-22 naming correction: the pass touches no visibility state, and the earlier "visibility pass" wording here inherited the stale private filename).
+- The world-mutation primitive that links logical NPC state to active-object slots — `u5-decomp/functions/TOWN_OVL/`.
+- The NPC roster loader for one location — `u5-decomp/functions/NPC_OVL/`.
+- The per-tick NPC walker invoked once per turn from the town loop — `u5-decomp/functions/NPC_OVL/`.
+- The NPC pathfinder notes that bind the ascend/descend marker IDs `0xC8` and `0xC9` to the scheduler's tile-ID goal path, plus the town step handler's separate `0x8C` trigger — `u5-decomp/functions/NPC_OVL/`, and `u5-decomp/functions/TOWN_OVL/`.
+- The shared per-letter command dispatcher routed by mode — `u5-decomp/functions/ULTIMA_EXE/`.
+- The per-turn cleanup that advances the clock and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/`.
 - The underfoot handler's unconditional per-turn placement after the clock
   advance, its wake roll, its two mass-damage tile families, its poison-gas
   Dexterity save and per-member presentation order, and its trailing party
   status pass -
-  `u5-decomp/functions/TOWN_OVL/0x0F02_town_step_interaction.md`,
-  `u5-decomp/functions/ULTIMA_EXE/0x2AA8_party_random_damage.md`, and
+  `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and
   `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
 - Independent second-pass re-derivation of the poison-gas predicate, the
   Dexterity save comparison, the absence of any further gating condition, and

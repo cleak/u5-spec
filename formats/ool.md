@@ -263,20 +263,18 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
   cross-checked against the load path's use of the same two wrappers. This
   supersedes `u5-decomp/notes/dosbox_probes_2026-05-07.md` Probe 1 and the
   "unconditional mirror writes, no per-plane read" reading previously carried
-  here and in `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`, which had the
+  here and in `u5-decomp/functions/CAST2_OVL/`, which had the
   direction of both per-plane transfers backwards.
-- Fresh-game `SAVED.OOL` writer half order: `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- Fresh-game `SAVED.OOL` writer half order: `u5-decomp/functions/FONT_OVL/` and `u5-decomp/functions/INTRO_OVL/`.
 - Seed-state contents in section 7 were read directly from the shipped `BRIT.OOL`, `UNDER.OOL`, and `INIT.OOL`, with the object type bytes resolved through the `LOOK2.DAT` object domain and the placements cross-checked against the shipped underworld and Britannia map data.
 - Internal load-flow analysis, including `SAVED.OOL` read, unconditional mirror writes to `BRIT.OOL` and `UNDER.OOL`, and underworld disk-swap path.
 - OUTSUBS runtime mirror-file selection and transition consumers:
-  `u5-decomp/functions/OUTSUBS_OVL/0x0368_outsubs_world_filename.md`,
-  `u5-decomp/functions/OUTSUBS_OVL/0x0388_outsubs_check_town_entry.md`, and
-  `u5-decomp/functions/OUTSUBS_OVL/0x0458_outsubs_falls_handler.md`.
+  `u5-decomp/functions/OUTSUBS_OVL/`, and
+  `u5-decomp/functions/OUTSUBS_OVL/`.
 - Active-object runtime model used to interpret each eight-byte record: `u5-spec/systems/active-objects.md`.
 - Save/load system prose used for cross-checking lifecycle semantics: `u5-spec/systems/save-load.md`.
 - Vehicle byte interpretation for ship boarding, X-it parking, and broadside
-  damage: `u5-decomp/functions/CMDS_OVL/0x07F6_cmds_board.md`,
-  `u5-decomp/functions/CMDS_OVL/0x0EB4_cmds_xit_vehicle.md`, and
-  `u5-decomp/functions/CMDS_OVL/0x0962_cmds_fire_broadsides.md`.
+  damage: `u5-decomp/functions/CMDS_OVL/`, and
+  `u5-decomp/functions/CMDS_OVL/`.
 - Animator byte interpretation for the packed phase/direction field:
-  `u5-decomp/functions/ULTIMA_EXE/0x4552_active_object_tick.md`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
