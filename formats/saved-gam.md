@@ -6,7 +6,7 @@
 
 Everything described below is therefore a *layout* rather than a *protocol*. Each field has a fixed location, fixed width, and fixed meaning. There are no length prefixes, no string terminators that must be honoured, no padding the writer can vary, and no out-of-line storage — strings are fixed-width, arrays are inline, and records are packed back-to-back at known offsets. An implementation that wants to read or write a byte-compatible `SAVED.GAM` works at the level of "which byte holds which field," nothing more.
 
-The save is paired with three companion files. `SAVED.OOL` holds five hundred twelve bytes of active-object state for both world planes - the part of the runtime cast that lives outside the save image. `BRIT.OOL` and `UNDER.OOL` ship as seeds for those tables and are mirror-written by both load and save paths; the save path writes `UNDER.OOL` a second time unless it entered with disk-prompt mode already set to mode 1. The save and load semantics are described in `systems/save-load.md`; this spec covers the byte layout of `SAVED.GAM` itself, with `SAVED.OOL`/`BRIT.OOL`/`UNDER.OOL` covered where the two formats touch (Section 13).
+The save is paired with three companion files. `SAVED.OOL` holds five hundred twelve bytes of active-object state for both world planes - the part of the runtime cast that lives outside the save image. `BRIT.OOL` and `UNDER.OOL` ship as seeds for those tables and are mirror-written by the load path; the save path reads them instead, and writes `UNDER.OOL` back out only when it entered with a disk-prompt mode other than mode 1. The save and load semantics are described in `systems/save-load.md`; this spec covers the byte layout of `SAVED.GAM` itself, with `SAVED.OOL`/`BRIT.OOL`/`UNDER.OOL` covered where the two formats touch (Section 13).
 
 A second seed file, `INIT.GAM`, carries the identical layout. It is a frozen "first save" the chargen flow clones into `SAVED.GAM` for new games. It is read-only at runtime, byte-for-byte identical to `SAVED.GAM` on a clean install, and obeys every layout statement made about `SAVED.GAM` below.
 
@@ -483,13 +483,13 @@ The active-object table embedded in `SAVED.GAM` (Section 8) holds the cast on th
 | File         | Size      | Role                                                                                                |
 |--------------|-----------|-----------------------------------------------------------------------------------------------------|
 | `SAVED.OOL`  | 512 bytes | Runtime working copy. Surface in first 256 bytes, underworld in second 256 bytes.                   |
-| `BRIT.OOL`   | 256 bytes | Surface object table. Seed, load-time mirror, and save-time mirror.                                 |
-| `UNDER.OOL`  | 256 bytes | Underworld object table. Seed, load-time mirror, and save-time mirror; written a second time during save unless entry disk-prompt mode was already mode 1. |
+| `BRIT.OOL`   | 256 bytes | Surface object table. Seed and load-time mirror; a save reads it and never writes it.               |
+| `UNDER.OOL`  | 256 bytes | Underworld object table. Seed and load-time mirror; a save reads it, then writes the same bytes back unless entry disk-prompt mode was already mode 1. |
 | `INIT.OOL`   | 256 bytes | Factory seed for the underworld (companion to `INIT.GAM`); byte-identical to the shipped `UNDER.OOL`. Read-only at runtime. |
 
 The on-disk record layout in every `.OOL` file matches the eight-byte active-object record from Section 8 exactly. The shipped surface seed `BRIT.OOL` is all zeros; the shipped underworld seed `UNDER.OOL` has the small handful of non-zero records — five of them, a skiff and a four-corpse cluster — with the rest zero. (An earlier revision of this paragraph had the two planes the other way round, attributing the records to a Britannia surface seed and calling the underworld seed empty; that is withdrawn. `formats/ool.md` section 7 enumerates the five records.) The "depends" auxiliary bytes use class-specific encodings; for these bare seed records, `+0x04` is `0xFF` and `+0x05..+0x07` are zero.
 
-The roundtrip across `.OOL` files is owned by `systems/save-load.md`: load refreshes both per-plane mirrors from `SAVED.OOL`, while save reads staged per-plane data, writes both per-plane mirrors, conditionally repeats the underworld mirror write based on the entry disk-prompt mode, and writes the canonical `SAVED.OOL`. The "OOL" extension's expansion is unattested; "Object Overlay Layer" is a plausible mnemonic, treated as opaque.
+The roundtrip across `.OOL` files is owned by `systems/save-load.md`: load refreshes both per-plane mirrors from `SAVED.OOL`, while save reads both per-plane files into its staging halves, writes the underworld file back out only when the entry disk-prompt mode was not mode 1, never writes the surface file, and composes the canonical `SAVED.OOL` from those halves. The "OOL" extension's expansion is unattested; "Object Overlay Layer" is a plausible mnemonic, treated as opaque.
 
 ## 14. Format Boundary And Remaining Runtime Work
 
@@ -584,7 +584,7 @@ The byte-level layout described here was derived from the project's private save
   snapshot and display path:
   `u5-decomp/functions/ZSTATS_OVL/0x099A_snapshot_inventory_to_overlay_ds.md`
   and `u5-decomp/functions/ZSTATS_OVL/0x0A3A_zstats_main.md`.
-- The save handler's open-write-close sequence, byte-image flush to `SAVED.GAM`, the absence of any per-plane `.OOL` read on the save path, unconditional mirror writes, entry-mode-gated second underworld mirror flush, and canonical `SAVED.OOL` write -- `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`.
+- The save handler's open-write-close sequence and byte-image flush to `SAVED.GAM` -- `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`. The per-plane `.OOL` half of that note (two unconditional mirror writes and no read) is superseded: a 2026-08-22 re-derivation from the shipped save overlay shows the two per-plane operations are reads and the single underworld write is the entry-mode-gated one. `systems/save-load.md` section 5 owns the corrected order.
 - The load handler's byte-image read of `SAVED.GAM` into the same region, the empty-save guard, the `SAVED.OOL` read, and the mirror-write of `BRIT.OOL` and `UNDER.OOL` — `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - The chargen flow's per-record write to roster slot zero (name, gender, STR, DEX, INT, and MP) and preservation of seed class/status/HP/experience fields — `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 - The equipment slot order, empty sentinel, carried-equipment counter band, and

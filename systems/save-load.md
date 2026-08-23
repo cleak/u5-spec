@@ -4,7 +4,7 @@
 
 Ultima V persists the entire run-time game state by writing one contiguous slab of memory directly to disk. The save is not a structured serialisation — no record header, no field-by-field marshalling, no version stamp. It is a byte-image dump of a fixed-length region of the engine's data segment, paired with a smaller companion buffer holding the per-map active-object table. Loading is the inverse: read the same bytes back into the same memory region and let the running engine pick up where it left off.
 
-Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` so older plane-entry paths can read the per-plane files directly. The save path writes both mirrors from the resident staging halves rather than reading the per-plane files back in, performs a second underworld-mirror flush unless it entered with disk-prompt mode already set to mode 1, and then writes the canonical files. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
+Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` so older plane-entry paths can read the per-plane files directly. The save path runs the mirrors in the opposite direction: it reads both per-plane files back into the two staging halves, writes only `UNDER.OOL` back out — and only when it entered with a disk-prompt mode other than mode 1 — and then writes the canonical files from those halves. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
 
 The save flow is gated by non-combat Quit-and-Save (`Q`) and returns to the caller after the save prompt completes; it is not the DOS-exit path by itself. The load flow is the `J` "Journey Onward" branch of the title-menu dispatcher. Transfer uses the same disk-I/O layer but is documented as a fresh-save producer rather than a load variant.
 
@@ -58,8 +58,8 @@ Alongside the save image, the engine maintains a smaller buffer for the active-o
 | File | Size | Role |
 |---|---|---|
 | `SAVED.OOL` | 512 bytes | Runtime working copy. Surface object table in the first 256 bytes; underworld in the second 256 bytes. |
-| `BRIT.OOL` | 256 bytes | Surface seed, load-time mirror, and save-time mirror of the surface half of `SAVED.OOL`. |
-| `UNDER.OOL` | 256 bytes | Underworld seed, load-time mirror, and save-time mirror of the underworld half of `SAVED.OOL`; save writes it a second time unless the entry disk-prompt mode was already mode 1. |
+| `BRIT.OOL` | 256 bytes | Surface seed and load-time mirror of the surface half of `SAVED.OOL`. Save reads it and never writes it. |
+| `UNDER.OOL` | 256 bytes | Underworld seed and load-time mirror of the underworld half of `SAVED.OOL`. Save reads it, then writes the same bytes back unless the entry disk-prompt mode was already mode 1. |
 | `INIT.OOL` | 256 bytes | Factory seed for the underworld (companion to `INIT.GAM`); byte-identical to the shipped `UNDER.OOL`. Read-only at runtime. |
 
 The on-disk record layout matches the in-memory eight-byte layout exactly: `(tile, frame, x, y, z, depends1, depends2, depends3)`, with `z = 0xFF` as the "above-ground / no z" sentinel. The shipped seeds run the opposite way from what an earlier revision of this section claimed: the **surface** seed `BRIT.OOL` is all zeros — a fresh Britannia has no pre-placed overlay objects at all — while the **underworld** seed `UNDER.OOL` holds a small fixed set of five records (one skiff and a four-corpse cluster) with the rest zero. The earlier wording, which put the ferry-skiffs and clustered objects in the surface seed and called the underworld seed empty, is withdrawn. `formats/ool.md` section 7 enumerates the five underworld records.
@@ -68,7 +68,7 @@ The mnemonic "Object Overlay Layer" is a working guess; the actual extension exp
 
 ### 3.2 Why three files for two halves
 
-Naively, the engine could carry only `SAVED.OOL` and never touch `BRIT.OOL` / `UNDER.OOL` after the install. Empirically, the load path refreshes both per-plane files from `SAVED.OOL`: the surface half is written to `BRIT.OOL`, the underworld half is written to `UNDER.OOL`, and the underworld half may be written again after the underworld disk-swap probe. The save path also refreshes both mirror files: it writes both mirrors from the resident staging halves - it performs no per-plane read of its own - writes the underworld mirror a second time unless the save handler's entry disk-prompt mode was already mode 1, and writes the canonical `SAVED.OOL`.
+Naively, the engine could carry only `SAVED.OOL` and never touch `BRIT.OOL` / `UNDER.OOL` after the install. Empirically, the load path refreshes both per-plane files from `SAVED.OOL`: the surface half is written to `BRIT.OOL`, the underworld half is written to `UNDER.OOL`, and the underworld half may be written again after the underworld disk-swap probe. The save path does not refresh them. It consumes them: it reads `UNDER.OOL` and then `BRIT.OOL` into the two staging halves, writes the underworld half back out to `UNDER.OOL` unless the save handler's entry disk-prompt mode was already mode 1, and then writes the canonical `SAVED.GAM` and `SAVED.OOL`. `BRIT.OOL` is read-only to a save.
 
 The file split is not just archival. Traced overworld helper paths choose
 `BRIT.OOL` or `UNDER.OOL` from the current world-plane byte and hand that
@@ -140,9 +140,9 @@ The save handler is a callable function, distinct from the inline load flow. The
 
 3. **Open the save channel.** The handler asks the I/O layer to set up the save-disk channel. On a system that requires a disk swap to the player disk, this is where the swap prompt fires.
 
-4. **Object-overlay staging halves are already live.** The two staging halves that become the canonical `SAVED.OOL` payload are the resident surface and underworld active-object buffers the running game has been mutating all along; the handler performs no `.OOL` read of its own before writing. An earlier revision of this step said the handler reads the per-plane `.OOL` files back into the staging halves first; that read does not exist in the traced save handler and the claim is withdrawn.
+4. **Fill the object-overlay staging halves from the per-plane files.** The handler reads all of `UNDER.OOL` into the underworld staging half, then all of `BRIT.OOL` into the surface staging half. These two halves are what step 7 writes out as `SAVED.OOL`, so the saved object-overlay state is the state the per-plane files held on disk when the save began, not a snapshot lifted out of live gameplay memory — the live cast for the player's current map travels inside the save image instead. (Two successive revisions of this step got this backwards: one described the handler as writing both mirrors with no read, and explicitly withdrew the correct read wording. Both readings are withdrawn; the two operations here are reads.)
 
-5. **Refresh both per-plane mirrors.** The underworld staging half is written to `UNDER.OOL` first, then the surface staging half is written to `BRIT.OOL`. (That is the traced order; it matters only for a reader reconstructing the write sequence, since both writes are unconditional.) The handler then checks the disk-prompt mode it had on entry. If that entry mode was not mode 1, it writes the same underworld staging half to `UNDER.OOL` a second time as a defensive re-flush. If the entry mode was already mode 1, this second underworld write is skipped.
+5. **Write the underworld mirror back, conditionally.** The handler checks the disk-prompt mode it had on entry. If that entry mode was not mode 1, it writes the underworld staging half to `UNDER.OOL` — the same bytes it read in step 4, so the file's content does not change. If the entry mode was already mode 1, this write is skipped. There is no surface counterpart: **a save never writes `BRIT.OOL`.**
 
 6. **Write `SAVED.GAM`.** The full 4192 bytes of the save image are written from memory to disk in one operation.
 
@@ -278,7 +278,7 @@ seed and matches `UNDER.OOL` byte for byte. Transfer specifics are owned by
 The items below are compatibility boundaries for modern ports or low-level
 floppy UI emulation, not gaps in the save-file layout.
 
-- **Disk-prompt mode labels.** The save-time file targets and second-`UNDER.OOL` condition are now pinned: the extra underworld write is skipped only when the save handler entered with disk-prompt mode 1. The user-facing names for every historical disk-prompt mode remain a low-level floppy UI detail rather than a save-format rule.
+- **Disk-prompt mode labels.** The save-time file targets and the `UNDER.OOL` write condition are now pinned: the underworld write-back is skipped only when the save handler entered with disk-prompt mode 1. The user-facing names for every historical disk-prompt mode remain a low-level floppy UI detail rather than a save-format rule.
 
 - **The load-time underworld disk-swap condition.** The load flow's branch tests the saved scene and party floor before probing for the underworld data disk. The branch behaviour is clear, but the surrounding disk-inventory state machine is still documented only at compatibility depth.
 
@@ -298,7 +298,18 @@ Naming note: the older retry-wrapper note still carries a loader-style working
 name, but the later `read_file_seek` analysis establishes that the inner path is
 generic DOS file I/O, not an LZW decompressor.
 
-- Save handler — confirmation prompt, status messages, the absence of any per-plane `.OOL` read on the save path, unconditional mirror writes, entry-mode-gated second underworld mirror flush, canonical `SAVED.GAM` / `SAVED.OOL` writes, and disk-prompt mode branching — derived from `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`, with helper roles cross-checked against `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
+- Save handler — confirmation prompt, status messages, the two per-plane `.OOL`
+  reads that fill the staging halves, the entry-mode-gated single underworld
+  write-back, the canonical `SAVED.GAM` / `SAVED.OOL` writes, and disk-prompt
+  mode branching — re-derived 2026-08-22 straight from the shipped save overlay,
+  with the read-versus-write identity of the two resident file wrappers it calls
+  settled by the DOS service each one issues and cross-checked against the load
+  path, which reaches the same two wrappers in the opposite roles. This
+  supersedes `u5-decomp/notes/dosbox_probes_2026-05-07.md` Probe 1 and the
+  "unconditional mirror writes, no per-plane read" reading in
+  `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md`, both of which had the
+  direction of the per-plane transfers inverted. Helper roles cross-checked
+  against `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md`.
 
 - Load flow — byte-image read, empty-save guard, dual-half `SAVED.OOL` read, unconditional mirror-write of both per-plane seed files, underworld disk-swap loop, and final commit — derived from `u5-decomp/functions/INTRO_OVL/0x0EB4_load_saved_game.md`.
 - Underworld-disk presence test — open-then-close existence semantics, present/absent result, error-cell update, and routing of a failed test through the critical-error/disk-prompt dispatch — derived from `u5-decomp/functions/ULTIMA_EXE/0x1674_probe_file_present.md`.
