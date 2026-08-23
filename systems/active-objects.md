@@ -345,6 +345,63 @@ fallback when blocked.
 
 The animator does not move the player. Player movement is owned by the input system and per-mode command handlers. Slot zero is refreshed from world-state globals by the renderer/compositor path before objects are stamped into the viewport, not by the animator itself.
 
+### 8.1 Off-screen pruning on the overworld
+
+Pruning is specified here, in the document that owns the table, because it
+changes table occupancy. It was previously mentioned only in passing in
+`systems/animation.md` and `systems/encounters.md`, neither of which is
+normative for this table and neither of which named a trigger. An
+implementation that reads only those mentions can build the predicate and never
+invoke it, leaving occupancy to diverge from the original over play.
+
+**Trigger.** The overworld per-turn epilogue runs two passes over the table: the
+animate pass described above, and then a **separate prune pass**. Pruning is not
+animation, is not on the render tick, and is not driven by the animator. It runs
+once per overworld turn. Town, dungeon and combat loops do not run it.
+
+**What the prune pass tests.** For each slot it considers, the pass compares the
+slot's stored X and Y against the current **scroll base** - the top-left corner
+of the loaded window - and keeps the slot only when **both** differences fall
+within thirty-two. Failing either axis releases the slot.
+
+Four properties are contract, and three of them are places an implementation
+predictably goes wrong:
+
+- **It is a square window, not a radius.** The two axes are tested separately
+  and independently against the same bound. There is no distance computation,
+  no hypotenuse and no disc. Naming this quantity a *radius* invites an
+  implementation to compute a Euclidean or squared distance, which prunes the
+  corners of the window that the original keeps.
+- **The comparison is window-relative and wraps.** The difference is formed in
+  **unsigned eight-bit arithmetic** against the scroll base, so it wraps
+  naturally with the 256-cell coordinate space rather than needing a special
+  case at the map seam. An implementation using signed or wider arithmetic will
+  mis-handle objects across the wrap.
+- **Slot zero is never pruned.** The pass walks the slots above zero only. The
+  player slot cannot be released by this path however far the scroll base moves,
+  and an implementation that includes slot zero in the sweep can delete the
+  player.
+- **Only classified slots are considered.** A slot whose type byte does not
+  classify as a prunable kind is skipped before the position test runs, so an
+  out-of-window slot of an unclassified kind survives.
+
+**Consumers, in both directions.** The prune pass is invoked by the overworld
+per-turn epilogue, and by nothing else. It releases slots through the ordinary
+slot-freeing rule of Section 4 - a one-byte write, no free list, no compaction -
+so freed slots are immediately available to allocation. It is **not** invoked by
+the animator, **not** by the renderer, **not** by mode entry, and **not** by the
+combat backup/restore path of Section 9. Nothing reads a "was pruned" result:
+the pass returns no report and the epilogue keeps none, so an implementation
+must not build a pruning event that other systems observe.
+
+**Relationship to eviction.** Pruning and the eviction cascade of Section 4 are
+different mechanisms with different triggers and must not be collapsed.
+Eviction is demand-driven - it runs when acquisition needs a slot and the range
+is full - and chooses a victim by class priority. Pruning is time-driven, runs
+every overworld turn regardless of pressure, and chooses by position alone. A
+single shared distance constant serving both is a sign the two have been
+conflated.
+
 ## 9. Combat backup and restore
 
 Combat suspends the world by swapping the active-object table to a backup region and overwriting the live table with combat actors. The mechanism is a pair of byte-for-byte copies.

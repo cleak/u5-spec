@@ -252,9 +252,12 @@ tile-animation family, it is not on the tick cadence described here, and an
 engine's animation clock must not try to own it. A skipped render frame does not
 advance it; a consumed world turn does.
 
-The overworld's per-turn epilogue can also prune off-screen
-active objects; pruning is separate from animation and may remove slots that
-would otherwise be considered on later ticks.
+The overworld's per-turn epilogue also prunes off-screen active objects.
+Pruning is separate from animation - it is not on the tick cadence described
+here and the animator must not own it - and it may remove slots that would
+otherwise be considered on later ticks. The normative contract, including the
+trigger, the window test and the consumers, is `systems/active-objects.md`
+Section 8.1; this mention is not sufficient to implement from.
 
 ### Towns, Castles, Keeps, and Dwellings
 
