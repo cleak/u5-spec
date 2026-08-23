@@ -361,8 +361,13 @@ once per overworld turn. Town, dungeon and combat loops do not run it.
 
 **What the prune pass tests.** For each slot it considers, the pass compares the
 slot's stored X and Y against the current **scroll base** - the top-left corner
-of the loaded window - and keeps the slot only when **both** differences fall
-within thirty-two. Failing either axis releases the slot.
+of the loaded window - and keeps the slot only when **both** differences land
+inside the loaded window. Failing either axis releases the slot.
+
+Precisely: each difference must be in the range **0 to 31 inclusive** - thirty-two
+positions, matching the 32-by-32 chunk-aligned window anchored at the scroll base
+(`systems/overworld.md` Section 4). An implementation that admits a difference of
+thirty-two keeps a row and a column of objects the original releases.
 
 Four properties are contract, and three of them are places an implementation
 predictably goes wrong:

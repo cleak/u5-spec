@@ -118,7 +118,7 @@ unsigned little-endian.
 
 | Region | File offset | Size | Use |
 |---|---|---:|---|
-| Two leading counters | `0x0000` | 8 | Skipped. The transfer never reads them, so their meaning does not matter to a clean parser. |
+| Leading header bytes | `0x0000` | 8 | Skipped. The transfer's first read seeks straight to `0x0008`, so these eight bytes are never loaded at all and their meaning does not matter to a clean parser. |
 | Character records | `0x0008` | 8 records of 39 bytes each | Only the **first** record is read, so the transfer path itself never exercises the stride; the 39-byte stride is fixed instead by the file geometry — eight records between `0x0008` and the party-wide block at `0x0140` — and by the field layout below, which fills exactly 39 bytes. The read pulls 40 bytes from offset `0x0008`, i.e. the whole leading record plus one slack byte. |
 | Party-wide block | `0x0140` | 182 bytes read | Begins immediately after the eighth character record (`0x0008 + 8 * 39 = 0x0140`). Used only for the Avatarhood test in Section 5.3. |
 
@@ -149,10 +149,14 @@ source value: Section 7 specifies the attribute translation, the experience
 scaling, and the recalculated level and hit-point fields. Validation happens
 first, on the raw source values.
 
-The party-wide block begins with a four-byte food counter and a two-byte gold
-counter, and the eight virtue/karma standing values follow as eight consecutive
-16-bit words at block offsets `0x06` through `0x14` (file offsets `0x0146`
-through `0x0155`).
+Within the party-wide block the transfer skips the first six bytes and reads
+the eight virtue/karma standing values as eight consecutive 16-bit words at
+block offsets `0x06` through `0x14` (file offsets `0x0146` through `0x0155`).
+The published Ultima IV save layout accounts for those six skipped bytes as a
+four-byte food counter followed by a two-byte gold value; that identification
+comes from the predecessor's own format, not from anything Ultima V does, and
+the transfer never examines either field. An implementation needs only the
+six-byte skip.
 
 ### 5.2 Validation gate
 
@@ -219,9 +223,14 @@ stride is two bytes, giving file offsets `0x0146`, `0x0148`, `0x014A`, `0x014C`,
 The 182-byte read that supplies them begins at file offset `0x0140`, so the
 party-wide food and gold fields at the head of that block are skipped by
 construction rather than by an explicit step. **A byte-wide test, an eight-byte
-span, or any offset near the head of the file is wrong**: eight bytes at
-`0x0002` lands on the moon counter, the dungeon counter and the 16-bit gold
-field, none of which this path ever reads.
+span, or any offset near the head of the file is wrong.** The transfer never
+reads the first eight bytes of `PARTY.SAV` at all — its first read seeks
+straight to `0x0008` — so a test anchored near the head of the file is testing
+bytes this path never loads. Earlier wording here named those head-of-file
+bytes a moon counter, a dungeon counter and a 16-bit gold field; **those labels
+are withdrawn.** They were never established from the Ultima V side, which
+reads nothing in that range, and no part of this contract depends on what those
+bytes hold.
 
 The resulting flag is set at most once and is **never cleared** for the
 remainder of the run, so treat it as a one-shot latch computed per transfer
