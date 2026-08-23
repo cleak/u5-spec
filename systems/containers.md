@@ -168,6 +168,18 @@ helper prints the trapped result and invokes the shared trap-effect resolver in
 bits then drive content generation whether or not the chest was trapped. If no
 content row from either pool succeeds, the chest reports empty.
 
+Every successful row from either pool is committed the same way: the engine
+acquires a free active-object slot, writes the result family and the rolled
+quantity into it, and names the granted object. The slot allocator carries a
+shipped quirk that a reimplementation should reproduce rather than tidy away.
+It scans the active-object table from the highest index downward and returns
+the first index whose class byte is free; when every entry is occupied it
+returns index zero as well. The caller reads a returned index of zero as "no
+slot available" and abandons that row's grant. Two consequences follow: index
+zero of the active-object table can never receive a chest-loot grant even when
+it is genuinely free, and rows rolled while the table is full are dropped
+silently rather than reported.
+
 The primary pool is evaluated once in the order shown below. A row is eligible
 only when its threshold is less than or equal to the chest class. Eligible rows
 then roll `1..30` and succeed when the roll is greater than or equal to the
@@ -614,7 +626,15 @@ does not reproduce decompiled code, assembly, or raw data dumps.
 - `u5-decomp/functions/SJOG_OVL/0x112C_sjog_inner_chest_open.md`.
 - `u5-decomp/functions/SJOG_OVL/0x1040_sjog_trap_apply_a.md`.
 - `u5-decomp/functions/SJOG_OVL/0x10B8_sjog_trap_apply_b.md`.
-- `u5-decomp/functions/SJOG_OVL/0x0F88_sjog_trap_dispatch.md`.
+- `u5-decomp/functions/SJOG_OVL/0x0F88_sjog_trap_dispatch.md` (filename is
+  historical; the note's 2026-08-22 banner withdraws the "trap" reading and
+  establishes the routine as the object-slot grant).
+- Source provenance: the per-row commit through an acquired active-object slot,
+  the downward scan of the slot table, and the index-zero collision that makes
+  slot zero unreachable and silently drops rows when the table is full --
+  re-derived on 2026-08-22 and recorded in the banner and addendum on
+  `u5-decomp/functions/SJOG_OVL/0x0000_sjog_per_party_check.md` (filename is
+  historical; the routine is the slot allocator, not a party check).
 - `u5-decomp/functions/SJOG_OVL/0x0D4A_sjog_jimmy.md`.
 - `u5-decomp/functions/SJOG_OVL/0x0BAA_sjog_object_table_action.md`.
 - `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md` — source
