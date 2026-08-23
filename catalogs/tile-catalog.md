@@ -248,15 +248,29 @@ A subset of classes animates. The engine implements animation by reserving a con
 
 The dominant pattern is the **four-frame cycle**: a single conceptual tile reserves four sequential indices `N, N+1, N+2, N+3`, each carrying a sprite for one phase. The map cell keeps its authored index forever; a small resident table holds one selector byte per animated id, and the animator advances those selector bytes. The renderer resolves the cell's authored id through its selector at draw time. `systems/animation.md` Section 6 owns this contract.
 
-Moongate graphics are **not** animated at all. A natural moongate is ordinary
-live terrain: the once-per-turn refresh writes the moon-gate tile onto an
-eligible Moonstone cell at night and restores the underlying grass after dawn,
-and the renderer paints it like any other tile. An earlier revision of this
-catalog described a bespoke render-frame plate driven by a moongate animator
-that cycled a sixteen-step visual sequence; that reading is withdrawn. The
-sixteen-step cycle it described belongs to the night-time light beacon
+Moongates have **no authored frame family** and are not members of any animator
+cycle in this catalog. A natural moongate is ordinary live terrain: the
+once-per-turn refresh writes the moon-gate tile onto an eligible Moonstone cell
+at night and restores the underlying grass after dawn.
+
+An earlier revision described a bespoke render-frame plate driven by a moongate
+animator cycling a sixteen-step visual sequence; **that reading is withdrawn** -
+there is no such plate and no such animator, and the sixteen-step *bearing*
+cycle it described belongs to the night-time light beacon
 (`systems/visibility.md` Section 12.6), which paints light, not gates.
-`systems/overworld.md` owns the gate placement and entry contract.
+
+**A second correction, because the withdrawal above overshot.** A revision of
+this catalog then said moongates are "not animated at all" and that the renderer
+"paints it like any other tile". That is also wrong, and it contradicted
+Section 11 of this same document. A gate cell is painted as a plain tile only at
+full presence; at every intermediate phase the renderer *composes* the frame at
+draw time from the gate tile and the cell's ground tile. What is true is the
+narrower claim: no authored frames exist and no animator advances it. The phase
+is driven by a persistent, save-backed presence value, not by a render tick.
+
+The full model is `systems/overworld.md` Section 9.1, which also owns gate
+placement and the entry contract; the composition and its scratch tile are
+described in Section 11 below.
 
 | Tile ids | Family | Cycle length | Animator |
 |---|---|---|---|
@@ -265,7 +279,7 @@ sixteen-step cycle it described belongs to the night-time light beacon
 | `0xEC..0xEF` | The standard of Britannia | 4 (half rate — same gate as the pendulum) | Per-turn world-tick tile animator |
 | `0x80..0x83` | Pendulum | 2 (paired toggle, half rate) | Per-turn world-tick tile animator |
 | `0xFA..0xFD` | Grandfather clock, bellows | 2 (paired toggle, quarter rate) | Per-turn world-tick tile animator |
-| — | Moongate | None | Not animated; live terrain (see note above) |
+| — | Moongate | None authored (16 phases composed at draw time) | **No animator.** Live terrain; phase driven by a persistent save-backed presence value, not a tick. See the note above and `systems/overworld.md` Section 9.1 |
 | — | Vehicles | 4 per facing | Active-object animator |
 | — | Monsters | 2..4 per facing | Active-object animator |
 | — | Effects | 1..8 | Per-effect handler |
