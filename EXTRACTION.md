@@ -88,6 +88,40 @@ implementer read the strings from the user's own copy of the game data at
 runtime — which is the approach several other specs here already take for
 `SHOPPE.DAT` barks and `KARMA.DAT` verdict paragraphs.
 
+## Measured Residual Error Rate
+
+On 2026-08-22, after the correction passes, an unbiased sample was taken to
+answer "how much is still wrong?" rather than to hunt for more bugs. Claims were
+selected by a positional rule (every third numbered section of each doc, first
+checkable assertion) with no regard to how suspicious they looked, and each was
+verified directly against the shipped binaries rather than against the private
+notes — the notes and the spec share an ancestor and can be wrong together. A
+second agent then audited each sample for selection bias and rubber-stamping.
+
+**Result: 138 claims sampled, 131 correct, 5 wrong, 2 unverifiable — a residual
+error rate of roughly 3.6%,** of which 3 would have broken an engine
+implementing them. All five have been fixed. Treat the figure as a
+per-section-cluster rate rather than a per-assertion rate: some sampled units
+were a single sentence, others were whole tables that proved exhaustively
+correct (the 48-row equipment table matched the shipped arrays in all 288 cells).
+
+Two things are worth carrying forward from the measurement:
+
+**A correction source can itself be the defect.** The worst of the five — the
+spell scene allow-mask with its dungeon and combat bits transposed — was a
+*regression*. Git history shows the spec had the mapping right, and a later pass
+overwrote it from a `CORRECTIONS.md` entry whose own Finding line was wrong.
+That entry was then struck through as landed, which made the regression look
+like a completed fix. The root cause was an annotation in a private note that
+assumed the combat scene byte is `0x28`, which is in fact Doom, the eighth
+dungeon. Propagating a correction is not safe merely because it is labelled a
+correction.
+
+**Verification against the ancestor proves nothing.** Several errors survived
+multiple review passes because reviewers checked the spec against the private
+notes, which agreed with it. Only re-derivation from the shipped binaries
+distinguishes "the spec matches our notes" from "the spec matches the game".
+
 ## Known V1 Deferrals
 
 These items are intentionally not treated as blockers for the v1 visible-MVP
