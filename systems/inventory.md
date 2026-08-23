@@ -765,6 +765,41 @@ directly from the shipped binaries; private analysis in
 private note describes the R-Ready item prompt with the wrong literal; the
 published Section 5.1 wording matches the binary and that note does not.
 
+### Refusal and label strings are shipped data, not spec content
+
+This document refers to messages **descriptively** - "the only-outdoors
+refusal", "the only-at-night refusal" - and deliberately does not quote them.
+That is not an omission to be filled by inventing literals.
+
+**Every one of these strings ships inside `DATA.OVL`, which any user running
+this engine already owns.** An implementation should **read them from the
+shipped file at runtime** rather than embedding transcribed copies in its own
+source. Doing so is both more faithful - the text matches whatever edition the
+user has, including its typographic quirks - and avoids carrying game content
+in an engine repository.
+
+The strings are NUL-terminated and sit in a contiguous run of command messages.
+For the two this section refers to, and their immediate neighbours, the file
+offsets in `DATA.OVL` are:
+
+| File offset | Message |
+|---|---|
+| `0x49D2` | the ship-rigged-for-double-speed line |
+| `0x49F1` | the only-usable-on-shipboard refusal |
+| `0x4A0C` | the Sextant label |
+| `0x4A16` | the only-outdoors refusal |
+| `0x4A26` | the only-at-night refusal |
+
+**The label carries its own trailing blank line.** The Sextant label string ends
+with two newlines, so the coordinate pair lands on a separate line from the
+label with one blank line between. An implementation that prints the label and
+the coordinates on one line has dropped the string's own formatting - which is
+the concrete reason to emit the shipped bytes rather than a transcription.
+
+Where a refusal is shared between causes, it is genuinely the **same string**:
+the Underworld and an indoor scene both take the only-outdoors refusal, and
+neither has an Underworld-specific message.
+
 Sextant and Spyglass gate provenance (2026-08-23): the three-part
 plane/scene/night test on each item, the shared refusal text, and the
 Underworld's exclusion by the plane condition; re-derived from the shipped
