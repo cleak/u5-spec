@@ -132,9 +132,9 @@ through to the no-action/default case. The public behaviour names are:
 | `0` | Stationary at the selected waypoint. |
 | `1` | Random wander, bounded to a small radius around the waypoint. |
 | `2` | Random wander without the radius bound. |
-| `3` | Follow or shadow the player while maintaining distance. |
+| `3` | **Flee** when the player comes within about four tiles. The only mode that moves away from the player. (Earlier revisions said "follow or shadow the player while maintaining distance"; that was inverted.) |
 | `4` | Approach and attack when close enough. |
-| `5` | Reserved engage/chase path; present in the dispatcher but not used by shipped roster data. |
+| `5` | Randomized chase with the attack-event adjacency behaviour; fully live in the dispatcher but not used by shipped roster data. |
 | `6` | Guard or blocking event path. |
 | `7` | Randomized chase/engage path. |
 

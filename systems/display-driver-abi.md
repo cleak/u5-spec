@@ -42,10 +42,12 @@ Callers preserve their own data segment around driver calls because driver
 entries may change segment registers. Arguments are passed in registers or in
 driver-resident state, not through a public stack frame.
 
-The separate resident far pointer used by the screen-mode handler is not a
+The separate resident far pointer used by the disk-error handler is not a
 driver dispatch cell. It points back into the resident executable and should
 not be treated as part of the `*.DRV` ABI. Its public behaviour is specified in
-`screen-mode-dispatch.md`.
+`disk-prompt.md`. (Earlier revisions of this paragraph called it the
+"screen-mode handler"; that name is withdrawn — see
+`systems/screen-mode-dispatch.md`.)
 
 ## 3. EGA Baseline Mode
 

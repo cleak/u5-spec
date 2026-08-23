@@ -141,9 +141,9 @@ give the disk-prompt controller an opportunity to repaint or wait for the
 active prompt context before the next gameplay mode is dispatched.
 
 The outer loop does not define file I/O semantics. Failed reads and writes are
-retried by the save/load I/O wrappers, while the visible prompt, active disk
-hint, and per-mode prompt-state table are owned by
-`systems/screen-mode-dispatch.md`. A modern engine that loads everything from
+retried by the save/load I/O wrappers, while the visible prompt, the
+required-disk index, and the per-disk drive-letter table are owned by
+`systems/disk-prompt.md`. A modern engine that loads everything from
 one directory can no-op the visible prompt path, but should keep the retry
 contract described in `systems/save-load.md` for byte-compatible I/O wrappers.
 
@@ -216,9 +216,9 @@ The behaviour described above was derived by reading the function and format not
 - The per-turn cleanup that advances time and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/`.
 - The shared per-turn party-capability check that opens each exploration turn and routes a total-party defeat — `u5-decomp/functions/ULTIMA_EXE/`. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
 - The data-segment layout of the scene byte, time clock, daylight value, and disk-swap state — `u5-decomp/formats/data-ovl.md`.
-- Disk-prompt presentation state and retry ownership —
+- Disk-prompt state and retry ownership —
   `u5-decomp/functions/ULTIMA_EXE/`, and
-  `systems/screen-mode-dispatch.md`.
+  `systems/disk-prompt.md`.
 - The save-image encoding of the scene byte and the resumption rules — `u5-decomp/formats/saves.md`.
 - The lifecycle trace that corrects the scene-byte value set and combat marker semantics — `u5-decomp/notes/critical_state_lifecycles.md`.
 - The OUTSUBS ownership correction and DNGLOOK/DUNGEON dungeon-cluster

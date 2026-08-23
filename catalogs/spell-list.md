@@ -382,8 +382,10 @@ combat-only and dungeon-only spells.
   direction prompt, an adjacent cached target coordinate, or an ordered
   eight-cell ring. Summon's self-check threshold is a concrete stat — the
   caster character's **Intelligence** for a party caster (the only case a player
-  C-Cast can reach), or the class row's flip-HP field, the third of the eight
-  class-stat fields, for a monster caster — compared against a
+  C-Cast can reach), or the class row's **endurance rating**, the third of the
+  eight class-stat fields, for a monster caster (this field was published as
+  "flip-HP" in earlier revisions; that name is withdrawn along with the
+  team-flip mechanic it referred to) — compared against a
   uniform inclusive `0..60` roll halved with the fraction discarded and floored
   to one, i.e. `1..30`. On `roll >= threshold` the cast prints `Oops...`,
   returns the silent-failure result, and leaves the Daemon placed but

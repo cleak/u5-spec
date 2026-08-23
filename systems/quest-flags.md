@@ -30,7 +30,7 @@ Confirmed durable families include:
 | NPC interaction facts | `systems/conversation.md`, `systems/town-mode.md`, and save-backed state | Persistent named-NPC facts are semantic state written by their owning systems, such as town-side killed/cleared NPC state. Do not model the entire mixed save band before the active-object table as a dense NPC flag array. |
 | Shadowlord state | `catalogs/quest-graph.md` and related systems | Current hideout town or vanquished state for each Shadowlord, plus the active-Shadowlord handshake. |
 | Word-of-Power seal flags | `systems/commands.md` and `formats/saved-gam.md` | One durable flag per dungeon recording whether its Word of Power has been spoken. Region loading re-derives the sealed entrance tile from these flags, so they are world state, not presentation scratch. |
-| Shrine ruin flags | `systems/karma.md` and `formats/saved-gam.md` | One durable flag per shrine recording whether that shrine currently stands ruined; region loading re-derives the ruined tile from it. |
+| Shrine ruin flags | `systems/blackthorn.md`, `systems/karma.md` and `formats/saved-gam.md` | One durable flag per shrine recording whether that shrine currently stands ruined; region loading re-derives the ruined tile from it. **The only writer that sets a shrine ruined is Blackthorn's mantra interrogation** — giving him a shrine's correct mantra desecrates it. Meditating at the shrine with the right virtue and mantra clears the flag again. |
 
 These fields are ordinary game state, not conversation scratch. If a branch
 grants an item, marks a shrine path complete, vanquishes a Shadowlord, or sets

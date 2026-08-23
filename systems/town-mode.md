@@ -686,12 +686,23 @@ hiding.
 Which of the three is hosted also selects a one-shot, town-wide NPC state
 sweep that runs at the end of the same entry pass. This paragraph is the only
 statement of that mapping in this spec — nothing earlier describes it. Hatred
-puts every eligible NPC into the fortified/alert state, Cowardice puts every
-eligible NPC into the pacified state, and Falsehood changes no NPC state at all
-(its effects are the shop surcharge and the conversation theft). Eligibility is
-the same per-NPC predicate the alarm sweeps of Section 14 use, and the two
-resulting states are the same fortified and pacified states described there;
-the difference is only the trigger. Eligibility asks three things of an NPC:
+rewrites every eligible NPC's schedule into **permanent pursuit of the party**,
+Cowardice rewrites every eligible NPC's schedule into **flight** and replaces
+that NPC's conversation with a cowering line, and Falsehood changes no NPC at
+all (its effects are the shop surcharge and the conversation theft). Eligibility
+is the same per-NPC predicate the alarm sweeps of Section 14 use, and the two
+resulting rewrites are the same two described there; the difference is only the
+trigger.
+
+> **Withdrawal.** Earlier revisions of this paragraph called these outcomes "the
+> fortified/alert state" and "the pacified state". Both names were wrong and the
+> first was inverted. There is no NPC "state" field involved: each outcome
+> overwrites the NPC's stored *schedule* and its stored *dialogue index*. The
+> "fortified" outcome installs an aggressive approach mode — nothing about it
+> holds position or defends — and the "pacified" outcome installs the engine's
+> only retreating mode plus a cowering line, so the NPC is frightened rather than
+> calmed. Both rewrites are destructive of persisted data: the NPC's real
+> conversation index is overwritten and cannot be recovered from the save. Eligibility asks three things of an NPC:
 that its daily schedule block is not empty, that its type falls in the
 ordinary-townsperson band, and that a per-NPC coin flip comes up — so roughly
 half of the eligible cast flips on any given entry.
@@ -700,7 +711,7 @@ That predicate carries one original-code quirk worth naming rather than
 inheriting by accident: the type-band half of the test is evaluated against a
 fixed roster slot instead of against the NPC being tested, so it returns the
 same answer for every NPC in the sweep, while the schedule test and the coin
-flip are per-NPC as intended. The state-setting helper the sweep then calls
+flip are per-NPC as intended. The schedule-rewriting helper the sweep then calls
 performs the same band test correctly, against the real NPC. A reimplementation
 should decide deliberately whether to reproduce the fixed-slot read; it is an
 implementation artefact, not a designed rule. In a town hosting no Shadowlord, and in a
@@ -723,11 +734,23 @@ Some named locations contain hostile NPCs. A guard in Blackthorn's keep, for exa
 
 A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). A-Attack directed at a town NPC plays the attack presentation, can smash a small prop, can mark or clear the targeted NPC through the town death flow, and can trigger the town-wide alarm sweep. An earlier revision of this section also said the town overlay "does not call the combat framer or swap to a `.CBT` arena"; that is withdrawn. The town overlay has a live NPC-conflict chain, entered both from A-Attack and from post-action cleanup, that hands the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses, so a town fight is an ordinary arena fight: ordinary town ground resolves to the cobble arena, and the scene-keyed town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). On exit the town chain clears the NPC slot, reloads the town map, and re-runs the Shadowlord install pass of Section 13 (which, in a hideout town whose Shadowlord is still standing in the active-object table, is rejected by the one-at-a-time check and does nothing). The full contract is in `systems/encounters.md` Section 7.
 
-NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an attack/catch event, town post-action cleanup routes it through the alarm, arrest, pacify, death, or slot-clear paths described below, or into the NPC-conflict chain above; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
+NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an attack/catch event, town post-action cleanup routes it through the alarm, arrest, frighten, death, or slot-clear paths described below, or into the NPC-conflict chain above; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
 
-Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, eligible NPCs are forced into a fortified/alert schedule state or into a pacified/fleeing schedule state; some special classes — the Shadow Lord actor class, the lich/death-mage class, and the guard class — are fortified instead of fleeing. Other eligible townsfolk use a random half-chance before switching into the fleeing state. The schedule walker consumes these state changes on later ticks.
+Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, an eligible NPC's stored schedule is overwritten in one of two ways.
 
-After each schedule tick, town mode interprets the walker's event bytes. A non-attack/flee event from an alarmed NPC can print the associated message and pacify that NPC. Three routings reach the arrest sequence: a guard-catch event byte raised for an NPC that is not already alarmed and whose active-object tile is in the guard sprite family; the Talk entry reporting a positive result for the flagged NPC; and a preceding command whose dispatch result carried the arrest outcome code, which reaches the handler unconditionally regardless of any event byte. Which commands can produce that third result is not yet enumerated; an implementation should keep the routing but treat the command set behind it as open. The sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In every other location, and in Blackthorn's castle when nobody can act and nobody is asleep, it prints the arrest challenge and asks whether the party will come quietly: surrendering prints the knockout and awakening lines, fades, moves the party to the Yew jail scene at `(25, 4, 0)`, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing prints the guards' challenge, triggers the alarm sweep, and consumes the turn. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
+- **Forced pursuit.** All three of the NPC's per-period behaviour modes are set to an approach mode, and all four of its time-of-day boundaries are zeroed so the schedule can never advance past its first period. The NPC's waypoint coordinates are left alone. Two approach modes are used, chosen by the NPC's class: one acts only while the party is within about four tiles, the other acts every turn and adds an occasional random step. Both step toward the party and both raise the "reached the party" event on adjacency, which this section's cleanup turns into the attack path.
+- **Forced flight.** All three behaviour modes are set to the engine's only *retreating* mode — it acts only while the party is within about four tiles, and then steps to whichever neighbouring square is **further** from the party — and the NPC's dialogue index is overwritten with a sentinel that makes conversation produce a single canned cowering line instead of the NPC's real script. This is destructive: the real dialogue index is gone.
+
+Some special classes — the Shadow Lord actor class, the lich/death-mage class, and the guard class — always take the pursuit rewrite. Other eligible townsfolk take a random half-chance of the flight rewrite; the rest are untouched. The flight rewrite additionally applies only to ordinary human townsperson classes, so monsters cannot be made to flee. The schedule walker consumes these rewrites on later ticks.
+
+> **Withdrawal.** Earlier revisions called these "a fortified/alert schedule
+> state" and "a pacified/fleeing schedule state". "Fortified" was inverted — the
+> mode installed is an approach mode — and "pacified" was wrong in the other
+> direction: the NPC is frightened, not calmed, and calm is a different mode
+> entirely. Neither writes an NPC "state" field; both overwrite persisted
+> schedule data, and the flight rewrite also destroys the NPC's conversation.
+
+After each schedule tick, town mode interprets the walker's event bytes. When an NPC in one of the two approach modes reaches the party, it raises the guard/non-attack event; if that NPC's dialogue index is already the sentinel written by an earlier sweep, town mode prints a shouted brush-off ("Begone, vermin!") and then applies the **flight** rewrite to that NPC — one warning, then it runs. (Earlier revisions described this as printing a message and "pacifying" the NPC; both halves are withdrawn.) Three routings reach the arrest sequence: a guard-catch event byte raised for an NPC that is not already alarmed and whose active-object tile is in the guard sprite family; the Talk entry reporting a positive result for the flagged NPC; and a preceding command whose dispatch result carried the arrest outcome code, which reaches the handler unconditionally regardless of any event byte. Which commands can produce that third result is not yet enumerated; an implementation should keep the routing but treat the command set behind it as open. The sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In every other location, and in Blackthorn's castle when nobody can act and nobody is asleep, it prints the arrest challenge and asks whether the party will come quietly: surrendering prints the knockout and awakening lines, fades, moves the party to the Yew jail scene at `(25, 4, 0)`, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing prints the guards' challenge, triggers the alarm sweep, and consumes the turn. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
 
 ## 15. Exit
 
@@ -898,7 +921,7 @@ The behaviour described above was derived by reading the function and format not
   full-reload semantics of a floor change, and the two roles of the saved floor
   byte. It also fixes the floor of the harpsichord puzzle: floor `2` is two
   storeys above the castle's entry floor, not a basement.
-- The town alarm, pacify/fortify, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`.
+- The town alarm, forced-pursuit / forced-flight schedule rewrites, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/`.
 - The Lord British castle chord handler - `u5-decomp/functions/TOWN_OVL/`.
 - The Stonegate setup helper audio/presentation pattern - `u5-decomp/functions/TOWN_OVL/`.
 - The free-roaming animal/object walker and its narrow town terrain predicate - `u5-decomp/functions/TOWN_OVL/`.

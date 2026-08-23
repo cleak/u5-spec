@@ -109,8 +109,9 @@ The schedule column uses the roster's three-waypoint model:
 - `A`, `B`, and `C` are the three stored waypoints.
 - `m#` is the per-waypoint AI/mode byte. The values are interpreted in
   `systems/npc-schedules.md`: `m0` stationary, `m1` bounded wander, `m2`
-  unbounded wander, `m3` follow/shadow, `m4` approach/attack, `m5` reserved
-  engage path, `m6` guard/blocking event, and `m7` randomized chase.
+  unbounded wander, `m3` **flee when the player closes** (corrected — it was
+  listed as "follow/shadow"), `m4` approach/attack, `m5` randomized chase with
+  the attack event, `m6` approach-and-guard-event, and `m7` randomized chase.
 - `@(x,y,z)` is the waypoint coordinate in the location's 32 by 32 grid. `z`
   is shown as signed when the byte is the observed below-floor sentinel.
 - `A 21-09` means waypoint A applies from hour 21 through hour 8, wrapping

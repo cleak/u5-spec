@@ -616,9 +616,12 @@ warp.
 
 The sequence, in order:
 
-1. One world-tick pause, then a short PC-speaker sweep from the shared software
-   envelope generator - the same generator the shrine effect uses, not a
-   melodic cue.
+1. One world-tick pause, then a short PC-speaker sweep from the shared
+   parameter-sweep sound helper - a swept tone, not a melodic cue. *Corrected:*
+   an earlier revision named the shrine effect as another user of that same
+   helper. **That comparison is withdrawn** - it rested on a mis-identified
+   routine, and the effect it named does not use this helper at all. The
+   verified other user of it is the Blackthorn pendulum-blade descent.
 2. **Stage A, the party is swallowed.** The party sprite is switched to tile
    `0x116`, and the party's view cell is dissolved into the moon-gate tile
    pixel by pixel: the cell is first cleared to colour zero, then **255** of its

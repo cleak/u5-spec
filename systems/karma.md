@@ -234,6 +234,7 @@ Negative boundaries for unpromoted action families:
 | Refusing requested aid | Conversation refusal branch | No separate traced writer is promoted. Branch text may express virtue judgement without proving a runtime standing delta. |
 | Giving to a needy NPC | Conversation "give" path with gold or food | The traced three-digit conversation gold-payment control byte debits party gold and carries the narrowly gated milestone bump described in Section 4.1, but it is not a per-virtue Compassion writer. Do not turn every conversation gold debit into a charity-karma delta. |
 | Third-party healing | Healer shop or dialogue path for curing a stranger | Shop treatment costs and no-price exceptions are shop/town-scene rules. No karma-owned healer price or standing writer is promoted. |
+| Betraying a shrine's mantra to Blackthorn | The mantra interrogation in `systems/blackthorn.md` Section 4 | **Confirmed scalar writer.** Each correct answer given to Blackthorn debits five points from the shared moral-standing selector, clamped at zero, and separately sets the interrogated shrine's durable ruin flag. This is the only path that sets a shrine ruined. |
 | Paying or refusing a regime guard | The Blackthorn guard-demand handler in `systems/blackthorn.md` Section 7a: the Minoc "charity" demand, the per-living-member tribute, and the palace-gate password | Resolved as a non-writer. The handler's only durable effect is on party gold; it writes no virtue standing, no scalar selector, and no character status, whether the party pays, refuses, or fails the password. Do not model consenting to the "charity" demand as a Compassion gain or refusing the tribute as a Honesty loss. |
 | Attacking a non-hostile NPC | Combat-mode strike on a peaceful or friendly actor | No combat-overlay write to the scalar selector or a per-virtue standing byte is promoted in the current census. Town-family cannon hits are the covered hostile/destructive scalar penalty. |
 | Initiating or refusing combat | Combat engagement or combat-end stay-and-fight branch | Combat framer, ordinary combat exit, reward, and flee paths have no traced post-combat virtue delta. |
@@ -370,7 +371,9 @@ The meditation handler does not require a minimum standing to run. The mechanica
 The shrine/word presentation primitive is a visual-and-audio effect, not a
 quest-state mutator by itself. The traced resident helper produces a turbulent
 full-viewport flash paired with a low, randomized PC-speaker rumble, then
-returns with no direct save-state writes. It is confirmed as the feedback used
+returns with no direct save-state writes. It takes no arguments and reads no
+quest state, which is why the same helper serves every dramatic moment that
+uses it rather than being parameterised per occasion. It is confirmed as the feedback used
 by the Word-of-Power path in `commands.md` and by the CMDS-side
 shrine-restoration branch that path can hand off to. That hand-off is
 reachable: yelling any Word of Power while standing beside a ruined shrine
@@ -569,8 +572,13 @@ The behaviour described here was derived from the private function and format no
 - The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/` and the local CAST2 shrine-handler trace.
 - The shared shrine/word presentation effect boundary -- low randomized rumble
   plus turbulent viewport flash, no direct quest-state mutation -- derived from
-  `u5-decomp/functions/CMDS_OVL/` and cross-checked
-  against the Word-of-Power path in `systems/commands.md`.
+  `u5-decomp/functions/ULTIMA_EXE/` and cross-checked
+  against the Word-of-Power path in `systems/commands.md`. The effect is a
+  shared resident helper, not shrine-specific code: the same helper is invoked
+  from the shrine, Word-of-Power, Shadowlord-destruction, Codex-urn, Lord
+  British audience, and outdoor-loop paths, so an implementation should model
+  it as one reusable presentation routine that several systems call rather
+  than duplicating it per occasion.
 - The M-command shrine/urn dispatcher and urn reader's Codex-read bit stamping,
   prophecy display, completed branch, active-object suspension, and restore/redraw
   wrapper -- derived from

@@ -497,7 +497,7 @@ status-restoration ordering.
 
 Towns and other location-mode maps do not run the random-encounter probe. They **do** reach arena combat, though, and an earlier draft of this section said otherwise. The town overlay has a live NPC-conflict chain, reached both from the A-Attack handler and from post-action cleanup, that passes the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses. The arena selector then resolves to the cobble arena for ordinary town ground, and the terrain setup's town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). When the fight ends, the town chain clears the NPC slot, reloads the town map, and re-runs the town-entry Shadowlord install (`systems/town-mode.md` Section 13), which is normally rejected as a no-op because the town's resident Shadowlord, if any, is still standing in the table. It does not re-place the player: the player's position comes from the world-state globals throughout.
 
-The rest of town hostility remains a town/NPC-system behavior: the alarm sweep, guard-catch and attack event reporting, and the arrest, pacify, death, and slot-clear routing all live in `systems/town-mode.md`.
+The rest of town hostility remains a town/NPC-system behavior: the alarm sweep, guard-catch and attack event reporting, and the arrest, forced-flight, death, and slot-clear routing all live in `systems/town-mode.md`.
 
 The combat framer's ambush entry branch is real, and its setup target is now fully traced: it is the room-NPC setup entry used by dungeon room setup, invoked with an entry mode that runs both the party readback and the sixteen-source scan against the resident arena buffer. The only traced live callers of that *ambush* entry mode are the two dungeon wandering-monster triggers; the town chain described above does not use it, and reaches combat through the ordinary terrain-combat entry instead. So the boundary is: town-triggered fights are ordinary terrain-arena fights and are specified here, while the remaining town hostility bookkeeping stays in `systems/town-mode.md`.
 
@@ -652,7 +652,7 @@ change the current encounter contract.
   the whole write surface. Section 5 states the full contract.
 
 - **Town hostility boundary.** Town hostility is not an arena-encounter path in
-  the traced town overlay. A-Attack, alarm scatter, guard arrest, pacify, death,
+  the traced town overlay. A-Attack, alarm scatter, guard arrest, forced flight, death,
   and slot-clear behavior are owned by `systems/town-mode.md`; do not model
   them as `.CBT` combat unless a separate live combat-framer caller is traced.
 
