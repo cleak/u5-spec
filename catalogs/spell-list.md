@@ -22,13 +22,22 @@ The compact token table, recipe masks, and scene allow masks are resident data.
 Player-facing labels and short effect summaries are aligned with the published
 spellbook/manual names and the decoded handler behaviour.
 
-The resident long-incantation display phrase table is not a reliable one-to-one
-map for the last few spell ids: it has forty-seven entries for forty-eight
-parser ids, includes `Frotz` in the high-circle area, and leaves the final
-Time/Negate-Time handler without a matching phrase in that table. Treat the
-compact token table plus handler behaviour as authoritative for ids 44 through
-47. In particular, id 46 is `PRV` / `Vas Rel Por` / Gate Travel, not Codex
-Vision or a spell named `Frotz`.
+**Correction (supersedes earlier revisions).** Earlier revisions of this
+section described the resident long-incantation display phrase table as sparse:
+forty-seven entries for forty-eight parser ids, with `Frotz` intruding in the
+high-circle area and the final Negate Time id left without a phrase. That was
+an artefact of reading the phrase strings as one packed run and starting two
+strings too late. The phrases are not reached by scanning the string area; they
+are reached through a **forty-eight-entry pointer table**, one pointer per spell
+id, sitting immediately after the eight reagent-name pointers. Under that
+anchor the phrase table is dense and exactly one-to-one with parser ids `0..47`:
+id `0` is `In Lor` and id `47` is `An Tym`. `Frotz` is simply the next string
+after id 47 and is not a spell incantation at all. The alignment is confirmed
+independently: for all forty-eight ids the compact parser token equals the
+alphabetically sorted initials of that id's phrase words, which holds
+forty-eight times out of forty-eight under the pointer-table anchor and fails
+under the old one. Id 46 is `PRV` / `Vas Rel Por` / Gate Travel — that
+attribution was always correct and is unaffected.
 
 ## 2. Rune Syllables
 
@@ -197,10 +206,10 @@ combat-only and dungeon-only spells.
 
 - The table is ordered by engine spell id, not alphabetically and not by the
   manual's display grouping.
-- The long rune-name strings in this catalog are canonical public spell names
-  aligned from parser tokens, manual spell names, and handler behaviour. They
-  are not a dump of a dense resident phrase table; the resident long-phrase
-  table is sparse at the final spell id.
+- The long rune-name strings in this catalog agree with the resident display
+  phrase table, which is dense and one-to-one with spell ids `0..47` when read
+  through its pointer table. They are also independently corroborated by the
+  parser tokens, the manual spell names, and handler behaviour.
 - The compact code is the exact token used by both C-Cast and M-Mix. Examples:
   `IL` is `In Lor`, `GP` is `Grav Por`, `IPVY` is `In Vas Por Ylem`,
   `PRV` is `Vas Rel Por`, and `AT` is `An Tym`.
@@ -438,7 +447,8 @@ High-confidence engine-derived data:
 - Forty-eight spell tokens, forty-eight recipe masks, forty-eight scene masks,
   circle formula, charge counter semantics, parser acceptance rules, and
   mix/cast gate order. The resident long-incantation phrase table is a separate
-  forty-seven-entry display aid, not the authoritative spell-id table.
+  display aid, but it is a dense forty-eight-entry table that agrees one-to-one
+  with the spell ids; the compact parser-token table remains the dispatch key.
 - Reagent bit order and charge cap.
 - Scene mask bit order and scene-byte classification, including the `0xFF`
   combat marker. The dungeon and combat bits were published transposed in

@@ -316,9 +316,16 @@ shop triggers and tag `70` (the guard sprite) for the `0xFF` markers.
 
 Two named cases are intentionally special:
 
-- Lord British's roster slot in `CASTLE:0` has a no-dialogue id; his throne-room
-  conversation is handled by engine logic rather than by a normal `CASTLE.TLK`
-  blob.
+- Lord British has **no** roster slot in `CASTLE:0`. **Retraction:** earlier
+  revisions of this section said his slot was present with a no-dialogue id and
+  the guard-class role tag; that claim is withdrawn. The role tag that names his
+  own sprite class occurs nowhere in any of the four `.NPC` files, none of
+  `CASTLE:0`'s dialogue ids resolves to a Lord British record (its nine authored
+  ids are the residents tabulated above, Alistair the Bard through Chuckles),
+  and the twelve no-dialogue slots that prompted the original claim all carry
+  the ordinary guard role tag `70`, twelve of them, indistinguishable from one
+  another. Whatever presents Lord British in the throne room is not a scheduled
+  roster NPC, and an implementation must not synthesise one.
 - Lord Blackthorn's castle reuses dialogue id 12 for six guard roster slots.
   Those guards are interchangeable schedule actors sharing one authored
   dialogue record, whose display-name entry is the punctuation string `....`

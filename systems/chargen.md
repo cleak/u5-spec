@@ -406,7 +406,7 @@ underworld and mirrors them without normalization. Remaining work is not about
 the questionnaire, seed-stock ownership, save-image producer, or first-load
 file lifecycle.
 
-- **`BRIT.OOL`/`UNDER.OOL` lifecycle.** The chargen writer does not refresh either per-plane mirror; it writes only `SAVED.OOL` and `SAVED.GAM`. The standard load path later refreshes both per-plane mirrors from `SAVED.OOL`, while the in-game save path stages through those files, writes both mirrors, and may flush the underworld mirror a second time. This belongs to the save/load system rather than chargen; it is flagged here only because the filenames overlap.
+- **`BRIT.OOL`/`UNDER.OOL` lifecycle.** The chargen writer does not refresh either per-plane mirror; it writes only `SAVED.OOL` and `SAVED.GAM`. The standard load path later refreshes both per-plane mirrors from `SAVED.OOL`, while the in-game save path stages *from* those files - it reads both, writes only the underworld one back, and only on the disk-prompt-mode branch. This belongs to the save/load system rather than chargen; it is flagged here only because the filenames overlap.
 
 ## 12. Sources
 

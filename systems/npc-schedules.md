@@ -434,7 +434,7 @@ waypoint.
 | `2` | Unbounded random wander. The NPC occasionally takes a random cardinal step without the waypoint-radius limit. |
 | `3` | Follow or shadow the player at distance. If the player is too close, it falls into the chase/engagement family rather than standing still. |
 | `4` | Approach-and-attack family. While the player is far enough away, the NPC uses the wander step with a shrinking range around the waypoint; when close, it can raise the town-mode attack event. |
-| `5` | Reserved engage path. The dispatcher has a slot for it, but shipped `.NPC` data does not use it. |
+| `5` | Randomized chase with the attack event. Fully implemented, but unused by shipped `.NPC` data. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test raises the same town-mode attack event as value `4` rather than the guard event. It is not a reserved hole or a no-op: an implementation that treats value `5` as inert would diverge from the engine on any authored or modified roster that used it. |
 | `6` | Guard/blocking event family. It shares the follow-distance movement path but raises the non-attack guard event when adjacent. |
 | `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation. |
 

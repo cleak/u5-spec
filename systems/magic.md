@@ -132,7 +132,7 @@ The full table:
 | 8      | Vas Rel Por               | Gate Travel         | Long-range teleport via saved Moonstone slot.               |
 | 8      | An Tym                    | Negate Time         | Freeze the passage of time for actors.                     |
 
-The parser tokens, public canonical incantations, circles, recipes, and table order are fixed for all forty-eight spell ids. The compact parser-token table is the dispatch key. The resident long-incantation display phrase table has only forty-seven entries and is not a reliable one-to-one id map for the last few high-circle entries; the public spell list is aligned to the parser ids and handler behaviour.
+The parser tokens, public canonical incantations, circles, recipes, and table order are fixed for all forty-eight spell ids. The compact parser-token table is the dispatch key. The resident long-incantation display phrase table is a dense forty-eight-entry table reached through a per-id pointer table, and it is one-to-one with the parser ids from `In Lor` at id 0 to `An Tym` at id 47; an earlier revision called it a forty-seven-entry sparse table, which was an anchoring mistake and is withdrawn. The public spell list agrees with it and is additionally aligned to the parser ids and handler behaviour.
 
 The mana cost for any spell is `(spell_index / 6) + 1` (integer division, zero-based index 0..47). Equivalently, the circle number. Circle 1 costs 1 MP, circle 8 costs 8 MP. There are no half-costs, no cost-reduction items, and no per-class cost adjustments — magic is uniform across casters.
 
@@ -1108,5 +1108,5 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/CAST2_OVL/0x0E76_enter_shrine_or_urn.md`,
   `u5-decomp/functions/CAST2_OVL/0x0966_shrine_meditate.md`, and
   `u5-decomp/functions/CAST2_OVL/0x0D24_read_urn.md`.
-- The twenty-four-entry rune-syllable dictionary, the sparse resident long-incantation display phrase table, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/data-ovl.md`, `u5-decomp/notes/system-trace_magic.md`, and local `DATA.OVL` table reads.
+- The twenty-four-entry rune-syllable dictionary, the forty-eight-entry resident long-incantation display phrase table and its per-id pointer table, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/data-ovl.md`, `u5-decomp/notes/system-trace_magic.md`, and local `DATA.OVL` table reads.
 - The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine quest masks — derived from `u5-decomp/formats/saves.md`.
