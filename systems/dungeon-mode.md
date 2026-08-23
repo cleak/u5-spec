@@ -842,7 +842,12 @@ The three chest commands form one lifecycle built from a single rewrite idiom:
 keep the cell's variant bit, then replace the class and the remaining low bits.
 A successful dungeon Jimmy rewrites a locked chest cell to the variant bit plus
 the closed-chest class, which clears the lock/trap sub-type. Open rewrites that
-cell to the variant bit plus the open-chest class. Get rewrites it to the
+cell to the variant bit plus the open-chest class; because that rewrite replaces
+the low bits, it also clears the lock/trap sub-type, and it runs **whether or not
+a trap fired on this open**. A trapped dungeon chest therefore consumes its trap
+condition when opened and cannot spring twice — the same outcome
+`systems/traps.md` § 4 records for surface and town containers, reached by a
+different mechanism. Get rewrites it to the
 variant bit alone, which is a plain passage cell. Get therefore leaves floor
 behind rather than promoting the cell to some further "looted chest" state,
 because the class it is looting from already *is* the open-chest class — there

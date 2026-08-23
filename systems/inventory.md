@@ -403,8 +403,11 @@ these readied-equipment writes.
    The four corner keys — Home, End, PgUp and PgDn, or the numpad corners, which
    the input layer delivers as the four diagonal codes — page the list by a full
    eight-row window. This and the shop list navigator are the only places
-   outside combat's targeting cursor that consume those codes at all. Enter
-   confirms the current row. Escape exits and restores the HUD.
+   outside combat's targeting cursor that consume those codes at all. **Enter
+   or Space** confirms the current row - the picker tests the two keys
+   separately and both reach the same eligibility cascade. (*Corrected:* an
+   earlier revision of this step named Enter alone.) Escape exits and restores
+   the HUD.
 5. After a successful or refused selection, the picker remains open until the
    player exits, so several items can be attempted in one R-Ready invocation.
 
@@ -413,18 +416,69 @@ stock band; another caller can reuse the same picker against a different item
 band and name table.
 
 **Turn cost.** R-Ready costs a turn in every mode, and a refusal costs exactly
-what a success costs — there is no free retry. The equipment overlay reports no
-status of its own: the cascade returns the same value for every refusal and for
-every successful equip, the picker consumes that value only as a "close the
-panel" signal, and the command layer discards it. Outside combat the dispatcher
-reports its default "acted" status for `R` whatever the overlay did, so the
-mode loop runs its per-turn epilogue and the clock advances even if the player
-opens the panel and immediately backs out. In combat, `R` runs through the
-labelled prompt with the live-actor gate, so it ends the acting combatant's
-action; only a dead actor escapes the cost, with a short refusal and a free
-re-prompt. Because the panel stays open until the player exits, the cost is per
-invocation of the command, not per item readied: several items can be equipped,
-unequipped or refused within one turn.
+what a success costs — there is no free retry. This rule was challenged and
+re-derived from the shipped binaries on 2026-08-23; it stands unchanged, and an
+implementation that never advances the clock on `R` is wrong against the
+original in every mode.
+
+The equipment overlay reports no status of its own. The eligibility cascade
+returns the same value for every refusal and for every successful equip and
+unequip — the one exception is the magic-ring vanish path, which returns the
+other value — the picker consumes that value only as a "close the panel"
+signal, and the command layer discards it before the mode loop ever sees it. No
+outcome inside R-Ready can therefore change the turn cost.
+
+Outside combat the dispatcher reports its default "acted" status for `R`
+whatever the overlay did: the `R` arm never writes the status word and is not
+one of the arms that overwrite it from their handler's return value. The mode
+loop then runs its per-turn epilogue and the clock advances even if the player
+opens the panel and immediately backs out. The three world mode loops differ
+only in how they reach that conclusion: world and town modes skip their epilogue
+only on a "no action" status, which `R` never reports; dungeon mode advances its
+clock at the head of every loop iteration, ahead of the input read and not
+gated on the status at all, so `R` costs a minute there exactly as any other
+keystroke does. Town mode additionally skips its whole epilogue when no party
+member is able to act; that is an all-incapacitated edge case, not an `R`
+exemption.
+
+In combat, `R` runs through the labelled prompt with the live-actor gate, so it
+ends the acting combatant's action. Only an actor that fails that gate escapes
+the cost, with a short refusal and a free re-prompt. The mechanism is worth
+stating precisely, because it is easy to describe wrongly: the shared verb
+helper discards whatever the ready cascade returned and reports success
+unconditionally on every dispatched path, and the combat parser keeps that value
+in a slot separate from its "the prompt is finished" flag — the flag is already
+set before the letter is dispatched, so `R` always leaves the inner prompt loop.
+The parser's epilogue then re-prompts on the gate's failure value and ends the
+actor's action otherwise.
+
+Every one of these therefore charges a turn: cancelling the member prompt before
+an item is ever shown; the empty-handed refusal; the silent ammunition row; the
+strength refusal; the combat body-armour lock; the occupied-slot and
+hand-occupancy refusals; the ammunition-prerequisite refusal; a successful
+equip; a successful unequip; the ring vanish; and opening the picker and
+immediately pressing Escape. Because the panel stays open until the player
+exits, the cost is per invocation of the command, not per item readied: several
+items can be equipped, unequipped or refused within one turn.
+
+Scope of that claim: it rests on reading the dispatcher's `R` arm, the R-Ready
+entry point, the eligibility cascade, the combat verb helper and all three mode
+loops end to end, plus a transitive walk of everything the R-Ready subtree calls,
+which does not reach the clock. That walk follows direct near calls only, so a
+clock advance reached by a far call or a computed call would not have been seen.
+Nothing suggests one exists, and one would be redundant given the dispatcher's
+unconditional "acted" status, but the negative is bounded by that method.
+
+An independent re-verification on the same day re-derived the positive half of
+the rule in full — the dispatcher's `R` arm provably never touches the status
+word, and all three mode loops and the combat parser were read end to end — but
+repeated only an overlay-local scan for direct calls into the clock routine, not
+the transitive walk. So one narrow point is an explicit gap, published rather
+than glossed: **whether anything the R-Ready subtree calls advances the clock a
+second time, producing a double charge, is not established.** It cannot change
+whether a turn is charged, because the mode loop charges one on a positive
+finding regardless; it can only affect how much time one `R` costs. Walking the
+subtree's resident callees to their returns would settle it.
 
 ### 5.1 R-Ready presentation
 
@@ -434,14 +488,36 @@ label on the panel's top border, the `Player:_` prompt in the message window,
 and the fifteen-cell inverse-video row. Its item list is the eight-row frame of
 Section 4.4 with the row format of Section 4.5.
 
-The literals R-Ready owns for itself are:
+The literals R-Ready owns for itself are the first three below; the fourth
+belongs to the shared picker's other caller and is listed only for contrast,
+because the two were previously described the wrong way round:
 
 | Literal | Meaning |
 |---|---|
 | `Item:_` | The item prompt, in the message window. Colon then one trailing space. |
 | `Thou_art_empty-\nhanded!\n` | Nothing to ready. The embedded newline is part of the literal, so the word "handed" always starts a new line. |
-| `None!\n` | The picker was cancelled. |
-| `Done\n` | The picker was closed after use. |
+| `Done\n` | **What R-Ready prints when the player leaves the picker with Escape.** |
+| `None!\n` | Printed by the *other* caller of the same shared picker on its Escape, never by R-Ready. Listed here only so the pair is not confused. |
+
+**Those last two literals are now settled.** The shared picker has exactly one
+Escape arm, and it chooses between the two literals purely from the mode value it
+was opened with: R-Ready's mode selects `Done`, and the other caller's mode
+selects `None!`. *Corrected:* an earlier revision of this table glossed `None!`
+as "the picker was cancelled" and `Done` as "the picker was closed after use" —
+which reads as though R-Ready prints `None!` on Escape. Both glosses are
+withdrawn; they had the two the wrong way round for R-Ready. A further revision
+recorded the attribution as **UNVERIFIED**; that flag is now cleared, and the
+point should no longer be treated as an open question.
+
+The magic-ring vanish closes the picker without printing either literal, so a
+port must not attach `Done` to every close — only to the Escape exit. Neither
+literal affects any state.
+
+Scope of the settlement: it rests on locating every load of either literal's
+address across the equipment overlay and nineteen other shipped code overlays,
+which found exactly two, both inside that single Escape arm. That scan covers
+loads of the address as an immediate; a pointer fetched from memory instead would
+not have been seen.
 
 Closing the picker restores the message-window frame and then triggers a full
 roster redraw, which is what puts the six member rows, the food-and-gold line
@@ -494,8 +570,13 @@ metadata and applies these gates before writing a slot:
   slot/conflict gates accept the selection, the command writes the ring slot
   and decrements the shared carried counter, then rolls an inclusive `0..15`
   random value. On zero, it prints vanish feedback, clears the ring slot back
-  to empty, plays the short vanish sound, and returns a consumed-action result
-  to its caller. On any nonzero result, the ring remains readied.
+  to empty, plays the short vanish sound, and returns the cascade's *other*
+  return value — which the picker reads as "close the panel", and nothing else.
+  This is the only path in the cascade that produces that value. *Corrected:* an
+  earlier revision described it as returning "a consumed-action result to its
+  caller". That is withdrawn: it is not a turn-cost signal, the turn cost of the
+  vanish path is identical to every other path (see Section 5), and the value
+  never leaves the picker. On any nonzero roll, the ring remains readied.
 
 When an ordinary equip succeeds, the chosen item id is written into the target
 equipment slot and the shared equipment counter for that item id is decremented.
@@ -533,10 +614,10 @@ Confirmed U-Use families:
 | Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
 | Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only outside dungeon/combat scenes and only on accepted terrain; Search/Get recovery later invalidates the slot. |
-| Spyglass | Surface-only utility. It refuses in unsupported scenes and when the sky-state check says there are no stars; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
+| Spyglass | Night utility, surface plane only. It permits a look when all three of these hold: the party is on the surface plane, the scene is the outdoor world or a town-class scene (dungeon-class and combat-class scenes are excluded), and the hour is in the night window `19..23` or `0..5`. The Underworld fails the plane condition, exactly as the Sextant does. A scene or plane failure prints the "not here" refusal; a daytime hour prints the no-stars refusal; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
 | HMS Cape plans | Shipboard-only utility. When used aboard ship, it marks the ship-rigging flag so the ship is rigged for double speed; otherwise it refuses. `weather.md` owns the resulting hoisted-sail wait-pass timing change. |
-| Sextant | Outdoor night-only utility. It refuses outside the overworld or during the daytime interval, and otherwise prints the party position. |
-| Pocket Watch | Prints the current hour as a twelve-hour AM/PM time. |
+| Sextant | Outdoor night-only utility, surface plane only. It permits a reading only when all three of these hold: the party is on the **surface** world plane, the scene is the outdoor world scene, and the hour is in the night window `19..23` or `0..5`. **The Underworld does not qualify**: it is the outdoor world scene on the other world plane, so it fails the plane condition and produces the same "only outdoors" refusal an indoor scene produces — there is no Underworld-specific message and no coordinate readout. The item label prints before any of the three tests, so it is emitted even on a refusal. The branch consumes nothing and writes nothing on any of its paths. Coordinate formatting is in `catalogs/item-list.md`. |
+| Pocket Watch | Prints the current time as a twelve-hour reading with **hour, minutes and AM/PM suffix**. See `catalogs/item-list.md`; an earlier revision of both documents said no minute display was present, and that is withdrawn. |
 | Sandalwood Box | The direct U-Use path asks how to use the box and does not perform the endgame handoff. The successful quest handoff is owned by the terminal endgame overlay path, which reads the saved box flag during its Lord British confirmation sequence. |
 
 ## 8. Implementation Contract
@@ -552,8 +633,13 @@ For a compatible recreation:
 - Apply strength, combat-armour, occupied-slot, and hand-occupancy gates before
   mutating counters. Restrict the combat gate to the body-armour family and to
   an undecided battle; do not block other slot families during a fight.
-- Charge one turn per R-Ready invocation regardless of outcome, and keep the
-  picker open across repeated attempts within that turn.
+- Charge one turn per R-Ready invocation regardless of outcome — including a
+  cancelled member prompt, the empty-handed refusal, a silently refused
+  ammunition row, every gate refusal, the magic-ring vanish, and opening the
+  picker and immediately backing out — and keep the picker open across repeated
+  attempts within that turn, **except** after the magic-ring vanish, which
+  closes it. In combat the same rule spends the acting combatant's action;
+  only an actor that fails the live-actor gate escapes the cost.
 - Refuse ammunition rows silently, with no message.
 - Treat arrows and quarrels as carried ammunition stocks rather than readied
   slots, and apply the traced bow/crossbow ammunition prerequisites.
@@ -577,6 +663,13 @@ returns, and magic-ring equip-time checks are public. The U-Use command family
 is also complete at dispatch-family depth: scrolls, potions, Moonstones,
 regalia, shards, magic carpet, skull keys, Spyglass, HMS Cape plans, Sextant,
 Pocket Watch, Black Badge, and Box have public item-activation contracts.
+R-Ready's turn cost was re-challenged and re-derived from the shipped binaries
+on 2026-08-23 — twice, the second time by an independent adversarial pass that
+read the dispatcher, the entry point, the eligibility cascade, the picker, the
+combat verb helper and all three mode loops end to end — and stands as published,
+so an engine that treats `R` as free is wrong in every mode. The `None!` / `Done`
+cancel-literal attribution that was previously listed here as unsettled is
+**closed**; Section 5.1 now states it, and `Done` is R-Ready's Escape literal.
 No ZSTATS-owned page-routing or R-Ready storage gap remains at this layer;
 object pickup visuals, combat-side equipment consumers, dialogue reactions, and
 opaque save/runtime bytes are delegated to their own specs. The scope of the
@@ -659,6 +752,26 @@ refused R-Ready costs exactly what a successful one costs, in every mode.
 Source provenance: derived from private analysis note
 `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
 `../u5-decomp/functions/ZSTATS_OVL/`.
+
+Turn-cost re-derivation provenance (2026-08-23): the `R` dispatcher arm's
+unconditional "acted" status, the R-Ready entry point's single exit with no
+return value, the eligibility cascade's two return values and which paths reach
+each, the ammunition rows' silent exit, the combat verb helper's discarded
+delegate result, all three world mode loops' clock placement, and a transitive
+walk showing the R-Ready subtree never reaches the turn clock. Re-derived
+directly from the shipped binaries; private analysis in
+`u5-decomp/functions/ZSTATS_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/` was used only to locate starting points. One
+private note describes the R-Ready item prompt with the wrong literal; the
+published Section 5.1 wording matches the binary and that note does not.
+
+Sextant and Spyglass gate provenance (2026-08-23): the three-part
+plane/scene/night test on each item, the shared refusal text, and the
+Underworld's exclusion by the plane condition; re-derived from the shipped
+binaries, with `u5-decomp/functions/CAST_OVL/` used to locate the U-Use item
+dispatch. A private data-access table for that dispatch mis-attributes the
+minutes byte to the coordinate formatter; that attribution is wrong and is not
+followed here.
 
 Combat U-Use correction provenance: combat routes `U` into the same item-use
 handler the world modes use, after the live-actor gate. Source provenance:

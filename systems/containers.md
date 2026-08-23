@@ -159,14 +159,39 @@ Whichever way the chest is entered, the low seven-bit content class survives
 every lock and trap interaction, so container contents can never be destroyed
 before they are generated.
 
-When the chest helper opens a matching surface/town object-table chest, it asks
-for the party member who opens it. It commits and clears the matched object
-slot, marks inventory/status state dirty, and in town-family scenes reduces the
-shared moral-standing selector by two units, clamped at zero. If the chest's high bit is set, the
-helper prints the trapped result and invokes the shared trap-effect resolver in
-`traps.md` with the selected member as the target context. The same low seven
-bits then drive content generation whether or not the chest was trapped. If no
-content row from either pool succeeds, the chest reports empty.
+When the chest helper opens a matching surface/town object-table chest, it
+chooses the party member who opens it through the shared acting-member
+selection, and it does so *before* testing whether the chest is trapped. A
+prompt is only one of that selection's three outcomes — a combat-class scene and
+a set active character both bypass it, and a party with exactly one able member
+selects that member silently. `systems/traps.md` § 2.1 owns the priority order
+and its consequences, including the case where the selection returns nobody and
+the command aborts before any trap can fire.
+
+The helper then **clears the matched object record outright** — its kind, its
+position, and the byte carrying its lock/trap flag and content class are all
+zeroed — marks inventory/status state dirty, and in town-family scenes reduces
+the shared moral-standing selector by two units, clamped at zero. Two ordering
+details are load-bearing and were re-derived from the shipped binaries on
+2026-08-23:
+
+- The clear happens **after** the helper has taken its own local copy of the
+  container's flag/class byte and **before** it tests that copy for the trap
+  condition. So the trap still fires on this open, and content generation still
+  uses the class bits, even though the record no longer exists by then.
+- The record lives inside the persisted save image, so the clear is durable. A
+  later Open of the same square matches no container and reports that there is
+  nothing to open; a trapped surface or town container therefore cannot spring a
+  second time. `systems/traps.md` § 4 states the same rule for the trap side and
+  records that an earlier revision of that document published this point as an
+  open gap on the false premise that the handler only masked the flag in a
+  working copy.
+
+If the copied byte's high bit is set, the helper prints the trapped result and
+invokes the shared trap-effect resolver in `traps.md` with the selected member as
+the target context. The same low seven bits then drive content generation whether
+or not the chest was trapped. If no content row from either pool succeeds, the
+chest reports empty.
 
 Every successful row from either pool is committed the same way: the engine
 acquires a free active-object slot, writes the result family and the rolled

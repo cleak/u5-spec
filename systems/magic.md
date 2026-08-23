@@ -203,9 +203,9 @@ Mixing costs no game time at all. This matters because almost every other
 world action advances the clock, and a port that charges a turn for M-Mix will
 drift on NPC schedules, light counters, and timed magic effects.
 
-**Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, then clamps that counter to a maximum of 99. The order is add-then-clamp, so an over-large mix is capped rather than refused; the player still loses the full reagent quantity for charges the cap discards. If the masks do not match, the selected reagents are already spent and no spell charges are added. The wrong-mix branch then emits a line break, refreshes a scratch target slot by scanning the travelling party for the first member whose status is Good or Poisoned, and invokes the shared trap-effect resolver described in `systems/traps.md` with that slot. If the scan finds no Good or Poisoned member, it does not replace the existing scratch slot before the trap-effect call, so the trap lands on whatever party index that scratch slot last held; preserve that stale-slot edge rather than inventing a new fallback, and treat it as undefined behaviour that a port should handle deliberately.
+**Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, then clamps that counter to a maximum of 99. The order is add-then-clamp, so an over-large mix is capped rather than refused; the player still loses the full reagent quantity for charges the cap discards. If the masks do not match, the selected reagents are already spent and no spell charges are added. The wrong-mix branch then emits a line break, refreshes its target slot by scanning the travelling party for the first member whose status is Good or Poisoned, and invokes the shared trap-effect resolver described in `systems/traps.md` with that slot. Note that the mixer supplies this slot itself; it does **not** use the shared acting-member selection the container callers use (`systems/traps.md` § 2.1). If the scan finds no Good or Poisoned member, it does not replace the existing value before the trap-effect call, so the trap lands on whatever that word last held; preserve that stale-slot edge rather than inventing a new fallback, and treat it as undefined behaviour that a port should handle deliberately. *Corrected:* an earlier revision called that word a dedicated "scratch target slot" holding a previous party index. It is not dedicated scratch — it is a resident word the world-coordinate bookkeeping also uses as a map origin — so when no Good-or-Poisoned member exists the stale value is most likely a map coordinate rather than a party index. Whether the mixer's overwrite of that word also disturbs the party's world position is **UNVERIFIED**; `systems/traps.md` § 4 records that gap and what would settle it. Two things bound the consequences: the poison helper ignores a slot at or above the party count outright, while the single-slot damage effect has no such bound.
 
-The player-visible cost of a wrong mix is therefore: the reagents are gone, no charges are gained, an explosion sound plays, and one of the four trap effects lands. In non-combat scenes the trap rolls acid damage of one to thirty points on the chosen member with probability three-eighths, poisoning of that member with probability one-quarter, a blast dealing one to eight points to every living member with probability one-quarter, and a gas cloud poisoning the whole party with probability one-eighth. `systems/traps.md` owns the effect families and the combat-scene variant.
+The player-visible cost of a wrong mix is therefore: the reagents are gone, no charges are gained, an explosion sound plays, and one of the four trap effects lands. In non-combat scenes the trap rolls acid damage bounded by one to thirty points on the chosen member with probability three-eighths (the roll is not uniform over that range — see `systems/traps.md` § 3), poisoning of that member with probability one-quarter, a blast dealing one to eight points to every in-party member not marked Dead with probability one-quarter, and a gas cloud poisoning every in-party member not marked Dead with probability one-eighth. Dead is the only status those last two skip: an Ashes, Sleeping or Charmed member is damaged or poisoned along with the rest. `systems/traps.md` owns the effect families and the combat-scene variant.
 
 The recipe list is fixed in the resident data segment. The full decoded recipe table is in `catalogs/spell-list.md`.
 
@@ -326,11 +326,38 @@ door lock-state ladder itself is owned by `systems/doors-and-z-transitions.md`.
 Locate uses the shared sextant-style coordinate printer. It reads the party's
 current map coordinates, splits each coordinate byte into high and low nibbles,
 maps nibble values 0 through 15 to letters `A` through `P`, and prints the
-Y-coordinate first, then a comma and the X-coordinate. Each coordinate is
-rendered as high-letter, apostrophe, low-letter; the helper ends the line with
-a trailing double-quote character and a newline. This is presentation only: it
-does not move the party, consume gems, reveal map cells, or alter the saved
-position.
+Y-coordinate (latitude) first, then the X-coordinate (longitude). Each
+coordinate is rendered as high-letter, apostrophe, low-letter, **double-quote**,
+and the two coordinates are joined by a comma and a space. *Corrected:* an
+earlier revision said the helper "ends the line with a trailing double-quote
+character", which undercounts the quotes - a double-quote is also emitted
+immediately after the Y pair, as the first character of the separator. Both
+coordinates carry their own closing quote.
+
+The printer emits a **newline before** the coordinate pair as well as after it.
+*Corrected:* an earlier revision of this paragraph said only that "a newline ends
+the line", which leaves an implementer free to append the coordinates to whatever
+label preceded them. That is wrong for both callers: the label a caller prints
+first carries no newline of its own, so the observable output is the label on one
+line and the coordinate pair on the line below, followed by a further line break.
+An engine that concatenates label and coordinates onto a single line matches the
+old wording and still does not match the original. The printer also brackets the
+coordinate line with two calls into a presentation helper — one before, one after
+— whose exact screen-placement effect has **not** been established; vertical
+placement of the pair is therefore an open point rather than a settled one.
+
+This is presentation only: it does not move the party, consume gems, reveal map
+cells, or alter the saved position.
+
+**Locate and the Sextant do not share a gate.** Locate is admitted by the
+ordinary spell scene mask, which is computed from the scene alone; neither that
+computation nor Locate's own handler reads the world-plane byte at all. The
+Sextant item adds a plane condition and therefore refuses in the Underworld,
+where Locate still reports coordinates. Do not implement the Sextant by
+delegating to Locate's gate, and do not add a plane condition to Locate. This
+asymmetry is derived from static re-derivation of the whole cast gate cascade
+and of both handlers; it has not been confirmed in a running game. See
+`catalogs/item-list.md` for the Sextant's three-part gate.
 
 Blink's non-combat path is deterministic and direction-prompted, not a random
 teleport. After the normal cast gates spend the premixed charge and mana, the
@@ -372,7 +399,24 @@ experience adjustment described below, recomputes level from the resulting
 experience, and sets maximum HP to thirty times that recomputed level. Avatar,
 Mage, and the default class branch receive mana equal to Intelligence; Bard
 receives half Intelligence. The helper treats only Dead as a valid target:
-Ashes and all other non-Dead statuses fail the dead-status gate. Some callers
+Ashes and all other non-Dead statuses fail the dead-status gate. Note the shape
+of that rule - there is no affirmative Ashes test anywhere in the shipped game.
+The gate is a single equality comparison against Dead, so "rejects Ashes" is a
+corollary of "requires exactly Dead" rather than a separate check. (An earlier
+private analysis note attributed an explicit Ashes rejection to this routine; it
+had misread a comparison against the party record's **class** field, which sits
+one byte from the status field, as a status test. That reading does not appear in
+this document, and should not be introduced into it. Two independent
+re-derivations agree that every comparison of that letter anywhere near a party
+record is against the class field, and that the class field is what receives that
+letter at character creation — but they disagree about *which* routine holds the
+misread comparison: one places it inside the revive body, the other in a
+party-wide restore-and-level-up loop that rebuilds hit points, status and mana
+for every non-Dead member. Both routines contain a class-letter cascade of
+similar shape, so the routine attribution here is **not settled** and should not
+be relied on. The class-versus-status finding does not depend on it.) Whether the shipped game ever
+produces an Ashes status at all is an open question recorded in
+`formats/saved-gam.md`. Some callers
 use a verbose mode that prints the `Not dead!` refusal for a non-Dead target;
 the ordinary spell/scroll path records a failed result and lets the dispatcher
 own the trailing failure narration.
@@ -750,7 +794,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 |---|---|---|
 | Light counter | In Lor, Vas Lor | Set the shared light-spell counter to 100 or 255, then return through the common cast-success path. |
 | Active-target attack wrapper | Grav Por, Vas Flam, Xen Corp | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage, Vas Flam rolls 1..30 raw damage, and Xen Corp passes the decimal 99 instant-kill sentinel. Non-instant rolls subtract target defense before the shared damage/status path. |
-| Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu scans the roster and wakes the first Sleeping member to Good status; it has no selected-member prompt. An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires Dead status, rejects Ashes and other non-Dead statuses, changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
+| Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu scans the roster and wakes the first Sleeping member to Good status; it has no selected-member prompt. An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires exactly Dead status - every other status, Ashes included, is refused by that one equality test, and no Ashes-specific check exists - changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
 | Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates the field kind plus active target slot to the arena-field helper. Player combat C-Cast uses the arena cursor followed by the ordinary projectile/impact resolver, not an adjacent direction prompt. Cursor moves outside the eleven-by-eleven arena or beyond range are ignored, Escape cancels after charge/mana debit but before marker placement, and the cursor does not reject empty or occupied cells. Combat marker placement requires a confirmed impact cell, but no Fire/Sleep/Energy random acceptance gate exists for marker materialization. The helper places the matching temporary active-object field marker, then separately reports a hit/contact target from the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Arena contact skips the current active actor but does not run the friend/foe lookup, and contact does not consume the marker. Poison Field skips linked active-object classes `>= 0x80`; for accepted targets it poisons Good party members and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members, otherwise sleeps party targets or marks non-party targets with the combat sleep/disabled bit; it does not seed a separate combat sleep countdown. Fire Field rolls raw 1..21 before defense, and Energy Field supplies raw zero to the same damage/value path. The traced placement/contact/redraw path and generic active-object tick show no field countdown/decrement; placed markers persist until combat exit restores the pre-combat active-object table. |
 | Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock/trap bit on a co-located kind-1 chest object — which in combat includes the chest a dying monster drops, making Open's success case reachable in every arena — and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
 | Field removal helper | An Grav | Uses a separate Dispel Field path. Dungeon scenes inspect the faced adjacent live cell and turn recognized field cells back into open/visited-live-cell state while preserving only the visit marker. Combat/non-dungeon spell scenes use the shared direction prompt and remove a matching active-object field marker at the cached target coordinate. Failure leaves the map image or active-object table unchanged. |
@@ -1060,7 +1104,17 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/CAST2_OVL/` and the CAST spell
   map in `u5-decomp/functions/CAST_OVL/all_spells.md`.
 - The Locate/sextant coordinate printer -- nibble-to-letter formatting,
-  Y-before-X ordering, and display-only side effects -- is derived from
+  Y-before-X ordering, the per-coordinate closing double-quote and the
+  comma-space separator, the newline emitted before the coordinate pair as well
+  as after it, the absence of any plane condition on Locate's gate,
+  and display-only side effects. The 2026-08-23 revision of the punctuation, of
+  the leading newline, and of the Locate/Sextant gate asymmetry was re-derived
+  from the shipped binaries -- twice for the asymmetry, the second pass reading
+  the whole cast gate cascade and confirming that the per-spell scene mask is
+  selected from scene bands alone with no plane component, and establishing the
+  latitude-before-longitude order independently from the shared direction
+  prompt's own coordinate arithmetic rather than by convention;
+  the rest is derived from
   `u5-decomp/functions/CAST2_OVL/` and the CAST
   spell map in `u5-decomp/functions/CAST_OVL/all_spells.md`.
 - The non-combat Blink contract -- direction prompt, straight-ray scan,

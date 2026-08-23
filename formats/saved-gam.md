@@ -68,7 +68,7 @@ Each thirty-two-byte record is laid out as follows.
 | `0x00`       | 9 bytes  | Name. ASCII, NUL-padded. The first character is the leading byte of the record and may be zero on an unused slot. |
 | `0x09`       | 1 byte   | Gender. `0x0B` for male, `0x0C` for female. Not ASCII; the values are private to the engine.             |
 | `0x0A`       | 1 byte   | Class. ASCII letter — `'A'` Avatar, `'B'` Bard, `'F'` Fighter, `'M'` Mage, `'D'` Druid, `'T'` Tinker, `'P'` Paladin, `'R'` Ranger, `'S'` Shepherd. |
-| `0x0B`       | 1 byte   | Status. ASCII letter — confirmed values include `'G'` good/alive, `'P'` poisoned, `'S'` sleeping, `'C'` charmed, `'D'` dead, and `'A'` ashes. |
+| `0x0B`       | 1 byte   | Status. ASCII letter. The letters shipped code is confirmed to **write** into this byte are `'G'` good/alive, `'P'` poisoned, `'S'` sleeping, and `'D'` dead. Two further letters belong to the value space but are **not** confirmed as stored values: `'C'` charmed, which the stats panel synthesises for display (see below), and `'A'` ashes. Preserve all of them; see the note below for what is and is not established. |
 | `0x0C`       | 1 byte   | Strength.                                                                                                |
 | `0x0D`       | 1 byte   | Dexterity.                                                                                               |
 | `0x0E`       | 1 byte   | Intelligence.                                                                                            |
@@ -95,9 +95,54 @@ does not mean class Paladin; Paladin is class `'P'` at `+0x0A`. Status `'P'`
 means poisoned, and only that. Earlier drafts of this document described a
 revive-style helper that writes `'P'` when transitioning a dead slot back to a
 live state; that reading is retracted. The helper in question is a poison
-primitive: it skips any member already marked dead and stamps `'P'` on living
-members only, so no path in the game moves a character from `'D'` to `'P'`.
+primitive: it skips a member marked `'D'` and stamps `'P'` on **every other**
+status, so no path in the game moves a character from `'D'` to `'P'`, while a
+member holding any other letter is overwritten with `'P'`. (An earlier revision
+said the helper "stamps `'P'` on living members only", which reads as though it
+distinguishes living members from otherwise-incapacitated ones. It does not;
+that wording is withdrawn. The full contract is in `systems/traps.md` § 3.)
 Compatible tools should still preserve the raw status letter.
+
+**`'C'` and `'A'` are not confirmed stored values.** *Corrected:* an earlier
+revision of the `+0x0B` row listed `'C'` charmed and `'A'` ashes among the
+byte's "confirmed values". Neither is confirmed by the shipped code, and that
+wording is withdrawn.
+
+- `'C'` charmed is a **presentation override**. During combat-class scenes the
+  stats-panel row builder substitutes the literal `C` for display when the
+  per-combatant controlled/charmed descriptor bit is set for that slot, and
+  otherwise prints the raw status byte; the Charm spell writes `'G'`, never
+  `'C'`, into a party target's status byte. `systems/combat.md` Section 6.1a
+  owns that rule, and this row now agrees with it rather than contradicting it.
+- `'A'` ashes has no confirmed producer. A scan of every shipped code file for
+  every immediate-operand form that compares a byte against, or stores a byte
+  equal to, each status letter found **no** compare of any byte against the
+  ashes letter and no store of it into any byte reachable as a status field.
+  Every occurrence of that letter value elsewhere in the shipped code is a class
+  letter, a scene-mode byte, or a text buffer.
+
+That scan was independently repeated on 2026-08-23 by a stronger method - an
+exhaustive enumeration of every encoding of the immediate-operand compare and
+store forms with a memory operand, over the executable, every overlay and every
+driver, which unlike a linear sweep cannot lose synchronisation on embedded data
+and silently skip real instructions. It reached the same result: no compare
+against the ashes letter and no store of it anywhere in the status band, and the
+only write of that letter value into a party record at all is into the **class**
+field during character creation, one byte away from the status field. That is
+corroboration of the finding below, not a clearance of it.
+
+That scan is a narrowing, not a clearance, and its scope is worth stating: it
+covers immediate-operand compares and stores only, in executable code only - not
+the shipped data files. It cannot see a status byte
+set by copying another byte, by a record or block copy, by a table lookup, by
+arithmetic that produces the value, or by the save-load path itself. **Whether
+the shipped game ever produces an Ashes status is therefore UNVERIFIED**, and so
+is whether `'C'` is ever stored. Settling either would take a dedicated trace of
+the save-load path and of combat/dungeon death handling. Until then, treat both
+letters as values a save image may legitimately contain - an externally authored
+or transferred save can hold them, and the behaviour of the trap, resurrection
+and rest paths on them is specified - without treating either as something the
+original engine is known to write.
 
 ### 3.3 The inn-guest registry
 
@@ -586,6 +631,12 @@ The byte-level layout described here was derived from the project's private save
   Search/Get recovery behaviour --
   `u5-decomp/functions/CAST_OVL/` plus local SJOG
   helper analysis summarized without copying implementation text.
+- The status-byte letter space at `+0x0B`: which letters shipped code writes,
+  the panel-side synthesis of `'C'`, and the absence of any confirmed producer
+  or consumer of `'A'`. Re-derived from the shipped binaries on 2026-08-23 by
+  scanning every shipped code file for immediate-operand compares and stores of
+  each status letter, cross-checked against `systems/combat.md` Section 6.1a and
+  the trap status helper in `systems/traps.md`.
 - The Spyglass, Sextant, Pocket Watch, Black Badge, and Wooden/Sandalwood Box
   special-item byte identities are cross-checked from the Z-stats special-item
   snapshot and display path:

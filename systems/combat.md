@@ -1328,7 +1328,7 @@ The exact
 number of decrements per full actor-table pass depends on which command/AI
 paths run, so per-round parity remains tied to actor dispatch.
 
-The character status byte is the load-bearing summary value: `'G'` good, `'P'` poisoned, `'D'` dead, `'S'` asleep, `'C'` charmed, `'A'` ashes, plus other state-specific letters. The `C` the stats panel shows during combat is not read from this byte: it is a presentation override driven by the controlled/charmed descriptor bit (Section 6.1a), and the Charm spell writes `'G'`, never `'C'`, into a party target's status byte. Other systems read the byte to decide whether the character can act, can be selected as active player, or counts toward the party-defeat check.
+The character status byte is the load-bearing summary value. The letters shipped code is confirmed to write into it are `'G'` good, `'P'` poisoned, `'D'` dead, and `'S'` asleep. Two further letters appear in the byte's value space but have no confirmed producer: `'C'` charmed and `'A'` ashes. The `C` the stats panel shows during combat is not read from this byte: it is a presentation override driven by the controlled/charmed descriptor bit (Section 6.1a), and the Charm spell writes `'G'`, never `'C'`, into a party target's status byte. *Corrected:* an earlier revision of this sentence listed `'C'` and `'A'` alongside the four written letters as though all six were stored states; that framing is withdrawn, and `formats/saved-gam.md` records the scope of the scan behind it and what remains UNVERIFIED about Ashes. Other systems read the byte to decide whether the character can act, can be selected as active player, or counts toward the party-defeat check.
 
 ## 13. Per-monster-class data
 
