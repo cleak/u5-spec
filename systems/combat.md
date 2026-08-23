@@ -675,7 +675,7 @@ When defeat or leave-combat fires, the round loop returns "1" (victory/escape) o
 section described a "post-round maintenance pass" that swept the arena grid
 "dispatching cell effects" once per round. That framing is **withdrawn**: it
 misread the shared viewport rasterizer described in `systems/visibility.md` and
-`systems/display.md` as a combat-scoped routine. The routine in question is the
+`systems/display-driver.md` as a combat-scoped routine. The routine in question is the
 engine's single tile-painting pass, run by the idle redraw tick in *every*
 mode - overworld, town, dungeon and combat alike - immediately after the
 visibility post-pass composites active objects into the viewport buffers. It
@@ -698,6 +698,27 @@ additional small marker at an explicit arena X/Y. These marker updates are
 presentation only: they do not advance combat time, mutate actor HP or status,
 or consume placed field markers, and they are distinct both from actor dispatch
 and from the post-step field-contact hook described later.
+
+**Consumers of the shared effect counter, in both directions.** The second
+blit entry that pass uses takes a shared counter, and it is worth naming what
+touches that counter, because a contract nobody can falsify is exactly how an
+invented one survives review. That counter is the natural moon-gate presence
+value specified in `systems/overworld.md` Section 9.1. **It is persisted world
+state**, carried in the save image — **not** scratch, and **not** scoped to a
+call, a round or a turn. An earlier informal characterisation of it as a
+short-lived animation counter is withdrawn. It **is read by** the tile-painting
+pass, to choose the gate's current appearance, and by the gate-travel path that
+advances it. It is **not** ticked by the per-turn cleanup, **not** advanced by
+the round loop, **not** written by any combat routine, and nothing in combat
+reads it. An implementation that ties it to combat rounds, or that treats it as
+scratch that may be discarded between calls, is wrong in both directions.
+
+**Nothing else in this section owns shared state.** The blink flag and the
+marker coordinates named above are read only by that same painting pass, and
+neither is saved. If a future revision of this section introduces a counter or
+a flag, it should state its lifetime and its readers in this same form — and
+where the honest answer is that nothing reads it, that is evidence the contract
+is not real.
 
 The phase-counter / base-step structure means actors act at *staggered* paces. There is no "player turn then monster turn" — initiative is *interleaved* by phase counter, so a fast monster might act twice between the player's turns.
 

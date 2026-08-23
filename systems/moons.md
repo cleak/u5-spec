@@ -251,7 +251,17 @@ over-read:
   referred to one; that reading is withdrawn in full. Gates are ordinary live
   terrain, and the render-frame scratch block once attributed to a gate animator
   belongs to the night-time light beacon in `systems/visibility.md` Section
-  12.6.
+  12.6. This does **not** mean a gate is a static tile: it is drawn through a
+  sixteen-phase rise-and-sink composition whose phase is a persisted counter
+  advanced by the once-per-turn placement refresh, and stepping into one plays a
+  blocking transition. Both are specified in `systems/overworld.md` Sections 9.1
+  and 9.2. The distinction the withdrawal makes is that no *per-render-frame*
+  animator exists, not that nothing changes.
+
+- **The phase counter is not per-moon and not per-gate.** It is one shared,
+  save-backed byte for the whole world. The moon glyphs decide only where an
+  entered gate leads; they have no influence on the phase, on which gates are
+  present, or on how far open any of them is.
 
 The renderer is suppressed for dungeon-class views, combat, and the underworld
 presentation, even though the same saved clock continues to advance. The dungeon
@@ -279,6 +289,10 @@ glyph dumps, or private address tables.
 - Source provenance: the separation of moon phase from moongate placement, and
   the withdrawal of the moongate animator, are derived from private analysis
   note `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+- Source provenance: that the withdrawal of the animator does not make a gate
+  static, and that the sixteen-phase presence counter is world-global,
+  save-backed, and independent of moon phase, are derived from private analysis
+  note `u5-decomp/notes/moongate_transition_2026-08-23.md`.
 - Calendar bounds (day one through twenty-eight, reset after twenty-eight), the
   single hour-change trigger, and that trigger's own scene-and-floor gate --
   which is what makes the painter's below-surface erase arm unreachable -- the

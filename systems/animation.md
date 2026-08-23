@@ -10,7 +10,9 @@ Ultima V has two animation layers that run during normal play:
   fixed set of decorative terrain families — waterfall, fountain, pendulum, the
   standard of Britannia, and the grandfather clock / bellows pair. Water, lava
   and torch/brazier tiles are **not** among them (Section 6), and natural
-  moongates are **not** one of these families either; see Section 8.
+  moongates are **not** one of these families either; see Section 8. A moongate
+  does change appearance over time, but through a persisted presence phase owned
+  by the overworld rather than through either layer here.
 
 Both layers are visual and turn-paced. They are not independent real-time
 threads, and they are not driven directly by the in-world clock. They advance
@@ -236,7 +238,21 @@ The overworld is the main consumer of ambient animation. Waterfalls, vehicles,
 and random outdoor monsters all use the animation tick. Open water and lava-like
 terrain do not: no water or lava family is animated at all (Section 6).
 Natural moongates do not: a gate is a live terrain byte written and removed by
-the once-per-turn saved-slot refresh, with no frame cycle of its own. The overworld's per-turn epilogue can also prune off-screen
+the once-per-turn saved-slot refresh, and it has no entry in the family table of
+Section 6, no frame selector, and no advance from the animation tick.
+
+**Correction.** An earlier revision of this sentence went on to say a gate has
+"no frame cycle of its own", and an implementation could reasonably read that as
+"the gate is a static sprite". It is not. A moon-gate cell is drawn through a
+sixteen-phase rise-and-sink composition, and the phase is a persisted counter
+that the once-per-turn refresh advances and that a blocking transition drives
+directly. The full contract is `systems/overworld.md` Sections 9.1 and 9.2. What
+belongs in *this* document is only the boundary: that phase is not a
+tile-animation family, it is not on the tick cadence described here, and an
+engine's animation clock must not try to own it. A skipped render frame does not
+advance it; a consumed world turn does.
+
+The overworld's per-turn epilogue can also prune off-screen
 active objects; pruning is separate from animation and may remove slots that
 would otherwise be considered on later ticks.
 
@@ -378,3 +394,9 @@ decompiler output, implementation listings, and raw private tables.
   `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
 - `FLAMES.OVL` non-animation role and title-effect ownership -
   `u5-decomp/functions/FLAMES_OVL/0x0000_flames_entry_stub.md`.
+- Source provenance: the boundary between this document's two animation layers
+  and the moongate presence phase - that the phase is not a tile-animation
+  family, is not advanced by the animation tick, and is not per-frame - is
+  derived from private analysis note
+  `u5-decomp/notes/moongate_transition_2026-08-23.md`. The withdrawn "no frame
+  cycle of its own" wording in Section 8 is superseded by the same note.

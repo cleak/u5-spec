@@ -409,10 +409,15 @@ light-source positions harvested from the loaded map, its phase byte is the
 beacon's current bearing, and it never holds a moongate. Three specific
 consequences follow:
 
-- Natural moongates are ordinary **live terrain**, not a render effect. They are
-  written into the live map by the once-per-turn refresh below and drawn by the
-  normal renderer like any other tile, so nothing about a gate's appearance is
-  per-frame and nothing resets when a frame is skipped.
+- Natural moongates are ordinary **live terrain**. They are written into the
+  live map by the once-per-turn refresh below and drawn by the normal renderer,
+  never by an animator of their own. That does **not** make a gate a static
+  sprite. The renderer resolves a moon-gate cell through the sixteen-phase
+  rise-and-sink model in Section 9.1, reading the same presence counter the
+  refresh advances. Nothing about a gate's appearance is per-*frame*, and
+  nothing resets when a frame is skipped - but the appearance is not fixed
+  either, and an implementation that draws the gate tile unconditionally is
+  wrong in a different way than the withdrawn animator was.
 - The supposed "daylight threshold" precondition was also inverted. The beacon
   that owns that gate runs only **after dark**; nothing runs it by day.
 - The supposed "destination" coordinate pair was never a teleport target. A
@@ -444,6 +449,13 @@ tile change marks the viewport dirty and refreshes local light. This covers the
 ordinary natural-gate placement and waning schedule at live-terrain level, and
 it is driven by saved Moonstone slots.
 
+That counter is **persisted world state**, not scratch. It occupies the
+byte at `SAVED.GAM` offset `0x02E1`, inside the mode-scratch band next to the
+cached moon glyphs, and the shipped starting save holds zero there - correct,
+because the game opens at hour eight with no gate up. Its lifetime is discussed
+in full in Section 9.1, because getting that lifetime wrong is the single most
+likely way to mis-implement this feature.
+
 **The moon phase plays no part in whether a gate is present.** Placement is
 gated on the hour alone, so all eligible gates open together at nightfall and
 fade together over the sixteen turns after dawn - one shared counter, not one
@@ -451,14 +463,106 @@ per gate. The phase decides only *where* a gate leads, through the destination
 rule below. An implementation that opens gates one at a time as their moon
 waxes is modelling something the original does not do.
 
-The overworld command loop also has a live-gate entry hook before normal input
-dispatch. It reads the party's current live terrain cell and returns
-immediately unless that cell is `0xDC`. On `0xDC`, the hook pauses the loop,
-plays the portal shimmer, temporarily uses the moongate action marker for
-rendering, runs the tile-effect animation, clears that live cell back to
-terrain `5`, and marks visibility dirty.
+### 9.1 Gate-presence phase and how a gate is drawn
 
-After clearing the tile, the hook has two outcomes. If the clock is in hour
+A moon-gate cell is **not** drawn as a plain tile most of the time. The renderer
+special-cases live terrain byte `0xDC` against the shared gate-presence counter
+introduced above, and the counter behaves as a sixteen-step position, not as a
+mere on/off flag:
+
+| Presence counter | What the cell draws as |
+|---|---|
+| `0` | Not a gate. The refresh has already restored the cell to terrain `5`. |
+| `1..15` | A **composed transition frame**: the ground tile, with its bottom *N* pixel rows replaced by the top *N* pixel rows of the moon-gate tile. |
+| `16` | The whole moon-gate tile `0xDC`, drawn through the ordinary tile path. |
+
+Read as an animation, phase `N` is "the gate has risen *N* of sixteen pixel rows
+out of the ground". Counting the phase up makes the gate rise; counting it down
+makes it sink. Sixteen is the fully open gate and the only phase at which the
+authored moon-gate artwork is shown intact.
+
+Three properties follow, and all three are contract:
+
+- **The composition is per-cell but the phase is global.** Every visible
+  moon-gate cell is composed at the same phase, so a view containing more than
+  one gate shows them rising and sinking in lockstep. There is no per-gate
+  phase.
+- **The ground half of the frame is scene-dependent.** In ordinary play the
+  ground plate is terrain `5`, grass - the same tile the daytime pass restores.
+  The endgame scene substitutes tile `0x44`, its throne-room floor, which is why
+  the endgame's gate appears to rise out of flagstones rather than turf.
+- **The composed frame is written into a dedicated scratch tile, id `0x116`.**
+  That slot is saved and restored around every composition, so its shipped
+  artwork survives; but an implementation must not treat `0x116` as a stable
+  authored tile while a gate is on screen. The same id doubles as the
+  party-vanishing sprite in Section 9.2.
+
+**Lifetime of the presence counter: persistent, not turn-scoped and not
+call-scoped.** There is exactly one such byte in the whole engine, it is
+save-backed at `SAVED.GAM` offset `0x02E1`, and it survives turns, mode changes,
+scene changes and save/load alike. Three consequences an implementation should
+check itself against:
+
+- Modelling it as a local, per-call value destroys the natural rise and sink
+  outright, because the rise is spread across sixteen consecutive world turns.
+- Modelling it as turn-scoped - reset or recomputed at each turn boundary -
+  breaks save/load round-trip and loses the mid-rise state, so a game saved at
+  20:07 reloads with a gate at the wrong height.
+- Because it is shared, the blocking transit sequence in Section 9.2 leaves it
+  at zero when it finishes. A gate that was mid-rise elsewhere in view is
+  therefore driven to zero by an unrelated party's transit and rises again from
+  zero on subsequent turns. That is the original's behaviour, not a defect to
+  design around.
+
+The counter is **not** a member of the global tile-animation families in
+`systems/animation.md` Section 6. It is not advanced by the animation tick, it
+has no frame selector, and skipping a rendered frame does not advance it.
+
+### 9.2 The transit transition
+
+The overworld command loop has a live-gate entry hook that runs before normal
+input dispatch, on every iteration. It reads the party's current live terrain
+cell and returns immediately unless that cell is `0xDC`. **That terrain test is
+the only precondition.** Nothing about daylight, moon phase, party transport,
+surface versus Underworld plane, or party composition gates it. It is confined
+to the overworld only because it is the overworld loop that runs it; town,
+dungeon and combat loops never do.
+
+On `0xDC`, the hook runs a **blocking** transition to completion before the
+party is relocated and before any key is read. It is not driven by the per-turn
+tile animator and it cannot be skipped by the player - the abort poll that some
+other presentation effects offer is disabled in overworld scenes. The whole
+sequence plays at the **gate cell**, which is the party's own cell and therefore
+the centre cell of the eleven-by-eleven view. **Nothing is played at the
+destination cell**; the arrival is drawn by the next ordinary compose after the
+warp.
+
+The sequence, in order:
+
+1. One world-tick pause, then a short PC-speaker sweep from the shared software
+   envelope generator - the same generator the shrine effect uses, not a
+   melodic cue.
+2. **Stage A, the party is swallowed.** The party sprite is switched to tile
+   `0x116`, and the party's view cell is dissolved into the moon-gate tile
+   pixel by pixel: the cell is first cleared to colour zero, then its remaining
+   255 pixels are plotted in a fixed pseudo-random order, one pixel per step.
+   The stage is paced by a world tick every eight steps rather than by a fixed
+   wait, so it also advances ambient animation while it runs.
+3. **Stage B, the gate closes.** The party sprite is suppressed entirely, and
+   the shared presence counter is driven from `15` down to `1`, one phase per
+   step, with a wait of **two BIOS timer ticks** between phases - roughly
+   110 ms per phase at the standard 18.2 Hz tick, and about 1.65 seconds for the
+   stage. Each phase draws the composed frame of Section 9.1 at the gate cell,
+   so the visible effect is the gate sinking back into the ground with the party
+   already gone. The countdown ends with the counter at zero.
+4. The gate's live cell is rewritten to terrain `5`, the viewport is marked
+   dirty, and the cell is repainted.
+
+The frame counts are `15` for stage B and `256` dispatch steps for stage A; both
+are exact, and neither is a duration an implementation may retune without
+changing observable behaviour.
+
+After the tile is cleared, the hook has two outcomes. If the clock is in hour
 `0` and the minute is below `10`, it reports success to the outer loop; the
 outer loop then dispatches the same shrine/urn kneel overlay used by
 M-Meditate. Otherwise, the hook chooses a destination from the cached moon-glyph
@@ -466,6 +570,18 @@ digits: before noon it uses the first cached glyph, and from noon onward it
 uses the second. The glyph digit selects one of the saved Moonstone slots, and
 the hook calls the same saved-slot warp helper used by Gate Travel. If that
 warp changes scene, the outer loop exits through the normal scene-byte check.
+The party's transport marker is restored on every path that ran the transition.
+
+The **endgame overlay reuses this presentation twice**, on the same shared
+counter and with the same fifteen-step counts: once counting up, as a gate rises
+in the throne room, and once counting down, as it sinks after the party has
+passed through. The only differences are the substituted ground plate noted in
+Section 9.1 and the pacing - the endgame spends a full world tick plus one BIOS
+tick per phase where the transit spends a bare two ticks. An implementation
+should build one phase-composition routine and let all three callers drive it.
+See `systems/endgame.md`.
+
+### 9.3 The Shrine of the Codex approach gate
 
 The **Shrine of the Codex approach gate** is a separate fixed-coordinate
 branch and has nothing to do with moongates. It fires from the post-action
@@ -635,8 +751,16 @@ unresolved outdoor loop control flow.
   cell and warps to the slot named by the current moon glyph. The former "render
   animator" is withdrawn: that scratch block is the night-time light beacon
   (`systems/visibility.md` Section 12.6). The Shrine of the Codex approach gate
-  is a separate branch with its own corrected polarity. What is left is
-  presentation timing and asset naming, not entry behaviour.
+  is a separate branch with its own corrected polarity.
+
+- **Moongate presentation.** *Closed.* The presentation timing and asset naming
+  that the previous entry left open are now specified: the sixteen-phase
+  rise-and-sink render in Section 9.1, the persisted presence counter and its
+  save offset, the scratch tile the composed frame occupies, the two-stage
+  blocking transit in Section 9.2 with its exact step counts and its two-tick
+  inter-phase wait, and the endgame's reuse of the same counter. The remaining
+  gap is subjective: no recording of the accompanying PC-speaker sweep has been
+  made, so this spec describes that cue only by generator and not by character.
 
 - **Outdoor light sources.** After dark the outdoor map lights one rotating
   beacon from a lighthouse in the loaded window, and a location map lights up to
@@ -693,6 +817,16 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/0x47F4_npc_warp_to_scene.md`, plus
   `u5-decomp/functions/ULTIMA_EXE/0x48A8_lockpick_or_unlock.md` (historical
   filename; note content now corrected).
+- Source provenance: the sixteen-phase gate render and its composition rule,
+  the persistence and save offset of the shared presence counter, the complete
+  census of that counter's users, the two-stage blocking transit sequence with
+  its exact step counts and inter-phase wait, the scratch tile the composed
+  frame occupies, the scene-dependent ground plate, and the endgame's reuse of
+  the same counter are derived from private analysis note
+  `u5-decomp/notes/moongate_transition_2026-08-23.md`.
+- The viewport rasterizer that resolves moon-gate cells against the presence
+  counter — `u5-decomp/functions/ULTIMA_EXE/0x56AC_combat_post_round.md`
+  (historical filename; the routine is the eleven-by-eleven rasterizer).
 - The location map setup that harvests up to two indoor light-source positions
   into the same beacon coordinate scratch — `u5-decomp/functions/TOWN_OVL/0x0408_town_setup_load_map.md`.
 - The combat loop exit reset of the light beacon's bearing byte —

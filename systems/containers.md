@@ -537,10 +537,18 @@ The visible consumed-object rules are:
   path after committing the chest result. Trap and combat chest branches can
   also mark a related combat/effect record as claimed, but the ordinary
   non-combat persistence rule is still "clear the consumed object-table slot."
-- **Corpse searches.** The plague outcome for a corpse search clears the corpse
-  slot without staging food or gold. Non-plague corpse searches rewrite the slot
-  into a later food/gold pickup; the eventual pickup then follows the ordinary
-  object-table grant rule above.
+- **Corpse searches.** A corpse search splits on a single roll before anything
+  is narrated, and the fate of the corpse slot follows that split, not the
+  narration. The majority arm -- seven outcomes in eight -- **clears the corpse
+  slot first**, and only then rolls for what the search is said to have turned
+  up. Plague is one rare result inside that already-cleared arm, and the
+  several "nothing"-style results are the rest of it, so plague and every
+  "nothing"-style narration alike leave the slot cleared and stage neither food
+  nor gold. Only the minority arm -- one outcome in eight -- leaves the slot in
+  place and rewrites it into a later food/gold pickup; the eventual pickup then
+  follows the ordinary object-table grant rule above. *Corrected:* an earlier
+  revision had this backwards, attributing the slot clear to the plague outcome
+  alone and the rewrite into a pickup to every non-plague search.
 - **Combat-created body/retrieval slots.** The ordinary post-combat
   trigger-slot reconciler can rewrite a restored `0x2C..0x2F` body-family
   active-object slot into the same broad body/retrieval family consumed by
@@ -648,6 +656,11 @@ does not reproduce decompiled code, assembly, or raw data dumps.
 - `u5-decomp/functions/SJOG_OVL/0x045A_sjog_search_lookup_b.md`.
 - `u5-decomp/functions/SJOG_OVL/0x1458_sjog_inventory_add.md`.
 - `u5-decomp/functions/SJOG_OVL/0x1B34_sjog_aux_combat_helpers.md`.
+- Source provenance: the corpse-search arm structure -- the majority arm's
+  slot clear happening ahead of the plague-or-narration roll, and the minority
+  arm being the only one that stages a pickup -- re-derived on 2026-08-22 from
+  the shipped overlay and recorded in the banner and Behavior section of
+  `u5-decomp/functions/SJOG_OVL/0x01F2_sjog_corpse_grant.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x3702_lookup_object_at.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0x6150_combat_target_describe.md`.
 - `u5-decomp/functions/ULTIMA_EXE/0xB8A4_init_object_slot.md`.
