@@ -390,10 +390,18 @@ predictably goes wrong:
   classify as a prunable kind is skipped before the position test runs, so an
   out-of-window slot of an unclassified kind survives.
 
+**How a pruned slot is released.** *Corrected:* an earlier revision of this
+section said pruning frees a slot through the ordinary one-byte rule of
+Section 4. **That is withdrawn.** The prune path instead calls the shared
+record-writer with the slot index and **six zero field values**, so it clears
+the record's first six bytes rather than only its type byte. The freed slot is
+immediately available to allocation either way, and Section 4's one-byte rule
+remains correct for the other paths that free slots - but an implementation
+that models pruning as a single-byte clear leaves five stale bytes behind in a
+record that allocation will later hand out.
+
 **Consumers, in both directions.** The prune pass is invoked by the overworld
-per-turn epilogue, and by nothing else. It releases slots through the ordinary
-slot-freeing rule of Section 4 - a one-byte write, no free list, no compaction -
-so freed slots are immediately available to allocation. It is **not** invoked by
+per-turn epilogue, and by nothing else. It is **not** invoked by
 the animator, **not** by the renderer, **not** by mode entry, and **not** by the
 combat backup/restore path of Section 9. Nothing reads a "was pruned" result:
 the pass returns no report and the epilogue keeps none, so an implementation
