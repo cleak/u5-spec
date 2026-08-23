@@ -1104,11 +1104,11 @@ extraction now publish the exact mapped transfer behavior: `PARTY.SAV`
 validation, slot-0-only import, source gender/class/status translation,
 three-region STR/DEX/INT conversion, Strength-only floor, MP from converted
 INT, XP divided by ten, level from scaled XP, and current/max HP from level.
-The no-transferable-data gate is now fixed as eight consecutive candidate words
-inside the second source block. Later U4 no-data cleanup identifies those
-candidate words as the predecessor virtue/karma standings, and static dispatch
-cleanup fixes post-commit control as intro/menu redraw. Remaining transfer
-gaps are preview pixel coverage.
+The gate over eight consecutive candidate words inside the second source block
+is now fixed as the Avatarhood test, not a no-transferable-data gate; later
+cleanup identifies those candidate words as the predecessor virtue/karma
+standings, and static dispatch cleanup fixes post-commit control as intro/menu
+redraw. Remaining transfer gaps are preview pixel coverage.
 
 **Current overworld underfoot cleanup:** 2026-05-12 -
 `systems/overworld.md`, `systems/lighting.md`, vehicles, and extraction now
@@ -2560,7 +2560,8 @@ Onward load variant: entry, `PARTY.SAV` source, `BRIT.GAM` / `BRIT.OOL` seed
 files, validation gate, imported Avatar fields, preview/confirmation boundary,
 abort-before-write behavior, commit file set, and Journey Onward handoff are
 public, including the fresh-save `.OOL` emission order. Later U4 no-data
-cleanup identifies the already-shaped no-data gate as the predecessor
+cleanup identifies the already-shaped gate (later renamed the Avatarhood test)
+as the predecessor
 virtue/karma standings, and static dispatch cleanup fixes post-commit control
 as an intro/menu redraw rather than direct gameplay entry. Remaining parity
 work is exhaustive preview text-field cursor, attribute, and redraw-timing
@@ -2568,11 +2569,14 @@ parity.
 
 **Current U4 no-data label cleanup:** 2026-05-13 -
 `systems/u4-transfer.md` and extraction now identify the later transfer
-no-data gate as the eight predecessor virtue/karma standing words: Honesty,
-Compassion, Valor, Justice, Sacrifice, Honor, Spirituality, and Humility. All
-eight zero produces the no-transferable-data branch; any nonzero word allows
-the normal preview. Remaining transfer parity work is exhaustive preview
-text-field cursor, attribute, and redraw-timing parity.
+gate as the eight predecessor virtue/karma standing words: Honesty,
+Compassion, Valor, Justice, Sacrifice, Honor, Spirituality, and Humility.
+**Superseded 2026-08-22:** this entry originally said that all eight zero
+produces a "no-transferable-data" branch. That direction is withdrawn. All
+eight zero is the *Avatar* success condition; it never rejects the transfer,
+and the only effects are the class override and preview wording. See
+`systems/u4-transfer.md` sections 5.3 and 5.4. Remaining transfer parity work
+is exhaustive preview text-field cursor, attribute, and redraw-timing parity.
 
 **Current U4 transfer post-commit cleanup:** 2026-05-13 -
 `systems/intro.md`, `systems/main-loop.md`, `systems/u4-transfer.md`, and

@@ -39,6 +39,14 @@ forty-eight times out of forty-eight under the pointer-table anchor and fails
 under the old one. Id 46 is `PRV` / `Vas Rel Por` / Gate Travel — that
 attribution was always correct and is unaffected.
 
+**This check is reproducible from the table in Section 3 alone**, without any
+private analysis: for every id, sort the letters of the parser token and compare
+them with the sorted initials of the phrase's words. It holds forty-eight times
+out of forty-eight. A reader who doubts the anchor can therefore falsify it here
+rather than taking it on trust - which is the point of stating it, since an
+anchor slip of a fixed number of entries produces a table that is internally
+consistent and wrong, and is the most common failure in this specification.
+
 ## 2. Rune Syllables
 
 The spell incantations use this twenty-four-syllable vocabulary.

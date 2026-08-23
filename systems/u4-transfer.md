@@ -250,6 +250,75 @@ Note that validation runs on the raw predecessor values, before any of the
 translations in Section 7. A source Strength of 70 passes the gate and is then
 put through the attribute translator; the gate does not see U5-side values.
 
+### 5.4 Verification status of Sections 5.1 to 5.3
+
+Sections 5.1, 5.2 and 5.3 were re-derived from the shipped Ultima V program
+files in August 2026, deliberately without reference to this document's earlier
+drafts, because an engine implementation reported that its own parser
+contradicted all three. **All three stand as published.** Where an
+implementation disagrees with them, the implementation is wrong. The specific
+findings:
+
+- **There are exactly two reads of `PARTY.SAV`, and no others.** Following the
+  path down to the file-access primitive it calls shows the first read opening
+  the file, seeking to file offset `0x0008` and reading 40 bytes, and the
+  second reopening it, seeking to file offset `0x0140` and reading 182 bytes.
+  Nothing else on this path touches the predecessor save.
+- **The leading character record begins at file offset `0x0008`.** That is the
+  seek target of the first read, and the buffer it fills is the record base
+  from which every field offset in Section 5.1 is taken. The name field is
+  therefore at file offset `0x001C` and the class byte at file offset `0x002D`.
+  A parser reading the name at `0x001A` and the class at `0x0019` is wrong
+  about the record base and about both field positions.
+- **No party-wide counter is or can be validated.** Every byte the validation
+  gate inspects lies inside the 40-byte leading-record buffer. The party-wide
+  block is not read until after validation has already passed *and* the leading
+  record has already been copied into the destination, so no value from it can
+  influence the accept/reject decision. An implementation that rejects a source
+  save on account of its food, gold, gems, torches, keys, sextants, move count,
+  moon phase or dungeon progress rejects saves the original accepts.
+- **All-zero standings is the Avatar success condition, not a rejection.** The
+  parse step reports the same success status whether the eight standings are
+  all zero or not; the only consequences of the all-zero outcome are the class
+  override and the preview wording described in Sections 6.6 and 7. An
+  implementation that treats an all-zero standings block as "no transferable
+  data" and refuses the transfer turns away precisely the completed Ultima IV
+  Avatar that this path exists to import. This is the highest-consequence item
+  in Section 5 and it is settled.
+- **Independent cross-check on the anchor.** The two seek targets are the only
+  two anchors the Ultima V side supplies, and they agree with the publicly
+  documented Ultima IV save layout without adjustment: that layout puts an
+  eight-byte header before the character array, gives each record 39 bytes with
+  the name at record offset `0x14` and the sex, class and status bytes at
+  `0x24`, `0x25` and `0x26`, and places the virtue standings six bytes into the
+  party-wide block. Two independently derived geometries agreeing is the
+  strongest confirmation available here, since Ultima V itself reads only the
+  first record and so never exercises the stride.
+
+What remains **unverified from the Ultima V side**, and is carried here on the
+authority of the published Ultima IV format rather than on anything Ultima V
+does:
+
+- the 39-byte record stride and the eight-record count, since only the first
+  record is ever read;
+- the identity of the record words at `0x0E`, `0x10` and `0x12`, of the status
+  byte at `0x26`, and of name bytes `0x1C` through `0x23` — all of which are
+  read into memory as part of the 40-byte block but never examined;
+- the identity of party-wide block bytes `0x00` through `0x05` and of
+  everything past block offset `0x15`, which are likewise loaded by the
+  182-byte read and never examined.
+
+An implementer should treat those as labels, not as contract. Nothing in the
+Ultima V transfer path depends on any of them.
+
+This section could not be validated against a genuine Ultima IV `PARTY.SAV`;
+no Ultima IV installation was available, and no save file was fabricated and
+treated as evidence. The findings above rest entirely on how the shipped
+Ultima V code reads the file.
+
+Source provenance: re-derived from private analysis in
+`u5-decomp/functions/INTRO_OVL/` and `u5-decomp/notes/`.
+
 ## 6. Character Comparison And Status Preview
 
 The transfer screen is built entirely from the resident fixed-cell text system
