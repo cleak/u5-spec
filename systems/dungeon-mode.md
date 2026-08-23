@@ -1556,9 +1556,30 @@ on this path.
 3. **Synthesise the arena in the room buffer.** The dungeon room painter is
    called with the combat kind byte already set to the ambush value. It fills the
    eleven-by-eleven terrain grid with the current corridor fill byte, stamps the
-   outline, corner markers, the underfoot-class centre icon, and the four
-   passage strokes, and then writes the same metadata band that the room-combat
-   setup helper reads (see `formats/cbt.md` Section 5 for the row/column layout):
+   outline, corner markers, the underfoot-class centre icon, and one per-side
+   treatment for each of the four sides, and then writes the same metadata band
+   that the room-combat setup helper reads (see `formats/cbt.md` Section 5 for the row/column layout):
+
+   > *Corrected (2026-08-23).* An earlier revision called the per-side step "the
+   > four passage strokes", which implies every side is opened. It is not. The
+   > painter dispatches on the class of the adjoining **dungeon** cell one step
+   > in that direction:
+   >
+   > - a passable class carves an opening in that side's wall line - seven cells
+   >   wide, and then a five-cell carve as well, whose cells are a subset of the
+   >   seven, so the result is the seven-cell opening;
+   > - the **wall** classes carve **nothing**: that side's outer edge strip, one
+   >   cell outside the wall line, is filled with the same filler byte the
+   >   always-outside corners get, and the side stays sealed;
+   > - the remaining classes (the door families) carve the five-cell opening.
+   >
+   > So a chamber can be built with fewer than four openings, and a wall side is
+   > sealed rather than stroked. Two limits on this re-derivation: the room
+   > painter was read only through about half its length, so a later pass in its
+   > unread tail could in principle overwrite edge cells (not verified either
+   > way); and the filler byte is identified as "outside/void" by inference from
+   > the corner cells, the shipped arena record's edge row and one other
+   > overlay's use of it - the renderer's handling of that byte was not traced.
 
    - **Party-entry rows.** Metadata rows one through four receive fixed
      six-entry X and Y sequences. On this path the entry-facing seed the setup

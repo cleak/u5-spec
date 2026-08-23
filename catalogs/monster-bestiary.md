@@ -297,7 +297,7 @@ damage, spell, target-picker, movement, and monster-special readers:
 | `splits` | If damaged but not killed, the class may clone itself into an empty combat slot. |
 | `physical half` | Non-magical physical damage is halved before HP is reduced. |
 | `physical immune` | Non-magical physical damage is reduced to zero. |
-| `team override` | The class participates in special faction handling used by target selection. |
+| `zero-selector stat row` | When the shared stat-selector helper is asked for this class's stat with a selector of zero, it returns the class stat row's first byte instead of the value the combat-weight path would give. Nothing about factions or sides is involved. *(Renamed 2026-08-23 from `team override`; see the withdrawal note below.)* |
 | `vanish branch` | On death, the class prints the vanish narration, leaves the gravestone-style marker in the temporary combat view, clears the combat actor, and bypasses the default drop-marker path. |
 | `special death` | A class-specific death transition runs instead of the terrain/drop path. Only two classes carry it: the Gazer, whose branch marks its own record and then places a live Insect Swarm at the death cell, and the Gargoyle, whose branch edits the arena terrain and releases the slot. |
 | `possess` | On a monster AI turn, the class may pick a random eligible party target, run resistance, and mark the target controlled for combat. Daemon-class possessors self-clear after a successful landing path. |
@@ -306,6 +306,18 @@ damage, spell, target-picker, movement, and monster-special readers:
 | `poison/status attack` | The class's attack can route through the shared party-status/damage helper before ordinary melee damage. Against a Good party member this can apply poison with zero ordinary damage and no attacker experience. |
 | `turnable attack` | When this class targets a living party member wearing Amulet/Turning with a ranged or special effect attack, half of attempts are forced into the scattered-impact path instead of the ordinary hit-roll result. |
 | `teleport-capable` | If ordinary attack/action handling falls through to movement, a class with this flag can attempt a random legal arena-cell move before ordinary stepping. |
+
+> *Corrected (2026-08-23).* The trait now called `zero-selector stat row` was
+> published as `team override`, defined as participation "in special faction
+> handling used by target selection". **That is withdrawn.** An exhaustive scan
+> of every shipped code file for accesses to the per-class flag table finds
+> exactly one instruction anywhere that tests this bit, inside the shared
+> stat-selector helper, and it fires only for a monster slot asked for a
+> zero-valued selector. Nothing about sides or factions is computed, and the
+> helper writes nothing outside its own frame. The routine that actually
+> resolves friend from foe reads per-actor descriptor bytes and one roster byte;
+> it never reads the class-flag table at all. `systems/combat.md` Section 6.1a
+> carries the same withdrawal with the scope limits.
 
 **No-corpse death family.** Ten classes carry the low class-flag bit without the
 vanish bit: Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect
@@ -386,15 +398,15 @@ distribution per class. The contexts below are therefore broad.
 
 | Class | Creature | Sprite run | HP | Reward unit | Drop cap | Charm threshold | Traits | Encounter context |
 |------:|----------|------------|---:|------------:|---------:|---------------:|--------|-------------------|
-| 26 | Mimic | `0xA8..0xAB` | 30 | 8 | 20 | 12 | team override | Chest-like or ambush-style monster |
-| 27 | Reaper | `0xAC..0xAF` | 40 | 11 | 25 | 12 | team override; turnable attack | Forest or fixed dungeon encounter |
+| 26 | Mimic | `0xA8..0xAB` | 30 | 8 | 20 | 12 | zero-selector stat row | Chest-like or ambush-style monster |
+| 27 | Reaper | `0xAC..0xAF` | 40 | 11 | 25 | 12 | zero-selector stat row; turnable attack | Forest or fixed dungeon encounter |
 | 28 | Gazer | `0xB0..0xB3` | 20 | 6 | 0 | 25 | special death; possess; turnable attack | Eye-burst death: writes the eye-burst tile onto its own record, keeps the slot, runs no drop roll, and **places a live class-31 Insect Swarm at the death cell** through the ordinary monster-placement mode (tile `0xBC`, five HP, hostile), then redraws. The spawn is a real combatant, not a visual effect. |
 | 29 | Crawler | `0xB4..0xB7` | 35 | 9 | 0 | 12 | - | Dungeon or underworld encounter |
-| 30 | Gargoyle | `0xB8..0xBB` | 40 | 11 | 0 | 5 | splits; team override; special death | Writes the lava-pool byte into the arena terrain under the corpse, then releases the slot. It does **not** continue into the default kill path, so it leaves no corpse marker and no drop; pixel details belong to combat presentation QA. |
-| 32 | Orc | `0xC0..0xC3` | 10 | 3 | 11 | 10 | team override | Humanoid wilderness or dungeon group |
+| 30 | Gargoyle | `0xB8..0xBB` | 40 | 11 | 0 | 5 | splits; zero-selector stat row; special death | Writes the lava-pool byte into the arena terrain under the corpse, then releases the slot. It does **not** continue into the default kill path, so it leaves no corpse marker and no drop; pixel details belong to combat presentation QA. |
+| 32 | Orc | `0xC0..0xC3` | 10 | 3 | 11 | 10 | zero-selector stat row | Humanoid wilderness or dungeon group |
 | 33 | Skeleton | `0xC4..0xC7` | 20 | 6 | 13 | 5 | physical half | Undead encounter |
-| 35 | Ettin | `0xCC..0xCF` | 30 | 8 | 17 | 12 | team override | Large humanoid encounter |
-| 36 | Headless | `0xD0..0xD3` | 20 | 6 | 12 | 8 | team override | Wilderness or underworld encounter |
+| 35 | Ettin | `0xCC..0xCF` | 30 | 8 | 17 | 12 | zero-selector stat row | Large humanoid encounter |
+| 36 | Headless | `0xD0..0xD3` | 20 | 6 | 12 | 8 | zero-selector stat row | Wilderness or underworld encounter |
 | 37 | Wisp | `0xD4..0xD7` | 40 | 11 | 0 | 20 | possess; teleport-capable | Magical or spectral encounter |
 | 38 | Daemon | `0xD8..0xDB` | 75 | 19 | 0 | 25 | physical half; possess; turnable attack | High-tier magical/dungeon encounter |
 | 39 | Dragon | `0xDC..0xDF` | 99 | 25 | 30 | 25 | summon-daemon | High-tier wilderness or dungeon encounter |
@@ -512,7 +524,8 @@ classes.
 
 1. Class-flag publication is complete at behavioral-trait depth. The
    eight-byte class-stat row layout is specified, and the decoded traits above
-   publish row assignments for damage modifiers, faction override, death
+   publish row assignments for damage modifiers, the zero-selector stat-row
+   select (**corrected 2026-08-23** from "faction override"), death
    branches, monster-turn specials, poison/status attacks, turnable attacks,
    and teleport-capable movement, including the Mage turnable-attack flag
    boundary outside the hostile-monster table. The common ranged/effect branch,

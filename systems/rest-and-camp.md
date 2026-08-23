@@ -259,6 +259,14 @@ The event's public contract:
   results `25..99` skip it. The event chance is therefore 25%.
 - It iterates active party members. Dead members do not receive the level-up
   narration or stat reward.
+- **Every member who is not dead is silently full-healed and cured before the
+  level check.** Current hit points are set to that member's maximum, and the
+  status is forced to the healthy value, clearing poison, sleep and any other
+  affliction letter. No text accompanies this; it happens for the whole living
+  party whether or not anyone gains a level. *Added 2026-08-23 from a complete
+  re-read of the handler; an earlier revision of this section omitted it, so an
+  implementer working from the previous text would have shipped the event
+  without its heal.*
 - For each eligible member, it recomputes the displayed level from experience:
   start at level 1, divide experience by 100, then increment level once for
   each halving step while that quotient remains nonzero. This yields level 1

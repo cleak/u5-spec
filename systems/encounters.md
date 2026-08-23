@@ -657,7 +657,9 @@ change the current encounter contract.
   the whole write surface. Section 5 states the full contract.
 
 - **Town hostility boundary.** Town hostility is not an arena-encounter path in
-  the traced town overlay. A-Attack, alarm scatter, guard arrest, forced flight, death,
+  the traced town overlay. A-Attack, the alarm's schedule-rewrite sweep (**corrected 2026-08-23**: an
+  earlier revision called this "alarm scatter"; the sweep displaces no NPC and
+  writes no coordinate), guard arrest, forced flight, death,
   and slot-clear behavior are owned by `systems/town-mode.md`; do not model
   them as `.CBT` combat unless a separate live combat-framer caller is traced.
 

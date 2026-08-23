@@ -354,8 +354,11 @@ global combat metadata that is not stored in arena files:
   stats, not terrain-combat monster-type weights.
 - Class-name pointers for the same actor-class namespace.
 - Decoded damage/death flags. The analyzed baseline's class-flag table confirms
-  split-on-damage, halve-physical-damage, physical immunity, faction override,
-  turnable attacks, ranged/effect branch selection, the magic-immune
+  split-on-damage, halve-physical-damage, physical immunity, the zero-selector
+  stat-row select (**corrected 2026-08-23**: this entry read "faction override";
+  that is withdrawn - the bit's only reader changes which byte of the class stat
+  row a zero selector returns, and the routine that actually resolves sides
+  never reads this table), turnable attacks, ranged/effect branch selection, the magic-immune
   ranged/effect gate, teleport-capable movement, poison/status attacks,
   vanish-on-death, and the Gazer/Gargoyle special-death branches through their
   consumers. Neighboring per-class side tables supply attack range caps and

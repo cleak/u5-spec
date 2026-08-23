@@ -293,11 +293,39 @@ The ranged reactions, reached only when no adjacency reaction fired:
   either form to the other. The generic "attacked" message belongs to the
   adjacent-engagement path, not to this one.
 
-If none of those immediate reactions fires, the cleanup phase decides ordinary
-movement. Whirlpool-class slots toggle a two-frame swirl and occasionally take
-a random cardinal wander. Ship-like water-creature and pirate frames first pass
-through the wind cadence table owned by `weather.md`; once that cadence permits
-movement, they use the same directed step planner as land monsters.
+If no immediate reaction has fired **so far this turn**, the movement-dispatch
+phase decides ordinary movement for the slot. Whirlpool-class slots flip a
+stored parity bit and move only on the turns where it clears, choosing between a
+random cardinal step and the directed step planner. Ship-like water-creature and
+pirate frames first pass through the wind cadence table owned by `weather.md`;
+once that cadence permits movement, they use the same directed step planner as
+land monsters.
+
+> *Corrected (2026-08-23).* Two things this section said are withdrawn.
+>
+> First, the phase was called a **cleanup** phase that runs **per slot** when
+> that slot's own reaction pass declined it. It is neither. A complete re-read
+> of the routine and of both movement helpers it calls shows it performs no
+> drawing, no frame advance and no cleanup at all: given a slot, it decides
+> whether that object takes a step and dispatches it. And the gate is not
+> per-slot. The walker keeps a **running total** of the reaction pass's results,
+> zeroed once before the slot loop and never reset, and consults that total.
+> Once any earlier slot in the same turn produced a reaction, the movement
+> dispatch is skipped for **every remaining slot for the rest of that turn**. An
+> implementation that re-evaluates the gate per slot will move objects the
+> original leaves standing. The walk runs from the highest slot index down to
+> one; slot zero is excluded.
+>
+> Second, the whirlpool "two-frame swirl" was an animation reading. The bit
+> being toggled gates **movement**, and the byte holding it is persisted state,
+> not a render frame.
+>
+> Two limits on the re-read, recorded so this is not over-read: the helpers that
+> validate a candidate cell and commit the step were **not** examined, so "the
+> step is committed" is inferred from the callers' structure; and one branch's
+> two exits were found to reach the same movement call with a dead argument, so
+> no behavioural difference should be modelled between them beyond the counter
+> byte one of them increments.
 
 A special `0xFC` sprite class has an additional proximity-mask branch. That
 sprite value is the Shadow Lord actor class (`catalogs/monster-bestiary.md`,
@@ -359,7 +387,7 @@ destination-tile chance gates. For ordinary outdoor movers:
 
 These gates are movement cadence rules layered after terrain/occupancy
 acceptance; they are not the primary passability predicate. A refused chance
-gate ends that slot's cleanup attempt rather than falling back to another axis.
+gate ends that slot's movement attempt rather than falling back to another axis.
 
 Ship-like water-creature frames `0x2C..0x2F` bypass these low-terrain chance
 gates. Four monster first-frame values also bypass them exactly: Bat `0x94`,
@@ -584,8 +612,8 @@ The behaviour described above was derived by reading the function and format not
 - The `0xB5` actor-class interpretation is cross-checked against the shipped
   NPC roster analysis in `u5-decomp/formats/npc-tlk-pth.md`.
 - The overworld per-turn slot walker, outdoor animated/monster predicate,
-  hostile reaction dispatch, water-creature step path, post-animate cleanup,
-  directed step planner, and proximity helper -
+  hostile reaction dispatch, water-creature step path, per-slot movement
+  dispatch, directed step planner, and proximity helper -
   `u5-decomp/functions/MAINOUT_OVL/`, and
   `u5-decomp/functions/MAINOUT_OVL/`.
 - Source provenance: the exact-equality breath recognition, the
