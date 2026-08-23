@@ -611,6 +611,37 @@ Source provenance: derived from private analysis note
 This section separates text-output compatibility boundaries from remaining
 pixel-parity work.
 
+### There is no "current message" to overwrite
+
+An implementation that keeps a **single message slot** — one string field that
+the turn epilogue writes and a command handler then overwrites — has invented a
+conflict the original does not have, and will silently lose whichever line is
+written first.
+
+**The original has no such slot.** Text output is a *stream* into a windowed
+grid. Each window carries a live cursor that stays where output last left it,
+emission continues from that cursor, and when a line feed carries the cursor past
+the window's bottom edge **the window scrolls**. Nothing holds "the current
+message", so nothing can replace it.
+
+So the question "does an epilogue line append, replace, queue, or take
+precedence over a command result?" has no answer in the original's terms,
+because it presupposes a slot. **Both lines are emitted, in the order they
+occur**, and both are visible unless the second scrolls the first out of the
+window. A turn that produces an epilogue announcement *and* a command result
+shows the announcement first, then the result beneath it.
+
+The practical consequence for a port: model the message area as an append-and-
+scroll region, not as a value. An architecture that stores one message per turn
+will match the original whenever a turn happens to produce exactly one line, and
+diverge silently whenever it produces two — which is the hardest kind of
+divergence to notice, because the common case looks correct.
+
+This is a case where **matching the original's behaviour requires matching its
+structure**. A port that reproduces each individual message correctly but holds
+them in a slot will still lose lines, and no test of an individual message will
+show it.
+
 - **Cursor-advance gate ownership.** The per-cell emitter consumes a shared
   cursor-advance gate. Confirmed callers use it for cursor blink painting,
   typed-input erase/padding, and intro-frame cell decoration. The clean
