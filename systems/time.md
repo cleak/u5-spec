@@ -464,7 +464,9 @@ The behaviour described here was derived from the private function notes listed 
 - The per-turn cleanup routine itself — its mode-argument handling, the state-tag modifiers, the minute-to-year cascade, the day-rollover bundle, the daylight recompute, and the hour-change hooks — derived from `u5-decomp/functions/ULTIMA_EXE/0xCDAC_per_turn_cleanup.md`.
 - The resolved hour-change presentation call - formerly suspected as
   overworld gameplay logic, now identified as the sky/status row renderer -
-  derived from `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`.
+  derived from `u5-decomp/functions/ULTIMA_EXE/0x4A84_combat_status_grid.md`
+  (that note's filename predates its 2026-08-22 naming correction; the routine
+  is not combat-scoped and reads no status letters).
 - The party status and provision pass - including the per-invocation walk, the
   Dead/Sleeping consumer exclusion, the one-point poison tick, the hour-gated
   starvation and 06:00/12:00/18:00 food branches, and the pass's own trailing

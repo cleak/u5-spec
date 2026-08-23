@@ -799,7 +799,10 @@ The behaviour described above was derived by reading the function and format not
 - The world-tile getter that dispatches between combat, overworld 2×2 chunk window, and town/dungeon-explore single-grid buffers, including the out-of-bounds sentinel — `u5-decomp/functions/ULTIMA_EXE/0x4402_get_world_tile.md`.
 - The default active-object compositor helper and its 0..3 variant selector -
   `u5-decomp/functions/ULTIMA_EXE/0x51B8_monster_spawn_table.md` and
-  `u5-decomp/functions/ULTIMA_EXE/0x51A0_combat_class_roll.md`.
+  `u5-decomp/functions/ULTIMA_EXE/0x51A0_combat_class_roll.md`. Both filenames
+  predate their naming corrections: neither routine spawns monsters and neither
+  is combat-scoped or class-related; the second returns the variant index used
+  by the first.
 - The cross-overlay alias and callsite census for the same world-tile getter -- `u5-decomp/functions/ULTIMA_EXE/0xC232_tile_at_world_coord.md`.
 - The overworld map family's chunk layout (BRIT.DAT sparse, UNDER.DAT dense), the four-class location-DAT format, and the combat arena format that combat pre-composites — `u5-decomp/formats/maps.md`.
 - The resident data segment's fixed locations for the visibility grid, the terrain band, and the per-cell scrap regions — `u5-decomp/formats/data-ovl.md`.

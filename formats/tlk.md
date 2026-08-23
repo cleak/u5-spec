@@ -166,7 +166,7 @@ printable text (after bit-7 strip). The full dispatch table:
 | `0x81` | PRINT-AVATAR-NAME   | Emit the player's saved name (the name chosen during character creation) into the output stream.                         |
 | `0x82` | END-STREAM          | Stop the current stream and signal the caller "this stream is finished". Used to terminate the fixed leading entries.   |
 | `0x83` | PAUSE               | Redraw the world view and wait for any key. After the key, refresh the party panel for every member.                    |
-| `0x84` | ASK-PARTY-NAME      | Prompt the player to type a party member's name. Used by the JOIN sequence and similar "name a companion" prompts.       |
+| `0x84` | RECRUIT-SPEAKER     | Recruit the speaking NPC into the active party. No player prompt: the engine reads the speaker's own name out of the blob's Name entry and matches it against the reserve portion of the character roster. The historical mnemonic "ASK-PARTY-NAME" is wrong; `0x84` reads no player input. |
 | `0x85` | GOLD-PAYMENT        | Multi-byte introducer (three argument bytes follow): collect a gold amount and run the gold-payment routine.             |
 | `0x86` | ACTION-DISPATCH     | Multi-byte introducer (one argument byte follows): collect a letter `A..K` for the global action table, or a small generic flag index. |
 | `0x87` | KEYWORD-ALIAS       | No argument byte. Save the stream position, skip forward past the rest of the current record and past the whole record that follows it, run the record after that as a nested stream, then restore the saved position and continue — unless the nested stream signalled stop, which propagates. Used as a whole response body to make one keyword an alias for the next keyword's response. The historical mnemonic "SET-FLAG" is wrong; `0x87` writes no flag and performs no keyword matching. |
@@ -185,7 +185,7 @@ printable text (after bit-7 strip). The full dispatch table:
 
 Multi-byte introducers (`0x85`, `0x86`, `0x8C`, `0xFE`) consume one or more bytes following the introducer as arguments, not as ordinary stream bytes. The number of argument bytes is fixed per introducer (Section 9.1 below). Argument bytes themselves are passed through to the introducer's handler as literal argument values; they are not subject to bit-7 strip or dictionary expansion.
 
-The full runtime semantics of each code — how PAUSE redraws, how IF-ELSE walks its arms, how ASK-PARTY-NAME interacts with party state — belong in `systems/conversation.md`. This format spec restricts itself to the on-disk arrangement and the byte-by-byte type tags.
+The full runtime semantics of each code — how PAUSE redraws, how IF-ELSE walks its arms, how RECRUIT-SPEAKER interacts with party state — belong in `systems/conversation.md`. This format spec restricts itself to the on-disk arrangement and the byte-by-byte type tags.
 
 A label is *declared* by the two-byte record marker `0x90 <label>`. A transfer
 to label `L` rewinds to the start of the blob and scans forward for the byte

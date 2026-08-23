@@ -440,11 +440,17 @@ must match:
   `display-driver-abi.md` section 5.
 - **Lines include both endpoints** and cover all eight octants; a polyline is a
   first line followed by continuation strokes from the current point.
-- **The message-window scroll is hardwired.** On the EGA baseline the scroll
-  entry accepts only the message window's left pixel column, moves a
-  128-pixel-wide stripe up by exactly one 8-pixel cell row, and ignores any
-  requested distance. A portable engine may generalise it, but must not assume
-  the original honours a row count; see `display-driver-abi.md` section 9.5.
+- **The message-window scroll is a hardwired fast path, not the whole entry.**
+  On the EGA baseline the scroll entry has a general body — signed row
+  distance, arbitrary rectangle, both surfaces, vacated band blanked — plus a
+  special case taken when the rectangle's left edge is the message window's
+  left pixel column, which moves a 128-pixel-wide stripe up by exactly one
+  8-pixel cell row, ignores the requested distance, and leaves the vacated band
+  unblanked. Because the resident text layer always presents that left edge,
+  text scrolls always take the fast path and always move one row. An earlier
+  revision said the entry "accepts only" the message window's left column and
+  never honours a row count; that is withdrawn. See `display-driver-abi.md`
+  section 9.5.
 
 ## 8. Intro and Cutscene Effects
 

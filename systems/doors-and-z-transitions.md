@@ -344,9 +344,11 @@ and the descend link `0xC9` or a metal grate `0x86` moves to the floor below.
 **There is no two-way ladder cell in town mode** and no up-or-down prompt on
 this path; the two link ids are directional and a cell is one or the other.
 When the underfoot cell is none of the three, K instead prompts for a direction
-and inspects the neighbour: a wooden fence or gate cell there moves the party
-one cell onto it **without any floor change**, and anything else prints "What?"
-and consumes no turn. A cancelled direction prompt still counts as the party's
+and inspects the neighbour: the pile of rocks `0x4C` or either wooden-fence id
+`0xCA`/`0xCB` there moves the party one cell onto it **without any floor
+change**, and anything else prints "What?" and consumes no turn. (Corrected
+2026-08-22: this accepted set was previously given as "a wooden fence or gate
+cell"; no gate id is on this path and the rubble id was missing.) A cancelled direction prompt still counts as the party's
 action.
 
 Facing-sensitive walk-on stairs are the separate `0xC4..0xC7` tile family: their

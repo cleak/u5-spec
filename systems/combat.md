@@ -661,7 +661,7 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 4. **Decrement the actor's phase counter.** While non-zero, the slot does not act this round. When it reaches zero, the actor *does* act.
 5. **On zero, refresh the counter and act.** The counter is reset to `36 - base_step`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine fires a tile-render pass for animation.
 6. **Dispatch the actor's turn.** A single function asks "is this slot a player or a monster?" — for a player, control passes to the player command handler (Section 8); for a monster, to the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch (Section 9).
-7. **Mark the slot acted, run the post-action render.** Redraws changed cells and runs any post-action sound or particle effect. Death narration runs here when relevant.
+7. **Mark the slot acted, run the standing-cell hazard pass, then the post-action render.** These are two separate steps and only the second one draws. The hazard pass reads the arena terrain under the actor that just acted, and — if that terrain is not itself damaging — scans the object table for any object other than the actor's own sitting on the same cell. Three damaging kinds are recognized, each with its own effect: a low tier that applies the party status/damage path with the no-attacker sentinel and plays the hit sound, but only while the actor's own object entry is an ordinary live entry; a middle tier that plays the hit sound, rolls a small random amount, feeds it to the damage-and-status resolver, runs the shared finalize hook and raises the leave-combat flag; and a top tier that routes the actor into the same petrify-style special effect a Gazer's gaze uses. A cell with none of these kinds costs the actor nothing. Only after the hazard pass does the separate render step redraw changed cells and run any post-action sound or particle effect. Death narration runs here when relevant.
 
 **End-of-round exit checks.** Three flags control exit:
 
@@ -671,28 +671,33 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 
 When defeat or leave-combat fires, the round loop returns "1" (victory/escape) or "0" (defeat).
 
-**Post-round maintenance pass.** A separate round-adjacent maintenance pass
-keeps arena tile effects and combat cursors in sync with the rendered tactical
-view. It sweeps the eleven-by-eleven combat arena grid in row-major order using
-the same padded row stride as the runtime terrain grid. For each cell, it reads
-the terrain/state byte and the parallel magic/effect byte:
+**Combat does not own a post-round render pass.** An earlier revision of this
+section described a "post-round maintenance pass" that swept the arena grid
+"dispatching cell effects" once per round. That framing is **withdrawn**: it
+misread the shared viewport rasterizer described in `systems/visibility.md` and
+`systems/display.md` as a combat-scoped routine. The routine in question is the
+engine's single tile-painting pass, run by the idle redraw tick in *every*
+mode - overworld, town, dungeon and combat alike - immediately after the
+visibility post-pass composites active objects into the viewport buffers. It
+walks the eleven-by-eleven viewport in row-major order and, per cell, issues one
+sixteen-by-sixteen tile blit: a cleared viewport byte means "paint the byte from
+the parallel companion terrain band" (one companion value is a
+paint-nothing sentinel), one reserved viewport value routes to a second blit
+entry point that also takes the shared magic-effect timer, and every other
+viewport value is translated through the animated-tile state table before being
+blitted. Every one of those calls is a display-driver blit. None of them applies
+a hazard, ticks an actor, or mutates HP, status or field markers; the
+"per-cell effect dispatch" reading was an artifact of the private working name,
+not of the behaviour.
 
-- Terrain/state byte `0x00` dispatches the magic/effect byte as a cell effect,
-  except for magic/effect byte `0x16`, which is the skipped no-effect sentinel.
-- Terrain/state byte `0xDC` ticks the shared combat magic-effect timer only
-  while that timer is nonzero and below sixteen.
-- Any other terrain/state byte is translated through the combat tile-effect
-  table before dispatch.
-
-After the grid sweep, the same pass handles presentation-only markers while
-combat is active. A blink flag toggles the player cursor every other pass; if
-the cursor is enabled and the player arena cell is valid, the renderer draws
-the player marker at the cell's table-derived screen position. A separate
-secondary-marker flag can draw another small marker at an explicit arena X/Y.
-These marker updates do not advance combat time, mutate actor HP/status, or
-consume placed field markers. They are visual/effect synchronization around the
-round loop, distinct from actor dispatch and from the post-step field-contact
-hook described later.
+The only combat-specific part of that pass is its tail, which runs when the
+scene byte is in the combat band. It toggles a blink flag each pass and, on the
+lit pass, draws the player cursor box around the active player's arena cell,
+skipping it when that cell is the invalid sentinel; a separate flag can draw an
+additional small marker at an explicit arena X/Y. These marker updates are
+presentation only: they do not advance combat time, mutate actor HP or status,
+or consume placed field markers, and they are distinct both from actor dispatch
+and from the post-step field-contact hook described later.
 
 The phase-counter / base-step structure means actors act at *staggered* paces. There is no "player turn then monster turn" — initiative is *interleaved* by phase counter, so a fast monster might act twice between the player's turns.
 
@@ -1116,7 +1121,17 @@ unless a caller has forced the outcome. Certain special action/effect tile
 families are always-hit cases. Otherwise the helper resolves attacker and
 defender combat ratings, computes `(attacker - defender + 30) / 2`, and accepts
 the hit when that score beats a uniform random byte. This is the public hit-roll
-shape. The item catalog now publishes the traced weapon-dispatch range/effect
+shape. One of the ratings the selector can return is not a stat-table byte at
+all but a per-actor *combat weight*: normally the actor's own speed seed, and
+the floor value one in three override cases — while the Negate Time tag is
+running and the actor is a monster, for one specific actor class, and for any
+actor carrying the asleep/magically-disabled bit. It is the defender term of
+the score in the ordinary melee case, and can stand in as the attacker term as
+well, so all three overrides make the affected actor markedly easier to hit
+while barely changing what it can land; the Negate Time override is the
+mechanical bite of a time-stopped arena. Earlier revisions described this
+weight as a "team modifier" consumed by a chest-encounter targeting flip; that
+reading is withdrawn. The item catalog now publishes the traced weapon-dispatch range/effect
 rows; attack-time ammunition and breakage/consumption remain a negative
 boundary shared with the item catalog. The traced combat attack stack does not
 decrement arrows/quarrels, decrement a readied weapon's carried stock, or clear
@@ -1305,7 +1320,7 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 | Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, faction-override, vanish-on-death, special death checks, the turnable-attack flag consumed by Amulet/Turning, ranged/effect branch selection, the magic-immune ranged/effect gate, teleport-capable movement, and the turn special bits for possess, blink/phase, and summon-daemon. |
 | Ordinary AI helper state         | Not a class script table. Ordinary monster decisions use the combat actor/effect records, target-selection scratch, per-class flag/stat tables, and shared helper outputs such as the AI step vector. Slot-local position, target, phase, flee, and visibility data remain in the combat actor/effect tables. |
 | Per-class display/narration data | Pointer data used by combat narration and class labels; this is not an AI behavior table.                                                        |
-| Per-class stat record            | Eight bytes per class: combat tier, speed seed/base-step input, HP-comparison byte for chest/encounter team-flip checks, defense rating, attack-damage cap, maximum HP, default spawn count, and default kill/drop cap. Maximum HP initializes monster HP and supplies the reward-unit input. The attack and defense bytes are consumed by the computed attack resolver; this row is not a flat damage/hit lookup matrix. |
+| Per-class stat record            | Eight bytes per class: combat tier, speed seed/base-step input, endurance rating, defense rating, attack-damage cap, maximum HP, default spawn count, and default kill/drop cap. The tier and endurance bytes are the two class-side ratings the shared actor-rating selector returns into the to-hit and resistance scores; the "chest/encounter team-flip" reading of them in earlier revisions is withdrawn. Maximum HP initializes monster HP and supplies the reward-unit input. The attack and defense bytes are consumed by the computed attack resolver; this row is not a flat damage/hit lookup matrix. |
 | Per-class name pointers          | Sixteen-bit pointers per class to the printable monster name strings.                                                                            |
 
 A monster's class id is set at spawn time and never changes (death may cause a tile swap, but the class stays). The forty-eight-row class space is shared: classes 0-3 are the four human party sprites (Mage, Bard, Fighter, Avatar), classes 4-15 are townsfolk and special NPC actors, and classes 16-47 are the bestiary. Note that the descriptor's owner/target/class field is overloaded: for a seated party member it holds the character's roster slot index, and only for monsters and objects does it hold a class id. The AI's friend/foe filter relies on the descriptor faction tag and the slot index range rather than on that field alone.
@@ -1344,11 +1359,13 @@ Combat is built on top of several other systems and integrates cleanly with each
 
 - **Time.** Combat advances time at one specific point — when the round counter wraps inside a round (corresponding to one full actor walk under typical game pacing). The wrap fires the per-turn cleanup with a one-minute increment, exactly as the town and dungeon loops do.
 
-- **Rendering and tile effects.** The post-round maintenance pass sweeps the
-  runtime combat terrain/effect grid, dispatches per-cell visual or hazard
-  effects, blinks the player cursor, and optionally draws a secondary marker.
-  It is not the ownership point for placed-field lifetime; field markers still
-  persist until combat exit unless an explicit command or spell removes them.
+- **Rendering and tile effects.** Combat contributes no render pass of its own.
+  The shared viewport rasterizer that paints every other mode also paints the
+  arena, driven by the idle redraw tick rather than by the round loop, and its
+  only combat-specific work is blinking the player cursor and optionally
+  drawing a secondary marker (Section 7). It applies no hazards and is not the
+  ownership point for placed-field lifetime; field markers persist until combat
+  exit unless an explicit command or spell removes them.
 
 - **Spell system.** Combat shares the single player/party spell dispatcher
   described in `magic.md`. Combat-specific gates wrap the dispatcher's call
@@ -1500,9 +1517,12 @@ The behaviour described here was derived from the private function and format no
   derived from
   `u5-decomp/functions/COMBAT_OVL/0x111A_reveal_ambush_at_coord.md`.
 - The per-round walk over the thirty-two-slot actor table, the phase-counter mechanic, the round-counter wrap, the dispatch to player vs. monster handlers, and the three exit conditions — derived from `u5-decomp/functions/COMBAT_OVL/0x0B94_combat_main_loop.md`.
-- The post-round combat terrain/effect sweep, player-cursor blink marker, and
-  secondary-marker render hook -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/0x56AC_combat_post_round.md`.
+- The retraction of the "post-round combat terrain/effect sweep", and the
+  player-cursor blink marker and secondary-marker hook that survive it as the
+  shared rasterizer's combat-only tail -- derived from
+  `u5-decomp/functions/ULTIMA_EXE/0x56AC_combat_post_round.md` (the note's
+  filename predates its 2026-08-22 naming correction; the routine is the shared
+  viewport rasterizer, not a combat post-round pass).
 - The per-actor turn dispatcher, complete dispatcher-level combat command map
   for all twenty-six letters and seven special inputs, the AI synthesis path for
   monster turns, the verb-stitching narration buffer, and the unified

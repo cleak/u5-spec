@@ -69,9 +69,12 @@ The confirmed per-class data supports these fields:
 
 The eight-byte class stat records have a fixed semantic layout even where this
 catalog does not print every per-class value. The row fields are combat tier,
-speed seed for phase timing, an HP-comparison byte used by chest/encounter
-team-flip checks, defense rating, attack-damage cap, maximum HP, default spawn
-count, and default kill/drop cap. Initial HP, reward-unit input, drop-cap input,
+speed seed for phase timing, an endurance rating, defense rating,
+attack-damage cap, maximum HP, default spawn count, and default kill/drop cap.
+The tier and endurance bytes are the two class-side ratings the shared
+actor-rating selector can return into the to-hit and resistance scores;
+earlier revisions called them inputs to a "chest/encounter team-flip"
+comparison, which is withdrawn. Initial HP, reward-unit input, drop-cap input,
 Mass Charm threshold, and the teleport-capable movement flag consumer are
 called out where they affect visible class behavior. Do not treat the stat
 records as a flat damage or hit-chance matrix. The ranged/effect maximum-range
