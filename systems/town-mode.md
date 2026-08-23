@@ -142,7 +142,7 @@ Five authored cell families change the floor while the party is inside a locatio
 
 **One location overrides the trapdoor.** Stonegate is a single-floor keep whose trapdoor cells form a ring around one open centre cell. Walking into that ring does not descend; it runs a scripted sequence — a tone-and-fade presentation, the visible map replaced wholesale with a single tile, the active-object table cleared, and every party member's status set to dead. This is the *only* place a trapdoor is not a floor transition; every other trapdoor in the game takes the generic descend path above. Specify it as a scripted location event, not as part of floor selection.
 
-**Every floor change is a full reload.** A transition re-runs the whole location load against the new page: read the page, harvest NPC start markers and spawn markers, run the dawn/dusk substitution if the hour is in the night band, run the Shadowlord blight pass, relink the active-object table for the new floor, and mark visibility dirty. It is never a partial update, and the announcement (`Up!` / `Down!`) is printed before the reload.
+**Every floor change is a full reload.** A transition re-runs the whole location load against the new page: read the page, harvest NPC start markers and the beacon's light sources (Section 5 step 3 - **not** spawn markers), run the dawn/dusk substitution if the hour is in the night band, run the Shadowlord blight pass, relink the active-object table for the new floor, and mark visibility dirty. It is never a partial update, and the announcement (`Up!` / `Down!`) is printed before the reload.
 
 ### The floor byte has two roles
 
@@ -206,7 +206,16 @@ Entering a town is a single setup pass that runs once per entry, before the per-
 
 2. **Tile-grid load.** The per-location floor page is loaded into the tile buffer (Section 3). Exactly 1,024 bytes — one floor of 32×32 — are read.
 
-3. **Marker harvest.** The load pass walks the freshly-read tile grid cell-by-cell, finds NPC start markers and asterisk spawn markers, and records their coordinates into per-NPC-slot arrays and into the primary/secondary spawn slots. Later load-time passes handle any runtime tile-buffer cleanup or conditional marker rewrites.
+3. **Marker harvest.** The load pass walks the freshly-read tile grid
+   cell-by-cell in a single walk that serves two purposes: it finds **NPC start
+   markers** and records their coordinates for placement, and it finds the
+   **night beacon's indoor light sources** and records theirs. *Corrected:* an
+   earlier revision called the second kind "asterisk spawn markers" recording
+   primary and secondary player-entry coordinates. **That reading is withdrawn**
+   - see `formats/location-dat.md` Section 6. Those two slots belong to the
+   beacon specified in `systems/visibility.md` Section 12.6, they hold light
+   sources rather than player positions, and the byte occurs on no town, castle
+   or keep floor at all.
 
 4. **Dawn/dusk substitution.** The shipped maps store gate cells in their daytime, open form. When the current hour is in the night band (8 PM through 4 AM), a pass runs over the tile buffer and toggles the cell paired with each archway marker into its night, closed form. Section 6 describes the substitution in detail.
 
@@ -219,9 +228,10 @@ Entering a town is a single setup pass that runs once per entry, before the per-
    the one-at-a-time reject, the actor-index choice, and the placement. The
    player is present in this mode as slot zero of the active-object table, kept
    in step with the world-state globals by the compositor; the entry pass does
-   not write a player entry anywhere else. If the map-load pass found explicit
-   asterisk spawn markers, command handlers may use those marker slots for
-   stair/alternate landing paths.
+   not write a player entry anywhere else. *Corrected:* an earlier revision added that command
+   handlers may use "asterisk spawn marker" slots for stair or alternate
+   landing paths. **Withdrawn** - those slots are the beacon's light sources,
+   not landing points, and no town floor carries the byte.
 
    **Retraction, and an open item.** This step was previously called "player
    attach" and was said to give the player a phantom NPC entry — a high-indexed
@@ -232,10 +242,12 @@ Entering a town is a single setup pass that runs once per entry, before the per-
    its record from the ordinary monster-slot allocator (which never returns
    slot zero), and stamps the Shadow Lord actor tile. Section 13 now owns those
    coordinates, and Section 8 records the withdrawal of the phantom NPC itself.
-   The player's own default town-entry cell — the fallback used when the map's
-   asterisk markers supply none — is therefore **not currently established** by
-   this spec and must be treated as an open item rather than implemented from
-   the old wording.
+   The player's own default town-entry cell is therefore **not currently
+   established** by this spec. Note the old wording framed it as "the fallback
+   used when the map's asterisk markers supply none" - but since those markers
+   are the beacon's and appear on no town floor, there was never a primary rule
+   for the fallback to fall back *from*. The entry cell is unsourced outright,
+   not merely defaulted.
 
 After these six steps return, the entry pass calls a final screen redraw and hands off to the per-turn loop. The player is in town mode until the loop's per-turn epilogue notices that the scene byte has been cleared (Section 15).
 
