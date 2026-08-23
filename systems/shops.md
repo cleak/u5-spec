@@ -999,7 +999,9 @@ condition is treatable by the selected service. Cure requires Poisoned status.
 Heal refuses Dead members and members already at maximum HP; it can heal a
 Poisoned member's HP but does not cure the Poisoned status. Resurrect requires
 Dead status; Ashes and other non-Dead statuses are refused rather than treated
-as dead. An untreatable selection prints the shared healer refusal and
+as dead. That is a corollary of a single equality test against Dead, not a
+separate Ashes check - see `systems/magic.md`, which owns the shared
+resurrection gate. An untreatable selection prints the shared healer refusal and
 returns to the service menu without quoting a price or changing gold, status,
 or HP.
 

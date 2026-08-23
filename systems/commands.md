@@ -347,7 +347,7 @@ Attack-family on-foot refusal.
 | `None!\n` | message window | The universal cancel response. |
 | `Nothing!\n` | message window | The empty-selection variant used where there was nothing to choose from. |
 | `Invalid!\n` | message window | A selection outside the valid range. |
-| `Done\n` | message window | Leaving an inventory page. |
+| `Done\n` | message window | Leaving an inventory page. The shared item picker's single Escape arm prints this when it was opened in R-Ready's mode, and prints `None!` when opened in its other caller's mode; the choice is made from the mode value alone. `systems/inventory.md` § 5.1 owns that attribution, which was settled on 2026-08-23 after being published as unverified. |
 
 Several independent copies of the cancel word exist and one of them omits the
 newline, so a compatible implementation should treat the newline as belonging to
