@@ -225,9 +225,12 @@ else. They never carry a player position.
 **Marker handling remains in-memory only** and the on-disk file is unchanged by
 a load, which is the one claim from the old wording that survives intact.
 
-This document does not specify where the player is placed on entering a
-location. That is mode behaviour rather than file format, and it is **not
-established here** - an implementation should not infer it from this file.
+Where the player is placed on entering a location is mode behaviour rather than
+file format, and it is **not** derived from this file - but it is no longer
+unknown. The party enters at **column 15, row 30, floor 0**, a fixed value for
+every location, written by the overworld entry path. See
+`systems/town-mode.md` Section 5. Every location's floor-0 page carries walkable
+ground at that cell.
 
 ### Farmland and orchard blight in a Shadowlord hideout
 
