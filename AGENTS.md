@@ -90,7 +90,31 @@ u5-spec/
    that context and write clean prose here.
 5. Add or update source provenance without copying private text.
 6. Check for contamination before finishing: no source code, assembly, raw
-   dumps, or address-heavy tables.
+   dumps, or address-heavy tables. Run the checker - it is mechanical and
+   takes a second:
+
+   ```text
+   python scripts/check_contamination.py
+   ```
+
+   It must print `clean`. Exit 1 means contamination; exit 2 means the checker
+   itself is broken and the result means nothing.
+
+## Citing private analysis
+
+Cite the **directory**, never the note filename:
+
+```text
+Source provenance: derived from private analysis in
+`u5-decomp/functions/<OVERLAY>/`.
+```
+
+Private note filenames encode a routine's load offset and its private label, so
+a list of them is a private address table however scholarly it reads. This is
+not hypothetical: 1056 such citations across 77 files once exposed 440 distinct
+private entry points here, and they were introduced by a repair pass that was
+improving the document's sourcing. Put the real provenance in the prose - say
+what was established and how - and let the path name only the directory.
 
 ## Status and open questions
 
