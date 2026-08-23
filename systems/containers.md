@@ -549,6 +549,27 @@ The visible consumed-object rules are:
   follows the ordinary object-table grant rule above. *Corrected:* an earlier
   revision had this backwards, attributing the slot clear to the plague outcome
   alone and the rewrite into a pickup to every non-plague search.
+- **Corpse-search odds.** Every roll below is over a **closed** range - both
+  bounds are attainable - which is the detail most likely to be mis-implemented
+  as an exclusive upper bound.
+
+  | Roll | Outcome |
+  |---|---|
+  | The arm split | **1 in 8** takes the minority arm and stages a pickup; the other **7 in 8** clear the slot. |
+  | Inside the minority arm | **1 in 4 food, 3 in 4 gold.** |
+  | Inside the cleared arm | Plague on **1 in 32**. |
+
+  An earlier revision of this section gave the contents split as one third
+  against two thirds, and the plague chance as one in thirty-one; **both figures
+  are withdrawn**. Each was an inclusive/exclusive off-by-one on a closed range.
+
+  The remaining narration in the cleared arm - the several "nothing"-style
+  results - is **not uniform**. It is drawn through a chained roll rather than a
+  flat four-way choice, which weights it heavily toward the least interesting
+  outcome: roughly **52%**, **27%**, **15%** and **6%** across the four messages
+  in order. An implementation that picks one of the four with equal probability
+  will show the rarest message about twice as often as the original does. This
+  is presentation only and stages neither food nor gold.
 - **Combat-created body/retrieval slots.** The ordinary post-combat
   trigger-slot reconciler can rewrite a restored `0x2C..0x2F` body-family
   active-object slot into the same broad body/retrieval family consumed by
