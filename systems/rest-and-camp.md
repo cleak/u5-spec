@@ -142,6 +142,33 @@ records and apply recovery if all of these guards pass:
 - The member is not the selected watch/target slot. The watcher recovers
   neither HP nor MP.
 
+**The cooldown is persisted.** It occupies the byte at `SAVED.GAM` offset
+`0x02E6`, inside the mode-scratch band, and the shipped seed carries zero there
+- correct, since no cooldown is active at game start. It survives save and
+reload like any other saved counter. An implementation that keeps it only in
+memory lets a player clear the window by saving and reloading, which the
+original does not.
+
+**A camp refused by the cooldown does not re-arm it.** There is exactly one
+instruction in the shipped code that writes fourteen to that byte, and both
+refusal branches jump past it. A player cannot lock themselves out by camping
+repeatedly.
+
+**But a refused camp still advances time in full.** The gate is evaluated
+*after* the camp's hours are credited, so the counter decays during the very
+attempt it refuses. Repeated camping is therefore not a no-op loop - each try
+burns its hours and brings the window closer to expiry. An implementation that
+tests the gate *before* advancing time will diverge, and it will diverge in the
+direction that looks more sensible, which is the hard kind to notice.
+
+**A refused camp prints its own message.** It is a distinct, shorter no-effect
+line, not the rest-success line, emitted from a mutually exclusive branch. Both
+strings ship adjacently in `DATA.OVL` - the success line at file offset
+`0x41FC` and the no-effect line at `0x420B` - so an implementation should read
+them from the shipped file rather than transcribe either. Reporting a refused
+camp through the success message is a visible error: the player is told the
+party rested when nothing happened.
+
 For each member that passes those guards, the handler adds a uniform random
 `1..63` HP, rolled independently per member, and caps current HP at maximum HP.
 It then restores MP only for specific class rows: Avatar and Mage set current MP
@@ -151,10 +178,38 @@ assignment, not an addition, so a class row on this list can have its magic
 points reduced by camping if its current MP was already above the target value.
 Poisoned members keep Poisoned status; rest does not cure poison.
 
-After the recovery walk, the handler arms the cooldown counter at 14 and, on a
-25-percent roll, remembers the tile under the party and stamps the camp marker
-tile. The cooldown is armed whether or not the marker is stamped, and whether
-or not any member actually recovered.
+After the recovery walk, the handler arms the cooldown counter at 14. The
+cooldown is armed unconditionally - whether or not any member actually
+recovered.
+
+**There is no camp marker tile, and nothing is stamped.** *Corrected:* an
+earlier revision of this section said the handler "remembers the tile under the
+party and stamps the camp marker tile" on a twenty-five percent roll. **Both
+halves are withdrawn.** The roll's success path is three instructions: it copies
+the **calendar month** byte into a second saved byte and calls one routine. No
+tile array is written anywhere in the handler.
+
+**The value copied is the month**, one-based in the range one to thirteen, not a
+tile id - so the "remembered tile" reading was a value-space error, not a
+misplaced write. The routine called is the **camp apparition and level-up
+event** already specified in Section 7.
+
+**So Sections 5 and 7 describe the same draw at the same instruction, counted
+twice.** There is one event here, not two, and an implementation that builds
+both will roll twice and stamp something that does not exist.
+
+**The draw is not a clean quarter, and the exact form matters.** The apparition
+gate draws from the closed range `0..24` against one hundred - twenty-five
+outcomes in a hundred. Stating it as "twenty-five percent" is a rounding that
+happens to be exact here, but the neighbouring hit-point roll is a closed
+`1..63`, and a published percentage invites an implementation to reach for a
+float where the original uses a bounded integer draw. Publish and implement the
+draw, not the ratio.
+
+The apparition branch carries **an additional gate the earlier wording omitted**:
+it runs only when two caller flag bits are both clear. When either is set the
+branch is skipped entirely - **and the cooldown is still armed**, which is what
+the "armed whether or not" clause was really describing.
 
 Statuses outside the rest-participating set, including Charmed or Ashes if
 present in the party record, have no dedicated H-Hole-up status transition in
