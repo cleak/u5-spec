@@ -513,7 +513,11 @@ for NPC pathfinding:
 | `0x01..0x03` | Deep water, water, and shoals. |
 | `0x0C..0x0D` | Mountains and high peaks. |
 | `0x10..0x1C` | Huts, shrines, keeps, settlements, cave/mine/dungeon entrances, lighthouse, and the world-map bridge run. |
-| `0x27..0x2B` | Roof, crystal sphere, bright light, and hollow stump. |
+| `0x27` | Roof. |
+| `0x28` | Roof. The two roof ids share a description; they are not one id. |
+| `0x29` | Crystal sphere. |
+| `0x2A` | Bright light. |
+| `0x2B` | Hollow stump. |
 | `0x2E..0x3F` | Fruit tree, cactus, the world-map grass art run `0x30..0x37`, gargoyle, and the mighty-castle run. |
 | `0x41..0x43` | Codex, mast, and rail. |
 | `0x46` | Pillar. |
