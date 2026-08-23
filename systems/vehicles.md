@@ -107,7 +107,7 @@ change the clock increment and it is not a player movement-speed table.
 |---------|------------------------|--------------------|----------------|
 | Foot | Default state. | No vehicle object; normal terrain restrictions. | None at this level. |
 | Horse | Boardable. X-Xit can leave a horse object behind. | Overland transport; requires the party to be on foot before boarding. Directional movement uses the ordinary one-cell overland step with mounted-horse passability. | None at this level. |
-| Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; boarding warns when hull is below ten or no skiffs are aboard. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
+| Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; boarding warns when hull is below ten or no skiffs are aboard. While aboard, the hull absorbs outdoor impact damage under the closed-interval `[1, 30]` rule in "Hull Condition And What Destroys A Ship" below, and no party member loses hit points while the ship survives. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
 | Skiff | Boardable. | Water transport at the ordinary mode turn cost; no vehicle-specific time modifier. The shared movement spec names the facing-sensitive skiff predicate family. | None at this level. |
 | Magic carpet | Boardable as a carpet. | Boarding changes the party transport state to the carpet transport marker. Boarding does not touch the timing tag byte at all - the `T` tag is Negate Time, never a carpet marker; outdoor Klimb is a separate Grapple-gated command, not a carpet ownership test. The shared movement spec names the carpet predicate family. | None at this level. |
 | Balloon | Vehicle tile family only in the analyzed baseline. | Balloon art and manual-facing references can be preserved as assets, but no traced B-Board, X-Xit, U-Use, shipwright, or ordinary movement branch promotes a live balloon transport state. | No command-level balloon mechanics are specified for v1; do not infer a boardable vehicle from art alone. |
@@ -341,6 +341,47 @@ the same one-run furl. The neighbouring outcomes for a ship that hits something
 it cannot enter are a collision message and, when the hull gives way, a
 breaking-up message.
 
+*Named gap — the sailing-collision hull rule.* The sailing-collision path is one
+of the outdoor sites that reaches the shared impact-absorption stage of
+`systems/overworld.md` Section 6.2.4, which is consistent with the breaking-up
+message above. The call is established; the enclosing routine was **not** read
+to its end, so **the exact condition under which a collision costs hull is not
+published**, and an implementation must not assume it is the same trigger as the
+collision message. A second per-turn outdoor site, preceded by a rough-seas line
+and guarded on the party marker being a skiff or a carpet, reaches the same
+stage; what schedules it is likewise unestablished, and no rough-seas mechanic
+is published here. Reading either enclosing routine to its end would settle it.
+
+### Hull Condition And What Destroys A Ship
+
+The hull-condition byte is active-object byte `+5` of the party's vessel record.
+Two different things reduce it, and they are not the same rule:
+
+- **The party's own broadside against a target object** subtracts a random
+  amount from *that object's* byte `+5` under the depletion-and-clear rule of
+  Section 7 below.
+- **An impact absorbed by the party's own ship** — a creature's ranged attack,
+  the adjacency reactions of `systems/active-objects.md` Section 8, and the
+  whirlpool — runs the shared impact-absorption stage. Its numeric contract is
+  published once, in `systems/overworld.md` Section 6.2.4, and is summarised
+  here only so far as it concerns the vehicle:
+
+  While the party is aboard a frigate — **any** of the eight marker values, all
+  four headings and both sail states — the impact draws a uniform integer in the
+  **closed interval `[1, 30]`, inclusive on both ends**, and compares it against
+  the hull byte. The ship survives **only** when the roll is strictly less than
+  the hull, and the hull is then reduced by exactly the roll. A roll equal to or
+  greater than the hull destroys the ship.
+
+  Two consequences are contract. **The hull absorbs the impact entirely: no
+  party member loses hit points while the ship survives.** And the hull cannot
+  fall to zero or below by this route — the least it can hold after a survived
+  impact is one.
+
+Under every other transport marker the same impact instead damages the party
+directly, as `systems/overworld.md` Section 6.2.4 specifies. A frigate is
+therefore a damage sink, not merely a faster way to cross water.
+
 ### Losing The Ship
 
 When a frigate is destroyed, the party is not simply killed. The engine walks a
@@ -354,6 +395,21 @@ fixed fallback ladder and takes the first option that is available:
 3. **Otherwise, the party drowns.** The marker is set to the
    sprite-suppressed value and the drowning outcome runs. This is the only way
    the suppressed value becomes persistent state.
+
+**The drowning outcome is a loop, and it tests before it damages.** While the
+shared living-member scan does not report "none remaining", each iteration plays
+the impact presentation at the party's cell and runs the whole-party damage pass
+of `systems/overworld.md` Section 6.2.4 **once** — that is, one fresh
+independent draw from the closed interval `[1, 8]` per qualifying member, per
+iteration. A party that is already entirely dead when the ladder reaches this
+rung takes no damage at all, because the test comes first.
+
+Two gaps sit on this rung and are named rather than papered over. The damage
+pass skips only members whose status byte is the dead marker, while the scan
+that ends the loop counts only good, poisoned and sleeping members; a member in
+some other living state would keep taking damage while no longer being counted
+alive by the exit test, and whether that state is reachable is unexamined. What
+runs after the loop exits was not traced.
 
 Y-Yell's word-of-power and Shadowlord-name branches are command-system
 features, not vehicle behavior.
@@ -508,6 +564,18 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/formats/ds-bss-map.md`.
 - `u5-decomp/formats/saves.md`.
+- Source provenance: the hull-condition impact rule (the closed-interval
+  `[1, 30]` draw, the strictly-less-than survival test, the exact-roll
+  subtraction, the floor of one, and the fact that no party member loses hit
+  points while the ship survives), the coverage of all eight frigate marker
+  values, and the test-first shape of the drowning loop were **re-derived from
+  the shipped binaries** in a verification pass that read the impact-absorption
+  stage, the whole-party damage pass, the per-member helper and the
+  living-member scan each from entry to exit. Record field positions are cited
+  from `formats/saved-gam.md`. Working directories:
+  `u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. The
+  numeric contract is published once, in `systems/overworld.md` Section 6.2.4;
+  this document points at it rather than restating it, so the two cannot drift.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the marker's
   identity as the party sprite, the complete persistent value set and the

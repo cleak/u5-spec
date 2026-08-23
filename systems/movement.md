@@ -152,7 +152,7 @@ predicate each family uses while an outdoor active object is trying to step:
 | `0xA0..0xBF` | Slime, Gremlin, Mimic, Reaper, Gazer, Crawler, Gargoyle, and Insect Swarm sprite runs. | Slime, Gremlin, Mimic, Reaper, Crawler, Gargoyle, and Insect Swarm use the base predicate; Gazer uses the carpet-like composite predicate. |
 | `0xC0..0xD7` | Orc, Skeleton, Python, Ettin, Headless, and Wisp sprite runs. | Base bitset predicate, with the documented `0x90..0x93` force-reject edge. |
 | `0xD8..0xDF` | Daemon and Dragon sprite runs. | Carpet-like composite predicate. |
-| `0xE0..0xE3` | Outdoor sea-serpent adjacency family in the overworld active-object domain; Sand Trap in the combat class table. | Accepts only tile id `0x07`. |
+| `0xE0..0xE3` | **Sand Trap sprite run** (`catalogs/monster-bestiary.md` class 40) in both domains. *Corrected:* an earlier revision said "outdoor sea-serpent adjacency family in the overworld active-object domain; Sand Trap in the combat class table". **That domain split is withdrawn — there is none.** The Sea Serpent run is `0x80..0x8F`'s `0x88..0x8B`, listed above. | Accepts only tile id `0x07`, which the terrain catalogue names parched desert — itself corroborating the Sand Trap identity. |
 | `0xE4..0xE7` | Troll sprite run. | Base bitset predicate, with the documented `0x90..0x93` force-reject edge. |
 | `0xE8..0xEB` | Immobile or never-pass family; no promoted ordinary mover identity. | Rejects every static tile. |
 | `0xEC..0xEF` | Outdoor whirlpool / forced-underworld animated family. | Accepts only tile id `0x01`. |
@@ -309,6 +309,12 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/MAINOUT_OVL/`.
 - `u5-decomp/functions/NPC_OVL/`.
+- Source provenance: the withdrawal of the `0xE0..0xE3` domain split was
+  re-derived from the shipped binaries, fixing sprite-run identity two
+  independent ways — the shipped description strings for the sprite pages, and
+  the published `class * 4 + 0x40` actor-byte rule of
+  `catalogs/tile-catalog.md` Section 7 applied to
+  `catalogs/monster-bestiary.md` class numbers.
 - `u5-decomp/notes/system-trace_movement.md`.
 - `systems/overworld.md`.
 - `systems/town-mode.md`.

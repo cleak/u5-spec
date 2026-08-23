@@ -37,7 +37,10 @@ byte, not from a search that happened to stop.
   plane, moves the party to the fixed underworld emergence coordinate `(34,
   18)`, and re-enters overworld setup so chunks and active objects refresh for
   the new plane. If the party marker is the on-foot avatar when this branch is
-  reached, the whirlpool branch is a no-op.
+  reached, no plane is written. *Corrected:* an earlier revision called the
+  on-foot case "a no-op"; **that is withdrawn.** The on-foot arm still applies
+  the impact payload of Section 6.2.4, which under a foot marker damages every
+  living party member. It skips the plane transition, not the damage.
 
 - **Interior exit plane selection.** Town-family exits clear the scene byte and
   restore overworld coordinates from the per-scene exit table. The traced town
@@ -264,36 +267,318 @@ belongs entirely to the ranged attacks below.
 ### 6.2 Creature ranged attacks
 
 Some creatures attack the party at a distance instead of closing with it. Two
-outdoor cases exist, and they are resolved by the same procedure:
+outdoor cases exist. They share one trace procedure and one damage payload, and
+**this section is the normative owner of both**. `systems/active-objects.md`
+Section 8 describes the same two reactions from the per-turn walker's side and
+points here rather than restating the contract.
 
-| Attacker | Condition | Announcement |
-|---|---|---|
-| Sea serpent or dragon (first frame) | Within three cells of the party on **both** axes, then a one-in-eight roll each turn | None |
-| Hostile ship / water creature | Aligned on the party's row or column, within three cells | A boom message before the shot |
+#### 6.2.1 Which creature fires, and when
 
-The resolution is identical in both cases. A straight line is traced from the
-attacker's cell to the party's cell, drawn as an animated projectile travelling
-along that line, and tested cell by cell for obstructions as it goes. The
-attacker's own cell never obstructs its own shot. If the line reaches the party
-with no intervening blocker, the attack connects: the world tick runs and damage
-is applied to the party at its map coordinates. If an obstruction is met first,
-the shot stops there and nothing further happens.
+| Attacker | Recognition | Geometry | Roll | Announcement |
+|---|---|---|---|---|
+| Sea serpent or dragon | The slot's type byte **equals** the first frame of the Sea Serpent run (`0x88`) or the first frame of the Dragon run (`0xDC`). Exact equality on the unmasked byte. | Wrapped absolute separation from the party of at most three on **both** axes, inclusive on each axis | One-in-eight each turn | None |
+| Hostile ship / water creature | The slot's type byte, masked to its four-frame family, is the water-creature / pirate family `0x2C..0x2F` | Strictly axis-aligned: zero separation on one axis, separation below four on the other | None; it fires whenever the geometry holds | A boom message before the shot |
 
-The player's own ranged attack uses the identical procedure with the endpoints
-exchanged, so **line-of-fire rules are symmetric between the party and the
-creatures**. An implementation should share one routine.
+Three properties of the recognition tests are contract:
+
+- **The breath test is exact equality — not a range, not a masked family.**
+  Sibling animation frames `0x89..0x8B` and `0xDD..0xDF` never enter the breath
+  branch. This is why `systems/active-objects.md` Section 8 calls these the
+  *first-frame* classes, and the word is meant literally.
+- **The broadside test is a masked family test**, deliberately unlike the one
+  above. The same walker uses both forms a few steps apart. Do not generalise
+  either rule to the other.
+- **Orthogonal adjacency is tested before the class test.** A sea serpent or
+  dragon standing exactly one cell north, south, east or west of the party takes
+  the adjacent-engagement path and does not breathe that turn. In play the
+  breath is a two- or three-cell reaction, and the broadside reaches only
+  effective distances two and three, adjacency having been consumed first.
+
+The one-in-eight is exact rather than approximate. The shared range draw is
+**inclusive on both bounds**; the breath asks for the closed interval `[0, 7]`
+and fires on one of those eight outcomes.
+
+Counting the geometries this admits: with separation of at most three on both
+axes, excluding the co-located cell and the four adjacency cells, **44** signed
+offsets reach the breath branch. Eight are cardinal, twelve are exact diagonals,
+and the remaining **24** are neither — non-cardinal, non-diagonal breath lines
+genuinely occur. The broadside admits exactly **8** offsets: two and three cells
+out along each of the four cardinal directions.
+
+#### 6.2.2 How the line is generated and sampled
+
+*Corrected:* an earlier revision of this section said "a straight line is traced
+from the attacker's cell to the party's cell, drawn as an animated projectile
+travelling along that line, and tested cell by cell for obstructions as it
+goes." **The cell-by-cell reading is withdrawn.** The trace runs at sub-tile
+resolution, and obstruction testing happens only at positions sampled at a fixed
+interval along it. Cells that lie on the geometric line are routinely skipped,
+one cell is often tested twice, and for several geometries the projectile stops
+short of the party's cell while still counting as a hit.
+
+**Coordinate space.** Both endpoints are converted from cells to sub-tile
+positions before the line is generated. There are sixteen sub-tile units per
+cell; cell `c` owns the closed span of positions `16c + 8` through `16c + 23`,
+and an endpoint converts to `16c + 16`. The inverse conversion, applied to every
+sampled position, subtracts eight and divides by sixteen truncating toward zero.
+Positions outside the closed band `[8, 183]` on either axis are off the
+eleven-by-eleven viewport; reaching one ends the walk and reports a clear line.
+
+**Generation.** The two axes are not treated alike. The **column** axis is the
+driver and the **row** axis is accumulated:
+
+- The column advances exactly one sub-tile step per iteration, toward the target.
+- An accumulator carries one hundred times the row-per-column slope, truncated
+  toward zero exactly once at setup and then taken positive. A shot with no
+  column delta substitutes a very large constant in place of the slope.
+- The accumulator is **initialised to that full slope value** — not to zero, and
+  not to half of it.
+- At the top of each iteration, while the accumulator is strictly greater than
+  zero and row steps remain, the row advances one step and the accumulator loses
+  one hundred. This repeats within the same iteration, so a steep line takes
+  several row steps per column step. This is not one-minor-step-per-major-step.
+- The column then steps and the slope value is added back to the accumulator.
+- The starting position is itself part of the emitted run.
+
+Four consequences are contract, because they are where an implementation that
+substitutes a textbook line-drawing routine will diverge:
+
+- Because the accumulator starts full, the first thing after the start position
+  is a **row** step whenever the shot has any row delta at all. The projectile
+  leaves the attacker's cell vertically before it moves horizontally.
+- An accumulator value of exactly zero does **not** step the row: the test is
+  strictly greater than zero. There is no other rounding anywhere in the walk.
+- Consecutive emitted positions differ on exactly one axis, by one unit.
+- The run always ends inside the target cell, but the column coordinate may
+  overshoot the target position by exactly one sub-tile step **in the direction
+  of travel** — never more, and never far enough to leave the target cell. A
+  shot with no column delta always ends one such step off on the column axis.
+
+**Sampling and testing.** The walker does not visit every emitted position. On
+the overworld it visits every thirteenth position, starting with the first. For
+each visited position, in this order: convert it to a cell, and stop reporting
+*clear* if either coordinate is outside the valid band; draw the effect figure;
+wait briefly and flush the dirty rectangle; advance the sampling index, and stop
+reporting *clear* if the run has ended; **and only then** test the current cell
+for obstruction. **The last sampled cell is therefore never obstruction-tested**,
+and neither is any position the sampling interval skips.
+
+The obstruction test consults the on-screen eleven-by-eleven viewport tile grid
+rather than the world map, against a fixed per-tile-id passability bitmap in
+which exactly **46** of the 256 tile ids block. A blocking cell whose coordinates
+equal the shooter's own starting cell is ignored and the walk continues — this
+is a coordinate comparison, not a "skip the first sample" rule, and it is why
+the attacker's own cell never obstructs its own shot. Any other blocking cell
+ends the walk and reports *blocked*.
+
+Return polarity, stated positively: **a run that reaches the end of the
+generated line reports clear, and clear is what both outdoor call sites treat as
+a hit.** *Blocked* means the shot stops where it stopped and nothing further
+happens — no payload, no message, no state change.
+
+**Worked example.** A creature three columns east and one row south of the party
+sits at viewport cell (8, 6) with the party at (5, 5). The generated run holds
+sixty-five positions. Sampling every thirteenth gives five visits, whose cells
+are (8, 6), (7, 6), (7, 6), (6, 5) and (6, 5) in that order. The first is the
+launch cell and is exempt; the next three are tested; the fifth is the last
+sample and is not tested. Exactly two distinct cells, (7, 6) and (6, 5), can
+block this shot. Cells (8, 5), (7, 5), (6, 6) and the party's own cell (5, 5)
+are never tested — the projectile is never even drawn on the party's cell — and
+the hit is still awarded.
+
+Two results hold across every reachable geometry of both attacks, swept
+exhaustively over the 44 breath offsets and the 8 broadside offsets: **the
+party's own cell is never obstruction-tested**, and the number of tested samples
+per shot lies in the closed interval `[2, 7]`, inclusive. In twelve of the
+forty-four breath geometries the sampled path never reaches the party's cell at
+all, and a broadside fired three cells away never samples the party's cell — the
+animation visibly stops one cell short and still connects.
+
+#### 6.2.3 Symmetry with the player's own shot
+
+*Corrected:* an earlier revision said "the player's own ranged attack uses the
+identical procedure with the endpoints exchanged, so **line-of-fire rules are
+symmetric between the party and the creatures**." The shared-routine half stands;
+**the symmetry conclusion is withdrawn.**
+
+The same routine is used with the endpoints exchanged, and an implementation
+should share it. But the traced cell set is **not** mirror-symmetric in general:
+the column axis drives the walk and sampling starts at the shooter's end, so
+exchanging the endpoints can change which cells are tested. Sixteen of the
+forty-four breath geometries have direction-dependent effective-blocker sets.
+
+Two positive statements bound that. Every one of those sixteen is non-cardinal
+and non-diagonal; and every cardinal geometry and every exact-diagonal geometry
+traces identically in both directions. On the overworld the player's own shot is
+always axis-aligned — the fire-direction prompt yields a single unit cardinal
+step, the ship-facing gate requires the fire axis to be perpendicular to the
+hull, and the target search steps one to three cells along that cardinal — so
+the asymmetry is not observable in overworld play. It remains a property of the
+shared routine: **trace from the actual shooter's cell; do not normalise the
+direction and mirror the result.**
+
+#### 6.2.4 The damage payload
+
+On a clear line the attack connects, and the payload below runs. It is the same
+payload for both outdoor ranged attacks: the calls and their arguments are
+identical. (The two tails around them are not byte-identical — the broadside
+rebuilds the viewport once more before the impact presentation, and the two pass
+different effect-figure indices — but nothing in the payload itself differs.)
+
+The same payload is also reached from the sand-trap adjacency reaction and from
+the whirlpool engagement described in Section 8 and in
+`systems/active-objects.md` Section 8. Two further outdoor sites reach it whose
+triggers are not established; see Section 6.2.5.
+
+**Stage one — impact presentation.** An impact figure is drawn at the party's
+own map coordinates (converted to viewport-relative coordinates), a short tone
+plays, and the viewport is rebuilt. This stage writes no character state and no
+vehicle state, and prints no narration line.
+
+**Stage two — impact absorption.** This stage takes no arguments and branches on
+exactly one thing: the party's transport marker.
+
+- **Aboard a frigate** — any marker in the hoisted or furled ship families of
+  `systems/vehicles.md` Section 2, meaning all four headings and both sail
+  states, eight values in total. Draw a uniform integer in the **closed interval
+  `[1, 30]`, inclusive on both ends**, and compare it against the ship's
+  hull-condition byte (active-object byte `+5` of the party's vessel record).
+  - Roll **strictly less than** the hull: subtract the roll from the hull,
+    repaint the stats panel, and return. **No party member loses hit points.**
+    The hull cannot fall to zero or below by this route; the least it can hold
+    afterwards is one.
+  - Roll **greater than or equal to** the hull: the ship is destroyed. The
+    ship-sunk line prints and the loss-of-ship ladder in
+    `systems/vehicles.md` Section 6 runs exactly as published there.
+- **Under every other transport marker** — foot, horse, carpet, skiff, and the
+  sprite-suppressed value — the **whole-party damage pass** below runs, and the
+  stage returns.
+
+**Target selection, as a positive statement.** The whole-party damage pass walks
+roster slots from index zero upward. For each slot index that is **below the
+party-size byte** and whose **status byte is not the dead marker**, it draws its
+own **fresh, independent** uniform integer in the **closed interval `[1, 8]`,
+inclusive on both ends**, and applies it. The pass's own hard bound is six slots,
+indices `0..5`.
+
+What demonstrably does **not** apply — scoped to the whole of that pass and the
+whole of the absorption stage, both of which were read from entry to exit:
+
+- No active-player selection, no first-living selection, no single randomly
+  chosen target, and no fixed slot. Every qualifying member is damaged.
+- One roll per damaged member, not one roll shared between them.
+- No attacker identity, sprite byte, class or sentinel participates anywhere on
+  this path, and the path never reaches the combat damage-and-status resolver.
+
+**The per-member application.** The pass applies each amount through the same
+party-damage helper that the surface chasm/falls row of Section 8 uses for its
+one-point fall damage. That helper:
+
+- flashes the member's row in the stats panel;
+- subtracts the amount from that member's **current hit points** word, character
+  record `+0x10` (`formats/saved-gam.md` Section 3.1);
+- if the signed result is zero or below, clamps that word to **zero** and writes
+  the **dead** status letter into the member's status byte, record `+0x0B`;
+- if the member that just died is the currently selected character, writes the
+  published "none selected" value into the active-player index byte
+  (`formats/saved-gam.md` Section 5). That value is the no-active-member
+  sentinel; it is **not** an attacker id, and nothing on this path reads it back
+  as one;
+- repaints the stats panel.
+
+Maximum hit points, experience, level, magic points and equipment are untouched
+by this helper. That list is bounded by the helper's own body, which was read
+from entry to exit; the one routine it calls that was not fully read is named as
+a gap in Section 6.2.5.
+
+**The payload prints no narration line — but it is not silent on screen.** The
+closing stats-panel repaint draws panel text, including the hull readout while
+the party is aboard a frigate. Implement "no narration line", not "prints
+nothing".
 
 Two presentation notes. The two outdoor cases share the flight machinery but
-differ in the figure drawn at each sampled point along the line, selected by a
-single index the caller supplies: the ship's broadside draws a small solid burst
-travelling along the line, while the breath attack paints a coloured spark cloud
-around each sampled point with no outline. The firing sound is played by the
-caller before the flight begins, not per cell during it. Neither the generic
-"attacked" message nor any melee narration belongs to these paths; that message
-is the adjacent-engagement case.
+pass different effect-figure indices, selecting what is drawn at each sampled
+position. An inherited description, not re-derived by the verification pass, has
+the ship's broadside drawing a small solid burst travelling along the line and
+the breath painting a coloured spark cloud around each sampled position with no
+outline; treat the appearance itself as unverified (Section 6.2.5). The firing
+sound is played by the caller before the flight begins, not per sampled
+position. Neither the generic "attacked" message nor any melee narration belongs
+to these paths; that message is the adjacent-engagement case.
 
 None of this changes turn cadence, the encounter-spawn formula, or active-object
 pruning.
+
+#### 6.2.5 Named gaps in this section
+
+These are open. The engine must not treat their absence from the text above as
+licence to invent a rule.
+
+- **Stats-panel repaint field census.** The closing repaint called by the
+  per-member helper was read only as far as its frigate hull-readout branch. It
+  is established positively that it prints panel text and that nothing in the
+  part read writes a character record. It is **not** established that it writes
+  no character field and narrates no death. Until that routine is read to its
+  end, treat the field list above as "these fields are written", not as "only
+  these fields are written". Reading that routine, and the per-slot panel-row
+  routine it calls in its loop, would settle it.
+- **The status-byte domain.** The pass's only status test is inequality against
+  the dead marker, and that inequality is what is published. Whether "not dead"
+  is equivalent to membership in any particular set of living letters is **not**
+  established: the scan for status writes covered one addressing form only and
+  found writers for good, poisoned and dead; the shared living-member scan tests
+  good, poisoned and sleeping; no write of the charmed letter was found.
+  `formats/saved-gam.md` Section 3.1 carries the same caution about the letter
+  space. Implement the inequality, not a living-letter whitelist. A scan for
+  status stores through computed pointers would settle it.
+- **Drowning-loop asymmetry.** The whole-party pass skips only dead members,
+  while the living-member scan that decides whether the drowning loop of
+  `systems/vehicles.md` Section 6 continues counts only good, poisoned and
+  sleeping members. A member in some other living state would keep taking damage
+  while no longer being counted alive by the exit test. Whether that state is
+  reachable is unexamined, and what runs after that loop exits was not traced.
+- **Two further absorption sites, triggers unestablished.** Besides the two
+  ranged attacks and the Section 8 adjacency reactions, the outdoor code reaches
+  the same impact-absorption stage from a sailing-collision site and from a
+  per-turn site preceded by a rough-seas line and guarded on the party marker
+  being a skiff or a carpet. Both calls, and the second one's marker guard, are
+  established; neither enclosing routine was read to its end, so **neither
+  trigger is published as a mechanic**. Reading those two routines would settle
+  what schedules them.
+- **Call discovery is near-call only.** The census of sites reaching this
+  payload — and the count of creatures that can fire a ranged shot at all — is
+  an exhaustive byte scan for near calls across the shipped executable and every
+  overlay with a published load base. It does not cover far calls, indirect or
+  computed calls, or table dispatch, and four overlays have no published load
+  base. A dispatcher-reached caller would not appear in it. Inside the routines
+  read entry-to-exit there are no indirect or far calls on this path; that is a
+  whole-routine statement, not a whole-program one.
+- **Interior, dungeon and combat modes are out of scope.** Everything in
+  Section 6.2.2 is overworld-only. The sampling interval is smaller in interior
+  scenes, which changes every tested-cell set above. The non-overworld branch of
+  the player's Fire command calls the same walker with a different argument set
+  that was not traced, and no combat or dungeon breath analogue was examined. Do
+  not carry this section into those modes without redoing the work.
+- **Unresolved viewport cells and stamped actors.** An unresolved viewport cell
+  — one the visibility pass never filled — holds a value the passability bitmap
+  marks passable, so darkness of that kind does not block a shot. That is a
+  positive result about the fill and the bitmap. The broader claim "no cell the
+  party cannot see ever blocks" is **not** established: the shadow-casting pass
+  that fills visible cells, and the pass that stamps active-object sprites into
+  the same grid, were not read. Whether a creature standing between attacker and
+  party blocks the line is therefore open.
+- **The blocking tile-id set is uncharacterised.** The 46 blocking ids are
+  established as a set of ids; they were not mapped to named terrain, and
+  whether other systems read the same bitmap was not checked.
+- **Frigate sub-state narrowing.** The absorption stage's ship branch covers both
+  hoisted and furled markers. The per-turn walker that reaches the ranged
+  branches was not read to its end, so a gate above it that narrows which frigate
+  sub-states can reach a ranged attack cannot be ruled out.
+- **Long-line edge cases.** The generator carries a step budget, and only the
+  first part of each path buffer is pre-filled with the run terminator. A line
+  long enough to exhaust either is unreachable at breath and broadside ranges and
+  was not analysed. An implementation should not reproduce a wrap or an
+  uninitialised read here; treat long lines as undefined and out of contract.
 
 ## 7. Random encounters
 
@@ -346,7 +631,9 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 - **Whirlpool.** Outdoor whirlpool active-object engagement can force the
   party to the fixed underworld emergence coordinate `(34, 18)` on the
   underworld plane. This is an active-object engagement effect, not a dungeon
-  or town scene-entry route.
+  or town scene-entry route. It also applies the Section 6.2.4 impact payload,
+  on foot as well as aboard a vehicle; see the forced-movement table below for
+  the two withdrawn statements this corrects.
 
 - **Water and current-like movement.** The traced overworld loop does not
   publish a general player-facing waterfall/current sweep that repeatedly
@@ -358,8 +645,8 @@ A small set of tile classes triggers special handling in the per-turn block, rec
   |---|---|---|---|---|
   | Ordinary water travel | Player directional movement into a destination cell accepted by the current transport predicate | One committed cardinal step; no sweep, queue, or multi-cell current is installed | Ships accept the deep-water/water predicate; skiffs use the facing-sensitive skiff predicate; foot and horse reject ordinary water through their predicates; carpets use their own carpet predicate; balloon has no promoted live transport path | Normal consumed-turn timing only; no drowning roll or queued forced-movement state |
   | Pre-loop `0xFF` underfoot state | The tile under the party is the special all-ones tile and the exemption state is not active | Suppresses the next movement commit while forcing the cached light/radius to zero | Applies to the mode loop state rather than to a vehicle family | No damage, no status change, and no scene/plane transition; clearing the state recomputes light with a zero-minute cleanup |
-  | Surface chasm/falls | Britannia coordinate `(54, 138)` | Prints the falls presentation, switches the world plane to the underworld value, and reloads the destination plane/object state | Vehicle marker is saved across the presentation clear and restored before the plane swap completes; the traced falls handler does not force the durable post-transition transport marker to foot | Each non-dead party member is checked once during the fall presentation: draw one random byte `0..255`; if the member's Dexterity byte is greater than the roll, no damage is applied, otherwise the normal party-damage helper applies `1 HP` damage. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, transport marker, party HP/status, and active-object table |
-  | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | On-foot state is a no-op defensive branch. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached | No drowning damage is applied by the whirlpool branch. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
+  | Surface chasm/falls | Britannia coordinate `(54, 138)` | Prints the falls presentation, switches the world plane to the underworld value, and reloads the destination plane/object state | Vehicle marker is saved across the presentation clear and restored before the plane swap completes; the traced falls handler does not force the durable post-transition transport marker to foot | Each non-dead party member is checked once during the fall presentation: draw one random byte `0..255`; if the member's Dexterity byte is greater than the roll, no damage is applied, otherwise the normal party-damage helper applies `1 HP` damage. That helper is the same per-member application specified in Section 6.2.4. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, transport marker, party HP/status, and active-object table |
+  | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, applies the Section 6.2.4 impact payload, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | *Corrected:* an earlier revision said the on-foot state is a no-op defensive branch; **that is withdrawn**. The on-foot arm tests the marker for the published foot/avatar value and reaches the Section 6.2.4 impact-absorption stage, which under a foot marker is the whole-party damage pass. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached, and that branch reaches the same absorption stage immediately before the plane change | *Corrected:* an earlier revision said no drowning damage is applied by the whirlpool branch; **that is withdrawn**. Both arms reach the Section 6.2.4 payload. One mechanism detail matters here: the swallow presentation temporarily overwrites the party marker with the whirlpool sprite and **restores the original marker before** the absorption call, so aboard a frigate the closed-interval `[1, 30]` hull roll really does apply and can sink the ship in the instant before the teleport — with the coordinate change and overworld re-entry still following. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
   | Water-creature / pirate active-object movement | Outdoor active-object slots in the water-creature/pirate frame family | Active objects move one cardinal cell when their cadence and validation allow it; they do not push the player along a current row | This is actor movement, not player transport. Wind cadence controls ship-like water-creature movement; ordinary player ship/skiff movement remains command-driven | May print the attack line or enter the ordinary engagement/combat path when adjacency/collision rules fire; it does not install a water-current sweep |
 
 - **Other plane-transition routes.** None. Outside the falls cell, the
@@ -942,14 +1229,30 @@ The behaviour described above was derived by reading the function and format not
   against `u5-decomp/notes/outdoor_npc_scheduling.md`.
 - Source provenance: the two outdoor ranged attacks, their trigger conditions,
   the shared traced-line resolution with the launch-cell exemption, the
-  symmetry with the player's own ranged attack, the announcement assignment,
-  and the per-sample effect figures are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` and its verification
-  pass, cross-checked against
-  `u5-decomp/functions/COMSUBS_OVL/`. Earlier
-  readings that treated the shared helper as a directed-step probe or a
-  path-clear scan, and the effect-class descriptions attached to them, are
-  superseded.
+  announcement assignment, and the per-sample effect figures were first derived
+  from private analysis note
+  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md`, cross-checked against
+  `u5-decomp/functions/COMSUBS_OVL/`. Earlier readings that treated the shared
+  helper as a directed-step probe or a path-clear scan are superseded.
+- Source provenance for Section 6.2 as it now stands: the exact-equality breath
+  recognition, the adjacency-before-class ordering, the inclusive range draw and
+  the exact one-in-eight, the sub-tile line generation with its column-driven
+  accumulator, the fixed sampling interval and the untested last sample, the
+  viewport-grid obstruction test and its passable/blocking split, the
+  direction-dependence result and the axis-aligned player shot that hides it,
+  and the two-stage damage payload with its frigate hull branch and whole-party
+  pass, were **re-derived from the shipped binaries** in a verification pass
+  that did not consult the earlier notes for any claim. Routine boundaries were
+  read from entry to exit and the caller censuses were exhaustive near-call
+  scans; the limits of both are published in Section 6.2.5 rather than left
+  implicit. Working directories: `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/COMSUBS_OVL/`, `u5-decomp/functions/OUTSUBS_OVL/`,
+  `u5-decomp/functions/CMDS_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. Record
+  field positions are cited from `formats/saved-gam.md`, not from private notes.
+  Private notes in those directories that describe the line generator as a
+  classical eight-connected line-drawing routine, or that name the sand-trap
+  adjacency family after the sea serpent, are contradicted by this pass and
+  should be corrected on the private side.
 
 - The overworld's pre-dispatch control-code table, its four shared Control
   bindings, the synthetic table slot, the under-sail input substitution, and the
