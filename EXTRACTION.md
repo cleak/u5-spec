@@ -88,6 +88,31 @@ implementer read the strings from the user's own copy of the game data at
 runtime — which is the approach several other specs here already take for
 `SHOPPE.DAT` barks and `KARMA.DAT` verdict paragraphs.
 
+## The Correction Pipeline Itself Was Audited
+
+`../u5-decomp/CORRECTIONS.md` is how findings reach this spec: an entry states a
+finding, names a target doc, is propagated, and is struck through as landed. On
+2026-08-22 one entry was found to be *itself wrong* and to have overwritten a
+correct spec value — a regression disguised as a fix. That prompted an audit of
+all eighty-five entries against the shipped binaries rather than against the
+notes they cite.
+
+**Thirty-two entries were wrong or partially wrong. Four had already propagated
+their error into this spec** and have been repaired: the runic-incantation table
+(a dense forty-eight-entry pointer-addressed set, not a sparse forty-seven-entry
+run), the save path's per-plane object-file reads (which do happen, and which an
+earlier pass on the same day had wrongly withdrawn), NPC AI mode five (fully
+implemented, merely unused in shipped data, not a reserved dispatcher slot), and
+a Lord British roster slot that does not exist in any `.NPC` file.
+
+The dominant failure mode is worth naming, because it defeats ordinary review:
+**a false premise, not a misread instruction.** A table anchor two entries late.
+A scene byte assumed to mean combat when it is Doom, the eighth dungeon. A
+routine assumed to have one caller when it has five. Each produced a plausible,
+internally consistent, wrong answer, and each survived multiple reviews because
+reviewers checked the reasoning rather than the premise it rested on. When
+auditing a claim here, check what it assumes before checking what it concludes.
+
 ## Measured Residual Error Rate
 
 On 2026-08-22, after the correction passes, an unbiased sample was taken to
