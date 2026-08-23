@@ -211,7 +211,29 @@ The dispatcher's classification, in order:
 - **Bytes `0x01..0x80`.** These are *common-word dictionary tokens*. The byte is itself the index into the shared one-hundred-twenty-eight-entry dictionary published in `catalogs/common-word-dictionary.md`, and the word is expanded inline into the output. The classifier is a single comparison — anything below `0x81` takes this path — so the top token, `0x80`, has its high bit set and is still a dictionary token. See Section 8.
 - **Bytes `0x91..0x9F`.** These are GOTO-LABEL codes; they participate in label dispatch. See Section 7.7.
 - **Bytes `0xA0..0xFD` (high bit set, in the printable range).** These bytes enter the printable text path. The word-buffer flush strips the high bit before glyph output; whether the queued byte still carries that bit is what the `0x8E` toggle controls, and it decides both which font the character renders in and whether it acts as a word-buffer break marker. See Section 7.1.
-- **Bytes `0x80..0x9F` (with the exception of the GOTO range above).** Engine control codes. The dispatch table is in Sections 7.2–7.6.
+- **Bytes `0x81..0x9F` (with the exception of the GOTO range above).** Engine
+  control codes. The dispatch table is in Sections 7.2–7.6.
+
+  *Corrected:* an earlier revision gave this band as `0x80..0x9F`, which
+  contradicted the dictionary-token bullet above in the same list. **`0x80`
+  is a dictionary token, not a control code** — the classifier is a single
+  comparison and anything below `0x81` takes the token path. The control band
+  begins at `0x81`.
+
+  Confirmed from the shipped conversation files, independently of any code
+  reading: `0x80` occurs thirteen times across the four files, always between
+  ordinary text, and each occurrence reads as English only if it expands to a
+  word — for example "I ‹token› hard", "We ‹token› long days", and
+  "I compiled reference ‹token› known as ...". The arithmetic agrees: a
+  one-hundred-twenty-eight-entry dictionary needs one hundred twenty-eight
+  token values, and `0x01..0x7F` supplies only one hundred twenty-seven,
+  leaving the final entry unreachable by any token.
+
+  **Do not derive either band's boundary from the other.** They are adjacent
+  as a fact about the original, not as a rule either enforces on the other.
+  Defining one as "one past" the other propagates an error in the first
+  silently into the second, in a different subsystem, and removes the only
+  independent check that could have caught it.
 - **Byte `0xFE`.** A multi-byte command introducer that behaves as an alias for `0x8C` (IF/ELSE).
 - **Byte `0xFF`.** End-of-response. The byte runner flushes any pending word buffer and signals the keyword input loop to start a new iteration.
 
@@ -465,6 +487,22 @@ records inside the labelled block. Implementations must therefore preserve the
 engine's scan discipline rather than treating label values as unique symbols in
 a map. In shipped content the value `0x9F` is conventionally the blob's final
 record marker.
+
+**The label range is `0x91..0x9F`, and that is confirmed by the shipped
+content itself.** Scanning the four shipped conversation files for the
+two-byte declaration marker followed by a byte in that range finds **eleven
+distinct labels in use**, spanning the full range end to end. The distribution
+is steeply skewed toward the low end: the first label accounts for over a
+hundred declarations, the next three for most of the remainder, and several
+mid-range labels appear only once or twice. `0x9F` is the other heavily used
+value, consistent with its role as the conventional final record marker.
+
+An implementation that recognises only the top of the range will therefore
+fail on the overwhelming majority of shipped conversations rather than on a
+rare edge case. Fifteen label values are addressable (`0x9F` minus `0x91`,
+inclusive), matching the fifteen-label limit stated above; eleven are
+exercised by shipped content, and the four unused values are not evidence of a
+narrower range.
 
 Labelled blocks can do more than skip an IF/ELSE arm. They may open a scoped
 sub-prompt, print a prompt such as "Your interest?", read another free-text
