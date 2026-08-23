@@ -431,9 +431,9 @@ active-object at the party's current cell so it can be boarded later:
 - Horse exits always park a riderless horse and return the party to foot travel.
 - Carpet exits require either passable ground under the party or nearby
   landing support; otherwise they refuse as no-land-nearby.
-- Skiff exits require nearby landing support and reject the
-  deep-water tile family under the skiff; on success the parked skiff preserves
-  facing.
+- Skiff exits require nearby landing support and reject the bridge tile pair
+  (`0x6A` and `0x6B`) under the skiff, with the not-here refusal; water tiles
+  are not rejected. On success the parked skiff preserves facing.
 - Furled-ship exits park the ship hull. With nearby landing support, the party
   leaves on foot. Without that support, a carried skiff is launched if
   available; failing that, a stowed carpet is redeployed if available. If none

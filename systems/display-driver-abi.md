@@ -82,9 +82,12 @@ corresponding plane slices.
 
 The back buffer is not a general double buffer for world tiles or text cells.
 The original driver renders ordinary viewport tiles and fixed-cell text to the
-front buffer. Back-buffer use is limited to whole-screen or effect-oriented
-paths such as compressed bitmap staging, silhouette stamping, screen dissolves,
-and title/menu animation.
+front buffer, by leaving the render-target selector on the visible page rather
+than by any inability of those entries to reach the hidden one: the tile, glyph,
+pixel-plot and rectangle-fill entries all have working back-buffer bodies
+(sections 6, 8 and 9.2). Back-buffer use in the shipped game is limited to
+whole-screen or effect-oriented paths such as compressed bitmap staging,
+silhouette stamping, screen dissolves, and title/menu animation.
 
 ## 4. Screen Descriptor State
 
@@ -128,7 +131,7 @@ without visible effect.
 | `0x27` | 13 | Scroll the right-side text panel upward by exactly eight scanlines. See section 9.5 for the precise region and exposed-band policy. |
 | `0x2A` | 14 | No-op. |
 | `0x2D` | 15 | Set the current 4-bit drawing colour. |
-| `0x30` | 16 | Plot one pixel. The back-buffer override path silently no-ops, so this is effectively a front-buffer operation. |
+| `0x30` | 16 | Plot one pixel with the current drawing colour, on whichever surface the descriptor's render-target selector currently names. The back-buffer path is a real write: it modifies the pixel's bit in all four back-buffer plane slices. See section 9.2. |
 | `0x33` | 17 | Draw an arbitrary-direction integer line between two pixel endpoints. |
 | `0x36` | 18 | No-op. |
 | `0x39` | 19 | Fill a single horizontal scanline in either buffer. The row coordinate is the entry's Y argument; there is no row loop. |
@@ -139,11 +142,11 @@ without visible effect.
 | `0x48` | 24 | Register a loaded asset segment as the active tile/sprite asset and prepare it for blitting by converting its embedded pixel payload from packed to planar layout in place. Despite the historical working name "pack to back buffer", this entry does not touch the back buffer; it operates on the asset segment. |
 | `0x4B` | 25 | General tile or sprite blit. Accepts a render-flags word whose low bits choose between an opaque blit and a transparency-mask blit. |
 | `0x4E` | 26 | Stamp one record of a one-bit-per-pixel record archive into the back buffer. Takes the archive segment, the record index, and a destination pixel `(x, y)`. The index is bounds-checked against the archive's record count and an out-of-range index returns without drawing. Set source bits are written into all four planes, so the stamped shape reads as the brightest palette index in the back buffer; clear source bits leave the destination untouched, so the stamp is an overlay rather than a rectangle overwrite. This is the entry the intro uses for every `TITLE.BIT` and `BRITISH.BIT` draw. |
-| `0x51` | 27 | Draw one 16-by-16 tile directly to the front buffer. |
+| `0x51` | 27 | Draw one 16-by-16 tile on whichever surface the descriptor's render-target selector currently names. The entry has a separate, complete back-buffer body; see section 8. Ordinary viewport painting leaves the selector on the front buffer. |
 | `0x54` | 28 | No-op. |
 | `0x57` | 29 | No-op. |
 | `0x5A` | 30 | Release the current asset segment back to DOS. |
-| `0x5D` | 31 | Draw one 8-by-8 fixed-cell glyph directly to the front buffer. |
+| `0x5D` | 31 | Draw one 8-by-8 fixed-cell glyph on whichever surface the descriptor's render-target selector currently names. The entry has a separate, complete back-buffer body; see section 8. Ordinary text painting leaves the selector on the front buffer. |
 | `0x60` | 32 | Mutate loaded tile graphics for animated shimmer effects. The mutation phase is followed by a propagation/composite phase, so the body of this entry is substantially larger than just the noise step. |
 | `0x63` | 33 | Tile blit with the transparency-mask flag forced on. Equivalent to dispatch offset `0x4B` with the caller-supplied flag word bitwise-ORed with the transparency bit. |
 | `0x66` | 34 | Copy a rectangle from back buffer to front buffer in pseudo-random dissolve order. The visit order is driven by a Galois-style LFSR; see section 9.6 for the public visit-order contract. |
@@ -240,12 +243,18 @@ currently selected colour.
 
 ## 8. Tile And Glyph Rendering
 
-The 16-by-16 tile entry is the front-buffer viewport workhorse. It accepts only
-16-pixel width and 16-pixel height requests; other sizes are ignored by this
-entry and belong to the general blitter. If the current render-target selector
-names the back buffer, the EGA tile entry returns without drawing; there is no
-separate back-buffer tile path. Each tile consumes 128 bytes in the EGA asset
-segment:
+The 16-by-16 tile entry is the viewport tile workhorse, and in ordinary use it
+draws to the front buffer. It accepts only 16-pixel width and 16-pixel height
+requests; other sizes are ignored by this entry and belong to the general
+blitter. The entry is render-target aware: it reads the descriptor's
+render-target selector and, when the selector holds the back-buffer value `1`,
+branches to a separate 16-row back-buffer body that writes each row's four
+plane bytes into the four 8,000-byte back-buffer plane slices, advancing one
+scanline (40 bytes) per row in the destination and eight bytes per row in the
+source. Any other selector value takes the front-buffer body. Both bodies stamp
+the tile opaquely over the destination and neither clips, so the caller is
+responsible for keeping the 16-by-16 cell on screen. Each tile consumes 128
+bytes in the EGA asset segment:
 
 | Component | Size |
 |---|---:|
@@ -259,17 +268,34 @@ layout produced from the `.16` tile assets before drawing. The public
 file-format layout remains the chunky packed-nibble layout in
 `formats/tiles.md`.
 
-The fixed-cell glyph entry draws one 8-by-8 glyph to the front buffer. The
-source glyph is eight bytes, one byte per row, with the most-significant bit as
-the leftmost pixel. The caller supplies foreground and background colours
-through the text renderer's attribute path. The resulting cell must contain
-the foreground colour where the glyph bit is set and the background colour
-where it is clear. As with the tile entry, selecting the back buffer makes this
-entry a no-op in the EGA baseline; ordinary fixed-cell text is drawn directly
-to the visible page.
+The fixed-cell glyph entry draws one 8-by-8 glyph. The source glyph is eight
+bytes, one byte per row, with the most-significant bit as the leftmost pixel.
+The caller supplies foreground and background colours through the text
+renderer's attribute path. The resulting cell must contain the foreground
+colour where the glyph bit is set and the background colour where it is clear.
+As with the tile entry, this entry is render-target aware: a zero selector
+takes the front-buffer body, and any non-zero selector takes a separate
+back-buffer body that produces the same cell in the four back-buffer plane
+slices. That body makes two passes over the glyph's eight rows — a background
+pass that overwrites each plane byte of the cell, setting the inverted glyph
+mask in the planes the background colour selects and clearing the others, then
+a foreground pass that ORs the glyph mask into the planes the foreground colour
+selects. The visible contract is identical on both surfaces: the whole 8-by-8
+cell is replaced, foreground where the bit is set and background where it is
+clear. Ordinary fixed-cell text is drawn with the selector on the visible page.
 
-Neither the 16-by-16 tile entry nor the fixed-cell glyph entry is used for
-ordinary back-buffer updates in the EGA baseline.
+**Correction: both entries have real back-buffer paths.** An earlier revision
+of this section said the tile entry returned without drawing when the back
+buffer was selected, that there was no separate back-buffer tile path, and that
+selecting the back buffer made the glyph entry a no-op. All three statements
+are withdrawn: each entry branches to a dedicated back-buffer body, and both
+bodies draw for real. What survives from that revision is only the usage
+observation, which is a separate claim: ordinary viewport tiles and fixed-cell
+text are painted with the render-target selector naming the front buffer, and
+only staging and transition sequences point it at the hidden surface
+(`display-driver.md` section 7). A cleanroom implementation must nevertheless
+support both surfaces for both entries, exactly as it must for the clipped
+rectangle fill in section 6.
 
 ## 9. Additional Public Entries
 
@@ -300,8 +326,11 @@ it on its main exit path, so it should be treated as historical scaffolding.
 Dispatch offset `0x0F` updates the resident screen descriptor's render-target
 selector. Subsequent entries that consult that selector route their output to
 the front buffer when the field is zero and to the back buffer when it is
-non-zero. Not every entry honours the selector; entries explicitly noted as
-front-buffer-only ignore it.
+non-zero. The tile entry is the one exception to that reading: it takes its
+back-buffer body only for the exact value `1`. Not every entry consults the
+selector at all; entries explicitly noted as front-buffer-only — the pixel read
+at `0x24` and the line rasteriser at `0x33` — ignore it and always address the
+visible page.
 
 Dispatch offset `0x2D` stores a 4-bit drawing colour into a driver-resident
 single-byte register. Later entries that fill, plot, or rasterise without an
@@ -315,18 +344,29 @@ Dispatch offset `0x24` reads one pixel from the front buffer and returns the
 visible page and ignores the render-target selector. The colour is reassembled
 by selecting each colour-plane in turn and bit-testing the relevant byte.
 
-Dispatch offset `0x30` writes one pixel to the front buffer using the current
-drawing colour. The entry has a code path that consults the render-target
-selector, but the inner pixel-write helper rejects non-front-buffer segments,
-so back-buffer plotting is silently a no-op. Modern implementations may
-collapse the back-buffer branch and document the entry as front-buffer only.
+Dispatch offset `0x30` writes one pixel using the current drawing colour, on
+whichever surface the render-target selector names. The entry first rejects
+coordinates outside the 320-by-200 screen, then consults the selector: with the
+front buffer selected it writes through the adapter's plane-masked write path,
+and with the back buffer selected it takes a distinct four-pass body that sets
+or clears the pixel's bit in each of the four 8,000-byte back-buffer plane
+slices according to the current colour. A carry flag set on entry selects an
+exclusive-or plot instead of a replace plot; both surfaces honour that mode, and
+the entry returns the driver to replace mode before it exits. Both paths write
+for real; an earlier
+revision of this document called the back-buffer branch a silent no-op and
+described the entry as front-buffer only, and both statements are withdrawn.
+This is the same render-target awareness section 6 records for the clipped
+rectangle fill.
 
 Dispatch offset `0x33` draws an integer line between two pixel endpoints. The
 implementation uses a textbook integer Bresenham step over the major axis with
 plus-or-minus-one minor-axis steps, so the line includes both endpoints and
-covers all eight octants. Each plotted pixel uses the same single-pixel
-front-buffer writer as dispatch offset `0x30`; the entry does not optimise
-horizontal or vertical lines into rectangle fills.
+covers all eight octants. Each plotted pixel goes through the same single-pixel
+writer as dispatch offset `0x30`, but this entry re-points that writer at the
+visible page before every pixel, so lines are front-buffer-only regardless of
+the render-target selector. The entry does not optimise horizontal or vertical
+lines into rectangle fills.
 
 The resident layer wraps this entry twice: a line-from-two-endpoints call that
 also records the second endpoint as the current point, and a line-to-point call
@@ -581,8 +621,8 @@ active-object simulation.
 
 The EGA-facing ABI contract is complete for the v1 compatibility target:
 dispatch-cell loading, EGA buffer layout, rectangle fill, packed-to-planar
-archive preparation, front-buffer tile and glyph entries, title/dissolve
-animation entries,
+archive preparation, the render-target-aware tile and glyph entries,
+title/dissolve animation entries,
 the combat-exit tile-graphics restoration path, and the absence of ordinary
 hardware page-flipping for world/text updates are public.
 
@@ -634,6 +674,13 @@ Cleanroom prose derived from these private analysis notes:
   per-driver status of the packed-to-planar preparation entry and the reason
   the other three families implement it as a no-op.
 
+- `u5-decomp/functions/EGA_DRV/0x0E6C_plot_pixel.md`,
+  `u5-decomp/functions/EGA_DRV/0x1637_tile_blit_16x16.md`, and
+  `u5-decomp/functions/EGA_DRV/0x19D2_glyph_8x8.md` — re-read in full for the
+  2026-08-22 correction that the pixel-plot, 16-by-16 tile, and fixed-cell
+  glyph entries are render-target aware and each carry a complete back-buffer
+  body, withdrawing the earlier "no-op"/"returns without drawing" wording in
+  sections 5, 8 and 9.2.
 - `u5-decomp/formats/ega-driver.md`.
 - `u5-decomp/functions/EGA_DRV/_OVERVIEW.md` (full per-slot index, 38 slots
   plus helper-routine notes, completed during the 2026-05-26 follow-up pass).

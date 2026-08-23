@@ -75,7 +75,7 @@ The transfer starts from an Ultima V template, not from the player's existing
 | File | Role |
 |---|---|
 | `INIT.GAM` | Save-image template used as the destination baseline. It has the same layout family as `SAVED.GAM`. The transfer reads 4,192 bytes of it into the working save image. |
-| `INIT.OOL` | Object-overlay seed paired with that baseline. The transfer reads 256 bytes of it. |
+| `INIT.OOL` | Object-overlay seed paired with that baseline; it is the underworld plane table, byte-identical to the shipped `UNDER.OOL`. The transfer reads 256 bytes of it. |
 
 Earlier revisions of this document named the seed pair `BRIT.GAM` and
 `BRIT.OOL`. That is withdrawn: no file named `BRIT.GAM` exists in the shipped
@@ -562,21 +562,25 @@ Journey Onward or creation attempt reads from disk again.
 
 On commit, the transfer writes the normal Ultima V save files:
 
-1. Compose the object-overlay companion by zeroing the first 256-byte half and
-   leaving the loaded `INIT.OOL` seed in the second 256-byte half.
+1. Compose the object-overlay companion by zeroing the first 256-byte half -
+   the surface table - and leaving the loaded `INIT.OOL` seed in the second
+   256-byte half, which is the underworld table.
 2. Write `SAVED.OOL`.
 3. Write the full save image to `SAVED.GAM`.
 4. Return to intro/menu state and redraw the start/menu screen.
 
 The traced transfer writer therefore emits `SAVED.OOL` as a blank half followed
 by the 256 bytes from `INIT.OOL`. As with the questionnaire chargen writer in
-`systems/chargen.md`, this is opposite the normal surface-first interpretation
-specified in `formats/ool.md`. A byte-compatible transfer implementation should
-preserve the emitted order, while Journey Onward and normal saves should still
-follow the canonical surface-first load/save contract. The later Journey
-Onward load does not repair or rotate the emitted halves; it reads the blank
-first half as the surface table, reads the seed half as the underworld table,
-and mirrors those interpreted halves to `BRIT.OOL` and `UNDER.OOL`.
+`systems/chargen.md`, this **is** the normal surface-first interpretation
+specified in `formats/ool.md`: `INIT.OOL` is the underworld seed, and the
+shipped surface seed `BRIT.OOL` is empty, so a blank first half followed by
+`INIT.OOL` is precisely [surface][underworld]. An earlier revision of this
+paragraph called the emitted order "opposite the normal surface-first
+interpretation"; that is withdrawn, along with the idea that transfer needs a
+special writer order at all. The later Journey Onward load has nothing to
+repair or rotate; it reads the blank first half as the surface table, reads the
+seed half as the underworld table, and mirrors those interpreted halves to
+`BRIT.OOL` and `UNDER.OOL`, restoring both to their shipped contents.
 
 The commit is destructive to the existing working save slot. There is no
 separate confirmation that the previous Ultima V save should be replaced, no
@@ -686,11 +690,11 @@ commit ordering are all in Section 6.
   `PARTY.SAV` for transfer purposes. Fields outside that set are never read,
   so nothing is known or claimed about them here.
 
-- **First-load handling after transfer.** The traced writer order is fixed:
-  `SAVED.OOL` is emitted as a blank half followed by `INIT.OOL`, while normal
-  save/load treats `SAVED.OOL` as surface-first. Journey Onward performs no
-  special-case normalization; it mirrors the blank first half to `BRIT.OOL` and
-  the seed half to `UNDER.OOL`.
+- **First-load handling after transfer.** The traced writer order is fixed and
+  is the same surface-first order normal save/load uses: `SAVED.OOL` is emitted
+  as a blank surface half followed by the `INIT.OOL` underworld seed. Journey
+  Onward performs no special-case normalization and needs none; it mirrors the
+  blank first half to `BRIT.OOL` and the seed half to `UNDER.OOL`.
 
 - **Preview presentation parity.** Closed for implementation purposes.
   Section 6 publishes the three text-window rectangles, the lower prompt

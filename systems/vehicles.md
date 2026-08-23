@@ -220,9 +220,17 @@ The vehicle families behave as follows:
   no-land-nearby. On success it parks a carpet object and returns the party to
   foot travel.
 - **Skiff.** X-it requires at least one nearby landing-support cell and also
-  rejects the deep-water tile family directly under the skiff. On success it
-  parks the skiff object, preserving its facing, and returns the party to foot
-  travel.
+  rejects the bridge tile pair directly under the skiff: tile ids `0x6A` and
+  `0x6B`, which the `LOOK2.DAT` terrain-description domain names "a bridge"
+  (see `formats/look2-dat.md`). The check ignores the low bit of the tile id,
+  so the two ids are always refused together, and the refusal is the
+  location-specific not-here line rather than the no-land-nearby line. No
+  water tile id is rejected here; deep water, water, and shoals (`0x01`,
+  `0x02`, `0x03`) are exactly the tiles a skiff normally sits on. The bridge
+  case is reachable because the facing-sensitive skiff movement queries in
+  `systems/movement.md` accept parts of the river/bridge run.
+  On success X-it parks the skiff object, preserving its facing, and returns
+  the party to foot travel.
 - **Ship with sails hoisted.** X-it refuses while the ship is in the
   wind-control sail range. The player must furl sails first.
 - **Ship with sails furled.** X-it first parks the ship hull at the current

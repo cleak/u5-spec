@@ -13,9 +13,9 @@ The file extension's expansion is not attested. "Object Overlay Layer" is a usef
 | File | Expected size | Plane tables | Role |
 |------|--------------:|-------------:|------|
 | `SAVED.OOL` | 512 bytes | 2 | Canonical saved surface and underworld object-overlay state. |
-| `BRIT.OOL` | 256 bytes | 1 | Surface plane mirror and seed. |
-| `UNDER.OOL` | 256 bytes | 1 | Underworld plane mirror and seed. |
-| `INIT.OOL` | 256 bytes | 1 | Factory surface seed paired with `INIT.GAM`. |
+| `BRIT.OOL` | 256 bytes | 1 | Surface plane mirror and seed. Ships empty. |
+| `UNDER.OOL` | 256 bytes | 1 | Underworld plane mirror and seed. Ships populated. |
+| `INIT.OOL` | 256 bytes | 1 | Factory underworld seed paired with `INIT.GAM`. Byte-identical to the shipped `UNDER.OOL`. |
 
 ## 2. File Roles
 
@@ -30,15 +30,15 @@ On load, both halves are read into memory. On save, both halves are written back
 
 ### `BRIT.OOL`
 
-`BRIT.OOL` is the per-plane surface file. It ships as the surface seed object table. The confirmed load flow rewrites it so it mirrors the surface half of `SAVED.OOL`. The traced save flow writes the resident surface staging half back to it as the surface save-time mirror on every confirmed save; it does not read the file first.
+`BRIT.OOL` is the per-plane surface file. It ships as the surface seed object table, and in a clean install that seed is empty: all two hundred fifty-six bytes are zero, so every one of its thirty-two slots is free. The confirmed load flow rewrites it so it mirrors the surface half of `SAVED.OOL`. The traced save flow writes the resident surface staging half back to it as the surface save-time mirror on every confirmed save; it does not read the file first.
 
 ### `UNDER.OOL`
 
-`UNDER.OOL` is the per-plane underworld file. It ships as the underworld seed object table. In a clean install, the seed table is empty. The confirmed load flow rewrites it so it mirrors the underworld half of `SAVED.OOL`. The traced save flow writes the resident underworld staging half back to it as the underworld save-time mirror, and may write that same underworld half a second time on a defensive disk-prompt-mode branch; it does not read the file first.
+`UNDER.OOL` is the per-plane underworld file. It ships as the underworld seed object table, and in a clean install that seed is populated: five non-empty records occupy slots 23 through 27 and the remaining twenty-seven slots are zero. The confirmed load flow rewrites it so it mirrors the underworld half of `SAVED.OOL`. The traced save flow writes the resident underworld staging half back to it as the underworld save-time mirror, and may write that same underworld half a second time on a defensive disk-prompt-mode branch; it does not read the file first.
 
 ### `INIT.OOL`
 
-`INIT.OOL` is the factory seed paired with `INIT.GAM`. It contains one plane table and matches the clean surface seed. The runtime treats it as read-only; it is used when creating the first playable save state.
+`INIT.OOL` is the factory seed paired with `INIT.GAM`. It contains one plane table and is byte-identical to the shipped `UNDER.OOL`, so it is the **underworld** seed, not a surface seed. The runtime treats it as read-only; it is used when creating the first playable save state, where it supplies the underworld half of the new `SAVED.OOL`.
 
 ## 3. Plane Table Shape
 
@@ -91,26 +91,62 @@ On save, the two staging halves are already the resident active-object buffers -
 
 ## 7. Seed-State Observations
 
-The clean surface seed contains a small set of non-empty object records and otherwise zero slots. These records correspond to pre-placed world objects such as ferry-skiffs and clustered static objects on Britannia. The underworld seed is empty in a clean install.
+The clean **surface** seed is empty. Shipped `BRIT.OOL` is two hundred fifty-six
+zero bytes, so a fresh Britannia has no pre-placed movable objects at all: every
+skiff, ship, horse and carpet the player meets on the surface is placed by
+gameplay, by a map's own static tile data, or by a scene-entry path, not by the
+surface object overlay. (An earlier revision of this section described the
+surface seed as holding "ferry-skiffs and clustered static objects on
+Britannia"; that is withdrawn. Those records are in the underworld seed.)
 
-`SAVED.OOL` in a clean install begins as the surface seed followed by an empty underworld table. `INIT.OOL` matches the surface seed. As the player moves vehicles, drops or removes objects, or otherwise changes overworld object state, the object-overlay tables become the durable record of those changes.
+The clean **underworld** seed is populated. Shipped `UNDER.OOL` carries five
+non-empty records in slots 23 through 27, with all other slots zero:
 
-The questionnaire and Ultima IV transfer writers have a traced fresh-game
-exception: they emit a blank 256-byte half followed by the surface seed, and
-**both** of them read that seed from `INIT.OOL`. (An earlier revision of this
-paragraph named `BRIT.OOL` as the transfer path's seed; that is withdrawn — the
-transfer reads the same `INIT.GAM` / `INIT.OOL` pair the questionnaire uses, and
-no `BRIT.GAM` exists in the shipped data at all.) That emitted
-order is documented with the writer flows in `systems/chargen.md` and
-`systems/u4-transfer.md`. The canonical load/save interpretation in this
-format remains surface first, underworld second.
+| Slot | Type | Frame | X | Y | Z | Description |
+|-----:|-----:|------:|--:|--:|--:|---|
+| 23 | 0x29 | 0x29 | 14 | 242 | 0xFF | A skiff, on a shoals cell. |
+| 24 | 0x1E | 0x1E | 103 | 226 | 0xFF | A corpse. |
+| 25 | 0x1E | 0x1E | 105 | 227 | 0xFF | A corpse. |
+| 26 | 0x1E | 0x1E | 107 | 227 | 0xFF | A corpse. |
+| 27 | 0x1E | 0x1E | 108 | 225 | 0xFF | A corpse. |
 
-There is no special first-load repair for that fresh-game exception. When the
-player later chooses Journey Onward, the load path reads the first half of
-`SAVED.OOL` as the surface table and the second half as the underworld table,
-then mirrors those two halves to `BRIT.OOL` and `UNDER.OOL` exactly as read.
-Byte-compatible implementations should preserve this sequence rather than
-trying to detect or rotate the fresh-game writer's half order.
+All five have zero auxiliary bytes and the common above-ground Z sentinel. The
+four corpses are a deliberate cluster: on the underworld map they stand on a
+uniform grass clearing walled off inside a mountain field, and the skiff sits on
+water. Read against the Britannia surface map instead, the same coordinates are
+incoherent: the skiff cell falls inside an all-water region, and the four corpse
+cells scatter across a mismatched run of water and shoreline tiles with no
+enclosure and no shared terrain. The placements are meaningful on exactly one
+plane, which independently confirms that these records belong to the underworld.
+
+`SAVED.OOL` in a clean install therefore begins as an empty surface table
+followed by the populated underworld seed. `INIT.OOL` is byte-identical to
+`UNDER.OOL`, not to `BRIT.OOL`. As the player moves vehicles, drops or removes
+objects, or otherwise changes overworld object state, the object-overlay tables
+become the durable record of those changes.
+
+The questionnaire and Ultima IV transfer writers follow that same canonical
+order. Each emits a blank 256-byte first half followed by the 256 bytes of
+`INIT.OOL`, which is exactly [empty surface table][underworld seed]. (An earlier
+revision of this section called that a "fresh-game exception" whose half order
+was the opposite of the canonical interpretation; that is withdrawn. The
+mislabelling came from treating `INIT.OOL` as a surface seed. Once `INIT.OOL` is
+correctly identified as the underworld seed, the writers are simply producing
+surface-first, underworld-second like everything else, and there is no exception
+to reconcile. A separate earlier claim, that the transfer path seeded from
+`BRIT.OOL`, is also withdrawn: both writers read the same `INIT.GAM` /
+`INIT.OOL` pair, and no `BRIT.GAM` exists in the shipped data at all.) Those
+writer flows are documented in `systems/chargen.md` and
+`systems/u4-transfer.md`.
+
+No first-load repair or normalization is needed, and none exists. When the
+player chooses Journey Onward, the load path reads the first half of `SAVED.OOL`
+as the surface table and the second half as the underworld table, then mirrors
+those two halves to `BRIT.OOL` and `UNDER.OOL` exactly as read. For a
+fresh-game `SAVED.OOL` this restores precisely the shipped state: an empty
+`BRIT.OOL` and an `UNDER.OOL` holding the five seed records. Byte-compatible
+implementations should read and write the halves in this fixed order and must
+never rotate or swap them.
 
 ## 8. Validation And Invariants
 
@@ -124,7 +160,7 @@ A byte-compatible reader should enforce these invariants:
 - Slot order is stable and must not be compacted on write.
 - Coordinates are byte-sized. Map-level validity depends on the owning plane and should be checked by the map system, not by the `.OOL` decoder alone.
 - The common surface-object Z sentinel should be preserved as a byte value, not converted to a nullable field unless the original byte can be reconstructed.
-- After the confirmed load sequence, the surface half of `SAVED.OOL` should match `BRIT.OOL`, and the underworld half should match `UNDER.OOL`. This applies even to fresh saves whose writer emitted a blank first half followed by a surface seed; load does not reinterpret that exception.
+- After the confirmed load sequence, the surface half of `SAVED.OOL` should match `BRIT.OOL`, and the underworld half should match `UNDER.OOL`. This holds for fresh saves too: the chargen and transfer writers emit a blank first half followed by the `INIT.OOL` underworld seed, which is already the canonical order, so load reproduces the shipped mirrors without reinterpreting anything.
 - After save, `SAVED.OOL` is the canonical object-overlay file, and both per-plane mirrors are refreshed from the same staging halves. `UNDER.OOL` receives a second identical defensive flush unless the entry disk-prompt mode was already mode 1.
 
 ## 9. Implementation Notes
@@ -163,10 +199,11 @@ For a high-level engine, the record can be mapped to an object record or entity 
 The `.OOL` file-format contract is complete at table-layout and lifecycle
 depth: file roles, table sizes, record size, surface/underworld split, seed
 roles, mirror writes, and known active-object auxiliary bytes are fixed.
-The first-load behavior for fresh-save writer exceptions is also fixed: no
-normalization pass rotates the two halves. Remaining items are naming, uncommon
-family-specific runtime meanings, reader census, and gameplay population
-sources.
+The half order is also fixed in both directions: every writer, including the
+fresh-game writers, emits surface first and underworld second, and no
+normalization pass rotates the two halves on load. Remaining items are naming,
+uncommon family-specific runtime meanings, reader census, and gameplay
+population sources.
 
 - **Name expansion.** The meaning of "OOL" is unattested. Treat it as an opaque
   extension, not as a field or runtime semantic.
@@ -182,9 +219,13 @@ sources.
   the confirmed falls transition names both per-plane files while changing the
   party to the underworld plane. The remaining census is only for additional
   mirror-file callers outside these traced overworld transition paths.
-- **Underworld population.** The clean underworld seed is empty. Later gameplay
-  may populate it; confirming every underworld object source requires played
-  saves or targeted runtime probes.
+- **Surface population.** The clean surface seed is empty, so every surface
+  object overlay entry is created during play. Enumerating the full set of
+  gameplay sources that write surface records - vehicle parking, dropped items,
+  corpse creation, and any scripted placement - requires played saves or
+  targeted runtime probes. The clean underworld seed's five records are fixed
+  and enumerated in section 7; whether any later gameplay path adds more
+  underworld records is the same open question on that plane.
 
 ## 12. Sources
 
@@ -192,7 +233,8 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 
 - First-pass save and `.OOL` survey, including file roles, sizes, record shape, seed observations, and the surface/underworld split: `u5-decomp/formats/saves.md`.
 - Save-handler analysis, including the absence of any per-plane `.OOL` read on the save path, unconditional mirror writes, the entry-mode-gated second `UNDER.OOL` flush, and canonical `SAVED.OOL` write: `u5-decomp/functions/CAST2_OVL/0x10FE_save_game.md` and `u5-decomp/notes/dosbox_probes_2026-05-07.md`.
-- Fresh-game `SAVED.OOL` writer exceptions: `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- Fresh-game `SAVED.OOL` writer half order: `u5-decomp/functions/FONT_OVL/0x0B0A_chargen_main.md` and `u5-decomp/functions/INTRO_OVL/0x132A_continue_load.md`.
+- Seed-state contents in section 7 were read directly from the shipped `BRIT.OOL`, `UNDER.OOL`, and `INIT.OOL`, with the object type bytes resolved through the `LOOK2.DAT` object domain and the placements cross-checked against the shipped underworld and Britannia map data.
 - Internal load-flow analysis, including `SAVED.OOL` read, unconditional mirror writes to `BRIT.OOL` and `UNDER.OOL`, and underworld disk-swap path.
 - OUTSUBS runtime mirror-file selection and transition consumers:
   `u5-decomp/functions/OUTSUBS_OVL/0x0368_outsubs_world_filename.md`,
