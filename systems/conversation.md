@@ -432,6 +432,39 @@ Consequently a clean implementation must not model `0x8C`'s argument as a flag
 id, and must not conclude that the bank has no setter. Both errors were present
 in earlier public answers and are withdrawn.
 
+**Neither outcome of `0x85` transfers control to a label.** Not a fixed label
+byte, not a computed one, on either the accepted or the refused arm. An
+implementation that pairs `0x85` with paid/refused label bytes is carrying an
+invention and should remove it rather than re-tune it.
+
+**On an accepted payment the runner keeps emitting in place.** It debits the
+party's gold, refreshes the status panel, reports "continue" to the byte runner,
+and the response run fetches the byte immediately after the third digit, from the
+same record. The success line is ordinary prose sitting right there in the
+stream - which is why a label transfer is not merely absent but impossible: a
+fixed paid-label would leave every shipped success line unreachable.
+
+This is confirmed from the shipped dialogue files independently of any code
+reading. Across all four files there are **thirteen gold demands in nine
+conversation blobs**, and in **every one** the byte following the third digit is
+ordinary text, an item-grant introducer, or a raise-standing byte - never a label
+declaration, never a label byte, never a record terminator. In all thirteen the
+demand also heads a *yes*-answer record, which is the shape that makes an outcome
+label impossible.
+
+**An accepted payment can also raise moral standing**, which the earlier wording
+did not record. The rise is conditional: it happens only when the speaker's actor
+class matches one specific value **and** an internal counter has reached its
+threshold, at which point the counter resets and standing rises by one - and by a
+further two if the payment has emptied the party's purse.
+
+**On a refusal the routine opens a nested keyword prompt, and when that prompt
+ends the whole conversation ends.** It discards any pending partial word rather
+than flushing it, prints the refusal line, clears its multi-byte state, and calls
+the keyword prompt as a nested call. That prompt always reports non-zero, so the
+response run stops and the enclosing keyword loop also ends. The published
+behaviour is correct; the unwinding is the part worth stating explicitly.
+
 The gold-payment introducer (`0x85`) interacts with conversation flow, not just emission: depending on whether the player can pay, the surrounding response may take different paths, so implementations need to model it as a re-entrant prompt that returns a result code. On an affordable demand the amount is debited from party gold and the panel is refreshed; on an unaffordable one the runner prints the refusal line, clears its multi-byte state, and re-enters the keyword prompt rather than continuing the response. The rare moral-standing side effect that a successful payment can trigger is gated on the speaking NPC's sprite class and on a turn-based cooldown; `systems/karma.md` section 4 owns that contract, and `0x85` itself is not a karma writer.
 
 The action-dispatch handler (`0x86`) is the engine's main extension point. The
