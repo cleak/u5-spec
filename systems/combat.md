@@ -715,7 +715,7 @@ marker at an explicit arena X/Y. That marker is not independently gated: a dark
 blink pass, invalid active cell, or non-player active group suppresses both
 overlays. These updates are presentation only: they do not advance combat time,
 mutate actor HP or status, or consume placed field markers, and they are
-distinct both from actor dispatch and from the post-step field-contact hook
+distinct both from actor dispatch and from the post-dispatch field-contact hook
 described later.
 
 **Exact combat-overlay raster contract.** For either overlay cell, let its
@@ -1168,10 +1168,18 @@ Movement and attack share a single primitive, called once per actor turn. The pr
    - **Empty walkable cell:** the actor moves. Update its (X, Y) in both the actor table and the parallel dynamic-objects table.
    - **Hostile actor at the destination:** run the attack roll. Hit/miss decision, raw damage, defense subtraction, and the target HP/status writes are computed from the attacker/target combat state, class stats, cached party defense bytes, active effects, and random rolls. The formerly suspected data-region lookup is not a combat damage or hit-chance matrix.
    - **Friendly actor or wall at the destination:** treat as blocked.
-5. **On success**, the round walker's post-action render redraws the new positions.
+5. **On success**, the primitive commits the new positions and returns the completed command to the actor dispatcher.
 6. **On failure**, narrate "Blocked!" — a short blocked-message and a beep tone are emitted; the actor stays in place.
 
-A side path — controlled by special-combat state bits — runs a **post-step effect** when a placed-field, arena hazard, or special encounter mode is active. This hook is reached only after the step-or-attack primitive succeeds and commits the actor's new coordinate to both combat actor tables. Range failures, blocked cells, and failed attacks do not fire it. It is therefore the confirmed contact boundary for arena hazards and placed-field effects; Poison/Sleep field routing, Fire/Energy damage inputs, non-consuming contact, and combat-exit lifetime for placed fields are fixed below.
+Placed-field contact does not run inside this primitive. It belongs to the
+round walker's common post-dispatch tail. After either per-actor handler returns,
+the walker passes its current combat-descriptor slot to the terrain/field hook;
+there is no intervening test for movement success, attack success, or a changed
+coordinate. A parser-local refusal or blocked direction that re-prompts without
+returning has not reached the hook, but a completed pass, attack, cast, automatic
+status/no-action dispatch, or successful move does. The rule is identical for
+player-controlled and AI-controlled slots because their dispatch branches join
+before this call.
 
 Combat field casting itself enters a shared arena-field helper that separates
 marker placement from contact/application before any per-field result is
@@ -1194,20 +1202,38 @@ scans slots in ascending order and returns the first descriptor at the selected
 coordinate with either live/selectable bit (`0x80` or `0x40`) set, without
 marked-dead bit `0x20`, without hidden/not-yet-revealed bit `0x04`, and without
 linked active-object tile byte `0xF4`; that lookup controls the hit/contact
-target returned by the helper, not whether the marker is placed. The post-action
-hook matches marker coordinates against the actor's committed coordinate when
-checking contact. The contact side resolves the actor at the field coordinate,
-skips the current active actor slot, and does not run the creature-prompt
-friend/foe lookup. Contact does not consume the marker: the hook applies the
-field result and returns without clearing or aging the matched active-object
-record. Poison Field contact first rejects actors whose linked active-object
-tile/class byte is `>= 0x80`; accepted party targets are poisoned only if their
-character status is Good, while monsters and already non-Good party targets fall
-through to poison damage with no field-contact XP credit. Sleep Field contact
-ignores dead party targets; otherwise it writes asleep status for party targets
-or the combat sleep/disabled bit for non-party targets. Fire Field rolls raw
-damage in `[1, 21]` before the normal random defense subtraction, and Energy
-Field supplies raw zero to the same damage/value path. The traced
+target returned by the helper, not whether the marker is placed.
+
+The post-dispatch hook has this exact ordered contract:
+
+| Stage | Input and result |
+|---|---|
+| Target selection | The argument is the round walker's current combat-descriptor slot. That same descriptor is the effect target; no second descriptor is found by coordinate. Its current X/Y and its active-object back-reference are the lookup inputs. |
+| Terrain priority | Check arena terrain at that X/Y first. A recognized terrain hazard selects its effect immediately and suppresses the placed-marker scan for that dispatch. |
+| Marker scan | If terrain selected no effect, scan all thirty-two active-object records in ascending index order. Skip the record whose index equals the target descriptor's active-object back-reference, then compare every other record's X/Y with the target descriptor's X/Y. The first colocated recognized marker wins. |
+| Meaning of the skip | The skipped item is the actor's renderer-facing active-object record, not the current combat actor. This prevents an actor sprite from being interpreted as a field marker. A separate field record on the same cell still targets and affects the actor whose slot was passed. |
+| Completion | Apply the selected result to the passed slot, then continue through the ordinary post-action maintenance. Contact does not clear, age, or rewrite the marker. |
+
+Consequently, a successful move onto Poison, Sleep, or Fire applies that field
+to the mover. Remaining on one of those markers while completing another action
+can apply it again. Field ownership and the caster's slot are not inputs, and
+the creature-prompt friend/foe lookup is not repeated.
+
+The per-marker results and random-consumption order are:
+
+| Field | Hook-level predicates and result | PRNG use after lookup |
+|---|---|---|
+| Poison | Reject contact when the target's linked active-object tile/class byte is at least `0x80`. For an accepted party target whose character status is Good, change the status to Poisoned. Any other accepted target enters the shared damage/status endpoint with no attacker credit. | The linked-record rejection and Good-status test occur before any draw. The Good-to-Poisoned arm consumes none. The damage fallback consumes one inclusive `0..20` draw and passes that raw value directly to damage/status application. It makes no defense draw. |
+| Sleep | Ignore a dead party target; otherwise write asleep status for a party target or the combat sleep/disabled bit for a non-party target. | No hook-local draw. |
+| Fire | Pass a rolled raw value directly to the shared damage/status endpoint, then run the ordinary no-attacker finalization and status-panel refresh. | After the marker has won the scan, consume one inclusive `0..10` draw. It makes no defense draw. |
+| Energy | The Energy marker is not recognized by this contact hook. The arena movement validator treats it as a blocking marker, while Poison, Sleep, and Fire markers are passable for destination occupancy. | No contact-path draw and no zero-valued damage dispatch. |
+
+The ordinary attack damage roller—which randomizes attack value and defense—is
+not called by Poison or Fire contact. Their raw damage still enters the shared
+damage/status endpoint, so its ordinary class modifiers, HP changes, and death
+handling remain applicable.
+
+The traced
 CAST/COMSUBS/COMBAT callbacks, the accepted-placement resident redraw helper,
 the post-action contact hook, the generic active-object tick, and the monster
 death/record-clear path do not contain a field countdown, decrement, or pre-exit
@@ -1600,7 +1626,7 @@ without independent behavioral consumers remain opaque metadata.
   victory bonus. Gold/food from a rewritten body-like slot is obtained only
   through the later Search/Get body rules in `containers.md`.
 
-- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16, Fireball rolls 1..30, and Kill passes the decimal 99 instant-kill sentinel after the shared aiming/projectile path accepts a collision target. The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep applies party sleep status or descriptor byte 2 bit `0x08` for non-party targets, Poison Wind applies a resistance/random gate before poison status, Death Wind uses the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact is bounded to the post-step effect hook, and combat field casting reaches a shared arena-field helper before splitting placement from application. Placed fields live as active-object markers in the temporary combat table, and the contact scan matches those markers by coordinate while skipping only the current active actor slot; contact applies without consuming the marker. Poison Field skips linked active-object classes `>= 0x80`, poisons only Good party members, and otherwise falls through to poison damage with no field-contact XP credit. Sleep Field skips dead party members and otherwise writes party sleep status or descriptor byte 2 bit `0x08` for non-party targets. Fire Field contact rolls raw 1..21 before defense, Energy Field supplies raw zero to the same path, and the placement path has no Fire/Sleep/Energy random acceptance gate once impact resolution confirms an in-arena cell. Field markers are not aged by the placement, contact, redraw, generic active-object tick, or monster death/record-clear paths; they persist until combat exit restores the pre-combat active-object table.
+- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16, Fireball rolls 1..30, and Kill passes the decimal 99 instant-kill sentinel after the shared aiming/projectile path accepts a collision target. The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep applies party sleep status or descriptor byte 2 bit `0x08` for non-party targets, Poison Wind applies a resistance/random gate before poison status, Death Wind uses the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. The same rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
 
 - **Status narration.** "Sleep!", "Poison!", "Charm!" lines are not produced by the damage-and-status handler. They live in separate per-effect handlers (one per status). The exact wording and trigger mechanics belong in those handlers' specs.
 
@@ -1805,7 +1831,7 @@ The behaviour described here was derived from the private function and format no
   combat-record/active-object coordinate updates — derived from
   `u5-decomp/functions/COMBAT_OVL/` and
   `u5-decomp/functions/SJOG_OVL/`.
-- The step-or-attack primitive — direction-to-unit-step translation, arena range check, on-success and on-failure narration, and the post-step effect gate — derived from `u5-decomp/functions/SJOG_OVL/`.
+- The step-or-attack primitive — direction-to-unit-step translation, arena range check, and on-success and on-failure narration — derived from `u5-decomp/functions/SJOG_OVL/`. The separate common post-dispatch field-contact call, target-slot contract, marker scan, and effect ordering are derived from private analysis in `u5-decomp/functions/COMBAT_OVL/`.
 - The dungeon-room special source conversion for the final Doom absorbable
   marker -- derived from
   `u5-decomp/functions/DNGLOOK_OVL/`,

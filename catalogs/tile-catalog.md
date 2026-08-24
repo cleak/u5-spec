@@ -729,7 +729,7 @@ The principal effect families:
   including which ground tile is used, is `systems/overworld.md` Section 9.1.
 - **Projectile frames.** Arrow, axe, sling, magic missile sprites in flight. The combat handler walks a projectile from caster to target one cell per render frame.
 - **Splash / explosion / impact.** Multi-frame sprites for fireball impact, lightning hit, explosion clouds, smoke. The effect handler runs through the frames and clears.
-- **Fields.** Fire field, poison field, sleep field, energy field, electric field. Dungeon field placement writes the field terrain bytes documented in `systems/magic.md` into the live dungeon image, optionally preserving the dungeon visit marker bit. Combat arena fields are handled by the arena-field helper instead of direct dungeon terrain writes; contact is checked after a successful step commits, then routes to the per-field status or damage/value helper.
+- **Fields.** Fire field, poison field, sleep field, energy field, electric field. Dungeon field placement writes the field terrain bytes documented in `systems/magic.md` into the live dungeon image, optionally preserving the dungeon visit marker bit. Combat arena fields are handled by the arena-field helper instead of direct dungeon terrain writes. Poison, Sleep, and Fire contact is checked for the current actor after its dispatch returns, not only after movement; the scan skips that actor's linked renderer record while retaining the actor itself as the effect target. Energy is blocking and has no contact-result arm in that hook.
 - **Wind / smoke / sparkle.** Atmospheric and transient effect graphics driven by weather, storm, and spell handlers. The wind/gust graphics are tile-atlas effects; baseline dungeon contact handling does not use them as `DUNGEON.DAT` torch-extinguishing cells.
 
 Several effect tiles double as world-tile sentinels in the special class range, so renderers should keep map-cell field bytes and transient combat-field visuals in the same semantic family even when their storage paths differ. **Correction:** an earlier revision added that "the animator that sweeps live tile buffer for animated-static cells handles dungeon field tiles uniformly: each owns a four-frame run, and the animator advances it." That is withdrawn on both counts — there is no live-tile-buffer sweep (Section 4), and no field id is in the five families that animator advances. Field frame cycling, where it happens, belongs to the per-effect handlers.
@@ -780,7 +780,9 @@ segment.
 
 The data here is drawn from four sources. Each tile's position in the partition is anchored to a bytes-on-disk observation (the `LOOK2.DAT` string, the resident terrain-query tables), to a per-class engine behaviour (the animator's class-range tests, the special-trigger comparisons), or to the canonical naming from the published manual.
 
-**From the project's private analysis notes** (`u5-decomp/formats/tile-graphics.md`, `data-tables.md`, `data-ovl.md`, `maps.md`, function notes under `functions/LOOKOBJ_OVL/`, `CMDS_OVL/`, `OUTSUBS_OVL/`, `NPC_OVL/`):
+**From the project's private analysis** (`u5-decomp/formats/`,
+`u5-decomp/functions/LOOKOBJ_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+`u5-decomp/functions/OUTSUBS_OVL/`, and `u5-decomp/functions/NPC_OVL/`):
 
 - The five-hundred-and-twelve-tile count and the EGA / CGA file-size invariants.
 - The `LOOK2.DAT` layout (five hundred and twelve sixteen-bit offsets split
@@ -791,15 +793,15 @@ The data here is drawn from four sources. Each tile's position in the partition 
   caller-query tile-class dispatcher and the corrected `0x90..0x93`
   force-reject edge.
 - The active-object animator's class-range tests.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md` - the
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` - the
   companion-band compositor write, the renderer's zero-grid-cell branch, the
   `+256` actor index rule and its one reserved transparent value, together
   with the seven actor-half sprite identities confirmed by decoding the
   shipped atlas with this document's own container rules.
 - The special-trigger comparisons in the per-mode walk loops.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md` - the trapdoor
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` - the trapdoor
   `0x8C` step handler's general descend arm with its single scripted
   exception, the magic-carpet suppression, and the metal grate `0x86`
   standing in for a descend link opposite an ascend link on the floor below.
@@ -808,13 +810,11 @@ The data here is drawn from four sources. Each tile's position in the partition 
 - Source provenance: the telescope identity of tile `0x59`, its three shipped
   placements, the separation from the wishing-well tile `0xA1`, and the
   withdrawal of the moongate-animation plate are derived from private analysis
-  notes `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` and
-  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+  notes in `u5-decomp/notes/`.
 - Source provenance: that no authored moongate frame family exists but a
   draw-time sixteen-phase composition does, the identity and dual role of the
   scratch tile `0x116`, and the scene-dependent choice of ground tile are
-  derived from private analysis note
-  `u5-decomp/notes/moongate_transition_2026-08-23.md`.
+  derived from private analysis in `u5-decomp/notes/`.
 
 **From the published Ultima V manual** (`The Book of Lore`, `The Book of Play`):
 

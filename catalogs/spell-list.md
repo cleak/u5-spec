@@ -425,19 +425,19 @@ combat-only and dungeon-only spells.
   `0x04`, and without linked active-object tile byte `0xF4`; that lookup
   reports the immediate hit/contact target and does not gate marker
   materialization. Fire, Poison, Sleep, and Energy have no extra random
-  placement gate. Contact is bounded to
-  the post-step effect hook that runs after a
-  successful step-or-attack commits its new coordinate, then matches marker
-  coordinates against that actor. The contact scan skips the current active
-  actor slot but does not run the creature-prompt friend/foe lookup, and it
-  applies without consuming the matched marker. Poison Field skips linked
+  placement gate. Contact runs from the common post-dispatch hook for the
+  current actor descriptor. That same actor is the effect target; the scan
+  skips only its linked renderer record while looking for a separate colocated
+  marker. The rule is shared by player and AI dispatch and applies without
+  consuming the matched marker. Poison Field skips linked
   active-object classes `>= 0x80`; accepted party targets are poisoned only if
   currently Good, while monsters and already non-Good party targets fall
   through to poison damage with no field-contact XP credit. Sleep Field skips
   dead party members, otherwise writing party sleep status or the non-party
-  combat sleep/disabled bit without seeding a sleep countdown. Fire Field rolls raw damage in `[1, 21]` before
-  the target's random defense subtraction. Energy Field supplies raw zero to
-  the same damage/value path.
+  combat sleep/disabled bit without seeding a sleep countdown. An accepted
+  Good-party Poison result consumes no random value; its damage fallback rolls
+  raw `0..20` with no defense draw. Fire Field rolls raw `0..10` with no defense
+  draw. Energy Field blocks movement and has no contact-result arm.
   The traced placement/contact/redraw path, generic active-object tick, and
   monster death/record-clear path show no field countdown/decrement or
   pre-exit removal; placed field markers persist until combat exit restores

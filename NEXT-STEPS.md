@@ -2921,7 +2921,23 @@ or seed, combat branches, and non-shrine clamp policy.
   enumerations. `.XMI` music is not
   present in the analyzed clean DOS baseline; add it only for a different
   audio-enabled distribution.
-- The spell table is now aligned to the resident incantation order (`In Lor`, `Grav Por`, ...), with all 48 parser tokens, parser acceptance rules, recipe masks, scene masks, light-spell durations, the 99-charge mix cap, major CAST handler families, active-target attack-wrapper damage math for Magic Missile/Fireball/Kill, Tremor exact damage/reward and no-faction-filter actor scan, Awaken/Cure low-circle status gates, shared active-effect tag/counter values and expiry behavior, Negate Time `T`/10 countdown semantics, combat C-Cast adjacent-target interference gating, Protection's equipped-statistic bonus boundary, Quickness's player-dispatch random gate, Mass Charm's class-threshold target-selection remap, Negate Magic's combat-cast absorption path, Blackthorn's-Castle/Stonegate absorption pre-gates, Charm/Polymorph/Clone/Fear/Gate/Negate Time high-circle handler semantics, Polymorph's Giant Rat replacement, Clone's paired-slot allocation, random legal arena placement, no-partial-copy capacity failure, undefined original capacity result, shrine-meditation linkage to Avatar intelligence, dungeon field no-write failure, the combat post-step boundary for field/hazard contact, the arena-field helper placement/application split, combat field-kind bytes, coordinate-lookup slot/flag eligibility, active-object marker contact for placed combat fields, non-consuming field contact, accepted-placement redraw/lifetime non-ownership, combat field lifetime until combat exit, Dispel Field's dungeon live-cell rewrite and combat active-object removal path, no friend/foe gate in the shared field-contact scan, Poison/Sleep field-contact status gates, Fire Field raw 1..21 damage before defense, Energy Field raw zero damage/value input, directed In Zu/Poison Wind/Death Wind/Flame Wind cone geometry and friendly-fire behavior, and monster possess/blink/summon-daemon hook separation documented semantically.
+- The spell table is now aligned to the resident incantation order (`In Lor`,
+  `Grav Por`, ...), with all 48 parser tokens, parser acceptance rules, recipe
+  masks, scene masks, light-spell durations, the 99-charge mix cap, major CAST
+  handler families, and exact active-target and multi-target damage semantics.
+  Combat field placement and contact are also closed: placement-time target
+  lookup is separate from the common post-dispatch contact hook; that hook
+  targets the current actor descriptor while skipping only its linked renderer
+  record. Poison's status arm consumes no randomness and its damage fallback
+  rolls raw 0..20 with no defense draw; Fire rolls raw 0..10 with no defense
+  draw; Sleep applies its status result; and Energy blocks movement and has no
+  contact-result arm. Contact is shared by player and AI dispatch, does not
+  consume the marker, and field markers persist until combat exit. The spell
+  contract also covers active-effect tags and expiry, combat C-Cast
+  interference, Protection, Quickness, Mass Charm, Negate Magic and Negate
+  Time, high-circle targeters and placement, Dispel Field, directed wind-cone
+  geometry and friendly fire, and the separate monster
+  possess/blink/summon-daemon hook.
 - An earlier external verification slice against local game data logged clean
   corrections. The first run bound Lord British's castle evidence to `CASTLE:0`
   and corrected the older "fifth castle slot" wording. Do not create or update
