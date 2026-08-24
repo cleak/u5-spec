@@ -224,11 +224,28 @@ them.
 
 **Active-object setup.** Dungeon active-object setup is its own step, distinct
 from the view initialiser that loads the corridor/object banks and clears the
-viewport pages; it runs on dungeon entry, on every level change, and on return
-from a fight. It can either reuse the current active dungeon object or roll a
-fresh one. A fresh roll selects one of
-eight dungeon monster presentation records, installs that record's sprite-state
-byte and its **combat class id**, resets the special-placement flag, stamps the
+viewport pages. Its one input selects either exact record reuse or a fresh
+family roll and placement:
+
+| Situation | Setup mode |
+|---|---|
+| Direct entry from the overworld loop into a dungeon | Fresh |
+| Dungeon state already active when the top-level dispatcher begins, including a loaded or resumed dungeon | Reuse |
+| Accepted level change | Fresh |
+| Return from a dungeon fight or encounter, if the resulting scene is still a dungeon | Fresh |
+| Return from the character/stats presentation | Reuse after restoring the saved record |
+
+The distinction is not inferred from the active record. The dungeon turn loop
+receives a handoff flag: the outer dispatcher sets it only when an overworld
+loop that began with the zero scene returns into a dungeon, and clears it for
+an already-active dungeon dispatch. Reuse preserves the whole active record,
+does not roll coordinates, and does not run placement; it only ensures that
+the selected family's sprite bank is loaded when the record is active.
+
+A fresh roll selects one of
+eight dungeon monster presentation records with a uniform inclusive draw from
+0 through 7, so each family has probability 1/8. It installs that record's
+sprite-state byte and its **combat class id**, resets the special-placement flag, stamps the
 current Z level, and lazily loads the sprite source if placement succeeds. The
 two per-record bytes are distinct: one is presentation, the other is the combat
 class the wandering-monster combat path consumes directly (§ 14.1). The eight
@@ -725,9 +742,22 @@ colour 3 on CGA and Hercules; it does not redraw a separate centre pixel. It
 then stores stage 5.
 
 Stage 5 is a real, transient stored state. Its next paint draws no decoration,
-plays the short falling-pitch tone whose pitch depends on the depth band, and
-stores stage 0. Implementations therefore need six states even though only five
-have visible coordinates.
+runs a band-dependent speaker sweep, and stores stage 0. Implementations
+therefore need six states even though only five have visible coordinates.
+
+| Band | Requested frequencies | Calibrated delay units |
+|---:|---|---:|
+| 0 | 20 updates: 3200, 3215, ..., 3485 Hz | 20 |
+| 1 | 12 updates: 3200, 3225, ..., 3475 Hz | 12 |
+| 2 | 4 updates: 3200, 3275, 3350, 3425 Hz | 4 |
+| 3 | No tone update; stop the speaker | 0 |
+
+The audible sweeps rise toward 3500 Hz but never emit that endpoint. Each
+update is followed by one calibrated delay unit. Exact milliseconds are not a
+stable contract because the delay is scaled by the runtime CPU calibration.
+Turning sound off suppresses tone generation, but the band-0 through band-2
+delay cadence still runs. This is presentation pacing only: aside from storing
+stage 0, the stage-5 branch changes no gameplay state.
 
 ### 6.9 Cell reads, active objects and the composite redraw
 
@@ -804,7 +834,10 @@ updated phase.
 
 While the Negate Time effect is active, the helper resets the state to the
 family's initial byte and forces the pose selection instead of taking the two
-random draws. This is a time-stop rule, not a quest-scene sprite-table path. The
+random draws. The left half uses pose 1 for all eight families. The paired
+right half also uses pose 1 except for Ghost, whose complement symmetry makes
+the right half use pose 0. This is a time-stop rule, not a quest-scene
+sprite-table path. The
 selected `MONn` bank is loaded on demand; if it is unexpectedly absent, the
 renderer emits an internal diagnostic and paints no monster. Colour pixels and
 their paired one-bit mask composite as `destination AND mask`, then `OR` the
