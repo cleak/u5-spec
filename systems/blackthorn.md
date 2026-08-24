@@ -371,8 +371,9 @@ layer, paid/passed is the ordinary outcome. Refusal or failure is the only
 positive outcome and requests the town loop's arrest cleanup.
 
 **Branch 1 — the palace gate password.** In Lord Blackthorn's Castle, and only
-while the Black Badge aura is the party's active timed magic effect (see
-`systems/magic.md`), the guard asks the party to give the password as a bearer
+while the Black Badge aura's exact effect code `0x1D` is the party's active
+timed magic effect (see `systems/magic.md`), the guard asks the party to give
+the password as a bearer
 of the Badge and prompts for a response. The player may type up to fourteen
 characters, but only the **first four** are compared, and the comparison folds
 letter case. The expected answer is the Oppression-side password that
@@ -498,8 +499,6 @@ This cleanroom spec was derived from private analysis notes and sibling public
 specs. It intentionally does not reproduce decompiled code, assembly, raw data
 tables, raw script bytes, or implementation-specific addresses.
 
-- `u5-decomp/functions/BLCKTHRN_OVL/bytecode_scripts.md`.
-- `u5-decomp/functions/BLCKTHRN_OVL/OVERVIEW.md`.
 - `u5-decomp/functions/BLCKTHRN_OVL/`.
 - `u5-decomp/functions/TALK_OVL/` — the
   three guard-demand branches, the four-character password comparison, the
@@ -511,8 +510,8 @@ tables, raw script bytes, or implementation-specific addresses.
 - `u5-decomp/functions/ULTIMA_EXE/` — the
   shared party-capability check of Section 7.
 - `u5-decomp/functions/ULTIMA_EXE/`.
-- `u5-decomp/formats/data-ovl.md`.
-- `u5-decomp/notes/subsystem_coupling_matrix.md`.
+- `u5-decomp/formats/`.
+- `u5-decomp/notes/`.
 - `catalogs/gazetteer.md`.
 - `systems/combat.md`.
 - `systems/encounters.md`.

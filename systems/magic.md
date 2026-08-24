@@ -439,12 +439,12 @@ timed-effect slot described next.
 
 **The shared timed-effect slot.** Ultima V has exactly one global timed
 magic-effect slot, not a bank of per-spell timers. The slot is a pair of
-values: an effect code naming the currently active effect (with a reserved
-"none" value), and a remaining duration counted in world turns, with a second
-reserved value meaning "permanent, never ages". Every timed magic effect in the
-game writes that same pair — the four timed buff spells, Negate Time, three of
-the spell scrolls, and the three worn regalia items. Three consequences follow,
-and all three must be reproduced:
+save-backed bytes: the effect code at `SAVED.GAM +0x02D4` names the active
+effect (`0x00` means none), and the remaining duration at
+`SAVED.GAM +0x02E8` is counted in world turns (`0xFF` means permanent and never
+ages). Every timed magic effect writes that same pair — the four timed buff
+spells, Negate Time, three of the spell scrolls, and the three worn regalia
+items. Three consequences follow, and all three must be reproduced:
 
 - **Effects never stack.** Installing a new effect overwrites whatever was in
   the slot. Casting Quickness while Negate Magic is running simply replaces it,
@@ -467,12 +467,21 @@ The confirmed codes and durations are:
 | Protection scroll | `P` | 100 | yes |
 | Negate Magic scroll | `N` | 20 | yes |
 | Negate Time scroll | `T` | 20 | yes |
-| Amulet of Lord British (U-Use) | its own reserved code | permanent | yes |
-| Crown of Lord British (U-Use) | its own reserved code | permanent | yes |
-| Black Badge (U-Use) | its own reserved code | permanent | none |
+| Amulet of Lord British (U-Use) | `0x0E` | `0xFF` (permanent) | yes |
+| Crown of Lord British (U-Use) | `0x1C` | `0xFF` (permanent) | yes |
+| Black Badge (U-Use) | `0x1D` | `0xFF` (permanent) | none |
 
-**Aging.** The countdown has an exact rule: the "none" value and the permanent
-sentinel are both inert, any other value decrements by one when an aging
+**Regalia toggle writes.** U-Using any of the three regalia items first compares
+the shared effect-code byte with that item's code. If they match, the item is
+being removed: the command prints the removal acknowledgement, writes `0x00`
+to both the effect-code and duration bytes, and requests a stats-panel redraw.
+If they do not match, the item is being donned: its code is written to the
+effect byte and `0xFF` to the duration byte, replacing any prior spell or aura.
+The Amulet and Crown use the common installer and play its sound; the Black
+Badge performs the same two-byte state change without a sound.
+
+**Aging.** The countdown has an exact rule: duration `0x00` and the permanent
+sentinel `0xFF` are both inert, any other value decrements by one when an aging
 endpoint is reached, and expiry clears the effect code and requests a stats
 redraw. In effect the countdown loses exactly one unit per world turn. The
 traced endpoints are the per-turn cleanup that follows command dispatch outside
@@ -1023,7 +1032,9 @@ forty-eight player spell definitions.
 
 The behaviour described here was derived by reading the private function and format notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The absence of any time-driven magic-point regeneration, and the withdrawal of the earlier "full restoration on rest" claim in Section 11, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
+- The absence of any time-driven magic-point regeneration, and the withdrawal
+  of the earlier "full restoration on rest" claim in Section 11, derived from
+  private analysis in `u5-decomp/notes/`.
 
 - The C-Cast dispatcher itself — its prompt, the forty-eight-entry token table, the charges/mana/level gate cascade, the scene gate, the per-spell handler dispatch, the light-spell duration writes, the field-placement byte mapping, the handler-family map, and the print-on-success and print-on-failure narration — derived from `u5-decomp/functions/CAST_OVL/`, local CAST/CAST2 helper analysis, and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/`.
 - The directed wind-cone and actor-scan family used by several combat spells,
@@ -1037,7 +1048,7 @@ The behaviour described here was derived by reading the private function and for
   Negate Time, and Invisibility are derived from fresh local CAST.OVL and CAST2
   helper analysis summarized here without copying assembly or source. Cause
   Fear's critical-HP flee setup is cross-checked against the combat current-HP
-  field and wound-score classifier in `u5-decomp/formats/data-ovl.md` and
+  field and wound-score classifier in `u5-decomp/formats/` and
   `u5-decomp/functions/COMBAT_OVL/`.
 - The active-target attack wrapper path for Magic Missile, Fireball, and Kill — aiming/projectile routing, spell-tag damage lookup, defense subtraction, and instant-kill sentinel — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
 - Create Food's 1..3 food/provisions delta and 9999 cap are derived from
@@ -1045,8 +1056,8 @@ The behaviour described here was derived by reading the private function and for
 - Source provenance: the identification of the Up and Down pair as the dungeon
   level-change spells, their ladder-free level step, their destination-cell
   refusal, their hand-off to the shared dungeon exit at a level edge, and their
-  outright refusal inside Doom are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+  outright refusal inside Doom are derived from private analysis in
+  `u5-decomp/notes/`.
 - Arena-field placement, contact, non-consuming markers, Poison/Sleep status
   gates, Dispel Field's dungeon live-cell rewrite and combat active-object
   removal path, and combat-exit marker lifetime are derived from local CAST,
@@ -1076,13 +1087,14 @@ The behaviour described here was derived by reading the private function and for
   regalia auras, the per-turn aging rule and its duplicated mode-loop copy, the
   three clear sites, the complete consumer census for each code, Protection's
   two-fold deadness, and Invisibility's absence of any timer — derived from
-  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`,
-  `u5-decomp/notes/system-trace_magic.md`,
+  `u5-decomp/notes/`,
   `u5-decomp/functions/CAST2_OVL/`, and
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The casting absorption pre-gate names combine `CAST.OVL` dispatcher analysis with the clean scene bindings in `catalogs/gazetteer.md` and the Crown ownership flag writer in `u5-decomp/functions/SJOG_OVL/`.
 - Moonstone Search/Get recovery is derived from `u5-decomp/functions/SJOG_OVL/`, and local SJOG helper analysis summarized without copying implementation text.
-- The CAST.OVL function inventory and the misclassification correction (CAST is the spell-cast overlay, not character creation) — derived from `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`.
+- The CAST.OVL function inventory and the misclassification correction (CAST
+  is the spell-cast overlay, not character creation) — derived from
+  `u5-decomp/functions/CAST_OVL/`.
 - The shared spell-name input helper — accepted selector letters, order-insensitive compact-token matching, blank/cancel/no-match returns, and M-Mix's no-match fall-through — derived from local CAST2 helper analysis and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat C-Cast adjacent-target interference gate - mapped target, target validity, target awakeness, Negate Time suppression, and adjacency - is derived from `u5-decomp/functions/COMSUBS_OVL/`.
 - The monster AI boundary correction is derived from the corrected COMSUBS
@@ -1094,15 +1106,14 @@ The behaviour described here was derived by reading the private function and for
   routes to the same wrong-recipe path and springs the trap, that the on-screen
   mixing pause is presentation only and advances no clock, and that the charge
   cap is an add-then-clamp rather than a refusal — derived from
-  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
-  `u5-decomp/notes/system-trace_magic.md`.
+  private analysis in `u5-decomp/notes/`.
 - The low-circle status/HP restore helpers -- Awaken's first-Sleeping roster
   scan, Cure's selected-member Poisoned gate, selected-member Heal's Dead-only
   skip, small random HP recovery, maximum-HP clamp, status preservation,
   Great Heal's dungeon combat-active refusal, and stats-redraw dirty marking --
   are derived from
   `u5-decomp/functions/CAST2_OVL/` and the CAST spell
-  map in `u5-decomp/functions/CAST_OVL/all_spells.md`.
+  map in `u5-decomp/functions/CAST_OVL/`.
 - The Locate/sextant coordinate printer -- nibble-to-letter formatting,
   Y-before-X ordering, the per-coordinate closing double-quote and the
   comma-space separator, the newline emitted before the coordinate pair as well
@@ -1116,7 +1127,7 @@ The behaviour described here was derived by reading the private function and for
   prompt's own coordinate arithmetic rather than by convention;
   the rest is derived from
   `u5-decomp/functions/CAST2_OVL/` and the CAST
-  spell map in `u5-decomp/functions/CAST_OVL/all_spells.md`.
+  spell map in `u5-decomp/functions/CAST_OVL/`.
 - The non-combat Blink contract -- direction prompt, straight-ray scan,
   farthest-grass landing rule, no random/retry/passability/occupancy checks,
   and no refund from handler failure -- is derived from
@@ -1127,20 +1138,19 @@ The behaviour described here was derived by reading the private function and for
   rewrites, the Space/Pass silent branch, the Success/Failed narration split,
   and the arena tile census that shows which shipped arenas contain eligible
   tiles -- are derived from
-  `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
+  private analysis in `u5-decomp/notes/`,
   `u5-decomp/functions/CAST_OVL/`,
   `u5-decomp/functions/CAST2_OVL/`,
   `u5-decomp/functions/ULTIMA_EXE/`, and
-  `u5-decomp/formats/maps.md`.
+  `u5-decomp/formats/`.
 - The shared random arena probe, the sixteen-outcome Conjure selector, Swarm's
   single-cell-then-stack placement, the controlled-bit stamp on placed actors,
   the Summon self-check threshold and roll, the correction that spell id 7
   is Repel Undead rather than a summon/tame helper, and the finding that the
   shared exclusion filter used by Cause Fear and Repel Undead rejects the three
   protected special classes rather than "humanoids" are derived from
-  `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`,
-  `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
-  `u5-decomp/functions/CAST_OVL/all_spells.md`,
+  `u5-decomp/notes/`,
+  `u5-decomp/functions/CAST_OVL/`,
   `u5-decomp/functions/CAST2_OVL/`,
   `u5-decomp/functions/COMBAT_OVL/`, and
   `u5-decomp/functions/ULTIMA_EXE/` (filename
@@ -1159,5 +1169,5 @@ The behaviour described here was derived by reading the private function and for
   ordained/Codex bitmap updates -- derived from
   `u5-decomp/functions/CAST2_OVL/`, and
   `u5-decomp/functions/CAST2_OVL/`.
-- The twenty-four-entry rune-syllable dictionary, the forty-eight-entry resident long-incantation display phrase table and its per-id pointer table, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/data-ovl.md`, `u5-decomp/notes/system-trace_magic.md`, and local `DATA.OVL` table reads.
-- The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine quest masks — derived from `u5-decomp/formats/saves.md`.
+- The twenty-four-entry rune-syllable dictionary, the forty-eight-entry resident long-incantation display phrase table and its per-id pointer table, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/`, private analysis in `u5-decomp/notes/`, and local `DATA.OVL` table reads.
+- The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine quest masks — derived from `u5-decomp/formats/`.
