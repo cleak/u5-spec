@@ -165,23 +165,38 @@ Every iteration walks the same sequence:
    c. Camp / wishing-well dispatch if the tile matches.
    d. Pirate-ship ambush if the tile and transport state indicate one.
    e. Fixed narrative gate branch if on its surface-world coordinate.
-   f. Per-turn party-status tick through the OUTSUBS status helper.
-   g. Active-object animator if the under-tile is animated (Section 6).
+   f. Per-turn party-status and provisions work through the outdoor status helper.
+   g. Run the remaining ordinary environment and transport hooks.
+   h. Run the outdoor object epilogue: after its ordinary scene/transport
+      pendulum gates, roll for a random encounter, then animate/move and prune
+      eligible non-player active objects as specified in Section 6.
 
 7. **Loop.** Back to step 1 unless the exit flag is set.
 
 Ahead of the input block of step three, each iteration runs the shared
 party-capability check that all three exploration modes use, described in
-`systems/main-loop.md` Section 6: if nobody in the party can act but somebody is
-asleep, the loop prints the sleep line and passes the turn without reading a
-command; if nobody can act and nobody is asleep, it runs the total-party-defeat
-sequence of `systems/blackthorn.md` Section 7 instead of taking a turn. The
-overworld contributes no condition of its own to that check. It does add
-bookkeeping on the defeat path: when the party is on the Britannia surface
-rather than in the Underworld, the loop first asks the player to make the
-surface map file available and re-asks until it is, and it then runs a
-maintenance pass over the active-object table. Neither step is a precondition —
-the sequence runs either way, and the object pass runs on both surfaces.
+`systems/main-loop.md` Section 6. If nobody in the party can act but somebody is
+asleep, the loop prints the sleep line and takes the complete ordinary
+consumed-turn path of step 6 without reading a command. Thus an outdoor asleep
+pass advances the clock by two minutes, re-reads and processes the underfoot
+environment, runs party-status/provisions and transport work, rolls the normal
+encounter check, and runs the normal active-object animation/movement/pruning
+work, all subject to the same gates as any other consumed outdoor turn. The
+loop then scans party capability again.
+
+If nobody can act and nobody is asleep, the loop instead runs the
+total-party-defeat sequence of `systems/blackthorn.md` Section 7. The overworld
+contributes no condition of its own, but it performs one ordered persistence
+step before rescue. If gameplay disk 1 is not already current, request it and
+retry until `BRIT.DAT` can be opened; this test concerns the current disk, not
+whether the party is on the upper or lower plane. Select `BRIT.OOL` or
+`UNDER.OOL` from the party's current plane, then write the entire live
+active-object table to that file as one unchanged block: all thirty-two
+records, including slot zero, and all eight bytes of every record. This step
+does not mutate, classify, animate, prune, or reorder an in-memory record and
+uses no randomness. It is distinct from the ordinary encounter and
+animate/prune epilogue of step 6. The rescue begins only after the write
+succeeds; the ordinary consumed-turn path is skipped on defeat.
 
 The "consumed a turn" gate means looking at the sky, opening the inventory, mistyping a command, talking-to-no-one cost zero time. Only a successful action advances the clock.
 
@@ -1159,10 +1174,11 @@ The behaviour described above was derived by reading the function and format not
 
 - The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/`.
 - The shared per-turn party-capability check that precedes the overworld input
-  block, its three-way result mapping, and the surface-only map-file prompt and
-  active-object maintenance pass that precede the total-party-defeat sequence.
-  Source provenance: derived from private analysis note
-  `u5-decomp/notes/`.
+  block; the full ordinary consumed-turn processing of its asleep arm; and the
+  disk-availability, per-plane whole-table persistence, and rescue ordering of
+  its defeat arm. Source provenance: derived from private analysis under
+  `u5-decomp/notes/`, `u5-decomp/functions/MAINOUT_OVL/`, and
+  `u5-decomp/functions/OUTSUBS_OVL/`.
 - The pre-loop special-underfoot latch that forces zero light and gates outdoor
   movement commit — `u5-decomp/functions/MAINOUT_OVL/`.
 - Local MAINOUT outer-loop analysis -- one-shot pending vehicle-acquisition

@@ -97,7 +97,29 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 6. **Post-action hook.** If the dispatch did anything, call a post-action helper for end-of-turn cleanup.
 7. **Party-capability check.** The iteration then ends by running the shared party-capability check specified in `systems/main-loop.md` Section 6 — the same check town and overworld mode run, with the same three-way result mapping — before the loop reads another command. The check also runs once on entry, ahead of the first command read, and it runs on every iteration regardless of what the dispatch reported, so a command that took no turn (a refused Klimb, say) skips the post-action helper of step 6 but still passes through the check. If at least one member can act, the loop proceeds to the next iteration. If nobody can act but at least one member is asleep, the loop pauses briefly, prints the sleep line ("Zzzzzz..."), and re-runs the check without reading a command, repeating for as long as that result holds; the dungeon takes this pass without running the post-action helper. If nobody can act and nobody is asleep, the inner loop stops and the epilogue runs the total-party-defeat sequence (§ 13.4). Dungeon mode contributes no condition of its own to the check.
 
-**Epilogue.** Toggle the appropriate visibility flag bit so the next render runs a full repaint and call the per-turn redraw primitive. The world-clock advance — the same routine town and combat call, with a one-minute increment — is issued from the head of the *next* iteration rather than from this epilogue, and is not gated on whether the command consumed a turn (Section 15). Time in dungeons advances at the indoor rate. If the party-capability check of step 7 reported that nobody can act and nobody is asleep, the epilogue's last act is to run the total-party-defeat sequence of `systems/blackthorn.md` Section 7; the per-turn redraw/view-helper pass named above runs immediately before it, as bookkeeping rather than as a condition on it. An earlier revision described this tail call as a dungeon-exit teardown fired by an end-of-stream / quit poll result; that reading is withdrawn.
+**Epilogue.** When the inner loop ends, transition the dungeon-graphics
+lifecycle from “dungeon banks loaded” to “restore ordinary graphics,” then run
+the graphics teardown. It releases the selected corridor bank and item bank,
+releases the optional monster bank if one was loaded, clears that optional-bank
+reference, and reloads/prepares the ordinary world-and-town tile atlas,
+retrying through the normal storage-error workflow until successful. It then
+marks dungeon graphics inactive and ordinary tile graphics ready. This helper
+uses no randomness, paints or presents no pixels, and does not alter the
+dungeon map, exploration memory, party, coordinates/facing, active objects,
+clock, or other durable game state. Consequently it requires no intermediate
+redraw: the last dungeon frame remains visible until the following mode or
+rescue code changes it.
+
+The world-clock advance — the same routine town and combat call, with a
+one-minute increment — is issued from the head of the *next* iteration rather
+than from this epilogue, and is not gated on whether the command consumed a
+turn (Section 15). Time in dungeons advances at the indoor rate. If the
+party-capability check of step 7 reported that nobody can act and nobody is
+asleep, the epilogue calls the total-party-defeat sequence of
+`systems/blackthorn.md` Section 7 immediately after graphics teardown. An
+earlier revision described the helper as a redraw and the tail call as a
+dungeon-exit teardown fired by an end-of-stream / quit poll result; both
+readings are withdrawn.
 
 The loop then iterates, checking the scene byte; if it is still in the dungeon range, the next turn begins.
 
@@ -1564,8 +1586,11 @@ wipe** and through the **endgame** hand-off.
 
 A wipe is detected by the shared party-capability check of § 4, step 7, not by
 any dungeon-local test: when that check reports that nobody can act and nobody
-is asleep, the turn loop stops and its epilogue runs the rescue/refuge sequence
-specified in `systems/blackthorn.md` Section 7. That sequence restores every
+is asleep, the turn loop stops. Its epilogue first performs the transient-only
+graphics teardown specified in § 4: release the dungeon-specific banks,
+restore the ordinary tile atlas with retry semantics, mark dungeon graphics
+inactive, and leave the visible framebuffer unchanged. It then runs the
+rescue/refuge sequence specified in `systems/blackthorn.md` Section 7. That sequence restores every
 member, reads out a moral-standing verdict, and resumes ordinary play in Lord
 British's Castle, so an ordinary wipe underground is **not** a terminal
 game-over. An earlier revision of this section routed the wipe to a "death
@@ -2018,11 +2043,13 @@ The behaviour described here was derived by reading the private function notes l
 
 - The Section 4 turn-loop tail and the Section 13.4 wipe route: the dungeon's
   per-iteration party-capability check, its ownership of the sleep line, the
-  withdrawn "idle pump" / "dungeon-exit teardown" reading of that tail, and the
+  graphics-bank release and ordinary-tile restoration ordered before rescue,
+  the absence of a redraw or durable-state mutation in that helper, the
+  withdrawn "idle pump" / "dungeon-exit teardown" reading of the tail, and the
   routing of a total party wipe to the rescue/refuge sequence rather than to a
-  death or game-over path. Source provenance: derived from private analysis under
-  `../u5-decomp/notes/` and
-  `../u5-decomp/functions/DUNGEON_OVL/`.
+  death or game-over path. Source provenance: derived from private analysis
+  under `../u5-decomp/notes/`, `../u5-decomp/functions/DUNGEON_OVL/`, and
+  `../u5-decomp/functions/DNGLOOK_OVL/`.
 
 - The Section 8 Search reveal presentation tail: its three reaching outcomes,
   narration-before-mutation order, post-mutation hidden viewport render,

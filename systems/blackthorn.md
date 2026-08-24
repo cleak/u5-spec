@@ -301,18 +301,31 @@ counts as unable.
 | Roster scan result | Effect |
 |--------------------|--------|
 | At least one member can act | Ordinary turn. The scan also records which member that was, for callers that need a member able to act. |
-| Nobody can act, but at least one member is asleep | The mode prints the sleep line ("Zzzzzz...") and the turn passes with nothing else happening. |
+| Nobody can act, but at least one member is asleep | The mode prints the sleep line ("Zzzzzz...") and follows its mode-local no-input asleep path. |
 | Nobody can act and nobody is asleep | This rescue/refuge cinematic runs. |
 
 That third case is the only entry condition. There is no quest gate, no
 moonstone requirement, no location test, and no per-mode variation: town,
 overworld, and dungeon mode all use the identical check and the identical
 result mapping, and combat reaches it only indirectly, when the exploration
-loop that framed the fight runs its next check. The mode-local work around the
-check is bookkeeping rather than predicate — the overworld asks for the surface
-map disc first when the party is above ground, and runs its active-object
-maintenance pass on either surface, while the dungeon runs its own view-helper
-pass first. An empty roster also falls into the third case.
+loop that framed the fight runs its next check. An empty roster also falls into
+the third case.
+
+The result mapping is shared; the work surrounding it is mode-local. On the
+asleep result, overworld mode runs its entire ordinary two-minute consumed-turn
+path without input, including underfoot/environment, party-status/provisions,
+encounter, and active-object work under their normal gates. Town mode runs its
+documented wake-before-underfoot path. Dungeon mode skips its post-action
+helper; its next ordinary loop head owns the indoor clock advance.
+
+On defeat, overworld mode first makes gameplay disk 1 available when necessary,
+selects the current plane's object file, and persists all thirty-two live
+active-object records byte-for-byte. It does not run the ordinary animator or
+pruner and consumes no randomness. Dungeon mode first tears down only transient
+graphics resources: it releases the dungeon banks, restores the ordinary tile
+atlas with retry semantics, marks dungeon graphics inactive, and draws no
+intermediate frame. Neither preamble changes the shared predicate or makes
+rescue conditional; rescue follows the successful persistence/resource step.
 
 Because this cinematic restores the party and returns it to play, an ordinary
 party wipe in Ultima V is not a terminal game-over: the run continues from Lord
@@ -539,5 +552,9 @@ Source provenance: derived from private analysis in `u5-decomp/notes/` for the
 audience entry path, the withdrawal of the death-route marker, the
 shared party-capability check that enters the rescue/refuge cinematic, and that
 cinematic's restoration, two viewport dissolves, standing-floor, and handoff
-effects; cross-checked against `u5-decomp/functions/BLCKTHRN_OVL/` and the
-display-driver notes under `u5-decomp/functions/EGA_DRV/`.
+effects; the mode-local asleep and defeat preambles were cross-checked against
+`u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/OUTSUBS_OVL/`,
+`u5-decomp/functions/DUNGEON_OVL/`, and `u5-decomp/functions/DNGLOOK_OVL/`;
+the cinematic presentation was cross-checked against
+`u5-decomp/functions/BLCKTHRN_OVL/` and the display-driver notes under
+`u5-decomp/functions/EGA_DRV/`.
