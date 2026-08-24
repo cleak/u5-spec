@@ -777,11 +777,14 @@ coordinate, then mutates one cell:
    stops. **The party stands next to the sealed cell, never on it** — the sealed
    tile is impassable, so standing on it is not possible anyway.
 2. **Ruined-shrine branch.** If the neighbour selected in step 1 is a ruined
-   shrine, the handler hands off to the shrine restoration/mantra prompt for
-   that word's index instead of doing anything to a dungeon entrance. This
-   branch is reachable in normal play; earlier public wording that called the
-   mantra-style Yell branch unreachable was wrong. `systems/karma.md` owns the
-   restoration contract itself.
+   shrine, the handler hands off to the shrine restoration prompt with the
+   word's index and that adjacent cell's coordinates. It then exits without
+   running the ordinary entrance-coordinate check, entrance-tile toggle, or
+   Word-of-Power seal-flag toggle. This branch is reachable in normal play;
+   earlier public wording that called the mantra-style Yell branch unreachable
+   was wrong. `systems/karma.md` Section 7.1 owns the direct word-to-virtue
+   mapping, four mandatory text responses, messages, state writes, and acted
+   result.
 3. **Coordinate.** Otherwise the handler requires the selected neighbour's
    world coordinate to equal that word's published dungeon entrance coordinate
    (`catalogs/gazetteer.md` Section 5.1). Speaking a valid word anywhere else

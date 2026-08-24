@@ -191,7 +191,9 @@ The free-text reader accepts printable ASCII bytes up to the caller-supplied
 maximum length, echoes each accepted byte, and NUL-terminates the caller's
 buffer when Enter is pressed. Backspace erases one accepted character by
 printing a replacement space through the text eraser. Escape clears the whole
-line and terminates with an empty buffer. These prompts may disable the normal
+current line but does **not** submit or terminate it; the reader continues until
+Enter is pressed, and Enter then submits whatever remains, including an empty
+buffer. These prompts may disable the normal
 type-ahead flush while active so a typed word can be drained across repeated
 single-key reads.
 
@@ -379,8 +381,7 @@ The behaviour described here was derived from the private function notes listed 
   `u5-decomp/functions/ULTIMA_EXE/`.
 - Direction-code consumer boundaries, including cardinal-only world, town,
   dungeon, and combat movement plus diagonal fallthrough behavior -- derived from
-  `u5-decomp/notes/system-trace_movement.md` and
-  `u5-decomp/notes/cross_mode_behavior_matrix.md`.
+  private analysis under `u5-decomp/notes/`.
 - The standard party-member target wrapper and selector return families --
   selected active slot, cancel, and explicit none -- derived from
   `u5-decomp/functions/CAST2_OVL/` and
@@ -398,7 +399,7 @@ The behaviour described here was derived from the private function notes listed 
   between scancode translation and the typed-Control pseudo-code rewrite, the
   behavioural description of the type-ahead setting and its three writers, and
   the closure of the function-key and diagonal-code consumer questions. Source
-  provenance: derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`, with
+  provenance: derived from private analysis under
+  `../u5-decomp/notes/`, with
   `../u5-decomp/functions/ULTIMA_EXE/` and
   `../u5-decomp/functions/COMSUBS_OVL/`.

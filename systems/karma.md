@@ -326,8 +326,7 @@ eight rows finds no match, the handler resolves the meditation to
 ones *is* the test for Spirituality, and "no row matched" must not be treated as
 an error.
 
-Source provenance: derived from private analysis note
-`u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+Source provenance: derived from private analysis under `u5-decomp/notes/`.
 
 The eight expected mantras are fixed:
 
@@ -383,6 +382,62 @@ retracted. The live CAST2 shrine meditation handler
 owns the actual shrine quest-state changes above; whether every successful
 live shrine branch also calls this exact resident presentation helper remains a
 presentation-parity verification item, not a different shrine-state machine.
+
+### 7.1 Ruined-shrine restoration through Yell
+
+This is separate from the ordinary M-Meditate shrine quest flow above. The
+outdoor Yell handler first recognizes a Word of Power, prints the uttered-word
+line, and runs the shared viewport flash/low-rumble effect. If the first
+qualifying adjacent cell in its west, south, east, north scan is a ruined
+shrine, it passes the Word index and that cell's coordinates directly to this
+restoration flow.
+
+The Word index is also the virtue/mantra index; there is no lookup by the
+shrine tile itself:
+
+| Index | Word of Power | Required virtue | Required mantra |
+|---:|---|---|---|
+| 0 | `FALLAX` | Honesty | `Ahm` |
+| 1 | `VILIS` | Compassion | `Mu` |
+| 2 | `INOPIA` | Valor | `Ra` |
+| 3 | `MALUM` | Justice | `Beh` |
+| 4 | `AVIDUS` | Sacrifice | `Cah` |
+| 5 | `INFAMA` | Honor | `Summ` |
+| 6 | `IGNAVUS` | Spirituality | `Om` |
+| 7 | `VERAMOCOR` | Humility | `Lum` |
+
+The interaction always asks four questions; it never exits early after a bad
+answer:
+
+1. Print `\nUpon what virtue\ndost thou\nmeditate?\n\n:` and read up to
+   fifteen characters.
+2. Print `\nMantra:` and read up to fifteen characters.
+3. Print the same mantra prompt and read a second time.
+4. Print it and read a third time.
+
+Matching is case-insensitive substring matching: the required virtue or mantra
+may occur anywhere in a longer response. The virtue response and **all three**
+mantra responses must match. Any wrong or empty response permanently fails the
+interaction, although all remaining prompts are still shown. Escape is not a
+cancel result: it erases the current field and leaves that field active until
+Enter submits the remaining text. Escape followed by Enter therefore submits
+an empty, failing response.
+
+After the four responses, the selected adjacent cell must also equal the shrine
+coordinate owned by that same index. Thus any Word of Power beside any ruined
+shrine opens the prompts, but only the Word mapped to that shrine can restore
+it. Spirituality's coordinate row is the off-surface sentinel, so the index-6
+combination cannot restore an ordinarily placed Britannia surface shrine.
+
+| Outcome | Presentation | State | Action result |
+|---|---|---|---|
+| Any empty/wrong response, or coordinate mismatch | Emit one newline after the final mantra input. There is no refusal text and no additional `No effect!` line. The earlier uttered-word line and first flash/rumble remain visible. | No shrine, live-tile, visibility, or Word-seal write. | Acted; consumes the outdoor action. |
+| Success | Print `\n\nThe Shrine is\nrestored!\n`, then run the shared viewport flash/low-rumble a second time. | Clear only the high bit of the indexed saved shrine-ruin byte, preserving its low seven bits; write the adjacent live tile directly from ruined shrine `0x1A` to mystic shrine `0x19`; dirty visibility immediately. The matching Word-of-Power seal byte is unchanged. | Acted; consumes the outdoor action. |
+
+All outcomes are acted because the outer Yell command retains its initialized
+acted result; it ignores the restoration helper's incidental return register.
+The durable ruin-byte array and its high-bit interpretation are specified in
+`formats/saved-gam.md` Section 9.1.
 
 Blackthorn rescue/refuge handling reuses `KARMA.DAT` as verdict text, but
 the Blackthorn overlay does not make the file a numeric karma table and does
@@ -551,23 +606,23 @@ The behaviour described here was derived from the private function and format no
 - The identity of the `+2` thank-you award as a prisoner release on a restraint
   tile rather than a pickpocket, including the outdoor-map variant that clears
   the tile and awards nothing. Source provenance: derived from private analysis
-  note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+  under `u5-decomp/notes/`.
 
 - The corrected gold-payment milestone (sprite-class gate, step-counter
   threshold, nested zero-gold bonus, and the counter's real increment site and
   cadence) and the two conversation control codes that raise and lower the
   shared selector directly — derived from
-  `u5-decomp/notes/talk_group_retrace_2026-08-22.md`,
+  `u5-decomp/notes/`,
   `u5-decomp/functions/TALK_OVL/`, and
-  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
+  `u5-decomp/notes/`.
 - The record-level routing of the two shipped raise-standing runs (both on the
   bonus arm of the introduce-yourself branch, hence once per NPC per savegame),
   the record framing of all eight lower-standing bytes, the factory seed values
   for the standing selector and the step counter, and the census caveat that
   replaced the earlier "only writer in the game" absolutes — derived from
-  `u5-decomp/notes/talk_group_retrace_2026-08-22.md` section 8,
+  `u5-decomp/notes/`,
   `u5-decomp/functions/TALK_OVL/`, and
-  `u5-decomp/formats/saves.md`.
+  `u5-decomp/formats/`.
 
 - The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/` and the local CAST2 shrine-handler trace.
 - The shared shrine/word presentation effect boundary -- low randomized rumble
@@ -583,21 +638,20 @@ The behaviour described here was derived from the private function and format no
   prophecy display, completed branch, active-object suspension, and restore/redraw
   wrapper -- derived from
   `u5-decomp/functions/CAST2_OVL/`.
-- The `KARMA.DAT` six-record tier-verdict layout, the lack of numeric deltas in the file, the Blackthorn five-band selector, and the Lord British-in-disguise camp-event top-band selector for the sixth record — derived from `u5-decomp/formats/data-tables.md` (`KARMA.DAT` section), `u5-decomp/functions/BLCKTHRN_OVL/`, and `u5-decomp/functions/OUTSUBS_OVL/`.
+- The `KARMA.DAT` six-record tier-verdict layout, the lack of numeric deltas in the file, the Blackthorn five-band selector, and the Lord British-in-disguise camp-event top-band selector for the sixth record — derived from private format analysis under `u5-decomp/formats/`, `u5-decomp/functions/BLCKTHRN_OVL/`, and `u5-decomp/functions/OUTSUBS_OVL/`.
 - The save-backed scalar moral-standing selector, shrine standing adjustments,
   Blackthorn rescue selector, Lord British-in-disguise selector, ruled-out
   party-gold high-byte hypothesis, and broader per-virtue storage
-  boundary -- derived from `u5-decomp/formats/saves.md`,
-  `u5-decomp/formats/ds-bss-map.md`,
-  `u5-decomp/notes/system-trace_inventory.md`, the shrine handler,
+  boundary -- derived from `u5-decomp/formats/`,
+  `u5-decomp/notes/`, the shrine handler,
   `u5-decomp/functions/BLCKTHRN_OVL/`, and
   `u5-decomp/functions/OUTSUBS_OVL/`.
-- The ordained / Codex visited bitmasks following the inventory section — derived from `u5-decomp/formats/saves.md` (shrine quest progress region).
-- The eight-virtue ordering, per-virtue mantra and prefix tables — derived from `u5-decomp/formats/data-ovl.md` and the shrine handler note.
+- The ordained / Codex visited bitmasks following the inventory section — derived from private save-format analysis under `u5-decomp/formats/`.
+- The eight-virtue ordering, per-virtue mantra and prefix tables — derived from private data-format analysis under `u5-decomp/formats/` and the shrine handler note.
 - The chargen-time seeding of stat tallies and the lack of avatar-class write — derived from `u5-decomp/functions/FONT_OVL/`.
-- The shop pricing model (not karma-modulated, with arms Intelligence adjustment handled in the shop spec) — derived from `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md` (Karma / reputation interactions section).
+- The shop pricing model (not karma-modulated, with arms Intelligence adjustment handled in the shop spec) — derived from `u5-decomp/functions/SHOPPES_OVL/`.
 - The sage topic/fee/destination/template path, and the absence of a confirmed sage-shop karma selector — derived from `u5-decomp/functions/SHOPPES2_OVL/`.
-- The conversation profanity/default reserved-keyword rebuke and negative karma-write boundary -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`, and cross-checked against `u5-decomp/CORRECTIONS.md`.
+- The conversation profanity/default reserved-keyword rebuke and negative karma-write boundary -- derived from `u5-decomp/functions/TALK_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and private correction analysis at the `u5-decomp/` root.
 - The conversation gold-payment scalar boundary -- derived from
   `u5-decomp/functions/TALK_OVL/`.
 - The TALK moral-standing threshold branch -- derived from
@@ -607,12 +661,17 @@ The behaviour described here was derived from the private function and format no
 - The Get-side object-taking scalar boundaries -- town-family chest debit,
   crop/table-food debit, and borrowed-furniture no-debit behavior -- are
   derived from `u5-decomp/functions/SJOG_OVL/`, and
-  `u5-decomp/notes/system-trace_object-interaction.md`.
+  `u5-decomp/notes/`.
 - The stolen-action warning and no-promoted-standing-writer boundary --
   derived from `u5-decomp/functions/TALK_OVL/`
   and `u5-decomp/functions/TALK_OVL/`,
   with the presentation-sound boundary cross-checked against
   `u5-decomp/functions/ULTIMA_EXE/`.
-- The Blackthorn audience flow's lack of in-overlay karma adjustment and the rescue/refuge `KARMA.DAT` reuse — derived from `u5-decomp/functions/BLCKTHRN_OVL/OVERVIEW.md` and summarized in `systems/blackthorn.md`.
-- The per-companion class assignments and the avatar-as-class-Avatar invariant — derived from `u5-decomp/formats/saves.md` (character roster) and cross-checked against the shrine handler note.
-- The MISCMSG.DAT virtue-aphorism and "failing of virtue" record clusters printed during meditation and certain dialogue branches — derived from `u5-decomp/formats/data-tables.md` (MISCMSG.DAT section, records twelve through twenty-seven).
+- The Blackthorn audience flow's lack of in-overlay karma adjustment and the rescue/refuge `KARMA.DAT` reuse — derived from `u5-decomp/functions/BLCKTHRN_OVL/` and summarized in `systems/blackthorn.md`.
+- The per-companion class assignments and the avatar-as-class-Avatar invariant — derived from private save-format analysis under `u5-decomp/formats/` and cross-checked against the shrine handler note.
+- The MISCMSG.DAT virtue-aphorism and "failing of virtue" record clusters printed during meditation and certain dialogue branches — derived from private data-format analysis under `u5-decomp/formats/`.
+- The Yell-side ruined-shrine mapping, mandatory four-response sequence,
+  substring matching, success/failure presentation, ruin-bit clear, live-tile
+  rewrite, visibility request, unchanged Word seal, and acted result are derived
+  from private analysis under `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
