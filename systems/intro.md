@@ -479,8 +479,14 @@ The loader runs the following sequence:
    to the visible page. The animated caller path performs that transfer as a
    pseudo-random per-pixel dissolve (`display-driver-abi.md` section 9.6); the
    plain caller path copies the rectangle in one step. There is no per-column
-   wipe on either path. The animated path then samples the keyboard once, and a
-   keystroke downgrades the rest of the loader to the plain path.
+   wipe on either path. On the first gated dissolve, the current pixel is
+   copied before each alternating click/input test, and the zero-initialized
+   alternating flag tests visits `1, 3, 5, ...`. A key already pending at
+   entry is therefore noticed after exactly one pixel, `(1,0)`, has moved.
+   The driver's test does not consume it. Immediately after the transfer
+   returns, the animated loader runs the normal nonblocking keyboard reader;
+   that read consumes the same pending key and downgrades the rest of this
+   loader invocation to the plain path.
 5. Select the hidden surface, clear it, and draw records `1`, `2`, `3`, `4` at
    `(16, 0)`, `(16, 50)`, `(16, 100)`, `(16, 150)` respectively — opaque, no
    mirroring, no transparency mask. This lays out the four idle-animation bands
@@ -498,11 +504,17 @@ The loader runs the following sequence:
 Whether the loader takes the animated or the plain path is decided by the same
 "player skipped the title sequence" flag described in section 3: an unskipped
 title sequence gets the animated path, and any earlier keystroke gets the plain
-one. That flag has one further effect. Immediately after the loader returns, an
-unskipped run plays the Return-to-View preview once, before the menu is polled
-for the first time; a skipped run goes straight to the menu. Only this first
-automatic showing is conditional — the two-hundred-pass idle timeout in section
-6 and the explicit `R` command are unaffected.
+one. A keystroke first discovered inside the rectangle dissolve changes only
+the loader's by-value copy of that flag. It skips subtitle ignition and forces
+the instant block copy, but it does **not** change the caller's title-sequence
+skip flag. Immediately after the loader returns, that caller still plays the
+one-shot automatic Return-to-View preview before polling the menu. The aborting
+key has already been consumed by the loader, so it neither aborts this preview
+nor becomes its first menu command. A keystroke detected in an earlier title
+phase is different: it changes the caller's flag, enters this loader plain, and
+suppresses the automatic preview. Only this first automatic showing is
+conditional — the two-hundred-pass idle timeout in section 6 and the explicit
+`R` command are unaffected.
 
 The finished start/menu screen is therefore the `ULTIMA` record-0 logo occupying
 rows `0..60`, the animated subtitle band at rows `65..113`, and the intro menu
@@ -1773,11 +1785,15 @@ preview actors; switch to a new strip section and its fixed caption; run short
 sprite-walk and cell-effect loops; run a fixed wipe/actor-draw beat; run a
 requested number of preview ticks; and repeat blocks of commands. There is no
 wait-for-keypress command: waiting is a side effect of running preview ticks,
-and every tick polls the keyboard once. Any pending key aborts the preview at
-that poll, immediately, abandoning the rest of the tick count the current
-command asked for; the caller then restores the title/menu surface. There is no
-uninterruptible phase and no key with a special meaning. A command-stream
-restart command remains local to the preview and never resumes a saved game.
+and every tick calls the normal nonblocking keyboard reader once. A pending key
+is consumed and normalized there; the preview discards its returned command
+code and uses only the nonzero result as an abort signal. The abort immediately
+abandons the rest of the tick count the current command asked for, and the
+caller restores the title/menu surface. Menu polling then begins with a fresh
+read: the hotkey, arrow, Space, Enter, or Escape that aborted the preview does
+not immediately dispatch in the restored menu. There is no uninterruptible
+phase and no abort key with a special meaning. A command-stream restart command
+remains local to the preview and never resumes a saved game.
 
 Two cell effects have stronger pixel-level contracts than the ordinary preview
 repaint. The open/close effect paints fifteen complete 16-by-16 rasters made by

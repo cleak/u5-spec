@@ -499,9 +499,10 @@ copied exactly once. The original implementation uses a Galois-style LFSR
 indexed by the rectangle's pixel count to select the next visited pixel; the
 visible contract is:
 
-1. Every pixel inside the inclusive rectangle is visited exactly once.
-2. After the entry returns, the front buffer matches the back buffer inside
-   the rectangle.
+1. On uninterrupted completion, every pixel inside the inclusive rectangle is
+   visited exactly once.
+2. After uninterrupted completion, the front buffer matches the back buffer
+   inside the rectangle. An input abort has the partial-transfer rule below.
 3. The visit order is deterministic and reproducible across calls with the
    same rectangle dimensions.
 4. The visit order is not row-major, not column-major, and not a clean spiral;
@@ -511,9 +512,13 @@ visible contract is:
 when the driver image is first loaded and is cleared permanently the first time
 any character is drawn through the driver's fixed-cell glyph entry. Nothing
 ever re-enables it. While the gate is enabled, the dissolve does extra work on
-**every second** visited pixel, and only there: it emits one short percussive
-speaker click and it samples keyboard status. Both the click and the poll sit
-behind the same alternating flag, so neither happens on every pixel. **Earlier
+alternating visited pixels, and only there. The alternating flag starts at
+zero in a freshly loaded driver; each copied pixel toggles it, and the extra
+work runs when the new value is one. The first gated dissolve therefore checks
+visits `1, 3, 5, ...`, not `2, 4, 6, ...`. On each checked visit it emits one
+short percussive speaker click and samples keyboard status. Both the click and
+the poll sit behind the same alternating flag, so neither happens on every
+pixel. **Earlier
 revisions of this section said the speaker effect was per-pixel and that its
 pitch tracked progress through the rectangle; both halves are withdrawn.** The
 click frequency is drawn from a driver-internal scrambling sequence rather than
@@ -521,10 +526,14 @@ rising monotonically, and the width of the range it is drawn from grows as the
 transfer advances, so the effect reads as a scatter of clicks that spreads out
 over the transition rather than a glissando. A pending keystroke aborts the
 call immediately, leaving the rectangle **partly** transferred and the speaker
-silenced. The abort only tests for a pending key; it does not consume it, so
-the keystroke is still queued for whatever the caller reads next. Once the gate
-has been cleared, the dissolve is silent, never polls, and runs to completion
-regardless of input.
+silenced. The four-plane copy of the checked pixel happens before its click and
+status test. Thus a key already pending when the first start/menu dissolve
+begins leaves exactly one pixel transferred before abort: the first visit,
+`(1,0)`. The driver's status test does not consume the key, so it is still
+queued for whatever the caller reads next. The start/menu loader immediately
+uses the normal consuming keyboard reader and removes that same key. Once the
+gate has been cleared, the dissolve is silent, never polls, and runs to
+completion regardless of input.
 
 In practice that makes exactly one dissolve in a normal session interruptible:
 the first start/menu screen reveal, which happens before any menu text has been
@@ -553,11 +562,13 @@ pixel counts `8,16,...,248` it runs one mode-dependent tick, exactly 31 tick
 boundaries, and it does not tick or poll after count 256. In Return-to-View the
 boundary operation is the complete one-budget preview tick: active-object and
 animated-tile advance, intro title tick, actor scatter, revealed-span repaint,
-reveal-cursor update, keyboard-status poll, then — only on a poll miss — one
-BIOS-tick wait and strip-specific ambient sound. A hit aborts before that wait
-and leaves the already-written permutation prefix intact. The preview command
-also bypasses its actor cleanup on this abort, so its two suppression fields
-and the zero/suppression preview-plane pair remain until later replacement.
+reveal-cursor update, one consuming read through the normal keyboard input
+path, then — only when no key was read — one BIOS-tick wait and strip-specific
+ambient sound. A key is consumed and discarded as an abort signal before that
+wait, leaving the already-written permutation prefix intact. The preview
+command also bypasses its actor cleanup on this abort, so its two suppression
+fields and the zero/suppression preview-plane pair remain until later
+replacement.
 The outer saved-surface restore hides the partial raster but does not roll back
 those memory changes. Return-to-View's terrain-versus-overlay source choice is
 specified in `formats/location-dat.md` section 11.
