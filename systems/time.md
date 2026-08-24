@@ -332,7 +332,7 @@ The wraparound segment — the night-time band that crosses midnight from `time[
 
 The selection is computed against the current hour byte at every NPC tick. Because the same hour byte is used by every NPC and is updated by the per-turn cleanup, all NPCs see identical time-of-day for every tick of a given turn — there is no per-NPC clock.
 
-The NPC scheduler itself runs once per turn from the town turn loop (and from one specific time-elapsing command handler that operates outside the normal mode loops); it reads the hour byte fresh each call. The overworld and dungeon mode loops do not invoke the NPC scheduler — there are no scheduled NPCs to advance outdoors or in dungeons — but they do still call the per-turn cleanup, so the hour and the daylight stay accurate when you walk back into town.
+The NPC scheduler itself runs once per ordinary consumed turn from the town turn loop (and from one specific time-elapsing command handler that operates outside the normal mode loops); it reads the hour byte fresh each call. A failed explicit Talk against a Blackthorn guard demand is the sole town result that still advances the one-minute clock but skips this scheduler before entering arrest. The overworld and dungeon mode loops do not invoke the NPC scheduler — there are no scheduled NPCs to advance outdoors or in dungeons — but they do still call the per-turn cleanup, so the hour and the daylight stay accurate when you walk back into town.
 
 The relationship between the time system and NPC schedules is therefore simple: time updates a single shared hour byte; the scheduler reads that byte to pick a waypoint. The scheduler's internal state machine, pathfinding, and waypoint-coordinate tables are described in the NPC-schedule spec.
 

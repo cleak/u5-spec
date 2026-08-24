@@ -78,7 +78,7 @@ Each world mode has its own per-turn loop. The shared structure is a five-step c
 1. **Input.** Block on the input pipeline until a keystroke arrives. The pipeline polls the keyboard, paints the cursor blink, and — when no key is pending — runs one *world tick* of redraw and ambient animator-driven side effects. In-world time and scheduled NPCs freeze during the wait; the idle tick is not a committed turn.
 2. **Pre-dispatch checks.** A short setup step handles meta-state — combat in progress, cursed-by-spell timer — and the scene-byte exit check. If the scene byte changed during the previous turn, the loop returns to the outer loop.
 3. **Dispatch.** Direction codes go to a small per-mode movement table. Letter commands go to the shared command dispatcher, which returns a status word saying whether the action consumed a turn.
-4. **Per-turn epilogue.** When the action consumed a turn, the loop calls the per-turn cleanup helper with the mode's minute increment — two minutes for overworld, one minute elsewhere. Mode-specific work runs after cleanup: town runs the NPC schedule processor; overworld runs random-encounter checks and object-pruning work; dungeon runs dungeon-local turn bookkeeping; combat advances the round counter. **The dungeon loop is the exception to the gating.** Its single cleanup call sits at the top of the next iteration, ahead of the input read and the dispatch, and is not conditioned on the previous command's status word, so a dungeon command the dispatcher reported as "no action" still costs a minute; only the mode-specific post-action pass is gated on that status. See `commands.md` Section 3 and `dungeon-mode.md`.
+4. **Per-turn epilogue.** When the action consumed a turn, the loop calls the per-turn cleanup helper with the mode's minute increment — two minutes for overworld, one minute elsewhere. Mode-specific work runs after cleanup: town normally runs the NPC schedule processor (the explicit-T arrest-cleanup result skips that processor); overworld runs random-encounter checks and object-pruning work; dungeon runs dungeon-local turn bookkeeping; combat advances the round counter. **The dungeon loop is the exception to the gating.** Its single cleanup call sits at the top of the next iteration, ahead of the input read and the dispatch, and is not conditioned on the previous command's status word, so a dungeon command the dispatcher reported as "no action" still costs a minute; only the mode-specific post-action pass is gated on that status. See `commands.md` Section 3 and `dungeon-mode.md`.
 5. **Render.** A redraw if any per-turn work flagged the visibility-dirty flag or moved an animated object. Otherwise the loop reads the next command without painting.
 
 The three exploration loops — town, overworld, dungeon — share one further step, ahead of the input block: a **party-capability check** over the roster. A member counts as able to act when their status is Good or Poisoned. If at least one is able, the turn proceeds normally, and the check also records which member that was for callers that need one able to act. If none is able but at least one is asleep, the loop prints the sleep line and passes the turn without reading a command. If none is able and none is asleep, the loop runs the total-party-defeat sequence specified in `systems/blackthorn.md` Section 7 instead of taking a turn. The check, and the mapping from its three results to those three behaviours, is identical in all three modes; combat has no such check of its own and reaches the defeat sequence only through the loop it returned to.
@@ -94,11 +94,13 @@ Every printable letter that survives the input pipeline goes to a single dispatc
 Many letters are *mode-aware*. A-Attack runs different overlays in overworld, town, and dungeon. K-Klimb has three handlers — one for each non-combat mode. T-Talk runs the conversation engine in town and prints "Funny, no response!" elsewhere. L-Look uses the dungeon's first-person look overlay underground and the world look overlay above. The dispatcher reads the scene byte to pick the branch, then routes to the relevant overlay entry. A few letters are shared — Q save-game, Z-Stats, R-Ready — and route to a single handler whenever they reach this dispatcher. The dispatcher is the one place where the scene byte is consulted at letter-granularity; everywhere else, the active mode loop has already routed by mode.
 
 The dispatcher's return value is a four-member enum: acted, no action, a
-town-only "a conversation happened" value, and a town-only "re-prompt without
+town-only arrest-cleanup value produced by an explicit Talk-triggered
+Blackthorn guard demand that fails, and a town-only "re-prompt without
 advancing the world" value produced when the party keys digits at the
-harpsichord. The overworld and dungeon loops read it as a single boolean; only
-the town loop distinguishes all four. There is no separate global turn flag
-anywhere in the engine — turn cost travels entirely in this value.
+harpsichord. Ordinary conversations use the acted value. The overworld and
+dungeon loops read the result as a single boolean; only the town loop
+distinguishes all four. There is no separate global turn flag anywhere in the
+engine — turn cost travels entirely in this value.
 `commands.md` Section 3 gives the full contract, including the six routes that
 forward an overlay handler's own value.
 
@@ -214,13 +216,13 @@ The behaviour described above was derived by reading the function and format not
 - The shared per-letter command dispatcher and its mode-aware routing — `u5-decomp/functions/ULTIMA_EXE/`.
 - The redraw orchestrator that drives the world tick — `u5-decomp/functions/ULTIMA_EXE/`.
 - The per-turn cleanup that advances time and recomputes daylight — `u5-decomp/functions/ULTIMA_EXE/`.
-- The shared per-turn party-capability check that opens each exploration turn and routes a total-party defeat — `u5-decomp/functions/ULTIMA_EXE/`. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
-- The data-segment layout of the scene byte, time clock, daylight value, and disk-swap state — `u5-decomp/formats/data-ovl.md`.
+- The shared per-turn party-capability check that opens each exploration turn and routes a total-party defeat — `u5-decomp/functions/ULTIMA_EXE/` and private analysis in `u5-decomp/notes/`.
+- The data-segment layout of the scene byte, time clock, daylight value, and disk-swap state — `u5-decomp/formats/`.
 - Disk-prompt state and retry ownership —
   `u5-decomp/functions/ULTIMA_EXE/`, and
   `systems/disk-prompt.md`.
-- The save-image encoding of the scene byte and the resumption rules — `u5-decomp/formats/saves.md`.
-- The lifecycle trace that corrects the scene-byte value set and combat marker semantics — `u5-decomp/notes/critical_state_lifecycles.md`.
+- The save-image encoding of the scene byte and the resumption rules — `u5-decomp/formats/`.
+- The lifecycle trace that corrects the scene-byte value set and combat marker semantics — `u5-decomp/notes/`.
 - The OUTSUBS ownership correction and DNGLOOK/DUNGEON dungeon-cluster
-  cross-checks — `u5-decomp/functions/OUTSUBS_OVL/OVERVIEW.md` and
-  `u5-decomp/notes/full_call_graph.md`.
+  cross-checks — `u5-decomp/functions/OUTSUBS_OVL/` and
+  `u5-decomp/notes/`.
