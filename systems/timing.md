@@ -93,12 +93,12 @@ tick" means one ~55 ms BIOS tick produced by the hardware-tick wait helper.
 | The `a` hold and the finished-composition hold (visible phases 3 and 5) | A bounded poll of up to twenty BIOS ticks each | Nothing is redrawn; each phase holds for about 1.1 s or until a key arrives. |
 | `BRITISH.PTH` signature path | One BIOS tick per 32 consumed path bytes | Thirty-two path bytes (each encoding two nibble-deltas) are walked and painted; a single keyboard poll separates each byte within the chunk. |
 | Start/menu logo reveal | Self-paced inside one driver call, with no delay at all | The pseudo-random per-pixel dissolve of the inclusive rectangle `(0, 0)..(319, 100)` runs to completion in a single driver call. It is not a per-column, per-tick loop, and unlike the two calibrated phases it has no wait of any kind in its inner loop — it transfers one pixel per iteration as fast as the host manages, so on a modern host it is close to instantaneous. |
-| Start/menu subtitle ignition | One calibrated busy wait per restored position, inside the driver | Runs once, on the animated start/menu path only, when the ignition resource is supplied. Self-paced; no BIOS tick. The band is published — and the idle-strip frame counter advanced — once per 128 restored positions, or once per 256 on a host at or below the calibration baseline; the early part of the reveal uses a slightly shorter per-position wait while the speaker effect plays. Two full passes over a `288 x 49` position space. |
+| Start/menu subtitle ignition | One calibrated busy wait per batch publication, inside the driver | Runs once on the animated path; no BIOS tick. Each pass resets a 128-in-bounds-position countdown, changed to 256 when calibration is below 250. A publication first draws the current idle frame, then advances its counter. A speaker-gated publication waits 45 full calibration units; a silent one waits 50, in addition to the burst's own short pitch holds. Ordinary positions have no calibrated wait. Two passes make 110 publications each normally or 55 each at the 256-position cadence; neither pass publishes its 32-position tail. Keyboard status is tested once per nonzero LFSR state after that state's work. See `intro.md` section 5. |
 | Story step-1 rectangle reveal | Self-paced inside one driver call | The pseudo-random per-pixel dissolve of the inclusive rectangle `(40, 86)..(75, 120)` runs to completion in a single driver call. It is not a per-column, per-tick loop; see `intro.md` section 10. |
 | Story `U` slide-show inter-slide pacing | Blocking keyboard wait | Bounded by player input; no wall-clock advancement except the cursor blink loop. |
 | Return-to-View preview tick | One BIOS tick per preview tick | One preview tick advances the animated-tile frame table and active-object animation by one step, fires one title tick, rescatters preview actors, repaints the revealed columns, widens the strip reveal on every second tick, and polls the keyboard once. Commands request a fixed number of these; see `formats/location-dat.md` section 11. |
 | Return-to-View local cell effect | One preview tick between steps | One of the fifteen shimmer steps of an open or close effect. |
-| Return-to-View temporary actor draw | Self-paced inside one driver call | One cell converges to its target tile over a fixed run of dissolve steps, with a keyboard poll roughly every eighth step. Not tick paced. |
+| Return-to-View temporary actor draw | Eight pixel writes between preview ticks | One cell converges through exactly 256 one-pixel writes. After completed counts `8,16,...,248`, exactly 31 times, the wrapper runs one complete preview tick whose keyboard poll may abort; there is no tick or poll after count 256. |
 | Menu idle pump (Return-to-View timeout) | **Two** BIOS ticks per no-key pass, about 110 ms | One menu-idle pass advances. The pass first calls the blinking-cursor input poll, which waits one tick when no key is queued (when a key *is* queued it erases the cursor cell and returns without waiting), and then, still holding no key, calls the title tick, which waits a second tick before advancing the idle strip. The two waits are sequential, so the idle strip advances about every 110 ms and the two-hundred-pass Return-to-View timeout is about 22 seconds of unattended menu, not 11. |
 | Acknowledgement screen, part and close wipes | One BIOS tick per step | One eight-pixel band of the credits page (part) or of the rebuilt menu screen (close) is published and both ornamental pillars advance eight pixels. Eighteen steps each, so about 0.99 s per phase; see `intro.md` section 11.2. |
 | Acknowledgement screen, rise and sink wipes | No wait at all | The pillar slide phases are unpaced: 137 rise steps and 136 sink steps run back to back at draw speed. Any claim that the whole acknowledgement sequence is uniformly tick-paced is wrong. |
@@ -240,41 +240,13 @@ This public description is a cleanroom prose rewrite from private timing-helper
 analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
 or private address tables.
 
-- Boot-time calibration helper and calibrated delay consumers --
-  `u5-decomp/functions/ULTIMA_EXE/`.
-- Calibrated busy waits, hardware-tick waits, and bounded prompt/input waits --
-  `u5-decomp/functions/ULTIMA_EXE/`, and
-  `u5-decomp/functions/ULTIMA_EXE/`.
-- Title-tick helper (one-tick built-in wait, slot-0x69 dispatch) --
-  `u5-decomp/functions/INTRO_OVL/`.
-- `BRITISH.PTH` per-stroke chunking and calibration override --
-  `u5-decomp/functions/INTRO_OVL/`.
-- Menu idle pump --
-  `u5-decomp/functions/INTRO_OVL/`.
-- Start/menu reveal helper and intro slide-loop call sites --
-  `u5-decomp/functions/INTRO_OVL/`,
-  `u5-decomp/functions/EGA_DRV/`, and
-  `u5-decomp/functions/INTRO_OVL/`.
-- Whole-program dissolve caller census, the separation of the entry's two carry
-  paths, and the endgame full-screen fade --
-  `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md`.
-- Title-flourish player, its animation script, the presentation step counts,
-  and the calibrated per-step wait --
-  `u5-decomp/functions/ULTIMA_EXE/`,
-  `u5-decomp/functions/EGA_DRV/`,
-  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`, and
-  `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`
-  (independent re-derivation of the 85-step count and the calibrated wait's
-  shape).
-- Acknowledgement screen pacing --
-  `u5-decomp/functions/INTRO_OVL/`.
-- The per-phase title holds (eighteen ticks plus a bounded poll before the
-  `Presents` frame, bounded twenty-tick polls after the ornament and the
-  finished composition), the un-paced logo dissolve, and the subtitle
-  ignition's per-position wait and publish cadence --
-  `u5-decomp/notes/intro_title_sequence_2026-08-22.md`.
-- Return-to-View preview tick body, per-command tick counts, strip reveal
-  cadence, and the single-cell dissolve poll interval --
-  `u5-decomp/functions/FONT_OVL/`,
-  `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md`, and
-  `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
+The boot calibration, delay, dissolve-wrapper, and input-helper evidence is
+under `u5-decomp/functions/ULTIMA_EXE/`; intro phase ownership, title ticking,
+path pacing, menu pumping, and caller order are under
+`u5-decomp/functions/INTRO_OVL/`; Return-to-View timing is under
+`u5-decomp/functions/FONT_OVL/`; display-entry wait and publication behavior is
+under `u5-decomp/functions/EGA_DRV/`; and the independent title, dissolve,
+subtitle-ignition, acknowledgement, and Return-to-View retraces are under
+`u5-decomp/notes/`. The subtitle ignition's pass counter, corner fixup,
+publication order, poll placement, speaker gate, and two wait branches were
+re-read directly from the shipped EGA driver for this timing contract.

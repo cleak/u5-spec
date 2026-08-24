@@ -516,12 +516,16 @@ by its carry flag on entry. With carry set, and a loaded one-bit-per-pixel
 resource segment supplied, it is not a single frame advance at all: it saves the
 whole hidden surface aside, blanks it, and runs a two-pass masked pseudo-random
 reveal that restores the saved pixels into all four staged bands at once,
-publishing the current band and advancing the frame counter every 128 restored
-positions (256 below the calibration baseline), then restores the saved hidden
-surface and releases its scratch storage. The pass structure, the mask polarity,
-the speaker effect and the abort rule are specified in `intro.md` section 5
-under "Subtitle ignition". Only the carry-clear form is the public frame
-advance.
+publishing the current band and advancing the frame counter every 128 in-bounds
+positions (256 when calibration is below 250). The countdown resets between
+passes; publication draws the current frame before advancing; sound and busy
+waiting happen only at publication boundaries; and keyboard status is tested
+after every nonzero pseudo-random state. A successful pass adds an uncounted
+corner fixup but does not publish its partial tail. The entry finally restores
+the saved hidden surface and releases its scratch storage. The exact pass
+counts, speaker gate, waits, poll order, and abort rule are specified in
+`intro.md` section 5 under "Subtitle ignition". Only the carry-clear form is
+the public frame advance.
 
 The animation advances only when intro or cutscene code requests the title
 tick. It runs once after the start/menu screen is drawn, once for each no-key
@@ -742,75 +746,15 @@ This spec is a cleanroom prose rewrite from private analysis notes. It omits
 assembly, decompiled code, raw jump tables, driver binary bytes, and private
 addresses.
 
-- Driver selection and load sequence:
-  `u5-decomp/functions/ULTIMA_EXE/`.
-- The title-tick entry's slot-to-frame mapping and free-running counter, its
-  carry-set two-pass masked band reveal, the filled-rectangle entry's honouring
-  of the descriptor render target, and the single-plane masked publish that
-  gives the publisher flourish its own ink:
-  `u5-decomp/notes/intro_title_sequence_2026-08-22.md` and
-  `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md`.
-- Shared game-screen frame — zone layout, deterministic paint, absence of any
-  gameplay-state dependency, and the correction that the frame is common to all
-  gameplay modes rather than combat-specific:
-  `u5-decomp/functions/ULTIMA_EXE/` (the note file
-  keeps its original filename; its contents were corrected on 2026-05-24) and
-  `u5-decomp/functions/INTRO_OVL/`.
-- Source provenance: the frame's three-phase paint order, the eight filled
-  rectangles, the three rounded-corner glyph cells, the four rule polylines, the
-  filled-versus-visible overpaint relationship, the two chrome pens and their
-  place in the user-interface colour table, the bracket end-cap composite, and
-  the four chrome-repaint regions are derived from private analysis note
-  `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked
-  against a fresh local re-read of the shipped executable and shared data
-  overlay.
-- EGA dispatch ABI, slot inventory, rectangle fill, packed-to-planar archive
-  preparation, 16-by-16 tile blit, and 8-by-8 glyph blit:
-  `u5-decomp/formats/ega-driver.md` and the `u5-decomp/functions/EGA_DRV/`
-  notes.
-- Driver-to-asset-family selection, the two user-interface colour sets, the
-  per-driver framebuffer shapes, the per-driver title-band geometry, and the
-  status of the packed-to-planar preparation entry in each family:
-  `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md`,
-  `u5-decomp/formats/cga-driver.md`, `u5-decomp/formats/tandy-driver.md`,
-  `u5-decomp/formats/hercules-driver.md`, and
-  `u5-decomp/functions/INTRO_OVL/`.
-- Text descriptor initialization, cell rendering, rectangle conversion, and
-  scroll/clear dispatch:
-  `u5-decomp/functions/ULTIMA_EXE/`, and
-  `u5-decomp/functions/ULTIMA_EXE/`.
-- Pixel-rectangle normalization and bitmap draw dispatch:
-  `u5-decomp/functions/ULTIMA_EXE/`, plus
-  fresh local rectangle-normalization verification.
-- Redraw, animation, and frame-presentation ordering:
-  `u5-decomp/functions/ULTIMA_EXE/`.
-- Combat-exit tile-graphics restoration dispatch:
-  `u5-decomp/functions/ULTIMA_EXE/`, and
-  `u5-decomp/formats/ega-driver.md`.
-- Title display tick, intro call-site cadence, driver-side frame-counter
-  evidence, the identification of the four idle frames as `ULTIMA` archive
-  records `1..4` and of their 50-row staging pitch in the back buffer, and
-  signature delay/poll separation:
-  `u5-decomp/functions/INTRO_OVL/`,
-  `u5-decomp/functions/EGA_DRV/`,
-  `u5-decomp/functions/INTRO_OVL/`,
-  `u5-decomp/functions/FLAMES_OVL/`,
-  `u5-decomp/formats/ega-driver.md`, and
-  `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md`.
-- Story panel draw ordering and the local rectangle transition:
-  `u5-decomp/functions/INTRO_OVL/` and fresh
-  local rectangle-transition helper analysis.
-- Return-to-View preview ownership of `MISCMAPS.DAT` map strips, command
-  stream, actor draw scheduling, and effect steps:
-  `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper
-  analysis.
-- Return-to-View strip orientation, framebuffer origin and cell size, per-tick
-  repaint policy, and centre-outward column reveal:
-  `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and
-  `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
-- Rectangle-dissolve abort gate and its speaker effect:
-  `u5-decomp/notes/rect_dissolve_abort_and_sound_2026-08-22.md`.
-- Whole-program rectangle-dissolve caller census, the separation of the entry's
-  two carry paths, the fill-then-dissolve fade idiom, and the correction that
-  the clipped rectangle fill is render-target aware:
-  `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md`.
+The driver loader, text/display wrappers, rectangle normalization, redraw
+ordering, and combat restoration evidence is under
+`u5-decomp/functions/ULTIMA_EXE/`. Intro composition, title/menu caller order,
+story transitions, screen chrome, and menu cadence are under
+`u5-decomp/functions/INTRO_OVL/`; Return-to-View rendering is under
+`u5-decomp/functions/FONT_OVL/`; display-entry bodies are under
+`u5-decomp/functions/EGA_DRV/` and `u5-decomp/functions/FLAMES_OVL/`; and the
+driver inventories and asset-family evidence are under `u5-decomp/formats/`.
+Independent title, subtitle-ignition, game-screen, Return-to-View, dissolve,
+and driver-family retraces are under `u5-decomp/notes/`. The subtitle ignition's
+pass reset, corner fixup, batch publication, frame order, keyboard poll, sound
+gate, and calibrated waits were re-read directly from the shipped EGA driver.
