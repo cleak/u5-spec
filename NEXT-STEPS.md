@@ -20,7 +20,7 @@ A durable handoff document for resuming specification work. Updated after each m
 
 ## Current state — 2026-08-22
 
-The engine issue queue is empty (eighty-three filed, eighty-three closed). The
+The engine issue queue is empty (ninety-six filed, ninety-six closed). The
 spec now carries every contract the clean engine has asked for, including the
 intro title/menu sequence, the gameplay screen frame and panel layout, the
 per-scene base floor-page table, command echo and dungeon presentation, the
