@@ -574,7 +574,7 @@ day.
 | Arms `B` branch | Resident `Buy` echo and resident affirmation | Affirmation draws uniform `0..3` only after `B` is accepted | Renders the current stock list; Space or Escape exits the buy list; letters outside the displayed stock count are ignored without a refusal bark | No mutation until an item confirmation passes |
 | Arms buy quote | Deterministic `SHOPPE.DAT` record from the selected equipment id; mapping is published in Section 8.1 | Selected immediately after a valid stock letter is accepted | Renders the quote and a resident confirmation prompt; `N` declines and returns without a fresh quote, other non-accepted keys keep waiting at the same prompt | No mutation before confirmation, cap check, and affordability check |
 | Arms buy confirmation | Resident prompt chosen from four variants | Uniform `0..3` after the deterministic item quote | `N` prints the resident decline echo and returns. Counter-cap refusal prints a fixed resident refusal and waits for a key. Short funds prints one fresh resident no-credit bark from a four-entry pool and exits the shop flow | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and then increments the equipment counter or fills arrows/quarrels to `99` |
-| Arms `S` branch | Resident/menu literals and deterministic sell-back quote text | Selection is driven by the carried item being browsed | Empty inventory, unsellable items, and excluded ammunition are refused without changing inventory; accepted `N` responses leave the selected item unchanged | Successful sale adds gold and decrements the carried counter |
+| Arms `S` branch | Resident/menu literals plus an eight-record sell-back quote pool | Initial, continuation, and ordinary local-goodbye lines each draw uniformly from separate four-line pools; an ordinary sellable selection draws uniformly from `SHOPPE.DAT` records `49..56` | Empty inventory is refused before the panel opens. Zero-price and ammunition rows remain visible but are refused when selected; accepted `N` responses leave the selected item unchanged | Successful sale adds gold and decrements the carried counter |
 | Guildmaster entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the guild stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted stock purchase |
 | Reagent-vendor entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the reagent stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted reagent purchase |
 | Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
@@ -592,7 +592,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Arms entry | Resident/tokenized shop greeting, resident shopkeeper-intro literal, two-entry resident long-greeting pool, then a resident closing quote/space | Appends to the inherited conversation window; no shop-local clear | No explicit shop cursor setter; output advances from the inherited cursor | Waits once after the first greeting, then waits for `B`, `S`, Space, or another exit key |
 | Arms buy stock list | Resident `Buy` echo, four-entry resident affirmation pool, four-entry resident stock-call pool, current stock item names | Appends after the entry transcript | Natural text advance only | Invalid stock letters leave the stock list visible and keep waiting; they do not redraw the list or consume a random draw |
 | Arms item quote and confirmation | Deterministic `SHOPPE.DAT` quote by equipment id, then one of four resident confirmation prompts | Appends after the stock list | Natural text advance only | Only `Y` and `N` advance. Other keys leave the quote/prompt visible and do not redraw or consume a random draw |
-| Arms sell browser | Resident sell-side literals plus deterministic sell-back quote records for the browsed carried item | Installs its own framed side panel in text window `1` (geometry below), then restores window `2` | Fixed panel cursor origins while the panel is up; natural text advance afterwards | Empty, unsellable, and declined items return through the browser without a fresh shared bark |
+| Arms sell browser | Resident sell-side literals plus `SHOPPE.DAT` sell-back records `49..56` | Installs its own framed side panel in text window `1`; each row redraw restores window `2`, leaving the panel pixels visible while quote text appends in the conversation window | Fixed panel cursor origins while the panel is up; one command-key wait per browser attempt, and a Y/N-only wait for an ordinary quote | Invalid browser keys do nothing. Declines and zero-price refusals redraw the page and continue; ammunition refusal terminates the browser |
 | Guild entry | Shared non-arms preamble row, resident acceptance/refusal literals, then guild stock menu | Appends; no shop-local clear | Natural text advance only | `Y`, `N`, and Space are accepted. Other keys leave the prompt visible and keep polling |
 | Reagent entry | Shared non-arms preamble row, resident acceptance/refusal literals, then reagent stock menu | Appends; no shop-local clear | Natural text advance only | Same as guild entry; ignored keys do not redraw or consume a random draw |
 | Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service choices re-prompt from the service menu rather than selecting a new shared preamble |
@@ -647,8 +647,9 @@ window `2`.
   `(24, 1)..(38, 6)` and clears it, widens to `(24, 1)..(39, 9)` for the frame,
   draws row borders at window-local `(0, row)` and `(14, row)` over rows
   `1..4`, and pages the party's carried equipment counters inside the panel.
-  It prints no heading or subheading. When the browser finishes it restores
-  window `2` before the ordinary confirm/prompt path resumes.
+  It prints no heading or subheading inside the frame. Each row render restores
+  window `2` before the ordinary quote/prompt path resumes; the frame remains
+  visible until browser teardown repaints the normal stats panel.
 
 Both use the same `(24, 1)..(38, N)` clear / `(24, 1)..(39, 9)` frame idiom that
 the character-sheet and inventory panels elsewhere in the game use, so a clean
@@ -861,10 +862,12 @@ After a randomised greeting ("Hail, friend! Wouldst thou Buy or Sell?"), the pla
   affordability check, deducts gold, increments the shared equipment counter,
   and re-prompts.
 - `S` (Sell) — the overlay opens an inventory browser over the party's carried
-  equipment counters. It skips empty counters, refuses item ids the arms shop
-  does not buy, quotes the shop's offer, asks for `Y`/`N`, and on acceptance
-  adds gold and decrements the selected equipment counter. Used ammunition is
-  explicitly refused rather than bought back.
+  equipment counters. It omits empty counters but displays every nonempty id,
+  including zero-price rows and ammunition. Selection refuses rows the arms
+  shop does not buy; an ordinary sellable row chooses one of eight offer
+  records, asks for `Y`/`N`, and on acceptance adds gold and decrements the
+  selected equipment counter. Used ammunition is explicitly refused rather
+  than bought back.
 - *Space* — Exit with a randomised farewell. Any other key simply re-polls the
   Buy/Sell prompt without output.
 
@@ -873,8 +876,9 @@ buy or sell repeatedly without leaving it. Leaving a sub-menu, however, ends
 the visit: control goes to the farewell rather than back to the Buy/Sell
 prompt. Only a key that is neither `B`, `S`, nor an exit key re-polls that
 prompt. The buy side refuses capped counters and insufficient gold without
-changing inventory. The sell side refuses empty, unsellable, or explicitly
-excluded equipment without changing inventory.
+changing inventory. Empty equipment counters never become selectable sell
+rows; zero-price and ammunition rows are selectable but their refusal paths
+leave inventory unchanged.
 
 The stock arms buy rows are scene-local and use the equipment item-id order in
 `catalogs/item-list.md`. `0xFF` is the end-of-row marker. `0x00` is not empty in
@@ -967,6 +971,126 @@ menu-name source as the other equipment ids and quote record `8`.
 
 The `S` (Sell) branch is the one arms path that owns its own screen furniture;
 its side-panel geometry is specified in Section 8.A.
+
+#### Arms sell-browser interaction
+
+The sell browser is a four-row, cursor-driven view of the party's shared
+equipment counters. It is not a letter menu and it does not filter its rows by
+the current shop's stock.
+
+**Entry and traversal.** If all forty-eight equipment counters are zero, the
+browser prints the fixed nothing-to-sell refusal and returns without drawing
+the panel or consuming a random draw. Otherwise it selects the lowest-numbered
+nonzero equipment id. That id is both the initial selection and the first item
+of the first page, so the first highlighted row is window-local row `1`.
+
+Rows traverse equipment ids `0..47` in ascending order. A zero counter is
+omitted; every nonzero counter is included. In particular, a zero base price
+does not hide a row, and Arrows and Quarrels remain visible. The short label for
+each id is the always-short row in `catalogs/item-list.md` Section 5.1.2, not
+the buy list's conditional-name choice.
+
+At most four nonzero ids are visible. Moving beyond the first or fourth visible
+row scrolls the page by one item; a four-step movement scrolls as needed to keep
+the resulting selection visible. Home and End construct the first and last
+page directly. Forward movement at the final id stays on that id. Backward
+movement at the first id normally returns to the first id rather than wrapping.
+
+There is one shipped compatibility defect at that backward boundary. The
+failed predecessor temporarily aliases the Wooden/Sandalwood Box flag as if it
+were an equipment counter. Before the box is acquired, the following redraw
+repairs the selection to the first real item. After the box is acquired, the
+same input can leave the current page with no highlighted row and an invalid
+pseudo-selection. A safe implementation may clamp at the first row; reproduce
+the invalid state only when strict bug compatibility is required.
+
+**Accepted keys.** The browser accepts the following normalized command keys:
+
+| Key | Browser action |
+|---|---|
+| Enter | Select the highlighted item. |
+| Space | Select the highlighted item. Space does **not** exit this browser. |
+| Escape | Exit the browser. |
+| Left or Up | Move to the previous nonzero equipment id. |
+| Right or Down | Move to the next nonzero equipment id. |
+| Home or keypad Northwest | Jump to the first nonzero id. |
+| End or keypad Southwest | Jump to the last nonzero id and show a final page of at most four rows. |
+| Page Up or keypad Northeast | Attempt four previous-item moves. |
+| Page Down or keypad Southeast | Attempt four next-item moves. |
+
+Every other key is ignored. It performs no redraw, prints nothing, and consumes
+no random draw. Each accepted movement redraws the row area and page indicator,
+then waits for the next command key.
+
+**Row cells.** Item rows begin at window-local `(1, 1)` and continue through
+`(1, 4)`. Under normal stock limits, each row consists of:
+
+1. the carried quantity, right-justified to a minimum width of two cells with
+   spaces;
+2. a literal hyphen;
+3. the fixed short equipment label; and
+4. enough spaces to leave the next cursor column at `14`.
+
+There is no menu letter and no separate arrow-shaped selection character. The
+selected row's entire interior is inverse video. Content occupies local columns
+`1..13`; the left and right frame rules remain at columns `0` and `14`.
+Unfilled tail rows are overwritten with thirteen spaces. As an inherited
+save-editor edge case, a carried count of `255` suppresses the quantity and
+hyphen for that row; ordinary gameplay equipment grants cap the value at `99`.
+
+The vertical row rules are identical ordinary frame glyphs. They are not the
+shared two-colour triangular bracket-cap primitive, so neither one has a facing
+direction. A separate stats-ribbon label reading `Arms` is painted immediately
+before the side panel; that label does use the shared caps, with the
+right-pointing opening cap on its left and the left-pointing closing cap on its
+right. The panel's own top and bottom edges use the ordinary frame-glyph family.
+
+The page-status cell is window-local `(6, 6)`. It shows no arrow, down only, up
+only, or both according to whether a nonzero item exists before the page start
+and after the last visible row. It is repainted with every row redraw.
+
+**Selection, refusal, and continuation.** A row render restores active text
+window `2` before returning to the input loop. Enter or Space therefore renders
+the offer or refusal in the conversation window while the side panel remains
+visibly present; selection does not first erase or close the panel.
+
+The selected id then follows one of three paths:
+
+| Selected row | Result | Browser continuation |
+|---|---|---|
+| Arrows or Quarrels | Print the fixed used-ammunition refusal; do not change inventory or gold | Terminate immediately. Do not rebuild the panel or draw the browser's local goodbye line. |
+| Any zero-base-price id (`8`, `15`, `35`, `39`, `40`, `41`, or `47`) | Print the fixed cannot-buy refusal; do not ask Y/N and do not change state | If any equipment remains, redraw the same selection and page, choose a continuation prompt, and resume browsing. |
+| Any other nonzero id | Compute the Section 6 offer, choose one `SHOPPE.DAT` offer record, append the resident `Deal?` prompt, and wait for Y or N | `N` preserves the counter and selection. `Y` adds the offer to gold and subtracts one from the counter. If equipment remains, redraw and resume. |
+
+The quote wait accepts only uppercase `Y` or `N`; other keys leave the quote
+visible and re-poll without a redraw or random draw. Both accepted answers
+redraw the stats-panel gold field. A decline, a zero-price refusal, or a sale
+whose counter remains nonzero rebuilds the same page and selection. If a sale
+removes the page's first item, selection moves to the preceding nonzero id when
+one exists, otherwise to the first remaining id. If the removed item was not
+the page start, selection moves to the following nonzero id when one exists,
+otherwise to the last remaining id. The page is normalized around that choice.
+The frame is not reconstructed during these continuations—only its row
+interiors and page indicator are repainted.
+
+Escape or depletion repaints the complete ordinary stats panel and restores its
+plain top ribbon before browser-local conversation text continues. The outer
+arms `S` branch uses the silent shared-farewell outcome, so the random lines
+listed below are browser-owned; no second shop-wide farewell bark follows.
+
+**Random draws and waits.** The browser's draws occur only at these points:
+
+| Flow point | Draw |
+|---|---|
+| Nonempty entry, before panel construction | Uniform `0..3` over `Which item wouldst thou like to sell?`, `What dost thou wish to sell?`, `Show me what ye got...`, and `What dost thou have for me to buy?` |
+| Ordinary sellable selection, after offer substitutions are prepared | Uniform `0..7` over `SHOPPE.DAT` records `49..56` |
+| Decline, zero-price refusal, or completed sale when equipment remains | Uniform `0..3` over `What else can ye offer me?`, `What else hath ye to sell?`, `What else doth thou wish to sell?`, and `What other arms wilt thou sell?` |
+| Escape or depletion on the ordinary zero-return path | Uniform `0..3` over `Good-bye...`, `Mayhap another time...`, `Godspeed...`, and `Fare thee well...` |
+
+There is no draw for movement, row rendering, empty inventory, a zero-price
+refusal, or the ammunition refusal itself. The browser performs no free-standing
+"press any key" pause: its waits are the repeated command-key read and, after an
+ordinary sellable selection, the Y/N-only quote read.
 
 ### 8.2 Guildmaster (magic shop)
 
@@ -1528,9 +1652,11 @@ fixed.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- `u5-decomp/functions/SHOPPES_OVL/` — weaponsmith / armourer, guildmaster, healer /
-  sanctum, herbalist, horse-trader sale, and post-transaction surcharge
-  behavior.
+- `u5-decomp/functions/SHOPPES_OVL/` and
+  `u5-decomp/functions/ZSTATS_OVL/` — weaponsmith / armourer behavior,
+  including the shared equipment scanners and row renderer used by the sell
+  browser; guildmaster, healer / sanctum, herbalist, horse-trader sale, and
+  post-transaction surcharge behavior.
 - `u5-decomp/functions/SHOPPES2_OVL/` — tavernkeeper, ship broker,
   sage, and the correction that the traced `F`/`S` pending-action flow belongs
   to shipwright sales rather than a provisions merchant.
