@@ -679,7 +679,10 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 **End-of-round exit checks.** Three flags control exit:
 
 - **Defeat flag**: the entire party is dead, asleep, or fled. Result is "defeat".
-- **Leave-combat flag**: the out-of-arena leave helper has accepted, a spell or tile effect has ended combat, or the combat-only Escape cleanup path has accepted after no live foes remain. On the *first* such trigger per fight, the exit-message string is printed; subsequent reads pass through silently.
+- **Leave-combat flag**: the out-of-arena leave helper has accepted, a spell or
+  tile effect has ended combat, or the combat-only Escape cleanup path has
+  accepted. The one-shot exit narration and Escape's table cleanup are separate
+  operations; Section 14 gives their exact ordering and text.
 - **Exhausted slots** (loop reached slot 32): start a new round.
 
 When defeat or leave-combat fires, the round loop returns "1" (victory/escape) or "0" (defeat).
@@ -753,7 +756,17 @@ The combat command set consists of letter keys A-Z plus a small set of control c
 
 **Shape A — the labelled prompt with a live-actor gate.** The helper prints the verb label, then requires that the acting combatant is still alive. A dead actor gets the short "Can't!" refusal and the prompt is re-issued at no cost. A live actor's command is handed to one shared world-mode delegate chosen by the letter, and the combatant's action ends. Six letters use this shape: `G` Get, `J` Jimmy, `O` Open, `R` Ready, `S` Search and `U` Use. Their delegates are the same handlers the world modes use — the shared tile-interaction overlay for Get/Jimmy/Open/Search, the status/equipment overlay for Ready, and the item-use handler for Use.
 
-**Shape B — the shared "that verb means nothing here" responder.** The responder prints the verb label, appends one of three fixed tails (" what?", "-Not here", or "-Funny, no response!"), plays a two-tone refusal beep, and always re-prompts without cost. Twelve letters use it: `B` Board and `X` X-it take the first tail; `E` Enter, `F` Fire, `H` Hole up, `I` Ignite, `L` Look, `M` Mix, `N` New order, `Q` Quit and `V` View take the second; `T` Talk takes the third. `D` and `W` bypass the responder and print their own `D-What?` / `W-What?`, with the same no-cost re-prompt.
+**Shape B — the shared "that verb means nothing here" responder.** The
+responder prints a bare verb label, appends one of three exact tails, then emits
+the newline and plays a two-tone refusal beep. The tails contain no newline of
+their own: `" what?"` (including its leading space), `"-Not here"` (no
+exclamation point), and `"-Funny, no response!"`. Twelve letters use it: `B`
+Board and `X` X-it take the first tail and therefore produce exactly
+`Board what?` and `X-it what?`; `E` Enter, `F` Fire, `H` Hole up, `I` Ignite,
+`L` Look, `M` Mix, `N` New order, `Q` Quit and `V` View take the second; `T`
+Talk takes the third. The responder always re-prompts without cost. `D` and
+`W` bypass it and print their own `D-What?` / `W-What?`, with the same no-cost
+re-prompt.
 
 The remaining letters call their targets directly, as the table below records.
 
@@ -816,6 +829,24 @@ it is clear, that combatant's action is over. Every accepted verb therefore
 costs the acting combatant its action, and every refusal is free — including a
 refused Ready, whose refusal is indistinguishable from success to everything
 outside the equipment overlay.
+
+**Where the free re-prompt occurs.** A raised re-prompt flag branches straight
+back to the input read inside the same actor dispatch. It occurs before the
+committed-action maintenance tail and before control returns to the round
+walker. Shape-B `Q`, `X`, and the other free refusals therefore do **not** run
+the acting slot's worn-ring hook, do not age the shared timed-magic counter, and
+do not run the remaining post-action presentation/effect helpers. The same
+actor is simply asked for another key.
+
+For a committed non-digit action, that tail does run. If the acting descriptor
+is an eligible party-side slot, it re-applies that member's equipped ring hook:
+Ring of Invisibility reasserts the hidden presentation, while Ring of
+Regeneration invokes the party-wide regeneration roll described in Section 12.
+This is not the ring-destruction roll; the `A ring has vanished!` check is
+encounter-entry-only. Digits `0` through `6` use their selection/UI path and
+also skip this tail. Accepted Escape reaches the committed path only after its
+handler has cleared the combat descriptors, so the later ring hook has no
+eligible acting slot and does nothing.
 
 **Diagonal input and the targeting cursor.** Combat is the one place in the game
 that accepts eight-way input, and it is not movement. While combat asks the
@@ -1292,34 +1323,37 @@ paths, but they are inventory stock, not combat effect timers. Do not
 model the carried item counter band as a sleep/charm counter table.
 
 **Equipped magic rings.** Combat reads the party equipment slots directly for
-two ring ids. A party member wearing Ring of Invisibility is marked with the
-same hidden/suppressed combat flag that the target picker rejects, and the
-linked visual/effect byte is changed while the ring is active; removing that
-ring in combat clears the hidden flag. A party member wearing Ring of
-Regeneration gets one regeneration tick: a 1-in-8 chance to recover 1 HP,
-capped by that character's maximum HP.
+two ring ids. The shared worn-ring hook marks a Ring of Invisibility wearer
+with the hidden/suppressed flag rejected by the target picker and changes the
+linked presentation byte. On a Ring of Regeneration wearer, the hook invokes a
+party-wide pass: every active non-dead member wearing that ring independently
+has a 1-in-8 chance to recover 1 HP, capped at maximum HP.
 
-**Both ring behaviours are seating-time, not per-round.** Every one of these
-reads happens inside the per-encounter setup pass that seats the party
-(Section 5), once per member per fight, and nothing in the round loop repeats
-them. The 1-in-16 check that destroys a worn Ring of Invisibility or Ring of
-Regeneration — printing the ring-vanish feedback, playing the short timed
+**Ring effects run at seating and after committed non-digit actions.** During
+encounter setup, each living, awake party member is seated and sent through the
+worn-ring hook. Later, the combat parser's committed-action tail sends its
+acting party-side slot through the same hook. A free refusal branches back to
+input before this tail (Section 8), so repeatedly pressing `Q` or `X` cannot
+farm regeneration rolls or refresh an effect boundary. This is action-tail
+cadence, not an unconditional once-per-round sweep.
+
+The separate 1-in-16 check that destroys a worn Ring of Invisibility or Ring
+of Regeneration — printing `A ring has vanished!`, playing the short timed
 sound, and clearing the first matching ring from that character's readied
-equipment slots — runs in the same pass, immediately before the member is
-placed, so it can take the ring away before its effect is ever applied. An
-earlier revision of this section described a *separate* removal check inside
-the combat round loop and a per-round regeneration pass; that is withdrawn.
-There is one check and one regeneration tick per fight, both at entry.
+equipment slots — is **encounter-entry-only**. It runs immediately before that
+member is placed, so it can remove the ring before the seating-time effect hook.
+It is not repeated by committed actions or by the round loop.
 
 **Active-effect display counter.** Protection, Quickness, Mass Charm, and
 Negate Magic install a single shared visible tag/counter rather than writing a
 per-character status byte. A resident update helper ages this counter: zero and
-255 are inert, other values decrement when that helper runs, and expiry clears
-the visible tag and requests a redraw. This counter is not the time system's
+255 are inert, other values decrement when the committed non-digit action tail
+runs, and expiry clears the visible tag and requests a redraw. One early
+active-player denial route enters the same maintenance endpoint directly. This
+counter is not the time system's
 torch/light-spell counter; do not model it as one decrement per minute or per
-full actor-table sweep. The traced combat-side aging endpoint is the
-active-player/selection cleanup path; Negate Time's `T` tag uses the same counter
-shape, while the per-turn clock cleanup only observes `T` to skip minute
+full actor-table sweep. Negate Time's `T` tag uses the same counter shape, while
+the per-turn clock cleanup only observes `T` to skip minute
 advancement. Inside an arena the `T` tag has one further consumer of its own:
 the automatic actor driver returns immediately when it is set, so every
 self-acting actor's turn is skipped for as long as the tag lasts (Section 9).
@@ -1383,11 +1417,35 @@ character.
 
 Three exit conditions end combat; each sets one of the round-loop's flag bytes, and the per-round epilogue checks them.
 
-**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round-loop exits with result code "1". The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a post-combat award. The traced SJOG calls reached from COMBAT are command-time delegates and per-round helpers, not an after-victory loot-conversion pass. Ordinary terrain-trigger removal happens after the framer, in the resident caller that invokes the post-combat object reconciler for the original trigger slot. This settles the combat-exit boundary: ordinary attack/spell experience can be credited before the framer restores the world, the original trigger slot can be cleared or rewritten by the caller-side reconciler, and any body-like food/gold result belongs to later Search/Get interaction with that rewritten slot. Arbitrary combat corpse markers, party gold, karma, and any victory bonus are not automatic framer outputs. No separate victory message prints — the death-tile transitions tell the story.
+**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round loop prints the resident combat string `VICTORY!` through the ordinary string printer. The stored string has one leading and one trailing newline, and a one-shot guard prevents a duplicate announcement. The loop exits with result code "1" after cleanup. The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a post-combat award. The traced SJOG calls reached from COMBAT are command-time delegates and per-round helpers, not an after-victory loot-conversion pass. Ordinary terrain-trigger removal happens after the framer, in the resident caller that invokes the post-combat object reconciler for the original trigger slot. This settles the combat-exit boundary: ordinary attack/spell experience can be credited before the framer restores the world, the original trigger slot can be cleared or rewritten by the caller-side reconciler, and any body-like food/gold result belongs to later Search/Get interaction with that rewritten slot. Arbitrary combat corpse markers, party gold, karma, and any victory bonus are not automatic framer outputs.
 
-**Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine sets the defeat flag and the round loop returns "0". There is no command that reaches the defeat exit deliberately: an earlier revision of this section described combat `Q` as an abandon-party command that did so, and that is withdrawn — the combat parser refuses `Q` like the other meaningless verbs (Section 8). What happens next is not decided by combat: control returns to the exploration loop that framed the fight, and that loop's next per-turn party-capability check sees the result. A wipe with nobody left able to act and nobody asleep runs the rescue/refuge cinematic specified in `systems/blackthorn.md` Section 7 — which restores the party and resumes play at Lord British's Castle, so an ordinary wipe is not a terminal game-over. A wipe that leaves a sleeping member instead simply passes turns until someone wakes or dies.
+**Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine prints `BATTLE IS LOST!` from the same resident combat string pool and the round loop returns "0". That stored string begins with a newline and has no trailing newline before its terminator. There is no command that reaches the defeat exit deliberately: an earlier revision of this section described combat `Q` as an abandon-party command that did so, and that is withdrawn — the combat parser refuses `Q` like the other meaningless verbs (Section 8). What happens next is not decided by combat: control returns to the exploration loop that framed the fight, and that loop's next per-turn party-capability check sees the result. A wipe with nobody left able to act and nobody asleep runs the rescue/refuge cinematic specified in `systems/blackthorn.md` Section 7 — which restores the party and resumes play at Lord British's Castle, so an ordinary wipe is not a terminal game-over. A wipe that leaves a sleeping member instead simply passes turns until someone wakes or dies.
 
-**Escape.** Moving outside the arena reaches the out-of-bounds combat leave helper. Ship-style fights can refuse the attempt, and constrained encounters require party exits to share the established exit direction. Once the helper accepts, it sets the leave-combat path; the first accepted trigger per fight prints the exit presentation and the round loop exits with code "1". Surviving party members and monsters are not given a chance to land final blows once that helper accepts. The Escape key is different: its escape handler scans for active-not-dead foes and refuses while any remain, so it is a cleanup/victory exit path rather than the ordinary flee-with-enemies-live path. The `X` letter does not reach that handler at all — the combat parser refuses it outright (Section 8).
+**Escape.** Moving outside the arena reaches the out-of-bounds combat leave helper. Ship-style fights can refuse the attempt, and constrained encounters require party exits to share the established exit direction. Once the helper accepts, it sets the leave-combat path; the first accepted trigger per fight prints the exit presentation and the round loop exits with code "1". Surviving party members and monsters are not given a chance to land final blows once that helper accepts.
+
+The Escape key uses a distinct cleanup handler and always prints the bare prefix
+`Escape` first. Contrary to the earlier contract, its table scan does **not**
+look for foes. It looks for any party-side descriptor whose marked-dead bit is
+clear. Its exact branches are:
+
+- If such a party-side descriptor exists and the encounter mode's high bit is
+  set, append `-Not here!` plus a newline and re-prompt the same actor at no
+  cost. The complete line is `Escape-Not here!`.
+- If such a descriptor exists in an ordinary mode and the one-shot exit
+  announcement has not yet happened, append `-Not yet!` plus a newline and
+  re-prompt at no cost. The complete line is `Escape-Not yet!`.
+- If the ordinary-mode exit announcement has already happened, or if no
+  qualifying party-side descriptor exists, accept cleanup. Append the single
+  character `!`, producing `Escape!`; this handler appends no newline after it.
+
+Accepted cleanup sweeps the thirty-two combat descriptors and the thirty-two
+combat-instance active-object records, advancing one world tick after each
+occupied slot it clears. It then plays a rising PC-speaker glissando and marks
+the stats panel for repaint. This presentation is separate from the round
+loop's `VICTORY!` / `BATTLE IS LOST!` narration above. The later committed-action
+ring hook sees the already-cleared acting descriptor and is therefore inert.
+The `X` letter does not reach this handler at all — the combat parser produces
+`X-it what?` and re-prompts (Section 8).
 
 The framer's restore phase runs the same way for all three — the only difference is the result code returned. Combat time advances from the round loop's round-counter wrap, which fires the per-turn cleanup with a one-minute increment; a separate one-minute exit increment is not part of the currently traced framer restore.
 
@@ -1656,19 +1714,16 @@ The behaviour described here was derived from the private function and format no
   command handler, and the correction of the earlier "player-side dispatch
   gate" reading — derived from a 2026-08-22 re-read of
   `u5-decomp/functions/COMBAT_OVL/`, and
-  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`, with the
+  `u5-decomp/notes/`, with the
   round walker's two-way dispatch confirmed against
   `u5-decomp/functions/ULTIMA_EXE/`.
-- The seating-time placement of both magic-ring behaviours (one regeneration
-  tick, one 1-in-16 vanish check, both inside the per-encounter setup pass and
-  neither repeated by the round loop) -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/`, whose
-  2026-08-22 retrace identifies that function as the per-encounter setup pass
-  rather than a round engine.
-- Equipped Ring of Invisibility and Ring of Regeneration combat behaviour,
-  including hidden-flag marking, wearer healing, and combat-round removal checks
-  -- derived from `u5-decomp/functions/ULTIMA_EXE/`, and
-  `u5-decomp/functions/ULTIMA_EXE/`.
+- The two equipped-ring effect hooks at encounter seating and at the parser's
+  committed non-digit action tail, including hidden-state reassertion and the
+  party-wide regeneration roll; the free-refusal branch before that tail; and
+  the separate encounter-entry-only 1-in-16 ring-destruction check -- derived
+  from `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and
+  `u5-decomp/functions/SJOG_OVL/`.
 - The damage application and status transitions, the per-monster-class flag word's effect on damage and death, the special-class death paths, the slime-divide replication path, and the combat-local attacker experience credit — derived from `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`.
 - Amulet/Turning's combat passive branch and ranged/effect scatter boundary —
   derived from `u5-decomp/functions/COMBAT_OVL/`, and
@@ -1725,17 +1780,26 @@ The behaviour described here was derived from the private function and format no
   argument -- derived from `u5-decomp/functions/ULTIMA_EXE/`
   and `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
 - The per-letter combat command map of Section 8 — the two shared delegate
-  shapes, the three refusal tails, the direct-call letters, the exact re-prompt
-  rule, and the withdrawal of the earlier U-Use, X-it and Quit readings — plus
+  shapes, the exact three refusal tails and newline/audio ordering, the
+  direct-call letters, the exact pre-maintenance re-prompt rule, and the
+  withdrawal of the earlier U-Use, X-it and Quit readings — plus
   the encounter-size damper's full life cycle in Section 5. Source provenance:
-  derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
+  derived from private analysis in
+  `../u5-decomp/notes/`, with
   `../u5-decomp/functions/COMBAT_OVL/`,
   `../u5-decomp/functions/SJOG_OVL/`,
   `../u5-decomp/functions/ULTIMA_EXE/`, and
   `../u5-decomp/functions/CAST_OVL/`.
 - Combat's own typeahead toggle, its Escape / Space / actor-select bindings, and
   the arena targeting cursor as the game's only eight-way input surface. Source
-  provenance: derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
+  provenance: derived from private analysis in
+  `../u5-decomp/notes/` and
   `../u5-decomp/functions/COMSUBS_OVL/`.
+- The Escape handler's party-side predicate, exact `Escape-Not here!`,
+  `Escape-Not yet!`, and newline-free `Escape!` outputs, two-pass cleanup,
+  per-slot ticks, speaker glissando, and relationship to the round loop's exact
+  victory/defeat strings -- derived from
+  `../u5-decomp/functions/CMDS_OVL/`,
+  `../u5-decomp/functions/COMBAT_OVL/`,
+  `../u5-decomp/functions/ULTIMA_EXE/`, and
+  `../u5-decomp/notes/`.
