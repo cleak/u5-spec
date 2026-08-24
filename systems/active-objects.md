@@ -230,7 +230,24 @@ A *parallel* combat-effect descriptor table holds the additional per-actor state
 
 The combat-effect descriptor table owns combat-only fields that earlier notes sometimes attributed to the active-object record. Its first byte is the current monster HP or wound counter for non-party actors, it contains the friend/foe faction tag used by target selection, and one byte is a back-reference to the linked active-object slot. The active-object table remains the renderer-facing table during combat; it is not the source of the combat faction byte.
 
-Placed combat fields also live in this temporary active-object table. Their marker records use arena coordinates and are matched by the combat post-action hook when an actor finishes a successful step on the same cell. Marker creation is gated by the arena field helper: target selection and coordinate lookup must succeed, then the COMBAT acceptance callback must accept before the marker/application callbacks run. The coordinate lookup scans combat slots in ascending order and accepts the first selected-coordinate descriptor with `0x80` or `0x40` set, without `0x20` or `0x04`, and without linked active-object tile byte `0xF4`. Contact is non-consuming: the post-action hook applies the field result without clearing, aging, or rewriting the matched marker record. Field markers are active-object-only records rather than paired combat-effect descriptors, so the monster death/record-clear path cannot age or remove them. The accepted-placement resident redraw helper and the generic active-object tick do not allocate, remove, or decrement field marker records. Their presence is combat-local: they persist until the framer restores the pre-combat active-object table on exit.
+Placed combat fields also live in this temporary active-object table. Their
+marker records use arena coordinates. After either per-actor dispatch branch
+returns, the combat walker gives its current descriptor slot to the contact
+hook. That descriptor remains the effect target. If no terrain hazard has
+priority, the hook scans active-object records in ascending order, skips the
+target descriptor's own linked renderer record, and selects the first separate
+recognized marker at the target's coordinate. Thus the skip prevents an actor
+sprite from masquerading as a field marker; it does not immunize the current
+actor. Poison, Sleep, and Fire markers are passable and can affect the mover,
+while Energy is blocking and has no result arm in this hook. The same contract
+follows player and AI dispatch and is not restricted to actions that changed
+coordinates. Contact is non-consuming: it applies the result without clearing,
+aging, or rewriting the marker record. Field markers are active-object-only
+records rather than paired combat-effect descriptors, so the monster
+death/record-clear path cannot age or remove them. The accepted-placement
+resident redraw helper and the generic active-object tick do not allocate,
+remove, or decrement field marker records. Their presence is combat-local: they
+persist until the framer restores the pre-combat active-object table on exit.
 
 Projectile and impact visuals are not active-object records. The combat and
 spell projectile path builds a temporary line in scratch path buffers, steps
@@ -773,7 +790,7 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The compositor that walks the table backwards to stamp on-screen sprites into the viewport, plus the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/`.
 - The world-mutation helper that links logical NPC state to a slot in the table when an NPC arrives on or leaves the player's floor — `u5-decomp/functions/TOWN_OVL/`.
-- The town-entry Shadowlord install that allocates an active-object slot and a parallel high-indexed NPC slot for a resident Shadowlord — `u5-decomp/functions/TOWN_OVL/` (see that note's 2026-08-22 repair-round correction, which supersedes its original "player attach" framing) and `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
+- The town-entry Shadowlord install that allocates an active-object slot and a parallel high-indexed NPC slot for a resident Shadowlord — private analysis in `u5-decomp/functions/TOWN_OVL/` and `u5-decomp/notes/`.
 - The NPC pathfinding workspace builder that overlays active-object obstacles
   and the current player cell for collision avoidance -
   `u5-decomp/functions/NPC_OVL/`.
@@ -784,9 +801,9 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/` and
   `u5-decomp/functions/SJOG_OVL/`.
 - The NPC per-tick walker that drives schedule-based NPC movement and feeds the world-mutation helper — `u5-decomp/functions/NPC_OVL/`.
-- The save image's region holding the table and the on-disk overlay files — `u5-decomp/formats/saves.md`.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` -- the confirmation
+- The save image's region holding the table and the on-disk overlay files — private analysis in `u5-decomp/formats/`.
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` -- the confirmation
   that the directed step planner never compares the two axis distances (so
   there is no longer-axis preference and no diagonal tie-break), the coin flip's
   role as attempt ordering only, the single-attempt random wanderer fallback,

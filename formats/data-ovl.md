@@ -251,9 +251,11 @@ The magic system reads several resident tables:
   writing the live dungeon image.
 - A sibling arena-field lookup for the same four spells. It does not write the
   dungeon map byte; it selects the combat field kind consumed by the arena
-  helper, where Poison Field routes to poison status, Sleep Field routes to
-  sleep status, Fire Field uses a raw damage cap of 21 before defense, and
-  Energy Field uses a raw damage value of zero in the same path.
+  helper. The later post-dispatch contact hook targets the current actor:
+  Poison Field either changes Good party status without a random draw or rolls
+  raw `0..20` fallback damage with no defense draw; Sleep Field routes to sleep
+  status; Fire Field rolls raw `0..10` with no defense draw; and Energy Field
+  is blocking and has no contact-result arm.
 - Reagent names and abbreviated reagent labels.
 - Eight virtue names and the corresponding shrine mantras.
 - **One** eight-entry shrine coordinate table, in the standard virtue order,
@@ -772,7 +774,7 @@ When preserving compatibility with original files:
 ## 10. Sources
 
 This is a cleanroom prose rewrite derived from the private resident-data
-dissection in `u5-decomp/formats/data-ovl.md`, cross-checked against the public
+dissection in `u5-decomp/formats/`, cross-checked against the public
 specs listed in Section 7. The shared coordinate-scratch boundary was
 cross-checked against
 `u5-decomp/functions/OUTSUBS_OVL/`,
@@ -784,9 +786,7 @@ predates that note's 2026-08-22 naming correction; the routine draws the moon /
 time-of-day row and is not combat-scoped).
 Source provenance: the dense-underworld resolution, the 205-entry surface chunk
 index, the filename-letter loader discriminator, and the single shrine
-coordinate table are derived from private analysis notes
-`u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md` and
-`u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+coordinate table are derived from private analysis in `u5-decomp/notes/`.
 Intro/story presentation metadata ownership was cross-checked against
 `u5-decomp/functions/INTRO_OVL/`.
 Viewport-buffer semantics were cross-checked against
