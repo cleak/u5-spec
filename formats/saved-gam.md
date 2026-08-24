@@ -470,10 +470,11 @@ A loosely packed band of bytes before the dungeon/map-cell working buffer holds 
 | `0x02F2..0x02FF` | Animation / cached light    | Animation, redraw, and cached ambient-light bytes. The active light-source duration counters start at `0x0300`.                                  |
 | `0x0300`     | Light-spell counter         | Duration counter set by *In Lor* and *Vas Lor*.                                                                                                  |
 | `0x0301`     | Torch counter               | Duration counter set or extended by I-Ignite.                                                                                                    |
-| `0x0302..0x0327` | Per-mode scratch / casting flags | Cast-spell handshake, scene-tag pre-combat, fall-through flags, and other transient mode state. Most are transient; saved because they sit in resident memory. |
+| `0x0302..0x0321` | Combat interference-source map | Thirty-two bytes, one per combat slot. A value `0..31` names the most recently recorded ordinary adjacent attacker for that victim; `0xFF` means no source. Combat does not initialize this map on encounter entry or clear it on exit, so it is persistent gameplay state rather than disposable scratch. The shipped new-game seed contains zero in every entry. Zero is a valid slot number, not the sentinel, though a normal fresh encounter treats slot zero as party-side and therefore not a hostile interferer. |
+| `0x0322..0x0327` | Per-mode scratch / casting flags | Cast-spell handshake, fall-through flags, and other transient mode state. Saved because they sit in resident memory. |
 | `0x03B3`     | Early-game encounter-size damper | Wilderness encounter spawn-count reroll flag, historically mislabelled the "fortunes of war" or "double encounter" flag. Terrain combat reads non-zero as "replace the first random monster-count roll with a second roll of the same shape", which can only lower the count. **The factory seed sets this byte to `1`** — it is the only non-zero byte in the tail of `INIT.GAM` — so every new game begins with the damper active, and save/load carries it. Nothing in gameplay ever sets it; the only write anywhere in the engine is the clear performed at the 28-day month rollover. Because the shipped calendar starts partway through a month, it survives the first twenty-four in-game days and is then off permanently. See `systems/combat.md` Section 5. |
 
-The per-turn flags are not part of the format's "stable" surface — different dot releases of the original game might have set or cleared bytes here for reasons not modelled in any external spec. An implementation that wants a byte-compatible save can pass these through unchanged: the engine reads the relevant ones during boot, ignores the rest, and rewrites them as it plays.
+The remaining per-turn flags are not part of the format's "stable" surface — different dot releases of the original game might have set or cleared bytes here for reasons not modelled in any external spec. An implementation that wants a byte-compatible save can pass these through unchanged: the engine reads the relevant ones during boot, ignores the rest, and rewrites them as it plays. The interference-source map is an explicit exception: preserve its exact bytes and apply the lifecycle in `systems/magic.md` Section 7. It has no encounter-entry, round-start, or combat-exit reset; each victim entry clears only after that victim completes an action. A source left uncleared at combat exit may therefore be written by Q-Save and restored by Journey Onward.
 
 Several fields in the band have higher-level meaning:
 
@@ -641,6 +642,12 @@ The byte-level layout described here was derived from the project's private save
 
 - The first-pass byte-level survey of the save image, the `.OOL` family, the canonical companion roster, and the offset-by-offset verification of inventory and runtime fields — `u5-decomp/formats/`.
 - The runtime-state map used to cross-check persistent field positions — `u5-decomp/formats/`.
+- The combat interference-source map's saved position, factory-zero seed,
+  adjacent-attack writer, completed-action clear, Cast-time revalidation, and
+  cross-encounter lifetime — `u5-decomp/formats/`,
+  `u5-decomp/functions/COMBAT_OVL/`,
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
 - The turn-step counter at `0x02E5` — its single increment site and saturation
   cap, its single reset site, and the cadence of the pass that advances it —
   `u5-decomp/notes/` and

@@ -215,15 +215,48 @@ The per-spell charge counters are part of the persistent save image: forty-eight
 
 Combat introduces an additional interference gate that runs *before* the C-Cast command's own checks; outside combat, only the dispatcher's checks apply. The combined gate hierarchy is:
 
-**Combat-only interference gate.** Reached when the player presses `C` inside a combat round. Before the dispatcher even prompts for the spell name, combat asks whether the caster's current target can interfere:
+**Combat-only interference gate.** Each combat slot owns a saved
+*interference source*: the slot of the most recently recorded adjacent attacker,
+or the all-ones sentinel when no source is recorded. When a party actor presses
+`C`, combat revalidates that actor's stored source before the dispatcher prompts
+for a spell. The source interferes only when all of these conditions still hold:
 
-1. **Mapped target.** The per-slot combat target map must contain a target other than the all-ones sentinel.
-2. **Target validity.** The target slot must hold a valid live actor and pass the actor-group validity helper.
-3. **Target state.** The target must be visible/revealed and awake; targets with the hidden/not-yet-revealed or asleep/disabled bits do not interfere.
-4. **Runtime tag.** Negate Time's `T` tag suppresses interference. While that tag is active, this gate returns clear and the cast may continue to the dispatcher.
-5. **Adjacency.** The caster and target must be at distance one in the eleven-by-eleven arena coordinate space.
+1. **Recorded source.** The entry is not the no-source sentinel.
+2. **Current allegiance.** The referenced slot is occupied and currently
+   classifies as an ordinary hostile combatant.
+3. **Current state.** The source is visible/revealed and awake; a hidden,
+   not-yet-revealed, asleep, or disabled source does not interfere.
+4. **Runtime tag.** Negate Time's `T` tag is not active. Negate Time suppresses
+   this test without erasing the recorded source.
+5. **Current adjacency.** The source remains in one of the caster's eight
+   neighboring arena cells. The underlying distance is truncated Euclidean
+   distance, and this gate requires exactly one.
 
-Only when all five conditions pass does the gate block the cast: it prints a newline, the target actor's name, and ` interferes!`, then returns to combat command input before the spell prompt. If any condition fails, the spell dispatcher runs normally. This gate is therefore not a combat-side MP, reagent, level, or spell-allowed check; those resource checks remain in the shared dispatcher below.
+When all five conditions hold, combat prints a newline, the source actor's name,
+and ` interferes!`, then re-prompts the same actor before the spell prompt. This
+is not a completed action: it consumes no additional actor turn and does not
+clear the source. Repeating `C` therefore blocks again unless the source's
+current state changes. If any condition fails, the spell dispatcher runs
+normally. This gate is not a combat-side MP, reagent, level, spell-allowed, or
+spell-target check; those concerns remain in the shared dispatcher and the
+individual spell handlers.
+
+**Interference-source lifecycle.** An ordinary automatic adjacent attack records
+the attacker in the victim's entry after range and adjacency have been accepted
+but before the hit test. Hits and misses therefore both record; a later
+qualifying adjacent attack overwrites the earlier source. Ranged attacks,
+failed-range or no-target attempts, and the special controlled-actor attack path
+do not update the entry and do not clear an existing source.
+
+The victim's entry is cleared only after that victim completes any dispatched
+combat action. An actor skipped because its slot is empty, dead, excluded by
+terrain, or not ready to act does not reach this clear. There is no wholesale
+reset at combat entry, round start, or combat exit. Consequently, a link left
+behind when combat ends can survive exploration, saving and loading, and later
+encounters. The Cast-time checks always revalidate the referenced slot, so a
+stale link blocks only if later slot reuse happens to satisfy every current-state
+condition above. The save representation and new-game seed quirk are specified
+in `formats/saved-gam.md` Section 10.
 
 **Dispatcher gates** (run after the combat pre-gate, or as the only gate outside combat):
 
@@ -827,9 +860,10 @@ The C-Cast command is also bound in the combat command set. The implementation r
 
 **Combat-specific interference pre-gate.** Section 7 listed the combat-only
 interference gate. It runs before the dispatcher prompts for the spell name; an
-interfering adjacent target skips the dispatcher entirely.
+interfering recorded attacker skips the dispatcher entirely and re-prompts the
+same actor without completing the action.
 
-**Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. The combat target map used by the interference gate is not a replacement for spell-specific targeting. Several spells still take an explicit target separately from the caster, and active-target combat spells still use their own aiming/targeting path.
+**Active player and target.** Outside combat, the active player is whichever character the digit keys most recently selected; the cast applies to or originates from that character. Inside combat, the active player is whichever slot the round walker is currently dispatching — the cast happens on that character's turn and consumes that character's mana. The incoming-attacker entry used by the interference gate is independent of spell-specific targeting. Several spells still take an explicit target separately from the caster, and active-target combat spells still use their own aiming/targeting path.
 
 **Scene gate selects spells.** The four-bit scene allow-mask uses `0x01` for combat-class scenes, `0x02` for dungeon scenes, `0x04` for indoor/town-mode scenes, and `0x08` for overworld. Spells without the active scene bit are rejected with `Not here!`; for example, combat-only attack spells reject outside combat, while overworld-only utility such as Wind Change rejects inside combat.
 
@@ -1096,7 +1130,14 @@ The behaviour described here was derived by reading the private function and for
   is the spell-cast overlay, not character creation) — derived from
   `u5-decomp/functions/CAST_OVL/`.
 - The shared spell-name input helper — accepted selector letters, order-insensitive compact-token matching, blank/cancel/no-match returns, and M-Mix's no-match fall-through — derived from local CAST2 helper analysis and the CAST2 overlay dispatch mapping in `u5-decomp/functions/ULTIMA_EXE/`.
-- The combat C-Cast adjacent-target interference gate - mapped target, target validity, target awakeness, Negate Time suppression, and adjacency - is derived from `u5-decomp/functions/COMSUBS_OVL/`.
+- The combat C-Cast interference-source lifecycle — the ordinary automatic
+  adjacent-attack writer and before-hit timing, overwrite and completed-action
+  clear boundaries, same-actor re-prompt, current-state revalidation, lack of
+  encounter/round/exit reset, save persistence, and factory-zero seed — is
+  derived from `u5-decomp/functions/COMBAT_OVL/`,
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/formats/`, and
+  `u5-decomp/notes/`.
 - The monster AI boundary correction is derived from the corrected COMSUBS
   actor-name note, the COMSUBS monster-special hook, and the COMBAT
   actor-dispatch/target-picker notes; current evidence does not support a

@@ -1075,14 +1075,29 @@ The architectural consequence: **all damage and movement effects in combat go th
 Combat shares the spell engine with the rest of the game; the C (Cast) command dispatches via the same routing as the overworld C. The combat-specific path adds three things.
 
 **Interference and active-effect checks.** Before queueing a spell, combat runs
-an interference check, not a resource gate. It reads the caster's current target
-mapping; if that target exists, is a valid live/visible/awake actor, Negate Time's
-`T` runtime tag is not active, and the target is at distance one from the caster,
-the handler prints a newline, the target's actor name, and ` interferes!`, then
-returns to combat command input before the shared spell dispatcher prompts for a
-spell. If any of those conditions fail, combat proceeds to the shared spell
-dispatcher. The charge, mana, level, and scene checks are still owned by that
-dispatcher. The combat C-Cast path also checks the shared active-effect tag:
+an interference check, not a resource or spell-target gate. Each actor slot has
+an incoming-attacker entry. The ordinary automatic adjacent-attack path writes
+the attacker into the victim's entry before resolving whether the attack hits,
+so a miss records too; later qualifying attacks overwrite the source. Ranged,
+failed-range, no-target, and special controlled-actor attacks leave the entry
+unchanged.
+
+When a party actor presses `C`, combat blocks only if the recorded source is
+currently occupied, hostile, visible/revealed, awake, and in one of the eight
+adjacent cells, and Negate Time's `T` tag is not active. On a block it prints a
+newline, the source actor's name, and ` interferes!`, then re-prompts the same
+actor. The refusal is not a completed action and does not clear the entry or
+consume another actor turn. If any current-state test fails, combat proceeds to
+the shared spell dispatcher.
+
+The victim's entry clears only after that victim completes an action. It is not
+reset at combat entry, round start, or combat exit, and skipped actors do not
+clear it. The map is save-backed, so an uncleared source can survive combat and
+save/load; later Cast attempts revalidate the referenced slot rather than
+trusting its history. `systems/magic.md` Section 7 gives the full predicate and
+`formats/saved-gam.md` Section 10 gives the saved representation. The charge,
+mana, level, and scene checks remain owned by the shared dispatcher. The combat
+C-Cast path also checks the shared active-effect tag:
 when Negate Magic's `N` tag is active, the cast is absorbed/refused before the
 shared spell dispatcher consumes charge or MP.
 
@@ -1600,7 +1615,7 @@ The behaviour described here was derived from the private function and format no
   the arena index, the reachable spawn-count invariant, the forty-eight-entry
   companion-class table, and the party-seating pass that runs before monster
   placement. Source provenance: derived from private analysis notes
-  `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
+  `../u5-decomp/notes/`,
   `../u5-decomp/functions/ULTIMA_EXE/`, and
   `../u5-decomp/functions/ULTIMA_EXE/`.
 - The combat enter/exit framer with its three-way entry-mode dispatch, save-and-restore of player position and the dynamic-objects table, the scene-byte sentinel, and the post-combat active-player check — derived from `u5-decomp/functions/ULTIMA_EXE/`.
@@ -1629,15 +1644,15 @@ The behaviour described here was derived from the private function and format no
   Get/Jimmy/Open/Search/Klimb, CMDS escape/Yell/Push, and ZSTATS
   Ready/Z-stats - derived from
   the corresponding COMBAT command table plus
-  `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
+  `u5-decomp/functions/SJOG_OVL/`,
   `u5-decomp/functions/SJOG_OVL/`,
   `u5-decomp/functions/CMDS_OVL/`, and
-  `u5-decomp/functions/ZSTATS_OVL/_OVERVIEW.md`, with
-  `u5-decomp/notes/cross_mode_behavior_matrix.md` as a cross-mode check.
+  `u5-decomp/functions/ZSTATS_OVL/`, with
+  `u5-decomp/notes/` as a cross-mode check.
 - The negative post-combat SJOG boundary -- COMBAT reaches SJOG for in-round
   command delegates and helpers, not for an after-victory loot sweep -- derived
-  from `u5-decomp/functions/COMBAT_OVL/_OVERVIEW.md` and cross-checked against
-  `u5-decomp/notes/system-trace_combat-round.md`.
+  from `u5-decomp/functions/COMBAT_OVL/` and cross-checked against
+  `u5-decomp/notes/`.
 - The special combat absorption marker producer that bridges qualifying dungeon
   room cleanup into ENDGAME -- derived from
   `u5-decomp/functions/SJOG_OVL/` and the
@@ -1680,7 +1695,7 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/SHOPPES3_OVL/`,
   `u5-decomp/functions/BLCKTHRN_OVL/` and
   `u5-decomp/functions/CMDS_OVL/`. Cross-checked against
-  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+  `u5-decomp/notes/`.
 - Note for save-tooling authors: a hand-edited save could in principle make one
   of the other roster records match the shipped traitor template's name shape
   and so flip that companion to the monster side. No path in the shipped game
@@ -1698,8 +1713,7 @@ The behaviour described here was derived from the private function and format no
   field equal to the drawn row), together with the withdrawal of the earlier
   reading of the roster status letter `C` as "casting" (it means charmed) —
   derived from
-  `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`,
-  `u5-decomp/notes/2026-08-22_combat-status-magic-retrace.md`,
+  `u5-decomp/notes/`,
   `u5-decomp/functions/COMSUBS_OVL/`,
   `u5-decomp/functions/COMBAT_OVL/`, and
   `u5-decomp/functions/COMBAT_OVL/`.
@@ -1707,7 +1721,7 @@ The behaviour described here was derived from the private function and format no
   flag, and fear/panic spell route that forces combat current HP into the
   critical bucket — derived from
   `u5-decomp/functions/COMBAT_OVL/` and
-  `u5-decomp/formats/data-ovl.md`.
+  `u5-decomp/formats/`.
 - Protection's equipped-item-statistic bonus, Negate Magic's combat-cast absorption path, Negate Time's `T`/10 runtime tag, and the active-effect counter-aging rule — derived from local ULTIMA.EXE, COMBAT, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
 - The placement of Quickness's `Q` 0..1 gate and Negate Time's `T` outright
   turn skip at the head of the automatic actor driver rather than in the player
@@ -1735,7 +1749,7 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/COMBAT_OVL/`, and
   `u5-decomp/functions/COMBAT_OVL/`.
 - Monster ranged/effect side-table row values and row attribution -- derived
-  from `u5-decomp/formats/data-ovl.md` and cross-checked against the COMBAT and
+  from `u5-decomp/formats/` and cross-checked against the COMBAT and
   COMSUBS ranged/effect consumers above.
 - Shared saturating byte/word arithmetic used by stat and inventory mutation paths — derived from `u5-decomp/functions/ULTIMA_EXE/` and sibling helper notes.
 - The monster movement fallback, teleport-capable movement bit, random legal
@@ -1754,18 +1768,22 @@ The behaviour described here was derived from the private function and format no
   assignments, derived from
   `u5-decomp/functions/COMSUBS_OVL/`
   and the `DATA.OVL` class-flag table.
-- The combat-side C-Cast interference gate -- target mapping, target validity,
-  visibility/awakeness, Negate Time suppression, and adjacency -- derived from
-  `u5-decomp/functions/COMSUBS_OVL/`.
+- The combat-side C-Cast interference-source lifecycle — write and clear
+  timing, same-actor re-prompt, current-state predicates, no encounter/round/exit
+  reset, and save persistence — is derived from
+  `u5-decomp/functions/COMBAT_OVL/`,
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/formats/`, and
+  `u5-decomp/notes/`.
 - The shared spell dispatcher used by combat casts — derived from `u5-decomp/functions/CAST_OVL/`.
 - The combat spell-damage wrapper used by Magic Missile, Fireball, and Kill — derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text.
 - The Clone spell's allocation and random legal arena placement behaviour — derived from local CAST and COMBAT helper analysis summarized without copying implementation text.
 - The dynamic-objects table that combat overlays and the sprite animator that walks it during world ticks — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The fog/visibility post-pass that consumes the same active-object table during world rendering — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat AI target-range primitive, which computes truncated linear Euclidean distance between two arena coordinates — derived from `u5-decomp/functions/ULTIMA_EXE/`.
-- The data-region correction that rules out a combat damage/hit-chance matrix and identifies the combat-instance faction tagging and per-class stat-record shape — derived from `u5-decomp/formats/data-ovl.md`.
-- The combat-arena file layout — 352-byte record stride, 11×11 terrain grid, metadata band, outdoor and dungeon-encounter banks — derived from `u5-decomp/formats/maps.md`.
-- The character-record layout consulted by damage application and the active-player restore — derived from `u5-decomp/formats/saves.md`.
+- The data-region correction that rules out a combat damage/hit-chance matrix and identifies the combat-instance faction tagging and per-class stat-record shape — derived from `u5-decomp/formats/`.
+- The combat-arena file layout — 352-byte record stride, 11×11 terrain grid, metadata band, outdoor and dungeon-encounter banks — derived from `u5-decomp/formats/`.
+- The character-record layout consulted by damage application and the active-player restore — derived from `u5-decomp/formats/`.
 - The death-branch contract in Section 6.3 -- branch ordering, the incorporeal
   and vanish class-flag arms, the Gazer and Gargoyle exceptions, the arena
   terrain gate, which branches release the slot, and the drop-cap byte written
@@ -1778,7 +1796,7 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The framer's ambush entry branch, its setup target, and its discarded slot
   argument -- derived from `u5-decomp/functions/ULTIMA_EXE/`
-  and `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
+  and `u5-decomp/notes/`.
 - The per-letter combat command map of Section 8 — the two shared delegate
   shapes, the exact three refusal tails and newline/audio ordering, the
   direct-call letters, the exact pre-maintenance re-prompt rule, and the
