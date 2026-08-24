@@ -104,8 +104,10 @@ Most letters discard whatever their handler returned and report the default
 
 The undefined Yell paths are an original-game defect, not designed status codes. An
 implementation must not attempt to reproduce them; treat all three as "acted".
-Two of the three occur where the loop only tests zero-versus-non-zero anyway,
-but the empty-yell path can reach the town loop, which does discriminate.
+Because the sail shortcut accepts every scene below `0x80`, defensive ship
+state can expose a sail path to the town loop as well as to the overworld and
+dungeon loops. The town loop's numeric distinctions must not turn the leaked
+text-renderer value into cursor-dependent gameplay.
 
 Beyond those six routes, a modern implementation should preserve each command's
 observable turn cost rather than depend on numeric equality everywhere. Mode
@@ -686,16 +688,37 @@ command prints the normal rested result and stamps the current camp/rest marker.
 
 Y-Yell is a mode-sensitive command with three visible families.
 
-When the party is aboard a ship in a normal gameplay scene, Yell is a no-input
-sail command. It toggles the ship between hoisted and furled sail states while
-preserving heading, prints the corresponding short sail command, and does not
-move the ship immediately. Wind-driven movement and X-it's under-sail refusal
-remain vehicle-system behaviour; this command only changes the sail state.
+The no-input sail branch has two exact gates: the party transport marker must
+be any frigate value, and the unsigned scene byte must be below `0x80`. It is
+not restricted to scene zero or to a top-down world scene. Consequently it
+accepts scene `0` on either world plane, all town-family scenes `1..32`, and
+defensive/custom scenes `33..127`. In any accepted scene, Yell toggles the ship
+between hoisted and furled sail states while preserving heading, prints the
+corresponding short sail command, and does not move the ship immediately.
+Wind-driven movement and X-it's under-sail refusal remain vehicle-system
+behaviour; this command only changes the sail state.
+
+| Transport and unsigned scene | Yell behavior |
+|---|---|
+| Frigate, scene `0` | Toggle sails on either Britannia or Underworld; the plane is separate from the scene byte. |
+| Frigate, scene `1..32` | Toggle sails. |
+| Frigate, scene `33..127` | Toggle sails, including defensive dungeon/custom state. |
+| Frigate, scene `128..255` | Do not toggle; enter the ordinary word prompt. |
+| Any non-frigate marker | Enter the ordinary word prompt, regardless of scene. |
+
+The accepted sail branch prints `FURL!` when changing from hoisted to furled
+and `HOIST!` for the inverse change. The toggle is a committed action and must
+be reported to the active mode loop as **acted**, so it consumes that mode's
+action/turn. The shipped executable accidentally forwards an incidental text-
+renderer value on this path instead of a normalized command status; that
+register leak is the same original defect described in Section 3 and is not an
+additional sail rule to reproduce.
 
 When the party is not in the ship-sail branch, Yell prompts for a free-text
 word of up to thirty characters using the same style of line input as the
 conversation keyword path. Empty input prints the nothing-said result and
-returns without a world change. Nonempty input is routed by scene context:
+returns without a command-specific world mutation. Nonempty input is routed by
+scene context:
 
 - **Shadowlord-name contexts.** Only the three Eternal Flame keeps — The
   Lycaeum, Empath Abbey, and Serpent's Hold — accept Shadowlord names. In one of
@@ -723,8 +746,17 @@ returns without a world change. Nonempty input is routed by scene context:
   plane distinguished by the party's floor/depth byte. There is no
   dungeon-interior, town, or keep Word-of-Power route. The full predicate is
   given below.
-- **Other contexts.** Non-ship scenes that are not accepted by either
+- **Other contexts.** Prompted scenes that are not accepted by either
   Shadowlord-name or Word-of-Power routing produce no effect after the prompt.
+
+This prompt path also supplies the exact rejected-ship behavior. A frigate
+marker with scene `0x80..0xFF` does not print an immediate sail refusal: it
+asks the ordinary `Yell what?` question and accepts up to thirty characters.
+Empty input prints the ordinary nothing-said result. Nonempty input in this
+range prints the ordinary no-effect result. Both outcomes count as acted under
+the clean return contract. Combat is a reachable example: its parser calls the
+shared Yell handler with scene `0xFF`, so even a defensive frigate marker in
+combat follows the prompt, never the sail toggle.
 
 ### 11.1 The Word-of-Power seal predicate
 
@@ -878,7 +910,8 @@ reproduced here.
 - The New Order active-party record exchange, leader refusal, cancel paths, and
   same-slot self-swap behaviour:
   `u5-decomp/functions/CMDS_OVL/`.
-- The Y-Yell sail toggle, free-text prompt, Shadowlord-name branch,
+- The Y-Yell unsigned sail-scene gate, sail-result action status, free-text
+  fallback, Shadowlord-name branch,
   Word-of-Power seal predicate, saved per-word seal flags and the region-load
   pass that re-applies them, and the ruined-shrine mantra hand-off:
   `u5-decomp/notes/`,

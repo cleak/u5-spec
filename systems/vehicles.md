@@ -330,10 +330,17 @@ Toggling sail state updates the party's ship state but does not directly move
 the ship. Mechanically the toggle moves the marker by exactly one four-value
 sprite run and leaves the heading bits alone: furling adds a run, hoisting
 subtracts one. It is gated on the party already being aboard a frigate and on
-the scene being a top-down world scene. X-Xit should refuse the under-sail case
-while the ship is in the hoisted/wind-control range `0x20..0x23`. The
-furled/manual ship range is `0x24..0x27`. In both ranges, the low two bits carry
-heading as north, east, south, west.
+the unsigned scene byte being below `0x80`; this is broader than a top-down
+world-scene test. Scene `0`, town-family scenes `1..32`, and defensive/custom
+scenes `33..127` all accept the toggle. Scenes `0x80..0xFF` reject the shortcut
+and enter Yell's ordinary word prompt instead, even if a defensive state still
+contains a frigate marker. No immediate sail refusal is printed. See
+`systems/commands.md` Section 11 for the prompt outcomes and clean acted result.
+
+X-Xit should refuse the under-sail case while the ship is in the
+hoisted/wind-control range `0x20..0x23`. The furled/manual ship range is
+`0x24..0x27`. In both ranges, the low two bits carry heading as north, east,
+south, west.
 
 **Docking furls automatically.** On the overworld, a step that takes a ship onto
 a pier tile, while the ship is under sail, prints a docking message and applies
@@ -559,11 +566,10 @@ tables, or implementation-specific addresses.
 - Local SHOPPES2 shipwright control-flow analysis and direct `SHOPPE.DAT`
   record inspection.
 - `u5-decomp/functions/MAINOUT_OVL/`.
-- `u5-decomp/notes/system-trace_movement.md`.
+- Private movement analysis under `u5-decomp/notes/`.
 - Local MAINOUT outer-loop analysis for pending shipwright delivery placement.
 - `u5-decomp/functions/ULTIMA_EXE/`.
-- `u5-decomp/formats/ds-bss-map.md`.
-- `u5-decomp/formats/saves.md`.
+- Private data-layout analysis under `u5-decomp/formats/`.
 - Source provenance: the hull-condition impact rule (the closed-interval
   `[1, 30]` draw, the strictly-less-than survival test, the exact-roll
   subtraction, the floor of one, and the fact that no party member loses hit
@@ -576,8 +582,8 @@ tables, or implementation-specific addresses.
   `u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. The
   numeric contract is published once, in `systems/overworld.md` Section 6.2.4;
   this document points at it rather than restating it, so the two cannot drift.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the marker's
+- Source provenance: derived from private analysis under `u5-decomp/notes/` --
+  the marker's
   identity as the party sprite, the complete persistent value set and the
   transient one-frame overrides, the two-frame horse and carpet rule, the
   movement-announcer prefixes, the furled-on-boarding gate, the docking gate and
@@ -587,6 +593,10 @@ tables, or implementation-specific addresses.
   `u5-decomp/functions/TOWN_OVL/` -- the vehicle
   prefix strings and the facing-compose bound. That note's earlier
   skiff/carpet prefix assignment was swapped and is superseded.
+- The exact Y-Yell sail scene gate, rejected-scene prompt behavior, and acted
+  result are derived from private analysis under
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/notes/`.
 - `systems/overworld.md`.
 - `systems/doors-and-z-transitions.md`.
 - `systems/time.md`.
