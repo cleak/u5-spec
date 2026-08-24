@@ -232,35 +232,50 @@ at 99.
 ### 5.1.2 Short display labels
 
 Two display names exist per equipment id: the canonical name in the table above
-and a shorter label used where the canonical name would not fit a narrow
-column. Consumers that render into a narrow column measure the canonical name
-and substitute the short label when the canonical name is **thirteen characters
-or longer**; the arms-shop buy list is the traced consumer of that rule, and the
-character-sheet equipment listing draws from the same short-label set.
+and a fixed short-label row for narrow panels. The arms `B` buy list measures
+the canonical name and substitutes the short label only when the canonical
+name is **thirteen characters or longer**. The arms `S` carried-equipment
+browser is different: it always renders from the short-label row, even when
+the canonical name would fit. Character-sheet inventory consumers also draw
+from this row where their owning display contract says so.
 
-Ten of the forty-eight ids trip the length rule. Their short labels are:
+The complete short-label row is:
 
-| Id | Canonical name | Short label |
-|---:|---|---|
-| 6 | Spiked Shield | `Spkd. Shld` |
-| 10 | Leather Armour | `Leather` |
-| 15 | Mystic Armour | `Myst. Armr` |
-| 35 | Sword of Chaos | `Chaos Swrd` |
-| 40 | Jeweled Sword | `Jewel Swrd` |
-| 42 | Ring of Invisibility | `Inv. Ring` |
-| 43 | Ring of Protection | `Prot. Ring` |
-| 44 | Ring of Regeneration | `Regen Ring` |
-| 45 | Amulet/Turning | `Am/Turning` |
-| 46 | Spiked Collar | `Sp. Collar` |
+| Id | Canonical name | Short label | Id | Canonical name | Short label |
+|---:|---|---|---:|---|---|
+| 0 | Leather Helm | `Leath Helm` | 24 | Mace | `Mace` |
+| 1 | Chain Coif | `Chain Coif` | 25 | Morning Star | `Morn. Star` |
+| 2 | Iron Helm | `Iron Helm` | 26 | Bow | `Bow` |
+| 3 | Spiked Helm | `Spkd. Helm` | 27 | Arrows | `Arrows` |
+| 4 | Small Shield | `Sm. Shield` | 28 | Crossbow | `Crossbow` |
+| 5 | Large Shield | `Lg. Shield` | 29 | Quarrels | `Quarrels` |
+| 6 | Spiked Shield | `Spkd. Shld` | 30 | Long Sword | `Long Sword` |
+| 7 | Magic Shield | `Mag. Shld` | 31 | 2H Hammer | `2H Hammer` |
+| 8 | Jewel Shield | `Jewel Shld` | 32 | 2H Axe | `2H Axe` |
+| 9 | Cloth Armour | `Cloth` | 33 | 2H Sword | `2H Sword` |
+| 10 | Leather Armour | `Leather` | 34 | Halberd | `Halberd` |
+| 11 | Ring Mail | `Ring Mail` | 35 | Sword of Chaos | `Chaos Swrd` |
+| 12 | Scale Mail | `Scale` | 36 | Magic Bow | `Magic Bow` |
+| 13 | Chain Mail | `Chain` | 37 | Silver Sword | `Silver Swd` |
+| 14 | Plate Mail | `Plate` | 38 | Magic Axe | `Magic Axe` |
+| 15 | Mystic Armour | `Myst. Armr` | 39 | Glass Sword | `Glass Swrd` |
+| 16 | Dagger | `Dagger` | 40 | Jeweled Sword | `Jewel Swrd` |
+| 17 | Sling | `Sling` | 41 | Mystic Sword | `Myst. Swrd` |
+| 18 | Club | `Club` | 42 | Ring of Invisibility | `Inv. Ring` |
+| 19 | Flaming Oil | `Flame Oil` | 43 | Ring of Protection | `Prot. Ring` |
+| 20 | Main Gauche | `Main Gauch` | 44 | Ring of Regeneration | `Regen Ring` |
+| 21 | Spear | `Spear` | 45 | Amulet/Turning | `Am/Turning` |
+| 22 | Throwing Axe | `Thrwng Axe` | 46 | Spiked Collar | `Sp. Collar` |
+| 23 | Short Sword | `Sht. Sword` | 47 | Ankh | `Ankh` |
 
-Every other id's short label is either identical to its canonical name or a
-shorter spelling that the length rule never selects, so an engine that always
-prints the canonical name below the threshold matches the original. Of the ten
-above, ids `6`, `10`, `42`, `43`, `44`, `45`, and `46` appear in shipped
-arms-shop stock rows; `15`, `35`, and `40` do not.
+Ten canonical names reach the buy list's thirteen-character substitution
+threshold: ids `6`, `10`, `15`, `35`, `40`, `42`, `43`, `44`, `45`, and `46`.
+Every other short spelling in the table is invisible to that conditional buy
+list but remains observable in the always-short arms sell browser.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/functions/SHOPPES_OVL/`.
+Source provenance: derived from private analysis under
+`../u5-decomp/functions/SHOPPES_OVL/` and
+`../u5-decomp/functions/ZSTATS_OVL/`.
 
 ### 5.2 Armour, helms, and shields
 
@@ -676,9 +691,10 @@ Known acquisition paths:
   equipment counter. Buy quotes use the canonical equipment price adjusted by
   the speaking party member's Intelligence, check gold and carry capacity,
   debit gold on acceptance, increment the shared equipment counter, and do not
-  deplete shop stock. The `S` sell path scans nonzero carried equipment
-  counters, refuses unsellable rows, and on acceptance adds gold and decrements
-  the sold counter.
+  deplete shop stock. The `S` sell path displays every nonzero carried
+  equipment row in id order, including unsellable and ammunition rows; the
+  selection path refuses those rows as specified in `systems/shops.md`, while
+  an accepted ordinary sale adds gold and decrements the sold counter.
 - **Guild shops** sell keys, gems, and torches.
 - **Herbalists** sell reagents, with fixed per-vendor availability and prices.
   Zero-priced resident entries are omitted from the shop menu rather than sold.
