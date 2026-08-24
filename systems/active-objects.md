@@ -112,12 +112,42 @@ The eviction cascade is deterministic:
 | 9 | `0x30..0x7F` | any | Same class as phase 5, now visible allowed. |
 | 10 | `0x00..0xFF`, except `0xB5` | any | Last-resort eviction. |
 
-The off-screen test is viewport-sized rather than global-map-sized: a candidate
-more than roughly five cells from the player in either axis is considered
-eligible for the off-screen phases. The omitted ranges `0x12..0x1F` and
-`0x20..0x2F` protect NPC/person-like entries and vehicle-like entries from the
-priority phases. The last-resort phase can still take any byte except `0xB5`,
-so `0xB5` is the only universally protected byte-0 value in this allocator.
+The phases 2-5 off-screen test is an exact eleven-by-eleven square centred on
+the current player-coordinate globals. For each axis, compute the byte-wide
+unsigned value
+
+```text
+adjusted = (candidate_axis - player_axis + 5) modulo 256
+```
+
+The candidate is on-screen only when both adjusted axes are at most `10`.
+Equivalently, its symmetric wrapped separation from the player must lie in the
+inclusive range `-5..+5` on both axes. A separation of five remains on-screen;
+six on either axis is off-screen and makes the slot eligible for phases 2-5.
+The subtraction and addition both wrap as unsigned eight-bit arithmetic, so the
+same rule applies across the 0/255 world seam.
+
+This predicate reads the player X/Y state directly, not slot-zero coordinates
+and not the viewport or scroll origin. It reads candidate record bytes 2 and 3
+only; the candidate's floor/level byte does not participate. Matching X/Y on a
+different floor is consequently still classified as on-screen for allocation
+eviction. This is deliberately separate from the 32-cell scroll-base prune
+predicate in Section 8.1.
+
+For player `(2,2)`, the exact boundary cases are:
+
+| Candidate | Wrapped separation | Classification |
+|---|---|---|
+| `(253,2)` | `(-5,0)` | on-screen |
+| `(252,2)` | `(-6,0)` | off-screen |
+| `(7,7)` | `(+5,+5)` | on-screen |
+| `(8,7)` | `(+6,+5)` | off-screen |
+| `(2,2)` on another floor | `(0,0)` | on-screen; floor is ignored |
+
+The omitted ranges `0x12..0x1F` and `0x20..0x2F` protect NPC/person-like
+entries and vehicle-like entries from the priority phases. The last-resort
+phase can still take any byte except `0xB5`, so `0xB5` is the only universally
+protected byte-0 value in this allocator.
 The decoded NPC roster uses `0xB5` as a monster-variant actor class, including
 the Grendel row; it is not a moongate renderer. There is no moongate renderer:
 natural gates are live terrain written and removed by the once-per-turn refresh
@@ -711,11 +741,11 @@ The behaviour described above was derived by reading the function and format not
 - The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/`.
 - The compositor's companion-band write, the renderer's zero-grid-cell branch,
   the `+256` actor index rule and the reserved transparent value —
-  `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
+  `u5-decomp/notes/`.
 - The resident active-object acquisition cascade and slot initialiser -
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The `0xB5` actor-class interpretation is cross-checked against the shipped
-  NPC roster analysis in `u5-decomp/formats/npc-tlk-pth.md`.
+  NPC roster analysis in `u5-decomp/formats/`.
 - The overworld per-turn slot walker, its exact outdoor type-byte predicate,
   the proof that both animation and pruning classify record byte zero alone,
   hostile reaction dispatch, water-creature step path, per-slot movement
