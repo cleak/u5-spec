@@ -156,11 +156,10 @@ Dead is the *only* status it inspects. Every other status - including Ashes,
 Sleeping, Charmed, and an existing Poisoned - falls through both gates and is
 overwritten with Poisoned. An Ashes member in an in-party slot is therefore
 converted to Poisoned, and no Ashes-specific handling exists anywhere on this
-path. Read that as a conditional rather than as an observed event: whether the
-shipped game ever *produces* an Ashes status is itself an open question, recorded
-as a gap in `formats/saved-gam.md`. The contract established here is "if a status
-byte holds Ashes when this path runs, it is overwritten with Poisoned" - not that
-the conversion is reachable in normal play. *Corrected:* an earlier revision of this paragraph said the helper "skips
+path. The shipped game has no Ashes producer, so this conversion is unreachable
+from a valid new game and occurs only if an external, edited, or legacy U5 save
+already supplies Ashes. Preserve and honour that incoming value, including this
+consumer behaviour, but do not invent a gameplay producer. *Corrected:* an earlier revision of this paragraph said the helper "skips
 a member already marked Dead; a living member is left Poisoned", which reads as
 though the helper distinguishes living members from otherwise-incapacitated
 ones. It does not; that wording is withdrawn. The set of statuses it compares
@@ -423,9 +422,6 @@ oversights:
   position.
 - What the fixed constant stamped into the world-object entry by the
   surface/town combat cleanup in § 4 denotes.
-- Whether the shipped game ever produces an Ashes status at all, which decides
-  whether § 3's Ashes-to-Poisoned conversion is reachable in play or only a
-  conditional. That gap is owned by `formats/saved-gam.md`.
 - In the caller layer, the dungeon chest lock/trap sub-type is documented here
   only as "non-zero means trapped"; the claim that the sub-type is non-zero
   exactly when the chest is both locked and trapped has not been re-derived. The
@@ -454,9 +450,12 @@ This cleanroom spec was derived from private analysis notes. It intentionally
 does not reproduce decompiled code, assembly, raw tables, string dumps, or
 private address maps.
 
+- The absence of a shipped Ashes producer and the imported-value consumer
+  boundary are derived from the status-writer census in `u5-decomp/notes/` and
+  the status-owning overlay directories under `u5-decomp/functions/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/CMDS_OVL/`.
-- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the
+- `u5-decomp/notes/` — the
   wrong-mix branch's exact three steps, the stale victim-index edge, and the
   unmatched-spell-name route into the same branch.
 - `u5-decomp/functions/ULTIMA_EXE/`.
@@ -470,8 +469,7 @@ private address maps.
 
 Source provenance: the effect-1/effect-3 polarity correction, the absence of
 any caller-side trap-class table, and the three-call-site census are derived
-from private analysis note
-`u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+from private analysis in `u5-decomp/notes/`.
 
 Source provenance for the 2026-08-23 revision - § 2.1's acting-member selection
 and its scoped consequence, the per-site container differences and the Open

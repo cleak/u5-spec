@@ -1564,7 +1564,19 @@ The exact
 number of decrements per full actor-table pass depends on which command/AI
 paths run, so per-round parity remains tied to actor dispatch.
 
-The character status byte is the load-bearing summary value. The letters shipped code is confirmed to write into it are `'G'` good, `'P'` poisoned, `'D'` dead, and `'S'` asleep. Two further letters appear in the byte's value space but have no confirmed producer: `'C'` charmed and `'A'` ashes. The `C` the stats panel shows during combat is not read from this byte: it is a presentation override driven by the controlled/charmed descriptor bit (Section 6.1a), and the Charm spell writes `'G'`, never `'C'`, into a party target's status byte. *Corrected:* an earlier revision of this sentence listed `'C'` and `'A'` alongside the four written letters as though all six were stored states; that framing is withdrawn, and `formats/saved-gam.md` records the scope of the scan behind it and what remains UNVERIFIED about Ashes. Other systems read the byte to decide whether the character can act, can be selected as active player, or counts toward the party-defeat check.
+The character status byte is the load-bearing summary value. Shipped new-game
+and gameplay paths write `'G'` good, `'P'` poisoned, `'D'` dead, and `'S'`
+asleep. The `C` the stats panel shows during combat is not read from this byte:
+it is a presentation override driven by the controlled/charmed descriptor bit
+(Section 6.1a), and the Charm spell writes `'G'`, never `'C'`, into a party
+target's status byte. Ashes `'A'` has no shipped producer, though an external,
+edited, or legacy U5 save can supply a byte that the verbatim save/load path
+preserves. *Corrected:* an earlier revision listed `'C'` and `'A'` alongside the
+four written letters as though all six were gameplay-produced states; that
+framing is withdrawn. `formats/saved-gam.md` owns the complete reachability and
+compatibility rule. Other systems read the byte to decide whether the character
+can act, can be selected as active player, or counts toward the party-defeat
+check.
 
 ## 13. Per-monster-class data
 
@@ -1781,6 +1793,9 @@ without independent behavioral consumers remain opaque metadata.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
+- The status-byte producer boundary, including the absence of an Ashes writer,
+  is derived from private analysis in `u5-decomp/notes/` and the status-owning
+  overlay directories under `u5-decomp/functions/`.
 - Terrain-combat entry chain retrace of 2026-08-22 - outdoor arena selection from
   world terrain plus ship state, the class-id derivation and its separation from
   the arena index, the reachable spawn-count invariant, the forty-eight-entry

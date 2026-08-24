@@ -447,10 +447,12 @@ misread comparison: one places it inside the revive body, the other in a
 party-wide restore-and-level-up loop that rebuilds hit points, status and mana
 for every non-Dead member. Both routines contain a class-letter cascade of
 similar shape, so the routine attribution here is **not settled** and should not
-be relied on. The class-versus-status finding does not depend on it.) Whether the shipped game ever
-produces an Ashes status at all is an open question recorded in
-`formats/saved-gam.md`. Some callers
-use a verbose mode that prints the `Not dead!` refusal for a non-Dead target;
+be relied on. The class-versus-status finding does not depend on it.) No shipped
+new-game or gameplay path produces Ashes. This refusal is therefore observable
+only when an external, edited, or legacy U5 save already contains that status.
+Preserve and honour such a byte, but do not invent a death, spell, or
+resurrection path that creates it. Some callers use a verbose mode that prints
+the `Not dead!` refusal for a non-Dead target;
 the ordinary spell/scroll path records a failed result and lets the dispatcher
 own the trailing failure narration.
 
@@ -1118,6 +1120,10 @@ forty-eight player spell definitions.
 
 The behaviour described here was derived by reading the private function and format notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
+- The absence of a shipped Ashes producer and Resurrection's exact-Dead
+  consumer boundary are derived from the status-writer census in
+  `u5-decomp/notes/` and the status-owning overlay directories under
+  `u5-decomp/functions/`.
 - The absence of any time-driven magic-point regeneration, and the withdrawal
   of the earlier "full restoration on rest" claim in Section 11, derived from
   private analysis in `u5-decomp/notes/`.
