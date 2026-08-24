@@ -450,10 +450,18 @@ Consequently a clean implementation must not model `0x8C`'s argument as a flag
 id, and must not conclude that the bank has no setter. Both errors were present
 in earlier public answers and are withdrawn.
 
+#### The gold-payment envelope (`0x85`)
+
 **Neither outcome of `0x85` transfers control to a label.** Not a fixed label
 byte, not a computed one, on either the accepted or the refused arm. An
 implementation that pairs `0x85` with paid/refused label bytes is carrying an
 invention and should remove it rather than re-tune it.
+
+`0x85` itself reads **no player confirmation**. The three digit characters are
+the complete command arguments. The surrounding shipped dialogue puts each
+demand in an authored yes-answer record, so reaching the command already means
+that the player consented. Refusal means only that the decoded amount is
+greater than the party's current gold; an equal balance is affordable.
 
 **On an accepted payment the runner keeps emitting in place.** It debits the
 party's gold, refreshes the status panel, reports "continue" to the byte runner,
@@ -476,14 +484,48 @@ class matches one specific value **and** an internal counter has reached its
 threshold, at which point the counter resets and standing rises by one - and by a
 further two if the payment has emptied the party's purse.
 
-**On a refusal the routine opens a nested keyword prompt, and when that prompt
-ends the whole conversation ends.** It discards any pending partial word rather
-than flushing it, prints the refusal line, clears its multi-byte state, and calls
-the keyword prompt as a nested call. That prompt always reports non-zero, so the
-response run stops and the enclosing keyword loop also ends. The published
-behaviour is correct; the unwinding is the part worth stating explicitly.
+**On an unaffordable payment the exact fixed output is
+`"Thou hast not enough gold!"`, followed by two line feeds.** The quotes are
+part of the presentation framing. Before emitting them, the routine sets the
+pending-word count to zero: a partial word queued before `0x85` disappears and
+is not flushed. It then clears the multi-byte command and argument count and
+calls the ordinary top-level keyword loop as a nested call. The next fixed
+prompt is therefore `Your interest?`, a line feed, and `:` in that order.
 
-The gold-payment introducer (`0x85`) interacts with conversation flow, not just emission: depending on whether the player can pay, the surrounding response may take different paths, so implementations need to model it as a re-entrant prompt that returns a result code. On an affordable demand the amount is debited from party gold and the panel is refreshed; on an unaffordable one the runner prints the refusal line, clears its multi-byte state, and re-enters the keyword prompt rather than continuing the response. The rare moral-standing side effect that a successful payment can trigger is gated on the speaking NPC's sprite class and on a turn-based cooldown; `systems/karma.md` section 4 owns that contract, and `0x85` itself is not a karma writer.
+This is not the labelled-block scoped prompt of Section 7.7 and it is not a
+single forced turn. Each turn uses the ordinary reserved-word scan followed by
+the speaking NPC's ordinary keyword scan:
+
+| Nested input or response | Result inside the refusal prompt |
+|---|---|
+| `NAME`, `JOB`, or `WORK` | Run the ordinary fixed response, then print `Your interest?` again. |
+| A profanity | Run the ordinary rebuke and pause, then reprompt. |
+| An unmatched keyword | Print the ordinary no-match line, then reprompt. |
+| A per-NPC response that reaches its NUL without signalling stop | Finish its ordinary quote/newline framing, then reprompt. |
+| Empty input | Print `BYE` followed by two line feeds, run the NPC's mandatory Bye response in quotes, and return stop. |
+| `BYE` or `THANK` | Run that same mandatory Bye response and return stop. |
+| A per-NPC response that signals stop | Return stop without inventing an additional Bye line. |
+
+Nonterminating turns never return to the refused response; they stay inside
+the nested loop. Every path that actually returns from that loop returns stop.
+The stop propagates through the gold handler, the byte runner, the original
+response, and the enclosing keyword loop, so **every possible nested-loop
+return closes the whole conversation**. The bytes after the refused command's
+third digit are never resumed. The outer conversation owner also skips its
+fallback Bye call on this stop result: empty input and `BYE`/`THANK` therefore
+run the mandatory Bye response exactly once, while another stop-producing NPC
+response receives no synthetic Bye output. Final conversation cleanup follows.
+
+Compact compatibility vectors:
+
+| Case | Initial state and stream shape | Required result |
+|---|---|---|
+| Affordable | Gold is 5; the standing-milestone gate is false; `0x85` is followed by digit characters `0`, `0`, `5`, then ordinary success prose and a record terminator. | Read no input; set gold to 0; refresh the panel; continue with the first success-prose character. |
+| Unaffordable | Gold is 4; a partial word is pending; `0x85` is followed by digit characters `0`, `0`, `5`, then trailing prose. At the nested prompt enter `NAME`, then enter an empty line on the reprompt. | Discard the partial word; emit the exact quoted refusal and prompt; run the ordinary Name response and reprompt; emit `BYE` plus the quoted mandatory Bye response once; close the enclosing conversation; never emit the trailing prose. |
+
+The rare moral-standing side effect of an accepted payment remains gated on
+the speaking NPC's sprite class and a turn-based cooldown; `systems/karma.md`
+section 4 owns that contract, and `0x85` itself is not a general karma writer.
 
 The action-dispatch handler (`0x86`) is the engine's main extension point. The
 letter verbs cover joining the party, refusing to talk, granting items, and

@@ -167,7 +167,7 @@ printable text (after bit-7 strip). The full dispatch table:
 | `0x82` | END-STREAM          | Stop the current stream and signal the caller "this stream is finished". Used to terminate the fixed leading entries.   |
 | `0x83` | PAUSE               | Redraw the world view and wait for any key. After the key, refresh the party panel for every member.                    |
 | `0x84` | RECRUIT-SPEAKER     | Recruit the speaking NPC into the active party. No player prompt: the engine reads the speaker's own name out of the blob's Name entry and matches it against the reserve portion of the character roster. The historical mnemonic "ASK-PARTY-NAME" is wrong; `0x84` reads no player input. |
-| `0x85` | GOLD-PAYMENT        | Multi-byte introducer (three argument bytes follow): collect a gold amount and run the gold-payment routine.             |
+| `0x85` | GOLD-PAYMENT        | Multi-byte introducer (three argument bytes follow): collect a gold amount and run the automatic affordability test. It reads no player confirmation. |
 | `0x86` | ACTION-DISPATCH     | Multi-byte introducer (one argument byte follows): collect a letter `A..K` for the global action table, or a small generic flag index. |
 | `0x87` | KEYWORD-ALIAS       | No argument byte. Save the stream position, skip forward past the rest of the current record and past the whole record that follows it, run the record after that as a nested stream, then restore the saved position and continue — unless the nested stream signalled stop, which propagates. Used as a whole response body to make one keyword an alias for the next keyword's response. The historical mnemonic "SET-FLAG" is wrong; `0x87` writes no flag and performs no keyword matching. |
 | `0x88` | ASK-WHO             | No argument byte. Ask the player to name someone and read a typed line. On a match against a live party member, set the active scene's branch-flag bit for the NPC currently speaking — this is the in-stream setter that `0x8C` tests — and print the affirmative acknowledgement; otherwise print the dismissive one. |
@@ -206,7 +206,7 @@ conventionally the blob's final record marker.
 
 | Introducer | Argument bytes | Argument purpose                                                                                |
 |------------|----------------|-------------------------------------------------------------------------------------------------|
-| `0x85`     | 3              | Three ASCII digit bytes encoding a decimal gold amount for the gold-payment prompt.              |
+| `0x85`     | 3              | Three ASCII digit bytes encoding a decimal gold demand. The command itself reads no confirmation. |
 | `0x86`     | 1              | Letter `A..K` selecting a global fixed-slot action, or a small numeric generic flag index.       |
 | `0x8C`     | 1              | Branch **target label** taken when the tested flag is set, or `0xFF` meaning "end the response and return to the keyword prompt". It is *not* a flag identifier: the bit tested is chosen by the engine (the speaking NPC's roster slot), never by the script. |
 | `0xFE`     | 2              | Moral-standing threshold byte and target-label byte for a karma-conditional branch.             |
@@ -214,7 +214,9 @@ conventionally the blob's final record marker.
 
 For `0x85`, each of the three argument bytes is masked to seven bits and
 interpreted as one ASCII decimal digit. The resulting three-digit number is the
-gold amount tested against and deducted from the party. For `0x86`, the argument
+gold amount tested against and, when affordable, deducted from the party. The
+command reads no yes/no input; the surrounding authored response supplies the
+conversation context and consent. For `0x86`, the argument
 byte is also masked to seven bits; letters `A..K` dispatch through one global
 letter table, while small values below the letter range set generic
 one-conversation signal flags.
@@ -342,7 +344,7 @@ A reader can sanity-check a `.TLK` decoder by:
 - The free-text input pipeline that accepts the player's typed keyword — `systems/input.md`.
 - The runtime flag stores consumed by IF-ELSE and action-dispatch codes — `systems/quest-flags.md`; durable save-backed NPC and quest fields are cross-referenced from `formats/saved-gam.md`.
 - The party module whose state is mutated by the JOIN sequence and the gold-payment routine — described under `systems/conversation.md` cross-links.
-- The scene-byte lifecycle trace that distinguishes town-family scene ids from dungeon, intro, and combat-class markers — `u5-decomp/notes/critical_state_lifecycles.md`.
+- The scene-byte lifecycle trace that distinguishes town-family scene ids from dungeon, intro, and combat-class markers — `u5-decomp/notes/`.
 
 ## 14. Validation Boundary
 
@@ -357,7 +359,7 @@ complete in this spec; conversation runtime behavior is tracked in
 
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
-- The first-pass survey of the four `.TLK` files, the per-class NPC counts, the obfuscation verification against decoded names, and the control-byte prevalence analysis — `u5-decomp/formats/npc-tlk-pth.md`. That note's leading-pair-as-count reading of the header is superseded; see the retraction in Section 4.
+- The first-pass survey of the four `.TLK` files, the per-class NPC counts, the obfuscation verification against decoded names, and the control-byte prevalence analysis — `u5-decomp/formats/`. The earlier leading-pair-as-count reading of the header is superseded; see the retraction in Section 4.
 - The corrected header contract — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, the `4N + 2` header size that matches the first blob offset in all four files, and the consequent withdrawal of the "index 1 sentinel" — re-derived directly from the shipped `.TLK` files and from the runtime header walk in `u5-decomp/functions/TALK_OVL/`, cross-checked against the shipped `.NPC` dialog-index arrays and against the sprite-class description strings of `LOOK2.DAT`.
 - The conversation-engine entry point — the dialog-index dispatch from the Talk command, the dispatch into the file loader, and the conversation envelope — `u5-decomp/functions/TALK_OVL/`.
 - The `.TLK` file loader — the four-class file dispatch by scene byte, the header read into a working buffer, the linear header walk for the matched NPC id, and the second blob read at the matched offset — `u5-decomp/functions/TALK_OVL/`.
@@ -370,8 +372,8 @@ The format described above was derived from the analysis notes listed below. Non
   cross-checked against the Z-stats special-item display path:
   `u5-decomp/functions/ZSTATS_OVL/`
   and `u5-decomp/functions/ZSTATS_OVL/`.
-- The keyword input loop, reserved-keyword table, ordinary keyword scan, and profanity/default branch -- `u5-decomp/functions/TALK_OVL/`, and the summary correction in `u5-decomp/CORRECTIONS.md`.
+- The keyword input loop, reserved-keyword table, ordinary keyword scan, and profanity/default branch -- `u5-decomp/functions/TALK_OVL/`, and the correction ledger in `u5-decomp/`.
 - The case-insensitive bit-7-stripping string-equality routine used by the keyword match and the JOIN-name compare — `u5-decomp/functions/TALK_OVL/`.
-- The resident common-word dictionary and shop-side use of the same logical token order — `u5-decomp/formats/data-ovl.md`.
-- The 2026-08-22 retrace that corrected the `0x87`, `0x88`, `0x89`, `0x8A`, and `0x8E` control-code rows, the `0x8C` argument role, the dictionary token range, and the dictionary emission/spacing order — `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, with the supporting per-function notes `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.
+- The resident common-word dictionary and shop-side use of the same logical token order — `u5-decomp/formats/`.
+- The 2026-08-22 retrace that corrected the `0x87`, `0x88`, `0x89`, `0x8A`, and `0x8E` control-code rows, the `0x8C` argument role, the dictionary token range, and the dictionary emission/spacing order — `u5-decomp/notes/`, with supporting analysis under `u5-decomp/functions/TALK_OVL/`.
 - The conversation-system spec covering the runtime semantics this format spec only references — `u5-spec/systems/conversation.md`.
