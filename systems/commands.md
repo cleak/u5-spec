@@ -455,7 +455,10 @@ cancelled member selection, the generic no-lock result, and other pre-roll exits
 spend none. A failed pick changes nothing else, so container contents are never
 lost. There is no pickpocket branch in this command, and floor and town chests
 are container objects rather than tiles, so they always take the threshold
-roll. Detailed lock-state and prisoner-lifecycle rules live in
+roll. Key cost does not determine turn cost: the world-mode dispatcher reports
+the normal committed-action result after every Jimmy exit, including those
+zero-key exits, and combat Jimmy ends the acting combatant's action.
+Detailed lock-state and prisoner-lifecycle rules live in
 `doors-and-z-transitions.md`.
 
 `O` Open is the no-key counterpart. Non-dungeon Open runs the door auto-close
