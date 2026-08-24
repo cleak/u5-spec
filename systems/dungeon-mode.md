@@ -67,14 +67,14 @@ The high nibble drives wall checks in the renderer and the cell-description stri
 The loaded dungeon image does not carry a separate persistent visibility or
 automap state. The commonly seen `0x08` bit is class-sensitive runtime variant
 data, not a global visited or currently-visible bit. The shared dungeon cell
-reader clears that bit for returned cells below the wall/door band, so low
-classes such as passages, ladders, chests, fountains, pits, and fields do not
-expose it as a first-person visibility flag through the renderer-facing read
-path. For wall/door/room-like classes (`0x9?` and above), the renderer can use
-the bit as an extra-glyph or active-object overlay marker. Individual
-interaction handlers may still preserve, set, clear, or mask the bit as part
-of their own runtime state; those writes remain visit-local mutations of the
-loaded dungeon image, not durable exploration memory.
+reader clears that bit from returned values below `0x90`, so low classes are
+normalized before class/subtype interpretation. The backward painter then has
+one deliberate exception: for a normalized class below 9, it separately checks
+the raw level byte and, when bit `0x08` is set, draws the static pit-family
+rising overlay described in Section 6.6. Classes `0x9?` and above do not take
+that overlay path. The bit is unrelated to the coordinate-driven wandering
+monster and to durable exploration memory. Individual interaction handlers may
+still preserve, set, clear, or mask it as visit-local cell state.
 
 ## 4. Per-turn loop
 
@@ -223,12 +223,12 @@ redundant blits when the current dungeon presentation flavour does not require
 them.
 
 **Active-object setup.** Dungeon active-object setup is its own step, distinct
-from the view initialiser that allocates the dungeon view's buffers and clears
-the side panel; it runs on dungeon entry, on every level change, and on return
+from the view initialiser that loads the corridor/object banks and clears the
+viewport pages; it runs on dungeon entry, on every level change, and on return
 from a fight. It can either reuse the current active dungeon object or roll a
 fresh one. A fresh roll selects one of
-eight dungeon monster presentation records, installs that record's display
-sprite byte and its **combat class id**, resets the visibility flag, stamps the
+eight dungeon monster presentation records, installs that record's sprite-state
+byte and its **combat class id**, resets the special-placement flag, stamps the
 current Z level, and lazily loads the sprite source if placement succeeds. The
 two per-record bytes are distinct: one is presentation, the other is the combat
 class the wandering-monster combat path consumes directly (§ 14.1). The eight
@@ -239,9 +239,10 @@ the pit and open-chest spawn families (`0x6?` or `0x7?`) — both of which the
 renderer paints as passage — and rejecting the party's
 current cell. On success the same X/Y is written to the active-object slot and
 the first dungeon creature slot. On failure the active-object coordinates and
-sprite marker are cleared so no wandering object is drawn. Two traced sprite
-ids have an additional approximately even chance to start invisible; the exact
-monster names remain catalog data.
+sprite marker are cleared so no wandering object is drawn. Giant Spider and
+Slime alone receive a special upper/ceiling placement test: an inclusive draw
+from 0 through 99 sets the flag when greater than 48 (51/100). It is not an
+invisibility state.
 
 ## 5. Special underfoot reactions
 
@@ -423,12 +424,12 @@ gives a complete corridor wall; doing that for each side family in turn shows:
 | Forward door (12-15) | The same face carrying a framed doorway. The band-0 entry is the wide point-blank image: a full-height frame filling the aperture around an unlit interior, which is what standing *in* a doorway looks like. |
 | Forward flavour wall (24-27) | The forward wall of family 8-11 with the same scenery treatment as 20-23. |
 
-The two decorated families are the strongest check available, because they are
-their plain counterparts *plus* an overlay rather than independent artwork: a
-per-pixel comparison of slots 20-23 against 0-3, and of slots 25-27 against
-9-11, differs over well under a tenth of the image in every band, while any
-other pairing of families differs far more. A reader who has mixed up the plain
-and decorated families will see that ratio invert.
+The two decorated families are the strongest visual check available, because
+they are their plain counterparts *plus* scenery rather than unrelated artwork.
+Difference masks for slots 20-23 against 0-3, and for slots 25-27 against 9-11,
+trace the added scenery silhouettes while leaving the shared wall structure
+aligned. This is a structural identification rule, not a numeric pixel-ratio
+contract.
 
 Two invariants make the widths self-checking:
 
@@ -552,7 +553,8 @@ The renderer performs two sweeps over the same four cells.
    two side cells. The sweep stops at the first band whose forward test reports
    "blocked".
 2. **Backward sweep**, from the deepest accepted band back to band 0, painting
-   forward-facing objects, sprites, fields and active-object overlays. This is
+   forward-facing objects, fields, static cell overlays, and the coordinate-
+   matched wandering monster. This is
    the renderer's entire depth sorting: nearer bands paint over farther ones,
    with no depth buffer.
 
@@ -574,19 +576,21 @@ corridor on the next redraw with no transition effect.
 
 ### 6.6 Object sprites
 
-Objects standing in a cell are drawn from a separate art file holding **twenty
-sprites in five families of four**, one sprite per depth band. Each sprite is
+Objects standing in a cell are drawn from `ITEMS.16` (or its active-display
+depth twin, `ITEMS.4`). Despite its filename, this is the first-person dungeon
+object bank on this path. It holds **twenty sprites in five families of four**,
+one sprite per depth band. Each sprite is
 stored as a colour image **plus a separate one-bit transparency mask of the same
 dimensions**, so objects composite over the corridor art rather than punching
 opaque rectangles through it.
 
-| Family | Band 0 | Band 1 | Band 2 | Band 3 |
-|---|---|---|---|---|
-| Ladder | 40 x 80 | 24 x 56 | 16 x 24 | 8 x 8 |
-| Fountain | 40 x 80 | 24 x 56 | 16 x 24 | 8 x 8 |
-| Pit | 40 x 24 | 24 x 32 | 16 x 16 | 8 x 8 |
-| Chest | 40 x 24 | 24 x 32 | 16 x 16 | 8 x 8 |
-| Open chest | 40 x 24 | 24 x 32 | 16 x 16 | 16 x 16 |
+| Sprite indices | Family | Band 0 | Band 1 | Band 2 | Band 3 |
+|---|---|---|---|---|---|
+| 0-3 | Ladder | 40 x 80 | 24 x 56 | 16 x 24 | 8 x 8 |
+| 4-7 | Fountain | 40 x 80 | 24 x 56 | 16 x 24 | 8 x 8 |
+| 8-11 | Pit | 40 x 24 | 24 x 32 | 16 x 16 | 8 x 8 |
+| 12-15 | Closed chest | 40 x 24 | 24 x 32 | 16 x 16 | 8 x 8 |
+| 16-19 | Open chest | 40 x 24 | 24 x 32 | 16 x 16 | 16 x 16 |
 
 Cell class selects the family and the drawing mode:
 
@@ -597,11 +601,16 @@ Cell class selects the family and the drawing mode:
 | `0x3?` both ladders | ladder | ladder |
 | `0x4?` closed chest | - | chest |
 | `0x5?` fountain | - | fountain, plus the water animation of Section 6.7 |
-| `0x6?` pit | - | pit |
+| `0x6?` pit | pit when the low three bits are zero | pit |
 | `0x7?` open chest | - | open chest |
 
 Closed and open chests are visually distinct sprites, and the bidirectional
 ladder genuinely draws both a rising and a descending sprite in the same cell.
+The normal class-6 rising-pit paint is eligible only when the cell's low three
+bits are zero. Separately, after ordinary object/field painting, any raw cell
+below class 9 whose bit `0x08` is set receives another rising overlay from the
+pit family. This static cell overlay is separate from the coordinate-driven
+wandering-monster record described in Section 6.9.
 
 Placement follows three rules, all of which reproduce exactly from the
 half-aperture sequence:
@@ -616,12 +625,10 @@ half-aperture sequence:
   **descending ladder and a fountain** hang from the horizon downward, starting
   at y = 96.
 
-An extra overlay sprite is drawn for cells in the active-object classes when the
-cell's overlay bit is set, using the pit sprite family in rising mode. Energy
-fields (class `0x8?`) are drawn by their own animated strobe helper rather than
-from this sprite bank; the field's low nibble selects the flavour. Where the
-level's dropped-item coordinates match a swept cell at a band other than 0, the
-dropped-item painter also runs.
+Energy fields (class `0x8?`) are drawn by their own animated strobe helper rather
+than from this sprite bank; the field's low nibble selects the subtype. The
+separate active dungeon-monster record is painted when its coordinates match a
+swept cell at a visible band, as specified in Section 6.9.
 
 ### 6.7 The fountain water animation
 
@@ -685,11 +692,11 @@ fountain sprite itself is always drawn first by the object pass.
 
 ### 6.8 Wall decorations
 
-Flavour walls in **flavour-1 (normal) dungeons only** carry a five-stage
-decoration animation - the falling droplet the player sees on a mossy wall. It
-is drawn as a three-pixel cross (one horizontal run and one vertical run through
-the same centre) with a brighter centre pixel, in the same blue pen family as
-the fountain water.
+Flavour walls in **flavour-1 (normal) dungeons only** carry a six-state
+decoration cycle - five visible positions followed by a transient landing/reset
+state. In visible stages 0 through 3 it is drawn as a three-pixel horizontal run
+and a three-pixel vertical run through the same centre in palette index 1
+(normal blue), then the centre pixel is redrawn in index 9 (bright blue).
 
 Horizontal position is fixed per band and side:
 
@@ -710,36 +717,100 @@ Vertical position advances through the five stages:
 
 The stage is stored in the **low three bits of the level cell itself**, and the
 painter writes the next stage back, so the animation's state persists in the
-live level map for the duration of the visit. Stage 0 advances only on a
-one-in-sixteen roll; stages 1 through 4 advance on every paint; stage 4 uses a
-brighter pen and omits the extra centre pixel; the stage after 4 draws nothing,
-plays a short falling-pitch tone whose pitch depends on the band, and resets the
-cycle to 0.
+live level map for the duration of the visit. At stage 0 it draws one inclusive
+random integer from 0 through 64 and advances only for results 0 through 3: the
+exact probability is 4/65. Stages 1 through 4 advance on every paint. Stage 4
+draws the cross in palette index 11 (bright cyan) on EGA and Tandy, or driver
+colour 3 on CGA and Hercules; it does not redraw a separate centre pixel. It
+then stores stage 5.
 
-Only stages 0 through 4 are producible by the animation. An implementation
-should treat each placement as exactly five entries and clamp; the original's
-tables run into their neighbours past stage 4, but that region is unreachable.
+Stage 5 is a real, transient stored state. Its next paint draws no decoration,
+plays the short falling-pitch tone whose pitch depends on the depth band, and
+stores stage 0. Implementations therefore need six states even though only five
+have visible coordinates.
 
 ### 6.9 Cell reads, active objects and the composite redraw
 
 **Cell reads.** Every renderer-facing cell read wraps X and Y independently to
 the range `0..7`, then reads the current Z-level image. For cell bytes below
-`0x90`, bit `0x08` is ignored by clearing it before class interpretation. For
-classes `0x9?` and higher, bit `0x08` remains meaningful as a render-side
-overlay/extra-glyph flag. This bit is not persistent visibility memory.
+`0x90`, bit `0x08` is cleared before class/subtype interpretation. The backward
+painter separately reads the raw byte only for normalized classes below 9 and
+uses a set `0x08` bit for the static rising pit-family overlay in Section 6.6.
+Classes `0x9?` and higher skip that overlay. This bit is not persistent
+visibility memory and is not the wandering monster marker.
 
-**Fields.** Energy-field cells draw animated horizontal strobe lines. The strobe
-uses per-field resident parameters for vertical band, row count, and row
-spacing, plus a field-specific pen choice. The exact row coordinates are
-randomized within the configured bands each render pass.
+**Fields.** Energy-field cells draw randomized horizontal strobe lines. The low
+nibble chooses only the pen; geometry is selected by depth band:
 
-**Active objects.** Active monster, Codex, Shadowlord, and similar dungeon
-sprites are drawn by an animated sprite helper keyed to the global dungeon
-animation phase and the current creature record. The helper can apply small
-random flicker/direction variants, has a special quest-scene sprite-table path,
-and paints a paired sprite/mask result when the dungeon sprite source is loaded.
-If the sprite source is unavailable, it falls back to text presentation rather
-than silently painting a blank object.
+| Subtype | Effect | EGA/Tandy palette index |
+|---:|---|---:|
+| 0 | Sleep | 13 (bright magenta) |
+| 1 | Poison gas | 10 (bright green) |
+| 2 | Fire | 12 (bright red) |
+| 3 | Electric | 9 (bright blue) |
+
+| Band | Coordinate minimum | Coordinate maximum | Strokes | Endpoint delta |
+|---:|---:|---:|---:|---:|
+| 0 | 16 | 167 | 300 | 7 |
+| 1 | 56 | 135 | 100 | 7 |
+| 2 | 80 | 111 | 50 | 5 |
+| 3 | 92 | 99 | 15 | 2 |
+
+For every stroke, in order, draw `x` uniformly from the inclusive range
+`[minimum, maximum - delta]`, then draw `y` uniformly from the inclusive range
+`[minimum, maximum]`, then paint the inclusive horizontal segment from `(x, y)`
+through `(x + delta, y)`. The visible lengths are therefore 8, 8, 6 and 3
+pixels by band. Pen selection happens once before the stroke loop.
+
+**Active dungeon monster.** The active record used by this corridor painter is
+the wandering dungeon monster, not a generic Codex, Shadowlord, quest-scene, or
+dropped-item registry. Its family selects one masked-sprite resource and one
+combat class:
+
+| Family | Resource | Monster | Combat class | Initial sprite-state byte |
+|---:|---|---|---:|---:|
+| 0 | `MON0.16` / `MON0.4` | Giant Rat | 20 | `0x60` |
+| 1 | `MON1.16` / `MON1.4` | Bat | 21 | `0xA0` |
+| 2 | `MON2.16` / `MON2.4` | Giant Spider | 22 | `0x00` |
+| 3 | `MON3.16` / `MON3.4` | Ghost | 23 | `0x90` |
+| 4 | `MON4.16` / `MON4.4` | Slime | 24 | `0x80` |
+| 5 | `MON5.16` / `MON5.4` | Gremlin | 25 | `0x60` |
+| 6 | `MON6.16` / `MON6.4` | Gazer | 28 | `0x00` |
+| 7 | `MON7.16` / `MON7.4` | Reaper | 27 | `0x00` |
+
+Each `MONn` file contains six sprites: pose 0 uses records 0, 1 and 2 at
+bands 1, 2 and 3; pose 1 uses records 3, 4 and 5 at those bands. The respective
+sprite dimensions in either pose are 24 x 66, 16 x 25 and 8 x 6. The painter
+runs only at bands 1 through 3 and only when the swept cell's wrapped X/Y equals
+the active record's X/Y.
+
+Each pose is painted as a left half and a paired half meeting at x = 96. The
+left-half x coordinates for bands 1 through 3 are 72, 80 and 88. Normal y
+coordinates are 86, 96 and 98; the special upper/ceiling placement uses y = 40,
+70 and 85. Placement may set that special flag only for Giant Spider or Slime,
+using one inclusive draw from 0 through 99 and setting it when the result is
+greater than 48 (51/100). This flag is a placement variant, not invisibility.
+
+On an ordinary paint the helper makes two independent inclusive draws from 0
+through 100 and sets each provisional pose selector when its result is below 50
+(50/101 apiece). It then interprets the state byte as symmetry bits `0x90`,
+animation mode bits `0x60`, and a four-bit phase. Mode `0x20` toggles phase 0/1
+and forces both selectors equal; mode `0x40` keeps the independent selectors;
+mode `0x60` decrements the phase modulo four and derives the selectors from the
+four-entry pose pattern 1, 3, 2, 3. Non-zero symmetry bits derive the second
+selector from the first: `0x90` complements it and the other non-zero patterns
+copy it. The rebuilt state preserves those symmetry and mode bits and stores the
+updated phase.
+
+While the Negate Time effect is active, the helper resets the state to the
+family's initial byte and forces the pose selection instead of taking the two
+random draws. This is a time-stop rule, not a quest-scene sprite-table path. The
+selected `MONn` bank is loaded on demand; if it is unexpectedly absent, the
+renderer emits an internal diagnostic and paints no monster. Colour pixels and
+their paired one-bit mask composite as `destination AND mask`, then `OR` the
+source pixels wherever the mask is clear. Codex and Shadowlord presentation is
+outside this corridor-monster path and must not be synthesized from these
+resources.
 
 **Composite redraw.** Commands that mutate dungeon state use a composite redraw
 helper: reset the prompt/status presentation, render the viewport with the
@@ -748,8 +819,9 @@ the front buffer, run the local presentation tick, and redraw the two border
 labels of Section 4.1. This is a repaint helper, not a game-state transition,
 and it is the path the map view returns through.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, and
+Source provenance: derived from private analysis in
+`../u5-decomp/functions/DUNGEON_OVL/`,
+`../u5-decomp/functions/DNGLOOK_OVL/`, and `../u5-decomp/formats/`, and
 re-verified against the shipped dungeon art directories.
 
 ## 7. Light sources
@@ -1291,8 +1363,8 @@ The map is therefore an inspect overlay, not a persistent panel that waits for
 the next turn loop to erase it, and not an automap: it is recomputed from the
 current dungeon record every time the player spends a gem.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+Source provenance: derived from private analysis under
+`../u5-decomp/notes/` and `../u5-decomp/functions/DNGLOOK_OVL/`.
 
 ## 13. Z transitions and exiting
 
@@ -1768,15 +1840,14 @@ specified, and stock data cannot produce that edge.
 
 The behaviour described here was derived by reading the private function notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The withdrawal of the per-hour "HP regeneration" step in Section 11, and the confirmation that the dungeon H path converges on the same shared hole-up handler as the overworld, derived from `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
+- The withdrawal of the per-hour "HP regeneration" step in Section 11, and the confirmation that the dungeon H path converges on the same shared hole-up handler as the overworld, derived from private analysis under `u5-decomp/notes/`.
 
 - The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, the status-gated post-action helper, the ungated party-capability check, and the epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/`.
 - The wandering-monster combat contract in Section 14.1 -- ambush entry mode,
   arena and metadata-band synthesis, party-entry and source coordinate tables,
   source-band construction, class derivation, active-object slot handling, and
-  the post-combat bracket -- derived from private analysis note
-  `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md` and the function notes it
-  cites: `u5-decomp/functions/DUNGEON_OVL/`,
+  the post-combat bracket -- derived from private analysis under
+  `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
   `u5-decomp/functions/DNGLOOK_OVL/`, and
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The room-clear bitmap's index derivation and the six-pair writer deny-list --
@@ -1784,8 +1855,8 @@ The behaviour described here was derived by reading the private function notes l
   `u5-decomp/functions/DNGLOOK_OVL/`.
 - The dungeon chrome bands, their exact cell layouts, the two border-label
   literals and the invalid-facing fallback, the status refresh cadence, and the
-  walk-in-only entry facing seed -- derived from private analysis note
-  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+  walk-in-only entry facing seed -- derived from private analysis under
+  `u5-decomp/notes/`.
 - The dungeon viewport frame, status row redraw, render-and-poll helper,
   active-object setup and placement, and room-entry state handoff -- derived
   from `u5-decomp/functions/DUNGEON_OVL/`,
@@ -1793,33 +1864,31 @@ The behaviour described here was derived by reading the private function notes l
 - The first-person renderer's billboard model, half-aperture frustum, per-band
   destination rules, cell-class-to-image mapping, sprite families and placement,
   fountain-water and wall-decoration animations, two-sweep ordering, and binary
-  light gate -- derived from private analysis note
-  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, which also
+  light gate -- derived from private analysis under `u5-decomp/notes/`, which also
   withdraws the earlier sparse-point-plotting reading recorded in
   `u5-decomp/notes/`.
-- The dungeon-entry scene/name/record binding, selected-record load, and entry seed coordinates — derived from the MAINOUT E-Enter helper and its dungeon-entry subhelper, cross-checked against `u5-decomp/formats/data-ovl.md`.
+- The dungeon-entry scene/name/record binding, selected-record load, and entry seed coordinates — derived from the MAINOUT E-Enter helper and its dungeon-entry subhelper, cross-checked against private analysis under `u5-decomp/formats/`.
 - Source provenance: the single shared exit contract and its plane rule, the
   four routes that reach it, the foot-travel entry gate, Doom's Shadowlord gate
   and one-way descent, the withdrawal of the "exit-dungeon tile" class, the
   klimb-versus-spell split on destination testing, and the per-dungeon
-  climbable-exit table are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+  climbable-exit table are derived from private analysis under
+  `u5-decomp/notes/`.
 - The mode-aware letter dispatch table including the dungeon-specific routes for A-Attack, K-Klimb, L-Look, T-Talk, V-View, and the H-Hole-up overworld path — derived from `u5-decomp/functions/ULTIMA_EXE/`.
-- The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/`. The View handler's centred flood map, its twenty-two by twenty-two eight-pixel cell grid, wrap rule, flood bound, font-based glyph source, and wait/clear/restore flow — derived from the DNGLOOK function notes under `u5-decomp/functions/DNGLOOK_OVL/` and from private analysis note `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`, which withdraws the earlier peer-spell tint reading.
+- The dungeon Look handler's tile-class switch, light gate, `0x61` description normalisation, and fountain Y/N drink flow — derived from `u5-decomp/functions/DNGLOOK_OVL/`. The relative focus prompt and coordinate writer used by dungeon Look and Search — derived from `u5-decomp/functions/SJOG_OVL/`. The View handler's centred flood map, its twenty-two by twenty-two eight-pixel cell grid, wrap rule, flood bound, font-based glyph source, and wait/clear/restore flow — derived from `u5-decomp/functions/DNGLOOK_OVL/` and `u5-decomp/notes/`, which record the withdrawal of the earlier peer-spell tint reading.
 - The wrapped dungeon cell reader's class-sensitive `0x08` normalization and
-  the front-cell renderer's extra-glyph/active-object overlay use of that bit
-  -- derived from `u5-decomp/functions/DUNGEON_OVL/`, and
-  `u5-decomp/notes/system-trace_dungeon-rendering.md`.
+  the backward painter's separate raw-bit static pit-family overlay
+   -- derived from `u5-decomp/functions/DUNGEON_OVL/` and
+  `u5-decomp/notes/`.
 - The first-person renderer helper contracts -- billboard bank selection and
   directory roles, per-band destination placement and the mirror rule,
   cell-class-to-image mapping including the point-blank override and the
   heavy-door pass-through, object sprite families and their masked format,
   the fountain-water point animation, the flavour-wall decoration animation and
-  its persisted stage, field strobe painting, active-object sprite painting,
+  its persisted stage, field strobe painting, wandering-monster sprite painting,
   and composite redraw sequencing -- derived from the dungeon renderer function
   notes under `u5-decomp/functions/DUNGEON_OVL/`, consolidated and corrected in
-  private analysis note
-  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`. That note
+  private analysis under `u5-decomp/notes/`. That analysis
   withdraws the earlier "sparse point-pair wall table" reading and reattributes
   those four tables to the fountain-water animation.
 - The dungeon Search handler's light gate, high-nibble feature descriptions,
@@ -1834,15 +1903,15 @@ The behaviour described here was derived by reading the private function notes l
   looted cell, the shipped-data facts that no static cell carries the open-chest
   class and that every static chest cell has the variant bit clear, and the
   absence of any caller-side trap-selection table above the shared trap
-  resolver. Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+  resolver. Source provenance: derived from private analysis under
+  `u5-decomp/notes/`.
 - The dungeon post-action tile-effect pass, including exact `0x61`/`0x69`
   fall traps, exact `0x62`/`0x6A` bomb traps, visit-local trap-cell rewrites,
   sleep-field one-shot resolution, and poison-field repeat resolution --
   derived from `u5-decomp/functions/DUNGEON_OVL/`, and
   `u5-decomp/functions/DUNGEON_OVL/`.
 - The dungeon movement destination-effect boundary and electric-field force-step path -- derived from `u5-decomp/functions/DUNGEON_OVL/`.
-- The DUNGEON.DAT layout (eight dungeons by eight levels by eight by eight cells, packed nibbles per cell) and the DUNGEON.CBT layout (combat arenas indexed by adjusted dungeon scene and room low nibble) — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
+- The DUNGEON.DAT layout (eight dungeons by eight levels by eight by eight cells, packed nibbles per cell) and the DUNGEON.CBT layout (combat arenas indexed by adjusted dungeon scene and room low nibble) — derived from `u5-decomp/formats/` and the dungeon room-entry helper.
 - The stock `DUNGEON.DAT` fall-trap reachability boundary -- fall traps exist,
   but no level-seven trap or same-column vertical fall-trap run reaches level
   seven -- derived from a local semantic scan of
@@ -1863,8 +1932,8 @@ The behaviour described here was derived by reading the private function notes l
 - The dungeon mode-local control-code table, the Enter/period movement
   bindings, the digit handler's "no action" result, the absence of the
   shifted-digit direction translation underground, and the corrected return
-  values of dungeon Klimb. Source provenance: derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
+  values of dungeon Klimb. Source provenance: derived from private analysis under
+  `../u5-decomp/notes/` and
   `../u5-decomp/functions/DUNGEON_OVL/`.
 
 - The Section 7 light-source correction: the two dungeon light bytes are
@@ -1872,8 +1941,8 @@ The behaviour described here was derived by reading the private function notes l
   only as a binary lit/unlit gate, and the complete writer census for both
   counters (Ignite, the G-Get borrow branch, the three light-spell writers, and
   the Blackthorn clear) rules out the previously claimed per-turn spellbook
-  bump. Source provenance: derived from private analysis notes
-  `../u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` and
+  bump. Source provenance: derived from private analysis under
+  `../u5-decomp/notes/` and
   `../u5-decomp/functions/CAST2_OVL/`, and from the
   sibling spec `u5-spec/systems/lighting.md`.
 
@@ -1881,6 +1950,6 @@ The behaviour described here was derived by reading the private function notes l
   per-iteration party-capability check, its ownership of the sleep line, the
   withdrawn "idle pump" / "dungeon-exit teardown" reading of that tail, and the
   routing of a total party wipe to the rescue/refuge sequence rather than to a
-  death or game-over path. Source provenance: derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2, and
+  death or game-over path. Source provenance: derived from private analysis under
+  `../u5-decomp/notes/` and
   `../u5-decomp/functions/DUNGEON_OVL/`.

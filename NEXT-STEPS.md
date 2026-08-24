@@ -1334,25 +1334,28 @@ dialogue id rather than a corrupted-data edge. See `formats/tlk.md` Section 6.
 
 **Current dungeon renderer provenance cleanup:** 2026-05-12 - `systems/dungeon-mode.md`, dungeon/tile formats, lighting, movement, tile catalog, and extraction now consistently describe the first-person dungeon renderer from the dedicated render trace: sparse point plotting from resident coordinate tables, not raycasting or continuous line drawing, with a binary torch/light-spell gate. This pass removed stale wireframe terminology and aligned provenance/status wording with the correction log. The previously asserted wind-tile torch-extinguish rule is resolved negatively for the analyzed baseline contact paths because the mapped movement and post-action tile-effect dispatchers do not identify a stock breeze contact branch, and the tile catalog now separates wind/gust graphics from any dungeon-contact claim. Dungeon L-Look now closes its focus-coordinate gap: it uses the shared relative ahead/right/left/here chooser, and Space/Pass aborts before tile description. `formats/dungeon-dat.md` now treats Search-revealed passages and wall/flavour rewrites as runtime behavior over preserved cell variants instead of a separate unresolved secret-door encoding. The later dungeon byte-visibility cleanup also separates class-sensitive `0x08` variant/overlay handling from persistent visibility memory.
 
-**Current dungeon renderer helper cleanup:** 2026-05-13 -
-`systems/dungeon-mode.md` now promotes the completed DUNGEON renderer helper
-notes into clean public prose: mod-8 cell reads, class-sensitive `0x08`
-normalization, forward/backward sweep ordering, blocker and side-wall
-classification, sparse coordinate-pair wall roles, glyph-versus-sprite source
-selection, single-glyph decoration families, energy-field strobe rendering,
-animated active-object sprite presentation, and the composite redraw bracket.
-The spec still avoids raw coordinate table dumps; those remain resident
-rendering data.
+**Current dungeon renderer helper cleanup:** corrected 2026-08-23 -
+`systems/dungeon-mode.md` now publishes the backward pass at implementation
+contract depth: `ITEMS` is the five-family, twenty-sprite dungeon-object bank;
+each `MONn` resource is one named wandering-monster family with two poses and
+three visible depths; energy-field subtype selects the pen while depth selects
+the exact randomized stroke geometry; and normal-flavour decoration includes a
+reachable transient state 5 with an exact 4/65 stage-0 gate. Earlier generic
+Codex/Shadowlord active-object, quest-scene sprite-table, per-field geometry,
+and five-state/clamped decoration readings are withdrawn. Mod-8 cell reads,
+forward/backward sweep ordering, blocker and side-wall classification, and the
+composite redraw bracket remain unchanged.
 
 **Current dungeon presentation/input helper cleanup:** 2026-05-13 -
 `systems/dungeon-mode.md` now covers the small DUNGEON overlay helpers around
 the turn loop: viewport frame paint, level/facing status redraw,
 render-and-poll key translation and blit cadence, dungeon active-object
 initialisation, eight-attempt spawn placement on `0x6?`/`0x7?` cells, lazy
-sprite-source loading, invisible-start variants, and the room-entry state
-snapshot before `DUNGEON.CBT` combat handoff. Exact title/prompt text and
-movement feedback text are now verified against DATA.OVL; monster-name labels
-remain asset/catalog verification items rather than gameplay contract gaps.
+sprite-source loading, the Giant Spider/Slime upper-placement variant, and the
+room-entry state snapshot before `DUNGEON.CBT` combat handoff. Exact
+title/prompt text and movement feedback text are verified against DATA.OVL;
+the eight wandering-monster names and `MONn` mappings are now closed in the
+dungeon renderer contract.
 
 **Current dungeon hazard/contact helper cleanup:** 2026-05-13 -
 `systems/dungeon-mode.md` now promotes the remaining DUNGEON hazard/contact

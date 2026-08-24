@@ -1,6 +1,6 @@
 # Tile-graphics files
 
-Format specification for the paired tile-graphics archive family — the `*.16` files for sixteen-colour EGA and the `*.4` files for four-colour CGA. The two depths share an identical container layout; only the per-pixel encoding differs. Together they store every tile, sprite, title strip, screen panel, and cutscene frame the engine renders. The set covers the world tile atlas, the inventory and monster sprite sheets, the decorative chapter-heading strips, the dungeon wall billboards, the title and end-game panels, and the multi-page story screens.
+Format specification for the paired tile-graphics archive family — the `*.16` files for sixteen-colour EGA and the `*.4` files for four-colour CGA. The two depths share an identical container layout; only the per-pixel encoding differs. Together they store every tile, sprite, title strip, screen panel, and cutscene frame the engine renders. The set covers the world tile atlas, the dungeon object and monster sprite sheets, the decorative chapter-heading strips, the dungeon wall billboards, the title and end-game panels, and the multi-page story screens.
 
 ## 1. Overview
 
@@ -8,7 +8,7 @@ Ultima V's renderable graphics are partitioned into four functional families —
 
 Both depths share an identical outer envelope and an identical container structure. Inside the container, the only difference is the per-pixel encoding: `.16` packs two four-bit pixels per byte (chunky packed, high nibble first), while `.4` packs four two-bit pixels per byte (packed, most-significant bits first). Every container layout, every directory format, every image header, and every padding convention is depth-agnostic; a single decoder can read either depth by switching only the row-stride formula and the per-byte unpacking code.
 
-The full file roster covers the canonical tile atlas (`TILES`), the inventory sprite sheet (`ITEMS`), the eight monster sprite sheets (`MON0` through `MON7`), the dungeon wall billboard sets (`DNG1`, `DNG2`, `DNG3`), the chapter-heading strip set (`TEXT`), the chargen panel set (`CREATE`), the universal banner panels (`ULTIMA`), the intro acknowledgement/credits page (`STARTSC`), the end-of-game cutscene frames (`ENDSC`, `END1`, `END2`), and the six story screens (`STORY1` through `STORY6`). Every file in this list ships as both `.16` and `.4`. There are no other tile-graphics files; the set is exhaustive.
+The full file roster covers the canonical tile atlas (`TILES`), the dungeon object sprite sheet (`ITEMS`), the eight dungeon monster sprite sheets (`MON0` through `MON7`), the dungeon wall billboard sets (`DNG1`, `DNG2`, `DNG3`), the chapter-heading strip set (`TEXT`), the chargen panel set (`CREATE`), the universal banner panels (`ULTIMA`), the intro acknowledgement/credits page (`STARTSC`), the end-of-game cutscene frames (`ENDSC`, `END1`, `END2`), and the six story screens (`STORY1` through `STORY6`). Every file in this list ships as both `.16` and `.4`. There are no other tile-graphics files; the set is exhaustive.
 
 Every file is wrapped in the shared Ultima V LZW envelope. After unwrap, the body is one of three small container layouts — a flat tile array, a directory of variable-shape images, or a directory of variable-shape image-and-mask sprites. The container choice is implicit per file (no tag, no magic number, no version); a reader knows which layout to apply because the file family's role is fixed. Sections 5 and 6 enumerate the layouts; Section 7 lists which files use which layout.
 
@@ -172,16 +172,24 @@ Two facts make this layout robust against forward-compatibility: the offset tabl
 
 ### 5.3 Directory of variable-shape sprite-and-mask blocks, sixteen-bit offsets
 
-The sprite-sheet files use a similar layout but with sixteen-bit offsets and twice as many slots — every sprite occupies two consecutive slots, an *image* slot and a *mask* slot. The image slot uses the same header-and-rows layout as Section 5.2; the mask slot uses the same width-and-height header followed by a one-bit-per-pixel transparency plane.
+The sprite-sheet files use a similar layout but with sixteen-bit offsets and two
+directory entries per sprite: an *image* entry and a *mask* entry. The leading
+count word is the number of sprites, not the number of offsets. The image entry
+uses the same header-and-rows layout as Section 5.2; the mask entry uses the same
+width-and-height header followed by a one-bit-per-pixel transparency plane.
 
 The header is:
 
 | Field             | Width   | Meaning                                                                                                |
 |-------------------|---------|--------------------------------------------------------------------------------------------------------|
-| Slot count        | 2 bytes | Little-endian unsigned word; equals two times the sprite count.                                        |
-| Offset table      | 2 × *n* bytes | Little-endian unsigned words; one per slot, giving the body-relative offset of each sub-block.   |
+| Sprite count      | 2 bytes | Little-endian unsigned word; number of paired sprites.                                                 |
+| Offset table      | 4 × *n* bytes | Two little-endian unsigned words per sprite, giving body-relative image and mask offsets.        |
 
-Slot ordering alternates: even-indexed slots (zero, two, four, ...) point to image sub-blocks; odd-indexed slots (one, three, five, ...) point to mask sub-blocks. A given sprite at sprite-index *k* has its image at slot `2k` and its mask at slot `2k + 1`. Sprite-zero is at slots zero and one; sprite-one is at slots two and three; and so on.
+Offset ordering alternates: entries zero, two, four, and so on point to image
+sub-blocks; entries one, three, five, and so on point to mask sub-blocks. A
+sprite at index *k* has its image offset at entry `2k` and its mask offset at
+entry `2k + 1`. The first image therefore begins at body offset
+`2 + sprite_count * 4`.
 
 The image sub-block follows the Section 5.2 image format — width word, height word, raw pixel rows in chunky packed (`.16`) or two-bit packed (`.4`) form. The mask sub-block follows the same width-and-height header but its pixel rows are one bit per pixel:
 
@@ -198,7 +206,7 @@ Local asset sanity over `ITEMS` and `MON0` through `MON7` in both `.16` and
 every shipped sprite slot, and set mask bits correspond to transparent image
 regions rather than visible silhouette pixels.
 
-The sixteen-bit offset table sets a hard ceiling of sixty-five thousand five hundred thirty-five bytes for the body; every sprite-sheet file fits comfortably under this limit (the largest sprite sheet is around ten thousand bytes uncompressed). Slot count is always even by construction — the count word equals twice the sprite count.
+The sixteen-bit offset table sets a hard ceiling of sixty-five thousand five hundred thirty-five bytes for the body; every sprite-sheet file fits comfortably under this limit (the largest sprite sheet is around ten thousand bytes uncompressed). The offset-entry count is always even by construction, but the stored count word is the sprite count itself.
 
 The five-bits-per-pixel (`.16` plus mask) and three-bits-per-pixel (`.4` plus mask) totals explain why the `.16` and `.4` sprite-sheet sizes are not in 2:1 ratio: the depth-dependent image plane scales 2:1, but the depth-independent mask plane does not. The observed ratio across the sprite-sheet family is approximately five over three (about 1.67), matching the predicted ratio.
 
@@ -209,8 +217,8 @@ The full set of tile-graphics files, with their container layouts, sub-image cou
 | File             | Layout                       | Sub-images / sprites                | Approximate `.16` body | Approximate `.4` body |
 |------------------|------------------------------|-------------------------------------|------------------------|-----------------------|
 | `TILES`          | Flat atlas (5.1)             | 512 fixed-size 16×16 tiles          | 65,536 bytes           | 32,768 bytes          |
-| `ITEMS`          | Sprite-and-mask (5.3)        | 10 sprites in 20 slots              | ~10.4 KB               | ~6.4 KB               |
-| `MON0`–`MON7`    | Sprite-and-mask (5.3)        | 3 sprites per file in 6 slots       | ~2.6 KB per file       | ~1.6 KB per file      |
+| `ITEMS`          | Sprite-and-mask (5.3)        | 20 sprites (40 offsets)             | ~10.4 KB               | ~6.4 KB               |
+| `MON0`–`MON7`    | Sprite-and-mask (5.3)        | 6 sprites per file (12 offsets)     | ~2.6 KB per file       | ~1.6 KB per file      |
 | `TEXT`           | Image directory (5.2)        | 6 strips                            | ~10.5 KB               | ~5.3 KB               |
 | `CREATE`         | Image directory (5.2)        | 11 chargen panels                   | ~37.5 KB               | ~18.3 KB              |
 | `ULTIMA`         | Image directory (5.2)        | 5 panels                            | ~38.2 KB               | ~19.0 KB              |
@@ -232,9 +240,21 @@ Several roles deserve dedicated commentary.
 
 The **tile atlas** is the heart of the two-dimensional rendering pipeline. Every overworld cell, town/interior cell, combat-arena terrain cell, and active-object sprite resolves to one of these five hundred twelve tiles. First-person dungeon floors are the exception: `DUNGEON.DAT` uses its own packed-nibble cell encoding and the dungeon renderer composites its own billboard and sprite art rather than indexing the world tile atlas for each floor cell. The high-nibble grouping is approximate (walls cluster in one range, floors in another, water in another, doors in another), but the catalogue treats the index as an opaque identifier and looks up animation, walkability, and class flags in a per-tile attribute table held in resident data. The atlas's indices are referenced from the location tile grids (see `formats/location-dat.md`), the surface and underworld chunk tables, combat arenas, and active-object tile bytes.
 
-The **inventory sprites** in `ITEMS` are larger-than-tile artwork shown on the inventory and trade screens. The ten sprites are paired into the standard image-and-mask layout. Sprite dimensions vary — the larger ones are around forty by eighty pixels — and the iconography is rendered at a higher resolution than world tiles to fill the inventory panel.
+The **dungeon object sprites** in `ITEMS` are twenty masked half-billboards used
+by the first-person dungeon renderer. They form five consecutive four-record
+families, one record per depth band: ladder, fountain, pit, closed chest, and
+open chest. The complete dimensions and class-to-family mapping are specified
+in `systems/dungeon-mode.md` Section 6.6. The filename does not establish an
+inventory-screen role, and this traced consumer does not use it as an inventory
+item-id sheet.
 
-The **monster sprites** in `MON0` through `MON7` carry three animated monster sprites per file across eight files, for twenty-four sprites total. Each sprite's width is wider than its visible silhouette because animation frames are laid out side-by-side within a single sprite — a four-frame walk cycle of a sixteen-pixel-tall figure is rendered as one sixty-four-pixel-wide image, which the renderer slices into four sixteen-pixel frames at draw time. The exact frame count per sprite varies; the cataloguing of which file holds which monster category is a property of the resident monster table, not of the file format.
+The **dungeon monster sprites** in `MON0` through `MON7` carry six masked
+sprites per file. They are two poses of the same monster family, with three
+visible depth records per pose; they are not frame strips sliced side-by-side.
+Pose 0 occupies records 0 through 2 and pose 1 records 3 through 5. Within each
+pose the dimensions are 24 x 66, 16 x 25, and 8 x 6. The resource-to-monster
+mapping and runtime pose rules are specified in `systems/dungeon-mode.md`
+Section 6.9.
 
 The **title strips** in `TEXT` are decorative chapter headings, drawn as artwork and blitted whole. Each of the six records is one word rendered in an ornate blackletter face, at a fixed height of 32 or 33 pixels, and the consumer draws the record as a single opaque image at a caller-supplied origin. They are **not** a bitmap font and are never sliced per character.
 
@@ -365,11 +385,11 @@ archive decoding:
 
   The two empty slots are 8 and 24, the band-0 entries of the forward wall and forward flavour wall families: at point-blank range the renderer substitutes slot 12 for every blocker class, so nothing ever requests them. The same table with per-band widths, the visual signature of each family, and the class-to-family selection rule are in `systems/dungeon-mode.md` sections 6.2 and 6.4; the placement rule is in section 6.3 and the file-to-flavour assignment in section 6.2.
 
-- **`MON0`–`MON7` monster category mapping.** Each of the eight files carries three sprites; which file holds which monster category (animals, undead, demons, dragons, and so on) is a property of the resident monster table, not of the file format. A content tool that wants to extract a named monster's sprites must consult the monster table.
-
-- **`ITEMS` slot-to-item-id mapping.** The ten sprites in `ITEMS` correspond to inventory items, but the slot-index-to-item-id mapping is a property of the inventory-rendering overlay, not of the file format.
-
-- **Animation frame layout within a sprite.** Monster and item sprites lay multiple animation frames side-by-side inside a single image. The frame count and per-frame width are not part of the on-disk header — they are encoded by the engine's per-sprite slicing convention. A reader extracting individual frames must consult the resident sprite-attribute table.
+- **Dungeon sprite catalog.** *Closed.* `ITEMS` is the twenty-sprite dungeon
+  object bank, ordered as five four-band families. Each `MON0` through `MON7`
+  file contains two poses times three depths for one named wandering-monster
+  family. `systems/dungeon-mode.md` Sections 6.6 and 6.9 publish both mappings
+  and the runtime pose selection contract.
 
 - **`STORY1` compression ratio outlier.** The compression ratio for `STORY1` is approximately 2.16 versus the cluster of 2.00 to 2.05 across the other story files. The deviation is small enough to attribute to dictionary luck on the specific bitmap content, but a comparison against an independent LZW encoder could confirm.
 
@@ -377,23 +397,22 @@ archive decoding:
 
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
-- The first-pass survey of every tile, sprite, font, and screen-panel file in both depths, the LZW envelope identification and verification, the three container layouts, the sprite-and-mask budget arithmetic, and the cross-file size and ratio audits — `u5-decomp/formats/tile-graphics.md`.
+- The first-pass survey of every tile, sprite, font, and screen-panel file in both depths, the LZW envelope identification and verification, the three container layouts, the sprite-and-mask budget arithmetic, and the cross-file size and ratio audits — private analysis under `u5-decomp/formats/`.
 - The resident LZW bit-reader and loader wrapper notes that confirm the
   variable-width code stream contract -
   `u5-decomp/functions/ULTIMA_EXE/`.
 - Fresh local sprite-mask verification over `ITEMS` and `MON0` through `MON7`
   in both `.16` and `.4` forms confirmed matching image/mask dimensions and
-  the "set bit = transparent" polarity.
-- The display drivers' byte-by-byte unpacking of the chunky packed (EGA) and packed two-bit (CGA) row data into hardware framebuffer form — `u5-decomp/code-inventory.md` (the `EGA.DRV`, `CGA.DRV`, `HERC.DRV`, and `TANDY.DRV` driver entries).
-- The `TEXT` record roles, sizes and words, decoded from the shipped archive with this document's own container rules and cross-checked against their consumers in `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md`.
-- The world tile attribute table held in the resident data slab — referenced by the location tile grids' decoded tile indices — `u5-decomp/formats/data-ovl.md`.
+  the "set bit = transparent" polarity, as well as the stored sprite counts
+  and the two-offsets-per-sprite directory rule.
+- The display drivers' byte-by-byte unpacking of the chunky packed (EGA) and packed two-bit (CGA) row data into hardware framebuffer form — private driver analysis under `u5-decomp/formats/` and `u5-decomp/functions/`.
+- The `TEXT` record roles, sizes and words, decoded from the shipped archive with this document's own container rules and cross-checked against consumers analyzed under `u5-decomp/notes/`.
+- The world tile attribute table held in the resident data slab — referenced by the location tile grids' decoded tile indices — private analysis under `u5-decomp/formats/`.
 - The withdrawal of the "resident miniature tile-glyph rendering path" of
   Section 5.1.1: the routine that reading rested on is the night-time light
   beacon's stencil stamp, re-read from the shipped executable for this revision
-  and written up in `u5-decomp/functions/ULTIMA_EXE/`
-  and `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`. The stale
-  reading survives as `u5-decomp/functions/ULTIMA_EXE/`
-  and in a `u5-decomp/CORRECTIONS.md` entry; both are superseded.
-- Per-record inventories and roles for `ULTIMA`, `STARTSC` and `ENDSC`, the depth difference in `ULTIMA`'s last record, and the `STARTSC`-is-not-the-start-screen correction — `u5-decomp/notes/intro_title_sequence_2026-08-22.md`, with every record shape re-decoded from the shipped files before publication.
+  and written up under `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/notes/`. The stale private readings are superseded.
+- Per-record inventories and roles for `ULTIMA`, `STARTSC` and `ENDSC`, the depth difference in `ULTIMA`'s last record, and the `STARTSC`-is-not-the-start-screen correction — private analysis under `u5-decomp/notes/`, with every record shape re-decoded from the shipped files before publication.
 - The active-object table whose per-slot tile byte indexes the world tile atlas — `u5-spec/systems/active-objects.md`.
 - The location tile grids' per-cell tile byte that indexes the world tile atlas — `u5-spec/formats/location-dat.md`.
