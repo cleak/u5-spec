@@ -149,10 +149,15 @@ reload like any other saved counter. An implementation that keeps it only in
 memory lets a player clear the window by saving and reloading, which the
 original does not.
 
-**A camp refused by the cooldown does not re-arm it.** There is exactly one
-instruction in the shipped code that writes fourteen to that byte, and both
-refusal branches jump past it. A player cannot lock themselves out by camping
-repeatedly.
+**A camp refused by the cooldown does not re-arm it.** The cooldown-refusal
+path bypasses recovery, the apparition-context gate, the apparition random
+draw, and the write that arms the next cooldown. A player cannot lock
+themselves out by camping repeatedly.
+
+**A duration of five hours or less has the same late bypass.** It does not
+recover the party, does not evaluate the apparition-context gate, consumes no
+apparition random draw, and does not arm a new cooldown. This duration check is
+made after the accepted camp has elapsed, just like the cooldown check.
 
 **But a refused camp still advances time in full.** The gate is evaluated
 *after* the camp's hours are credited, so the counter decays during the very
@@ -198,18 +203,33 @@ event** already specified in Section 7.
 twice.** There is one event here, not two, and an implementation that builds
 both will roll twice and stamp something that does not exist.
 
-**The draw is not a clean quarter, and the exact form matters.** The apparition
-gate draws from the closed range `0..24` against one hundred - twenty-five
-outcomes in a hundred. Stating it as "twenty-five percent" is a rounding that
-happens to be exact here, but the neighbouring hit-point roll is a closed
-`1..63`, and a published percentage invites an implementation to reach for a
-float where the original uses a bounded integer draw. Publish and implement the
-draw, not the ratio.
+**The exact integer draw matters.** The apparition gate draws from the closed
+range `0..99` and accepts `0..24`, giving twenty-five accepted outcomes in one
+hundred. The neighbouring hit-point roll is a closed `1..63`, so an
+implementation should preserve these bounded integer draws rather than replace
+them with floating-point probability checks.
 
-The apparition branch carries **an additional gate the earlier wording omitted**:
-it runs only when two caller flag bits are both clear. When either is set the
-branch is skipped entirely - **and the cooldown is still armed**, which is what
-the "armed whether or not" clause was really describing.
+The apparition branch carries **an additional caller-context gate**, evaluated
+before `random(0, 99)`:
+
+| Caller context | Context condition | Apparition PRNG draw |
+|----------------|-------------------|----------------------|
+| Ordinary overworld H-Hole-up | No suppression condition | Consumed once |
+| Dungeon H-Hole-up | Dungeon-rest condition | Not consumed |
+| Town-bed H-Hole-up | Separate rest handler; never reaches this gate | Not consumed |
+| Reserved compatibility condition | No shipped public caller sets it | Not consumed if supplied |
+
+The first tested condition is therefore the live dungeon-rest selector, not an
+outdoor selector. The second condition has no separate gameplay meaning in the
+shipped caller set: it is a dormant, reserved apparition-suppression input. It
+must not be inferred from paid lodging; town-bed rest is excluded by routing,
+not by that condition.
+
+When either condition suppresses the branch, the handler performs no
+apparition draw and still arms the cooldown at 14. When both are clear, it
+consumes exactly one `random(0, 99)` draw; either a miss or a completed event is
+then followed by the same cooldown write. Cooldown refusal and duration of
+five hours or less take an earlier branch and reach none of this logic.
 
 Statuses outside the rest-participating set, including Charmed or Ashes if
 present in the party record, have no dedicated H-Hole-up status transition in
@@ -308,10 +328,15 @@ The event's public contract:
 
 - It is outdoor-camp owned.
 - It is cinematic text plus party-stat mutation, not an interactive dialogue.
-- It is considered only on the eligible normal camp-success path: not the
-  sleep-ambush branch and not the paid/town rest branch.
-- The trigger roll is `random(0, 99)`. Results `0..24` run the old-man event;
-  results `25..99` skip it. The event chance is therefore 25%.
+- It is considered only after an uninterrupted ordinary overworld camp has
+  completed, the persisted cooldown is zero, and the requested duration is
+  greater than five hours. It is not considered on the sleep-ambush, dungeon,
+  town-bed, cooldown-refusal, or short-duration paths.
+- The caller-context gate is evaluated before the trigger roll. A suppressed
+  context consumes no event PRNG value.
+- When the context is eligible, the trigger roll is `random(0, 99)`. Results
+  `0..24` run the old-man event; results `25..99` skip it. The event chance is
+  therefore 25%.
 - It iterates active party members. Dead members do not receive the heal, the
   cure, the level recomputation, the narration or the stat reward. They are
   **not** passed over entirely, though: the class-keyed magic-point refresh
@@ -394,9 +419,11 @@ placement-shuffle branch in the ordinary terrain setup helper is not evidence
 for this live rest/camp path.
 
 The camp cooldown counter, the greater-than-five-hours duration gate, the
-per-member `1..63` roll, the class-keyed magic-point assignment, and the
-absence of any status/provision pass inside the wilderness camp loop are all
-public behavior here.
+caller-context mapping, suppression-before-PRNG ordering, per-member `1..63`
+roll, class-keyed magic-point assignment, and absence of any status/provision
+pass inside the wilderness camp loop are all public behavior here. The second
+apparition-suppression condition is intentionally specified as reserved: the
+shipped public callers do not assign it a gameplay context.
 
 The remaining residual is presentation parity around the same public mechanics:
 exact low-level string-window boundaries, audio/delay helper timing, and
@@ -413,28 +440,9 @@ tables, or implementation-specific addresses.
 
 - `u5-decomp/functions/CMDS_OVL/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
-- `u5-decomp/functions/ULTIMA_EXE/`
-  (resident H-Hole-up rest-with-watch handler; private filename retained for
-  continuity).
-- `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/OUTSUBS_OVL/`.
-- `u5-decomp/functions/OUTSUBS_OVL/` (the camp-event handler's note; on
-  2026-08-23 a second, competing note that had existed at the same routine was
-  merged into it and removed, so this contract now rests on one analysis rather
-  than two disagreeing ones, and Section 7 carries the corrections that merge
-  produced).
-- `u5-decomp/notes/lord_british_dialogue.md`.
-- `u5-decomp/notes/npc_walker_callers_2026-05-08.md`.
-- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`
-  (H-Hole-up's entry clear of the shared timed-effect slot, including the
-  permanent regalia auras).
-- `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`
-  (cadence of the shared status/provision pass, and the town-bed versus
-  wilderness-camp difference).
-- `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`
-  (independent second-pass re-derivation of the completed long-camp guard set,
-  the `1..63` hit-point roll, the class-keyed magic-point writes, the cooldown
-  counter's arming and hourly decay, and the Ring of Regeneration predicate).
+- `u5-decomp/notes/` (independent caller censuses and second-pass rest,
+  persistence, cadence, and camp-event traces).
 - `systems/time.md`.
 - `systems/encounters.md`.
 - `systems/town-mode.md`.

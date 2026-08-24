@@ -299,6 +299,14 @@ handoff, dormant helper non-use, Lord British camp event, and hourly
 food/provision delegation are public; low-level string-window, audio/delay, and
 refresh-helper parity remains presentation work.
 
+**Rest/camp caller-gate closure:** 2026-08-23 - The camp-event context gate is
+now public without exposing private addresses. Ordinary overworld camp is the
+only shipped caller context that consumes the event draw; dungeon camp is
+suppressed before PRNG consumption, town-bed rest uses another handler, and the
+second suppression condition has no shipped public setter and remains reserved.
+Cooldown refusal and durations of five hours or less bypass the context gate,
+event draw, and cooldown write entirely. Issue #96 is closed by this contract.
+
 **Current display-driver status cleanup:** 2026-05-13 - `EXTRACTION.md` now
 promotes both `EGA.DRV` and Display driver/rendering contract to complete at
 the EGA/v1 compatibility depth, matching `systems/display-driver.md` and
