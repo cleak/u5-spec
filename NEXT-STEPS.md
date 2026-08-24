@@ -63,6 +63,16 @@ absence of any producer of the Ashes status, and the inertness of the
 combat-class scene boundary disagreement. The `R`-costs-a-turn rule and the
 Sextant's Underworld refusal both survived challenge unchanged.
 
+**Addendum — 2026-08-24, R-Ready exact clock cost.** Issue #113 closed the
+remaining double-charge gap. Every path inside one R-Ready invocation has no
+clock call of its own. Overworld and town pay exactly one ordinary post-action
+charge (nominally two and one minutes respectively), dungeon pays its single
+one-minute loop-head charge, and repeated picker attempts add nothing. The
+shared Quickness and Negate Time modifiers still apply to those nominal
+increments. Combat Ready spends the live actor's action and adds no
+command-specific clock advance; combat's independent one-minute modulo-ten
+wrap occurs before actor dispatch and is unaffected by the chosen command.
+
 **Addendum — 2026-08-23, outdoor ranged-attack contract re-verified and
 published.** Three gaps around the outdoor creature ranged attacks were traced
 and adversarially re-derived from the shipped binaries, and the result is now in
