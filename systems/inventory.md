@@ -384,8 +384,8 @@ picker offer unequip rows even when the carried counter is zero. When no
 displayable row exists, the panel prints the none placeholder and waits for a
 key before returning to the page loop.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+Source provenance: derived from private analysis in
+`../u5-decomp/notes/`.
 
 ## 5. R-Ready Flow
 
@@ -415,11 +415,10 @@ The picker is shared infrastructure. In R-Ready mode it walks the equipment
 stock band; another caller can reuse the same picker against a different item
 band and name table.
 
-**Turn cost.** R-Ready costs a turn in every mode, and a refusal costs exactly
-what a success costs — there is no free retry. This rule was challenged and
-re-derived from the shipped binaries on 2026-08-23; it stands unchanged, and an
-implementation that never advances the clock on `R` is wrong against the
-original in every mode.
+**Timing contract.** R-Ready consumes one exploration action in overworld,
+town and dungeon modes. In combat it consumes the live combatant's action
+instead. A refusal costs exactly what a success costs — there is no free retry
+after the command has reached the equipment handler.
 
 The equipment overlay reports no status of its own. The eligibility cascade
 returns the same value for every refusal and for every successful equip and
@@ -430,55 +429,56 @@ outcome inside R-Ready can therefore change the turn cost.
 
 Outside combat the dispatcher reports its default "acted" status for `R`
 whatever the overlay did: the `R` arm never writes the status word and is not
-one of the arms that overwrite it from their handler's return value. The mode
-loop then runs its per-turn epilogue and the clock advances even if the player
-opens the panel and immediately backs out. The three world mode loops differ
-only in how they reach that conclusion: world and town modes skip their epilogue
-only on a "no action" status, which `R` never reports; dungeon mode advances its
-clock at the head of every loop iteration, ahead of the input read and not
-gated on the status at all, so `R` costs a minute there exactly as any other
-keystroke does. Town mode additionally skips its whole epilogue when no party
-member is able to act; that is an all-incapacitated edge case, not an `R`
-exemption.
+one of the arms that overwrite it from its handler's return value. The exact
+exploration charge is therefore:
+
+| Mode | Where the sole charge occurs | Nominal clock increment |
+|---|---|---:|
+| Overworld | Once in the post-action mode epilogue | 2 minutes |
+| Town | Once in the post-action mode epilogue | 1 minute |
+| Dungeon | Once at the head of the loop iteration, before input | 1 minute |
+
+These are the nominal increments before the shared time modifiers in
+`systems/time.md` apply. Quickness changes the overworld increment from two
+minutes to one and leaves either one-minute indoor increment at one; Negate
+Time suppresses the minute write. Neither modifier changes the fact that the
+action or dungeon iteration was consumed. Town mode additionally skips its
+whole epilogue when no party member is able to act; that is an
+all-incapacitated edge case in which the command is never dispatched, not an
+`R` exemption.
 
 In combat, `R` runs through the labelled prompt with the live-actor gate, so it
 ends the acting combatant's action. Only an actor that fails that gate escapes
-the cost, with a short refusal and a free re-prompt. The mechanism is worth
-stating precisely, because it is easy to describe wrongly: the shared verb
-helper discards whatever the ready cascade returned and reports success
-unconditionally on every dispatched path, and the combat parser keeps that value
-in a slot separate from its "the prompt is finished" flag — the flag is already
-set before the letter is dispatched, so `R` always leaves the inner prompt loop.
-The parser's epilogue then re-prompts on the gate's failure value and ends the
-actor's action otherwise.
+the cost, with a short refusal and a free re-prompt. The shared verb helper
+discards whatever the ready cascade returned and reports success on every
+dispatched path, so an equipment refusal and a successful change end the action
+identically.
 
-Every one of these therefore charges a turn: cancelling the member prompt before
-an item is ever shown; the empty-handed refusal; the silent ammunition row; the
-strength refusal; the combat body-armour lock; the occupied-slot and
+Ready has no command-specific world-clock advance in combat. Combat owns a
+separate counter that invokes the ordinary one-minute clock cleanup on every
+tenth phase refresh. That wrap occurs before the corresponding actor is
+dispatched and is independent of which command that actor later chooses. A
+Ready command can therefore be entered immediately after the normal combat
+cadence has advanced the clock, but Ready neither triggers nor duplicates that
+advance.
+
+In exploration, every applicable outcome receives that single mode-owned
+charge: cancelling the member prompt before an item is shown; the empty-handed
+refusal; the silent ammunition row; the strength refusal; the occupied-slot and
 hand-occupancy refusals; the ammunition-prerequisite refusal; a successful
 equip; a successful unequip; the ring vanish; and opening the picker and
-immediately pressing Escape. Because the panel stays open until the player
-exits, the cost is per invocation of the command, not per item readied: several
-items can be equipped, unequipped or refused within one turn.
+immediately pressing Escape. In combat every path reached for a live actor,
+including the combat-only body-armour lock, spends that actor's action instead.
 
-Scope of that claim: it rests on reading the dispatcher's `R` arm, the R-Ready
-entry point, the eligibility cascade, the combat verb helper and all three mode
-loops end to end, plus a transitive walk of everything the R-Ready subtree calls,
-which does not reach the clock. That walk follows direct near calls only, so a
-clock advance reached by a far call or a computed call would not have been seen.
-Nothing suggests one exists, and one would be redundant given the dispatcher's
-unconditional "acted" status, but the negative is bounded by that method.
-
-An independent re-verification on the same day re-derived the positive half of
-the rule in full — the dispatcher's `R` arm provably never touches the status
-word, and all three mode loops and the combat parser were read end to end — but
-repeated only an overlay-local scan for direct calls into the clock routine, not
-the transitive walk. So one narrow point is an explicit gap, published rather
-than glossed: **whether anything the R-Ready subtree calls advances the clock a
-second time, producing a double charge, is not established.** It cannot change
-whether a turn is charged, because the mode loop charges one on a positive
-finding regardless; it can only affect how much time one `R` costs. Walking the
-subtree's resident callees to their returns would settle it.
+There is no double charge. A complete call-form audit of every function
+reachable from R-Ready found no far or computed call and no path to the shared
+clock cleanup; walking the resident helpers to their returns produced the same
+negative result. A reverse audit of the clock cleanup's callers likewise found
+no Ready or equipment helper. Because the panel stays open without returning to
+the mode loop, several items may be equipped, unequipped or refused within the
+same invocation without accumulating time. The cost is strictly once per
+command invocation, not once per attempted row; the ring-vanish path merely
+closes that invocation early.
 
 ### 5.1 R-Ready presentation
 
@@ -723,7 +723,7 @@ listing, or raw binary dump is reproduced here.
 Additional provenance for the equipment-weight note: the resident
 `compute_party_member_weight` analysis in
 `u5-decomp/functions/ULTIMA_EXE/` and the
-inventory trace in `u5-decomp/notes/system-trace_inventory.md`; the discarded
+inventory trace in `u5-decomp/notes/`; the discarded
 call return is visible in the resident
 `u5-decomp/functions/ULTIMA_EXE/` note.
 
@@ -738,7 +738,7 @@ with the ZSTATS active-actor selector at
 
 Magic-ring vanish provenance: the same ZSTATS equip/unequip cascade, corrected
 with the Buffer-D `prng_range` thunk mapping in
-`u5-decomp/notes/engine_idioms.md`, and the resident combat ring consumers in
+`u5-decomp/notes/`, and the resident combat ring consumers in
 `u5-decomp/functions/ULTIMA_EXE/`, and
 `u5-decomp/functions/ULTIMA_EXE/`.
 
@@ -757,20 +757,24 @@ Search/Get Moonstone recovery notes.
 Combat-lock scope, silent-ammunition, and turn-cost provenance: the in-combat
 restriction applies to the body-armour family only and lifts once the battle's
 outcome has been announced; ammunition rows exit the cascade silently; and a
-refused R-Ready costs exactly what a successful one costs, in every mode.
-Source provenance: derived from private analysis note
-`../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`, with
+refused R-Ready costs exactly what a successful one costs in the same mode.
+Source provenance: derived from private analysis in
+`../u5-decomp/notes/`, with
 `../u5-decomp/functions/ZSTATS_OVL/`.
 
-Turn-cost re-derivation provenance (2026-08-23): the `R` dispatcher arm's
+Turn-cost re-derivation provenance (2026-08-23 and the 2026-08-24 double-charge
+closure): the `R` dispatcher arm's
 unconditional "acted" status, the R-Ready entry point's single exit with no
 return value, the eligibility cascade's two return values and which paths reach
 each, the ammunition rows' silent exit, the combat verb helper's discarded
-delegate result, all three world mode loops' clock placement, and a transitive
-walk showing the R-Ready subtree never reaches the turn clock. Re-derived
-directly from the shipped binaries; private analysis in
+delegate result, all three exploration mode loops' clock placement, an
+exact-boundary call-form audit of the complete R-Ready subtree, a walk of its
+resident helpers to return, and a reverse census of the clock routine's callers.
+Together these establish that R-Ready never reaches the clock itself and cannot
+double-charge. Re-derived directly from the shipped binaries; private analysis in
 `u5-decomp/functions/ZSTATS_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
-`u5-decomp/functions/ULTIMA_EXE/` was used only to locate starting points. One
+`u5-decomp/functions/ULTIMA_EXE/`, with audit records in
+`u5-decomp/notes/`, was used only to locate starting points. One
 private note describes the R-Ready item prompt with the wrong literal; the
 published Section 5.1 wording matches the binary and that note does not.
 
@@ -819,6 +823,6 @@ followed here.
 
 Combat U-Use correction provenance: combat routes `U` into the same item-use
 handler the world modes use, after the live-actor gate. Source provenance:
-derived from private analysis note
-`../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` and
+derived from private analysis in
+`../u5-decomp/notes/` and
 `../u5-decomp/functions/COMBAT_OVL/`.
