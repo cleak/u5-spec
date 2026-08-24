@@ -525,10 +525,11 @@ After completed write counts `8, 16, ..., 248`, and only there, the wrapper
 runs one complete Return-to-View preview tick: active-object and animated-tile
 advance, intro title tick, active-actor scatter into the preview planes,
 repaint of the revealed span, reveal-cursor widen/toggle, then one keyboard
-status poll. If no key is pending, that tick continues with its one-BIOS-tick
-wait and any strip-specific ambient speaker operation. A pending key aborts
-before that wait and sound. There are exactly 31 such checkpoints and no tick
-or input poll after the final eight writes.
+read through the normal nonblocking input path. If no key is pending, that tick
+continues with its one-BIOS-tick wait and any strip-specific ambient speaker
+operation. A pending key is consumed and normalized, then discarded as an
+abort signal before that wait and sound. There are exactly 31 such checkpoints
+and no tick or input read after the final eight writes.
 
 An abort at checkpoint `8k` leaves writes `0` through `8k-1` visible and all
 other cell pixels unchanged from before the effect; the driver performs no
@@ -585,14 +586,19 @@ One iteration does the following, in order:
 4. Repaint the cells inside the currently revealed column span, four rows at a
    time, skipping any cell whose terrain byte is the `0xFE` sentinel.
 5. Advance the reveal cursor, as described below.
-6. Poll the keyboard once. Any pending key aborts the preview immediately; the
-   caller restores the saved title/menu image and returns to the menu.
+6. Run the normal nonblocking keyboard reader once. A pending key is consumed
+   and normalized; the preview ignores its command identity and uses the
+   nonzero result only to abort. The caller restores the saved title/menu image
+   and returns to the menu, whose next poll is a fresh read. The aborting key
+   cannot immediately dispatch there.
 7. Wait one hardware tick, per `systems/timing.md` section 5.
 8. Run the current strip's ambient sound step, if that strip has one.
 
-The keyboard poll of step 6 happens **before** the one-tick wait, and an abort
-returns from the whole tick request immediately, so the remaining iterations of
-a multi-tick command are not run.
+The keyboard read of step 6 happens **before** the one-tick wait, and an abort
+returns from the whole tick request immediately, so the remaining iterations
+of a multi-tick command are not run. This is intentionally different from the
+status-only probe inside subtitle ignition: Return-to-View consumes its abort
+key.
 
 Step 8 depends only on the current strip index:
 
