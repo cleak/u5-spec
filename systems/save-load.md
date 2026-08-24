@@ -144,7 +144,7 @@ The save handler is a callable function, distinct from the inline load flow. The
 
 5. **Write the underworld mirror back, conditionally.** The handler checks the disk-prompt mode it had on entry. If that entry mode was not mode 1, it writes the underworld staging half to `UNDER.OOL` — the same bytes it read in step 4, so the file's content does not change. If the entry mode was already mode 1, this write is skipped. There is no surface counterpart: **a save never writes `BRIT.OOL`.**
 
-6. **Write `SAVED.GAM`.** The full 4192 bytes of the save image are written from memory to disk in one operation.
+6. **Write `SAVED.GAM`.** The full 4192 bytes of the save image are written from memory to disk in one operation. This includes the three pending shipwright-delivery fields documented in `formats/saved-gam.md` Section 9.3, including the class byte at the very end of the image; there is no field-specific conversion or normalization.
 
 7. **Write `SAVED.OOL`.** The full 512 bytes - surface and underworld halves concatenated - are written from the staging region to disk in one operation.
 
@@ -153,6 +153,11 @@ The save handler is a callable function, distinct from the inline load flow. The
 ### 5.3 What does not happen on save
 
 The save flow does not write `INIT.GAM` or `INIT.OOL` — those are shipped read-only. It does not write the world data files. It does not write a temporary or backup copy before overwriting; a save is an immediate destructive overwrite of `SAVED.GAM` and `SAVED.OOL`. An implementation that wants crash-safety should add an out-of-band copy step.
+
+A queued shipwright delivery remains queue state inside `SAVED.GAM` until the
+next overworld entry consumes it. Q-save does not create a speculative vehicle
+record in `BRIT.OOL`, in either staging half, or in `SAVED.OOL`; doing so would
+violate both the queue ownership and the per-plane staging order above.
 
 Above all, **no live map tiles are persisted.** An exhaustive census of every
 disk write the game performs shows four written regions and no others: the
@@ -305,7 +310,7 @@ generic DOS file I/O, not an LZW decompressor.
   with the read-versus-write identity of the two resident file wrappers it calls
   settled by the DOS service each one issues and cross-checked against the load
   path, which reaches the same two wrappers in the opposite roles. This
-  supersedes `u5-decomp/notes/dosbox_probes_2026-05-07.md` Probe 1 and the
+  supersedes earlier private probe analysis in `u5-decomp/notes/` and the
   "unconditional mirror writes, no per-plane read" reading in
   `u5-decomp/functions/CAST2_OVL/`, both of which had the
   direction of the per-plane transfers inverted. Helper roles cross-checked
@@ -320,17 +325,17 @@ generic DOS file I/O, not an LZW decompressor.
 
 - U4-Transfer companion path and character comparison preview — derived from `u5-decomp/functions/INTRO_OVL/`.
 
-- Read-and-write retry wrapper, disk-prompt contract, wait-cursor phase signalling, and write-side critical-error handler ownership — derived from `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/INTRO_OVL/`, and `u5-decomp/notes/system-trace_save-load.md`.
+- Read-and-write retry wrapper, disk-prompt contract, wait-cursor phase signalling, and write-side critical-error handler ownership — derived from `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/INTRO_OVL/`, and `u5-decomp/notes/`.
 
 - Inner read primitive — open, optional absolute seek, zero-count default, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-read edge — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 
 - Inner write primitive — create-or-truncate, write, close, byte-count result, zero-on-error retry signal, ignored close-time failure, and nonzero short-write edge — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 
-- Save-image layout, `SAVED.OOL` split, the `BRIT.OOL` / `UNDER.OOL` / `INIT.OOL` / `INIT.GAM` family, and the object-record structure — derived from `u5-decomp/formats/saves.md`.
+- Save-image layout, `SAVED.OOL` split, the `BRIT.OOL` / `UNDER.OOL` / `INIT.OOL` / `INIT.GAM` family, and the object-record structure — derived from `u5-decomp/formats/`.
 
 - The exhaustive census of the engine's disk writes and reads that establishes
   the saved-state window's upper boundary against the live tile buffer, and with
   it the impossibility of any durable tile mutation. Source provenance: derived
-  from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md` and
-  `../u5-decomp/functions/CMDS_OVL/`.
+  from private analysis in
+  `u5-decomp/notes/` and
+  `u5-decomp/functions/CMDS_OVL/`.

@@ -406,6 +406,49 @@ The factory seed has all 256 bytes zero. Implementations should still preserve
 the span byte-for-byte for save compatibility, and should read the semantics
 from the owning system specs rather than inventing per-bit meanings.
 
+### 9.3 Pending shipwright delivery
+
+A purchased watercraft is queued in three save-backed bytes until the next
+overworld entry materializes it as an active object. The coordinate pair and
+class byte are not contiguous:
+
+| Offset | Width | Field | Meaning |
+|---:|---:|---|---|
+| `0x03AD` | 1 byte | Pending delivery X | Overworld X coordinate copied from the shipwright row when the delivery is first queued. |
+| `0x03AE` | 1 byte | Pending delivery Y | Matching overworld Y coordinate. |
+| `0x105F` | 1 byte | Pending acquisition class/payload | Presence, vessel family, and carried-Skiff payload. This is the final byte of the 4,192-byte save image. |
+
+The shipwright produces these canonical class values:
+
+| Class byte | Meaning |
+|---:|---|
+| `0x00` | No pending delivery. |
+| `0x40` | One standalone Skiff. |
+| `0x82` | One Frigate carrying two Skiffs. |
+| `0x83` | That pending Frigate after one additional Skiff purchase; its delivered carried-Skiff count is three. |
+
+This is a packed byte rather than a closed four-value enum. A value below
+`0x40` is inactive. Any value from `0x40` through `0x7F` is consumed as a
+Skiff-family delivery; any value from `0x80` through `0xFF` is consumed as a
+Frigate-family delivery. The low six bits become the delivered object's
+carried-Skiff/class-specific auxiliary count. The shipwright increments the
+whole byte for each additional Skiff bought while a Frigate is pending, without
+a separate cap, so further successful purchases continue to `0x84`, `0x85`,
+and so on.
+
+Loading does not validate or normalize any of these bytes. An otherwise-unused
+value below `0x40` remains inert and survives unchanged; an otherwise-unused
+value at or above `0x40` is interpreted by the delivery rules above on the next
+overworld entry. After a delivery, the consumer writes `0x00` only to the class
+byte. The X and Y bytes retain their old values but are inert while the class
+byte is below `0x40`.
+
+All three bytes lie inside the ordinary 4,192-byte slab and therefore
+round-trip verbatim through Journey Onward and Q-save. A pending delivery is
+not an `.OOL` record until the overworld consumer creates one; save code must
+not materialize the queue into `BRIT.OOL` or `SAVED.OOL` as a persistence
+side-channel.
+
 ## 10. Per-turn flags and combat scratch
 
 A loosely packed band of bytes before the dungeon/map-cell working buffer holds per-turn and per-mode bookkeeping. Most are single-byte flags whose meaning is owned by one or two systems. They survive saves because they live inside the resident state region; whether they have semantic meaning for an implementation depends on which gameplay modes are reproduced.
@@ -594,24 +637,23 @@ format question.
 
 The byte-level layout described here was derived from the project's private save-format notes, runtime-state map, and semantic summaries of the save/load handlers. This public spec paraphrases the resulting behaviour and field positions; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, or implementation listings.
 
-- The first-pass byte-level survey of the save image, the `.OOL` family, the canonical companion roster, and the offset-by-offset verification of inventory and runtime fields — `u5-decomp/formats/saves.md`.
-- The runtime-state map used to cross-check persistent field positions — `u5-decomp/formats/ds-bss-map.md`.
+- The first-pass byte-level survey of the save image, the `.OOL` family, the canonical companion roster, and the offset-by-offset verification of inventory and runtime fields — `u5-decomp/formats/`.
+- The runtime-state map used to cross-check persistent field positions — `u5-decomp/formats/`.
 - The turn-step counter at `0x02E5` — its single increment site and saturation
   cap, its single reset site, and the cadence of the pass that advances it —
-  `u5-decomp/notes/talk_group_retrace_2026-08-22.md`,
-  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`, and
+  `u5-decomp/notes/` and
   `u5-decomp/functions/TALK_OVL/`.
 - The fresh-seed counter, reagent, clock, and location values were cross-checked
   against a clean local asset image by reading the named fields documented
   above; this spec does not reproduce the raw seed bytes.
 - The B-Board transport marker writes — `u5-decomp/functions/CMDS_OVL/`.
 - The moral-standing selector byte and its distinction from the party food word --
-  `u5-decomp/notes/system-trace_inventory.md`.
+  `u5-decomp/notes/`.
 - The moongate presence phase at `0x02E1` — its identification within the
   previously unnamed mode-scratch band, its range and factory seed, the complete
   census of its readers and writers, and the confirmation that it is a single
   world-global byte rather than per-gate or per-mode scratch —
-  `u5-decomp/notes/moongate_transition_2026-08-23.md`.
+  `u5-decomp/notes/`.
 - The N-New Order command's active non-leader whole-record swaps, slot-zero
   refusal, and party-size non-mutation are derived from
   `u5-decomp/functions/CMDS_OVL/`.
@@ -621,13 +663,13 @@ The byte-level layout described here was derived from the project's private save
   members and skips dead ones — `u5-decomp/functions/ULTIMA_EXE/`
   (the note's filename predates the correction). The correction retracting the
   earlier revive reading is source provenance: derived from private analysis
-  note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+  notes in `u5-decomp/notes/`.
 - The spell-charge stock index order is derived from the shared player
   spell-token parser used by C-Cast and M-Mix, the per-spell stock readers and
   writers in the CAST/CMDS overlay notes, and the public 48-row spell table:
   `u5-decomp/functions/CAST_OVL/`,
   `u5-decomp/functions/CMDS_OVL/`,
-  `u5-decomp/formats/data-ovl.md`, and
+  `u5-decomp/formats/`, and
   `u5-spec/catalogs/spell-list.md`.
 - The Moonstone gate-slot writer, special/use-item byte identities, and
   Search/Get recovery behaviour --
@@ -646,6 +688,10 @@ The byte-level layout described here was derived from the project's private save
   and `u5-decomp/functions/ZSTATS_OVL/`.
 - The save handler's open-write-close sequence and byte-image flush to `SAVED.GAM` -- `u5-decomp/functions/CAST2_OVL/`. The per-plane `.OOL` half of that note (two unconditional mirror writes and no read) is superseded: a 2026-08-22 re-derivation from the shipped save overlay shows the two per-plane operations are reads and the single underworld write is the entry-mode-gated one. `systems/save-load.md` section 5 owns the corrected order.
 - The load handler's byte-image read of `SAVED.GAM` into the same region, the empty-save guard, the `SAVED.OOL` read, and the mirror-write of `BRIT.OOL` and `UNDER.OOL` — `u5-decomp/functions/INTRO_OVL/`.
+- The pending shipwright-delivery offsets, packed acquisition byte, purchase
+  mutations, outdoor consumption, class-only clear, and complete code-reference
+  census — `u5-decomp/functions/SHOPPES2_OVL/` and
+  `u5-decomp/functions/MAINOUT_OVL/`.
 - The chargen flow's per-record write to roster slot zero (name, gender, STR, DEX, INT, and MP) and preservation of seed class/status/HP/experience fields — `u5-decomp/functions/FONT_OVL/`.
 - The equipment slot order, empty sentinel, carried-equipment counter band, and
   R-Ready stock mutations are derived from the updated ZSTATS overlay notes
@@ -655,19 +701,19 @@ The byte-level layout described here was derived from the project's private save
   item-id order in `u5-spec/catalogs/item-list.md`.
 - The save and load systems' overall semantics, file roles, and mirror-write contract — `u5-spec/systems/save-load.md`.
 - The active-object record layout and the in-memory table semantics — `u5-spec/systems/active-objects.md`.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` -- the
   exhaustive attribution of the disputed band, the exact extent of the dungeon
   working buffer, the two per-location NPC bitmask tables, and the finding that
   the two bytes formerly called a quest-progress word are Stonegate's
   removed-NPC mask. Cross-checked against
   `u5-decomp/functions/TOWN_OVL/`,
   `u5-decomp/functions/TALK_OVL/`, and
-  `u5-decomp/formats/saves.md`.
+  `u5-decomp/formats/`.
 - The calendar and clock fields' cascade rules and persistence — `u5-spec/systems/time.md`.
-- Source provenance: derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` -- the
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` -- the
   identification of `0x03B3` as the early-game encounter-size damper, its
   factory-seed value, the absence of any gameplay setter, and the month-rollover
   clear as the engine's only write. Cross-checked against
-  `../u5-decomp/functions/ULTIMA_EXE/`.
+  `u5-decomp/functions/ULTIMA_EXE/`.
