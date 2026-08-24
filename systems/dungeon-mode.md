@@ -1055,7 +1055,7 @@ extra handling only for exact unmarked pit-family bytes:
 | Searched byte | Search result |
 |---:|---|
 | `0x60` | Reports nothing in the pit; no state change. |
-| `0x61` | Reports a found secret door, rewrites the searched cell to `0x60`, and, unless already on the deepest level, marks the same X/Y cell one level below with the visit bit. This is a visit-local reveal in the loaded dungeon image. |
+| `0x61` | Reports a found secret door, rewrites the searched cell to `0x60`, and, unless already on the deepest level, marks the same X/Y cell one level below with the visit bit. It then renders the changed first-person view to the hidden surface and dissolves it in as described below. This is a visit-local reveal in the loaded dungeon image. |
 | `0x62` | Rolls `1..30` against `(2 * Z - member Dexterity + 30) / 2`. A roll above the threshold springs the bomb, reports it, and clears the searched cell to `0x00`; a roll at or below the threshold reports nothing on the pit and leaves the cell unchanged. |
 | Other `0x6?` values | No extra Search-specific handling beyond the generic preamble. |
 
@@ -1091,12 +1091,29 @@ The dungeon Open command operates on the **underfoot tile** (not the cell in fro
 **Special walls / secret doors.** Some wall-style and flavour cells can be
 rewritten by Search for the current dungeon visit. For flavour class `0xC?`,
 flavour values one and two only narrate the inspected feature. Other flavour
-values print the flavour-specific find text and convert the target cell to
-`0xB0` or `0xB8`, preserving only the visit marker bit. For wall class `0xD?`,
-Search prints the hidden-wall result and converts the target cell to `0xE0` or
-`0xE8`, again preserving only the visit marker bit. These rewrites affect only
-the loaded dungeon image; re-entering the dungeon reloads the original
-`DUNGEON.DAT` cell.
+values—the shipped case is Doom flavour—print that nothing is hidden on the
+skeleton and then that it crumbles away, and convert the target cell to `0xB0`
+or `0xB8`, preserving only the visit marker bit. For wall class `0xD?`, Search
+prints the hidden-door result and converts the target cell to `0xE0` or `0xE8`,
+again preserving only the visit marker bit.
+
+Exact `0x61`, the Doom-flavour `0xC?` skeleton branch, and the `0xD?`
+hidden-door branch all join one presentation tail. After the branch's
+narration and working-image rewrite, Search runs the ordinary first-person
+renderer with the changed image, composing the resulting viewport on the
+hidden surface, then performs one blocking rectangle dissolve over
+`(8,8)..(183,183)` to reveal it. The earlier Search light gate means every
+reaching branch is lit; an unlit Search stops with the too-dark refusal and
+cannot reach the dissolve. Narration precedes mutation, mutation precedes the
+hidden redraw, and the redraw precedes the dissolve. Search returns after the
+dissolve without a second mutation or redraw.
+
+The transition belongs only to those three dungeon S-Search outcomes. It is
+not reached by ordinary-flavour stalactites, mine-flavour caved-in passages,
+the `0x62` bomb-search result, or any O-Open outcome. In particular, Open shares
+neither this helper nor this presentation effect. All these Search rewrites
+affect only the loaded dungeon image; re-entering the dungeon reloads the
+original `DUNGEON.DAT` cell.
 
 **Wind/breeze non-behavior.** No stock contact branch is mapped for a tile that
 extinguishes a lit torch while leaving the light-spell counter unaffected. The
@@ -2006,3 +2023,10 @@ The behaviour described here was derived by reading the private function notes l
   death or game-over path. Source provenance: derived from private analysis under
   `../u5-decomp/notes/` and
   `../u5-decomp/functions/DUNGEON_OVL/`.
+
+- The Section 8 Search reveal presentation tail: its three reaching outcomes,
+  narration-before-mutation order, post-mutation hidden viewport render,
+  blocking dissolve-in, and absence from Open. Source provenance: derived from
+  private analysis under `../u5-decomp/functions/SJOG_OVL/`,
+  `../u5-decomp/functions/DUNGEON_OVL/`, and
+  `../u5-decomp/functions/EGA_DRV/`.

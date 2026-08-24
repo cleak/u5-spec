@@ -322,23 +322,38 @@ the way.
 The rescue contract:
 
 1. Enter cutscene mode and suppress ordinary map play.
-2. Clear terrain and temporary-object scratch state for the cinematic.
-3. Print the darkness, refuge, thunder, and fortune-themed narrative beats.
-4. Run the timed scene animation and tile placement passes.
+2. Print the unending-darkness beat, then dissolve the map viewport out to
+   black. This happens before clearing terrain or temporary-object scratch
+   state and before building the refuge tableau.
+3. Clear terrain and temporary-object scratch state for the cinematic.
+4. Print the refuge, thunder, and fortune-themed narrative beats and run the
+   timed scene animation and tile placement passes.
 5. Select and print one `KARMA.DAT` record through the five-band rescue
    selector.
 6. Restore every party member: the member's status is reset to able-bodied and
    their current hit points are set to their maximum.
 7. Print the disorientation or vertigo beat.
-8. Fade out and hand control to scene byte seventeen, the gazetteer's
-   `CASTLE:0` location associated with Lord British's Castle, on logical floor
-   one at local position `(10, 10)`, with the clock spun forward until the hour
-   reads 06:00.
+8. Fill the hidden map viewport black, draw the on-foot party sprite at its
+   centre cell `(5,5)`, and dissolve that image onto the visible viewport.
 9. Raise the moral-standing selector to a floor of seventy-five if it was
    below that, so the rescue cannot regress the save state. The verdict record
    printed in step 5 is chosen from the standing *before* this raise.
+10. Hand control to scene byte seventeen, the gazetteer's
+   `CASTLE:0` location associated with Lord British's Castle, on logical floor
+   one at local position `(10, 10)`, with the clock spun forward until the hour
+   reads 06:00.
 
-The restoration in steps 8 and 9 also wipes the party's magical state. As it
+Both viewport transitions are single blocking rectangle dissolves over the
+inclusive rectangle `(8,8)..(183,183)`. The first hidden rectangle contains
+only colour zero, so it is a dissolve-out to black. The second hidden rectangle
+contains colour zero plus exactly one centred party tile, so it is a
+dissolve-in to the restored party against black—not a redraw of Lord British's
+Castle. The moral-standing floor, destination scene/floor/position writes,
+timed-effect clear, advance to 06:00, and light-counter clears all occur only
+after the second dissolve has completed. The ordinary castle viewport is
+therefore a later handoff result, not the hidden source of this transition.
+
+The handoff in step 10 also wipes the party's magical state. As it
 sets the destination scene and position it clears the single shared
 timed-effect slot specified in `systems/magic.md`, so an active Protection,
 Quickness, Mass Charm, Negate Magic, or Negate Time is cancelled and any worn
@@ -523,4 +538,6 @@ tables, raw script bytes, or implementation-specific addresses.
 Source provenance: derived from private analysis in `u5-decomp/notes/` for the
 audience entry path, the withdrawal of the death-route marker, the
 shared party-capability check that enters the rescue/refuge cinematic, and that
-cinematic's restoration, standing-floor, and handoff effects.
+cinematic's restoration, two viewport dissolves, standing-floor, and handoff
+effects; cross-checked against `u5-decomp/functions/BLCKTHRN_OVL/` and the
+display-driver notes under `u5-decomp/functions/EGA_DRV/`.

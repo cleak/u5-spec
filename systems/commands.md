@@ -502,7 +502,11 @@ search descriptions. Chest cells use the dungeon chest trap/detail branch.
 Exact pit-family Search bytes cover ordinary pit, secret-passage reveal, and
 bomb detection/springing, while flavour/wall classes can rewrite only the
 visit-local loaded dungeon image. Those dungeon Search rewrites are specified
-in `dungeon-mode.md`. Inventory grants and chest contents belong to
+in `dungeon-mode.md`. Three of them—exact `0x61`, the Doom-flavour `0xC?`
+skeleton branch, and the `0xD?` hidden-door branch—also redraw the changed
+first-person view on the hidden surface and dissolve it into the visible
+viewport before Search returns. This presentation tail belongs only to Search;
+no Open outcome calls it. Inventory grants and chest contents belong to
 `containers.md` and `catalogs/item-list.md`.
 
 When an Open or container outcome selects the shared resident trap-effect

@@ -1776,7 +1776,8 @@ historical-renderer parity work.
   (`endgame.md` section 7.1), and three map-viewport ones outside the intro and
   endgame entirely. The full list lives in `display-driver-abi.md` section 9.6,
   which is where new callers should be recorded; the three map-viewport sites
-  are not yet specified in their own system docs.
+  are caller-specified in `blackthorn.md` section 7 and `dungeon-mode.md`
+  section 8.
 - **Acknowledgement screen content.** Closed. The acknowledgement page is a
   pre-rendered three-record image band, not typeset text, so there is no text
   transcription, font path, or pagination to publish. Its asset, record sizes,

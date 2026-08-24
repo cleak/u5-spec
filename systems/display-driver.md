@@ -700,10 +700,13 @@ own hidden surface.
   followed by a full-screen rectangle dissolve issued from the next routine, so
   the beat is a visible full-screen fade to black; see `endgame.md` section
   7.1. A whole-program census of the dissolve entry now lists all six of its
-  call sites in `display-driver-abi.md` section 9.6. Three of them — two in the
-  Blackthorn audience/rescue scene and one on the search/open command path, all
-  over the `(8, 8)..(183, 183)` map viewport — are still unspecified in their
-  own system docs, and remain open work outside this document.
+  call sites in `display-driver-abi.md` section 9.6. The three viewport sites
+  are now caller-specified as well: both Blackthorn calls belong to the
+  total-party-defeat rescue/refuge sequence, while the command call belongs
+  only to the three dungeon Search reveal outcomes (exact `0x61`, a
+  Doom-flavour `0xC?` skeleton, or a `0xD?` hidden door) and is never reached by
+  Open. See `blackthorn.md` section 7 and `dungeon-mode.md` section 8 for their
+  source surfaces and exact schedules.
 - **Return-to-View resident helper internals.** Closed. The script-level
   command schedule, rectangle coordinates, actor draw ordering, preview tick
   counts, framebuffer geometry, repaint policy, and column reveal are specified
