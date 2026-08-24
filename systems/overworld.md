@@ -609,7 +609,7 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 
 - **Town/keep/dwelling/castle entrance.** When the player's last action was Enter (E), the entry helper compares the party's current overworld coordinate against the first thirty-two rows of the DATA.OVL-derived `WorldLocationTable`. Row zero maps to scene byte one, row one maps to scene byte two, and so on through row thirty-one mapping to scene byte thirty-two. The scene-to-name and scene-to-file-family binding is published in `catalogs/gazetteer.md` and `formats/npc.md`.
 
-  On a match, the original path emits the location-entry prompt, performs any needed surface-disk availability check, clears or reseeds the active-object table, writes the scene byte to `matched_row + 1`, and seeds the party's town-mode coordinates on floor zero. The following town entry pass owns the final player placement; see `systems/town-mode.md` Section 5 step 6, which now records the player's fallback entry cell as an open item (the `LocationEntryYTable` rule previously stated there belongs to the Shadowlord install, and the phantom-NPC representation of the player is withdrawn entirely). If no row matches, E-Enter does not change mode.
+  On a match, the original path emits the location-entry prompt, performs any needed surface-disk availability check, clears or reseeds the active-object table, writes the scene byte to `matched_row + 1`, and directly seeds the party at **column 15, row 30, floor zero**. The following town entry pass preserves that position; it does not derive a landing cell from location data. See `systems/town-mode.md` Section 5 step 6. The earlier per-scene-row and phantom-player-NPC readings belong to the resident Shadowlord install and are withdrawn. If no row matches, E-Enter does not change mode.
 
 - **Dungeon entrance.** E-Enter compares the party's current coordinate against rows thirty-two through thirty-nine of the same DATA.OVL-derived `WorldLocationTable`. Row thirty-two maps to `DUNGEON:0` / scene byte thirty-three, row thirty-three maps to `DUNGEON:1` / scene byte thirty-four, and so on through row thirty-nine mapping to `DUNGEON:7` / scene byte forty. The name and data-record order is Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, Doom.
 
@@ -1162,14 +1162,14 @@ The behaviour described above was derived by reading the function and format not
   block, its three-way result mapping, and the surface-only map-file prompt and
   active-object maintenance pass that precede the total-party-defeat sequence.
   Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q2.
+  `u5-decomp/notes/`.
 - The pre-loop special-underfoot latch that forces zero light and gates outdoor
   movement commit — `u5-decomp/functions/MAINOUT_OVL/`.
 - Local MAINOUT outer-loop analysis -- one-shot pending vehicle-acquisition
   active-object placement before normal outdoor input.
 - The per-tick init that recomputes the scroll base and refreshes redraw flags — `u5-decomp/functions/MAINOUT_OVL/`.
 - The per-turn epilogue that walks the active-object table, animates and prunes, and rolls the random-encounter trigger — `u5-decomp/functions/MAINOUT_OVL/`.
-- The OUTSUBS overlay's collection of overworld helpers — `u5-decomp/functions/OUTSUBS_OVL/OVERVIEW.md` and the per-function notes in that directory covering water and chunk classification, chunk loading and scrolling, world filename selection, town-entry checks, the falls handler, per-plane actor setup, status checks, and the outdoor-camp Lord British service.
+- The OUTSUBS overlay's collection of overworld helpers — `u5-decomp/functions/OUTSUBS_OVL/`, covering water and chunk classification, chunk loading and scrolling, world filename selection, town-entry checks, the falls handler, per-plane actor setup, status checks, and the outdoor-camp Lord British service.
 - The world-tile getter that reads from the chunk buffer with the four-quadrant 2-by-2 interpretation — `u5-decomp/functions/ULTIMA_EXE/`.
 - The night-time rotating light beacon that owns the resident scratch block
   formerly attributed to a moongate animator, its inverted light gate, and its
@@ -1180,7 +1180,7 @@ The behaviour described above was derived by reading the function and format not
   positions, the closed plane-transition inventory, the overloaded plane byte,
   Ararat's underworld-only exit, and the corrected Codex approach-gate polarity
   are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+  `u5-decomp/notes/`.
 - The saved Moonstone slot scene/window test, natural live-gate tile refresh,
   saved-slot warp helper, and live moongate-tile shimmer/entry helper -
   `u5-decomp/functions/ULTIMA_EXE/`, and
@@ -1193,7 +1193,7 @@ The behaviour described above was derived by reading the function and format not
   its exact step counts and inter-phase wait, the scratch tile the composed
   frame occupies, the scene-dependent ground plate, and the endgame's reuse of
   the same counter are derived from private analysis note
-  `u5-decomp/notes/moongate_transition_2026-08-23.md`.
+  `u5-decomp/notes/`.
 - The viewport rasterizer that resolves moon-gate cells against the presence
   counter — `u5-decomp/functions/ULTIMA_EXE/`
   (historical filename; the routine is the eleven-by-eleven rasterizer).
@@ -1205,7 +1205,7 @@ The behaviour described above was derived by reading the function and format not
   it directly, with each candidate confirmed or excluded against the surrounding
   code. Fourteen genuine sites were found, in two files; one further textual
   match, in a third file, was confirmed to be an unrelated instruction and is
-  excluded. Recorded in `u5-decomp/notes/moongate_transition_2026-08-23.md`.
+  excluded. Recorded in `u5-decomp/notes/`.
 - The location map setup that harvests up to two indoor light-source positions
   into the same beacon coordinate scratch — `u5-decomp/functions/TOWN_OVL/`.
 - The combat loop exit reset of the light beacon's bearing byte —
@@ -1215,8 +1215,8 @@ The behaviour described above was derived by reading the function and format not
 - The render-loop orchestrator — `u5-decomp/functions/ULTIMA_EXE/`.
 - The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/`.
 - The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/`.
-- The on-disk format of the surface and underworld grids — `u5-decomp/formats/maps.md`.
-- The data-segment layout, including the shared scratch block read by the light beacon, the single Britannia chunk-index table, and the `WorldLocationTable` — `u5-decomp/formats/data-ovl.md`.
+- The on-disk format of the surface and underworld grids — `u5-decomp/formats/`.
+- The data-segment layout, including the shared scratch block read by the light beacon, the single Britannia chunk-index table, and the `WorldLocationTable` — `u5-decomp/formats/`.
 - Public scene/name binding for town-mode location rows — `catalogs/gazetteer.md`,
   `formats/npc.md`, and `formats/data-ovl.md`.
 - Public dungeon scene/name/record binding — `systems/dungeon-mode.md`,
@@ -1225,13 +1225,12 @@ The behaviour described above was derived by reading the function and format not
 - Source provenance: the creature step planner's absence of any distance
   comparison, the coin flip's role as attempt ordering only, and the
   single-attempt random-wander fallback are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md`, cross-checked
-  against `u5-decomp/notes/outdoor_npc_scheduling.md`.
+  `u5-decomp/notes/`.
 - Source provenance: the two outdoor ranged attacks, their trigger conditions,
   the shared traced-line resolution with the launch-cell exemption, the
   announcement assignment, and the per-sample effect figures were first derived
   from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md`, cross-checked against
+  `u5-decomp/notes/`, cross-checked against
   `u5-decomp/functions/COMSUBS_OVL/`. Earlier readings that treated the shared
   helper as a directed-step probe or a path-clear scan are superseded.
 - Source provenance for Section 6.2 as it now stands: the exact-equality breath
@@ -1258,4 +1257,4 @@ The behaviour described above was derived by reading the function and format not
   bindings, the synthetic table slot, the under-sail input substitution, and the
   loop's boolean reading of the command status. Source provenance: derived from
   private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`.
+  `../u5-decomp/notes/`.
