@@ -82,6 +82,20 @@ coordinates. `systems/combat.md` now also fixes base/cursor/marker draw order,
 shared blink and active-player eligibility, solid replacement rather than XOR,
 ordinary display clipping, and erasure by the following base repaint.
 
+**Addendum — 2026-08-24, potion presentation rasters and timing.** Issue #115
+replaced three provisional presentation models. Every accepted potion target
+first gets a selected-colour, blocking PC-speaker sequence bracketed by paired
+palette-mask-15 XOR passes over the complete EGA/Tandy playfield; randomized
+effect substitution happens afterward. Orange has no `Z` overlay: combat sleep
+selects ordinary tile `0x1E` until the one-in-seventeen scheduled wake path
+restores the actor. Purple has no one-frame magenta star: it rewrites both tile
+fields of the combat-instance object record to ordinary asset `0x90` with no
+timer or Purple-owned restoration. White has no growing disc or white raster:
+it computes one inclusive squared-distance-threshold-32 visibility field, then
+runs twenty ordinary compositor/repaint frames with one-tick pacing. The final
+idle redraw follows normal visibility-dirty policy, and none of this adds a
+second gameplay turn.
+
 **Addendum — 2026-08-23, outdoor ranged-attack contract re-verified and
 published.** Three gaps around the outdoor creature ranged attacks were traced
 and adversarially re-derived from the shipped binaries, and the result is now in
