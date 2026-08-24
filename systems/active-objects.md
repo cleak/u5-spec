@@ -16,7 +16,7 @@ Natural moongates are in neither group: a gate is live terrain written into the
 map buffer by the once-per-turn refresh in `systems/overworld.md`, not a slot
 and not a render-time stamp.
 
-The top-down world modes and combat read and write this same table. The renderer composites it into the top-down viewport. The visibility pipeline uses the table during compositing to decide which active sprites survive the current visibility grid. The NPC scheduler links into it when its NPCs cross onto the player's floor. Dungeon exploration is the main exception: its first-person view is rendered from dungeon coordinate globals and the loaded dungeon grid, not from active-object slots. When a dungeon room or ambush enters combat, the normal combat framer swaps the table for an isolated combat instance and swaps it back when the fight ends. The save image preserves the table byte-for-byte.
+The top-down world modes and combat read and write this same table. The renderer composites it into the top-down viewport. The visibility pipeline uses the table during compositing to decide which active sprites survive the current visibility grid. The NPC scheduler links into it when its NPCs cross onto the player's floor. Dungeon exploration is the main exception: its first-person view is rendered from dungeon coordinate globals and the loaded dungeon grid rather than by the top-down active-object compositor, although its one wandering monster reuses an eight-byte record in the resident table with dungeon-specific field meanings. When a dungeon room or ambush enters combat, the normal combat framer swaps the table for an isolated combat instance and swaps it back when the fight ends. The save image preserves the table byte-for-byte.
 
 The design is "simple, fixed, and shared." There is no spatial index, no linked list, no per-mode subclass. In top-down world scenes and combat, dynamic on-screen content goes through these thirty-two slots, and every slot is a flat eight-byte record interpreted differently by different systems. This shared, untyped, fixed-size table is what lets the engine's sub-modes hand the world cleanly back and forth while still allowing dungeon exploration to use its separate first-person renderer.
 
@@ -24,7 +24,13 @@ The design is "simple, fixed, and shared." There is no spatial index, no linked 
 
 The active-object table is a flat, contiguous, two hundred fifty-six byte block: thirty-two records of eight bytes each. Records are addressed by slot index `0..31`; field offsets within a record are `0..7`. The table lives at a fixed location in the resident data segment, directly readable and writable by every module.
 
-A slot is *empty* when its first byte (the type/tile byte) is zero. Allocating a slot writes a non-zero value to byte zero; freeing a slot writes zero back. Slot zero is reserved for the player. The convention is unbreakable: every system that wants the player's on-screen state reads slot zero, and slot zero never gets compacted, swapped, or stolen.
+Outside the dungeon wandering-monster interpretation, a slot is *empty* when
+its first byte (the type/tile byte) is zero. Allocating a slot writes a non-zero
+value to byte zero; freeing a slot writes zero back. Slot zero is reserved for
+the player. The convention is unbreakable: every system that wants the player's
+on-screen state reads slot zero, and slot zero never gets compacted, swapped,
+or stolen. The dungeon exception and its different inactive marker are defined
+in Section 3.
 
 Iteration order matters in two distinct passes. The renderer walks slots from thirty-one down to zero so that lower-indexed slots paint on top — this is what guarantees the player (slot zero) draws on top of every other entity in the same cell. The per-tick animator walks slots from zero up to thirty-one; iteration order there does not affect correctness, only deterministic tie-breaking.
 
@@ -42,6 +48,14 @@ Each record's eight bytes are interpreted as follows. Different systems read dif
 |   5  | `dep1`       | Auxiliary state byte. For ship/frigate objects this is hull condition; otherwise class-specific.                  |
 |   6  | `phase`      | Packed animation phase (low nibble) and direction-step counter (high nibble). Advanced by the animator.           |
 |   7  | `dep3`       | Auxiliary flag/aux byte. For ship/frigate objects this is skiffs aboard; otherwise class-specific.                |
+
+Dungeon first-person mode is a deliberate exception to the generic empty-slot
+test. It reuses one eight-byte record in this table for its wandering monster,
+but family zero is a valid Giant Rat. That record is inactive when `dep1` is
+`0xFF`, not when `type` is zero. Its complete field interpretation is specified
+in `dungeon-mode.md` Section 6.9. Top-down and combat consumers must not inherit
+the dungeon validity rule, and dungeon consumers must not inherit the generic
+`type == 0` rule.
 
 A few observations on the field encoding:
 
