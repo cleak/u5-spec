@@ -8,7 +8,11 @@ This spec describes that cluster: the door tile family and the J-Jimmy and O-Ope
 
 ## 2. The door tile family
 
-Doors live in two parallel encodings — one for the surface and town tile maps, the other for the packed-nibble dungeon grid. Both distinguish *closed-and-unlocked*, *closed-and-locked*, *closed-and-magic-locked*, and *open*; both encode the lock state in adjacent tile bytes so that toggling the lock is a one-byte rewrite.
+Top-down maps and the packed-nibble dungeon grid use distinct door encodings.
+Do not infer the top-down doors from a broad tile range: the live identifiers
+used by Open and Jimmy are dispersed, and only the ordinary locked/unlocked
+pairs are adjacent. Dungeon cells instead encode their class in the high
+nibble and their variant in the low nibble.
 
 In the surface and town encoding, the tile codes J-Jimmy and O-Open care about fall into these groups:
 
@@ -21,10 +25,21 @@ In the surface and town encoding, the tile codes J-Jimmy and O-Open care about f
   conversion of § 3.1 both name the window, and `systems/npc-schedules.md`
   carries the same names. The magic-locked forms live outside those pairs, at
   `0x97` for the plain family and `0x98` for the windowed family, and the
-  shipped description table gives both the same string; Jimmy refuses them without rolling (though it still breaks a key doing so), and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write the standing open-door code below; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
-- **Open door.** A single code drawn as the open-door sprite. Both Jimmy and Open recognise this as already-open and consume the turn without acting. The renderer paints it identically to a passage.
-- **Restraint tiles.** Stocks and a set of manacles. These are not containers and not doors: J-Jimmy treats them as prisoner releases (§ 3.1), and they never convert to an "unlocked" counterpart tile.
-- **NPC occupancy marker.** A non-rendered marker returned by the tile-probe path when the target cell is occupied by an NPC. J-Jimmy uses it only to find the prisoner standing on a restraint tile; there is no pickpocket interaction.
+  shipped description table gives both the same string; Jimmy refuses them without rolling (though it still breaks a key doing so), and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write a standing-open door code; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
+- **Open/already-open case.** Open alone treats exact tile `0xAF` as already
+  open and reports that state. Jimmy has no special `0xAF` branch; absent a
+  matching coordinate object, it produces the generic no-lock result. The
+  shipped Look description for `0xAF` is a heavy footlocker, so this is an
+  Open-command case rather than evidence for a general standing-open-door
+  family.
+- **Restraint tiles.** Exact tile `0x84` is stocks and `0x85` is a set of
+  manacles. These are not containers and not doors: J-Jimmy treats them as
+  prisoner releases (§ 3.1), and they never convert to an "unlocked"
+  counterpart tile.
+- **Live occupant link.** On an ordinary restraint attempt, the target-cell
+  occupancy query identifies a live active object. The command reverse-maps
+  that link to the owning NPC record after a successful pick. This is dynamic
+  actor state, not a terrain marker, and there is no pickpocket interaction.
 
 Surface and town chests are **not** part of this locked/unlocked tile pairing.
 A chest is a per-map container *object*, and its lock, trap, and contents state
@@ -45,12 +60,12 @@ verb prefix `Jimmy-` and a single direction prompt. There are exactly **two**
 lock-pick rolls in the command, and they apply to disjoint families of targets.
 The target family is decided from the target tile before any roll happens:
 
-- **Locked doors** take *roll one*, the flat Dexterity test.
-- **Restraints** — stocks and a set of manacles — take *roll one* as well, from
+- **Locked doors** (`0xB9` and `0xBB`) take *roll one*, the flat Dexterity test.
+- **Restraints** — stocks `0x84` and manacles `0x85` — take *roll one* as well, from
   a second, independent copy of the same test, but their success outcome is a
   prisoner release rather than an unlocking.
-- **Magically locked doors** are refused with no roll at all, and the refusal
-  still costs a key.
+- **Magically locked doors** (`0x97` and `0x98`) are refused with no roll at
+  all, and the refusal still costs a key.
 - **Everything else** falls through to the per-map container scan and takes
   *roll two*, the difficulty-versus-Dexterity threshold. A tile with no
   container object on it draws the generic no-lock refusal.
@@ -93,34 +108,55 @@ always picks. Note that the die's lowest outcome is zero — an earlier draft's
 "uniform `1..29` die" is off by one at the top of the curve, and would deny a
 maximum-Dexterity character the guaranteed success the original gives.
 
-Success consumes **no** key. Only failure consumes one, printing the broken-key
-result.
+Success consumes **no** key. A failed roll consumes one and prints the
+broken-key result. Pre-roll exits such as a cancelled member selection or an
+empty restraint spend none; the magic-lock refusal is the exceptional
+no-roll path that does break a key.
 
 **Locked doors.** Success converts the door to its unlocked counterpart, sets
 the tile-changed dirty bit, and prints "Unlocked!". Each locked door form has
 exactly one paired unlocked form — a locked plain door becomes a plain wooden
 door, and a locked door with a window becomes a wooden door with a window — so
 implement the conversion as that pairing rather than as arithmetic on a tile
-number. Jimmy does not open the door; a subsequent Open turns the cell into an
-open door. On failure the key counter is decremented, the broken-key result is
+number. Jimmy does not open the door; a subsequent Open temporarily turns the
+cell into cleared passage tile `0x44`. On failure the key counter is decremented, the broken-key result is
 printed, and the door's tile is *unchanged*: the lock still stands and the door
 may be attempted again while keys remain.
 
-**Restraints — stocks and manacles.** This is a prisoner release, not a
-container pick, and it should be read as its own interaction. It uses its own
-copy of the flat Dexterity test with the same thirty-outcome die and the same
-strictly-greater comparison, but the success tail is entirely different.
+**Restraints — stocks `0x84` and manacles `0x85`.** This is a prisoner
+release, not a container pick, and it should be read as its own interaction.
+In ordinary town-family scenes, the engine first requires a live actor on the
+target restraint. If none is there it prints "No one is there!" and stops
+before member selection, random draw, or key consumption. With an occupant,
+it uses its own copy of the flat Dexterity test with the same thirty-outcome
+die and the same strictly-greater comparison. A failed roll breaks one key and
+leaves both actor and tile unchanged.
 
-On success the engine probes for an NPC standing on the restraint tile. If no
-NPC is there it prints "No one is there!" and stops. Otherwise it walks that
-NPC's record chain, sets that NPC's state bytes to the freed value, prints the
-NPC's thanks line, and raises the shared moral-standing selector by `+2` with
-the normal ninety-nine cap (see `systems/karma.md`).
+After a successful roll, the live active-object link is resolved back to its
+owning NPC. If that reverse lookup fails, the command reports that it could not
+find the NPC and stops without spending a key. Otherwise it clears the NPC's
+live dialogue/awareness field and consults the saved per-location NPC-removal
+bit. On the first release, while that bit is clear, all three schedule periods
+are changed to AI mode 5, the NPC prints the thanks line, and moral standing
+rises by `+2` with the normal ninety-nine cap (see `systems/karma.md`). The
+command then attempts to set the persistent removal bit through the ordinary
+removable-NPC class filter. An actor the filter rejects remains unmarked, so a
+later success can repeat the otherwise one-time schedule rewrite, thanks, and
+reward.
 
-On the large outdoor maps the same success takes a different tail: it stamps the
-restraint tile to plain cobble and prints a differently worded, unpunctuated
-unlocked message — a distinct string from the door case's "Unlocked!" — and
-frees nobody.
+"Freed" therefore has a two-stage lifecycle. The NPC is not deleted during the
+current visit: mode 5 retains its randomized pursuit of the party, while the
+cleared dialogue/awareness field suppresses that mode's adjacent attack event.
+When the location is entered again, the saved removal bit prevents that roster
+slot from being placed. If an already-marked NPC is successfully targeted again
+before leaving, the command clears dialogue and preserves the removal mark but
+does not repeat the schedule rewrite, thanks line, or moral-standing reward.
+
+High-range scenes take a different success tail. Stock dungeon scenes have
+already been routed to dungeon Jimmy; the remaining shipped high-range caller
+is combat. There, restraint success changes the target tile to cobble `0x44`,
+marks the tile changed, and prints the no-exclamation "Unlocked" result. It
+does not query, release, or persist an NPC.
 
 A restraint never converts to an "unlocked restraint" form: the success tail
 never steps its tile down a rung the way the door case does, and the tile one
@@ -588,25 +624,31 @@ behavior.
 
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The J-Jimmy command's tile cascade, dungeon-mode routing, and the encoding of the door tile pairs — derived from `u5-decomp/functions/SJOG_OVL/`, and `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
-- The reconciliation of the two lock-pick rolls into one contract: that both read the acting member's Dexterity rather than any class field; the thirty-outcome zero-based die and its clamped Dexterity-over-thirty success chance; the corrected target families (locked doors and restraints on the flat test, containers on the threshold test, the magic-locked door refused with no roll, and no pickpocket anywhere in the command); the strictly-greater comparison on the threshold test; the depth doubling existing only on the dungeon path; the uniform "success spends no key, failure spends one" accounting; and the restraint case's prisoner-release outcome. Source provenance: derived from private analysis note `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+- The J-Jimmy command's tile cascade, dungeon-mode routing, live top-down tile
+  identifiers, and door-pair encoding — derived from private analysis in
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/TOWN_OVL/`, and
+  `u5-decomp/notes/`.
+- The reconciliation of the two lock-pick rolls into one contract: both read
+  the acting member's Dexterity rather than any class field; the flat die has
+  thirty zero-based outcomes; the target families and key costs are distinct;
+  the container threshold uses a strictly-greater comparison; dungeon depth
+  doubling exists only on the dungeon path; and restraint release has separate
+  current-visit and persistent states. Source provenance: derived from private
+  analysis in `u5-decomp/notes/`.
 - The per-map container's lock/trap flag, its threshold formula, and the fact
   that a failed pick leaves the container completely untouched while a
   successful pick clears the lock/trap flag and preserves the content class --
-  derived from `u5-decomp/functions/SJOG_OVL/`
-  and `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+  derived from `u5-decomp/functions/SJOG_OVL/` and `u5-decomp/notes/`.
 - The O-Open command's tile cascade, the auto-close countdown's record format and decrement, the pre-flight gate shared with Jimmy and Search, and the route to the chest-on-floor helper — derived from `u5-decomp/functions/SJOG_OVL/`.
 - The magic Open/Unlock helper's ordinary wooden-door tile rewrites,
   Space/Pass no-effect branch, dirty marking, and separation from O-Open's
   auto-close/chest/trap handling -- derived from
-  `u5-decomp/functions/CAST2_OVL/` and the CAST spell map in
-  `u5-decomp/functions/CAST_OVL/all_spells.md`.
+  `u5-decomp/functions/CAST2_OVL/` and `u5-decomp/functions/CAST_OVL/`.
 - The S-Search command's secret-door reveal path, the per-map object table layout, and the dungeon-mode high-nibble cascade — derived from `u5-decomp/functions/SJOG_OVL/`.
 - The CMDS overlay's overworld K-Klimb handler, including its gear gate, on-foot check, target-tile refusals, fall rolls, and final climb/move call — derived from `u5-decomp/functions/CMDS_OVL/`.
 - The conversation byte-action mapping that sets the Grapple/Klimb gear flag
   and the conversation graph that points from Bidney to Lord Michael's grant --
-  derived from `u5-decomp/functions/TALK_OVL/`, and
-  `u5-decomp/notes/tlk-quest-graph.md`.
+  derived from `u5-decomp/functions/TALK_OVL/` and `u5-decomp/notes/`.
 - The CMDS overlay's X-Xit vehicle handler with its scene refusal, vehicle
   family branches, nearby-land validation, ship skiff/carpet transfer cases,
   and parked-object state preservation -- derived from
@@ -620,7 +662,7 @@ The behaviour described here was derived from the private function notes listed 
   correction that a climb does not test its destination cell, the level-change
   spells' route to the same exit, and the closed plane-writer census are derived
   from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+  `u5-decomp/notes/`.
 - The dungeon-tile high-nibble class table including up-ladder, down-ladder, two-way ladder, pit/trap, and heavy-door classes; the exact `0x61`/`0x69` fall-trap and `0x62`/`0x6A` bomb-trap post-action behaviour; and the dungeon Klimb's Z-axis behaviour with level-edge exits (which are not refusals) separated from the pit-chain off-bottom path, together with that handler's turn cost - applied climbs, pit falls, and a cancelled prompt count as an action while both "nothing to klimb here" refusals do not, and the two refusals are distinct (`systems/dungeon-mode.md` Section 13.1) — derived from `u5-decomp/functions/DUNGEON_OVL/`, and `u5-decomp/functions/DNGLOOK_OVL/`.
 - The shared resident trap-effect resolver used after a chest trap has been
   selected, including the fact that the caller passes no trap flavour -- derived
@@ -628,7 +670,7 @@ The behaviour described here was derived from the private function notes listed 
   resident party-damage and status helper notes.
 - The town-mode per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis note
-  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
+  `u5-decomp/notes/`. That analysis supplies the
   town climb handler's actual cell set and refusal text, the absence of a
   two-way link cell in town mode, the fence/gate side path that changes no
   floor, the trapdoor's general descend behaviour with its single scripted

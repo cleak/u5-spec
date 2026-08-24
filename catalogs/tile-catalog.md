@@ -69,7 +69,7 @@ Five hundred and twelve tiles split cleanly into fourteen classes, each occupyin
 | Path        | 16..23              | 8           | Cobblestone path, brick path, packed-earth tracks                 |
 | Wall        | 24..63              | 40          | Stone, brick, wattle, decorative wall variants                    |
 | Furniture   | 64..95              | 32          | Tables, chairs, beds, fountains, signs, chests, ladders           |
-| Door        | 96..103             | 8           | Open, closed, locked, magic-locked, windowed                      |
+| River       | 96..103             | 8           | River terrain frames; not a door range                            |
 | Decoration  | 104..127            | 24          | Floor mosaics, banners, statues, runic glyphs, shrine altars      |
 | Special     | 128..159            | 32          | Fixtures, shrines, fountains, wells, fields, fire effects         |
 | Vehicle     | 160..191            | 32          | Live horse/ship/skiff/magic-carpet frames plus balloon art        |
@@ -119,7 +119,7 @@ The full breakdown by contiguous index range. The ranges below correspond to run
 | 80..87      | furniture       | Stairs / ladders (up and down pairs)                                     |
 | 88..91      | furniture       | Sign posts                                                               |
 | 92..95      | furniture       | Wells, brazier, fireplace                                                |
-| 96..103     | door            | Doors: open, closed, locked, magic-locked, windowed variants             |
+| 96..103     | terrain         | River terrain frames. The obsolete door classification for this range is withdrawn. |
 | 104..111    | decoration      | Floor mosaics, banners, statues, glyphs                                  |
 | 112..127    | barrier/field   | Magic barrier or shadow-field family; Sceptre U-Use treats this range as dissolvable top-down cells |
 | 128..135    | special         | Pendulum/restraint/grate/archway fixtures; not the traced natural-moongate terrain byte |
@@ -515,7 +515,18 @@ No `world_waterfalls.tsv` runtime sidecar is part of the promoted baseline.
 
 **Ladders / staircases.** In town mode, facing-sensitive stairway tiles are the `0xC4..0xC7` family. The low two bits are a facing selector in the town movement wrapper's normalized direction space: entering along that facing goes up one floor, entering from the opposite facing goes down one floor, and side crossings leave the current floor unchanged. K-Klimb ladders and trapdoors use the same floor-reload machinery after their own underfoot command checks. In dungeon mode, ladders are encoded in the tile byte's high nibble and handled by the dungeon turn loop's K-Klimb branch.
 
-**Doors.** Any door tile (indices `96..103`) blocks movement when closed and dispatches the door-interaction handler. The handler maps to O-Open (key for locked doors), J-Jimmy (lockpick), or dispel (the An Sanct / In Ex Por spells).
+**Doors and restraints.** Top-down doors are not the obsolete contiguous
+decimal `96..103` range; every shipped Look entry in that range is river
+terrain. The live ordinary pairs used by Jimmy and Open are `0xB8`/`0xB9`
+(wooden/locked) and `0xBA`/`0xBB` (wooden-with-window/locked-with-window).
+Magic-locked plain and windowed forms are `0x97` and `0x98`. Open alone treats
+`0xAF` as its already-open case; Jimmy does not special-case that id. Jimmy's
+prisoner-release fixtures are stocks `0x84` and manacles `0x85`, and the
+high-scene cleared result is cobble `0x44`. Command behavior, including which
+identifiers block, open, unlock, or fall through to coordinate objects, is
+owned by `systems/doors-and-z-transitions.md`. Source provenance: derived from
+private analysis in `u5-decomp/functions/SJOG_OVL/` and
+`u5-decomp/formats/`.
 
 **Chests.** Stepping onto a chest tile triggers G-Get. The handler may prompt for a key on locked chests, apply a random trap, and either yield treasure or print "Nothing of note".
 

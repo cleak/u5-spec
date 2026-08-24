@@ -826,7 +826,7 @@ The remaining letters call their targets directly, as the table below records.
 | **G** | Get. Labelled prompt with the live-actor gate, then the shared Get handler. |
 | **H** | Hole up — shared refusal responder, second tail. World-mode rest is not available inside an arena. No cost. |
 | **I** | Ignite — shared refusal responder, second tail. No torch counter is touched on this branch. No cost. |
-| **J** | Jimmy. Labelled prompt with the live-actor gate, then the shared Jimmy handler. |
+| **J** | Jimmy. Labelled prompt with the live-actor gate, then the shared Jimmy handler. The combat scene takes Jimmy's high-range restraint tail: a successful Dexterity pick on stocks `0x84` or manacles `0x85` clears that arena tile to cobble `0x44` and reports "Unlocked" without resolving or persisting an NPC release. Other Jimmy target families retain their shared behavior. |
 | **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
 | **L** | Look — shared refusal responder, second tail. This dispatcher does not run the world/town look flow. No cost. |
 | **M** | Mix — shared refusal responder, second tail. It does not open the reagent mixer. No cost. |
@@ -1710,9 +1710,10 @@ without independent behavioral consumers remain opaque metadata.
   direct calls, and one re-prompt flag. Two earlier claims are withdrawn there —
   combat U-Use does enter the item-use flow, and combat X-it is refused outright
   rather than escaping the fight. What remains is interior detail rather than
-  routing: the combat-mode branches inside the shared Get, Jimmy, Search, Klimb,
-  Yell and member-select delegates are surveyed but not enumerated one branch at
-  a time. Two are settled negatively — the shared Open handler and the escape
+  routing: the combat-mode branches inside the shared Get, Search, Klimb, Yell
+  and member-select delegates are surveyed but not enumerated one branch at a
+  time. Jimmy's combat-specific restraint result is now exact in Section 8.
+  Two are settled negatively — the shared Open handler and the escape
   handler carry no combat-specific branch at all, so they behave in an arena
   exactly as they do on the surface.
 
