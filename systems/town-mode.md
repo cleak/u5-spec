@@ -851,10 +851,22 @@ no exit tile. The movement handler flags a step whose destination would fall
 outside the thirty-two-by-thirty-two floor — north from the top row, south from
 the bottom row, west from the leftmost column, east from the rightmost column —
 and, once the step has otherwise passed the ordinary terrain and occupancy
-tests, asks whether the party wishes to leave instead of committing the step. A
-destination that fails those ordinary tests prints the blocked feedback and the
-prompt is never raised, so a location whose outer ring is impassable in some
-direction cannot be left that way.
+tests, asks whether the party wishes to leave instead of committing the step.
+
+The two tests deliberately use different samples:
+
+- **Terrain:** movement reads the adjacent cell already present in the
+  party-centred viewport. When that cell represents any coordinate outside a
+  town floor, viewport construction substitutes the loaded floor's
+  southeast-corner cell `(31,31)`. The ordinary transport-sensitive terrain
+  predicate is therefore applied to that same corner terrain for exits through
+  all four edges. If it rejects the corner terrain, the command prints the
+  blocked feedback and never raises the leave prompt.
+- **Occupancy:** movement separately queries the actual candidate coordinate on
+  the current floor. Its stepped axis is `-1` for a north or west exit and `32`
+  for a south or east exit; the other axis is unchanged. Town actors have only
+  in-grid coordinates, so no actor can occupy this candidate. The coordinate is
+  neither clamped nor replaced with `(31,31)` for this test.
 
 The prompt is a yes/no question. Accepting prints the affirmative and the
 destination plane, clears the scene byte, computes the player's overworld
@@ -866,12 +878,24 @@ clears the pending-exit flag, leaves town mode active, and does not move the
 party; the step itself is discarded either way, so a declined exit never nudges
 the avatar onto the boundary cell.
 
+Boundary-exit attempts have these exact turn effects:
+
+| Outcome | Position and scene | Turn accounting |
+|---|---|---|
+| Terrain rejected | No movement; town remains active; no prompt | Consumes one normal town turn: advance the clock by one minute, run underfoot/post-action processing, and run one NPC schedule step |
+| `Y` | Leave town and place the party at the location's overworld coordinate | Consumes no town turn; exit bypasses the clock, underfoot/post-action processing, and NPC schedule step |
+| `N` | No movement; town remains active | Consumes one normal town turn, including the clock, underfoot/post-action processing, and NPC schedule step |
+| Cancel (Escape) | Exactly the same refusal outcome as `N` | Consumes one normal town turn |
+| Any other prompt key | Stay in the modal prompt and wait for another key | No separate turn |
+
 **Withdrawn label.** Earlier revisions of this spec named "the town-family exit
 threshold, tile id `0x59`" as the trigger. That is withdrawn. Tile `0x59` is the
 telescope (`catalogs/tile-catalog.md`), a Look trigger that occurs in exactly
 three interior cells across all shipped maps and never on a location boundary;
 the value was a misreading of the affirmative keystroke consumed by the leave
-prompt. No tile id participates in the town-family exit decision.
+prompt. No dedicated tile id triggers a town-family exit; the ordinary terrain
+predicate still gates whether the boundary prompt can appear, using the
+southeast-corner sample specified above.
 
 The town turn loop's per-turn epilogue checks the scene byte each iteration. When the byte clears, the loop returns to the main game loop, which reloads the overworld map, restores the overworld active-object table from the on-disk overlay, and resumes overworld mode at the location's overworld cell.
 
@@ -1004,7 +1028,7 @@ The behaviour described above was derived by reading the function and format not
   regalia in, guards and creatures out), the two hard-wired removal writers, and
   the exhaustive accessor sweep showing the mask has no other owners.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/`.
-- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler analysis as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/`.
+- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/`. The Section 15 grid-boundary exit contract, its viewport terrain sample, true-coordinate occupancy query, and prompt turn accounting are derived from the town movement and turn-loop traces in `u5-decomp/functions/TOWN_OVL/`, the viewport and resident lookup analysis in `u5-decomp/functions/ULTIMA_EXE/`, and the independent synthesis in `u5-decomp/notes/`. Those traces also support the withdrawal of the earlier "exit threshold tile" reading.
 - The town Attack handler and the town K-Klimb handler - the corresponding command-handler notes under `u5-decomp/functions/TOWN_OVL/`. The climb-handler note predates the 2026-08-22 retrace and is filed under a different command name than the one it actually analyses; the retrace note above supersedes its labelling.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/`. That private analysis supplies the
