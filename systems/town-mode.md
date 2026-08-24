@@ -336,7 +336,7 @@ After entry, control sits in a tight loop that reads one command per iteration a
 1. **Read a command.** The input pipeline blocks until a keystroke arrives, applies its translation rules (key-to-command, numpad-to-direction, queue handling), and returns a single byte.
 2. **Pre-dispatch checks.** A short setup step handles meta-states (combat in progress, turn already in flight) and the cursed-by-spell timer. If the scene byte has been cleared during the previous turn — meaning the player just stepped off the edge of the interior grid and confirmed the leave prompt — the loop breaks out (Section 15).
 3. **Dispatch.** Movement commands use a small direction dispatch table; letter commands flow into the shared per-letter dispatcher described in the commands spec. Many handlers live in the town-mode overlay (Attack, Klimb); others are shared across modes (Cast, Get, Look, Talk, Use) and resolve to the appropriate cross-mode handler after a scene-byte check.
-4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, runs the underfoot-effect handler described in Section 10, ticks down the curse/buff counter, copies the party's current map coordinates into slot zero, and calls the NPC schedule processor with the current hour byte. The underfoot-effect handler is called unconditionally on every consumed turn and it re-reads the tile the party is standing on, so it is not gated on the party having moved; its last act is to run the shared party status/provision pass specified in `systems/time.md`.
+4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, runs the underfoot-effect handler described in Section 10, ticks down the curse/buff counter, and copies the party's current map coordinates into slot zero. It then normally calls the NPC schedule processor with the current hour byte. The sole exception is the explicit-T arrest-cleanup result: the clock and earlier underfoot/status work still run, but the schedule processor is skipped before arrest cleanup. The underfoot-effect handler is called on every consumed turn and it re-reads the tile the party is standing on, so it is not gated on the party having moved; its last act is to run the shared party status/provision pass specified in `systems/time.md`.
 5. **Render.** If the schedule processor reported any NPC moved, or the visibility-dirty flag is set, a full render runs. Otherwise the screen is left as-is and the loop reads the next command.
 
 Ahead of step one, each iteration runs the shared party-capability check that all three exploration modes use, described in `systems/main-loop.md` Section 6: if nobody in the party can act but somebody is asleep, the loop prints the sleep line and passes the turn without reading a command; if nobody can act and nobody is asleep, it runs the total-party-defeat sequence of `systems/blackthorn.md` Section 7 instead. Town mode adds no condition of its own to that check.
@@ -344,11 +344,13 @@ Ahead of step one, each iteration runs the shared party-capability check that al
 The dispatcher's return code decides when to skip parts of the epilogue: actions that take no turn (a cancelled command, a "What?" fallthrough, the buffer-toggle key) skip both the time advance and the schedule tick. Actions that consume more than one turn advance the clock once per inner action.
 
 Town is the only mode that reads the dispatcher's status as more than a boolean.
-Its four-way test is specified in `commands.md` Section 3: a "conversation
-happened" result runs the epilogue but skips the hour-advance step and fires the
-town post-action cleanup, and a "re-prompt" result returns straight to the input
-parser with no turn and no epilogue at all. The second of those has exactly one
-producer, described under the harpsichord below.
+Its four-way test is specified in `commands.md` Section 3: the arrest-cleanup
+result runs the common clock/underfoot epilogue, skips the NPC schedule
+processor, and fires town post-action cleanup with the arrest discriminator;
+the "re-prompt" result returns straight to the input parser with no turn and no
+epilogue at all. Each special result has exactly one producer: failed explicit
+Talk against the reserved Blackthorn guard demand for the former, and the
+harpsichord digit handler below for the latter.
 
 ### 7.1 Drunkenness
 
@@ -808,7 +810,11 @@ Some special classes — the Shadow Lord actor class, the lich/death-mage class,
 > entirely. Neither writes an NPC "state" field; both overwrite persisted
 > schedule data, and the flight rewrite also destroys the NPC's conversation.
 
-After each schedule tick, town mode interprets the walker's event bytes. When an NPC in one of the two approach modes reaches the party, it raises the guard/non-attack event; if that NPC's dialogue index is already the sentinel written by an earlier sweep, town mode prints a shouted brush-off ("Begone, vermin!") and then applies the **flight** rewrite to that NPC — one warning, then it runs. (Earlier revisions described this as printing a message and "pacifying" the NPC; both halves are withdrawn.) Three routings reach the arrest sequence: a guard-catch event byte raised for an NPC that is not already alarmed and whose active-object tile is in the guard sprite family; the Talk entry reporting a positive result for the flagged NPC; and a preceding command whose dispatch result carried the arrest outcome code, which reaches the handler unconditionally regardless of any event byte. Which commands can produce that third result is not yet enumerated; an implementation should keep the routing but treat the command set behind it as open. The sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In every other location, and in Blackthorn's castle when nobody can act and nobody is asleep, it prints the arrest challenge and asks whether the party will come quietly: surrendering prints the knockout and awakening lines, fades, moves the party to the Yew jail scene at `(25, 4, 0)`, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing prints the guards' challenge, triggers the alarm sweep, and consumes the turn. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
+After each schedule tick, town mode interprets the walker's event bytes. When an NPC in one of the two approach modes reaches the party, it raises the guard/non-attack event; if that NPC's dialogue index is already the sentinel written by an earlier sweep, town mode prints a shouted brush-off ("Begone, vermin!") and then applies the **flight** rewrite to that NPC — one warning, then it runs. (Earlier revisions described this as printing a message and "pacifying" the NPC; both halves are withdrawn.)
+
+Three routings reach the arrest sequence, and all are now bounded. First, an approaching guard reaches the party with the ordinary guard sprite and without the cowering-dialogue sentinel. Second, a different flagged-NPC event automatically dispatches that NPC's reserved Blackthorn guard demand; refusal, insufficient gold, a missing Badge aura, or a wrong password produces its sole positive outcome and enters arrest. Third, the player explicitly uses `T` on the same reserved guard-demand figure and receives the same failed outcome. The resident command dispatcher converts only that explicit-T failure into town result `2`; result `2` has no other command producer, skips a fresh schedule walk, and passes the arrest discriminator to cleanup. Because the schedule walker is also the only ordinary clearer of its event bytes, the original examines a retained approach-event code before the result-derived discriminator; that rare prior-event state can take precedence. In the normal no-event state, result `2` enters arrest directly. Ordinary NPC conversations, shops, canned replies, successful payment, and the accepted password all use the normal action result and do not take this route.
+
+The arrest sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In every other location, and in Blackthorn's castle when nobody can act and nobody is asleep, it prints the arrest challenge and asks whether the party will come quietly: surrendering prints the knockout and awakening lines, fades, moves the party to the Yew jail scene at `(25, 4, 0)`, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing prints the guards' challenge, triggers the alarm sweep, and consumes the turn. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
 
 ## 15. Exit
 
@@ -854,8 +860,10 @@ at slot fifteen after.
 
 **Command dispatch.** The shared per-letter dispatcher receives every keystroke not handled by the town-mode movement table. It routes mode-aware commands (A-Attack, K-Klimb, T-Talk) to town-specific handlers and shared commands (G-Get, P-Push, V-View) to cross-mode handlers.
 
-**NPC schedules.** Town mode invokes the schedule processor exactly once per
-consumed turn. The H-Hole-Up hours path invokes the same scheduler from inside
+**NPC schedules.** Town mode invokes the schedule processor once per ordinary
+consumed turn. The explicit-T arrest-cleanup result is the one exception: it
+skips the processor and enters arrest cleanup after the common time and
+underfoot work. The H-Hole-Up hours path invokes the same scheduler from inside
 its rest simulation loop, up to sixteen times per requested rest hour.
 
 **Conversation.** The Talk command hands the dialogue engine the NPC's dialogue index; the engine runs a self-contained per-NPC loop until the player exits.
@@ -1008,9 +1016,8 @@ The behaviour described above was derived by reading the function and format not
   town-mode load smoke checks - `u5-spec/NEXT-STEPS.md`.
 - The save image's scene-byte encoding and the per-location coordinate state — `u5-decomp/formats/saves.md`.
 
-Source provenance: derived from private analysis note
-`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, sections Q1, Q3
-and Q31, for the three routings into the arrest sequence and its
+Source provenance: derived from private analysis in `u5-decomp/notes/` for the
+three routings into the arrest sequence and its
 Blackthorn-castle branch, the resident-Shadowlord entry effects, and the
 harpsichord's arming condition, key-to-pitch mapping, thirteen-note tune,
 mistake re-sync, and completion effect.
@@ -1019,5 +1026,4 @@ mistake re-sync, and completion effect.
   substitution with its hiccup line and NPC schedule-rewrite sweep, the decrement
   rule, and the town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
   status, and the town loop's four-way reading of the command status. Source
-  provenance: derived from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`.
+  provenance: derived from private analysis in `../u5-decomp/notes/`.

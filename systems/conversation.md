@@ -31,7 +31,7 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
    - **The test object is a map tile, not an NPC sprite.** Both ids are furniture ids in the terrain-description domain of `LOOK2.DAT`, and the byte comes from the same live-map tile query that movement and Look use. The gate fires because the NPC's schedule has parked it on a bed cell or a mirror cell, not because the NPC has a distinct sleeping or praying appearance. An implementation that stores a per-NPC "asleep" flag and tests that instead will diverge.
    - **The cell tested is the resolved cell**, which may be the faced cell or, when the faced cell is a talk-through tile, the cell one step further along the same direction.
-   - **Both branches abort before dispatch.** Neither branch enters the conversation engine, uses the NPC's dialogue index, or reaches shop-trigger dispatch, and both report "no conversation happened" to the caller. This holds in every town, dwelling, castle and keep scene; the gate has no scene-specific behaviour. Turn accounting is not part of the gate: the town loop runs its per-turn scheduler pass after dispatching the command without consulting the Talk result, so an aborted Talk is not a free action. `systems/town-mode.md` and `systems/time.md` own the exact clock accounting.
+   - **Both branches abort before dispatch.** Neither branch enters the conversation engine, uses the NPC's dialogue index, or reaches shop-trigger dispatch, and both return the ordinary zero Talk outcome. This holds in every town, dwelling, castle and keep scene; the gate has no scene-specific behaviour. The resident `T` arm maps that outcome to the normal acted status, so the town loop advances the clock and runs its scheduler pass; an aborted Talk is not a free action. `systems/town-mode.md` and `systems/time.md` own the exact clock accounting.
 
 5. **Dialog-index dispatch.** Each live NPC carries a one-byte *dialog index* loaded into RAM from the location's `.NPC` file when the scene was entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
 
@@ -53,11 +53,21 @@ conversation layer is the shape of the contract:
   character status byte, no hit points, and no karma, and it calls no healing,
   resting, or curing routine.
 - It returns exactly two outcomes, "paid or passed" and "refused". The Talk
-  command surfaces that outcome as the conversation result.
+  command surfaces that outcome as the conversation result. Paid/passed is the
+  ordinary zero outcome; refusal, insufficient gold, a missing Badge aura, or
+  a wrong password is the sole positive Talk outcome.
 - There is no follow-on path. A reimplementation must not attach healing,
   lodging, resurrection, or any other service to this index — there is nowhere
   for one to hide, because the caller jumps straight to its exit with the
   handler's return value.
+
+The distinction is not "conversation did or did not run." Ordinary NPC
+dialogue, shops, canned replies, and no-response paths all use the ordinary
+zero Talk outcome. In an explicit town `T` command, the resident dispatcher
+converts only the positive guard-demand failure into the town loop's
+arrest-cleanup status. The same reserved handler may also be invoked by an
+automatic guard-contact event; its positive outcome reaches the same arrest
+sequence without a typed Talk command.
 
 Inns, healers, and every other paid service are reached through the ordinary
 shop-trigger dialog-index values instead, and are owned by `systems/shops.md`.
@@ -774,11 +784,11 @@ The behaviour described here was derived from the private function and format no
 - The reserved "not a real NPC" dialog index, the shape of the scene-keyed
   handler it dispatches, that handler's complete write set (party gold only),
   its two-valued result, and the absence of any follow-on path — derived from
-  `u5-decomp/functions/TALK_OVL/` and
-  `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`. Those notes
+  `u5-decomp/functions/TALK_OVL/` and private analysis in
+  `u5-decomp/notes/`. Those notes
   also retire the earlier reading that this index reached a healer or an
   innkeeper; there is no cure, rest, or status write anywhere on the path.
-- The two concrete status-tile ids, their message assignment, the fact that the gate reads a live map tile rather than an NPC sprite, and the talk-through tile set — derived from `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, which re-derives both from the shipped binaries and reconciles an internal inconsistency in the earlier handler note.
+- The two concrete status-tile ids, their message assignment, the fact that the gate reads a live map tile rather than an NPC sprite, and the talk-through tile set — derived from private analysis in `u5-decomp/notes/`, which re-derives both from the shipped binaries and reconciles an internal inconsistency in the earlier handler note.
 - The byte runner's full dispatch table, the multi-byte-command machinery, the GOTO-label semantics, the printable-text path, and the per-conversation state cluster — derived from `u5-decomp/functions/TALK_OVL/`.
 - The gold-payment, action-dispatch, and karma-threshold branch handlers -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.
 - The Spyglass, Sextant, and Black Badge action-letter identities --

@@ -64,7 +64,7 @@ engine: turn cost travels entirely in this status word.
 |---:|---|---|
 | `1` | Acted. The default; the mode loop runs its per-turn epilogue. | The dispatcher's initial value, kept by every letter that does not forward or refuse. |
 | `0` | No action. The loop skips its epilogue, so no world time passes. | Unknown input, the two stock-refusal letters `D` and `W`, the save route `Q`, the typeahead toggle, dungeon `P`, and any forwarded handler that refused. |
-| `2` | A conversation happened. | One producer only: `T` in a town-family scene when the conversation engine reports it did something. |
+| `2` | Request arrest cleanup after a failed Blackthorn guard demand. | One producer only: `T` in a town-family scene when the reserved guard-demand conversation reports refusal or failure. Ordinary NPC conversations, shops, canned replies, and successful payment/password outcomes do not produce this status. |
 | `3` | Re-prompt immediately, without advancing the world. | One producer only: the town digit handler while the party stands at the harpsichord tile, so a player can key in a tune without burning turns. |
 
 Only the town loop reads all four values. The other loops collapse the status to
@@ -78,8 +78,10 @@ a boolean:
   command is distinguished by this status for timekeeping purposes.
 - **Town.** `3` jumps straight back to the input parser with no turn and no
   epilogue; `0` skips the epilogue; `1` runs the epilogue *including* the
-  hour-advance step; `2` or higher runs the epilogue without that step, and `2`
-  additionally fires the town post-action cleanup.
+  NPC schedule step; `2` runs the common time/underfoot epilogue but skips the
+  NPC schedule step and fires town post-action cleanup with the arrest
+  discriminator. The clock still advances by one minute. In the shipped
+  command set no value above `3` is a designed producer.
 - **Combat.** Never calls this dispatcher at all; the combat parser keeps its
   own re-prompt flag (`combat.md`).
 
@@ -899,8 +901,7 @@ reproduced here.
   undefined Yell paths, the per-mode control-code tables and the single accepted
   non-letter code of Sections 2 and 9, and the established save/load boundary
   for the P-Push stamp in Section 8. Source provenance: derived from private
-  analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_commands-dispatch.md`, with
+  analysis in `../u5-decomp/notes/`, with
   `../u5-decomp/functions/ULTIMA_EXE/`,
   `../u5-decomp/functions/DUNGEON_OVL/`, and
   `../u5-decomp/functions/CMDS_OVL/`.

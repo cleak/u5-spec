@@ -366,7 +366,9 @@ loading a `.TLK` blob.
 That handler has exactly three branches, chosen by the current scene, and its
 only durable effect is on the party's gold. It writes no character status, no
 hit points, and no karma, and it returns one of two results — "paid or passed",
-or "refused" — which becomes the conversation's result. Nothing runs afterwards.
+or "refused/failed" — which becomes the conversation's result. At the Talk
+layer, paid/passed is the ordinary outcome. Refusal or failure is the only
+positive outcome and requests the town loop's arrest cleanup.
 
 **Branch 1 — the palace gate password.** In Lord Blackthorn's Castle, and only
 while the Black Badge aura is the party's active timed magic effect (see
@@ -385,17 +387,23 @@ Badge a second time to take it off, or donning the Amulet or Crown instead.
 
 **Branch 2 — the Minoc charity demand.** In Minoc, the guard announces that the
 party will give half its gold to charity. On a yes, the party's gold word is
-halved. On a no, nothing is taken.
+halved. On a no, nothing is taken and the refusal proceeds to arrest.
 
 **Branch 3 — the default tribute.** In every other scene the handler reaches,
 the guard demands a tribute to Blackthorn of ten gold per **living** party
 member; members marked Dead are not counted, so the amount is a head tax on the
 survivors. The demanded amount is printed in the line. On a yes, and only if the
 party can afford the full amount, that amount is subtracted; if the party cannot
-pay, the handler refuses and takes nothing.
+pay, the handler refuses, takes nothing, and proceeds to arrest.
 
 None of the three branches touches karma, party status, quest flags, or the
-inventory. Gold is the entire mechanical consequence.
+inventory. Gold is the entire direct state change inside the demand handler;
+arrest is the caller-owned consequence of any failed outcome. The demand can be
+raised in two ways: automatically when town cleanup dispatches the flagged
+guard's reserved dialogue, or explicitly when the player uses `T` on that
+guard. The explicit route is the sole command producer of the town loop's
+special arrest-cleanup status. Successful payment or the accepted password
+uses the ordinary town action result instead.
 
 ## 8. State Boundaries
 
@@ -496,7 +504,7 @@ tables, raw script bytes, or implementation-specific addresses.
 - `u5-decomp/functions/TALK_OVL/` — the
   three guard-demand branches, the four-character password comparison, the
   living-member head count, and the handler's complete set of writes.
-- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the
+- `u5-decomp/notes/` — the
   independent re-verification of that handler, and the Black Badge aura gate on
   the password branch.
 - `u5-decomp/functions/TOWN_OVL/`.
@@ -513,8 +521,7 @@ tables, raw script bytes, or implementation-specific addresses.
 - `formats/miscmsg-dat.md`.
 - `formats/karma-dat.md`.
 
-Source provenance: derived from private analysis note
-`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, sections Q1 and
-Q2, for the audience entry path, the withdrawal of the death-route marker, the
+Source provenance: derived from private analysis in `u5-decomp/notes/` for the
+audience entry path, the withdrawal of the death-route marker, the
 shared party-capability check that enters the rescue/refuge cinematic, and that
 cinematic's restoration, standing-floor, and handoff effects.
