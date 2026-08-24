@@ -214,10 +214,20 @@ cell. Each cell is reduced to a view class and drawn by a per-class renderer.
 
 The local view overlay is modal:
 
-- It saves or covers the existing view area before drawing.
-- It renders into a scratch/display overlay rather than mutating map data.
+- It composes on the hidden display target after clearing the inclusive main
+  gameplay-viewport rectangle `(8,8)..(183,183)`, which is 176 by 176 pixels.
+- It renders into that scratch/display target rather than mutating map data.
 - It waits for a keypress.
-- It restores the prior view region before returning.
+- On close it runs the ordinary world redraw path, which rebuilds and repaints
+  the same 11-by-11 main viewport rectangle. This is a redraw, not a saved-
+  background copy or “uncapture” operation.
+
+The right-side chrome begins at `x=192`. The local modal neither clears nor
+draws into that region, so it does not replace the stats, counters, or message
+content. Its close path does not request a View-specific side-panel repaint.
+The ordinary world redraw has its own independent first-mode-tick handshake
+that can repaint the full panel when already pending; that conditional behavior
+is not set or required by this modal.
 
 LOOKOBJ also contains a second, completely separate renderer, described in
 Section 4.2. Earlier revisions of this document called it "the full Britannia
@@ -240,13 +250,21 @@ all three correct earlier wording:
 - It has **no gem or item precondition**. The gem spend described above belongs
   to `V` View alone; a telescope answers Look whatever the party is carrying.
 
-The local 32-by-32 overlay renders at a four-pixel cell scale inside the
-message-panel region. A cell anchor is:
+The local 32-by-32 raster renders at a four-pixel cell scale, centered inside
+the main gameplay viewport. It is the shared absolute geometry for surface
+View and for the Peer/X-Ray-style local-view callers; mode changes affect
+source/palette selection, not placement. A cell anchor is:
 
 ```text
 anchor_x = 32 + column * 4
 anchor_y = 32 + row * 4
 ```
+
+For columns and rows `0..31`, the cells therefore occupy the inclusive screen
+rectangle `(32,32)..(159,159)`, exactly 128 by 128 pixels. This leaves a
+24-pixel margin on every side inside the surrounding `(8,8)..(183,183)` main
+viewport. The formula is authoritative; no part of this raster is translated
+to the side-panel origin.
 
 Each sampled cell is mapped through a private visual class and then through one
 of the class renderers below. The tile-id ranges are the tile catalog ids after
@@ -590,8 +608,8 @@ exploration bits, and is recomputed from the current dungeon record every time
 the player spends a gem. Map floodability is not the same as movement
 passability.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+Source provenance: derived from private analysis in
+`../u5-decomp/notes/` and `../u5-decomp/functions/DNGLOOK_OVL/`.
 
 ## 7. Data Ownership
 
@@ -641,25 +659,23 @@ does not reproduce decompiled code, assembly, raw tables, string dumps, or
 private address maps.
 
 - `u5-decomp/functions/ULTIMA_EXE/`.
-- `u5-decomp/functions/LOOKOBJ_OVL/_OVERVIEW.md`.
 - `u5-decomp/functions/LOOKOBJ_OVL/`.
 - The dungeon map's cell size and origin, its twenty-two by twenty-two extent,
   the modulo-eight wrap rule, the fixed frontier bound, the two eight-by-eight
   one-bit fonts that supply its glyphs, the per-class font selection, the
   single-cell fountain and energy-field vector drawings, and the withdrawal of
   the peer-view tint branch and of the twelve-row cell -- derived from private
-  analysis note
-  `u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+  analysis in `u5-decomp/notes/` and
+  `u5-decomp/functions/DNGLOOK_OVL/`.
 - The sky renderer's two presentation paths, the eight rows, the calendar-driven
   column rule, the per-row body and Shadowlord-marker geometry, and the
   retraction of the chunk-map/party-marker reading —
   `u5-decomp/functions/LOOKOBJ_OVL/` and
-  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 5.
+  `u5-decomp/notes/`.
 - Source provenance: the telescope identity of tile `0x59`, its three shipped
   placements, the placeholder-description reconciliation, the separation from
   the wishing-well tile, and the absence of any gem or item precondition on the
-  Look route are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+  Look route are derived from private analysis in `u5-decomp/notes/`.
 - `u5-decomp/functions/LOOKOBJ_OVL/`.
 - Source provenance: the road identity of view class `0x10` together with its
   connection-mask stub set and its diagonal corner notch; the water identity of
@@ -673,9 +689,13 @@ private address maps.
   themselves, and neither a creature marker nor a dungeon-room tile exists in
   this overlay.
 - `u5-decomp/functions/LOOKOBJ_OVL/`.
-- `u5-decomp/functions/DNGLOOK_OVL/_OVERVIEW.md`.
 - `u5-decomp/functions/DNGLOOK_OVL/`.
 - The complete top-down trigger set, the dispatch order, the redirect tiles,
   the clock/shrine/dungeon appenders, and the confirmation that the tested
   byte is a live terrain tile rather than an active-object class —
-  `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`.
+  `u5-decomp/notes/`.
+- The local View/Peer/X-Ray main-viewport placement, the distinction between
+  the 128-by-128 cell raster and its 176-by-176 modal compose rectangle, and
+  the ordinary viewport redraw on close are derived from private analysis in
+  `u5-decomp/functions/LOOKOBJ_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
