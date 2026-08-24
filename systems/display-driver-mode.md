@@ -294,6 +294,23 @@ authored at its own depth, and each driver's blitters consume it directly. Any
 per-driver palette-mapping or ordered-dither table offered for these backends is
 a modern reconstruction, not an original behaviour.
 
+**Normative scope and labeling.** EGA is the sole pixel-exact presentation
+target for the v1 clean-engine contract. No CGA, Hercules, or Tandy renderer is
+required for v1 completion, and no pixel-exact `.4` cinematic contract is
+implied by the shared record container, dimensions, or caller slot numbers.
+An implementation may support those drivers by loading the historically
+selected archive family and applying an independently chosen backend transform,
+but it must label the result a **modern approximation** and must not claim
+historical pixel parity. This permission applies to the intro, character
+creation, transfer, acknowledgements, story, and endgame archive families.
+
+Tandy's selection of `.16` records establishes its source record and logical
+palette indices only; it does not establish pixel identity with EGA because
+Tandy consumes packed pixels through a different framebuffer and blitter.
+Likewise, Hercules selecting `.4` establishes neither a required 2-bit-to-1-bit
+threshold nor a normative scale/aspect transform. Those details remain optional
+historical-hardware research, not completion criteria for the EGA baseline.
+
 ## 7. Known Uncertainties
 
 - **Exact CGA palette policy.** *Closed.* An earlier revision of this bullet
@@ -328,7 +345,7 @@ omits assembly, decompiled code, raw lookup tables, driver-internal addresses,
 and any source-shaped representation of the original code.
 
 - EGA dispatch ABI, slot inventory, and slot-1 mode-set semantics:
-  `u5-decomp/formats/ega-driver.md` and
+  private format analysis under `u5-decomp/formats/` and
   `u5-decomp/functions/EGA_DRV/`.
 - Back-buffer allocation, plane-image layout, and release semantics:
   `u5-decomp/functions/EGA_DRV/`.
@@ -342,17 +359,14 @@ and any source-shaped representation of the original code.
   `u5-decomp/functions/EGA_DRV/`.
 - Packed-to-planar preparation entry and asset-segment layout:
   `u5-decomp/functions/EGA_DRV/` (the note file
-  keeps its original filename; the entry is not a codec) and
-  `u5-decomp/CORRECTIONS.md`.
+  keeps its original filename; the entry is not a codec) and private correction
+  analysis at the `u5-decomp/` root.
 - Per-driver hardware modes, framebuffer shapes, drawing-colour reduction,
   asset-family selection, title-band geometry, and the status of the
   packed-to-planar entry in each family:
-  `u5-decomp/formats/cga-driver.md`, `u5-decomp/formats/tandy-driver.md`,
-  `u5-decomp/formats/hercules-driver.md`,
-  `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md`, and
+  private analysis under `u5-decomp/formats/` and `u5-decomp/notes/`, plus
   `u5-decomp/functions/INTRO_OVL/`.
 - Tile-blit and glyph entries:
   `u5-decomp/functions/EGA_DRV/`.
 - Resident screen-descriptor palette table field:
-  `u5-decomp/formats/data-ovl.md` (descriptor layout) and
-  `u5-decomp/formats/ega-driver.md` (palette-load step in slot 1).
+  private format analysis under `u5-decomp/formats/`.

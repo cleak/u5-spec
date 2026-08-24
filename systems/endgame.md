@@ -967,7 +967,9 @@ The original uses the active-object renderer for cinematic movement. A modern en
 - **Asset variant mapping.** Closed for the endgame. The panel archive, slot,
   size and origin for every window, the title strips, and the certificate
   backdrop are published in section 8. The equivalent alternate-depth archives
-  hold the same records and remain alternate-hardware parity work.
+  hold the same records. Exact CGA, Hercules, and Tandy presentation is outside
+  the EGA-only v1 parity target; any such backend is a labeled modern
+  approximation under `display-driver-mode.md` Section 6, not an endgame gap.
 - **Closing-title rune encoding.** Closed. Section 9.3 publishes the exact TH,
   ST, and word-space code points, canonical decoded-Latin re-encoding rule,
   stored-character test vectors, encoded cell counts, and centred positions.
