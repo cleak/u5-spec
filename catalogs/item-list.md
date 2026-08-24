@@ -458,10 +458,10 @@ Container/Search grants use the same eight ids and cap each colour counter at
 | 1 | Yellow | Heal the selected target through the shared small-heal helper: Dead targets are skipped, other statuses keep their status byte, and a small HP amount is added up to maximum HP. On success, print the healed feedback and refresh party status display. |
 | 2 | Red | Cure poison. If the selected target is poisoned, set status back to good, print the poison-cured feedback, and refresh party status display. |
 | 3 | Green | Poison. If the selected target is good, set status to poisoned, print the poisoned feedback, and refresh party status display. |
-| 4 | Orange | Sleep. If the selected target is good, set status to sleeping in non-combat scenes; in combat, apply the combat sleep/disabled presentation to the selected party member. |
-| 5 | Purple | Combat-only "Poof" presentation. Outside combat, print the no-noticeable-effect feedback. In combat, mark the active combatant's linked presentation record with the temporary visual effect. |
+| 4 | Orange | Sleep. If the selected target is good, set status to sleeping in non-combat scenes. In combat, apply the persistent combat sleep/disabled state and replace the selected member's ordinary displayed tile with tile `0x1E` until the normal wake path restores it. |
+| 5 | Purple | Combat-only "Poof" presentation. Outside combat, print the no-noticeable-effect feedback. In combat, replace both tile-identity fields of the active combatant's linked object record with ordinary tile asset `0x90`; this is a combat-record rewrite, not a timed overlay. |
 | 6 | Black | Combat invisibility. Outside combat, print the no-noticeable-effect feedback. In combat, mark the active combatant hidden/suppressed and update its linked presentation record. |
-| 7 | White | Surface/town visibility sweep. Dungeon and combat-class scenes print the no-noticeable-effect feedback. Accepted overworld and named interior scenes run a twenty-frame visibility/animation sweep centered on the party with radius 32 and finish with a normal world redraw. This branch does not spend a gem, enter the modal View overlay, set an active-effect tag, or persist a detector flag. |
+| 7 | White | Surface/town visibility sweep. Dungeon and combat-class scenes print the no-noticeable-effect feedback. Accepted overworld and named interior scenes compute one party-centred visibility carve with the inclusive squared-distance threshold `32`, then repaint that unchanged visibility field twenty times before one ordinary idle redraw. This branch does not spend a gem, enter the modal View overlay, set an active-effect tag, or persist a detector flag. |
 
 U-Use decrements the selected potion counter and selects a party-member target
 before final effect selection. The final effect is usually the selected colour,
@@ -470,6 +470,105 @@ the selected colour's effect, one chance in sixteen forces the Orange sleep
 effect, and one chance in sixteen replaces the effect with a random potion id
 from `0..7`. This variation changes only the effect branch after the counter is
 spent; the consumed counter is still the colour the player chose.
+
+#### Shared potion flash and timing
+
+After a target is accepted but before the variation roll, every potion runs a
+shared presentation keyed to the colour the player selected. The variation can
+therefore substitute a different gameplay effect without changing this
+pre-effect.
+
+On EGA and Tandy, the presentation first runs a colour-specific PC-speaker
+rumble. It then XORs every pixel of the inclusive playfield rectangle
+`(8, 8)..(183, 183)` with palette mask `15`, holds that inverted image while
+two colour-specific speaker sweeps execute, and repeats the same XOR to restore
+the original pixels. This is the whole 176-by-176 playfield, not a small sprite
+or a solid white rectangle. XOR with `15` maps each old four-bit palette index
+to `old_index XOR 15`; the paired operation is lossless even over moving terrain
+and objects because no repaint occurs between the two passes.
+
+The Orange, Purple, and White selections run respectively 26,000, 30,000, and
+38,000 iterations in each of the two envelope sweeps; their leading rumble
+accumulator targets are 14,400, 16,000, and 19,200. These are
+machine-calibration-scaled busy loops, not BIOS-timer durations. Sound-disabled
+play still executes the timing loops. The shared presentation polls no input,
+does not advance the gameplay clock, and blocks until both the sound sequence
+and restorative XOR finish.
+
+#### Orange combat sleep presentation
+
+Orange accepts only a target in Good status. In combat, success changes the
+linked roster status to Sleeping, marks that combat descriptor asleep/disabled,
+and selects ordinary 16-by-16 tile asset `0x1E` as the linked object's displayed
+tile. The object's base/type tile is retained. There is no letter `Z`, glyph,
+line raster, palette primitive, or additional overlay: the normal combat
+compositor draws tile `0x1E` in place of the actor sprite on every repaint.
+
+Each later scheduled dispatch of the sleeping actor rolls uniformly over
+seventeen outcomes; exactly one wakes the actor. A successful wake consumes
+that dispatch, so the actor cannot act until a later one. Wake restores Good
+status, clears the disabled state, and selects the retained base/type tile as
+the display tile, except that an actor still under the combat invisibility
+state uses tile `0x1D`. There is no sleep-duration counter. Combat teardown
+discards the combat-instance object table and restores the pre-combat world
+object table, while the character's status continues through its ordinary
+status lifecycle.
+
+#### Purple Poof presentation
+
+In combat, Purple prints the Poof feedback and writes ordinary tile asset
+`0x90` into both the base/type and displayed-tile fields of the active
+combatant's linked object record. The next normal combat repaint draws that
+asset through the ordinary 16-by-16 tile compositor. Purple changes no roster
+status, combat-descriptor flag, colour, pixel, line, or duration counter.
+
+Because both tile fields are replaced, Purple retains no private copy from
+which to restore the prior sprite. There is no Purple-owned one-frame duration
+or restoration pass. Tile `0x90` remains until another gameplay path replaces
+or clears that combat record, or until combat teardown discards the entire
+combat-instance table and restores the pre-combat world objects. A frontend
+should not substitute a one-frame magenta star.
+
+#### White visibility repaint sequence
+
+White first runs the shared inversion-and-sound presentation above. Its
+accepted two-dimensional scene branch then invokes the ordinary visibility
+producer exactly once, centred on the party's local viewport position, with
+the value `32`. As specified in `systems/visibility.md`, this is the inclusive
+squared-Euclidean gate
+
+```text
+dx * dx + dy * dy <= 32
+```
+
+and not a radius of thirty-two cells. In the eleven-by-eleven viewport it admits
+101 of the 121 cells before ordinary sight blockers and local-light rules are
+applied. A blocker inside the gate is visible but stops propagation past itself.
+The normal map reader supplies tiles, so overworld coordinate wrapping and
+named-location bounds remain exactly their ordinary rules; White adds no scan,
+frontier, clipping, or wrapping rule of its own.
+
+The completed grid stays unchanged for all twenty frames. Each frame optionally
+advances the normal active-object and animated-tile state (Negate Time suppresses
+that step), runs the normal fog/object compositor, repaints the normal terrain
+and objects in the eleven-by-eleven view, and requests a one-BIOS-tick pause.
+Consequently any changing pixels come only from ordinary object and tile
+animation. White draws no colour, circle, mask, line, or cell overlay.
+
+On a calibrated machine faster than the original baseline, each pause is one
+BIOS timer tick, about 54.9 milliseconds, so the twenty paced waits total about
+1.10 seconds plus rendering work. At or below the baseline calibration, a
+one-tick request is elided because the surrounding frame work supplies the
+delay. The sequence is synchronous, polls no input, and blocks through all
+twenty frames.
+
+One ordinary idle world redraw runs afterward. White does not itself dirty the
+visibility grid, so that redraw follows the normal dirty-versus-cheap redraw
+decision and does not promise an unconditional immediate recomputation at the
+ambient lighting threshold. Neither the twenty-frame loop nor this final idle
+redraw spends an extra gameplay turn or calls the gameplay clock. The enclosing
+U-Use command still consumes its one normal action through the current mode's
+ordinary post-action processing.
 
 ## 8. Quest and utility items
 
@@ -643,34 +742,29 @@ Remaining cross-system work belongs to other specs, not to this catalog:
 
 This catalog is a cleanroom prose rewrite from the following source notes and safe local specs. It intentionally omits assembly, decompiled code, raw private offsets, and binary dumps.
 
-- `u5-decomp/formats/data-ovl.md`
-- `u5-decomp/formats/saves.md`
+- `u5-decomp/formats/`
 - `u5-decomp/functions/CMDS_OVL/`
 - `u5-decomp/functions/SJOG_OVL/`
 - `u5-decomp/functions/COMBAT_OVL/`
 - `u5-decomp/functions/COMSUBS_OVL/`
 - `u5-decomp/functions/TALK_OVL/`
-- `u5-decomp/notes/tlk-quest-graph.md`
-- `u5-decomp/notes/system-trace_inventory.md`
+- `u5-decomp/notes/`
 - `u5-decomp/functions/ULTIMA_EXE/`
-- `u5-decomp/functions/CAST_OVL/_OVERVIEW.md`
 - `u5-decomp/functions/CAST_OVL/`
 - local CAST scroll subhandler analysis
 - local CAST potion subhandler analysis
 - `u5-decomp/functions/CAST2_OVL/`
 - `u5-decomp/functions/CAST_OVL/`
-- `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`
 - `u5-decomp/functions/SJOG_OVL/`
 - `u5-decomp/functions/TOWN_OVL/`
 - `u5-decomp/functions/LOOKOBJ_OVL/`
 - `u5-decomp/functions/DNGLOOK_OVL/`
-- `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`
 - `u5-decomp/functions/SHOPPES_OVL/`
 - `u5-decomp/functions/SHOPPES2_OVL/`
 - `u5-decomp/functions/SHOPPES3_OVL/`
 - `u5-decomp/functions/COMBAT_OVL/`
 - `u5-decomp/functions/ZSTATS_OVL/`
-- `u5-decomp/notes/engine_idioms.md`
+- `u5-decomp/notes/`
 - `u5-decomp/functions/ULTIMA_EXE/`
 - `u5-decomp/functions/ENDGAME_OVL/`
 - `u5-decomp/functions/BLCKTHRN_OVL/`
@@ -693,7 +787,7 @@ Combat U-Use correction: the combat parser routes `U` into the same item-use
 handler the world modes use, so a family that refuses in an arena does so
 through its own scene gate rather than because the command never arrives.
 Source provenance: derived from private analysis note
-`../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`.
+`../u5-decomp/notes/`.
 
 Sextant, Spyglass and Pocket Watch correction (2026-08-23): the three-part
 plane/scene/night gate on the Sextant and the Spyglass, the Underworld's
