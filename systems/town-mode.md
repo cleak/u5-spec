@@ -140,7 +140,7 @@ Five authored cell families change the floor while the party is inside a locatio
 
 **Trapdoors.** Stepping onto a trapdoor cell announces `A TRAPDOOR!` and drops the party one floor. It is an underfoot reaction in the per-turn tile-effect pass, not a command. It is suppressed entirely while the party is on the magic carpet, which floats over the cell. Lord Blackthorn's Castle is built around this: its entry floor and the three floors above it carry forty-five, thirty-six, thirty, and thirty-six trapdoor cells respectively. Its basement carries none, so the bottom of the tower is where falling stops.
 
-**One location overrides the trapdoor.** Stonegate is a single-floor keep whose trapdoor cells form a ring around one open centre cell. Walking into that ring does not descend; it runs a scripted sequence — a tone-and-fade presentation, the visible map replaced wholesale with a single tile, the active-object table cleared, and every party member's status set to dead. This is the *only* place a trapdoor is not a floor transition; every other trapdoor in the game takes the generic descend path above. Specify it as a scripted location event, not as part of floor selection.
+**One location overrides the trapdoor.** Stonegate is a single-floor keep whose trapdoor cells form a ring around one open centre cell. Walking into that ring does not descend; it runs the scripted-death sequence specified in Section 7.1. The event blacks the map viewport directly, replaces all 1,024 cells of the live location grid with tile byte `0x8F`, clears all 32 active-object records including record zero, and sets every in-party member's current HP to zero and status to Dead. This is the *only* place a trapdoor is not a floor transition; every other trapdoor in the game takes the generic descend path above. Specify it as a scripted location event, not as part of floor selection.
 
 **Every floor change is a full reload.** A transition re-runs the whole location load against the new page: read the page, harvest NPC start markers and the beacon's light sources (Section 5 step 3 - **not** spawn markers), run the dawn/dusk substitution if the hour is in the night band, run the Shadowlord blight pass, relink the active-object table for the new floor, and mark visibility dirty. It is never a partial update, and the announcement (`Up!` / `Down!`) is printed before the reload.
 
@@ -507,10 +507,79 @@ its line, temporarily clears the transport marker for the presentation, rebuilds
 the view, applies an independently rolled `1..8` hit points of damage to every
 non-Dead party slot below the party count (capped at six slots), and restores
 the transport marker. In the Stonegate scene the sequence then continues into
-the special imprisonment cutscene that clears the town presentation, marks the
-party into the long-term consequence state, and returns after a fade. In every
+the special scripted-death sequence below. In every
 other scene the handler instead decrements the floor index, reloads the map, and
 re-probes the tile under the party on the new floor.
+
+**Stonegate scripted-death contract.** This branch starts only after the common
+trapdoor prefix above has printed `A TRAPDOOR!`, temporarily hidden the
+transport marker for the view rebuild, applied the independent `1..8` damage
+rolls, and restored the original transport marker. It then performs these
+observable and state transitions in order:
+
+1. Fill the inclusive map-viewport rectangle `(8,8)..(183,183)` directly with
+   display colour zero. This is one immediate black rectangle fill, not a
+   dissolve, progressive fade, or replacement of the whole 320-by-200 screen.
+2. Emit 750 descending speaker steps, one at every integer frequency from
+   `1000` through `251`, with the ordinary calibrated `(40,1)` pacing after
+   each step, then stop the speaker.
+3. Replace every cell of the live 32-by-32 location grid with tile byte `0x8F`
+   (the molten-lava tile), and mark the map view dirty. This grid rewrite is
+   separate from the earlier direct black viewport fill; the event does not
+   repaint 1,024 lava tiles one by one.
+4. Zero all 256 bytes of the active-object table. The postcondition at this
+   script boundary is exactly 32 zeroed eight-byte records, including record
+   zero; it is not the ordinary town-entry clear that preserves record zero.
+5. Visit party slots below the current party count in ascending order. For
+   each slot, write current HP `0`, write status Dead (`D`, byte `0x44`), emit
+   one random-frequency rumble in the inclusive `100..500` range using
+   40-unit fragments until its 3,000-unit budget is reached, and repaint the
+   complete stats panel before advancing to the next member.
+6. Run the ordinary party status/provision pass, then return to the remaining
+   town-turn epilogue.
+
+The roster writes in step 5 are unconditional for every in-party slot: prior
+Dead, Sleeping, Poisoned, Ashes, or other status does not survive, and prior
+current HP does not survive. Maximum HP, party count, transport marker, party
+X/Y, floor, current area, inventory, and quest state are unchanged by this
+script. There is no additional Stonegate consequence flag, prison counter, or
+special status encoding. The ordinary saved roster fields — current HP zero
+and status byte `0x44` — are the complete durable death representation.
+
+The active-object table has two deliberately separate observation points.
+Immediately after the script-owned clear it is all zero. Later in the same
+town iteration, the normal epilogue writes the unchanged party X, Y, and Z
+into coordinate bytes 2, 3, and 4 of record zero. Before the NPC schedule pass,
+record zero is therefore `[0, 0, X, Y, Z, 0, 0, 0]`; the ordinary animal walker
+cannot move any zero-type record. The NPC schedule pass is not specially
+suppressed and may then perform its usual state-dependent writes to linked
+records. Implementations must not attribute those later standard writes to
+the Stonegate script or preserve the pre-script object records.
+
+The triggering action consumes exactly the one ordinary indoor minute that
+the town loop advanced before entering the underfoot pass. The Stonegate arm
+does not advance time again, change the action result, return from town mode,
+or install an epilogue-skip flag. Its party status/provision pass runs after
+the deaths: it clears the active-member selector when it names an in-party
+slot, counts zero provision eaters, applies no poison or regeneration to the
+Dead slots, and otherwise performs its normal counter/hour bookkeeping.
+Ordinary remaining town bookkeeping and, under the normal town gates, the NPC
+schedule pass also run.
+
+No player-input window follows the script. When the town loop reaches its next
+iteration, the shared party-capability check sees nobody able to act and nobody
+Sleeping, so it immediately enters the generic total-party-defeat rescue in
+`systems/blackthorn.md` Section 7. That later cinematic restores the roster,
+moves the party to Lord British's Castle, and applies its already-specified
+moral-standing floor; those are generic defeat-rescue effects, not a hidden
+Stonegate flag or an extra part of the trapdoor mutation.
+
+For presentation verification, expose the ordered black-fill, descending-tone,
+per-member rumble, and per-member stats-repaint events if the host has an
+observable presentation trace. None has a serialized progress marker. The
+viewport-dirty request, live lava-filled map, and audio generator's evolving
+seed are session presentation/runtime state; there is no durable fade or tone
+checkpoint to save and resume.
 
 **Burning family, live tiles `0xBC` and `0x8F`.** Rebuild the view, print the
 stored line `Burning!`, then apply the same independently rolled `1..8` mass
