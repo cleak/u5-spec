@@ -42,6 +42,27 @@ The required-disk index takes these values:
 | 4 | the *Ultima IV* Player disk (used only by the character-transfer flow) |
 | 2, 5 | folded to 1 by the disk requester before being stored |
 
+### Caller and file-family binding
+
+The same numeric index can be understood more precisely from the operations
+that select it immediately before I/O:
+
+| Stored index | Operations performed while it is required |
+|---:|---|
+| 0 | Program-disk work: boot and the intro/menu/title/character-creation resource family. Returning to the menu after an introduction, an empty Journey Onward attempt, character creation, or character transfer restores this index. |
+| 1 | Normal gameplay data. This includes surface and underworld world data, per-plane object files, town and dungeon transitions, conversation files, and gameplay/cutscene resources. Callers that historically request 2 or 5 enter this same family because the requester stores 1. |
+| 3 | The U5 save-file family. Journey Onward selects it before reading `SAVED.GAM` and `SAVED.OOL`; character creation, U4 transfer commit, and in-game saving select it before writing those two files. Although this index owns the save-file operation, its reconstructed floppy prompt uses the same "Britannia" label as index 1. |
+| 4 | U4 character transfer only. The transfer flow selects it directly before both reads from `PARTY.SAV`. |
+
+The in-game save path deliberately crosses two families. It first selects
+index 1 before reading `UNDER.OOL` and `BRIT.OOL` into the two staging halves;
+the conditional rewrite of `UNDER.OOL` also occurs under index 1. It then
+selects index 3 for the `SAVED.GAM` and `SAVED.OOL` writes and finally restores
+the required-disk index that was active when saving began. Journey Onward
+performs the corresponding load sequence: index 3 for the two `SAVED.*` reads,
+then index 1 for the per-plane mirror work. An unsuccessful empty-save attempt
+returns to index 0.
+
 A second byte, separate from all of the above, records only **how the prompt
 should be presented**: either "plain console" or "we are currently showing a
 picture, so open a small text window over it and restore the picture
@@ -83,9 +104,13 @@ letter, and takes the **first** of the following that applies.
 
 1. **Try the other floppy first.** If the recorded letter names a floppy drive
    *and* the machine is known to have more than one floppy drive, the handler
-   switches to the *other* floppy, asks the operating system to make it the
-   current drive, and — if this disk had not already been prompted for —
-   returns without showing the user anything. This is a silent retry.
+   changes that disk's recorded letter to the *other* floppy and asks the
+   operating system to make it current. If the already-prompted cache does not
+   yet name the required disk, the handler sets the cache to that disk and
+   returns without showing anything. This is a silent retry. If the cache
+   already names the required disk, the handler continues into the visible
+   prompt; the newly selected other-floppy letter remains recorded, so this is
+   the known-drive form of the prompt.
 
 2. **Fixed-disk fallback.** If the recorded letter names a fixed disk and is not
    the unknown marker, the handler rewrites that disk's entry to the first
@@ -104,10 +129,15 @@ letter, and takes the **first** of the following that applies.
    - If the disk's drive letter is still unknown, it asks the user to press a
      drive letter. If the letter is already known, it ends the sentence with a
      full stop and waits for any key instead.
-   - It waits for a keypress with no timeout, uppercases it, and asks the
-     operating system to make that the current drive. **It loops back to the
-     prompt whenever the operating system refuses the drive.**
-   - On acceptance it records the letter as that disk's drive letter, notes
+   - In the known-drive form, the key is only an acknowledgement. Its value is
+     ignored for selection and recording; the drive already recorded for the
+     disk remains selected.
+   - In the unknown-drive form, the handler uppercases the key and proposes it
+     to the drive selector. The selector rejects a nonletter before asking the
+     operating system to change drives. An invalid letter or an operating-system
+     refusal returns to the same key-input loop.
+   - On acceptance of an unknown drive it records the letter as that disk's
+     drive letter, notes
      "this machine has two floppy drives" if the user answered with the second
      floppy letter, and propagates the letter to the companion Britannia-disk
      entry when the required disk is index 3.
@@ -183,15 +213,22 @@ This is a cleanroom behavioral rewrite from private resident function analysis.
 It does not reproduce private source, decompiler output, assembly excerpts, raw
 dumps, private address tables, or implementation listings.
 
-- Handler, requester, read-retry, and boot initialisation:
+- Handler, requester, read-retry, boot initialisation, and cache transitions:
+  `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
+- Caller/file-family mapping:
   `u5-decomp/functions/ULTIMA_EXE/`,
-  `u5-decomp/notes/disk_insert_prompt_2026-08-23.md`.
+  `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/CAST2_OVL/`,
+  `u5-decomp/functions/FONT_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`,
+  `u5-decomp/functions/BLCKTHRN_OVL/`, and
+  `u5-decomp/functions/ENDGAME_OVL/`.
 - Required-disk index identification and the retraction of the earlier
   "screen-mode" and "world-state" readings:
-  `u5-decomp/CORRECTIONS.md`,
-  `u5-decomp/notes/dosbox_probes_2026-05-07.md`.
+  `u5-decomp/` and `u5-decomp/notes/`.
 - Write-side error handler ownership:
-  `u5-decomp/notes/system-trace_save-load.md`.
+  `u5-decomp/notes/`.
 - *Ultima IV* Player-disk case: `u5-decomp/functions/INTRO_OVL/`.
 - Display-driver dispatch separation: `systems/display-driver-abi.md`.
 - I/O semantics: `systems/save-load.md`.
