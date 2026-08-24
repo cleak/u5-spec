@@ -603,6 +603,15 @@ party has no usable item, it prints the no-usable-items refusal and exits. A
 selected row dispatches by the handler's use-item enumeration rather than by
 the forty-eight-entry equipment id space.
 
+In non-combat exploration, dispatching U-Use always commits one normal action.
+The outer command layer does not distinguish a successful item effect from an
+item-specific refusal or an early picker exit. The current mode therefore runs
+its ordinary per-turn processing after all of these outcomes: using an item
+successfully, receiving a refusal, cancelling the picker, or having no usable
+item to select. The mode still owns the contents of that processing -- outdoor,
+town, and dungeon turns advance and update their usual mode-specific systems.
+The item handler does not decide the turn cost by writing the clock itself.
+
 Confirmed U-Use families:
 
 | Family | Behaviour |
@@ -616,7 +625,7 @@ Confirmed U-Use families:
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only outside dungeon/combat scenes and only on accepted terrain; Search/Get recovery later invalidates the slot. |
 | Spyglass | Night utility, surface plane only. It permits a look when all three of these hold: the party is on the surface plane, the scene is the outdoor world or a town-class scene (dungeon-class and combat-class scenes are excluded), and the hour is in the night window `19..23` or `0..5`. The Underworld fails the plane condition, exactly as the Sextant does. A scene or plane failure prints the "not here" refusal; a daytime hour prints the no-stars refusal; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
 | HMS Cape plans | Shipboard-only utility. When used aboard ship, it marks the ship-rigging flag so the ship is rigged for double speed; otherwise it refuses. `weather.md` owns the resulting hoisted-sail wait-pass timing change. |
-| Sextant | Outdoor night-only utility, surface plane only. It permits a reading only when all three of these hold: the party is on the **surface** world plane, the scene is the outdoor world scene, and the hour is in the night window `19..23` or `0..5`. **The Underworld does not qualify**: it is the outdoor world scene on the other world plane, so it fails the plane condition and produces the same "only outdoors" refusal an indoor scene produces — there is no Underworld-specific message and no coordinate readout. The item label prints before any of the three tests, so it is emitted even on a refusal. The branch consumes nothing and writes nothing on any of its paths. Coordinate formatting is in `catalogs/item-list.md`. |
+| Sextant | Outdoor night-only utility, surface plane only. It permits a reading only when all three of these hold: the party is on the **surface** world plane, the scene is the outdoor world scene, and the hour is in the night window `19..23` or `0..5`. **The Underworld does not qualify**: it is the outdoor world scene on the other world plane, so it fails the plane condition and produces the same "only outdoors" refusal an indoor scene produces — there is no Underworld-specific message and no coordinate readout. The item label prints before any of the three tests, so it is emitted even on a refusal. The branch consumes nothing and writes nothing on any of its paths, but every outcome still commits one normal U-Use action and runs the current mode's ordinary per-turn processing. Coordinate formatting is in `catalogs/item-list.md`. |
 | Pocket Watch | Prints the current time as a twelve-hour reading with **hour, minutes and AM/PM suffix**. See `catalogs/item-list.md`; an earlier revision of both documents said no minute display was present, and that is withdrawn. |
 | Sandalwood Box | The direct U-Use path asks how to use the box and does not perform the endgame handoff. The successful quest handoff is owned by the terminal endgame overlay path, which reads the saved box flag during its Lord British confirmation sequence. |
 
