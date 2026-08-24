@@ -1045,9 +1045,26 @@ before the side panel; that label does use the shared caps, with the
 right-pointing opening cap on its left and the left-pointing closing cap on its
 right. The panel's own top and bottom edges use the ordinary frame-glyph family.
 
-The page-status cell is window-local `(6, 6)`. It shows no arrow, down only, up
-only, or both according to whether a nonzero item exists before the page start
-and after the last visible row. It is repainted with every row redraw.
+The page status begins at window-local `(6, 6)`, but a nonempty status is a
+**three-cell badge**, not one cell. It temporarily occupies the ordinary
+timed-effect slot at absolute columns `30..32`, row `7`: a right-pointing cap,
+one status glyph, and a left-pointing cap. The exact fixed-font codes are:
+
+| Item before page start? | Item after last visible row? | Codes at local columns `6, 7, 8` |
+|:---:|:---:|---|
+| no | no | No character codes; repaint the plain divider band. |
+| no | yes | `0x02, 0x19, 0x01` |
+| yes | no | `0x02, 0x18, 0x01` |
+| yes | yes | `0x02, 0x12, 0x01` |
+
+Codes `0x02` and `0x01` are the shared opening and closing caps described in
+`display-driver.md`; their normal accent strokes are part of the result. The
+middle code is therefore `0x19` for a following page only, `0x18` for a
+previous page only, and `0x12` for both. With neither page, the browser emits
+no blank or no-arrow glyph. It instead repaints the complete upper divider
+band as plain chrome with its two accent rules, exactly like a zero
+timed-effect indicator. This clears any badge left by the preceding page. The
+status is repainted with every row redraw.
 
 **Selection, refusal, and continuation.** A row render restores active text
 window `2` before returning to the input loop. Enter or Space therefore renders
