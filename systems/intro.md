@@ -665,8 +665,9 @@ destination as black.
 The carry-set title helper is a different operation and is not the public
 frame-advance. It takes a loaded one-bit-per-pixel resource as its argument and
 plays the subtitle ignition transition. Its only intro caller passes `WD.BIT`,
-and it runs exactly once, on the animated start/menu path. Only the clear-carry
-title tick advances the four-frame idle strip.
+and it runs exactly once, on the animated start/menu path. Carry clear is the
+public one-frame title tick; carry set invokes that same draw-then-advance body
+internally at its batch-publication boundaries.
 
 The effect is what makes the burning subtitle appear to catch light rather than
 simply switch on, and its structure is part of the contract:
@@ -674,14 +675,12 @@ simply switch on, and its structure is part of the contract:
 1. The whole hidden surface — which at this point holds the four staged bands —
    is copied aside into scratch storage, and the hidden surface is blanked.
 2. The reveal then runs **two passes** over the same `288 x 49` position space.
-   Each pass walks that space in the driver's deterministic pseudo-random order
-   and visits every position exactly once **except position `(0, 0)`**, which
-   the generator never emits. Unlike the logo dissolve of section 3's loader
-   step 4, this reveal does **not** append a fixup for that one position, so the
-   band's top-left pixel is never restored during the passes; the scratch
-   write-back in step 7 restores it, which is why the omission is invisible. Do
-   not add a fixup here to make the two effects symmetrical. Restoring a
-   position means copying that pixel back
+   Each pass walks every nonzero state of a fourteen-bit maximal Galois
+   sequence, interprets the state by division by 288, and applies positions
+   whose row is 0 through 48. After the nonzero-state cycle, a successfully
+   completed pass applies one explicit `(0,0)` fixup. That fixup is not counted
+   toward publication, is not paced or polled, and is skipped on abort.
+   Restoring a position means copying that pixel back
    from the scratch copy into the hidden surface **at all four band origins at
    once** — vertical offsets `0`, `50`, `100` and `150`, horizontally shifted to
    the bands' `x = 16` origin.
@@ -694,17 +693,55 @@ simply switch on, and its structure is part of the contract:
    palette index in all four band records, while `7871` of the band's `14112`
    positions vary between frames. The single exception is a lone pixel and has
    no bearing on the effect; treat the lettering as frame-invariant.
-4. Every 128 restored positions (256 on a host below the calibration baseline)
-   the entry publishes the current band to visible rows `65..113` and advances
-   the frame counter. Those publishes are what make the reveal visible as a
-   stipple; between them nothing reaches the screen.
-5. While the reveal is in its early portion the driver pulses the PC speaker,
-   producing a crackle that thins out as the reveal proceeds, and uses a
-   slightly shorter per-position wait during that portion.
-6. Any keystroke aborts the reveal.
-7. On exit the scratch copy is written back over the hidden surface, so the four
+4. Each pass starts a fresh publication countdown: 128 in-bounds nonzero-state
+   positions normally, or 256 when the boot calibration value is less than
+   250. The countdown advances for every in-bounds position whether that
+   pass's mask selects the pixel or not. One pass therefore makes 110 or 55
+   publications, then ends with 31 counted positions plus the uncounted corner
+   fixup still unpublished. There is no tail publication. Pass one's 32-position
+   tail first becomes visible with pass two's first batch; pass two's tail is
+   exposed only by the loader's ordinary title tick after this entry restores
+   the complete hidden bands.
+5. A batch publication draws the frame named by the current free-running
+   modulo-four counter and increments the counter afterward. The counter is not
+   reset at the effect or pass boundary. Thus a fresh normal run makes 220
+   internal publications and returns the counter to zero; the 256-position
+   cadence makes 110 and leaves it at two before the loader's following tick.
+6. Speaker and calibrated waiting occur only after a batch publication, never
+   per position. For publication `k` within either pass, starting at one, let
+   `T = 400 - 3k`. A speaker burst occurs exactly when the low nine bits of the
+   persistent gate state are less than `T`; the gate-state recurrence and burst
+   shape are given below. A burst publication then waits 45 full calibration
+   units, while a silent publication waits 50. There is no BIOS tick.
+7. Keyboard status is polled once after every nonzero LFSR state, including
+   states that map outside the valid row range. For an in-bounds state the
+   masked restore happens first; if it completes a batch, publication, counter
+   advance, sound, and wait also happen before the poll. A pending key is not
+   consumed. It aborts before the LFSR/gate-state advance and before the final
+   corner fixup; an abort in pass one also skips pass two.
+8. On exit the scratch copy is written back over the hidden surface, so the four
    clean bands survive intact for the idle strip, and the scratch storage is
    released.
+
+The speaker gate uses a persistent sixteen-bit state initialized to `0x7664`
+when the driver is loaded and not reset between passes or ignition calls. After
+each non-aborted nonzero LFSR-state iteration, including an out-of-bounds one,
+it is advanced modulo 65,536 as follows:
+
+```text
+gate = (((gate + 0x9248) rotate-right 3) XOR 0x9248) + 0x0011
+```
+
+For the first uninterrupted ignition after driver load, this gives 48 then 53
+speaker bursts across the two normal 128-position passes, or 35 then 33 across
+the two 256-position passes. One burst keeps the speaker enabled while it
+programs 25 successive pitches. A separate persistent pitch state, also
+initialized to `0x7664`, uses the same recurrence once per pitch; the requested
+frequency is `100 + (pitch_state modulo 1401)`, or 100 through 1500 Hz, and
+each pitch is held by a calibrated wait whose inner count is the boot
+calibration shifted right four bits. The speaker is disabled after pitch 25.
+Audio output may be omitted by a silent implementation; the gate still defines
+which publication takes the 45-unit rather than 50-unit pacing branch.
 
 The reveal covers only the band footprint. It is a different effect from the
 logo dissolve in section 3's loader step 4, which is an ordinary pseudo-random

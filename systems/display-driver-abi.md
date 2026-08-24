@@ -635,10 +635,17 @@ The EGA driver owns several visual effects that are not gameplay systems:
 - Subtitle ignition transition: dispatch offset `0x69` with carry set and a
   loaded one-bit resource segment in the primary register. The entry saves the
   back buffer to a scratch allocation, clears it, runs a pseudo-random
-  per-pixel reveal that interleaves idle-strip steps and a percussive sound
-  effect, then restores the back buffer and releases the scratch. It is paced
-  by the same CPU-calibrated busy wait as dispatch offset `0x6F`, not by a
-  timer tick, and it is not a cursor-blink entry.
+  two-pass masked reveal, then restores the back buffer and releases the
+  scratch. Each pass resets its 128-position publication countdown, or 256
+  below calibration 250; successful completion adds an uncounted `(0,0)`
+  fixup, and no partial tail is published. Each publication draws the current
+  idle-strip frame before incrementing its free-running counter. Sound and the
+  45/50-unit calibrated wait occur only at publications. Keyboard status is
+  tested after every nonzero LFSR state, after any restore and publication for
+  that state; it is not tested after the corner fixup. It is paced by a
+  CPU-calibrated busy wait rather than a timer tick and is not a cursor-blink
+  entry. `intro.md` section 5 owns the exact pass counts, gate recurrence,
+  speaker burst, poll, abort, and post-effect loader tick.
 - Rectangle dissolve: copies pixels from the back buffer to the front buffer
   in pseudo-random order until the rectangle matches. The EGA implementation
   uses a deterministic LFSR-style visit order; after the entry completes, the
