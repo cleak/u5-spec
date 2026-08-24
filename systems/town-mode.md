@@ -728,15 +728,14 @@ prints one such line per still-living Shadowlord regardless of where each is
 hiding.
 
 Which of the three is hosted also selects a one-shot, town-wide NPC state
-sweep that runs at the end of the same entry pass. This paragraph is the only
-statement of that mapping in this spec — nothing earlier describes it. Hatred
-rewrites every eligible NPC's schedule into **permanent pursuit of the party**,
-Cowardice rewrites every eligible NPC's schedule into **flight** and replaces
-that NPC's conversation with a cowering line, and Falsehood changes no NPC at
-all (its effects are the shop surcharge and the conversation theft). Eligibility
-is the same per-NPC predicate the alarm sweeps of Section 14 use, and the two
-resulting rewrites are the same two described there; the difference is only the
-trigger.
+sweep that runs at the end of the same entry pass. This resident-entry sweep is
+distinct from the alarm sweep in Section 14: it has its own eligibility test,
+does not give special classes a direct-pursuit exception, and uses a separate
+coin draw for every roster index. Hatred applies forced pursuit and then writes
+dialogue sentinel `0xFE` to every passing candidate. Cowardice attempts forced
+flight and then writes dialogue sentinel `0xFD` to every passing candidate.
+Falsehood changes no NPC here; its effects are the shop surcharge and the
+conversation theft.
 
 > **Withdrawal.** Earlier revisions of this paragraph called these outcomes "the
 > fortified/alert state" and "the pacified state". Both names were wrong and the
@@ -746,19 +745,29 @@ trigger.
 > holds position or defends — and the "pacified" outcome installs the engine's
 > only retreating mode plus a cowering line, so the NPC is frightened rather than
 > calmed. Both rewrites are destructive of persisted data: the NPC's real
-> conversation index is overwritten and cannot be recovered from the save. Eligibility asks three things of an NPC:
-that its daily schedule block is not empty, that its type falls in the
-ordinary-townsperson band, and that a per-NPC coin flip comes up — so roughly
-half of the eligible cast flips on any given entry.
+> conversation index is overwritten and cannot be recovered from the save.
 
-That predicate carries one original-code quirk worth naming rather than
-inheriting by accident: the type-band half of the test is evaluated against a
-fixed roster slot instead of against the NPC being tested, so it returns the
-same answer for every NPC in the sweep, while the schedule test and the coin
-flip are per-NPC as intended. The schedule-rewriting helper the sweep then calls
-performs the same band test correctly, against the real NPC. A reimplementation
-should decide deliberately whether to reproduce the fixed-slot read; it is an
-implementation artefact, not a designed rule. In a town hosting no Shadowlord, and in a
+The resident-entry predicate is exact:
+
+| Test or effect | Original behavior |
+|---|---|
+| Candidate scope | All 32 roster indices are tested; current floor is not consulted. |
+| Schedule test | At least one of the candidate's four time-of-day boundary bytes is nonzero. No waypoint or other schedule byte participates. |
+| Type test | The inclusive ordinary-townsperson band is `0x40..0x73`, but the original tests the type of fixed roster slot 4 for every candidate. |
+| Random test | Draw `0` or `1` from the shared PRNG and pass only on `0`. One draw is consumed for every roster index even if another test fails; there is no host-clock reseed. |
+| Hatred result | Apply forced pursuit according to the candidate's actual type, then overwrite its dialogue index with `0xFE`. |
+| Cowardice result | Attempt forced flight, then overwrite the dialogue index with `0xFD` even if the flight helper rejected that candidate's actual type. |
+
+The fixed-slot defect has observable asymmetric consequences. If slot 4 is
+outside `0x40..0x73`, no candidate passes. If slot 4 is inside the band, a
+scheduled candidate of any type can pass. Hatred's pursuit helper then writes
+near-only approach mode `6` when that candidate's actual type is below `0x2F`,
+or every-turn/randomized approach mode `7` otherwise, and zeros all four time
+boundaries. Cowardice's flight helper rechecks the candidate's real type and
+accepts only `0x40..0x73`; nevertheless, the outer entry sweep still writes
+`0xFD` after a rejection, so a non-townsperson can acquire cowering Talk without
+acquiring flight AI. A compatibility implementation should decide deliberately
+whether to reproduce this defect. In a town hosting no Shadowlord, and in a
 town whose install was skipped by the row-`4` guard, the sweep does not run.
 
 Stonegate has a separate entry-time presentation surface. On entry, the town
@@ -780,7 +789,10 @@ A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). 
 
 NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an attack/catch event, town post-action cleanup routes it through the alarm, arrest, frighten, death, or slot-clear paths described below, or into the NPC-conflict chain above; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
 
-Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering path, an eligible NPC's stored schedule is overwritten in one of two ways.
+Town alarms are one-shot sweeps over the NPC roster. They examine all 32 slots
+and skip only a slot whose runtime occupancy word is zero. Occupied actors use
+nonzero states even when assigned to a floor other than the player's current
+floor, so the alarm reaches the entire occupied roster across all floors.
 
 > *Corrected (2026-08-23).* An earlier revision of Section 7.1 said the
 > drunkenness stage "scatters nearby NPCs", and the source list below called the
@@ -790,18 +802,34 @@ Town alarms are one-shot sweeps over the NPC roster. Depending on the triggering
 > what changes is the NPC's persisted per-period behaviour modes, its
 > time-of-day boundaries, and (on the flight path) its dialogue index. An
 > implementer must not move any actor on this path.
->
-> Two further limits on what has been established, recorded so they are not
-> over-read: the coin flip on the non-special path was re-confirmed as a draw
-> compared against a mid-range threshold, but the draw's exact range was not
-> re-verified, so "half" is approximate rather than an exact one-in-two; and the
-> meaning of the individual behaviour-mode values written by the two helpers
-> comes from the separate analysis of those helpers, not from the sweep itself.
 
-- **Forced pursuit.** All three of the NPC's per-period behaviour modes are set to an approach mode, and all four of its time-of-day boundaries are zeroed so the schedule can never advance past its first period. The NPC's waypoint coordinates are left alone. Two approach modes are used, chosen by the NPC's class: one acts only while the party is within about four tiles, the other acts every turn and adds an occasional random step. Both step toward the party and both raise the "reached the party" event on adjacency, which this section's cleanup turns into the attack path.
-- **Forced flight.** All three behaviour modes are set to the engine's only *retreating* mode — it acts only while the party is within about four tiles, and then steps to whichever neighbouring square is **further** from the party — and the NPC's dialogue index is overwritten with a sentinel that makes conversation produce a single canned cowering line instead of the NPC's real script. This is destructive: the real dialogue index is gone.
+The two rewrite helpers have these exact contracts:
 
-Some special classes — the Shadow Lord actor class, the lich/death-mage class, and the guard class — always take the pursuit rewrite. Other eligible townsfolk take a random half-chance of the flight rewrite; the rest are untouched. The flight rewrite additionally applies only to ordinary human townsperson classes, so monsters cannot be made to flee. The schedule walker consumes these rewrites on later ticks.
+| Rewrite | Preconditions | Persisted result |
+|---|---|---|
+| Forced pursuit | None beyond receiving a roster index. | Write all three behavior bytes to mode `6` when the actor's actual type is below `0x2F`, otherwise mode `7`; zero all four time boundaries; preserve all waypoint coordinates and the dialogue index. Mode `6` approaches only while the party is within about four tiles. Mode `7` approaches every turn and occasionally redirects a step at random. |
+| Forced flight | Actual type is in inclusive band `0x40..0x73`, and either dialogue is already `0xFE` or at least one of the four time boundaries is nonzero. | Write all three behavior bytes to retreat mode `3` and replace the dialogue index with `0xFD`. Preserve all four time boundaries and every waypoint coordinate. |
+
+Talk recognizes `0xFD` as a sentinel independently of the NPC's original
+`.TLK` record and produces the canned cowering response instead of loading that
+record. Sentinel `0xFE` is distinct: Talk routes it to the shouted brush-off and
+then attempts the same forced-flight helper.
+
+The alarm's routing after the occupancy test is also exact:
+
+| Actor type or draw | Alarm action | PRNG consumption |
+|---|---|---|
+| Shadowlord, exact type `0xFC` | Forced pursuit; therefore mode `7` | None |
+| Lich/death-mage, exact type `0xD8` | Forced pursuit; therefore mode `7` | None |
+| Guard, exact type `0x70` | Forced pursuit; therefore mode `7` | None |
+| Any other type; inclusive `0..255` draw is `0..127` | Call forced flight; its own preconditions may still make this a no-op | One draw from the existing shared stream |
+| Any other type; draw is `128..255` | Leave unchanged | One draw from the existing shared stream |
+
+The alarm performs no host-clock reseed. Thus the non-special split is exactly
+128 flight-helper calls and 128 unchanged outcomes over the 256 possible draw
+values, while the number of actual flight rewrites also depends on the helper's
+ordinary-band and schedule/dialogue gates. The schedule walker consumes these
+rewrites on later ticks.
 
 > **Withdrawal.** Earlier revisions called these "a fortified/alert schedule
 > state" and "a pacified/fleeing schedule state". "Fortified" was inverted — the
@@ -954,7 +982,7 @@ The behaviour described above was derived by reading the function and format not
 - The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis notes
   `u5-decomp/functions/TOWN_OVL/` and
-  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
+  `u5-decomp/notes/` -- the
   farmland/orchard blight, its resident-Shadowlord gate and its two call sites,
   its two substitutions, its seven-in-eight rate, its day-of-month seed, and
   the clock re-seed that follows it. That note's earlier "grass/path
@@ -968,18 +996,18 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/TOWN_OVL/` (see that
   note's 2026-08-22 repair-round correction, which supersedes its original
   "player attach" framing) and
-  `u5-decomp/notes/2026-08-22_quest-world-retrace.md`.
+  `u5-decomp/notes/`.
 - The per-scene NPC removal mask reader/writer and runtime slot free helper - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md` -- the
+  `u5-decomp/notes/` -- the
   corrected sprite-class filter for recorded removals (townspeople and royal
   regalia in, guards and creatures out), the two hard-wired removal writers, and
   the exhaustive accessor sweep showing the mask has no other owners.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/`.
-- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler note as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+- The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/`, and `u5-decomp/functions/TOWN_OVL/`. The Section 15 grid-boundary exit contract, and the withdrawal of the earlier "exit threshold tile" reading of it, are derived from the same movement-handler analysis as re-traced on 2026-08-22, cross-checked against the shipped-map placement census in `u5-decomp/notes/`.
 - The town Attack handler and the town K-Klimb handler - the corresponding command-handler notes under `u5-decomp/functions/TOWN_OVL/`. The climb-handler note predates the 2026-08-22 retrace and is filed under a different command name than the one it actually analyses; the retrace note above supersedes its labelling.
 - Source provenance: derived from private analysis note
-  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
+  `u5-decomp/notes/`. That private analysis supplies the
   per-scene base floor-page binding and its sign convention, the complete
   inventory of floor-transition cells and their on-screen text, the climb
   command's refusal cases and its fence/gate side path, the trapdoor's general
@@ -987,7 +1015,12 @@ The behaviour described above was derived by reading the function and format not
   full-reload semantics of a floor change, and the two roles of the saved floor
   byte. It also fixes the floor of the harpsichord puzzle: floor `2` is two
   storeys above the castle's entry floor, not a basement.
-- The town alarm, forced-pursuit / forced-flight schedule rewrites, death, arrest, and post-scheduler cleanup helpers - `u5-decomp/functions/TOWN_OVL/`.
+- The town alarm, resident-Shadowlord predicate, forced-pursuit / forced-flight
+  schedule rewrites, death, arrest, and post-scheduler cleanup helpers -
+  `u5-decomp/functions/TOWN_OVL/`; the runtime occupancy and cross-floor state
+  contract - `u5-decomp/functions/NPC_OVL/`; the dialogue-sentinel dispatch -
+  `u5-decomp/functions/TALK_OVL/`; and the shared inclusive-range PRNG contract -
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The Lord British castle chord handler - `u5-decomp/functions/TOWN_OVL/`.
 - The Stonegate setup helper audio/presentation pattern - `u5-decomp/functions/TOWN_OVL/`.
 - The free-roaming animal/object walker and its narrow town terrain predicate - `u5-decomp/functions/TOWN_OVL/`.
@@ -1005,16 +1038,16 @@ The behaviour described above was derived by reading the function and format not
   status pass -
   `u5-decomp/functions/TOWN_OVL/`,
   `u5-decomp/functions/ULTIMA_EXE/`, and
-  `u5-decomp/notes/party_status_pass_cadence_2026-08-22.md`.
+  `u5-decomp/notes/`.
 - Independent second-pass re-derivation of the poison-gas predicate, the
   Dexterity save comparison, the absence of any further gating condition, and
   the caller-side per-turn placement:
-  `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
-- The location tile-grid file format and the two-floor-per-location layout — `u5-decomp/formats/maps.md`.
-- The NPC roster and dialogue file formats — `u5-decomp/formats/npc-tlk-pth.md`.
+  `u5-decomp/notes/`.
+- The location tile-grid file format and the two-floor-per-location layout — `u5-decomp/formats/`.
+- The NPC roster and dialogue file formats — `u5-decomp/formats/`.
 - The clean verification summary for Lord British's castle scene binding and
   town-mode load smoke checks - `u5-spec/NEXT-STEPS.md`.
-- The save image's scene-byte encoding and the per-location coordinate state — `u5-decomp/formats/saves.md`.
+- The save image's scene-byte encoding and the per-location coordinate state — `u5-decomp/formats/`.
 
 Source provenance: derived from private analysis in `u5-decomp/notes/` for the
 three routings into the arrest sequence and its
