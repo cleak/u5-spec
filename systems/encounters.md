@@ -250,7 +250,7 @@ gap classes have an all-zero stat row, which is one reason the families that map
 onto them are handled by their own world-mode paths rather than by entering
 combat.
 
-When the player steps onto (or attacks) an active-object tile that the engine recognises as hostile, the world loop's terrain-combat entry step selects and loads an outdoor arena and then calls the combat framer with `entry_mode = 0` (terrain combat). The framer then runs the **terrain-combat setup pipeline** described in `combat.md`. From the encounter system's side, the relevant sub-stages of that pipeline are:
+When the player steps onto or attacks an active-object tile that the engine recognises as hostile, or when the generic orthogonally adjacent-hostile reaction in `active-objects.md` falls through to combat, the world loop's terrain-combat entry step selects and loads an outdoor arena and then calls the combat framer with `entry_mode = 0` (terrain combat). All three triggers use the same class, banner, and arena selectors below; the automatic adjacent reaction has no smaller legacy selector of its own. The framer then runs the **terrain-combat setup pipeline** described in `combat.md`. From the encounter system's side, the relevant sub-stages of that pipeline are:
 
 Two independent selections happen at entry, and earlier drafts of this
 document conflated them. The **combat class** comes from the hostile active

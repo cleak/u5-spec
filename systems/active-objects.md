@@ -287,6 +287,58 @@ The adjacency reactions, in the order the handler tests them:
   for its banner name. An orthogonally adjacent sea serpent therefore does *not*
   apply the ranged payload on ordinary terrain.
 
+  The two gates in that sentence are exact. The terrain set is
+  `0x00..0x03` inclusive: the sentinel/void value, deep water, water, and
+  shoals. It includes `0x03`, so it is **not** the ship movement predicate
+  `0x00..0x02` from `systems/movement.md`. The accepted transport markers are
+  exactly carpet `0x14..0x15` and skiff `0x28..0x2B`. No foot, horse, frigate,
+  sprite-suppressed (`0x00`), or other marker qualifies. Both gates must pass;
+  if either fails, the branch enters terrain combat.
+
+  Terrain combat derives the encounter's base combat class and banner from
+  the triggering slot's byte-0 type. The low two frame bits do not affect the
+  result:
+
+  | Active-object type | Base combat class / banner identity |
+  |---|---|
+  | `0x2C..0x2F` | Class 1, but the encounter banner uses the fixed Pirates name rather than class 1's ordinary banner entry. |
+  | `0x80..0x8F` | Classes 16..19, one class per four-byte run. |
+  | `0x90..0x9F` | Classes 20..23, one class per four-byte run. |
+  | `0xA0..0xAF` | Classes 24..27, one class per four-byte run. |
+  | `0xB0..0xBF` | Classes 28..31, one class per four-byte run. The excluded `0xB4..0xB7` subfamily does not reach this fallback through the ordinary walker. |
+  | `0xC0..0xCF` | Classes 32..35, one class per four-byte run. |
+  | `0xD0..0xDF` | Classes 36..39, one class per four-byte run. |
+  | `0xE0..0xEF` | Classes 40..43, one class per four-byte run. The Sand Trap, excluded `0xE8..0xEB`, and whirlpool subfamilies do not reach this generic fallback through the ordinary walker. |
+  | `0xF0..0xFF` | Classes 44..47, one class per four-byte run. |
+
+  Equivalently, every ordinary type at or above `0x40` uses
+  `(type - 0x40) / 4`, discarding the remainder. This is a complete mapping,
+  not a gate limited to `0x40..0x7F`: the whole `0x80..0xFF` actor band maps
+  to bestiary classes 16..47. The class names and encounter-banner identities
+  are the rows of `catalogs/monster-bestiary.md` Section 2.
+
+  The combat class is **not** the outdoor arena number. The battlefield is
+  selected independently by the terrain under the hostile and party ship
+  state, using the complete priority and terrain tables in
+  `systems/encounters.md` Section 4. Type contributes only three special
+  inputs to that selector: `0x2C..0x2F` marks a ship target,
+  `0x80..0x8F` forces the water condition, and `0xFC..0xFF` forces Shadow Lord
+  arena 10. All other type families leave arena selection to terrain and
+  transport. A generic engagement implementation must call that complete
+  terrain-combat entry; a partial type-to-arena switch is not equivalent.
+
+**Multiple adjacent hostiles do not compete for one winning slot.** The outer
+walker visits eligible slots from thirty-one down through one and runs the
+adjacency test separately for each. After a returning reaction it continues
+with the next lower slot; there is no direction-order scan, class priority, or
+break after the first match. A generic terrain-combat call can therefore return
+and be followed by another lower-indexed adjacent reaction in the same
+epilogue. The first reaction makes the walker's running reaction total
+non-zero, which suppresses ordinary movement dispatch for the rest of that
+turn, but it does **not** suppress later reaction checks. A special branch that
+changes scene or re-enters overworld setup can of course transfer control away
+before the original walk resumes.
+
 The ranged reactions, reached only when no adjacency reaction fired:
 
 - **Sea Serpent and Dragon breath.** Entered when the slot's type byte **equals**
@@ -673,8 +725,10 @@ The behaviour described above was derived by reading the function and format not
 - Source provenance: the exact-equality breath recognition, the
   adjacency-before-class ordering, the identification of `0xE0..0xE3` as the
   Sand Trap run and of its adjacency arm as silent-but-damaging, the generic
-  adjacent arm's terrain-and-marker condition for reaching the shared payload,
-  and the withdrawal of the on-foot whirlpool no-op, were **re-derived from the
+  adjacent arm's exact terrain and marker sets, its complete class/banner and
+  arena-selector handoff, the descending walk's ability to process more than
+  one adjacent hostile, and the withdrawal of the on-foot whirlpool no-op,
+  were **re-derived from the
   shipped binaries** in a verification pass that read each routine from entry to
   exit and did not use any private note as evidence. Sprite-run identity was
   fixed two independent ways: the shipped description strings for the sprite
@@ -682,9 +736,8 @@ The behaviour described above was derived by reading the function and format not
   `catalogs/tile-catalog.md` Section 7 applied to
   `catalogs/monster-bestiary.md` class numbers. Working directories:
   `u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
-  Private notes in the first of those that name the `0xE0` adjacency arm after
-  the sea serpent are contradicted by this pass and should be corrected on the
-  private side.
+  The older private interpretation that named the `0xE0` adjacency arm after
+  the sea serpent was corrected in the same pass.
 - The resident tile-class dispatcher and reverse active-object lookup used by
   outdoor step validation -
   `u5-decomp/functions/ULTIMA_EXE/`.
