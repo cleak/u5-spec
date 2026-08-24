@@ -794,8 +794,28 @@ pixels by band. Pen selection happens once before the stroke loop.
 
 **Active dungeon monster.** The active record used by this corridor painter is
 the wandering dungeon monster, not a generic Codex, Shadowlord, quest-scene, or
-dropped-item registry. Its family selects one masked-sprite resource and one
-combat class:
+dropped-item registry. It reuses the public eight-byte active-object shape with
+the following dungeon-specific meanings:
+
+| Public field | Dungeon interpretation |
+|---|---|
+| `type` | Monster family and `MONn` resource selector, inclusive `0..7`. Zero is Giant Rat and is valid. |
+| `tile` | A mirror of `type` written by fresh setup. The corridor painter does not use it as a separate animation tile. |
+| `x`, `y` | Wrapped dungeon cell coordinates, each `0..7`. |
+| `z` | Dungeon level. |
+| `dep1` | Combat class id. `0xFF` means this dungeon record is inactive. |
+| `phase` | Packed sprite state: symmetry, animation mode and phase. |
+| `dep3` | Placement selector: `0` for floor placement, `0xFF` for upper/ceiling placement. |
+
+This is a mode-specific interpretation. In particular, the generic top-down
+rule that treats `type == 0` as empty is invalid here. Fresh-setup failure zeros
+`type` and `tile` and writes the authoritative inactive marker to `dep1`.
+Saving in a dungeon preserves all eight bytes in the live-scene table inside
+the main save image; it is not a plane-overlay `.OOL` record. A resumed dungeon
+then takes the reuse path from Section 4, so implementations must round-trip
+the auxiliary fields without normalization.
+
+The family selects one masked-sprite resource and one combat class:
 
 | Family | Resource | Monster | Combat class | Initial sprite-state byte |
 |---:|---|---|---:|---:|
