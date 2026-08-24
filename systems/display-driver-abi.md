@@ -665,19 +665,20 @@ The EGA driver owns several visual effects that are not gameplay systems:
   descriptor's render-target selector. It is always issued as a single blocking
   call, and it is the carry-clear half of dispatch offset `0x66`; the carry-set
   half is the stepped single-cell entry. See section 9.6.
-- Animated tile shimmer: mutates selected loaded tile graphics entries rather
+- Animated tile shimmer and moongate row splice: mutates selected loaded tile graphics entries rather
   than writing framebuffer pixels directly, then runs its own propagation and
   composite pass. In the ordinary world path the effect becomes visible when the
   viewport redraws those tiles. The entry also takes a target cell as a screen
   tile row and column plus the current viewport pixel origin and a step value,
-  and the Return-to-View preview drives it that way for its local cell effect,
+  and the Return-to-View preview and endgame gate drive it that way for a local cell effect,
   stepping `1..15` to open a cell and `15..1` to close it. The caller marks the
   cell as skipped in its own repaint for the duration, so the shimmer entry owns
   that cell while the effect runs. Carry set selects a separate direct-cell
   body rather than the large randomizer. For Return-to-View step `n` in 1..15,
   it builds a temporary 16-by-16 tile from base tile `0x05`: destination rows
   `0..15-n` retain the same base rows, and destination rows `16-n..15` receive
-  portal-tile `0xDC` rows `0..n-1`. It then paints all 256 pixels opaquely with
+  portal-tile `0xDC` rows `0..n-1`. The endgame uses the identical operation
+  with chamber-floor tile `0x44` as its base. It then paints all 256 pixels opaquely with
   no palette transform and restores every byte of the shared loaded scratch
   tile before returning. EGA and Tandy have the same decoded palette-index
   result. Reverse playback is the identical rasters for `n=15..1`, not a

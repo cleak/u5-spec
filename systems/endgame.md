@@ -426,6 +426,25 @@ detail is the ground half of that composition: this scene substitutes its own
 chamber floor tile for the grass the overworld uses, which is why step 13's
 repaint matches the ground the gate rose from.
 
+There is no display-driver brightness operation in this sequence. For a
+deterministic raster test, phase `N` in `1..15` is exactly this opaque 16-by-16
+cell:
+
+- destination rows `0..15-N` are rows `0..15-N` of floor tile `0x44`;
+- destination rows `16-N..15` are rows `0..N-1` of gate tile `0xDC`;
+- phase `16` is the ordinary complete `0xDC` tile.
+
+Every partial phase is rebuilt from those two stable source tiles. It is not
+cumulative and performs no transparency, mask, XOR, palette, or colour-plane
+transform. Phase 15 still retains floor row 0 and therefore is **not**
+pixel-identical to the complete gate held for the following four ticks. The
+temporary composition uses scratch tile `0x116`, paints the complete cell, and
+restores that scratch tile's prior bytes before returning. Ordinary terrain
+paint and viewport clipping apply; active-object sprites are composited later,
+so an actor occupying `(5,4)` appears over the gate until the script clears it.
+The rule is display-family independent even though the shipped drivers encode
+their pixels differently.
+
 Two consequences for implementation. First, an engine that models this as a
 palette animation, a brightness level, or a dedicated endgame effect will not
 reproduce it and will duplicate work it already owns — build one phase
@@ -933,10 +952,11 @@ The original uses the active-object renderer for cinematic movement. A modern en
 - **Endgame screen geometry.** Closed. The tableau rectangle, cell size, scene
   terrain source and buffer, and both text-window rectangles are published in
   section 3.1; the actor index space and per-class sprites in section 4.
-- **Pixel-perfect endgame scene rasters.** The terminal tableau slot layout,
-  actor bytes, movement order, gate brightness ramp, and local wander rule are
-  specified here. The residual is the driver's exact per-step pixel pattern for
-  the gate's brightness entry, which belongs to `display-driver-abi.md`.
+- **Pixel-perfect endgame scene rasters.** Closed. The terminal tableau slot
+  layout, actor bytes, movement order, gate rise/sink row splice, full-height
+  hold, source tiles, composition order, and local wander rule are specified
+  here. Earlier wording about an unpublished driver "brightness entry" was
+  wrong: the values are shared moongate phases, not brightness arguments.
 - **Final narrative page-in transitions.** Closed. The six windows' archive,
   slot, panel size, panel origin, text record, layout descriptor, title strips
   and presentation model are published in section 8. Each window does clear the
