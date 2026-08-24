@@ -571,9 +571,21 @@ dissolve has six call sites in the shipped program, spanning four rectangles
 | `(40, 86)..(75, 120)` | Intro story step 1 | `systems/intro.md` section 10 |
 | `(0, 0)..(319, 100)` | Intro start/menu loader, animated path only | `systems/intro.md` section 10 |
 | `(0, 0)..(319, 199)` | Endgame, entering the final narrative presentation | `systems/endgame.md` sections 7 and 8 |
-| `(8, 8)..(183, 183)` | Map viewport; two sites in the Blackthorn audience/rescue scene and one in the search/open command path | not yet specified; see section 11 |
+| `(8, 8)..(183, 183)` | Rescue/refuge entry after the unending-darkness line | `systems/blackthorn.md` section 7 |
+| `(8, 8)..(183, 183)` | Rescue/refuge exit after party restoration and the vertigo line | `systems/blackthorn.md` section 7 |
+| `(8, 8)..(183, 183)` | Dungeon Search after one of its three reveal rewrites | `systems/dungeon-mode.md` section 8 |
 
 The rectangle `(8, 8)..(183, 183)` is exactly the 176-by-176 world map viewport.
+
+The three viewport sites are not shared audience or Search/Open effects. Both
+Blackthorn sites belong exclusively to the total-party-defeat rescue/refuge
+sequence. The earlier one dissolves out to a black hidden viewport. The later
+one dissolves in a black viewport with the on-foot party sprite at centre cell
+`(5,5)`. The command site belongs exclusively to lit dungeon S-Search. Three
+outcomes reach it: revealing exact `0x61`, crumbling a Doom-flavour `0xC?`
+skeleton, and revealing a `0xD?` hidden door. After the outcome's cell rewrite,
+the ordinary first-person renderer composes the resulting view on the hidden
+surface and the call dissolves that new view in. Open never reaches it.
 
 **The fade idiom.** Four of the six sites are instances of one caller-side
 idiom that an engine should recognise, because the dissolve alone does not

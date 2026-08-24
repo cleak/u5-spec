@@ -111,6 +111,14 @@ pseudo-random per-pixel dissolve of the inclusive rectangle `(0, 0)..(319, 199)`
 in one driver call. Like the two intro dissolves it is self-paced, blocking, not
 tick-driven, and runs no title tick and no keyboard poll while it works.
 
+The same cadence applies to all three map-viewport calls listed in
+`display-driver-abi.md` section 9.6: each `(8,8)..(183,183)` dissolve is one
+self-paced blocking driver call. The two rescue/refuge calls and the dungeon
+Search reveal call run no world tick, gameplay-time advance, or
+caller redraw during the dissolve itself; their caller-side composition and
+mutation order is specified in `blackthorn.md` section 7 and
+`dungeon-mode.md` section 8.
+
 The title-tick helper has the per-call BIOS-tick wait built into its body, so
 intro callers do not add an external wait around it. The pacing of any phase
 whose unit is "one title-tick call per X" therefore inherits the same ~55 ms
