@@ -1230,6 +1230,22 @@ state used by the outdoor loop, and copies the row's delivery coordinate into
 the pending X and Y bytes at the same moment. The next overworld entry consumes
 that state and places the watercraft.
 
+The pending state is part of `SAVED.GAM`, not an `.OOL` file:
+
+| Save offset | Pending field | Canonical values |
+|---:|---|---|
+| `0x03AD` | Delivery X | Selected shipwright row's overworld X coordinate. |
+| `0x03AE` | Delivery Y | Selected shipwright row's overworld Y coordinate. |
+| `0x105F` | Acquisition class/payload | `0x00` none, `0x40` standalone Skiff, `0x82` Frigate with two Skiffs, `0x83` after one additional Skiff. |
+
+The class byte is packed: values below `0x40` are inactive, `0x40..0x7F`
+select the Skiff family, `0x80..0xFF` select the Frigate family, and the low six
+bits become the delivered auxiliary/cargo count. Further Skiffs bought for a
+pending Frigate continue incrementing the byte beyond `0x83`; the original
+does not impose a separate cargo cap here. Loading preserves all class values
+without normalization. See `formats/saved-gam.md` Section 9.3 for the complete
+round-trip and unknown-value contract.
+
 The delivery pass, which runs once before the first overworld turn after the
 purchase, does the following:
 
@@ -1245,7 +1261,8 @@ purchase, does the following:
 5. Set the carried-skiff auxiliary byte from the queued acquisition class: `2`
    for a plain Frigate, `3` for a Frigate that absorbed one extra purchased
    Skiff, `0` for a standalone Skiff.
-6. Clear the pending state.
+6. Set the pending class byte to zero. The pending X and Y bytes are not
+   cleared; without an active class they are ignored.
 
 The two purchase classes use different pending payloads:
 
@@ -1511,44 +1528,38 @@ fixed.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- `u5-decomp/functions/SHOPPES_OVL/OVERVIEW.md`,
-  `u5-decomp/functions/SHOPPES_OVL/`, and the private
-  SHOPPES healer-main trace — weaponsmith / armourer, guildmaster, healer /
+- `u5-decomp/functions/SHOPPES_OVL/` — weaponsmith / armourer, guildmaster, healer /
   sanctum, herbalist, horse-trader sale, and post-transaction surcharge
   behavior.
-- `u5-decomp/functions/SHOPPES2_OVL/_OVERVIEW.md`,
-  `u5-decomp/functions/SHOPPES2_OVL/`, and
-  local SHOPPES2 shipwright control-flow analysis — tavernkeeper, ship broker,
+- `u5-decomp/functions/SHOPPES2_OVL/` — tavernkeeper, ship broker,
   sage, and the correction that the traced `F`/`S` pending-action flow belongs
   to shipwright sales rather than a provisions merchant.
-- `u5-decomp/functions/SHOPPES3_OVL/_OVERVIEW.md`,
-  `u5-decomp/functions/SHOPPES3_OVL/`, and
-  `u5-decomp/functions/SHOPPES3_OVL/` — innkeeper
+- `u5-decomp/functions/SHOPPES3_OVL/` — innkeeper
   pricing, rest recovery, inn registry, and persistent guest-lodging state.
-- `u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md` — the inn
+- `u5-decomp/notes/` — the inn
   menu's entry clear of the shared timed-effect slot.
-- `u5-decomp/formats/data-tables.md` — `SHOPPE.DAT` record layout, substitution placeholders, shared bark renderer.
-- `u5-decomp/formats/data-ovl.md` — 128-entry phrase-token dictionary; the
+- `u5-decomp/formats/` — `SHOPPE.DAT` record layout, substitution placeholders, shared bark renderer.
+- `u5-decomp/formats/` — 128-entry phrase-token dictionary; the
   published contents, biases, empty-slot census, and the shop renderer's own
   spacing rule were re-derived in
-  `u5-decomp/notes/talk_group_retrace_2026-08-22.md` and
+  `u5-decomp/notes/` and
   `u5-decomp/functions/SHOPPES_OVL/`
   location, byte-range bias, shop-kind trigger table, and SHOPPES2 shipwright
   dispatch correction.
 - `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/functions/ULTIMA_EXE/` -- conversation-side
   shop dispatch, current shop selector, and shared caller context.
-- `u5-decomp/notes/shop_instance_binding_2026-08-22.md` -- the mounted-party
+- `u5-decomp/notes/` -- the mounted-party
   entry gate and its literal, the scene-to-row search and its out-of-range
   behaviour, and the two resident per-kind name tables that supply the shop-name
   and vendor-name substitutions published in Section 8.0.
-- `u5-decomp/formats/ds-bss-map.md`,
+- `u5-decomp/formats/`,
   `u5-decomp/functions/TOWN_OVL/`,
   `u5-decomp/functions/SHOPPES_OVL/`, and
   `u5-decomp/functions/TALK_OVL/` --
   the resident-Shadowlord selector that gates the shop surcharge.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3, for
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` for
   the surcharge's Falsehood-only gate.
 - Private SHOPPES horse-trader sale trace -- horse-trader sale helper and horse-object placement.
 - Shipped `.NPC` roster scan and resident shop name/scene tables -- high
@@ -1560,11 +1571,10 @@ The behaviour described here was derived from the private function and format no
 - `u5-decomp/functions/CMDS_OVL/` and direct
   `SHOPPE.DAT` record inspection -- Frigate/Skiff labels, boardable ship/skiff
   families, and ship hull/skiff-count auxiliary semantics.
-- `u5-decomp/notes/shoppe_random_bark_tables_2026-05-24.md` -- shared
+- `u5-decomp/notes/` -- shared
   entry-greeting and closing-bark random-bark record ordinals by shop trigger,
   including the 2026-08-22 correction of the row labels.
-- `u5-decomp/notes/shoppe_window_geometry_call_sweep_2026-05-24.md` and
-  `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md` -- overlay call
+- `u5-decomp/notes/` -- overlay call
   sweep and the later whole-build census of the text-window selector,
   rectangle, cursor, and colour primitives; the census supersedes the earlier
   sweep's claim that the inn register was the only shop-owned panel.
