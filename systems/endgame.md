@@ -801,11 +801,33 @@ path"; that is withdrawn — the only difference from the body text is which fon
 slot the glyph source points at. Centring and inverse video are both still in
 force, so the two lines are centred and inverse like the body above them.
 
-The stored form of these two lines uses the rune digraph encoding shared with
-the game's sign and Codex text: one character stands for the TH digraph,
-another for the ST digraph, and the at-sign stands for a word space. A clean
-implementation that stores the decoded Latin form must re-encode it, or supply
-its own rune glyph mapping, before drawing it through a rune font.
+The stored form uses these exact one-cell code points:
+
+| Decoded token | Stored character | Stored byte | Fixed-font cells |
+|---|---|---:|---:|
+| `TH` | `[` | `0x5B` | 1 |
+| `ST` | `_` | `0x5F` | 1 |
+| word space | `@` | `0x40` | 1 |
+
+Other uppercase Latin letters retain their ordinary byte values. The shipped
+title is already stored in this encoded form; this presentation path does not
+run a Latin-to-rune encoder. A clean implementation whose authored text is
+decoded uppercase Latin can reproduce that representation with an ordinary
+left-to-right scan: consume `TH` or `ST` as a two-letter token and emit its
+single stored character, convert each space to `@`, and pass each other
+uppercase letter through unchanged. The two digraphs do not overlap, so their
+test order cannot change the result.
+
+The complete vectors, excluding the terminating line feeds, are:
+
+| Decoded line | Stored character sequence | Cells | Start column / x |
+|---|---|---:|---:|
+| `THE QUEST OF THE AVATAR` | `[E@QUE_@OF@[E@AVATAR` | 20 | 10 / 80 px |
+| `IS FOREVER` | `IS@FOREVER` | 10 | 15 / 120 px |
+
+Centring counts the encoded stored characters. Each digraph occupies one
+eight-pixel fixed-font cell; using the decoded Latin length would shift the
+first line two cells left.
 
 **Three** blank rows follow the closing title — rows 18 through 20 — the gap
 between the certificate body and the report below. The fixed text ends that
@@ -926,6 +948,9 @@ The original uses the active-object renderer for cinematic movement. A modern en
   size and origin for every window, the title strips, and the certificate
   backdrop are published in section 8. The equivalent alternate-depth archives
   hold the same records and remain alternate-hardware parity work.
+- **Closing-title rune encoding.** Closed. Section 9.3 publishes the exact TH,
+  ST, and word-space code points, canonical decoded-Latin re-encoding rule,
+  stored-character test vectors, encoded cell counts, and centred positions.
 - **`END.DAT` and `ENDMSG.DAT` prose.** The certificate's fixed prose is
   published in section 9 because it is assembled from resident fragments. The
   narrative prose in `END.DAT` and the dialogue prose in `ENDMSG.DAT` are shipped
@@ -935,52 +960,18 @@ The original uses the active-object renderer for cinematic movement. A modern en
 
 ## 13. Sources
 
-This document is a cleanroom prose rewrite from the following source notes. It intentionally omits assembly, decompiled code, private offsets, and copied binary text dumps.
+This document is a cleanroom prose rewrite from private analysis under the
+following directories. It intentionally omits assembly, decompiled code,
+private offsets, copied binary text dumps, and private note filenames.
 
 - `u5-decomp/functions/ENDGAME_OVL/`
-- `u5-decomp/functions/ENDGAME_OVL/` — the
-  final narrative presentation helper, including the full-screen dissolve it
-  issues before its first draw. Its filename records a superseded reading; the
-  function is not a party-roster retirement lookup.
-- `u5-decomp/functions/ENDGAME_OVL/`
-- `u5-decomp/functions/ENDGAME_OVL/_OVERVIEW.md`
-- Source provenance: that the two gate ramps drive the same world-global,
-  save-backed moongate presence phase the overworld uses, that the phase
-  composes a rise-and-sink rather than a brightness level, and that this scene
-  substitutes its own ground tile into that composition, are derived from
-  private analysis note
-  `u5-decomp/notes/moongate_transition_2026-08-23.md`. The "brightness level"
-  wording in earlier revisions of Section 6 is superseded by the same note.
 - `u5-decomp/functions/ULTIMA_EXE/`
 - `u5-decomp/functions/DUNGEON_OVL/`
 - `u5-decomp/functions/DNGLOOK_OVL/`
 - `u5-decomp/functions/SJOG_OVL/`
-- local binary checks against `C:\Games\U5-Clean\DUNGEON.DAT`,
-  `DUNGEON.CBT`, and `DATA.OVL` for the Doom final-room trigger and
-  setup marker plus Word-of-Power coordinate binding.
-- local binary checks against `C:\Games\U5-Clean\DATA.OVL` and `END.DAT`
-  for the fixed final-presentation asset table and six text-window starts.
-- `u5-decomp/notes/system-trace_quest-endgame.md`
-- `u5-decomp/notes/endgame_late_fullscreen_rect_2026-08-22.md` — the primitive,
-  colour, target surface, timing, and input behaviour of the late full-screen
-  fill. Its further claim that the six narrative windows perform no clear of
-  their own is superseded by section 8.3.
-- `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md` — the follow-on
-  full-screen rectangle dissolve that consumes that fill, the complete caller
-  census of the dissolve entry, and the fill-then-dissolve fade idiom.
-- `u5-decomp/notes/lord_british_dialogue.md`
-- `u5-decomp/notes/presentation_endgame_chargen_u4_2026-08-22.md` — the endgame
-  surface geometry and scene-terrain source of section 3.1, the actor index
-  space and corrected scene-actor identities of section 4, the corrected
-  scripted staging and gate ramp of section 7, the complete per-window
-  bindings, paragraph rectangles, title strips and presentation model of
-  section 8, and the certificate's text modes, fixed prose, closing-title font
-  path, elapsed-time rule and terminal state in section 9.
-- `u5-decomp/notes/gameplay_screen_layout_2026-08-22.md` — independent
-  derivation of the same viewport and message-window rectangles.
-- `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` — the proportional
-  paragraph renderer's layout-descriptor contract that section 8.2 supplies
-  values for.
+- `u5-decomp/notes/`
+- local semantic checks of the shipped dungeon, combat, shared-data, and
+  endgame narrative resources.
 
 Local spec cross-references used for terminology and integration:
 
