@@ -198,7 +198,7 @@ combat-only and dungeon-only spells.
 | 34 | `AEX` | An Xen Ex | Charm | 6 | Spider Silk + Black Pearl + Nightshade | C | buff/debuff; toggles the controlled/charmed descriptor bit `0x01` on the picked creature (a second cast clears it), sets a party-side target's roster status letter back to Good, prints `<name> charmed!` and suppresses the shared epilogue; it does not change faction |
 | 35 | `BRX` | Rel Xen Bet | Polymorph | 6 | Sulfur Ash + Spider Silk + Nightshade + Mandrake | C | buff/debuff |
 | 36 | `LS` | Sanct Lor | Invisibility | 7 | Blood Moss + Nightshade + Mandrake | C | buff/debuff; caster-only hidden flag with no duration at all, and no use of the shared timed-effect slot |
-| 37 | `CX` | Xen Corp | Kill | 7 | Black Pearl + Nightshade | C | damage; single-target instant kill |
+| 37 | `CX` | Xen Corp | Kill | 7 | Black Pearl + Nightshade | C | damage; creature-target instant kill; classes 14/15/47 reject after charge, 7 MP, and pre-effect but before resistance, consume the turn, then report `Failed!` without gameplay randomness or a re-prompt |
 | 38 | `IQX` | In Quas Xen | Clone | 7 | Sulfur Ash + Ginseng + Spider Silk + Blood Moss + Mandrake | C | summon |
 | 39 | `IQW` | In Quas Wis | Peer | 7 | Nightshade + Mandrake | D/I/O | utility |
 | 40 | `HIN` | In Nox Hur | Poison Wind | 7 | Sulfur Ash + Blood Moss + Nightshade | C | damage |
@@ -288,10 +288,12 @@ combat-only and dungeon-only spells.
   clamped by the original; treat them as non-matching and report `Failed!`.
 - The CAST dispatcher table follows this exact public order. Handler-family
   classification is now known for the major shared cases: `IL`/`LV` write the
-  light counter, `GP`/`FV`/`CX` are active-target attack wrappers using the
-  combat aiming/projectile path; `GP` rolls 1..16 raw damage, `FV` rolls
-  1..30 raw damage, and `CX` uses the shared decimal 99 instant-kill sentinel,
-  with non-instant rolls reduced by target defense before damage/status.
+  light counter, while `GP`/`FV` are active-target attack wrappers using the
+  combat aiming/projectile path; `GP` rolls 1..16 raw damage and `FV` rolls
+  1..30 raw damage, with both rolls reduced by target defense before
+  damage/status. `CX` is a separate `Creature: ` cursor handler: it applies the
+  protected-class and shared-resistance gates before its death helper rather
+  than using the projectile wrapper or decimal-99 damage sentinel.
   `FGI`/`GIN`/`GIZ`/`GIS` share the field-placement helper, `IPVY` scans the
   whole combat actor table for Tremor damage checks, rolls 1..20 damage per
   accepted actor, and credits returned monster-kill reward units to the
@@ -443,6 +445,17 @@ combat-only and dungeon-only spells.
   pre-exit removal; placed field markers persist until combat exit restores
   the pre-combat active-object table.
 
+- `CX` / Kill checks protected-target eligibility only after the shared cast
+  dispatcher has spent one premixed charge and seven MP and after target
+  confirmation has run Kill's normal audiovisual pre-effect. Classes 14
+  (Blackthorn), 15 (Lord British), and 47 (Shadow Lord) fail before the shared
+  resistance call, so this branch advances no gameplay PRNG and shows no
+  target-death animation or target-cell effect. It prints `Failed!` plus a
+  newline and plays the shared fifty-step speaker failure glissando. The cast
+  consumes the combat action and completes without re-opening either the
+  creature cursor or the same actor's command prompt. The pre-effect's separate
+  speaker jitter is presentation state, not the gameplay PRNG.
+
 - `IMX` / Create Food uses the standard cast gates and resource ordering. On
   an accepted cast it rolls a uniform `1..3` food/provisions delta, adds that
   delta to the shared party food word with the 9999 cap, marks the stats panel
@@ -463,6 +476,10 @@ High-confidence engine-derived data:
 - Scene mask bit order and scene-byte classification, including the `0xFF`
   combat marker. The dungeon and combat bits were published transposed in
   earlier revisions; see the correction at the end of Section 4.
+- Kill's protected-target resource, action, randomness, presentation, and
+  prompt envelope, derived from private analysis in
+  `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/CAST2_OVL/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/notes/`.
 
 Manual/player-facing data:
 

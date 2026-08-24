@@ -875,6 +875,13 @@ costs the acting combatant its action, and every refusal is free — including a
 refused Ready, whose refusal is indistinguishable from success to everything
 outside the equipment overlay.
 
+Cast clears that re-prompt flag before entering the shared spell dispatcher;
+the spell handler's success or failure result does not restore it. Kill's
+protected-class rejection is therefore a committed action even though it
+reports `Failed!`: it neither re-opens the creature cursor nor returns the same
+actor to this command prompt. Its exact resource, randomness, and presentation
+envelope is specified in `systems/magic.md` Section 8.
+
 **Where the free re-prompt occurs.** A raised re-prompt flag branches straight
 back to the input read inside the same actor dispatch. It occurs before the
 committed-action maintenance tail and before control returns to the round
