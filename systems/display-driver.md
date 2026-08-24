@@ -376,11 +376,13 @@ sky strip in the top ribbon (`moons.md`), the wind banner in the bottom ribbon
 
 Every interruption in the chrome — the sky strip, the wind banner, the
 timed-effect slot, the stats-window label strip, and the message window's
-command-echo prompt — is framed by the same pair of triangular caps. This is
-the single most reused piece of chrome on the screen, and it is **not stored
-art**: no matching bitmap exists in the shipped fonts, the shared data overlay,
-or the display drivers. It is composited at draw time from a glyph and two
-strokes, at the active text window's current cursor cell:
+command-echo prompt — is framed by the same pair of triangular caps. The arms
+sell browser also uses this pair when it temporarily replaces the timed-effect
+slot with its page-status badge. This is the single most reused piece of chrome
+on the screen, and it is **not stored art**: no matching bitmap exists in the
+shipped fonts, the shared data overlay, or the display drivers. It is composited
+at draw time from a glyph and two strokes, at the active text window's current
+cursor cell:
 
 1. Save the active window's colour attribute; set the text foreground to the
    chrome colour and the text background to black.
