@@ -369,7 +369,7 @@ does not return to the mode loop until its prompt sequence has completed or been
 cancelled.
 
 Source provenance: derived from private analysis note
-`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+`../u5-decomp/notes/`.
 
 ## 6. N-New Order Party Command
 
@@ -434,22 +434,28 @@ and refuses outright when it is zero. It then splits by target into exactly two
 rolls, both of which read the acting member's Dexterity and neither of which
 reads any class or profession field:
 
-- A **flat Dexterity test** for locked doors and for restraint tiles (stocks and
-  manacles). Success chance is Dexterity divided by thirty, clamped. On a door
-  it converts the door to its unlocked counterpart; on a restraint it frees the
-  NPC standing there, prints a thanks line, and raises the shared moral-standing
-  selector, transferring nothing to the party. Magically locked doors are
-  refused before this roll and still cost a key.
+- A **flat Dexterity test** for locked doors (`0xB9`, `0xBB`) and for restraint
+  tiles (stocks `0x84`, manacles `0x85`). Success chance is Dexterity divided
+  by thirty, clamped. A door becomes its unlocked counterpart. In ordinary
+  town-family scenes, a restraint first requires a live occupant; an empty
+  restraint exits before the member prompt or roll. First successful release
+  clears that NPC's dialogue/awareness field, changes every schedule period to
+  AI mode 5, grants the thanks line and moral-standing increase, and records a
+  persistent removal for the next location entry. The actor remains in the
+  current visit, pursuing without its adjacent attack event. Magically locked
+  doors (`0x97`, `0x98`) are refused before this roll and still cost a key.
 - A **difficulty-versus-Dexterity threshold** for containers, used both for
   per-map container objects on the surface and for dungeon chest cells. Success
   clears the container's combined lock/trap flag, so a successful Jimmy also
   disarms.
 
-Key accounting is uniform: success spends no key, and every failure or refusal
-spends exactly one. A failed pick changes nothing else, so container contents
-are never lost. There is no pickpocket branch in this command, and floor and
-town chests are container objects rather than tiles, so they always take the
-threshold roll. Detailed lock-state rules live in
+Key accounting depends on where the attempt ends. Successful picks spend no
+key. Failed rolls and the magic-lock refusal break one. An empty restraint, a
+cancelled member selection, the generic no-lock result, and other pre-roll exits
+spend none. A failed pick changes nothing else, so container contents are never
+lost. There is no pickpocket branch in this command, and floor and town chests
+are container objects rather than tiles, so they always take the threshold
+roll. Detailed lock-state and prisoner-lifecycle rules live in
 `doors-and-z-transitions.md`.
 
 `O` Open is the no-key counterpart. Non-dungeon Open runs the door auto-close
@@ -865,14 +871,14 @@ reproduced here.
   `u5-decomp/functions/CMDS_OVL/`.
 - The M-family split between CMDS reagent mixing and CAST2 shrine/urn entry:
   `u5-decomp/functions/CMDS_OVL/` and
-  `u5-decomp/functions/CAST2_OVL/_INDEX_2026-05-08.md`.
+  `u5-decomp/functions/CAST2_OVL/`.
 - The New Order active-party record exchange, leader refusal, cancel paths, and
   same-slot self-swap behaviour:
   `u5-decomp/functions/CMDS_OVL/`.
 - The Y-Yell sail toggle, free-text prompt, Shadowlord-name branch,
   Word-of-Power seal predicate, saved per-word seal flags and the region-load
   pass that re-applies them, and the ruined-shrine mantra hand-off:
-  `u5-decomp/notes/2026-08-22_quest-world-retrace.md`,
+  `u5-decomp/notes/`,
   `u5-decomp/functions/CMDS_OVL/`,
   `u5-decomp/functions/OUTSUBS_OVL/`,
   `u5-decomp/functions/CMDS_OVL/`, and
@@ -882,17 +888,16 @@ reproduced here.
   live-tile mutations:
   `u5-decomp/functions/CMDS_OVL/`. The non-durable
   save/load boundary for top-down live buffers also uses
-  `u5-decomp/notes/system-trace_save-load.md` and
+  `u5-decomp/notes/` and
   `u5-decomp/functions/TOWN_OVL/`.
 - The Search/Jimmy/Open/Get overlay overview and public command handlers:
-  `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`,
-  `u5-decomp/functions/SJOG_OVL/`, and
   `u5-decomp/functions/SJOG_OVL/`.
 - The two-roll J-Jimmy contract, its corrected target families, the Dexterity
-  operand shared by both rolls, the uniform key accounting, and the fact that no
-  trap flavour is chosen by any caller. Source provenance: derived from private
-  analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md`.
+  operand shared by both rolls, branch-specific key accounting, the restraint
+  actor lifecycle, and the fact that no trap flavour is chosen by any caller.
+  Source provenance: derived from private analysis in
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/TOWN_OVL/`, and
+  `u5-decomp/notes/`.
 - The Search coordinate-object fallback:
   `u5-decomp/functions/ULTIMA_EXE/`.
 - Corrected entry notes for the shared Look/View and Ready/Z-stats command
@@ -910,6 +915,5 @@ reproduced here.
   `../u5-decomp/functions/DUNGEON_OVL/`, and
   `../u5-decomp/functions/CMDS_OVL/`.
 - The withdrawal of the global "turn consumed" flag reading, and the fact that
-  Ready and Z-stats always report the default status. Source provenance: derived
-  from private analysis note
-  `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md`.
+  Ready and Z-stats always report the default status. Source provenance:
+  derived from private analysis in `../u5-decomp/notes/`.

@@ -434,7 +434,7 @@ waypoint.
 | `2` | Unbounded random wander. The NPC occasionally takes a random cardinal step without the waypoint-radius limit. |
 | `3` | **Flee.** The NPC acts only while the player is within about four tiles, and then chooses the neighbouring square that **maximises** distance to the player. It is the only value in this table that moves away; every other acting mode minimises distance. **Correction:** earlier revisions of this row said "follow or shadow the player at distance" and described it as falling into the chase family when the player closes. That was exactly inverted. Values `3` and `6` share a dispatch handler, so they have the same *trigger* — act within four tiles — but the step chooser tests the mode again and gives them opposite directions. |
 | `4` | Approach-and-attack family. While the player is far enough away, the NPC uses the wander step with a shrinking range around the waypoint; when close, it can raise the town-mode attack event. |
-| `5` | Randomized chase with the attack event. Fully implemented, but unused by shipped `.NPC` data. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test raises the same town-mode attack event as value `4` rather than the guard event. It is not a reserved hole or a no-op: an implementation that treats value `5` as inert would diverge from the engine on any authored or modified roster that used it. |
+| `5` | Randomized chase with the attack event. No shipped `.NPC` schedule authors this value, but J-Jimmy writes it into all three periods when a prisoner is first released. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test normally raises the same town-mode attack event as value `4` rather than the guard event. Jimmy first clears the released NPC's dialogue/awareness field, which suppresses that adjacent event for the current visit while preserving chase movement; `systems/doors-and-z-transitions.md` owns the full release lifecycle. It is not a reserved hole or a no-op. |
 | `6` | Guard/blocking event family. It **approaches** the player, acting only while the player is within about four tiles, and raises the non-attack guard event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. |
 | `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation. |
 
@@ -739,11 +739,11 @@ The behaviour described above was derived by reading the function and format not
   of the on-this-floor test — `u5-decomp/functions/NPC_OVL/`.
 - The signed floor convention the classification rests on, and the shipped
   per-location floor values. Source provenance: derived from private analysis
-  note `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`.
+  in `u5-decomp/notes/`.
 - The flood-fill BFS, the workspace cell encoding, and the high-nibble inbound-direction trail — `u5-decomp/functions/NPC_OVL/`.
 - The tile-ID floor-link variant's two-marker dispatch, the per-state marker
   selection, and the up/down identity of the two markers — `u5-decomp/functions/NPC_OVL/`
-  and `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, the latter
+  and `u5-decomp/notes/`, the latter analysis
   cross-checking the markers against the shipped tile-description table and
   against the town climb handler's floor-index change, and against the town step
   handler's separate `0x8C` trigger in `u5-decomp/functions/TOWN_OVL/`.
@@ -753,12 +753,11 @@ The behaviour described above was derived by reading the function and format not
 - The dedicated NPC pathfinding predicate, its three-way answer, the
   out-of-bounds resolution, and the tile-set polarity (set bit means obstacle) —
   `u5-decomp/functions/NPC_OVL/`, and
-  `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md` section 5, which
+  private analysis in `u5-decomp/notes/`, which
   re-derives the tile set directly and reconciles two private notes that stated
   the polarity in opposite directions.
 - The early return that ends a whole walker pass when a drained route re-enters
-  a floor-transition state — `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`
-  sections 1.6 and 5.
+  a floor-transition state — `u5-decomp/notes/`.
 - The world-mutation helper, the hidden-NPC bitmask, and the default-human tile sentinel — `u5-decomp/functions/TOWN_OVL/`.
 - The shipped hidden-mask scene/slot catalogue was re-derived from the resident
   mask table together with the mask index computation in
@@ -767,17 +766,21 @@ The behaviour described above was derived by reading the function and format not
   superseded. Roster keys from `catalogs/gazetteer.md`; slot roles from the
   shipped sprite classes published in `catalogs/npc-roster.md` Section 4.
 - The town turn loop's once-per-turn invocation of the scheduler — `u5-decomp/functions/TOWN_OVL/`.
-- The on-disk `.NPC` file layout — `u5-decomp/formats/npc-tlk-pth.md`.
-- The save-format omission of NPC runtime state and the location-entry re-initialisation that fills its place — `u5-decomp/formats/saves.md`.
+- The on-disk `.NPC` file layout — `u5-decomp/formats/`.
+- The save-format omission of NPC runtime state and the location-entry re-initialisation that fills its place — `u5-decomp/formats/`.
 - The scene-byte lifecycle audit that resolves the NPC loader's temporary
-  scene-index conversion — `u5-decomp/notes/critical_state_lifecycles.md`.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_npc-walkers.md` -- the complete
+  scene-index conversion — `u5-decomp/notes/`.
+- Source provenance: derived from private analysis in
+  `u5-decomp/notes/` -- the complete
   enumeration of the cached-waypoint field's writers (the two entry seeders and
   the two arrival refreshers), the fact that the refresh happens on arrival
   rather than on departure or on the first committed step, and the three effects
   each refresh performs together. Cross-checked against
-  `u5-decomp/notes/system-trace_npc-tick.md` section 4.6, whose earlier
+  `u5-decomp/notes/`, whose earlier
   "updates on the first committed step" reading is superseded.
 - The outdoor active-object trace that separates overworld monster/vehicle
-  motion from `.NPC` scheduling — `u5-decomp/notes/outdoor_npc_scheduling.md`.
+  motion from `.NPC` scheduling — `u5-decomp/notes/`.
+- J-Jimmy's runtime write of AI mode 5 to all three periods, its prior
+  dialogue/awareness clear, and the resulting pursuit-without-attack exception
+  — `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/NPC_OVL/`, and
+  `u5-decomp/functions/TOWN_OVL/`.

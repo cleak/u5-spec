@@ -448,7 +448,14 @@ Several letter commands map to per-tile interactions that are interesting in tow
 
 **Read sign.** Tile-class encoding for sign tiles triggers a prompt that loads the sign's text from a per-location sign data file, indexed by the sign's coordinates.
 
-**Open / Jimmy.** O-Open applied to a door tile prompts for direction and triggers the door-open interaction: unlocked doors open (tile changes to "open door"); locked doors prompt for a key. J-Jimmy is the lockpick variant — it consumes a lockpick and either unlocks or breaks the lock. Both consume a turn.
+**Open / Jimmy.** O-Open and J-Jimmy route directly to the shared tile and
+coordinate-object handlers. Jimmy uses the party's **key** counter, not a
+separate lockpick item: successful picks spend no key, while failed rolls and
+the magic-lock refusal break one. It handles the exact ordinary and magic door
+identifiers, coordinate-object containers, and the stocks/manacles prisoner
+release. O-Open uses its own exact tile cascade and door auto-close state.
+`doors-and-z-transitions.md` owns the identifiers, prompts, costs, restraint
+lifecycle, and turn results.
 
 **Retraction (2026-08-22).** This spec previously said town mode adds "a small amount of local policy" to Open — a mounted refusal, a direction prompt, an accepted closed-door and gate family, and a separate town chest path. That paragraph is withdrawn. It described the town **climb** handler, not Open: the mounted refusal, the direction prompt and the accepted fence/gate family all belong to K-Klimb and are already specified under "K-Klimb inside a location" in Section 7. Town mode contributes no local policy to Open at all — O routes straight to the shared Open handler, whose door, gate, and chest behavior is specified in `doors-and-z-transitions.md` and `containers.md`. If opening or stepping through a door exposes a stair transition, the stair/floor-change handling described in Section 7 runs.
 
