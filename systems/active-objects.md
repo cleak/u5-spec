@@ -59,7 +59,7 @@ the dungeon validity rule, and dungeon consumers must not inherit the generic
 
 A few observations on the field encoding:
 
-**Type-byte conventions.** Byte 0 carries both "is this slot allocated?" (zero / non-zero) and a tile-class identifier (the high six bits used as an index into a per-class attribute table that the animator and dispatcher consult). The low two bits of byte 0 are reserved for sub-type or facing info on certain tile classes. A handful of byte-0 values are sentinels rather than tile classes: the value used to mean "this is the player slot" is one such sentinel, and the engine's slot-finder for the player searches by exact match against this sentinel rather than walking by index.
+**Type-byte conventions.** Byte 0 carries both "is this slot allocated?" (zero / non-zero) and a tile-class identifier (the high six bits used as an index into a per-class attribute table that the animator and dispatcher consult). The low two bits of byte 0 are reserved for sub-type or facing info on certain tile classes. Player identity is not encoded by a special byte-0 value: the player is the record at slot zero. The withdrawn player-as-NPC interpretation in Section 5 must not be revived as a second player sentinel or phantom record.
 
 **The phase byte.** Byte 6 packs two pieces of state into one byte: the low nibble counts down through animation frames (with the all-ones value meaning "rest at steady frame, do not animate"), and the high nibble holds a direction-step counter that AI movement uses. The animator's per-tick rule is: if the low nibble is at the steady-state marker, leave the slot alone; if non-zero, decrement; if zero, the slot is eligible for an AI tick that may pick a new direction or move the slot one cell.
 
@@ -477,6 +477,45 @@ predictably goes wrong:
   classify as a prunable kind is skipped before the position test runs, so an
   out-of-window slot of an unclassified kind survives.
 
+The classification is an exact byte-range predicate:
+
+| Type byte | Prunable? |
+|---|---:|
+| `0x00..0x2B` | No |
+| `0x2C..0x2F` | Yes |
+| `0x30..0x7F` | No |
+| `0x80..0xB3` | Yes |
+| `0xB4..0xB7` | No |
+| `0xB8..0xE7` | Yes |
+| `0xE8..0xEB` | No |
+| `0xEC..0xFF` | Yes |
+
+Only byte 0, `type`, selects a row. The mutable byte-1 `tile` value does not
+participate, even if it no longer mirrors `type`; neither do coordinates,
+floor, phase, or auxiliary state. After classification succeeds, and only
+then, X and Y participate in the window test. An implementation must therefore
+not combine `type` and `tile`, fall back from one to the other, or infer the
+answer from a broad semantic label such as vehicle, item, or effect.
+
+Consequences for the special cases are explicit:
+
+- There is no player phantom to classify. The player is slot zero, and the
+  slot-number exclusion keeps it out of the pass regardless of its current
+  type byte.
+- Parked vehicle objects (`0x10..0x11`, `0x1B`, and `0x24..0x2B`) are not
+  prunable. The adjacent water-creature/pirate family `0x2C..0x2F` is prunable,
+  so a blanket "vehicle-like" exclusion is too broad. Boarded transport is
+  represented by the player state and is already protected by slot zero.
+- Pickups and midrange objects in `0x30..0x7F` are not prunable.
+- `0xB5` is not prunable because the whole `0xB4..0xB7` range is excluded.
+  This is separate from Section 4's allocator rule, which protects exact
+  `0xB5` from eviction.
+- Projectile flight visuals ordinarily have no active-object slot, so this
+  pass has nothing to classify for them. Combat field markers are likewise
+  outside this pass because it does not run in combat. There is no additional
+  field/projectile semantic exception: for any record that does reach this
+  overworld pass, the byte-range table above is the complete classifier.
+
 **How a pruned slot is released.** *Corrected:* an earlier revision of this
 section said pruning frees a slot through the ordinary one-byte rule of
 Section 4. **That is withdrawn.** The prune path instead calls the shared
@@ -625,7 +664,8 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The `0xB5` actor-class interpretation is cross-checked against the shipped
   NPC roster analysis in `u5-decomp/formats/npc-tlk-pth.md`.
-- The overworld per-turn slot walker, outdoor animated/monster predicate,
+- The overworld per-turn slot walker, its exact outdoor type-byte predicate,
+  the proof that both animation and pruning classify record byte zero alone,
   hostile reaction dispatch, water-creature step path, per-slot movement
   dispatch, directed step planner, and proximity helper -
   `u5-decomp/functions/MAINOUT_OVL/`, and
