@@ -68,7 +68,7 @@ Each thirty-two-byte record is laid out as follows.
 | `0x00`       | 9 bytes  | Name. ASCII, NUL-padded. The first character is the leading byte of the record and may be zero on an unused slot. |
 | `0x09`       | 1 byte   | Gender. `0x0B` for male, `0x0C` for female. Not ASCII; the values are private to the engine.             |
 | `0x0A`       | 1 byte   | Class. ASCII letter — `'A'` Avatar, `'B'` Bard, `'F'` Fighter, `'M'` Mage, `'D'` Druid, `'T'` Tinker, `'P'` Paladin, `'R'` Ranger, `'S'` Shepherd. |
-| `0x0B`       | 1 byte   | Status. ASCII letter. The letters shipped code is confirmed to **write** into this byte are `'G'` good/alive, `'P'` poisoned, `'S'` sleeping, and `'D'` dead. Two further letters belong to the value space but are **not** confirmed as stored values: `'C'` charmed, which the stats panel synthesises for display (see below), and `'A'` ashes. Preserve all of them; see the note below for what is and is not established. |
+| `0x0B`       | 1 byte   | Status. ASCII letter. Shipped new-game and gameplay paths write `'G'` good/alive, `'P'` poisoned, `'S'` sleeping, and `'D'` dead. `'C'` charmed is a stats-panel display override, not a stored status. `'A'` ashes is accepted and preserved when already present in an external, edited, or legacy U5 save, but no shipped path produces it. |
 | `0x0C`       | 1 byte   | Strength.                                                                                                |
 | `0x0D`       | 1 byte   | Dexterity.                                                                                               |
 | `0x0E`       | 1 byte   | Intelligence.                                                                                            |
@@ -103,10 +103,10 @@ distinguishes living members from otherwise-incapacitated ones. It does not;
 that wording is withdrawn. The full contract is in `systems/traps.md` § 3.)
 Compatible tools should still preserve the raw status letter.
 
-**`'C'` and `'A'` are not confirmed stored values.** *Corrected:* an earlier
-revision of the `+0x0B` row listed `'C'` charmed and `'A'` ashes among the
-byte's "confirmed values". Neither is confirmed by the shipped code, and that
-wording is withdrawn.
+**`'C'` is not a stored status, and `'A'` has no shipped producer.**
+*Corrected:* an earlier revision of the `+0x0B` row listed `'C'` charmed and
+`'A'` ashes among the byte's gameplay-produced values. That wording is
+withdrawn.
 
 - `'C'` charmed is a **presentation override**. During combat-class scenes the
   stats-panel row builder substitutes the literal `C` for display when the
@@ -114,35 +114,31 @@ wording is withdrawn.
   otherwise prints the raw status byte; the Charm spell writes `'G'`, never
   `'C'`, into a party target's status byte. `systems/combat.md` Section 6.1a
   owns that rule, and this row now agrees with it rather than contradicting it.
-- `'A'` ashes has no confirmed producer. A scan of every shipped code file for
-  every immediate-operand form that compares a byte against, or stores a byte
-  equal to, each status letter found **no** compare of any byte against the
-  ashes letter and no store of it into any byte reachable as a status field.
-  Every occurrence of that letter value elsewhere in the shipped code is a class
-  letter, a scene-mode byte, or a text buffer.
+- `'A'` ashes has **no producer in the shipped game**. The factory image starts
+  all sixteen roster slots at Good. Character creation retains Good, and the
+  Ultima IV transfer path assigns Good rather than importing its source status.
+  The complete gameplay-writer census found only Good, Poisoned, Sleeping, and
+  Dead assignments; death has no cause-specific Ashes branch. Save/load, New
+  Order, inn storage, recruitment, and other whole-record copies can preserve
+  an already-present byte but do not synthesise one.
 
-That scan was independently repeated on 2026-08-23 by a stronger method - an
-exhaustive enumeration of every encoding of the immediate-operand compare and
+The earlier immediate-operand scan was independently repeated on 2026-08-23 by
+exhaustively enumerating every encoding of the immediate-operand compare and
 store forms with a memory operand, over the executable, every overlay and every
 driver, which unlike a linear sweep cannot lose synchronisation on embedded data
 and silently skip real instructions. It reached the same result: no compare
 against the ashes letter and no store of it anywhere in the status band, and the
 only write of that letter value into a party record at all is into the **class**
 field during character creation, one byte away from the status field. That is
-corroboration of the finding below, not a clearance of it.
+corroborated by the broader writer and whole-record dataflow census.
 
-That scan is a narrowing, not a clearance, and its scope is worth stating: it
-covers immediate-operand compares and stores only, in executable code only - not
-the shipped data files. It cannot see a status byte
-set by copying another byte, by a record or block copy, by a table lookup, by
-arithmetic that produces the value, or by the save-load path itself. **Whether
-the shipped game ever produces an Ashes status is therefore UNVERIFIED**, and so
-is whether `'C'` is ever stored. Settling either would take a dedicated trace of
-the save-load path and of combat/dungeon death handling. Until then, treat both
-letters as values a save image may legitimately contain - an externally authored
-or transferred save can hold them, and the behaviour of the trap, resurrection
-and rest paths on them is specified - without treating either as something the
-original engine is known to write.
+An external, edited, or legacy U5 save may nevertheless contain `'A'`, because
+the engine loads and saves the image verbatim. Preserve and round-trip that
+value. Its existing consumers remain normative: Resurrection requires exactly
+Dead and therefore refuses an Ashes target, while the shared poison helper
+skips exactly Dead and therefore overwrites Ashes with Poisoned. Do not infer a
+producer from those consumer behaviours, and do not invent one. Ultima IV
+transfer is specifically not an import route for Ashes because it forces Good.
 
 ### 3.3 The inn-guest registry
 
@@ -640,6 +636,11 @@ format question.
 
 The byte-level layout described here was derived from the project's private save-format notes, runtime-state map, and semantic summaries of the save/load handlers. This public spec paraphrases the resulting behaviour and field positions; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, or implementation listings.
 
+- The Ashes reachability closure — factory status values, new-character and
+  Ultima IV transfer initialization, gameplay status-writer census, and
+  whole-record preservation boundary — is derived from private analysis in
+  `u5-decomp/notes/`, `u5-decomp/functions/INTRO_OVL/`, and the status-owning
+  overlay directories under `u5-decomp/functions/`.
 - The first-pass byte-level survey of the save image, the `.OOL` family, the canonical companion roster, and the offset-by-offset verification of inventory and runtime fields — `u5-decomp/formats/`.
 - The runtime-state map used to cross-check persistent field positions — `u5-decomp/formats/`.
 - The combat interference-source map's saved position, factory-zero seed,
