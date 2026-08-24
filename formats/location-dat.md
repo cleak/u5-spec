@@ -454,9 +454,92 @@ Several visually complex commands have fixed script-level schedules:
 | `3` | The Welcoming |
 
 - `0x04` writes the sentinel tile `0xFE` to the target cell in both tile buffers, then runs the local cell-effect renderer at screen tile `(x, y + 7)` for steps 1 through 15. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0xDC` to the cell in both buffers and runs a two-tick preview update.
-- `0x05` reuses the coordinate cached by `0x04`, writes `0xFE` to the cell in both buffers, and runs the same local cell-effect renderer at `(x, y + 7)` for steps 15 down through 1. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0x05` to the cell in both buffers and runs a two-tick preview update.
-- `0x07` and `0x08` temporarily replace the actor slot's two tile bytes with the `0x16` suppression sentinel so the ordinary repaint leaves the cell alone, draw the actor's cell through the **single-cell dissolve helper** at screen tile `(actor.x, actor.y + 7)`, then restore the original actor tile bytes. The helper is the driver's pseudo-random pixel-dissolve entry driven one cell at a time: it converges the cell to the requested tile over a fixed run of small steps, polling the keyboard roughly every eighth step, and reports an abort that ends the preview. `0x07` passes the actor's own sprite, which is an overlay-plane value and so selects tile index `256 + byte`; `0x08` passes the backing-plane terrain byte at the actor's current cell instead, used as an ordinary terrain value, which is how an actor is dissolved away rather than in.
+- `0x05` reuses the coordinate cached by `0x04`, writes `0xFE` to the cell in both buffers, and runs the **same** local cell-effect renderer at `(x, y + 7)` for steps 15 down through 1. Each step is followed by a one-tick preview update that may abort the preview. If all steps complete, the command writes tile `0x05` to the cell in both buffers and runs a two-tick preview update.
+- `0x07` and `0x08` temporarily replace the actor slot's two tile bytes with the `0x16` suppression sentinel so the ordinary repaint leaves the cell alone, then drive the driver's carry-set single-cell entry at screen tile `(actor.x, actor.y + 7)`. `0x07` requests tile index `256 + saved_actor_tile`; `0x08` requests the ordinary tile index held by the backing plane at the actor's current cell. On success, both actor tile bytes are set back to the one saved actor byte. Abort behavior is intentionally different and is specified below.
 - `0x0B` runs five rectangle-effect steps. Step `n` from 0 through 4 begins with a one-tick preview update, then sets the drawing colour to user-interface colour slot 1 (see `systems/display-driver.md` section 2) and emits two inclusive pixel-rectangle operations: `(128 + 9n, 152 + 3n)` to `(137 + 9n, 155 + 3n)`, followed by `(128 + 9n, 153 + 3n)` to `(137 + 9n, 156 + 3n)`. These are **absolute framebuffer pixel rectangles** on the same visible page the preview strip occupies, not cell indices; the five steps together sweep a small diagonal band across the middle of the strip. Over the five steps the two rectangles together cover `x = 128` through `x = 173` and `y = 152` through `y = 168` inclusive — note the bottom edge is `168`, from the second rectangle of the last step, not `167`. Neither rectangle aligns to a cell boundary: the pair straddles the cell edge at `x = 136` and sits inside the strip's second cell row. After the five steps, the command skips two reserved argument bytes, reads the actor slot byte, draws that actor's cell at screen tile `(actor.x, actor.y + 7)` with tile/control value zero, plays a short percussive speaker effect, and then runs a three-tick preview update. Earlier revisions described that speaker call as a short fixed resident wait; it is a sound effect whose duration is incidental, and an engine that renders silently should not model it as a timed pause.
+
+#### Local cell-effect raster (`0x04` and `0x05`)
+
+The EGA and Tandy entries produce the same decoded palette-index raster. Let
+`B` be ordinary terrain tile `0x05`, let `P` be portal tile `0xDC`, and let
+`R_n` be the 16-by-16 raster drawn for step `n`, where `n` is 1 through 15.
+For relative pixel coordinates `x,y` in 0 through 15:
+
+```text
+R_n(x,y) = B(x,y)                 when y < 16 - n
+           P(x,y - (16 - n))      when y >= 16 - n
+```
+
+Thus step 1 places portal row 0 in destination row 15; step 15 retains base
+row 0 and places portal rows 0 through 14 in destination rows 1 through 15.
+Every step paints **all 256 pixels** of the cell through the ordinary opaque
+tile path. Palette index zero is an ordinary written colour. There is no
+transparency, XOR, blend, recolouring, palette-index arithmetic, or alternate
+plane transform. EGA writes the four bits of each index through separate
+planes and Tandy writes the equivalent packed nibble, with the same visible
+result.
+
+Reverse playback is exactly the same rasters in reverse order:
+`R_15, R_14, ..., R_1`. It does not sample or transform the current
+framebuffer. Internally, each call temporarily replaces one shared loaded tile
+with `R_n`, blits that tile, and restores all of its original bytes before the
+call returns. No loaded-tile mutation is retained across steps or after the
+command. The final complete portal or base tile appears through the command's
+logical plane write followed by the ordinary two-tick repaint; `R_15` itself
+is deliberately not a complete portal tile.
+
+The same driver sub-entry has a scene-marker variant whose base is tile
+`0x44`, but Return-to-View uses the ordinary `B = 0x05` branch. If a per-step
+preview tick aborts, the command has not yet made its final `0xDC` or `0x05`
+plane write. The last complete `R_n` remains in the framebuffer until the
+outer title/menu surface restoration, while the loaded shared tile has already
+been restored.
+
+#### Single-cell convergence (`0x07` and `0x08`)
+
+One convergence performs exactly 256 one-pixel writes. Number the writes
+`d = 0..255` and use coordinates relative to the target cell:
+
+1. Write 0 copies source pixel `(0,0)`.
+2. Before write 1, initialize an eight-bit state `s = 1`.
+3. Writes 1 through 255 copy source pixel `(x = s >> 4, y = s & 15)`, then
+   replace `s` with `s >> 1`, XOR-ing that result with `0xB8` when the old
+   low bit was one.
+
+This maximal Galois sequence visits every nonzero byte once and returns to
+state 1 after write 255, so the rule is an exact permutation of all 256 cell
+pixels. The first positions after the corner are `(0,1)`, `(11,8)`, `(5,12)`,
+`(2,14)`, `(1,7)`, `(11,3)`, `(14,1)`, and `(12,8)`; the final eight are
+`(7,1)`, `(8,0)`, `(4,0)`, `(2,0)`, `(1,0)`, `(0,8)`, `(0,4)`, and `(0,2)`.
+EGA and Tandy use the same order.
+
+The driver reads the requested tile directly; it does not resolve preview
+planes itself. Command `0x07` supplies `256 + saved_actor_tile`, selecting the
+overlay graphics page. Command `0x08` reads the backing-plane byte before the
+effect and supplies it as an ordinary terrain tile index. Every selected
+source pixel replaces its destination pixel, including palette index zero. A
+zero backing byte selects tile zero; it is not transparent and does not mean
+"retain the old destination pixel."
+
+After completed write counts `8, 16, ..., 248`, and only there, the wrapper
+runs one complete Return-to-View preview tick: active-object and animated-tile
+advance, intro title tick, active-actor scatter into the preview planes,
+repaint of the revealed span, reveal-cursor widen/toggle, then one keyboard
+status poll. If no key is pending, that tick continues with its one-BIOS-tick
+wait and any strip-specific ambient speaker operation. A pending key aborts
+before that wait and sound. There are exactly 31 such checkpoints and no tick
+or input poll after the final eight writes.
+
+An abort at checkpoint `8k` leaves writes `0` through `8k-1` visible and all
+other cell pixels unchanged from before the effect; the driver performs no
+rollback. The checkpoint tick has already scattered the temporary actor as
+terrain zero plus overlay `0x16`, skipped repainting that cell, and advanced
+any ordinary actor, title, and reveal state. The abort then bypasses the
+command's success cleanup: the actor's two tile bytes remain `0x16` and the
+cell's plane pair remains zero/`0x16` until later state replacement. The outer
+Return-to-View caller restores the saved title/menu surface, hiding the partial
+cell, but that surface restoration does not transactionally undo the actor or
+preview-plane memory changes.
 
 Command bytes above `0x0F` are treated as one-byte no-ops by the traced interpreter: they are skipped after the normal input poll. There is no separate caption opcode and no length-prefixed caption payload in the shipped stream.
 
@@ -618,9 +701,10 @@ or visual parity.
   entries: the 16-by-16 viewport tile blitter for cells and actors, the
   animated-terrain shimmer entry for the local cell effect, and the
   pixel-dissolve entry driven one cell at a time for the temporary actor draws.
-  The only residual is the shimmer entry's exact per-step pixel pattern, which
-  is a driver-internal raster question tracked in
-  `systems/display-driver-abi.md`, not a format question.
+  Their exact EGA/Tandy row-splice and 256-position convergence rasters,
+  checkpoint cadence, zero-colour rule, restoration, and abort behavior are
+  now specified in section 11 and cross-owned by
+  `systems/display-driver-abi.md`.
 
 - **Marker-roster cross-validation.** When a location's NPC start markers and
   its NPC roster do not agree on count, the load pass does not detect the

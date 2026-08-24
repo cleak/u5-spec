@@ -149,9 +149,9 @@ without visible effect.
 | `0x57` | 29 | No-op. |
 | `0x5A` | 30 | Release the current asset segment back to DOS. |
 | `0x5D` | 31 | Draw one 8-by-8 fixed-cell glyph on whichever surface the descriptor's render-target selector currently names. The entry has a separate, complete back-buffer body; see section 8. Ordinary text painting leaves the selector on the front buffer. |
-| `0x60` | 32 | Mutate loaded tile graphics for animated shimmer effects. The mutation phase is followed by a propagation/composite phase, so the body of this entry is substantially larger than just the noise step. |
+| `0x60` | 32 | Carry clear mutates loaded tile graphics for animated shimmer effects. Carry set temporarily constructs and paints one row-spliced 16-by-16 cell, then restores the shared tile bytes; see section 10. |
 | `0x63` | 33 | Tile blit with the transparency-mask flag forced on. Equivalent to dispatch offset `0x4B` with the caller-supplied flag word bitwise-ORed with the transparency bit. |
-| `0x66` | 34 | Copy a rectangle from back buffer to front buffer in pseudo-random dissolve order. The visit order is driven by a Galois-style LFSR; see section 9.6 for the public visit-order contract. |
+| `0x66` | 34 | Carry clear copies a back-buffer rectangle to the front buffer in pseudo-random dissolve order. Carry set writes one source-tile pixel into one viewport cell per call; see section 9.6 for both visit-order contracts. |
 | `0x69` | 35 | Two entries selected by the carry flag on entry. Carry clear: advance and draw the title/menu idle animation strip. Carry set: play the subtitle ignition transition using the one-bit resource segment passed in the primary register. |
 | `0x6C` | 36 | Loaded-tile graphics palette-plane mutation, save, restore, byte-parameterized substitution, and an extended mode reached only by alternate paths. The combat framer reaches this entry with mode value `1` when the resident tile-restoration flag is set. |
 | `0x6F` | 37 | Play a driver-resident byte-stream animation script, pacing each presentation step with a CPU-calibrated busy wait. This is the entry that plays the title flourish. |
@@ -539,11 +539,28 @@ dissolve.** Dispatch offset `0x66` is really two operations selected by the
 carry flag on entry. Carry clear is the rectangle dissolve specified above.
 Carry set is a different sub-entry that converges one 16-by-16 viewport cell to
 a requested tile; it takes a cell position and a tile, not a rectangle, and it
-advances one step per call. Callers drive it from a resident wrapper that
-issues a fixed run of steps for a single cell and checks the keyboard, and
-advances the world tick, every few steps. That wrapper is used in several
-places, including the Return-to-View preview's temporary actor draws
-(`formats/location-dat.md` section 11).
+advances one pixel per call. The EGA and Tandy entries have the same decoded
+pixel contract. Call 0 writes source pixel `(0,0)`. Calls 1 through 255 begin
+with eight-bit state 1, write `(x = state >> 4, y = state & 15)`, then shift
+the state right and XOR the result with `0xB8` when the old low bit was one.
+The maximal sequence visits every nonzero state once, so the complete run is a
+256-position permutation of the cell. The requested tile is read directly and
+every source palette index, including zero, replaces the destination pixel;
+there is no transparent colour.
+
+The resident wrapper invokes this entry exactly 256 times. After completed
+pixel counts `8,16,...,248` it runs one mode-dependent tick, exactly 31 tick
+boundaries, and it does not tick or poll after count 256. In Return-to-View the
+boundary operation is the complete one-budget preview tick: active-object and
+animated-tile advance, intro title tick, actor scatter, revealed-span repaint,
+reveal-cursor update, keyboard-status poll, then — only on a poll miss — one
+BIOS-tick wait and strip-specific ambient sound. A hit aborts before that wait
+and leaves the already-written permutation prefix intact. The preview command
+also bypasses its actor cleanup on this abort, so its two suppression fields
+and the zero/suppression preview-plane pair remain until later replacement.
+The outer saved-surface restore hides the partial raster but does not roll back
+those memory changes. Return-to-View's terrain-versus-overlay source choice is
+specified in `formats/location-dat.md` section 11.
 
 **Correction.** An earlier revision of this section said the resident core
 wraps *the rectangle dissolve* in an outer loop that re-invokes the world tick
@@ -638,10 +655,17 @@ The EGA driver owns several visual effects that are not gameplay systems:
   and the Return-to-View preview drives it that way for its local cell effect,
   stepping `1..15` to open a cell and `15..1` to close it. The caller marks the
   cell as skipped in its own repaint for the duration, so the shimmer entry owns
-  that cell while the effect runs. The exact per-step pixel pattern the entry
-  produces is a driver-internal raster detail and is not part of the public
-  contract; the step count, coordinates, and the tiles written before and after
-  are (`formats/location-dat.md` section 11).
+  that cell while the effect runs. Carry set selects a separate direct-cell
+  body rather than the large randomizer. For Return-to-View step `n` in 1..15,
+  it builds a temporary 16-by-16 tile from base tile `0x05`: destination rows
+  `0..15-n` retain the same base rows, and destination rows `16-n..15` receive
+  portal-tile `0xDC` rows `0..n-1`. It then paints all 256 pixels opaquely with
+  no palette transform and restores every byte of the shared loaded scratch
+  tile before returning. EGA and Tandy have the same decoded palette-index
+  result. Reverse playback is the identical rasters for `n=15..1`, not a
+  second operation. The command-level final plane write supplies the complete
+  portal or base tile; step 15 itself still retains base row 0. See
+  `formats/location-dat.md` section 11 for the command schedule and abort rule.
 - Loaded-tile palette-plane mutation: dispatch offset `0x6C` mutates tile
   graphics in the loaded asset segment rather than drawing directly to the
   framebuffer. Publicly confirmed modes are save-original tile bytes, restore
@@ -708,42 +732,12 @@ Remaining work is historical hardware and exact visual parity:
 
 ## 12. Sources
 
-Cleanroom prose derived from these private analysis notes:
-
-- `u5-decomp/notes/intro_title_flourish_and_flames_2026-08-22.md` — the trace
-  that identified the animation-script entry's real caller, located and parsed
-  the shipped script, resolved the idle-strip frame source, and separated the
-  two carry paths of dispatch offset `0x69`.
-- `u5-decomp/notes/title_flourish_presenter_verification_2026-08-22.md` — the
-  independent re-derivation of the animation-script entry's helper bodies, its
-  presentation-step counts, its centring and fill-direction rules, its
-  keystroke-abort tail, and its two-plane presentation mask.
-- `u5-decomp/functions/ULTIMA_EXE/`.
-- `u5-decomp/notes/rect_dissolve_abort_and_sound_2026-08-22.md` — the dissolve
-  entry's abort gate and its one-shot disable through the glyph entry.
-- `u5-decomp/notes/dissolve_entry_caller_census_2026-08-22.md` — the
-  whole-program caller census of the dissolve entry and its rectangles, the
-  separation of its two carry paths and of the two resident wrappers that reach
-  them, the correction that the speaker click and the keyboard check share one
-  alternating every-second-pixel gate, the fill-then-dissolve fade idiom, and
-  the correction that the clipped rectangle fill is render-target aware.
-- `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md` — the
-  dissolve entry's single-cell carry-set sub-entry and the shimmer entry's
-  direct-cell arguments.
-- `u5-decomp/notes/driver_asset_family_and_ui_colours_2026-08-22.md` — the
-  per-driver status of the packed-to-planar preparation entry and the reason
-  the other three families implement it as a no-op.
-
-- `u5-decomp/functions/EGA_DRV/`, and
-  `u5-decomp/functions/EGA_DRV/` — re-read in full for the
-  2026-08-22 correction that the pixel-plot, 16-by-16 tile, and fixed-cell
-  glyph entries are render-target aware and each carry a complete back-buffer
-  body, withdrawing the earlier "no-op"/"returns without drawing" wording in
-  sections 5, 8 and 9.2.
-- `u5-decomp/formats/ega-driver.md`.
-- `u5-decomp/functions/EGA_DRV/_OVERVIEW.md` (full per-slot index, 38 slots
-  plus helper-routine notes, completed during the 2026-05-26 follow-up pass).
-- Per-slot notes for every dispatch entry the engine reaches, and the
-  load-bearing helper notes behind them, under
-  `u5-decomp/functions/EGA_DRV/` (indexed by that folder's overview note).
-- `u5-decomp/functions/ULTIMA_EXE/`.
+Cleanroom prose is derived from the private presentation, dissolve, caller
+census, Return-to-View, driver-family, and raster retraces under
+`u5-decomp/notes/`; the resident wrapper and preview-runtime analyses under
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/functions/FONT_OVL/`; the EGA
+and Tandy entry/helper analyses under `u5-decomp/functions/EGA_DRV/` and
+`u5-decomp/functions/T1K_DRV/`; and the private driver inventories under
+`u5-decomp/formats/`. The EGA and Tandy carry-set cell paths were re-read
+directly from both shipped driver binaries for the exact row-splice,
+pixel-permutation, zero-colour, checkpoint, restoration, and abort contracts.

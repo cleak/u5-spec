@@ -2914,10 +2914,11 @@ or seed, combat branches, and non-shrine clamp policy.
   transition/draw mapping, intro story rectangle-transition region/order and
   helper handoff, Return-to-View `MISCMAPS.DAT` stream ownership, command
   table, helper-effect schedule, and the public display/rendering contract are
-  now specified. Remaining exact visual parity gaps are the story
-  rectangle-transition resident helper wipe curve, Return-to-View resident
-  helper raster/pacing internals, alternate-driver conversion details, and the
-  already-called-out per-table semantic enumerations. `.XMI` music is not
+  now specified. The Return-to-View EGA/Tandy cell-effect rasters, single-cell
+  convergence permutation, exact preview-tick/input cadence, and abort state
+  are also public. Remaining exact visual parity gaps are alternate-driver
+  conversion details and the already-called-out per-table semantic
+  enumerations. `.XMI` music is not
   present in the analyzed clean DOS baseline; add it only for a different
   audio-enabled distribution.
 - The spell table is now aligned to the resident incantation order (`In Lor`, `Grav Por`, ...), with all 48 parser tokens, parser acceptance rules, recipe masks, scene masks, light-spell durations, the 99-charge mix cap, major CAST handler families, active-target attack-wrapper damage math for Magic Missile/Fireball/Kill, Tremor exact damage/reward and no-faction-filter actor scan, Awaken/Cure low-circle status gates, shared active-effect tag/counter values and expiry behavior, Negate Time `T`/10 countdown semantics, combat C-Cast adjacent-target interference gating, Protection's equipped-statistic bonus boundary, Quickness's player-dispatch random gate, Mass Charm's class-threshold target-selection remap, Negate Magic's combat-cast absorption path, Blackthorn's-Castle/Stonegate absorption pre-gates, Charm/Polymorph/Clone/Fear/Gate/Negate Time high-circle handler semantics, Polymorph's Giant Rat replacement, Clone's paired-slot allocation, random legal arena placement, no-partial-copy capacity failure, undefined original capacity result, shrine-meditation linkage to Avatar intelligence, dungeon field no-write failure, the combat post-step boundary for field/hazard contact, the arena-field helper placement/application split, combat field-kind bytes, coordinate-lookup slot/flag eligibility, active-object marker contact for placed combat fields, non-consuming field contact, accepted-placement redraw/lifetime non-ownership, combat field lifetime until combat exit, Dispel Field's dungeon live-cell rewrite and combat active-object removal path, no friend/foe gate in the shared field-contact scan, Poison/Sleep field-contact status gates, Fire Field raw 1..21 damage before defense, Energy Field raw zero damage/value input, directed In Zu/Poison Wind/Death Wind/Flame Wind cone geometry and friendly-fire behavior, and monster possess/blink/summon-daemon hook separation documented semantically.
@@ -2971,8 +2972,9 @@ u5-spec/
 
 Continue with one of these narrow batches:
 
-- If exact original-asset visual parity becomes the next target, trace or capture the resident/display helper invoked for the story step-1 rectangle transition, then update `systems/intro.md` and `systems/display-driver.md` as needed.
-- If Return-to-View visual parity becomes the next target, trace the resident special actor draw, local cell-effect raster, and short fixed wait helpers or capture their output, then update `formats/location-dat.md`, `systems/intro.md`, and `systems/display-driver.md` as needed.
+- If exact original-asset visual parity becomes the next target, concentrate on
+  alternate-driver conversion differences; the story rectangle dissolve and
+  Return-to-View EGA/Tandy cell rasters are now specified.
 - If audio/music asset compatibility for a different distribution becomes in scope, add a future XMIDI format spec from primary XMIDI/Miles documentation or a fresh local asset dissection.
 - If exact movement and conversation parity becomes required, run implementation
   verification outside this dirty workspace and bring back only clean public

@@ -1514,8 +1514,8 @@ atlas, which is what the title tick expects to find (section 5).
 After the acknowledgement screen finishes, the intro returns to its menu loop with intro state still active. A later `J`, `C`, or `T` selection is required to leave the intro.
 
 Source provenance: derived from the private intro-overlay analysis notes under
-`../u5-decomp/functions/INTRO_OVL/` and from the private analysis note
-`../u5-decomp/notes/intro_title_sequence_2026-08-22.md`.
+`../u5-decomp/functions/INTRO_OVL/` and the private presentation analyses under
+`../u5-decomp/notes/`.
 
 ## 12. Return to View (`R`)
 
@@ -1700,6 +1700,18 @@ command asked for; the caller then restores the title/menu surface. There is no
 uninterruptible phase and no key with a special meaning. A command-stream
 restart command remains local to the preview and never resumes a saved game.
 
+Two cell effects have stronger pixel-level contracts than the ordinary preview
+repaint. The open/close effect paints fifteen complete 16-by-16 rasters made by
+splicing an increasing or decreasing number of portal-tile rows into the
+bottom of the base terrain tile; it restores its temporary loaded-tile scratch
+after every raster. Temporary actor draws instead replace one pixel at a time
+in a fixed 256-position permutation, running a full preview tick and keyboard
+poll after each completed group of eight except the final group. These effects
+write palette index zero opaquely. Their exact raster formula, permutation,
+31-checkpoint schedule, and non-transactional abort state are specified in
+`formats/location-dat.md` section 11 and `display-driver-abi.md` sections 9.6
+and 10.
+
 The control-flow contract is clear: run the preview as an intro-local screen, keep the intro scene active, do not load or resume a save, and continue polling the six-option menu afterward. The preview command-byte table, argument shapes, loop rule, actor/map side effects, and fixed script-level helper schedules are specified in `formats/location-dat.md`. Asset-compatible tooling that does not implement the preview interpreter should still preserve the command stream unchanged.
 
 ## 13. Hand-off back to gameplay
@@ -1758,8 +1770,10 @@ historical-renderer parity work.
   entry drives the local cell effect, and the pixel-dissolve entry driven one
   cell at a time performs the temporary actor draws. The "short fixed wait"
   after the fixed wipe was a misreading of a speaker call and is withdrawn.
-  The only residual is the shimmer entry's exact per-step pixel pattern, which
-  belongs to `display-driver-abi.md`.
+  The shimmer's exact per-step row splice and the temporary actor draw's exact
+  256-pixel permutation, input cadence, and abort state are now published in
+  `formats/location-dat.md` section 11 and `display-driver-abi.md`. There is no
+  remaining Return-to-View resident-helper raster gap for EGA/Tandy.
 - **Story rectangle-transition helper.** Closed for the intro. The fixed
   story-step list, primary story-art placement, secondary draws, text source,
   key-advance behaviour, and the step-1 rectangle transition are specified in
