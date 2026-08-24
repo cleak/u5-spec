@@ -230,9 +230,10 @@ Modelling it as an inert marker leaves those fifteen stock rooms empty of the
 randomised vermin they are supposed to spawn.
 
 The final Doom marker is a genuine special placement in the `16+` category:
-source `0x3C` is placed on the special active-object path, whose class is the
-`0x3C` absorbable-field family recognized by the combat post-step hook, and it
-is not converted into an ordinary monster kind. Genuine special placements do
+source `0x3C` is placed on the special active-object path. Viewport composition
+projects that family into the renderer companion band recognized by the
+committed-action combat absorption hook. The source is not converted into an
+ordinary monster kind. Genuine special placements do
 stay on the special active-object path and never become ordinary monster setup
 classes or party slot descriptors; only the `0xEC..0xEF` family, which is not a
 special placement at all, appears to contradict that rule.
@@ -397,11 +398,9 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
   world terrain plus ship state, the class-id derivation and its separation from
   the arena index, the reachable spawn-count invariant, the forty-eight-entry
   companion-class table, and the party-seating pass that runs before monster
-  placement. Source provenance: derived from private analysis notes
-  `../u5-decomp/notes/combat_entry_arena_selection_2026-08-22.md`,
-  `../u5-decomp/functions/ULTIMA_EXE/`, and
-  `../u5-decomp/functions/ULTIMA_EXE/`.
-- First-pass map and arena survey, including `.CBT` record size, terrain-grid dimensions, row stride, outdoor record count, and dungeon record count: `u5-decomp/formats/maps.md`.
+  placement. Source provenance: derived from private analysis in
+  `../u5-decomp/notes/` and `../u5-decomp/functions/ULTIMA_EXE/`.
+- First-pass map and arena survey, including `.CBT` record size, terrain-grid dimensions, row stride, outdoor record count, and dungeon record count: `../u5-decomp/formats/`.
 - Outdoor combat arena loader analysis, including the four metadata slices copied from each selected `BRIT.CBT` record into resident combat setup tables: `u5-decomp/functions/ULTIMA_EXE/`.
 - Internal combat enter/exit framer and arena setup analysis.
 - Internal terrain-combat setup analysis, including outdoor arena selection, per-class monster-count lookup, party-entry and placement-slot tables, and companion-class roll rules.
@@ -415,9 +414,8 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
   2026-08-22 retraces establish that the `0xEC..0xEF` family stays on the
   ordinary placement path and that the special path allocates an active-object
   record without a combat descriptor.
-- Arena synthesis for the ambush entry mode: derived from private analysis notes
-  `../u5-decomp/functions/DNGLOOK_OVL/` and
-  `../u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
+- Arena synthesis for the ambush entry mode: derived from private analysis in
+  `../u5-decomp/functions/DNGLOOK_OVL/` and `../u5-decomp/notes/`.
 - Stock-content census of the dungeon-room source band, counting the
   `0xEC..0xEF` family and each special setup id across all one hundred twelve
   shipped records, performed against the local clean install.
