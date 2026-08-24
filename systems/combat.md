@@ -940,10 +940,12 @@ in this section:
 Both gates precede the invisibility, sleep-wake and flee checks below, so a
 skipped dispatch does not run the wake roll either.
 
-**Pass 2 - Per-class special ability hook and direction.** Before ordinary
-movement is synthesized, monster AI runs a small class-flag hook. It is not a
-general script runner: it reads the acting monster's class flag word and tests
-three ability bits in fixed order.
+**Pass 2 - Per-class special ability hook and direction.** Before any ordinary
+target selection, attack, or movement is attempted, monster AI runs a small
+class-flag hook. It is not a general script runner: it reads the acting
+monster's class flag word and tests three ability bits in fixed order. Every
+random choice below advances the same gameplay PRNG specified in
+`systems/prng.md`; the hook does not precompute branch rolls.
 
 - `0x0040` is the possess/charm-on-turn ability. It draws one uniform slot index
   in `[0, 31]` — a single draw, with no retry if the draw lands on an ineligible
@@ -951,8 +953,11 @@ three ability bits in fixed order.
   marked-dead, phased/blinked, asleep-or-disabled, hidden/not-yet-revealed, or
   already controlled is set; because the ability hook itself only runs on
   monster-side actors, a monster can possess party members and never another
-  monster. An accepted target then runs the normal resistance check, and the
-  effect lands only when that check does not block. On landing: the target's
+  monster. An accepted target then runs the normal resistance check. This is
+  the branch's second PRNG advance: the resistance helper makes its underlying
+  inclusive `0..60` draw and derives the engine's usual skewed `1..30` combat
+  roll. No resistance draw occurs for an ineligible target. The effect lands
+  only when that check does not block. On landing: the target's
   controlled bit (`0x01`, Section 6.1a) is set; the active-player sentinel is
   cleared to "none" **if the sentinel currently names the possessed character** —
   it is compared against the target's own owner/character byte, never against the
@@ -963,29 +968,46 @@ three ability bits in fixed order.
   someone removes itself from the fight. Once a valid target reaches the
   resistance path, the hook returns handled whether the resistance blocks or the
   effect lands.
-- `0x0800` is the blink/phase ability. It has an approximately one-in-eight
-  chance per AI turn, toggles the actor's phase/hidden flag and linked visual
-  tile between visible and hidden, and narrates the disappearance or return.
-- `0x0400` is the summon-daemon ability. It has the same approximately
-  one-in-eight chance gate and then makes **exactly one** attempt, using the
-  same shared random arena probe and spawn-cell validator the player's Summon
-  spell uses (`systems/magic.md`, Summoning and conjuration). No direction of
-  any kind is consulted: the candidate cell is random, and if the probe lands
-  off the arena, if the validator rejects the cell, or if the actor table is
-  full, the ability simply ends for that turn with nothing placed — there is no
-  retry budget. On success a Daemon-class actor (class 38) is placed at that
-  cell, the acting monster's name and a short summoning line are printed with a
+- `0x0800` is the blink/phase ability. It draws one inclusive `0..255` gate
+  value and fires on exactly `0..31`, an exact `32/256 = 1/8` acceptance.
+  Success toggles the actor's phase/hidden flag and linked visual tile between
+  visible and hidden, narrates the disappearance or return, and consumes the
+  actor's turn. Values `32..255` decline to the summon test.
+- `0x0400` is the summon-daemon ability. It independently draws the same
+  inclusive `0..255` gate and accepts exactly `0..31`, again exactly `1/8`.
+  A passed gate then makes **exactly one** random arena probe using the shared
+  picker and spawn-cell validator used by the player's Summon spell
+  (`systems/magic.md`, Summoning and conjuration). The picker makes two fresh,
+  ordered draws: X from inclusive `0..15`, then Y from inclusive `0..15`;
+  both draws occur before either bound is checked, and the probe survives only
+  when both coordinates are at most 10. Thus the gate value is not reused as a
+  placement seed, and no existing AI direction state supplies the candidate.
+  The surviving cell is then checked deterministically for terrain and
+  occupancy before ordinary actor allocation is attempted. There is no retry
+  budget. On success a Daemon-class actor (class 38) is placed at that cell,
+  the acting monster's name and a short summoning line are printed with a
   sound, and the new actor's linked sprite plays the brief flame transition
   before settling on the Daemon tile. Unlike the player's Summon spell, this
   branch does **not** stamp the controlled bit (Section 6.1a) on the placed
   Daemon: a monster-summoned Daemon is an ordinary hostile.
 
-The branches are tested in the order above; a class with multiple bits would
-attempt possess first, then blink, then summon-daemon. The analyzed v1 data set
-assigns possess, blink/phase, and summon-daemon rows as listed in
-`monster-bestiary.md`; for any variant class carrying multiple turn-special
-bits, the fixed branch order determines which branch is attempted first.
-After this hook, the AI target picker and direction synthesis run as normal.
+The exact lazy cascade for a class with multiple bits is:
+
+| Stage | When reached | Result |
+|---|---|---|
+| Possess target draw | Possess bit is set | An ineligible single target declines to blink. An eligible target invokes resistance and then returns handled whether the effect is resisted or lands. |
+| Blink gate draw | Possess is absent or selected an ineligible target, and the blink bit is set | `0..31` returns handled after blinking; `32..255` declines to summon. |
+| Summon gate draw | Earlier branches declined and the summon bit is set | `32..255` returns unhandled. `0..31` proceeds to the fresh X and Y draws. |
+| Summon probe, validation, and allocation | Summon gate passed | Any off-arena coordinate, rejected cell, or allocation/placement failure returns unhandled. Successful placement returns handled. |
+
+“Handled” means the automatic actor driver ends this actor's dispatch: no
+ordinary target pick, attack, or movement follows. “Unhandled” means the
+ordinary AI target picker, attack path, and—if needed—movement path continue
+in the same dispatch. Consequently, a successful blink or summon never also
+performs an ordinary action, while every failed summon stage does. The
+analyzed v1 data set assigns possess, blink/phase, and summon-daemon rows as
+listed in `monster-bestiary.md`; the cascade above is the contract for any
+variant class carrying multiple turn-special bits.
 
 **Target selection** is the heart of Pass 2. Given the acting monster's slot index, the target picker walks the actor table backwards from slot 31 to slot 0, computes the truncated linear Euclidean distance to each candidate, and picks the closest one that survives a chain of filters:
 
@@ -1867,10 +1889,11 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/ULTIMA_EXE/`, and local
   binary verification of `DUNGEON.CBT`.
 - The monster special-ability hook, including possess, blink/phase,
-  summon-daemon, branch ordering, chance gates, and baseline class-flag
-  assignments, derived from
+  summon-daemon, lazy PRNG draw ordering, exact chance gates, random placement
+  probe, handled-result turn consumption, failure continuation, and baseline
+  class-flag assignments, derived from
   `u5-decomp/functions/COMSUBS_OVL/`
-  and the `DATA.OVL` class-flag table.
+  and `u5-decomp/functions/COMBAT_OVL/`, with the `DATA.OVL` class-flag table.
 - The combat-side C-Cast interference-source lifecycle — write and clear
   timing, same-actor re-prompt, current-state predicates, no encounter/round/exit
   reset, and save persistence — is derived from
