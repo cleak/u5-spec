@@ -583,6 +583,25 @@ world tick, no title tick, and no gameplay time advance runs while a rectangle
 dissolve is in progress, whatever the rectangle's size. Its wall-clock duration
 is whatever the machine needs to visit that many pixels.
 
+**Real-time compatibility policy.** Historical wall-clock duration is not a
+stable contract. The driver has no timer read, retrace wait, explicit frame
+publication, or intermediate callback in this loop. It writes video memory as
+fast as the CPU, bus, adapter, and selected driver permit; period scanout may
+therefore reveal partial states, but the program defines no frame boundaries
+among them. The first gated dissolve also performs its alternating speaker and
+keyboard-status work, so even equal-sized calls need not take equal time.
+
+The normative modern baseline is consequently **atomic presentation at the
+blocking-call boundary**: preserve the required visit order internally where
+tests or abort-prefix behavior observe it, and publish the completed rectangle
+when the call returns. A frontend may instead animate successive prefixes, but
+its duration, cadence, and visits per frame are presentation choices rather
+than compatibility claims. Such an animation must preserve the published
+order and final pixels and must not add gameplay/title ticks, consuming input,
+or abort points beyond the one historical gated status test. No timing
+tolerance is specified for optional animation; automated compatibility tests
+should compare the ordered prefix rules and final raster, not elapsed time.
+
 A compatible engine that wants exact frame-by-frame visual parity with the
 original can reuse the original tap-set inventory, indexed by the integer
 log2 of the rectangle's pixel count; the size-class taps are stored in the
