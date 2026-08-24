@@ -658,8 +658,10 @@ Putting the pieces together, a single conversation runs through a fixed envelope
      entries) through the byte runner. Most greetings end with `0x82`
      (END-STREAM) so the runner returns control without proceeding into the Job
      entry.
-   - **Bit clear (a stranger).** The engine re-seeds the random generator from
-     the host clock and flips a fair coin. On one outcome the conversation
+   - **Bit clear (a stranger).** After the description has completed and this
+     bit test has found the bit clear, the engine makes one fresh host-clock
+     read, assigns the transformed value as the shared random-generator state,
+     and immediately flips a fair coin. On one outcome the conversation
      simply proceeds to the keyword prompt with nothing said after the
      description. On the other the NPC introduces itself: the engine prints the
      "I am called" lead-in and runs the **Name** entry (entry 1 of the five
@@ -745,10 +747,13 @@ conversation costs the party anything.
 
 While Faulinei is resident there, every completed conversation in that
 settlement ends with a theft. The cleanup prints the stolen-goods line, plays a
-fixed descending PC-speaker glissando, re-seeds the random generator from the
-host clock (this is one of the re-seed sites listed in `systems/prng.md`
-section 3, so what is taken is not reproducible from game state), and then
-removes exactly one thing from the party, taking the first case that applies:
+fixed descending PC-speaker glissando, makes one fresh host-clock read, and
+assigns the transformed value as the shared random-generator state. Only then
+does it inspect the inventory categories and remove exactly one thing, taking
+the first case that applies. Thus the re-seed occurs even when the applicable
+category uses a deterministic descending scan rather than a random pick. This
+is one of the re-seed sites listed in `systems/prng.md` section 3, so what is
+taken is not reproducible from game state:
 
 1. If the party carries any keys, gems, or torches, one of those three counters
    is chosen at random — re-drawing until it lands on a counter the party
@@ -798,7 +803,7 @@ The behaviour described here was derived from the private function and format no
 - The Talk-entry shop dispatch and shared shop caller context -- cross-checked
   against `u5-decomp/functions/ULTIMA_EXE/`.
 - The `.TLK` file loader, the four-class dispatch by scene byte, the header walk, the two-byte count prefix ahead of the `(id, offset)` entries, and the 1024-byte blob read — derived from `u5-decomp/functions/TALK_OVL/`.
-- The keyword input loop, the empty-input-as-BYE shortcut, the fixed reserved-keyword table, the ordinary per-NPC keyword scan, the profanity rebuke/pause branch, and the no-match diagnostic -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`, cross-checked against `u5-decomp/CORRECTIONS.md`.
+- The keyword input loop, the empty-input-as-BYE shortcut, the fixed reserved-keyword table, the ordinary per-NPC keyword scan, the profanity rebuke/pause branch, and the no-match diagnostic -- derived from `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`, cross-checked against the correction ledger in `u5-decomp/`.
 - The labelled-block and scoped-prompt mechanics -- derived from
   `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/functions/TALK_OVL/`, cross-checked
@@ -807,8 +812,7 @@ The behaviour described here was derived from the private function and format no
   warning glissando -- derived from
   `u5-decomp/functions/TALK_OVL/` and
   `u5-decomp/functions/ULTIMA_EXE/`.
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q3 --
+- Source provenance: derived from private analysis in `u5-decomp/notes/` --
   the cleanup gate is the resident-Shadowlord selector, so the cleanup pass is
   the Shadowlord of Falsehood's conversation theft rather than a generic
   transient-signal reconciliation.
@@ -819,10 +823,9 @@ The behaviour described here was derived from the private function and format no
   introducing itself by name and saying nothing. That note's original
   "stolen-action warning" and inverted-polarity readings are superseded.
   Cross-checked against
-  `u5-decomp/functions/TALK_OVL/` and
-  `u5-decomp/notes/oq-closures_2026-08-22_save-band-transport.md`.
+  `u5-decomp/functions/TALK_OVL/` and `u5-decomp/notes/`.
 - The case-insensitive bit-7-stripping string-equality routine used by the JOIN-name compare and similar match operations — derived from `u5-decomp/functions/TALK_OVL/`.
-- The on-disk `.TLK` file structure — blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/npc-tlk-pth.md`. That note's header reading is superseded.
+- The on-disk `.TLK` file structure — blob obfuscation, mandatory leading entries, common-word dictionary substitution — derived from `u5-decomp/formats/`. The earlier private header reading is superseded.
 - The corrected `.TLK` header contract of Section 3 — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, dialog index `1` as an ordinary NPC, and the withdrawal of the sentinel/alias reading — re-derived from the shipped `.TLK` and `.NPC` files against the header walk in `u5-decomp/functions/TALK_OVL/`, and cross-checked against the sprite-class description strings of `LOOK2.DAT`.
-- The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/data-ovl.md`, with the published word list in `catalogs/common-word-dictionary.md`.
-- The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/talk_group_retrace_2026-08-22.md`, `u5-decomp/functions/TALK_OVL/`, and `u5-decomp/functions/TALK_OVL/`.
+- The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/`, with the published word list in `catalogs/common-word-dictionary.md`.
+- The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/` and `u5-decomp/functions/TALK_OVL/`.

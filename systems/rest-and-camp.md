@@ -286,6 +286,21 @@ gates have accepted the rest path. The zero outcome interrupts into the sleep
 ambush branch; all other outcomes continue the rest pass. The effective
 interruption chance is therefore 1 in 64 per eligible predicate invocation.
 
+The wilderness camp loop invokes that predicate once when a five-minute step
+observes that the game-hour byte changed, not on every five-minute step. The
+`0..63` predicate uses the PRNG state already in force. Results `1..63` do not
+read the host clock and do not re-seed. Only result `0` performs one fresh
+host-time read, replaces the shared PRNG state with the twelve-bit transform
+specified in `systems/prng.md`, and then consumes `random(0, 7)` from that new
+state to choose the sleep-ambush row. This conditional row-selection re-seed
+is the only clock sample in the wilderness camp loop.
+
+In particular, it is not the completed-camp Lord British trigger. Section 7's
+later `random(0, 99)` draw uses whatever stream is then in force and is not
+preceded by a host-clock sample or seed assignment. A camp that reaches that
+final draw without an earlier 1-in-64 interruption hit has not re-seeded during
+the camp, which is original behaviour.
+
 This roll is not the ordinary overworld random-encounter probe. It does not use
 the tile/Z/hour threshold from `systems/encounters.md`, and there is no separate
 terrain probability table in the traced rest path. Terrain determines whether
