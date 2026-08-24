@@ -27,8 +27,10 @@ In the surface and town encoding, the tile codes J-Jimmy and O-Open care about f
   `0x97` for the plain family and `0x98` for the windowed family, and the
   shipped description table gives both the same string; Jimmy refuses them without rolling (though it still breaks a key doing so), and only the Unlock Magic spell converts them back (see § 7). O-Open on an unlocked closed door does not write a standing-open door code; it writes the shared cleared-cell tile `0x44` — the same byte that fills ordinary interior floor — and the auto-close tracker restores the saved door byte a few turns later.
 - **Open/already-open case.** Open alone treats exact tile `0xAF` as already
-  open and reports that state. Jimmy has no special `0xAF` branch; absent a
-  matching coordinate object, it produces the generic no-lock result. The
+  open and prints "It's open!" followed by a newline. It changes nothing,
+  spends no key, and still commits the action. Jimmy has no special `0xAF`
+  branch; absent a matching coordinate object, it produces the generic no-lock
+  result, likewise committing the action without spending a key. The
   shipped Look description for `0xAF` is a heavy footlocker, so this is an
   Open-command case rather than evidence for a general standing-open-door
   family.
@@ -137,8 +139,10 @@ owning NPC. If that reverse lookup fails, the command reports that it could not
 find the NPC and stops without spending a key. Otherwise it clears the NPC's
 live dialogue/awareness field and consults the saved per-location NPC-removal
 bit. On the first release, while that bit is clear, all three schedule periods
-are changed to AI mode 5, the NPC prints the thanks line, and moral standing
+are changed to AI mode 5, the command prints the thanks line, and moral standing
 rises by `+2` with the normal ninety-nine cap (see `systems/karma.md`). The
+thanks is fixed command text — the visible quoted line `I thank thee!`, bracketed
+by newlines — rather than text selected from the NPC's dialogue record. The
 command then attempts to set the persistent removal bit through the ordinary
 removable-NPC class filter. An actor the filter rejects remains unmarked, so a
 later success can repeat the otherwise one-time schedule rewrite, thanks, and
@@ -155,8 +159,18 @@ does not repeat the schedule rewrite, thanks line, or moral-standing reward.
 High-range scenes take a different success tail. Stock dungeon scenes have
 already been routed to dungeon Jimmy; the remaining shipped high-range caller
 is combat. There, restraint success changes the target tile to cobble `0x44`,
-marks the tile changed, and prints the no-exclamation "Unlocked" result. It
-does not query, release, or persist an NPC.
+marks the tile changed, and prints `Unlocked` followed by a newline (no
+exclamation mark). It does not query, release, or persist an NPC.
+
+The world-mode command dispatcher reports its normal committed-action result
+after every Jimmy exit; combat's labelled delegate likewise ends that actor's
+action. This includes no keys, failed preflight, cancelled member selection,
+no lock, empty restraint, failed NPC reverse lookup, failed roll, and success.
+Their key effects remain distinct as stated above. In particular, there is no
+"no NPC after success" outcome in an ordinary scene: occupancy is checked
+before the member prompt and random draw. A later active-object-to-NPC reverse
+lookup can fail after a successful roll; that path commits the action but spends
+no key.
 
 A restraint never converts to an "unlocked restraint" form: the success tail
 never steps its tile down a rung the way the door case does, and the tile one
@@ -564,7 +578,7 @@ The transitions across the major boundaries are:
   trap-effect resolver documented in `traps.md`. This document owns the door
   and container routes that may precede that resolver; `traps.md` owns the
   common party HP/status effects once selected.
-- **Time.** Door open / close, vehicle dismount, and an *applied* Klimb each consume one turn at the current mode's rate (two minutes outdoor, one minute indoor / dungeon). Jimmy attempts that reach a door, restraint, or container outcome also consume a turn, including failed attempts. A refused Klimb is the exception, and only in two of the three modes: the town handler's non-ladder refusal and both of the dungeon handler's "nothing to klimb here" refusals report "no action" and cost nothing (Section 9), whereas the overworld handler's value is not forwarded at all, so its gear and on-foot refusals still report "acted" and still cost the outdoor turn (`systems/commands.md` Section 3).
+- **Time.** Door open / close, vehicle dismount, and an *applied* Klimb each consume one turn at the current mode's rate (two minutes outdoor, one minute indoor / dungeon). Every world-mode Jimmy exit reports a committed action, including no-keys, preflight failure, cancel, no-lock, empty-restraint, failed reverse-lookup, failed-roll, and success outcomes; combat Jimmy ends the acting combatant's action. A refused Klimb is the exception, and only in two of the three modes: the town handler's non-ladder refusal and both of the dungeon handler's "nothing to klimb here" refusals report "no action" and cost nothing (Section 9), whereas the overworld handler's value is not forwarded at all, so its gear and on-foot refusals still report "acted" and still cost the outdoor turn (`systems/commands.md` Section 3).
 
 ## 14. Transition Boundaries
 
