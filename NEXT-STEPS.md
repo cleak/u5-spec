@@ -1271,8 +1271,9 @@ below; this entry remains the low-level caller provenance.
 
 **Current endgame absorption-marker cleanup:** 2026-05-13 - combat, dungeon,
 endgame, and extraction now publish the producer/consumer split for the terminal
-handoff marker: a special combat absorption effect writes the marker after a
-committed post-step tile-effect path, and dungeon room/post-combat cleanup
+handoff marker: a special combat absorption effect writes the marker from the
+committed non-digit action tail when its fixed actor/renderer predicates match,
+and dungeon room/post-combat cleanup
 consumes it by entering ENDGAME. The remaining reachability gap was later
 closed by the Doom final-room route cleanup below; this entry remains the
 producer/consumer provenance.
@@ -1296,7 +1297,8 @@ scan used by room-trigger setup. For room-trigger entries, DNGLOOK setup reads
 sixteen source cells from the loaded arena metadata band; in Doom slot fifteen,
 the first scanned source cell is the `0x3C` absorbable-field family marker. The
 setup places that source through the special active-object path, preserving the
-family consumed by the combat post-step absorption hook. The scan boundary now
+family consumed through the renderer companion band by the combat absorption
+hook. The scan boundary now
 separates ordinary class-derived combatant sources from special-placement
 sources. Remaining Doom-room metadata work is per-subtype labels for unrelated
 special-placement values and the non-final opaque slices, not the terminal
@@ -2395,6 +2397,15 @@ and `systems/combat.md` now state that Fire/Sleep/Energy field marker
 materialization has no random acceptance gate once impact resolution confirms an
 in-arena cell. The coordinate lookup determines the returned contact target,
 not whether the marker is placed.
+
+**Current combat terrain-hazard correction:** 2026-08-24 -
+`systems/combat.md` now publishes the common post-dispatch hook's exact terrain
+arms: swamp reuses the Poison result, while molten lava and fireplace reuse the
+Fire result, with their target gates and exact PRNG consumption. Terrain
+selection suppresses the placed-marker scan even when the later swamp class
+gate rejects the effect. Doom's `0x3C..0x3F` absorption family is explicitly a
+separate committed-action hook over the renderer companion band, not combat
+arena terrain and not part of the terrain-over-marker priority rule.
 
 **Current encounter flag rollover cleanup:** 2026-05-13 - encounters,
 save-format, time, and extraction docs now correct the fortunes-of-war clear

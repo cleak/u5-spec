@@ -1209,10 +1209,25 @@ The post-dispatch hook has this exact ordered contract:
 | Stage | Input and result |
 |---|---|
 | Target selection | The argument is the round walker's current combat-descriptor slot. That same descriptor is the effect target; no second descriptor is found by coordinate. Its current X/Y and its active-object back-reference are the lookup inputs. |
-| Terrain priority | Check arena terrain at that X/Y first. A recognized terrain hazard selects its effect immediately and suppresses the placed-marker scan for that dispatch. |
+| Terrain priority | Check arena terrain at that X/Y first. The exact recognized bytes are listed below. A recognized terrain hazard selects its effect immediately and suppresses the placed-marker scan for that dispatch. |
 | Marker scan | If terrain selected no effect, scan all thirty-two active-object records in ascending index order. Skip the record whose index equals the target descriptor's active-object back-reference, then compare every other record's X/Y with the target descriptor's X/Y. The first colocated recognized marker wins. |
 | Meaning of the skip | The skipped item is the actor's renderer-facing active-object record, not the current combat actor. This prevents an actor sprite from being interpreted as a field marker. A separate field record on the same cell still targets and affects the actor whose slot was passed. |
 | Completion | Apply the selected result to the passed slot, then continue through the ordinary post-action maintenance. Contact does not clear, age, or rewrite the marker. |
+
+Terrain recognition is exact-byte, not a tile-family range test:
+
+| Arena terrain byte | Shipped tile identity | Hook-level predicates and result | PRNG use after lookup |
+|---:|---|---|---|
+| `0x04` | Swamp | Select the Poison-tier result. Reject the result when the target descriptor's linked active-object tile/class byte is at least `0x80`. For an accepted party target whose character status is Good, change status to Poisoned. Any other accepted target enters the shared damage/status endpoint with no attacker credit. | The linked-record rejection and Good-status test occur before any draw. Rejection and the Good-to-Poisoned arm consume none. The accepted damage fallback consumes one inclusive `0..20` draw and passes that raw value directly to damage/status application. It makes no defense draw. |
+| `0x8F` | Molten lava | Select the Fire-tier result: play the target sound, pass a rolled raw value to the shared damage/status endpoint, run no-attacker finalization, and request a status-panel refresh. | Consume one inclusive `0..10` draw after terrain selection. It makes no defense draw. |
+| `0xBC` | Fireplace | Same Fire-tier result as molten lava. | Consume one inclusive `0..10` draw after terrain selection. It makes no defense draw. |
+
+No other arena terrain byte is recognized by this hook. In particular, there
+is no arena-terrain Sleep, Energy, or Doom-absorption arm. Selection of swamp,
+molten lava, or fireplace suppresses the placed-marker scan before the selected
+effect is dispatched. Therefore a swamp cell still suppresses a colocated
+field marker when the later linked-record class gate rejects the swamp result;
+the hook does not fall back to the marker scan.
 
 Consequently, a successful move onto Poison, Sleep, or Fire applies that field
 to the mover. Remaining on one of those markers while completing another action
@@ -1240,24 +1255,38 @@ death/record-clear path do not contain a field countdown, decrement, or pre-exit
 removal. Placed markers persist until combat exits, when the combat framer
 restores the pre-combat active-object table.
 
-Separate from player-cast field markers, one special combat tile-effect path
-handles an actor being absorbed by a scripted field-like cell. The path runs
-only from the special post-step hook after movement has committed. It validates
-that the active combat descriptor is live, not already claimed by the
-dead/removed bit, has the expected pending-action class, and is linked to an
-active-object family whose class masks to the `0x3C` absorbable-field family. On
-success it narrates the absorption, plays the effect, invalidates the current
-active-player selector, updates the affected slot through the shared combat
-effect helpers, and writes the shared combat-result marker consumed by dungeon
-room cleanup. That marker is the low-level bridge into the terminal endgame
-handoff when the caller is a qualifying dungeon room. In stock data, the
-qualifying room is Doom's deepest room-id-fifteen arena; its metadata supplies
-the special setup marker for this path. The dungeon-room setup pass reads that
-marker from the arena metadata band, places it through the special active-object
-path rather than as an ordinary monster, and preserves it as the active-object
-family whose masked class matches the absorption hook. The unresolved portion is
-now limited to per-subtype labels for unrelated special-placement values in the
-same dungeon metadata scan, not the final-room handoff conversion.
+Separate from player-cast field markers and arena-terrain contact, one special
+combat path handles an actor being absorbed by a scripted field-like cell. It
+runs in the actor handler's committed non-digit action tail, before that handler
+returns to the round walker and before the common terrain/field hook above.
+Parser refusals that re-prompt and the `0` through `6` active-player selection
+commands skip this inner tail. The absorption call itself has no
+movement-success predicate, so any committed non-digit action can trigger it
+when its remaining conditions hold.
+
+The path requires the active combat descriptor to be live, not already claimed
+by the dead/removed bit, and at arena row `2`. It then reads the renderer's
+sixteen-byte-stride companion band at row `1` and the actor's arena X—the cell
+directly north of that actor—and accepts a byte whose family masks to
+`0x3C..0x3F`. It does not read the combat arena terrain grid. This predicate and
+the absorption effect consume no PRNG draw. On success it narrates the
+absorption, plays the effect, invalidates the current active-player selector,
+updates the affected slot through the shared combat effect helpers, and writes
+the shared combat-result marker consumed by dungeon room cleanup.
+
+The distinction between origin and immediate input matters. In stock data,
+Doom's deepest room-id-fifteen arena supplies a special `0x3C` setup source in
+its metadata band. Dungeon-room setup places that source through the special
+active-object path rather than as an ordinary monster; viewport composition
+then projects it into the renderer companion band inspected by the absorption
+hook. Thus the Doom family originates as a special active object and is
+observed through render composition, but it is neither an arena-terrain byte
+nor one of the common hook's recognized placed markers (`0xE8`, `0xE9`,
+`0xEA`). It does not participate in terrain-over-marker priority. The result
+marker remains the low-level bridge into the terminal endgame handoff when the
+caller is a qualifying dungeon room. The unresolved portion is limited to
+per-subtype labels for unrelated special-placement values in the same dungeon
+metadata scan, not the final-room handoff conversion.
 
 Damage application is the responsibility of the inner-pass attack roll (when the destination is a hostile actor), which calls into Section 12's damage-and-status handler with the rolled damage value and the target's slot. The same damage/status endpoint is also used by combat spells after their own targeting and raw-damage calculation.
 
@@ -1626,7 +1655,7 @@ without independent behavioral consumers remain opaque metadata.
   victory bonus. Gold/food from a rewritten body-like slot is obtained only
   through the later Search/Get body rules in `containers.md`.
 
-- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16, Fireball rolls 1..30, and Kill passes the decimal 99 instant-kill sentinel after the shared aiming/projectile path accepts a collision target. The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep applies party sleep status or descriptor byte 2 bit `0x08` for non-party targets, Poison Wind applies a resistance/random gate before poison status, Death Wind uses the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. The same rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
+- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16, Fireball rolls 1..30, and Kill passes the decimal 99 instant-kill sentinel after the shared aiming/projectile path accepts a collision target. The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep applies party sleep status or descriptor byte 2 bit `0x08` for non-party targets, Poison Wind applies a resistance/random gate before poison status, Death Wind uses the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
 
 - **Status narration.** "Sleep!", "Poison!", "Charm!" lines are not produced by the damage-and-status handler. They live in separate per-effect handlers (one per status). The exact wording and trigger mechanics belong in those handlers' specs.
 
@@ -1831,7 +1860,7 @@ The behaviour described here was derived from the private function and format no
   combat-record/active-object coordinate updates — derived from
   `u5-decomp/functions/COMBAT_OVL/` and
   `u5-decomp/functions/SJOG_OVL/`.
-- The step-or-attack primitive — direction-to-unit-step translation, arena range check, and on-success and on-failure narration — derived from `u5-decomp/functions/SJOG_OVL/`. The separate common post-dispatch field-contact call, target-slot contract, marker scan, and effect ordering are derived from private analysis in `u5-decomp/functions/COMBAT_OVL/`.
+- The step-or-attack primitive — direction-to-unit-step translation, arena range check, and on-success and on-failure narration — derived from `u5-decomp/functions/SJOG_OVL/`. The separate common post-dispatch field-contact call, target-slot contract, exact terrain arms, marker scan, priority, and effect/PRNG ordering are derived from private analysis in `u5-decomp/functions/COMBAT_OVL/`. The distinct Doom absorption caller timing and renderer-companion predicate are derived from private analysis in `u5-decomp/functions/COMBAT_OVL/`, `u5-decomp/functions/SJOG_OVL/`, and `u5-decomp/functions/ULTIMA_EXE/`.
 - The dungeon-room special source conversion for the final Doom absorbable
   marker -- derived from
   `u5-decomp/functions/DNGLOOK_OVL/`,
