@@ -96,6 +96,13 @@ runs twenty ordinary compositor/repaint frames with one-tick pacing. The final
 idle redraw follows normal visibility-dirty policy, and none of this adds a
 second gameplay turn.
 
+**Addendum — 2026-08-24, complete potion flash timing table.** Issue #116
+filled the five timing rows omitted by #115. `catalogs/item-list.md` now gives
+the rumble accumulator target and both envelope iteration counts for all eight
+selected bottle colours. Blue, Yellow, Red, Green, and Black use the same
+rumble/XOR/two-sweep/XOR-restore control flow and the same sound-disabled busy
+timing as Orange, Purple, and White; none has an exceptional structure.
+
 **Addendum — 2026-08-23, outdoor ranged-attack contract re-verified and
 published.** Three gaps around the outdoor creature ranged attacks were traced
 and adversarially re-derived from the shipped binaries, and the result is now in
