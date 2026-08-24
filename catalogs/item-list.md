@@ -487,13 +487,28 @@ or a solid white rectangle. XOR with `15` maps each old four-bit palette index
 to `old_index XOR 15`; the paired operation is lossless even over moving terrain
 and objects because no repaint occurs between the two passes.
 
-The Orange, Purple, and White selections run respectively 26,000, 30,000, and
-38,000 iterations in each of the two envelope sweeps; their leading rumble
-accumulator targets are 14,400, 16,000, and 19,200. These are
-machine-calibration-scaled busy loops, not BIOS-timer durations. Sound-disabled
-play still executes the timing loops. The shared presentation polls no input,
-does not advance the gameplay clock, and blocks until both the sound sequence
-and restorative XOR finish.
+For selected potion id `i`, the leading rumble accumulator target is
+`8,000 + 1,600 * i`, and each of the two envelope sweeps runs
+`10,000 + 4,000 * i` iterations. The complete selected-bottle table is:
+
+| Potion id | Colour | Leading rumble target | First sweep iterations | Second sweep iterations |
+|---:|---|---:|---:|---:|
+| 0 | Blue | 8,000 | 10,000 | 10,000 |
+| 1 | Yellow | 9,600 | 14,000 | 14,000 |
+| 2 | Red | 11,200 | 18,000 | 18,000 |
+| 3 | Green | 12,800 | 22,000 | 22,000 |
+| 4 | Orange | 14,400 | 26,000 | 26,000 |
+| 5 | Purple | 16,000 | 30,000 | 30,000 |
+| 6 | Black | 17,600 | 34,000 | 34,000 |
+| 7 | White | 19,200 | 38,000 | 38,000 |
+
+Every row uses the same leading-rumble, first-XOR, two-sweep, second-XOR
+structure; none of Blue, Yellow, Red, Green, or Black has an exceptional path.
+These are machine-calibration-scaled busy loops, not BIOS-timer durations.
+Sound-disabled play still executes the rumble and both sweep timing loops for
+all eight rows. The shared presentation polls no input, does not advance the
+gameplay clock, and blocks until both the sound sequence and restorative XOR
+finish.
 
 #### Orange combat sleep presentation
 
