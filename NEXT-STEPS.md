@@ -73,6 +73,15 @@ increments. Combat Ready spends the live actor's action and adds no
 command-specific clock advance; combat's independent one-minute modulo-ten
 wrap occurs before actor dispatch and is unaffected by the chosen command.
 
+**Addendum — 2026-08-24, combat overlay raster geometry.** Issue #114 replaced
+the provisional cursor-corner and palette-11-plus rendering with the exact
+EGA/Tandy-equivalent contract. The combat cursor is the complete white
+two-pixel outer ring of its sixteen-by-sixteen cell. The secondary overlay is a
+white-and-black twelve-by-twelve stroke pattern with exact inclusive relative
+coordinates. `systems/combat.md` now also fixes base/cursor/marker draw order,
+shared blink and active-player eligibility, solid replacement rather than XOR,
+ordinary display clipping, and erasure by the following base repaint.
+
 **Addendum — 2026-08-23, outdoor ranged-attack contract re-verified and
 published.** Three gaps around the outdoor creature ranged attacks were traced
 and adversarially re-derived from the shipped binaries, and the result is now in

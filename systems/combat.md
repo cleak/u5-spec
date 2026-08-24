@@ -708,12 +708,57 @@ not of the behaviour.
 
 The only combat-specific part of that pass is its tail, which runs when the
 scene byte is in the combat band. It toggles a blink flag each pass and, on the
-lit pass, draws the player cursor box around the active player's arena cell,
-skipping it when that cell is the invalid sentinel; a separate flag can draw an
-additional small marker at an explicit arena X/Y. These marker updates are
-presentation only: they do not advance combat time, mutate actor HP or status,
-or consume placed field markers, and they are distinct both from actor dispatch
-and from the post-step field-contact hook described later.
+lit pass, draws the player cursor box around the eligible active player's arena
+cell, skipping the entire overlay tail when that cell is the invalid sentinel
+or belongs to the non-player group. A separate flag can then draw an additional
+marker at an explicit arena X/Y. That marker is not independently gated: a dark
+blink pass, invalid active cell, or non-player active group suppresses both
+overlays. These updates are presentation only: they do not advance combat time,
+mutate actor HP or status, or consume placed field markers, and they are
+distinct both from actor dispatch and from the post-step field-contact hook
+described later.
+
+**Exact combat-overlay raster contract.** For either overlay cell, let its
+sixteen-by-sixteen screen-cell origin be `(8 + 16*x, 8 + 16*y)`, where `(x,y)`
+is the corresponding arena coordinate. Every endpoint below is inclusive and
+every coordinate is relative to that origin.
+
+The cursor uses EGA/Tandy palette index 15 (white) and covers the complete
+two-pixel outer ring of its cell:
+
+| Primitive | Relative coverage |
+|---|---|
+| Horizontal strokes | All pixels from `x=0` through `x=15` on rows `y=0`, `1`, `14`, and `15` |
+| Vertical strokes | All pixels from `y=0` through `y=15` on columns `x=0`, `1`, `14`, and `15` |
+
+The secondary marker occupies the twelve-by-twelve box from relative
+`(2,2)` through `(13,13)`. Its exact strokes are:
+
+| Draw group | Horizontal strokes | Vertical strokes |
+|---|---|---|
+| Upper white, palette 15 | row 6, columns 2 through 6 | column 6, rows 2 through 6 |
+| Upper black, palette 0 | row 5, columns 2 through 5 and 10 through 13; row 7, columns 2 through 6 and 9 through 13 | columns 5 and 10, rows 2 through 5; columns 7 and 8, rows 2 through 6 |
+| Lower white, palette 15 | row 9, columns 2 through 6 | column 6, rows 9 through 13 |
+| Lower black, palette 0 | row 10, columns 2 through 5 and 10 through 13; row 8, columns 2 through 6 and 9 through 13 | columns 5 and 10, rows 10 through 13; columns 7 and 8, rows 9 through 13 |
+
+Those four marker groups are emitted in the table's order. Within each white
+group the horizontal stroke precedes the vertical stroke; within each black
+group the narrower left horizontal/vertical pair is followed by the wider left
+pair, then by the narrower and wider right pairs. Each pair draws its horizontal
+stroke before its vertical stroke. These are solid colour replacement writes,
+not XOR or inversion: white and black overwrite the pixels already present.
+
+Composition order for a lit eligible pass is the full eleven-by-eleven base
+viewport repaint (terrain and composited actors), the cursor, then the
+secondary marker. Consequently a secondary-marker stroke wins wherever the
+two overlays coincide. There is no save-under, XOR erase, or overlay-specific
+clear. The next pass's base repaint removes both old shapes before the blink
+and eligibility tests decide whether to draw them again.
+
+The overlay routine does not clip either shape to its sixteen-by-sixteen cell,
+and it performs no separate range validation on the secondary coordinate.
+Ordinary display clipping still applies. Legal arena coordinates from 0 through
+10 keep every pixel of both shapes inside the viewport.
 
 **Consumers of the shared effect counter, in both directions.** The second
 blit entry that pass uses takes a shared counter, and it is worth naming what
@@ -1631,10 +1676,13 @@ The behaviour described here was derived from the private function and format no
 - The per-round walk over the thirty-two-slot actor table, the phase-counter mechanic, the round-counter wrap, the dispatch to player vs. monster handlers, and the three exit conditions — derived from `u5-decomp/functions/COMBAT_OVL/`.
 - The retraction of the "post-round combat terrain/effect sweep", and the
   player-cursor blink marker and secondary-marker hook that survive it as the
-  shared rasterizer's combat-only tail -- derived from
-  `u5-decomp/functions/ULTIMA_EXE/` (the note's
-  filename predates its 2026-08-22 naming correction; the routine is the shared
-  viewport rasterizer, not a combat post-round pass).
+  shared rasterizer's combat-only tail, including exact EGA/Tandy stroke
+  geometry, palette indices, replacement operation, composition order,
+  clipping boundary, and base-repaint erasure -- derived from private analysis
+  in `../u5-decomp/functions/ULTIMA_EXE/`,
+  `../u5-decomp/functions/EGA_DRV/`, `../u5-decomp/formats/`, and
+  `../u5-decomp/notes/`. The resident routine is the shared viewport rasterizer,
+  not a combat post-round pass.
 - The per-actor turn dispatcher, complete dispatcher-level combat command map
   for all twenty-six letters and seven special inputs, the AI synthesis path for
   monster turns, the verb-stitching narration buffer, and the unified
