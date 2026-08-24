@@ -520,10 +520,13 @@ publishing the current band and advancing the frame counter every 128 in-bounds
 positions (256 when calibration is below 250). The countdown resets between
 passes; publication draws the current frame before advancing; sound and busy
 waiting happen only at publication boundaries; and keyboard status is tested
-after every nonzero pseudo-random state. A successful pass adds an uncounted
-corner fixup but does not publish its partial tail. The entry finally restores
-the saved hidden surface and releases its scratch storage. The exact pass
-counts, speaker gate, waits, poll order, and abort rule are specified in
+after every nonzero pseudo-random state. Each pass seeds its fourteen-bit
+current-state walk at `0x0001`, maps that state directly by division and
+remainder by 288, then advances by a right shift with conditional `0x3500`
+XOR feedback from the old low bit. A successful pass adds an uncounted corner
+fixup but does not publish its partial tail. The entry finally restores the
+saved hidden surface and releases its scratch storage. The exact state vector,
+pass counts, speaker gate, waits, poll order, and abort rule are specified in
 `intro.md` section 5 under "Subtitle ignition". Only the carry-clear form is
 the public frame advance.
 

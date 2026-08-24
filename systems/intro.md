@@ -676,10 +676,17 @@ simply switch on, and its structure is part of the contract:
    is copied aside into scratch storage, and the hidden surface is blanked.
 2. The reveal then runs **two passes** over the same `288 x 49` position space.
    Each pass walks every nonzero state of a fourteen-bit maximal Galois
-   sequence, interprets the state by division by 288, and applies positions
-   whose row is 0 through 48. After the nonzero-state cycle, a successfully
-   completed pass applies one explicit `(0,0)` fixup. That fixup is not counted
-   toward publication, is not paced or polled, and is skipped on abort.
+   sequence. Its initial state is `0x0001`. Map the **current** scalar state
+   `s` directly as `x = s modulo 288` and `y = floor(s / 288)`; there is no
+   `s - 1` or other transform. Apply positions whose row is 0 through 48.
+   After processing and polling that state, advance it on a non-aborted
+   iteration by shifting right one bit, then XORing `0x3500` into the result
+   exactly when the old low bit was one. The next state is therefore
+   `(s >> 1) XOR 0x3500` for odd `s`, and simply `s >> 1` for even `s`.
+   The walk returns to `0x0001` after all 16,383 nonzero states. After that
+   cycle, a successfully completed pass applies one explicit `(0,0)` fixup.
+   That fixup is not counted toward publication, is not paced or polled, and
+   is skipped on abort.
    Restoring a position means copying that pixel back
    from the scratch copy into the hidden surface **at all four band origins at
    once** — vertical offsets `0`, `50`, `100` and `150`, horizontally shifted to
@@ -731,6 +738,41 @@ it is advanced modulo 65,536 as follows:
 ```text
 gate = (((gate + 0x9248) rotate-right 3) XOR 0x9248) + 0x0011
 ```
+
+The following current-state vector makes the position convention and tap
+independently testable. Coordinates are `(x,y)`; entries with `y >= 49` are
+walked and polled but do not restore a pixel or decrement the publication
+countdown.
+
+| ordinal | current state | coordinate | in bounds? |
+|---:|---:|---:|:---:|
+| 1 | `0x0001` | `(1,0)` | yes |
+| 2 | `0x3500` | `(32,47)` | yes |
+| 3 | `0x1A80` | `(160,23)` | yes |
+| 4 | `0x0D40` | `(224,11)` | yes |
+| 5 | `0x06A0` | `(256,5)` | yes |
+| 6 | `0x0350` | `(272,2)` | yes |
+| 7 | `0x01A8` | `(136,1)` | yes |
+| 8 | `0x00D4` | `(212,0)` | yes |
+| 9 | `0x006A` | `(106,0)` | yes |
+| 10 | `0x0035` | `(53,0)` | yes |
+| 11 | `0x351A` | `(58,47)` | yes |
+| 12 | `0x1A8D` | `(173,23)` | yes |
+| 13 | `0x3846` | `(6,50)` | no |
+| 14 | `0x1C23` | `(3,25)` | yes |
+| 15 | `0x3B11` | `(145,52)` | no |
+| 16 | `0x2888` | `(8,36)` | yes |
+
+At the normal 128-position cadence, the first publication occurs on state
+iteration 145: current state `0x0654`, coordinate `(180,5)`. For a freshly
+loaded driver, the current gate at that point is `0x15AA`; its low nine bits
+are 426, so it fails the first threshold of 397 and the publication is silent.
+The second publication occurs on iteration 296 at state `0x2562`, coordinate
+`(66,33)`, with current gate `0x7283`; its low nine bits are 131, so it passes
+the second threshold of 394. This same state and gate form the first
+publication at the 256-position cadence, where the threshold is 397 and the
+result is also a burst. These gate values are tested before the iteration's
+post-poll gate advance.
 
 For the first uninterrupted ignition after driver load, this gives 48 then 53
 speaker bursts across the two normal 128-position passes, or 35 then 33 across
