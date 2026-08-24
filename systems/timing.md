@@ -141,9 +141,17 @@ baseline CPU — which brings a step nearer **10.5 ms**. Across the flourish's
 **0.9 to 1.4 seconds**, plus the per-row keyboard-probe overhead of each
 repaint.
 
-For a v1 engine the recommended target is **14 ms per presentation step**,
-giving a flourish of about **1.2 seconds**. Implement it as a wall-clock
-requirement per section 5.3, not as a calibration emulation.
+For a v1 engine the normative compatibility cadence is **14 ms per
+presentation step**. An uninterrupted 85-step flourish therefore has a nominal
+duration of **1.190 seconds**. Implement it as a wall-clock requirement, not as
+a calibration emulation: one logical presentation per deadline, in order, with
+no multi-step catch-up.
+
+Deterministic scheduler tests should use exact 14 ms logical deadlines. For a
+real captured frontend, host scheduling jitter is acceptable when the mean
+step duration is within **14 ms ± 1 ms** and the uninterrupted whole flourish
+is within **1.190 s ± 0.100 s**. These tolerances cover publication timing only;
+the 85-frame raster sequence and abort snap to the completed frame remain exact.
 
 Anything that claims the flourish is 67 groups long, one BIOS tick per group,
 or about 3.7 seconds total is wrong on all three counts and is withdrawn.
@@ -158,8 +166,10 @@ drawn, so the flourish has to fit comfortably inside the remaining interval. A
 is.
 
 Because the flourish is calibration-paced rather than tick-paced, it is also
-the one intro phase whose duration genuinely varied with host speed in the
-original. Treating it as a fixed wall-clock target is a deliberate
+the one intro phase whose duration genuinely varied with CPU generation,
+memory/video timing, and emulator configuration. A timed capture can describe
+one reference setup, but there is no single historical wall-clock value encoded
+by the program. Treating it as a fixed wall-clock target is a deliberate
 modernisation, not a reproduction.
 
 A keystroke ends the flourish early, but not by cutting to the next phase
@@ -167,11 +177,12 @@ mid-picture: the driver presents the completed final frame once before
 returning, so the abort is visible as an instant snap to the finished mark
 rather than as a partial one. See `intro.md` section 3.
 
-**Residual.** The 10.5–15.8 ms bracket is derived from the calibration contract
-and instruction-cost reasoning, not from a timed capture. A measured
-wall-clock figure from an instrumented run would replace the bracket with a
-single number; until then, treat 14 ms per step as the target and the bracket
-as the tolerance.
+**Compatibility decision.** The 10.5–15.8 ms bracket remains historical
+instruction-cost context, not an acceptance range and not a placeholder for a
+future universal measurement. The final clean-engine contract is the 14 ms
+cadence and capture tolerance above. No timed capture is required to replace
+it, and an implementation must not describe 14 ms as a measured original-
+hardware constant.
 
 ### 5.2 Slow-CPU Gate And Override
 
