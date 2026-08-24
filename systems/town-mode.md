@@ -46,11 +46,11 @@ The active floor is loaded into a single 32×32 byte buffer in the resident data
 The on-disk tile bytes are *terrain plus markers*. Most cells contain a tile ID — wall, floor, grass, water, door, chair, ladder — that the renderer paints directly. A handful of special tile values are *markers* that the location-load pipeline and NPC scheduler harvest, rewrite, or consume:
 
 - **NPC start markers** (`0x48` or `0x49`) record where each rostered NPC begins. The location-load pass walks the grid, finds these markers, and records each marker's coordinates and exact marker byte.
-- **Spawn markers** (the literal asterisk character byte) record one or two map-entry coordinates. The first asterisk encountered is the *primary* spawn (typically the entrance from the overworld); the second is the *secondary* (typically an alternate exit or a stairway-up landing). What the engine does when a page carries no asterisk is an open item: earlier wording here named a per-scene default coordinate, and that rule is retracted — it belongs to the resident-Shadowlord install pass, not to player placement. See `formats/location-dat.md` Section 6.
+- **Night-beacon indoor light sources** (`0x2A`, displayed as an asterisk) record coordinates for the rotating light beam, not map-entry positions. The first hit fills beacon-source slot one; every later hit overwrites slot two. Shipped data uses the byte only on four dwelling-class lantern floors and never on a town, castle, or keep floor. Player entry is independently fixed at column 15, row 30, floor zero; see Section 5 step 6 and `formats/location-dat.md` Section 6.
 - **Farmland and orchard terrain** (the standing-crop and fruit-tree tile values) is not marker data at all, but in a settlement that is currently hiding a Shadowlord it is rewritten in place by a blight pass at the end of the map load. In every other settlement that pass does nothing. See the Shadowlord blight below.
 - **NPC floor-link markers** (`0xC8` and `0xC9`) are consumed by the NPC scheduler's tile-ID pathfinder after map load. They must remain distinguishable in the live tile buffer for the schedule processor.
 
-Marker processing is in-memory only: the on-disk `.DAT` floor is unchanged. By the time normal play begins, runtime passes have harvested the markers needed for spawn/NPC state and may have rewritten selected marker cells, while visible actors are represented through the dynamic sprite layer. Some markers, notably the `0xC8`/`0xC9` floor-link pair, remain meaningful to runtime consumers after the initial load pass.
+Marker processing is in-memory only: the on-disk `.DAT` floor is unchanged. By the time normal play begins, runtime passes have harvested NPC-start and beacon-light coordinates and may have rewritten selected marker cells, while visible actors are represented through the dynamic sprite layer. Some markers, notably the `0xC8`/`0xC9` floor-link pair, remain meaningful to runtime consumers after the initial load pass.
 
 ### Shadowlord blight on farmland and orchards
 
@@ -243,7 +243,7 @@ Entering a town is a single setup pass that runs once per entry, before the per-
    landing paths. **Withdrawn** - those slots are the beacon's light sources,
    not landing points, and no town floor carries the byte.
 
-   **Retraction, and an open item.** This step was previously called "player
+   **Correction and established entry cell.** This step was previously called "player
    attach" and was said to give the player a phantom NPC entry — a high-indexed
    NPC slot with a stationary three-identical-waypoint schedule — spawned at
    `(15, per-scene row, 0)`. All of that is withdrawn. Every detail came from
@@ -998,12 +998,18 @@ town-loop mechanism.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
-- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and calls the Shadowlord install — `u5-decomp/functions/TOWN_OVL/` (its own step describing the coordinate guard is stated inverted there and is superseded by the 2026-08-22 repair-round correction in the install's note).
+- The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and calls the Shadowlord install — `u5-decomp/functions/TOWN_OVL/`.
 - The top-level dispatcher and resident NPC-location warp helper that supply
   the traced fresh-versus-preserving town setup arguments -
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The per-turn loop that reads commands, dispatches, runs the schedule walker, advances time, and toggles gates at the dawn/dusk hour boundaries — `u5-decomp/functions/TOWN_OVL/`.
-- The per-location map loader, the marker harvest, and the dawn/dusk gate substitution — `u5-decomp/functions/TOWN_OVL/`.
+- The fixed `(15, 30, 0)` town-family entry writer, the per-location map
+  loader's separate NPC/beacon coordinate harvest, the beacon consumer, and the
+  shipped `0x2A` location-file census —
+  `u5-decomp/functions/OUTSUBS_OVL/`,
+  `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/formats/`, and
+  `u5-decomp/notes/`.
 - Source provenance: derived from private analysis notes
   `u5-decomp/functions/TOWN_OVL/` and
   `u5-decomp/notes/` -- the

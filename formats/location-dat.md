@@ -278,7 +278,7 @@ The two values are directional and not interchangeable. `0xC8` is the ascend lin
 
 ### Runtime marker handling
 
-Marker handling is in-memory only. The original on-disk file is unchanged. Implementations should treat marker bytes as authored annotations, not as ordinary tiles. The traced loader always harvests the NPC and asterisk markers into runtime coordinate slots; companion passes may then rewrite selected marker cells in the runtime buffer, while the NPC floor-link markers are runtime pathfinding goals. The exact visual cleanup is therefore a property of the town load and schedule pipeline rather than of the static file format alone.
+Marker handling is in-memory only. The original on-disk file is unchanged. Implementations should treat marker bytes as authored annotations, not as ordinary tiles. The traced loader harvests NPC start markers into NPC-placement coordinates and `0x2A` bright-light markers into the night beacon's two source-coordinate slots. Those are separate consumers: the beacon slots never place the player. Companion passes may then rewrite selected marker cells in the runtime buffer, while the NPC floor-link markers remain runtime pathfinding goals. The exact visual cleanup is therefore a property of the town load and schedule pipeline rather than of the static file format alone.
 
 ## 7. Multi-floor handling
 
@@ -313,11 +313,13 @@ Bytes 0 through 31 (decimal) are the first row of the ground floor — the row a
 - A floor tile, painted as interior flooring, walkable.
 - A door tile, painted as a closed door, openable via the O-Open command.
 - An NPC start marker (`0x48` or `0x49`), to be harvested as an NPC coordinate.
-- An asterisk byte (`0x2A`) - **not** a spawn marker; it is the night beacon's
-  indoor light source, and it occurs only on the four dwelling-class lantern
-  floors. See the corrected subsection above.
 
-A typical first row of an outdoor town is dominated by city-wall tiles (the town's perimeter) interspersed with a single gate tile (the entrance) and possibly an NPC start marker representing a guard standing at the gate. The asterisk is usually placed at the cell immediately inside the gate, so that the player arrives directly on the threshold.
+Tile `0x2A` is deliberately absent from that list: the exhaustive shipped-data
+census finds no occurrence anywhere in `TOWNE.DAT`, including this page. It
+appears only on the four dwelling-class lantern floors described above, where
+it supplies the night beacon rather than an arrival point.
+
+A typical first row of an outdoor town is dominated by city-wall tiles (the town's perimeter), with a gate elsewhere in the perimeter and possibly an NPC start marker representing a guard. The player's arrival is not inferred from the gate or any byte in this row. The overworld entry path places the party at column 15, row 30, floor zero for every town-family location; `systems/town-mode.md` Section 5 step 6 owns that behavior.
 
 Continuing past byte 31, the next thirty-two bytes (bytes 32 through 63) are the second row, and so on. After 1,024 bytes (the last cell of row 31, column 31) page 1 begins, which for this file is the same town's floor `+1`. Page 2, at byte 2,048, is the *next* town's floor zero — but only because this class file happens to pair its towns that way. In `DWELLING.DAT` and `CASTLE.DAT` the location boundaries fall elsewhere, so a reader must consult Section 4.1 rather than counting in 2,048-byte steps.
 
@@ -630,15 +632,21 @@ or visual parity.
 
 The format described above was derived from the analysis notes listed below. None of the byte offsets, function addresses, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed file structure and observed runtime behaviour.
 
-- The first-pass survey of every map and arena file shipped with the game, including per-file size verification, the four-class location partition, the two-floor-per-block reading, the verified `MISCMAPS.DAT` section sizes, and cross-file consistency checks — `u5-decomp/formats/maps.md`.
+- The first-pass survey of every map and arena file shipped with the game, including per-file size verification, the four-class location partition, the two-floor-per-block reading, the verified `MISCMAPS.DAT` section sizes, and cross-file consistency checks — `u5-decomp/formats/`.
 - The Blackthorn audience cutscene note that verifies the first cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/BLCKTHRN_OVL/`.
 - The endgame entry note that verifies a later cutscene-map record load from `MISCMAPS.DAT` — `u5-decomp/functions/ENDGAME_OVL/`.
-- The FONT overlay overview and Return-to-View trace that bind the four 4-row by 19-column map strips plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/_OVERVIEW.md` and fresh local FONT helper analysis.
-- The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/rtv_preview_pixel_geometry_2026-08-22.md` and `u5-decomp/notes/rtv_command_schedule_and_reveal_2026-08-22.md`.
+- The FONT overlay overview and Return-to-View trace that bind the four 4-row by 19-column map strips plus the following command stream to the intro `R` preview path — `u5-decomp/functions/FONT_OVL/` and fresh local FONT helper analysis.
+- The preview's framebuffer geometry, plane split, per-command tick schedule and column reveal — `u5-decomp/notes/`.
 - The generic file-read helper note confirming these `.DAT` reads are plain uncompressed file slices — `u5-decomp/functions/ULTIMA_EXE/`.
 - The town-mode location loader that opens the per-class file, computes the per-floor offset, reads exactly 1,024 bytes into the working buffer, and runs the marker harvest and dawn/dusk gate passes — `u5-decomp/functions/TOWN_OVL/`.
+- The `0x2A` bright-light marker's beacon-coordinate consumer, exhaustive
+  shipped-file census, and separation from the fixed town-family entry writer —
+  `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/formats/`, and
+  `u5-decomp/notes/`.
 - Source provenance: derived from private analysis note
-  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md`. That note supplies the
+  `u5-decomp/notes/`. That analysis supplies the
   complete per-scene base floor-page binding of Section 4.1, the sign convention
   and the on-screen text that confirms it, the exact page run and floor range of
   every location, the exhaustive sixty-four-page partition check, the inventory
@@ -650,7 +658,7 @@ The format described above was derived from the analysis notes listed below. Non
   Section 2.
 - Source provenance: derived from private analysis notes
   `u5-decomp/functions/TOWN_OVL/` and
-  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md` -- the
+  `u5-decomp/notes/` -- the
   farmland/orchard blight, its resident-Shadowlord gate, the direction of both
   substitutions, the seven-in-eight rate, the day-of-month seed, and the clock
   re-seed that follows the pass. That note's earlier "grass/path texturing",
@@ -661,6 +669,6 @@ The format described above was derived from the analysis notes listed below. Non
 - The facing-sensitive town stair family and floor-change reload path -
   `u5-decomp/functions/TOWN_OVL/`, cross-checked
   against `u5-decomp/functions/TOWN_OVL/`.
-- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, their ascend/descend identity, and the town step handler's separate `0x8C` trigger — the path-probe, flood-fill workspace and floor-transition-gate notes under `u5-decomp/functions/NPC_OVL/`, the town step-interaction note under `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/notes/npc_look_talk_trigger_retrace_2026-08-22.md`, and `u5-decomp/formats/maps.md`.
+- The NPC pathfinder notes that identify `0xC8` and `0xC9` as tile-ID goals in the live tile buffer, their ascend/descend identity, and the town step handler's separate `0x8C` trigger — the path-probe, flood-fill workspace and floor-transition-gate notes under `u5-decomp/functions/NPC_OVL/`, the town step-interaction note under `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/notes/`, and `u5-decomp/formats/`.
 - The overworld main loop providing the cross-mode contract under which the location loader is invoked, including the scene-byte-driven mode switch — `u5-decomp/functions/MAINOUT_OVL/`.
 - The overworld chunk loader establishing the convention that per-class files are addressed by filename pointer through a small resident table — `u5-decomp/functions/OUTSUBS_OVL/`.
