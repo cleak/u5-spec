@@ -237,11 +237,13 @@ population sources.
   and `+7` outside those roles are not fully enumerated.
 - **Runtime readers of mirror files.** OUTSUBS owns a traced world-plane
   filename helper that chooses `BRIT.OOL` for the surface and `UNDER.OOL` for
-  the underworld. The town-entry path passes that selected filename to the
-  resident object-table refresh/setup helper before handing off to town mode;
-  the confirmed falls transition names both per-plane files while changing the
-  party to the underworld plane. The remaining census is only for additional
-  mirror-file callers outside these traced overworld transition paths.
+  the underworld. Town entry writes the full live table to that selected file;
+  town exit reloads the destination plane's full table over the live table.
+  Both operations include slot zero and retain slot indices. Town actors are
+  never merged into the plane table. The confirmed falls transition names both
+  per-plane files while changing the party to the underworld plane. The
+  remaining census is only for additional mirror-file callers outside these
+  traced overworld transition paths.
 - **Surface population.** The clean surface seed is empty, so every surface
   object overlay entry is created during play. Enumerating the full set of
   gameplay sources that write surface records - vehicle parking, dropped items,
@@ -254,14 +256,16 @@ population sources.
 
 This spec is a cleanroom prose rewrite derived from the project notes below. It intentionally omits decompiled code, assembly, implementation addresses, and raw private offset tables.
 
-- First-pass save and `.OOL` survey, including file roles, sizes, record shape, seed observations, and the surface/underworld split: `u5-decomp/formats/saves.md`.
+- First-pass save and `.OOL` survey, including file roles, sizes, record shape,
+  seed observations, and the surface/underworld split: private analysis in
+  `u5-decomp/formats/`.
 - Save-handler operation order — the two per-plane reads that fill the staging
   halves, the entry-mode-gated single `UNDER.OOL` write-back, and the canonical
   `SAVED.GAM` / `SAVED.OOL` writes: re-derived 2026-08-22 directly from the
   shipped save overlay and from the two resident file wrappers it calls, whose
   read-versus-write identity was pinned by the DOS service each one issues and
   cross-checked against the load path's use of the same two wrappers. This
-  supersedes `u5-decomp/notes/dosbox_probes_2026-05-07.md` Probe 1 and the
+  supersedes the earlier private probe in `u5-decomp/notes/` and the
   "unconditional mirror writes, no per-plane read" reading previously carried
   here and in `u5-decomp/functions/CAST2_OVL/`, which had the
   direction of both per-plane transfers backwards.
@@ -271,6 +275,10 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 - OUTSUBS runtime mirror-file selection and transition consumers:
   `u5-decomp/functions/OUTSUBS_OVL/`, and
   `u5-decomp/functions/OUTSUBS_OVL/`.
+- The town round-trip's whole-table write/reload direction and slot-zero
+  inclusion are derived from private analysis in
+  `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/notes/`.
 - Active-object runtime model used to interpret each eight-byte record: `u5-spec/systems/active-objects.md`.
 - Save/load system prose used for cross-checking lifecycle semantics: `u5-spec/systems/save-load.md`.
 - Vehicle byte interpretation for ship boarding, X-it parking, and broadside

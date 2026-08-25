@@ -1387,8 +1387,12 @@ does not impose a separate cargo cap here. Loading preserves all class values
 without normalization. See `formats/saved-gam.md` Section 9.3 for the complete
 round-trip and unknown-value contract.
 
-The delivery pass, which runs once before the first overworld turn after the
-purchase, does the following:
+The delivery pass runs once before the first overworld turn after the purchase.
+On a town exit, it runs only after the destination plane's canonical `.OOL`
+has replaced the live active-object table and outdoor setup has synchronized
+player slot zero to the fixed return coordinate and saved transport marker.
+The delivery is therefore added to the restored outdoor table rather than to
+the town table. It does the following:
 
 1. Acquire an active-object slot through the ordinary allocator described in
    `systems/active-objects.md`.
