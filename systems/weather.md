@@ -142,7 +142,9 @@ four-cardinal Rel Hur prompt, but the shared setter supports it for callers
 that deliberately pass a calm target. Calling the setter with both old wind and
 new wind Calm is a no-op. Any other accepted transition plays the wind sound
 before storing and displaying the resulting wind state. Unrecognised target
-values do nothing.
+values do nothing. The sound variant is selected from the prior Calm/non-Calm
+state, not from the requested direction; `audio.md` gives the exact transition
+matrix and waveform recipe.
 
 Rel Hur should not:
 
@@ -332,8 +334,8 @@ The behavior described here was derived from cleanroom reading of the following 
   space, the resulting double-space rendering for Calm, East and West, the
   short-banner behaviour for out-of-range values, the erase rectangles used
   below the surface, and the correction that the banner is persistent chrome
-  rather than a message-log line are derived from private analysis note
-  `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked
+  rather than a message-log line are derived from private analysis under
+  `u5-decomp/notes/`, cross-checked
   against a fresh local re-read of the shipped executable and shared data
   overlay.
 - Existing cleanroom descriptions of time, magic, and overworld integration - `u5-spec/systems/time.md`, `u5-spec/systems/magic.md`, and `u5-spec/systems/overworld.md`.

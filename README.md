@@ -14,6 +14,11 @@ Each document explains one system or one file format clearly enough that an impl
 - `systems/` — One spec per coherent gameplay system (e.g., NPC schedules, combat, conversation engine).
 - `formats/` — One spec per data file format (e.g., TILES.16, SCHEDULE.DAT, *.TLK).
 
+Cross-cutting presentation contracts include
+[`systems/audio.md`](systems/audio.md) for the DOS PC-speaker effects and
+[`systems/timing.md`](systems/timing.md) for their calibrated and BIOS-tick
+cadence.
+
 ## Specification style
 
 Specs describe behavior and structure, not code. They should be:

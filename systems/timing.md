@@ -5,7 +5,8 @@
 This document covers the original engine's CPU-speed calibration used for short
 delays and display/audio pacing. It is separate from the in-game calendar,
 per-turn minute advancement, moon phases, torch duration, and vehicle timing
-tags, which are specified in `time.md`.
+tags, which are specified in `time.md`. The PC-speaker recipes that consume
+these timing classes are specified in `audio.md`.
 
 ## 2. Boot Calibration
 

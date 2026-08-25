@@ -523,7 +523,8 @@ These are machine-calibration-scaled busy loops, not BIOS-timer durations.
 Sound-disabled play still executes the rumble and both sweep timing loops for
 all eight rows. The shared presentation polls no input, does not advance the
 gameplay clock, and blocks until both the sound sequence and restorative XOR
-finish.
+finish. `systems/audio.md` owns the exact pitch ranges and all nine shared
+potion/wind envelope parameter rows, including the wind-only ninth variant.
 
 #### Orange combat sleep presentation
 

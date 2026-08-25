@@ -137,18 +137,24 @@ The public name `make_tag` in some private notes is misleading. The routine is
 the engine-wide PRNG range primitive. A call such as `random(1, 30)` consumes one
 state advance and returns one value from the inclusive 30-sided range.
 
-**The audio jitter source is a separate stream and must not be conflated with
-the game PRNG.** The PC-speaker rumble effect carries its own private copy of
-the same state-advance formula operating on its own state word. That word ships
-with a non-zero value in the initialised data image and is *never* seeded by
-anything, so speaker jitter is fully deterministic from boot, is identical on
-every run, and shares nothing with game-logic randomness. Conversely, the
-clock-sampling helper described in section 3 is not an audio helper at all:
-every one of its uses feeds the game PRNG's seed primitive. A deterministic
-port may replace the speaker jitter stream freely without affecting gameplay
-RNG parity, but must not reuse the game PRNG for it, and must not skip the
-clock seeding of the game PRNG on the mistaken assumption that it is
-presentation-only.
+**The random-rumble audio jitter source is a separate stream and must not be
+conflated with the game PRNG.** That effect carries its own private copy of the
+same state-advance formula operating on its own state word. The word ships with
+a non-zero value in the initialised data image and is never seeded, so this
+particular speaker jitter is deterministic from boot and shares nothing with
+game-logic randomness. A deterministic port may replace that stream without
+affecting gameplay RNG parity, but must not reuse the game PRNG for it.
+
+This separation does not apply to every randomized sound. The major-event
+full-viewport flash/rumble consumes one gameplay-PRNG draw for each of its
+1,856 drawing bands, including when sound is muted. Those draws are part of
+gameplay RNG parity and must be preserved even by a silent frontend. See
+`audio.md` for the event and mute contract.
+
+Conversely, the clock-sampling helper described in section 3 is not an audio
+helper at all: every one of its uses feeds the game PRNG's seed primitive. A
+compatible implementation must not skip that seeding on the mistaken
+assumption that it is presentation-only.
 
 The generator is entirely integer arithmetic. No floating point, heap allocation,
 or formatted I/O is involved.
