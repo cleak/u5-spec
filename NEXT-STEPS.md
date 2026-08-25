@@ -18,6 +18,17 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**Addendum — 2026-08-25, PC-speaker effect contract.** Issue #145 is covered
+by `systems/audio.md`. The public contract now centralizes the procedural
+PC-speaker primitives, calibrated CPU versus BIOS timing, Ctrl-S mute behavior,
+sound-only versus gameplay-random jitter, all nine shared potion/wind/spell
+envelope rows, and the exact priority boundaries for WD.BIT ignition, accepted
+potions, accepted wind changes, and blocked steps. It also inventories the
+confirmed trap, spell, dungeon-decoration, theft, ring, summon/possession,
+moongate, Stonegate, Return-to-View, and endgame effects and explicitly keeps
+ordinary menus, typing, successful movement, generic pickup, and generic
+successful commands silent.
+
 ## Current state — 2026-08-22
 
 The engine issue queue is empty (ninety-six filed, ninety-six closed). The

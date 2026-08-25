@@ -1239,7 +1239,7 @@ Movement and attack share a single primitive, called once per actor turn. The pr
    - **Hostile actor at the destination:** run the attack roll. Hit/miss decision, raw damage, defense subtraction, and the target HP/status writes are computed from the attacker/target combat state, class stats, cached party defense bytes, active effects, and random rolls. The formerly suspected data-region lookup is not a combat damage or hit-chance matrix.
    - **Friendly actor or wall at the destination:** treat as blocked.
 5. **On success**, the primitive commits the new positions and returns the completed command to the actor dispatcher.
-6. **On failure**, narrate "Blocked!" — a short blocked-message and a beep tone are emitted; the actor stays in place.
+6. **On failure**, narrate "Blocked!", play the 165 Hz blocking tone for 200 calibrated units, and leave the actor in place. The exact mute and timing behavior is specified in `audio.md`.
 
 Placed-field contact does not run inside this primitive. It belongs to the
 round walker's common post-dispatch tail. After either per-actor handler returns,
