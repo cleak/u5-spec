@@ -622,13 +622,35 @@ A handful of *scripted* encounters bypass the random system. Pirate ships, for e
 
 A small set of tile classes triggers special handling in the per-turn block, recognised by the post-action tile probe at step 6b. Each class corresponds to a small handler that may print a prompt, dispatch into another mode, or apply a status effect:
 
-- **Town/keep/dwelling/castle entrance.** When the player's last action was Enter (E), the entry helper compares the party's current overworld coordinate against the first thirty-two rows of the DATA.OVL-derived `WorldLocationTable`. Row zero maps to scene byte one, row one maps to scene byte two, and so on through row thirty-one mapping to scene byte thirty-two. The scene-to-name and scene-to-file-family binding is published in `catalogs/gazetteer.md` and `formats/npc.md`.
+- **Town/keep/dwelling/castle entrance.** E-Enter first classifies the live
+  tile under the party. A town-helper tile selects its narration class and then
+  compares the party coordinate against the first thirty-two rows of the
+  `WorldLocationTable`. Row zero maps to scene byte one through row thirty-one
+  mapping to scene byte thirty-two. The class is not inferred from the row or
+  storage family, and the complete stock join is in `catalogs/gazetteer.md`
+  Section 5.1.
 
-  On a match, the original path emits the location-entry prompt, performs any needed surface-disk availability check, clears or reseeds the active-object table, writes the scene byte to `matched_row + 1`, and directly seeds the party at **column 15, row 30, floor zero**. The following town entry pass preserves that position; it does not derive a landing cell from location data. See `systems/town-mode.md` Section 5 step 6. The earlier per-scene-row and phantom-player-NPC readings belong to the resident Shadowlord install and are withdrawn. If no row matches, E-Enter does not change mode.
+  On a match, the original path finishes the class/name narration, performs any
+  required disk-availability loop, writes the current plane's full live
+  active-object table to its `.OOL`, then writes the scene and seeds the party
+  at **column 15, row 30, floor zero**. The following town entry pass preserves
+  that position; it does not derive a landing cell from location data. If no
+  row matches, the helper prints `What town?`, stays outdoors, and returns an
+  acted result. Exact transcripts and the extension failure policy are in
+  `systems/commands.md` Section 5.5.
 
 - **Dungeon entrance.** E-Enter compares the party's current coordinate against rows thirty-two through thirty-nine of the same DATA.OVL-derived `WorldLocationTable`. Row thirty-two maps to `DUNGEON:0` / scene byte thirty-three, row thirty-three maps to `DUNGEON:1` / scene byte thirty-four, and so on through row thirty-nine mapping to `DUNGEON:7` / scene byte forty. The name and data-record order is Deceit, Despise, Destard, Wrong, Covetous, Shame, Hythloth, Doom.
 
-  On a match, the engine emits the dungeon-entry prompt, loads the selected 512-byte `DUNGEON.DAT` record into the active dungeon tile buffer, writes the scene byte to `matched_row + 1`, and seeds dungeon-mode level, X/Y, and facing. Surface-plane entry lands at level `0`, X `1`, Y `1`, facing east. Underworld-plane entry into non-Doom dungeons lands at level `7`, X `7`, Y `7`, facing west. Doom uses the surface-style entry seed even when reached from the underworld. This seeding belongs to the walk-in entry path only; the load-game path never writes the dungeon facing, so a resumed save keeps whatever facing it recorded. If no dungeon row matches, E-Enter does not change mode.
+  On a match, the engine finishes the dungeon narration, writes the current
+  plane's live active-object table to its `.OOL`, loads the selected 512-byte
+  `DUNGEON.DAT` record, writes the scene byte to `matched_row + 1`, and seeds
+  level, X/Y, and facing. Surface-plane entry lands at level `0`, X `1`, Y `1`,
+  facing east. Underworld-plane entry into non-Doom dungeons lands at level `7`,
+  X `7`, Y `7`, facing west. Doom uses the surface-style entry seed even from
+  the Underworld. This seeding belongs to walk-in entry only; direct/debug scene
+  construction and load-game entry do not print E narration. If no dungeon row
+  matches, the helper prints `What dungeon?`, stays outdoors, and returns an
+  acted result.
 
   Two gates sit in front of that seed. **Transport:** only a party travelling on
   foot may enter; a mounted, sailing, or flying party is refused with the

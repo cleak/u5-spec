@@ -2547,6 +2547,16 @@ combat ambush-reveal preemption are explicit. The save/load boundary keeps the
 top-down stamps visit-local, and both `0x44` and `0x45` resolve to cobble through
 LOOK2 while remaining distinct Push-family matching bytes.
 
+**Current E-Enter narration cleanup:** 2026-08-25 - commands, overworld, and
+gazetteer docs now publish the complete forty-row stock join from scene/key to
+accepted plane/coordinate, live-tile narration class, exact visible
+continuation, centered-name placement, and helper guard. The contract also
+closes the town/dungeon no-coordinate failures, opposite-helper guard failure,
+missing-sidecar-class policy, sealed-mouth behavior, acted/no-action results,
+and narration ordering before `.OOL` persistence and destination setup. It
+withdraws the earlier claim that successful entry omits the proper location
+name.
+
 **Current P-Push stamp-catalog narrowing:** 2026-05-13 - `systems/commands.md`,
 `systems/doors-and-z-transitions.md`, and extraction now use the LOOK2-backed
 tile catalog for the generic stamp: `0x44` is cobble. The only P-Push

@@ -301,9 +301,10 @@ each followed by a newline. See `dungeon-mode.md` section 9.
 
 ### 5.5 Entry narration and the location line
 
-The original **does** print a line on entering a location from the overworld,
-but it is not a name-and-coordinates line. `E`nter prints the word `Enter`, a
-space, and a noun naming the **kind** of place, then a newline:
+The overworld E handler first prints exactly `Enter_`, where `_` denotes one
+ASCII space. It then reads the live tile under the party. That tile selects the
+narration class and one of the two coordinate-table halves; the storage-family
+key does not select the noun.
 
 | Underfoot location class | Printed after `Enter_` |
 |---|---|
@@ -315,21 +316,65 @@ space, and a noun naming the **kind** of place, then a newline:
 | cave | `cave` |
 | mine | `mine` |
 | dungeon | `dungeon` |
-| ruins | `ruins` |
+| ruins | `ruins` with no newline; this is a direct non-transition arm |
 | lighthouse | `lighthouse` |
 | Codex shrine | `the_Shrine_of_the_Codex!\n` |
-| virtue shrine | `the_shrine_of\n` followed by the virtue's name, chosen by matching the party's overworld coordinates: Honesty, Compassion, Valour, Justice, Sacrifice, Honor, Spirituality, Humility |
+| virtue shrine | `the_shrine_of\n` followed by the coordinate-matched virtue name and `\n`. The seven stock surface cells are Honesty, Compassion, Valour, Justice, Sacrifice, Honor, and Humility; Spirituality has no stock surface `0x19` cell. |
 | Blackthorn's palace | `the_palace_of_Blackthorn!` |
 | Lord British's castle | `the_Castle_of_Lord_British!` |
-| anything else | `What?\n`, and the command consumes no turn |
+| anything else | `What?\n`, producing `Enter_What?\n`; no action |
 
-**The town's proper name is never printed, the dungeon level is never printed,
-and coordinates are never printed.** An engine line of the form
-`Entered <name> level N at (x, y).` has **no counterpart in the original** and
-should be dropped or moved behind a debug flag. Descending or climbing inside a
-dungeon prints only the climb echo and a one-word result; the only thing that
-reflects the new level is the level label in the dungeon frame's top border
-band, specified in `dungeon-mode.md` section 4.1.
+For most successful stock rows, the noun is followed by `\n\n`, the resident
+uppercase proper name on a horizontally centered line, and `\n`. The centering
+controls reposition the cursor; they emit no glyph and no ASCII padding bytes.
+The three unnamed dwelling rows print only `hut\n`. The Lord British and
+Blackthorn rows also omit the separate name line because their tile-selected
+phrases already contain the name. Non-Doom dungeons print the same centered
+uppercase name envelope; Doom success is only `Enter_cave\n`.
+
+The authoritative forty-row plane, coordinate, class, exact continuation,
+center column, and live-tile guard table is in `catalogs/gazetteer.md` Section
+5.1. A line such as `Entered CASTLE:0 from BRITANNIA` or one containing raw
+coordinates has no counterpart in the original and must not appear in the
+production transcript.
+
+#### Entry failure, extension, and ordering contract
+
+The two coordinate helpers have different no-match tails:
+
+| Situation | Exact command transcript | Echo relationship | Result |
+|---|---|---|---|
+| Town-helper tile, but no row 1..32 matches | `Enter_<class>\nWhat_town?\n` | The live-tile class continues the normal `Enter_` prefix; the refusal follows on the next line | Acted; ordinary overworld turn |
+| Dungeon-helper tile, but no row 33..40 matches | `Enter_<class>\nWhat_dungeon?\n` | Same envelope, with the dungeon-helper refusal | Acted; ordinary overworld turn |
+| Live tile is not an accepted E-Enter tile | `Enter_What?\n` | `What?\n` continues the normal prefix on the same line | No action |
+| Custom clean sidecar row has no narration class | `Enter_What?\n` | Treat the incomplete extension row as unrecognized; do not derive a noun from its key, coordinate, or storage family | No action; no transition |
+| Dungeon row matches, but the party is not on foot | `Enter_<class>\nOn_foot!\n` | The transport refusal follows the tile-selected class | Acted; no transition |
+| Doom row matches before all three Shadowlords are destroyed | `Enter_cave\nAttacked_at_entrance!\n` | Doom omits its proper-name line; the refusal follows `cave` | Acted; no transition; spawn the entrance ambush |
+
+A coordinate and narration class are independent inputs. If a row matches and
+the live tile is a different member of the **same** helper set, entry still
+succeeds and the actual tile's noun is printed; there is no expected-class
+comparison. If the live tile selects the opposite helper set, that helper does
+not find the coordinate and prints its corresponding `What town?` or `What
+dungeon?` refusal. This compatibility edge is why custom sidecar rows must name
+their narration class explicitly.
+
+The sealed dungeon-mouth tile `0xDF` is not an E-Enter tile and is also
+impassable. Ordinary play cannot stand on it; a forced/debug invocation prints
+`Enter_What?\n`, reports no action, and never reaches dungeon narration.
+
+All successful entry narration is emitted **before** disk availability work,
+the canonical write of the current plane's full live active-object table to its
+`.OOL`, and the destination scene/arrival writes. Dungeon entry reads the
+selected dungeon record after the `.OOL` write and before installing its scene.
+A file retry therefore occurs after the narration is already visible. Direct or
+debug construction of an interior/dungeon scene prints no entry narration,
+because no E-Enter handler ran.
+
+A successful scene transition exits the overworld loop before ordinary
+post-action time and cleanup. Descending or climbing inside a dungeon prints
+only the climb echo and a one-word result; the new level appears in the dungeon
+frame label specified in `dungeon-mode.md` Section 4.1.
 
 Two dungeon-specific narration lines do exist:
 
@@ -342,8 +387,8 @@ The `H`-Hole-up family carries its own literals: `Hole_up_&_` plus
 land, `Sails_must_be\n` plus `lowered!\n\n` and `On_land_or_ship!\n\n` for
 its refusals, and the prompts `For_how_many_hours?_(1-9)_`,
 `\nWilt_thou_set_a_watch?_` (answered `Yes\n\n` or `No\n\n`),
-`Who_will_stand_guard?_` and `None_posted!\n\n`. `On_foot!\n` is the
-Attack-family on-foot refusal.
+`Who_will_stand_guard?_` and `None_posted!\n\n`. `On_foot!\n` is shared by
+the Attack-family and dungeon-entry transport refusals.
 
 ### 5.6 Selection prompts and the cancel word
 
