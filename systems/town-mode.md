@@ -964,6 +964,59 @@ Boundary-exit attempts have these exact turn effects:
 | Cancel (Escape) | Exactly the same refusal outcome as `N` | Consumes one normal town turn |
 | Any other prompt key | Stay in the modal prompt and wait for another key | No separate turn |
 
+### 15.1 Transport and outdoor-object round trip
+
+Town-family entry has **no transport-marker gate**. If the current terrain and
+fixed location coordinate resolve to a town-family scene, every saved transport
+family takes the same entry path. Entry does not rewrite the marker, separate
+the party from a vehicle, or change a vehicle's hull or carried-skiff state.
+
+| Entering family | Transport-specific refusal | In-town marker | Marker after accepted exit | Outdoor-object effect |
+|---|---|---|---|---|
+| Foot | None | Unchanged | Unchanged | Whole-table save on entry; whole-table reload on exit |
+| Horse | None | Unchanged | Unchanged | Same |
+| Magic carpet | None | Unchanged | Unchanged | Same |
+| Frigate, furled or hoisted, in any facing | None | Unchanged | Unchanged | Same; hull and carried-skiff bytes survive with slot zero |
+| Skiff, in any facing | None | Unchanged | Unchanged | Same |
+
+A successful entry changes the scene before the overworld post-action gate, so
+it consumes no overworld turn. There is no transport-refusal branch and hence
+no transport-specific refusal cost. A recognized town-family Enter whose
+location-coordinate lookup fails to transition remains an ordinary consumed
+overworld action: it advances the clock by two minutes and runs the normal
+outdoor post-action work.
+
+The object-table handoff is ordered and replacing, not merging:
+
+1. Before installing the interior scene and coordinates, entry writes the
+   entire current 32-record outdoor table to the current plane's canonical
+   `.OOL`. Slot zero and all seven of its other bytes are included.
+2. Fresh town setup clears live slots 1 through 31, preserves slot zero, and
+   populates town actors. These town records are visit-local and never merge
+   into an outdoor plane table.
+3. Accepted boundary exit installs the fixed scene-table return coordinate and
+   chooses Britannia for every ordinary scene or the Underworld for scene
+   `0x19`. The resident dispatcher then replaces all 32 live records from that
+   destination plane's current canonical `.OOL`, including slot zero.
+4. Outdoor setup synchronizes slot zero's coordinate to the fixed party
+   coordinate and its type/frame to the unchanged transport marker. Its
+   auxiliary bytes, including Frigate hull, packed phase/direction, and
+   carried-skiff state, retain the reloaded `.OOL` values.
+5. If a shipwright acquisition is queued, the outdoor outer entry materializes
+   it in an ordinary free slot **after** the plane-table reload and slot-zero
+   synchronization, but before the first outdoor command. It is added to the
+   restored plane table; no town actor participates.
+
+No cached pre-entry coordinate, plane, transport marker, or in-memory object
+snapshot can override this sequence. The fixed return-coordinate table and the
+scene-`0x19` plane rule are authoritative. Loading a save whose active scene is
+a town uses the same path: load restores the marker and queue from `SAVED.GAM`
+and reconstructs the canonical plane mirrors from `SAVED.OOL`; the later exit
+then performs the same whole-table reload, slot-zero synchronization, and
+optional queued delivery as an uninterrupted town visit. No session-only
+pre-entry snapshot is required, so a normally produced town save exits
+byte-for-byte equivalently.
+
 **Withdrawn label.** Earlier revisions of this spec named "the town-family exit
 threshold, tile id `0x59`" as the trigger. That is withdrawn. Tile `0x59` is the
 telescope (`catalogs/tile-catalog.md`), a Look trigger that occurs in exactly
@@ -973,7 +1026,10 @@ prompt. No dedicated tile id triggers a town-family exit; the ordinary terrain
 predicate still gates whether the boundary prompt can appear, using the
 southeast-corner sample specified above.
 
-The town turn loop's per-turn epilogue checks the scene byte each iteration. When the byte clears, the loop returns to the main game loop, which reloads the overworld map, restores the overworld active-object table from the on-disk overlay, and resumes overworld mode at the location's overworld cell.
+The town turn loop's per-turn epilogue checks the scene byte each iteration.
+When the byte clears, the loop returns to the main game loop, which performs
+the ordered reload and synchronization above and resumes overworld mode at the
+location's fixed exterior cell.
 
 Exit is symmetric with entry: every per-location piece of state allocated during entry is cleared or freed; the next entry runs the full setup pass against the next location's data. There is no cross-town retention.
 
@@ -1111,6 +1167,11 @@ The behaviour described above was derived by reading the function and format not
   the exhaustive accessor sweep showing the mask has no other owners.
 - The reverse lookup from sprite slot to live NPC slot - `u5-decomp/functions/TOWN_OVL/`.
 - The stair/floor movement tail, vehicle movement presentation, movement command handler, and underfoot interaction handler - `u5-decomp/functions/TOWN_OVL/`. The Section 15 grid-boundary exit contract, its viewport terrain sample, true-coordinate occupancy query, and prompt turn accounting are derived from the town movement and turn-loop traces in `u5-decomp/functions/TOWN_OVL/`, the viewport and resident lookup analysis in `u5-decomp/functions/ULTIMA_EXE/`, and the independent synthesis in `u5-decomp/notes/`. Those traces also support the withdrawal of the earlier "exit threshold tile" reading.
+- Section 15.1's transport-independent entry, whole-plane `.OOL` handoff,
+  slot-zero synchronization, queued-delivery order, and town-save equivalence
+  are derived from private analysis in `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
 - The town Attack handler and the town K-Klimb handler - the corresponding command-handler notes under `u5-decomp/functions/TOWN_OVL/`. The climb-handler note predates the 2026-08-22 retrace and is filed under a different command name than the one it actually analyses; the retrace note above supersedes its labelling.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/`. That private analysis supplies the

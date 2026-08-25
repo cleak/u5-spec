@@ -672,13 +672,29 @@ Each mode's entry handler initialises the table according to its needs.
 
 **Town / dwelling / castle / keep entry.** Clears every slot except slot zero. Runs the per-NPC roster load (building runtime descriptors and schedules), the per-NPC initial-waypoint placement (calling the world-mutation helper for each NPC currently on the player's floor, allocating slots), and finally the Shadowlord install, which runs only in a town that currently hosts one of the three Shadowlords and is skipped entirely otherwise (`systems/town-mode.md` Section 13). Result: slot zero has the avatar and a handful of low-indexed slots have on-screen NPCs; in a hideout town one further active-object slot and the highest empty NPC index hold the resident Shadowlord. The entry pass writes no NPC-table entry for the player.
 
-**Overworld entry.** Slot zero is the player. The remainder of the table is populated from the on-disk overworld object overlay (per-map static object lists). Each non-zero record from the overlay is copied into a free slot. Before normal outdoor input begins, entry also consumes the one-shot pending vehicle-acquisition state used by shipwright purchases: if set, it allocates a free slot, writes the pending coordinates, initializes either a ship-family object with hull/skiff auxiliary state or a skiff-family object, and clears the pending state. Those pending coordinates are the fixed delivery cell of the shipwright that sold the vessel, published per row in `systems/shops.md` Section 8.7; they are not the town's entrance or exit cell. Random encounters, dropped items, and spawned creatures appear in the table over the course of overworld play and are pruned when they leave the player's viewport: the overworld per-turn walker checks each slot's distance from the scroll bases and frees slots more than thirty-two cells away.
+**Overworld entry.** The selected plane's current `.OOL` replaces the entire
+live table byte-for-byte; records are not compacted or copied into newly chosen
+slots. Slot zero is included. Outdoor setup then synchronizes slot zero's X/Y
+to the party globals and its type/frame to the saved transport marker while
+preserving its reloaded auxiliary bytes. Before normal outdoor input begins,
+entry also consumes the one-shot pending vehicle-acquisition state used by
+shipwright purchases: after that reload and slot-zero synchronization, it
+allocates a free ordinary slot, writes the pending coordinates, initializes
+either a ship-family object with hull/skiff auxiliary state or a skiff-family
+object, and clears the pending state. Those pending coordinates are the fixed
+delivery cell of the shipwright that sold the vessel, published per row in
+`systems/shops.md` Section 8.7; they are not the town's entrance or exit cell.
+Random encounters, dropped items, and spawned creatures appear in the table
+over the course of overworld play and are pruned when they leave the player's
+viewport: the overworld per-turn walker checks each slot's distance from the
+scroll bases and frees slots more than thirty-two cells away.
 
 **Dungeon entry.** Dungeon exploration does not populate the table for its first-person view. The dungeon loop reads the player's dungeon Z/X/Y and facing globals, renders from the loaded dungeon record, and does not run the town NPC scheduler or the overworld active-object walker. The active-object table remains part of global saved state, but it is not the dungeon renderer's actor list. If a dungeon room, trap, ambush, or attack enters combat, the combat framer takes over as described in Section 9.
 
 **Combat entry.** Section 9.
 
-Slot zero is preserved or written by the entry handler before any other slot is touched. No mode runs with slot zero empty.
+Slot zero is preserved, reloaded, or written by the entry handler before any
+new non-player object is allocated. No mode runs with slot zero empty.
 
 ## 11. Persistence in saves
 
@@ -802,6 +818,11 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/SJOG_OVL/`.
 - The NPC per-tick walker that drives schedule-based NPC movement and feeds the world-mutation helper — `u5-decomp/functions/NPC_OVL/`.
 - The save image's region holding the table and the on-disk overlay files — private analysis in `u5-decomp/formats/`.
+- The town round trip's whole-table `.OOL` write and reload, slot-zero
+  inclusion, outdoor synchronization, and shipwright-delivery ordering —
+  private analysis in `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/notes/`.
 - Source provenance: derived from private analysis in
   `u5-decomp/notes/` -- the confirmation
   that the directed step planner never compares the two axis distances (so
