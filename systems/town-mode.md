@@ -463,12 +463,13 @@ lifecycle, and turn results.
 
 **Push.** P-Push is the shared movable-tile command specified in
 `commands.md`. In town-family scenes it samples the adjacent cell relative to
-the avatar, accepts either a dynamic object or one of the known pushable static
-tile families, and then either pushes the object forward into a matching
-floor/occupancy stamp cell or pulls it backward into the avatar's old cell.
-Directional objects such as the four-facing furniture families are reoriented
-as they move. The command mutates the live tile buffer and advances the avatar
-one cell only after a push or pull succeeds.
+the avatar and accepts only an unoccupied member of the known pushable static
+tile families. An active-object record at the source takes the emphatic refusal
+and is never moved. An accepted static tile is either pushed forward into a
+matching floor/occupancy stamp cell or pulled backward into the avatar's old
+cell. Directional furniture families are reoriented as they move. The command
+mutates the live tile buffer and advances the avatar one cell only after a push
+or pull succeeds.
 
 **Get.** G-Get applied to an interactable tile (chest, body, dropped item) runs the per-tile-class get-handler. Chests prompt for a key on locked variants; bodies are searched for items; dropped items are picked up directly. The handler is shared across modes.
 

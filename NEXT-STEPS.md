@@ -2536,7 +2536,16 @@ traced weapon-dispatch path. The cleanup also removes the stale per-weapon
 accuracy-table gap: the traced dispatcher uses the shared combat to-hit helper
 after range/effect routing rather than a separate item hit-chance row.
 
-**Current P-Push cleanup:** 2026-05-12 - commands, town-mode, combat, and extraction docs now publish the shared P-Push movable-tile contract: direction prompt, door cleanup, pushable tile families, push versus pull branch, directional facing rewrite, live-tile mutation, avatar/actor advance, overworld coordinate-frame side effects, and combat actor-anchor invocation. The later save/load boundary pass narrows stamp persistence: top-down location and overworld live-buffer mutations are not durable local-map changes across save/load or ordinary buffer reload. The later stamp-catalog pass resolves both `0x44` and `0x45` as LOOK2 cobble descriptions, with `0x45` retained as the cannon-family matching stamp.
+**Current P-Push cleanup:** 2026-08-25 - commands, input, town-mode, combat,
+dungeon-mode, and text-output docs now publish the shared P-Push
+movable-static-tile contract: Escape is ignored while Space/`Pass` cancels;
+door cleanup precedes the prompt; active-object sources are refused rather than
+moved; both refusal literals and both success literals are exact; the
+push-versus-pull branch, facing rewrite, live-tile mutation, combat actor-anchor
+invocation, out-of-grid alias/scratch behavior, caller turn results, and the
+combat ambush-reveal preemption are explicit. The save/load boundary keeps the
+top-down stamps visit-local, and both `0x44` and `0x45` resolve to cobble through
+LOOK2 while remaining distinct Push-family matching bytes.
 
 **Current P-Push stamp-catalog narrowing:** 2026-05-13 - `systems/commands.md`,
 `systems/doors-and-z-transitions.md`, and extraction now use the LOOK2-backed

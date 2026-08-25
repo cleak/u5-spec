@@ -495,8 +495,11 @@ produce.
 An unrecognised command key prints `What?` followed by a newline and **consumes
 no turn**: the mode loop skips its per-turn cleanup for that keypress, so no
 game time passes. Two sibling refusals reach the screen through the same slot
-with a disambiguating prefix, `D-What?` and `W-What?`, and the push-into-nothing
-case prints `Push` + newline + `Not here!` + newline.
+with a disambiguating prefix, `D-What?` and `W-What?`. The dungeon-only Push
+refusal prints `Push` + newline + `Not here!` + newline and replaces the
+ordinary `Push-` direction echo. Push into a non-pushable source instead keeps
+its direction echo and appends `Won't budge!` on the next line; see
+`systems/commands.md` Section 8.1.
 
 ### 10.4 The blank row between commands
 
@@ -603,8 +606,7 @@ message window, which frames one glyph with the same caps. It is the
 timed-effect indicator specified in `stats-panel.md` section 8, not a text
 label, and it uses neither the centring rule nor the blanking geometry above.
 
-Source provenance: derived from private analysis note
-`../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+Source provenance: derived from private analysis in `../u5-decomp/notes/`.
 
 ## 11. Boundaries And Parity Work
 
@@ -701,21 +703,31 @@ The behaviour described here was derived from the private function notes listed 
 - The padded numeric printer — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The cursor accessors — derived from `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/functions/ULTIMA_EXE/`.
 - The window-descriptor initialisation, rectangle configuration, and active-window selection — derived from `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/functions/ULTIMA_EXE/` (the latter, despite its filename, is the active-window selector).
-- The overlay-side census of which windows are reshaped transiently — derived from `u5-decomp/notes/shop_window_geometry_recount_2026-08-22.md`. Its "window 2 is never configured" conclusion is corrected in section 9 step 3 and section 10.1.
-- Source provenance: the three standing gameplay window rectangles and their attributes and initial cursors, the absence of a fourth gameplay window, the command-echo cycle and its newline-first ordering, the echoed verb strings and their punctuation contract, the unrecognised-key response and its no-turn result, the blank-row mechanism, the un-blanked scroll, the input-cursor animation, and the three typed-input readers are derived from private analysis note `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked against a fresh local re-read of the shipped executable, overlays and shared data overlay.
-- The selectable fixed-cell font slot, the two boot-loaded fonts and their shared code points, and the three framed-border-label slots with their differing centring and blanking rules — derived from private analysis note `../u5-decomp/notes/presentation_dungeon_zstats_echo_2026-08-22.md`.
+- The overlay-side census of which windows are reshaped transiently — derived
+  from private analysis in `u5-decomp/notes/`. Its "window 2 is never
+  configured" conclusion is corrected in section 9 step 3 and section 10.1.
+- Source provenance: the three standing gameplay window rectangles and their
+  attributes and initial cursors, the absence of a fourth gameplay window, the
+  command-echo cycle and its newline-first ordering, the echoed verb strings
+  and their punctuation contract, the unrecognised-key response and its no-turn
+  result, the blank-row mechanism, the un-blanked scroll, the input-cursor
+  animation, and the three typed-input readers are derived from private
+  analysis in `../u5-decomp/notes/`, cross-checked against a fresh local
+  re-read of the shipped executable, overlays and shared data overlay.
+- The selectable fixed-cell font slot, the two boot-loaded fonts and their
+  shared code points, and the three framed-border-label slots with their
+  differing centring and blanking rules — derived from private analysis in
+  `../u5-decomp/notes/`.
 - The driver-load step in boot-time setup — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The C-runtime string-length utility used at some call sites for label width — derived from `u5-decomp/functions/ULTIMA_EXE/`. This utility is the standard NUL-terminated string length function and does not warrant a dedicated spec section.
 - Cross-overlay call-frequency and no-thunk text-output architecture — derived
-  from `u5-decomp/notes/hot_path_analysis.md` and
-  `u5-decomp/notes/engine_idioms.md`.
+  from private analysis in `u5-decomp/notes/`.
 - The proportional-font paragraph renderer used by intro, chargen, and
   Return-to-View text, including the layout descriptor field roles, the
   exclusive right-edge test, the plus-one inter-glyph gap, the backtracking
   break rule, the justification arithmetic, and the fixed nine-pixel line
   advance -- derived from
-  `u5-decomp/functions/FONT_OVL/` and
-  `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 2.
+  `u5-decomp/functions/FONT_OVL/` and `u5-decomp/notes/`.
 - The typed-input space eraser and cursor-advance gate preservation -- derived
   from `u5-decomp/functions/ULTIMA_EXE/` and
   cross-checked against

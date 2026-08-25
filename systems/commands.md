@@ -213,7 +213,7 @@ plain block of text rather than as a table addressed by the key code.
 
 | Key | Rendered echo | Notes |
 |---|---|---|
-| `Space` / `Esc` | `Pass\n` | Also the direction-prompt cancel word. |
+| `Space` | `Pass\n` | Also the adjacent-direction-prompt cancel word. Escape is ignored by that prompt. |
 | `A` | `Attack-` outside dungeons; `Attack\n` in a dungeon | Dungeon attacks are always straight ahead, so the dungeon form takes no direction and needs no hyphen. Each mode overlay carries its own copy of this literal. |
 | `B` | `Board_` | Becalmed refusal: `Sheets_in_irons!\n` |
 | `C` | `Cast...\n` | |
@@ -229,7 +229,7 @@ plain block of text rather than as a table addressed by the key code.
 | `M` | `Mix_Reagents\n\n` | |
 | `N` | `New_Order` | **No** trailing newline. |
 | `O` | `Open-` | |
-| `P` | `Push-` | Refusal form replaces the echo entirely: `Push\nNot_here!\n` |
+| `P` | `Push-` | Dungeon refusal replaces the echo entirely: `Push\nNot_here!\n`. Ordinary source/path refusals continue the direction echo; see Section 8.1. |
 | `Q` | `Quit:` | |
 | `R` | `Ready...\n\n` | |
 | `S` | `Search-` (direction form) or `Search...\n` (in-place form) | |
@@ -274,8 +274,8 @@ produced dynamically rather than baked into a literal.
 ### 5.4 The direction prompt has no text
 
 The shared direction prompt prints **nothing** before waiting. The hyphen at the
-end of the verb echo *is* the prompt. The prompt loop ignores every key except
-the four directions, Space and Escape:
+end of the verb echo *is* the prompt. The prompt loop accepts only the four
+directions and Space:
 
 | Key | Printed | Effect | Result to the caller |
 |---|---|---|---|
@@ -283,10 +283,13 @@ the four directions, Space and Escape:
 | East | `East\n` | target X increases by one | direction chosen |
 | North | `North\n` | target Y decreases by one | direction chosen |
 | South | `South\n` | target Y increases by one | direction chosen |
-| `Space` or `Esc` | `Pass\n` | none | cancelled |
+| `Space` | `Pass\n` | none | cancelled |
 
 The cancel word is the same word the Pass command echoes. A cancelled Look
 therefore renders as the verb, the hyphen and the cancel word on one line.
+Escape does not reach a cancellation arm: it emits nothing and the prompt reads
+again. This is the same adjacent-tile prompt contract published in `input.md`
+Section 10.
 
 **Movement keys echo the same four words.** On the overworld and in town-family
 scenes, a movement key prints the direction's name followed by a newline, on its
@@ -532,20 +535,20 @@ unlocks.
 
 ## 8. P-Push Movable-Tile Command
 
-P-Push is a direction-prompt command for movable map furniture and similar
-objects. Escape at the direction prompt cancels silently. Before resolving the
-push, the handler runs the same last-opened-door cleanup used by other
-directional CMDS commands, so a previously opened door may close before the
-object interaction is tested.
+P-Push is a direction-prompt command for movable static map furniture. Before
+waiting for the direction, the handler runs the same last-opened-door cleanup
+used by other directional CMDS commands, so a previously opened door may close
+even when Space later cancels the command or Escape leaves the prompt waiting.
 
-The command samples the adjacent source cell in the chosen direction. In
-town-family and interior scenes this coordinate is relative to the avatar. In
-overworld scenes the command temporarily works in the active camera-anchor
-coordinate frame, then restores the party coordinate after a successful
-resolution and requests a full redraw.
+The command samples the adjacent source cell in the chosen direction. In every
+noncombat scene this coordinate is relative to the party. In combat, the
+acting combatant's arena coordinate temporarily becomes the command anchor;
+after a success both that combat descriptor and its linked active-object
+coordinate advance, the party coordinate globals are restored, and the arena
+receives a full redraw.
 
-A source cell is pushable when either a dynamic object occupies that coordinate
-or the static tile is in the known pushable set:
+A source cell is pushable only when no non-player active object occupies that
+coordinate and its static tile is in the known pushable set:
 
 | Pushable tile family | Behaviour |
 |---|---|
@@ -555,13 +558,14 @@ or the static tile is in the known pushable set:
 | `0xAD..0xAF` | Non-rotating pushable run. |
 | `0xB4..0xB7` | Four-facing cannon family; successful movement rewrites the facing bits. |
 
-If neither dynamic-object presence nor the pushable static tile test accepts,
-the command prints the emphatic "won't budge" refusal and exits.
+An active object at the source is an immediate refusal; P-Push never moves an
+active-object record. If the source is unoccupied but its static tile is not in
+the table, the same refusal applies.
 
 The cell one tile farther in the same direction decides whether the command is
 a push or a pull:
 
-- **Push.** If the far cell has no dynamic object and its static tile is the
+- **Push.** If the far cell has no active object and its static tile is the
   expected floor/occupancy stamp for the source object family, the source object
   moves into the far cell and the source cell receives that stamp. Directional
   families are rotated to face the movement direction.
@@ -572,9 +576,74 @@ a push or a pull:
 - **Final refusal.** If neither path is legal, the command prints the shorter
   "won't budge" refusal and exits.
 
-On any successful push or pull, the avatar advances one tile in the prompted
-direction and the map is marked dirty. The command mutates the live tile buffer;
-implementations should not model it as an overlay-only animation.
+On any successful push or pull, the avatar—or the acting combatant in an
+arena—advances one tile in the prompted direction and the map is marked dirty.
+The command mutates the live tile buffer; implementations should not model it
+as an overlay-only animation.
+
+### 8.1 Exact transcript and result table
+
+The strings below begin with the command echo; they exclude the turn loop's
+preceding newline and prompt glyph. `<Dir>` stands for exactly one of `North`,
+`South`, `East`, or `West`. The `\n` after it is part of the direction echo.
+There is no distinct Pass input: Space is the key and `Pass` is its echo.
+
+| Row | Source/destination outcome | Exact rendered command text | Echo relationship | Door cleanup | Completed-result status |
+|---|---|---|---|---|---|
+| A | Escape pressed at the direction prompt | `Push-` remains open; Escape emits no byte | Prompt remains active; there is no cancellation or continuation | Already ran before the prompt | No command result yet in overworld, town, or combat |
+| B | Space pressed at the direction prompt | `Push-Pass\n` | `Pass\n` completes the normal `Push-` echo; no result line follows | Yes | Default acted status in overworld/town; ends the combatant's action |
+| C | No active object at source; source static tile is not pushable | `Push-<Dir>\nWon't budge!\n` | Emphatic refusal continues after the normal direction echo | Yes | Default acted status in overworld/town; ends the combatant's action |
+| D | Source or far coordinate outside a playable interior/combat grid | No separate bounds literal or status; apply Section 8.2 | Normal echo remains; the sampled tile/object predicates choose the continuation | Yes | No analogous finite-grid edge in the overworld; default acted status in town/interiors; ends the combatant's action |
+| E | Static source is pushable; push is blocked; actor cell is not the matching pull stamp | `Push-<Dir>\nWon't budge\n` | Short refusal continues after the normal direction echo | Yes | Default acted status in overworld/town; ends the combatant's action |
+| F | Active object occupies the source; far cell also has an actor/object | `Push-<Dir>\nWon't budge!\n` | Emphatic refusal continues after the normal direction echo | Yes | Default acted status in overworld/town; ends the combatant's action |
+| G | Active object occupies the source; far terrain is not legal | `Push-<Dir>\nWon't budge!\n` | Same as F; the far coordinate is never tested | Yes | Default acted status in overworld/town; ends the combatant's action |
+| H | Successful static push | `Push-<Dir>\nPushed!\n` | Success line continues after the normal direction echo | Yes | Default acted status in overworld/town; ends the combatant's action |
+| I | Successful static pull | `Push-<Dir>\nPulled!\n` | Success line continues after the normal direction echo | Yes | Default acted status in overworld/town; ends the combatant's action |
+| J | Successful dynamic-object push | Unreachable. A dynamic source takes F/G's `Won't budge!\n` result and its record is unchanged | No success continuation exists | Yes | No distinct status; the actual refusal uses F/G's status |
+| K | Dungeon P refusal, before direction handling | `Push\nNot here!\n` | Combined refusal replaces `Push-`; there is no direction prompt | No; the shared handler is bypassed | Resident dispatcher reports no action |
+
+Rows F, G, and J deliberately correct the earlier dynamic-source description.
+The source active-object test occurs before the far coordinate is computed, so
+far occupancy and terrain cannot distinguish those rows and no production path
+prints a dynamic-object success.
+
+The combined dungeon refusal applies to the ordinary dungeon scene range. Its
+no-action result skips the dungeon post-action pass, but dungeon time has
+already advanced by one minute at that loop iteration's head. Outside dungeons,
+the resident dispatcher discards the Push handler's return: every completed
+row B through J therefore consumes the ordinary action—two minutes plus normal
+post-action work in the overworld, one minute plus normal underfoot and NPC
+work in town. Combat's direct P route ends the acting combatant's action for
+every completed row B through J, including both refusals.
+
+The command never prints tile ids, coordinates, active-object slot numbers,
+terrain-class names, or the word `blocked`. It does print the exact success
+words `Pushed!` and `Pulled!` shown above; there is no other diagnostic success
+line.
+
+### 8.2 Out-of-grid and combat-reveal edge cases
+
+P-Push has no command-local playable-grid bounds test.
+
+- The overworld uses a streamed map rather than the finite interior or arena
+  grid in row D, so that row has no analogous overworld boundary transcript.
+- In a town-family/interior scene, an out-of-range tile sample aliases the
+  loaded grid's southeast cell `(31,31)`, while the true out-of-range
+  coordinate cannot match a normal active-object record. Every shipped page in
+  the town, castle, dwelling, and keep map families has a southeast tile that
+  is not pushable. A stock out-of-range **source** therefore takes row C. For an
+  out-of-range **far** coordinate, the stock southeast tile never matches the
+  required push stamp: the command takes row I if the actor cell supplies the
+  matching pull stamp, otherwise row E.
+- In combat, an off-playable-grid tile sample reaches temporary arena backing
+  state rather than a bounds sentinel. Its transcript is selected by that
+  sampled byte and the ordinary source/far/pull predicates; there is no single
+  extra combat bounds result and no `Blocked!` line. Tests of this original
+  edge must supply the sampled temporary byte as part of their fixture.
+- In ambush or camp combat, a pre-placed reveal marker at the chosen adjacent
+  coordinate preempts the ordinary source test. It consumes/reveals that marker
+  and leaves the transcript at exactly `Push-<Dir>\n`, with no `Pushed!`,
+  `Pulled!`, or refusal continuation. The combatant's action still ends.
 
 **The stamp is never persistent.** This is now a certainty rather than a
 negative bound. The push writes through the shared tile accessor, which can
@@ -923,12 +992,18 @@ reproduced here.
   `u5-decomp/functions/CMDS_OVL/`, and
   `u5-decomp/functions/CMDS_OVL/`.
 - The P-Push direction prompt, pushable tile families, push/pull branch
-  conditions, facing rewrite, overworld coordinate-frame side effects, and
+  conditions, facing rewrite, combat actor-anchor side effects, and
   live-tile mutations:
   `u5-decomp/functions/CMDS_OVL/`. The non-durable
   save/load boundary for top-down live buffers also uses
   `u5-decomp/notes/` and
   `u5-decomp/functions/TOWN_OVL/`.
+- The exact Push strings, Escape-versus-Space prompt result, active-object
+  refusal polarity, bounds behavior, combat reveal preemption, caller status,
+  and door-cleanup ordering are derived from private analysis in
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/COMBAT_OVL/`, `u5-decomp/functions/DUNGEON_OVL/`, and
+  `u5-decomp/notes/`.
 - The Search/Jimmy/Open/Get overlay overview and public command handlers:
   `u5-decomp/functions/SJOG_OVL/`.
 - The two-roll J-Jimmy contract, its corrected target families, the Dexterity

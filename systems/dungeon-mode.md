@@ -1181,7 +1181,13 @@ When the dungeon command handler receives a printable letter, it forwards the le
 - **V** — View; paint a top-down minimap of the current level (§ 12).
 - **T** — Talk; always prints "Funny, no response!" (no NPCs in dungeons).
 
-Letters that are no-ops in dungeons print "What?" or a stock refusal: **B** Board, **D**, **E** Enter, **F** Fire, **P** Push, **X** X-it. **Q** is the ordinary save-game route; the "Exit to DOS?" prompt is a Control binding in the mode-local table, not a letter.
+Letters that are no-ops in dungeons print "What?" or a stock refusal: **B**
+Board, **D**, **E** Enter, **F** Fire, **P** Push, **X** X-it. P is the
+combined literal `Push\nNot here!\n`: it replaces the normal `Push-` echo,
+does not ask for a direction or run Push's door cleanup, and reports no action.
+The loop-head minute has already advanced, but the dungeon post-action pass is
+skipped. **Q** is the ordinary save-game route; the "Exit to DOS?" prompt is a
+Control binding in the mode-local table, not a letter.
 
 The dungeon-mode A-Attack handler is a point-blank forward probe. It prints
 the attack label, computes the wrapped cell one step ahead of the party's
