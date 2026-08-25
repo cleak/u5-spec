@@ -219,15 +219,14 @@ every row is an in-world castle. The resident order is:
 floor `+2` — two storeys above the entry floor, the fourth of its five pages —
 which opens a walled-off passage when a fixed thirteen-note tune is played from
 the chair beside it. `systems/town-mode.md` Section 13 owns
-that contract. Source provenance: derived from private analysis note
-`u5-decomp/notes/oq-closures_2026-08-22_blackthorn-town.md`, section Q31.
+that contract. Source provenance: derived from private analysis under
+`u5-decomp/notes/`.
 
 `CASTLE:1` carries a scene-specific gate of its own: a guard at the palace
 demands a password from the party, but only while the party is wearing the
 Black Badge, and only the first four typed letters are compared.
 `systems/blackthorn.md` Section 7a owns that contract. Source provenance:
-derived from private analysis note
-`u5-decomp/notes/oq-closures_2026-08-22_magic-talk-services.md`.
+derived from private analysis under `u5-decomp/notes/`.
 
 ### Keeps
 
@@ -292,6 +291,75 @@ Two resident one-byte-per-scene tables in `DATA.OVL` (one for X, one for Y) carr
 | 38 | Shame | 58 | 102 |
 | 39 | Hythloth | 239 | 240 |
 | 40 | Doom | 128 | 128 |
+
+#### Authoritative stock E-Enter narration join
+
+This is the complete join required to turn the forty coordinate rows into
+production E-Enter transcripts. `T` means the town-family helper's exact
+accepted live-tile set `{0x10, 0x12, 0x13, 0x14, 0x15, 0x1B, 0x39, 0x3E}`;
+`D` means the dungeon helper's exact set `{0x16, 0x17, 0x18}`. Within either
+set, the actual live tile selects the narration and the coordinate selects the
+row—there is no comparison with an expected per-row tile. The `stock` value is
+the tile shipped at the accepted plane and therefore selects the exact
+continuation shown here.
+
+The continuation column begins immediately after the handler's `Enter `
+prefix and gives the exact visible transcript. For rows with a proper-name
+line, the serialized text stream inserts centre-on immediately before the
+uppercase name and centre-off immediately after it. Those controls emit no
+glyph or ASCII spaces; `Name col` gives the zero-based starting column in the
+sixteen-cell message window after the cursor reposition. A renderer test must
+therefore assert both the visible continuation shown and the two control-state
+changes around the name.
+
+| Scene / target | Accepted plane and coordinate | Narration class | Exact continuation after `Enter ` | Name col | Live-tile guard |
+|---|---|---|---|---:|---|
+| 1 / `TOWNE:0` | Britannia `(232,135)` | towne | `towne\n\nMOONGLOW\n` | 4 | `T`; stock `0x14` |
+| 2 / `TOWNE:1` | Britannia `(81,106)` | towne | `towne\n\nBRITAIN\n` | 4 | `T`; stock `0x14` |
+| 3 / `TOWNE:2` | Britannia `(36,222)` | towne | `towne\n\nJHELOM\n` | 5 | `T`; stock `0x14` |
+| 4 / `TOWNE:3` | Britannia `(58,43)` | towne | `towne\n\nYEW\n` | 6 | `T`; stock `0x14` |
+| 5 / `TOWNE:4` | Britannia `(159,20)` | towne | `towne\n\nMINOC\n` | 5 | `T`; stock `0x14` |
+| 6 / `TOWNE:5` | Britannia `(106,184)` | towne | `towne\n\nTRINSIC\n` | 4 | `T`; stock `0x14` |
+| 7 / `TOWNE:6` | Britannia `(22,128)` | towne | `towne\n\nSKARA BRAE\n` | 3 | `T`; stock `0x14` |
+| 8 / `TOWNE:7` | Britannia `(187,169)` | village | `village\n\nNEW MAGINCIA\n` | 2 | `T`; stock `0x13` |
+| 9 / `DWELLING:0` | Britannia `(88,120)` | lighthouse | `lighthouse\n\nFOGSBANE\n` | 4 | `T`; stock `0x1B` |
+| 10 / `DWELLING:1` | Britannia `(152,24)` | lighthouse | `lighthouse\n\nSTORMCROW\n` | 3 | `T`; stock `0x1B` |
+| 11 / `DWELLING:2` | Britannia `(104,216)` | lighthouse | `lighthouse\n\nGREYHAVEN\n` | 3 | `T`; stock `0x1B` |
+| 12 / `DWELLING:3` | Britannia `(216,120)` | lighthouse | `lighthouse\n\nWAVEGUIDE\n` | 3 | `T`; stock `0x1B` |
+| 13 / `DWELLING:4` | Britannia `(45,62)` | hut | `hut\n\nIOLO'S HUT\n` | 3 | `T`; stock `0x10` |
+| 14 / `DWELLING:5` | Britannia `(176,208)` | hut; unnamed | `hut\n` | — | `T`; stock `0x10` |
+| 15 / `DWELLING:6` | Britannia `(201,59)` | hut; unnamed | `hut\n` | — | `T`; stock `0x10` |
+| 16 / `DWELLING:7` | Britannia `(153,91)` | hut; unnamed | `hut\n` | — | `T`; stock `0x10` |
+| 17 / `CASTLE:0` | Britannia `(86,107)` | Lord British special | `the Castle of Lord British!\n` | — | `T`; stock `0x3E` |
+| 18 / `CASTLE:1` | Britannia `(196,245)` | Blackthorn special | `the palace of Blackthorn!\n` | — | `T`; stock `0x39` |
+| 19 / `CASTLE:2` | Britannia `(84,106)` | village | `village\n\nWEST BRITANNY\n` | 1 | `T`; stock `0x13` |
+| 20 / `CASTLE:3` | Britannia `(86,105)` | village | `village\n\nNORTH BRITANNY\n` | 1 | `T`; stock `0x13` |
+| 21 / `CASTLE:4` | Britannia `(88,106)` | village | `village\n\nEAST BRITANNY\n` | 1 | `T`; stock `0x13` |
+| 22 / `CASTLE:5` | Britannia `(98,145)` | village | `village\n\nPAWS\n` | 6 | `T`; stock `0x13` |
+| 23 / `CASTLE:6` | Britannia `(136,90)` | village | `village\n\nCOVE\n` | 6 | `T`; stock `0x13` |
+| 24 / `CASTLE:7` | Britannia `(136,158)` | towne | `towne\n\nBUCCANEER'S DEN\n` | 0 | `T`; stock `0x14` |
+| 25 / `KEEP:0` | Underworld `(49,58)` | keep | `keep\n\nARARAT\n` | 5 | `T`; stock `0x12` |
+| 26 / `KEEP:1` | Britannia `(15,160)` | keep | `keep\n\nBORDERMARCH\n` | 2 | `T`; stock `0x12` |
+| 27 / `KEEP:2` | Britannia `(64,240)` | keep | `keep\n\nFARTHING\n` | 4 | `T`; stock `0x12` |
+| 28 / `KEEP:3` | Britannia `(248,8)` | keep | `keep\n\nWINDEMERE\n` | 3 | `T`; stock `0x12` |
+| 29 / `KEEP:4` | Britannia `(148,74)` | keep | `keep\n\nSTONEGATE\n` | 3 | `T`; stock `0x12` |
+| 30 / `KEEP:5` | Britannia `(218,107)` | castle | `castle\n\nTHE LYCAEUM\n` | 2 | `T`; stock `0x15` |
+| 31 / `KEEP:6` | Britannia `(28,50)` | castle | `castle\n\nEMPATH ABBEY\n` | 2 | `T`; stock `0x15` |
+| 32 / `KEEP:7` | Britannia `(146,241)` | castle | `castle\n\nSERPENT'S HOLD\n` | 1 | `T`; stock `0x15` |
+| 33 / `DUNGEON:0` | Britannia or Underworld `(240,73)` | dungeon | `dungeon\n\nDECEIT\n` | 5 | `D`; stock `0x18` |
+| 34 / `DUNGEON:1` | Britannia or Underworld `(91,67)` | cave | `cave\n\nDESPISE\n` | 4 | `D`; stock `0x16` |
+| 35 / `DUNGEON:2` | Britannia or Underworld `(72,168)` | cave | `cave\n\nDESTARD\n` | 4 | `D`; stock `0x16` |
+| 36 / `DUNGEON:3` | Britannia or Underworld `(126,20)` | dungeon | `dungeon\n\nWRONG\n` | 5 | `D`; stock `0x18` |
+| 37 / `DUNGEON:4` | Britannia or Underworld `(156,27)` | dungeon | `dungeon\n\nCOVETOUS\n` | 4 | `D`; stock `0x18` |
+| 38 / `DUNGEON:5` | Britannia or Underworld `(58,102)` | mine | `mine\n\nSHAME\n` | 5 | `D`; stock `0x17` |
+| 39 / `DUNGEON:6` | Britannia or Underworld `(239,240)` | mine | `mine\n\nHYTHLOTH\n` | 4 | `D`; stock `0x17` |
+| 40 / `DUNGEON:7` | Underworld `(128,128)` | cave; Doom special | `cave\n` | — | `D`; stock `0x16` |
+
+No forty-row destination uses the `ruins` narration. That is the direct
+non-transition arm for the blocked ruined-shrine tile, not a town-family scene
+row. The Shrine of the Codex and virtue-shrine forms are likewise direct
+overworld tile interactions rather than entries in this forty-row destination
+table.
 
 The last eight entries (scenes 33..40, the dungeons) double as the Word-of-Power seal-coordinate table. The coordinate names the **entrance cell itself**, and the party speaks the word from an adjacent cell, not from the entrance: the Yell handler looks for the entrance among the party's four cardinal neighbours and then requires that neighbour's coordinate to equal the row below. The sealed entrance is impassable, so standing on it before the word is spoken is not possible in any case. The full predicate is in `systems/commands.md` Section 11.1.
 
@@ -701,13 +769,13 @@ Public specs used:
 
 Private analysis provenance:
 
-- Source provenance: derived from private analysis note
-  `u5-decomp/notes/scene_floor_page_table_2026-08-22.md` - the per-location
+- Source provenance: derived from private analysis under
+  `u5-decomp/notes/` - the per-location
   floor counts and floor ranges of Section 5.2, the four locations that enter
   above the bottom of their page run, and the correction placing the Lord
   British's Castle harpsichord two storeys above the entry floor rather than in
   a basement.
-- `u5-decomp/formats/data-ovl.md` - confirms the resident image contains
+- `u5-decomp/formats/` - confirms the resident image contains
   location coordinate tables, shrine coordinate tables, location/name
   vocabulary, and map metadata. This catalog cites only those semantic facts.
 - `u5-decomp/functions/OUTSUBS_OVL/` -
@@ -719,13 +787,20 @@ Private analysis provenance:
   exit table, Doom's entry gate and one-way descent, the closed
   plane-transition inventory, Ararat's underworld-only status, the eight
   shipped Moonstone positions, the four lighthouse positions, and the Shrine of
-  the Codex approach are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_world-transitions.md`.
+  the Codex approach are derived from private analysis under
+  `u5-decomp/notes/`.
 - Source provenance: the single shrine coordinate table, the Spirituality
   sentinel rule, the Shrine of the Codex coordinate, the Enter label set, and
-  the three shipped telescope placements are derived from private analysis note
-  `u5-decomp/notes/oq-closures_2026-08-22_shrine-prng-look-saduj.md`.
+  the three shipped telescope placements are derived from private analysis
+  under `u5-decomp/notes/`.
 - MAINOUT E-Enter helper analysis in `u5-decomp` - confirms that rows
   thirty-two through thirty-nine use the same row-plus-one scene rule for
   dungeons, load the matching `DUNGEON.DAT` record, and seed the dungeon entry
   position by plane.
+- The complete E-Enter live-tile switch, forty-row map join, centered-name
+  envelope, no-match transcripts, action results, `.OOL` write ordering, and
+  direct-construction boundary are derived from private analysis under
+  `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/formats/`, and
+  `u5-decomp/notes/`.
