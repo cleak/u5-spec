@@ -248,11 +248,14 @@ does not own the live entry hook, which is specified by the overworld loop.
 
 **Current fixed-gate branch detail:** 2026-05-13 -
 `systems/overworld.md` now records the live fixed-coordinate gate branch at
-source-free behavioral depth: the branch prints a common opening line, tests
-the ordained progress mask, prints either the blocked line or the two-line entry
-narration, and only the clear-mask branch moves the party one cell south before
-ordinary post-action cleanup. This is still a fixed narrative branch, not the
-saved-slot live-terrain refresh or live `0xDC` entry handler.
+source-free behavioral depth. **Exact transcript update 2026-08-25:** the
+shared fragment is only a leading LF plus opening quote; the nonzero ordained
+arm prints `Pass, Seeker!`, while the zero arm prints the Sacred Quest and
+Passage denied refusal and moves the party one cell south. Exact embedded LF
+placement, the absence of a live-tile equality guard or special presentation,
+the slot-zero mirror rule, and the single ordinary-turn cleanup boundary are
+now normative. This remains a fixed narrative branch, not the saved-slot
+live-terrain refresh or live `0xDC` entry handler.
 
 **Current random-wind cleanup:** 2026-05-13 -
 `systems/weather.md` and extraction now include the idle-redraw random wind

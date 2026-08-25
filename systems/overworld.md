@@ -998,16 +998,44 @@ special-tile pass after a consumed command has committed movement and the loop
 has sampled the party's underfoot world tile. The branch is checked only while
 still in overworld mode on the surface plane at the fixed world coordinate
 `(233, 235)`, two cells south of the Shrine of the Codex tile at `(233, 233)`.
-It prints the branch's opening narrative line, then reads the save-backed
-ordained progress bitmask - not a Codex-read mask, a moon phase, or any
-placement phase.
+It first emits the shared source-stream fragment `\n"`, then reads the
+save-backed ordained progress bitmask - not a Codex-read mask, a moon phase, or
+any placement phase. The quote is the only content in that shared fragment;
+there is no separate opening sentence.
 
-The polarity is: **a nonzero ordained mask grants passage**, printing the
-seeker's welcome and leaving the party where they stand; **a clear mask refuses
-it**, printing the two-line refusal and then pushing the party one cell south,
-back the way they came. An earlier revision of this section had those two arms
-swapped and is corrected here. Either way the loop continues through the
-ordinary post-action cleanup.
+| Ordained mask | Exact complete emitted stream | Position result | Presentation and turn result |
+|---|---|---|---|
+| Nonzero | `\n"Pass, Seeker!"\n` | Remain at `(233,235)` | Passage granted; no scene transition; continue the triggering action's ordinary post-action cleanup once |
+| Zero | `\n"Thou art not upon a Sacred Quest!\nPassage denied!"\n` | Set party position to `(233,236)`, one cell south | Passage refused; no scene transition; continue the triggering action's ordinary post-action cleanup once |
+
+These streams contain one leading LF and one trailing LF. The refusal has one
+additional embedded LF between `Quest!` and `Passage`; there is no CR, blank
+line, leading/trailing space, or additional LF. They pass through the ordinary
+wrap-aware string printer, so standard message-window wrapping and scrolling
+still apply; those are not extra bytes in the source stream.
+
+The branch performs no pause or key wait, sound, viewport clear, immediate
+redraw, disk operation, or other blocking presentation. There is no operation
+between the final refusal string and the south push. After either arm, the loop
+enters the same ordinary post-action and per-turn cleanup. A subsequent normal
+viewport refresh merely displays the already updated position.
+
+The gate has **no positive live-tile equality guard**. Its own predicate is the
+surface-overworld scene and coordinate above. The shipped cell is tile `0x20`,
+but the branch never compares against it. The loop has already sampled the
+underfoot tile, and an earlier higher-priority special-tile arm can preempt the
+coordinate test if custom runtime terrain substitutes one of those special
+classes; this does not make `0x20` a required gate byte.
+
+The refusal directly changes only the party's Y coordinate, from `235` to
+`236`. It does not move another active object or alter X, plane, scene, or a
+quest flag. An implementation that mirrors party position in a slot-zero actor
+record must keep that mirror synchronized with the new Y coordinate. The push
+does not consume a second turn beyond the action that reached the gate.
+
+The polarity is therefore: **a nonzero ordained mask grants passage in place;
+a clear mask refuses and pushes south**. An earlier revision of this section
+had those two arms swapped and is corrected here.
 
 This branch is a special world-transition case, not the saved-slot live-tile
 refresh, not a Moonstone-slot Gate Travel cast, and not a moon-phase display
@@ -1218,6 +1246,11 @@ The behaviour described above was derived by reading the function and format not
   positions, the closed plane-transition inventory, the overloaded plane byte,
   Ararat's underworld-only exit, and the corrected Codex approach-gate polarity
   are derived from private analysis note
+  `u5-decomp/notes/`.
+- The Codex approach branch's exact source streams, coordinate-only predicate,
+  priority boundary, presentation non-effects, one-coordinate refusal push,
+  and shared-cleanup ordering are derived from private analysis under
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/formats/`, and
   `u5-decomp/notes/`.
 - The saved Moonstone slot scene/window test, natural live-gate tile refresh,
   saved-slot warp helper, and live moongate-tile shimmer/entry helper -
