@@ -18,6 +18,27 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**Addendum — 2026-08-26, calibrated-unit delay contexts and wall-clock anchor.**
+Issue #146 is answered by `systems/timing.md` sections 6 and 7 and
+`systems/audio.md` sections 4, 5.4, and 10. Four of the five questions are
+answered; one sub-question is closed as unresolved. Headlines: there is exactly
+**one** live delay context and its shift is **zero**, so the selector should be
+dropped from any engine interface; one outer calibrated unit is **0.88 ms plus
+or minus 10 percent**, a static derivation rather than a measurement; the
+software envelope is a **high whistle at about 3.13 kHz**, not a growl, and the
+nine variants' pitch ratios are exact even though the absolute scale is banded;
+and the two potion viewport inversions are **not derivable from timing analysis
+at all** and need a separate pass over the display driver's invert path.
+
+The single highest-value follow-up in this area is now a **cycle-accurate
+emulator run that reads the boot calibration value after startup**. It would
+collapse most of the band in `timing.md` section 7 in one shot. An audio capture
+would settle the envelope carrier outright. Two derived figures are worth
+checking in play because they are much longer than they sound: the 26.5-second
+Stonegate trapdoor sweep and a 6.9-second long glissando. Two audio effects were
+also found that `audio.md` section 8 does not attribute to a trigger; they are
+recorded in `audio.md` section 10.6 and each deserves its own small issue.
+
 **Addendum — 2026-08-25, PC-speaker effect contract.** Issue #145 is covered
 by `systems/audio.md`. The public contract now centralizes the procedural
 PC-speaker primitives, calibrated CPU versus BIOS timing, Ctrl-S mute behavior,
