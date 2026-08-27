@@ -477,13 +477,15 @@ moral-standing floor are public. The alleged captive counter, parallel rescue
 progression byte, and capture-context field do not exist. Pixel-level cutscene
 effects remain presentation work.
 
-**Current CBT status cleanup:** 2026-05-13 - `EXTRACTION.md` now promotes
-`BRIT.CBT` and `DUNGEON.CBT` to complete at file-layout and record-selection
-depth, matching `formats/cbt.md`. The fixed record shape, terrain band,
-metadata preservation rule, outdoor placement-coordinate slices, dungeon room
-setup scan, and Doom final-room handoff marker are public; remaining arena
-metadata meanings, edge behavior, ambush setup, and future caller discovery
-stay with combat, encounter, and dungeon-mode runtime specs.
+**Current CBT runtime closure:** 2026-08-27 - `formats/cbt.md`,
+`systems/combat.md`, and `systems/dungeon-mode.md` now publish every traced
+metadata slice, the roster-slot meaning of both outdoor six-byte coordinate
+tables, every shipped dungeon special-source identity and state write,
+geometric edge behavior, individual leave/escape removal and restore semantics,
+the dormant fifteen-swap terrain branch, both live wandering-monster callers,
+the distinct sixteen-swap arena synthesis, exact PRNG order, caller-owned
+presentation, and deterministic vectors. Unread metadata bytes remain opaque
+round-trip material; no runtime blocker remains under the earlier CBT heading.
 
 **Current ZSTATS status cleanup:** 2026-05-13 - `EXTRACTION.md` now promotes
 `ZSTATS.OVL` to complete at overlay-contract depth. The covered Z-stats page
@@ -1736,12 +1738,12 @@ format contract is complete at byte-layout depth; remaining lower-nibble names
 belong to runtime consumers such as dungeon rendering, doors, traps, and field
 handlers, while custom room-id persistence is variant-content policy.
 
-**Current CBT format-boundary cleanup:** 2026-05-13 -
-`formats/cbt.md` now separates the fixed arena record layout from runtime
-metadata interpretation. Record size, row stride, terrain band, metadata-band
-preservation, and stock record counts are file-format contract; remaining
-metadata-byte names, arena-edge behaviour, and ambush/non-room caller discovery
-belong to combat runtime consumers.
+**Current CBT format-boundary cleanup:** 2026-08-27 - the fixed layout and all
+traced runtime consumers are closed. Bytes outside the published outdoor and
+dungeon slices have no traced reader and are preserved without invented
+semantics. Arena edges are geometric, the dormant outdoor shuffle has no live
+caller, and the live dungeon ambush synthesis/caller/PRNG contract is published
+in the combat and dungeon-mode specs.
 
 **Current NPC format-boundary cleanup:** 2026-05-13 -
 `formats/npc.md` now labels blank location names and sprite-class labels as
@@ -2042,13 +2044,12 @@ Good-status watcher validation, and the dungeon rest/camp alternate handoff.
 The alternate setup target is pinned to the CMDS H-Hole-up helper rather than
 SJOG or a separate scripted-fight dispatcher.
 
-**Current combat placement-shuffle cleanup:** 2026-05-13 - `systems/combat.md`,
-`systems/encounters.md`, `systems/rest-and-camp.md`, and `EXTRACTION.md` now
-separate the dormant Fisher-Yates branch inside the ordinary terrain combat
-setup helper from live ambush/rest setup. The only traced terrain caller leaves
-that branch inactive, so rest/camp's remaining exactness is presentation parity
-around the already-published rest/watch and sleep-ambush mechanics, not a
-terrain-helper shuffle.
+**Current combat placement-shuffle cleanup:** 2026-08-27 - `systems/combat.md`,
+`systems/dungeon-mode.md`, `systems/rest-and-camp.md`, and `EXTRACTION.md`
+separate the dormant fifteen-full-range-swap terrain branch from the live
+sixteen-swap dungeon wandering-monster synthesis and the CMDS rest/camp path.
+The sole terrain caller leaves its branch inactive; both live dungeon callers,
+PRNG order, banner boundary, and deterministic state-zero vectors are public.
 
 **Current hourly food/status cleanup:** 2026-05-12 - `systems/time.md`,
 `systems/rest-and-camp.md`, and extraction now specify the shared hourly
