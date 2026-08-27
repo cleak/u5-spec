@@ -115,7 +115,7 @@ The full table:
 | 5      | Rel Tym                   | Quickness           | Install a `Q`/30 active effect that halves the clock rate and randomly gates the automatic actor driver. |
 | 6      | In Vas Por Ylem           | Tremor              | Table-wide damage with a target-only combat-weight gate.    |
 | 6      | Quas An Wis               | Mass Charm          | Install a `C`/20 active effect that gates monster target-remap rolls. |
-| 6      | In An                     | Negate Magic        | Install an `N`/10 active effect that absorbs combat casts. |
+| 6      | In An                     | Negate Magic        | Install an `N`/10 active effect that absorbs party combat casts and suppresses the three enemy-side action stages specified below. |
 | 6      | Wis An Ylem               | X-Ray               | X-ray / remote-view effect.                                |
 | 6      | An Xen Ex                 | Charm               | Charm an enemy.                                            |
 | 6      | Rel Xen Bet               | Polymorph           | Transform a target into a Giant Rat.                       |
@@ -560,9 +560,22 @@ the otherwise permanent regalia auras:
   overworld epilogue returns before animating anything. In combat the automatic
   actor driver returns immediately, so every self-acting actor's turn is
   skipped outright while the tag lasts; the party is still prompted normally.
-- **`N` Negate Magic.** The enemy-cast gate returns "no spell", and the combat
-  C-Cast path absorbs casts before the shared cast dispatcher runs, so the
-  premixed charge and MP debit gates are not reached.
+- **`N` Negate Magic.** On the party's combat C-Cast path, the cast is absorbed
+  before the shared spell dispatcher runs, so the premixed charge and MP debit
+  gates are not reached. Enemy-side suppression is not one spell chooser. The
+  same tag is tested at three narrower automatic-action boundaries. First, it
+  bypasses the complete per-class possess/blink/summon-daemon hook before any
+  of that hook's random draws; the hook reports unhandled, so the actor proceeds
+  to ordinary target selection, attack, and, if needed, movement in the same
+  dispatch. Second, a teleport-capable actor bypasses its teleport attempt and
+  proceeds directly to ordinary stepping, without a teleport chance roll or
+  random-cell probe. Third, when a class in the scene-resistant ranged/effect
+  family reaches a non-adjacent ranged/effect attack, the attack is silently
+  absorbed before projectile presentation, hit testing, damage, or status
+  application; that outer attack action remains consumed, so this third case
+  does not fall through to melee or movement. Each boundary reads the tag when
+  reached. There is no once-per-turn latch: an actor granted multiple action
+  dispatches is checked again on each dispatch or qualifying ranged attempt.
 - **`C` Mass Charm.** Consumed by monster AI target selection: each target pick
   rolls one uniform random byte in `[0, 255]` against the acting monster's
   class charm threshold. Rolls strictly greater than that threshold remap the
@@ -570,8 +583,13 @@ the otherwise permanent regalia auras:
   targets outside the monster's normal hostile set eligible for that AI
   decision. The player-visible result is a confused actor re-picking whom it
   attacks.
-- **Crown of Lord British.** Shares the enemy-cast gate with `N`: while the
-  Crown occupies the slot it acts as a permanent Negate Magic aura.
+- **Crown of Lord British.** Its permanent code is accepted by all three
+  enemy-side checks just described, with the same distinct fall-through and
+  action-consumption rules. It does not replace the party C-Cast check, which
+  tests the `N` tag itself. Earlier wording collapsed these consumers into an
+  undefined "enemy-cast gate" that returned "no spell"; that abstraction is
+  withdrawn because it hid both non-spell suppression and three different
+  caller-visible outcomes.
 - **Amulet of Lord British.** Read by the overworld loop's void-tile handler,
   which forces the effective lighting threshold to zero on that tile unless the
   Amulet's code is in the slot. The Amulet is what lets the party keep any
@@ -880,7 +898,7 @@ pattern and is not reached as a party C-Cast summon row in the traced caller
 census. Do not use that private pattern as the source for Conjure, Swarm, or
 Summon placement.
 
-**Special / marquee effects.** Negate Magic, Gate Travel, and Negate Time. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when outside dungeon/combat scenes and on accepted world-tile ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. Negate Time scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
+**Special / marquee effects.** Negate Magic, Gate Travel, and Negate Time. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher, while the three enemy-side consumers are the class-special, teleport, and scene-resistant ranged/effect boundaries specified earlier in this section. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when outside dungeon/combat scenes and on accepted world-tile ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. Negate Time scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
 
 ### Handler-family map
 
@@ -904,7 +922,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
 | Negate Time | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
-This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's automatic-actor-driver gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's combat-cast absorption consumer, and the combat post-dispatch contact boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
+This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's automatic-actor-driver gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's party-cast absorption and three enemy-side action boundaries, and the combat post-dispatch contact boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
 
 ## 9. Casting in combat
 
@@ -1170,6 +1188,12 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/COMSUBS_OVL/`
   and the `DATA.OVL` class-flag table; it is summarized here only to separate
   those effects from the player spell dispatcher.
+- The three enemy-side Negate-Magic/Crown boundaries -- whole class-special
+  hook bypass with ordinary-action continuation, teleport bypass with
+  ordinary-step continuation, and silently consumed scene-resistant
+  ranged/effect attack -- plus their per-dispatch cadence are derived from
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/notes/`.
 - Protection's inertness, Quickness's automatic-actor-driver gate and Negate Time's matching turn skip, Negate Magic's combat-cast absorption path, the combat C-Cast interference gate, the shared active-effect counter-aging rule, and Negate Time's `T`/10 runtime tag semantics are derived from local ULTIMA.EXE, COMBAT, COMSUBS, CAST, CAST2, and SJOG helper analysis summarized without copying implementation text.
 - The correction that the `Q` gate and the `T` skip are a single pair of tests
   at the head of the automatic actor driver, not an every-actor coin flip plus
