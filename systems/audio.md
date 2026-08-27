@@ -1136,6 +1136,41 @@ so a known Word spoken at the wrong place is still audible and visible. A
 successful ruined-shrine restoration invokes the shared effect again at its
 own success boundary.
 
+#### 8.4.1 The sceptre-reclaimed sting
+
+Reclaiming the Sceptre of Lord British by entering the Shadow Lord fight while
+carrying it plays a single long software-envelope note (`section 5.4`), not a
+flash and not a rumble. It is the only caller of this recipe.
+
+| Parameter | Value |
+|---|---|
+| Phase increment | 4050 |
+| Idle count | 1 |
+| Iteration count | 65,000 |
+| Initial compare | 1 |
+| Per-iteration compare delta | +1 |
+
+Its character is unlike anything else in the inventory, and an implementation
+that treats it as a short cue will be conspicuously wrong. The compare term
+starts at 1 and rises by one per iteration, so the gate is open almost the whole
+time at the start and closes progressively: the note begins at effectively full
+duty and thins steadily to near silence. It is a slow fade-out sting, not a
+chirp or a sweep — the pitch never changes.
+
+At the reference machine and the anchor of `timing.md` section 7, the 65,000
+iterations run for roughly **2.8 seconds** at about **1.4 kHz**. Both figures
+are modelled, not measured, and inherit the tolerance of `section 5.4.3`; the
+five parameters above are exact. This is by a wide margin the longest
+non-blocking note in the game, so an implementation should confirm its own
+scene pacing tolerates a beat of that length at encounter setup.
+
+Muting takes the envelope's silent arm in the usual way, which is not
+cost-matched (`section 3`), so a muted reclaim is shorter than an audible one
+rather than an equal-length silence.
+
+The ordering with the printed line and the flag clear is normative and belongs
+to the encounter contract: see `encounters.md` section 4.
+
 ### 8.5 Dungeon presentation and Codex boundary
 
 In ordinary-flavour dungeons, a five-stage animated wall droplet plays the
@@ -1144,9 +1179,9 @@ depth-dependent glissando from Section 5.2 only when it reaches landing stage
 updates. The no-tone far-depth case still performs the final speaker stop.
 
 This is a wall-decoration cue, not a Codex-glow cue. The Codex approach
-transcript itself has no speaker call. A similarly named Sceptre-reclaimed
-envelope elsewhere in the game is unrelated and must not be attached to Codex
-approach.
+transcript itself has no speaker call. The sceptre-reclaimed sting is a
+different effect belonging to a different event and must not be attached to
+Codex approach; it is now published in full at `section 8.4.1`.
 
 Ordinary dungeon walking and turning are silent. A walking or turning redraw
 may incidentally advance an already-eligible wall decoration to its landing

@@ -327,8 +327,24 @@ NPC inside a town therefore normally fights on the cobble arena 8, since the
 town scene byte is non-zero and town streets are cobble.
 
 The Shadow Lord branch has one extra effect: if the party is carrying the
-Sceptre of Lord British, entering that fight prints the sceptre-reclaimed
-message, plays a tone, and clears the sceptre flag. The arena is 10 either way.
+Sceptre of Lord British, entering that fight reclaims it. The arena is 10
+either way, and the branch runs entirely inside encounter setup, before the
+combat scene is entered.
+
+In order, and only when the sceptre is held:
+
+1. Print exactly `The Sceptre is reclaimed!` followed by one newline. There is
+   no terminating period and no leading blank line. It is printed after the
+   class banner that names the opponent, which is printed for this encounter
+   whether or not the sceptre is held.
+2. Play the sceptre-reclaimed sting (`audio.md` section 8.4.1).
+3. Clear the sceptre flag.
+
+The order matters for a transcript: the line completes before the sting starts,
+and the flag clears last. If the sceptre is not held, none of the three happen
+and setup proceeds directly to arena entry — this is the only branch in the
+program that clears that flag, so a party that never brings the sceptre to this
+fight keeps it indefinitely.
 
 The sixteen outdoor arenas are stored in the on-disk **outdoor combat arena
 bank**; each arena is an 11x11 terrain grid with a band of placement metadata
