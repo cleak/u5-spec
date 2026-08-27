@@ -682,11 +682,13 @@ The vanish branch has this exact order:
 The field in step 2 is **global action-result scratch**, not a field in the
 dying actor's descriptor and not a persistent vanish status. Bit `0x02` means
 that branch-specific narration has already been printed. The common attack
-result narrator is its only relevant bit reader: when `0x02` is still present,
-it skips the generic killed/slept/hit chain and clears `0x02` in its cleanup.
-If that narrator is not reached, the combat walker replaces the whole field
-with zero before the next actor dispatch. The automatic actor driver reads the
-same byte's unrelated cancelled-step bit but does not read `0x02`.
+result narrator is its only relevant bit reader. It first clears the field's
+kill-narrated bit `0x01`; when `0x02` is still present, the combined suppression
+test skips the generic killed/slept/hit chain, produces no message or sound,
+and clears `0x02` in cleanup. If that narrator is not reached, the combat walker
+replaces the whole field with zero before the next actor dispatch. The automatic
+actor driver reads the same byte's unrelated cancelled-step bit but does not
+read `0x02`.
 
 This scratch byte happens to lie inside the fixed saved-game image and is
 therefore serialized mechanically. That storage fact does not extend its
@@ -695,13 +697,23 @@ dispatch resets it before use. A loader must not reconstruct a pending vanish
 from a saved value.
 
 There is one original ordering collision. If the control/faint scan finds a
-party member, the sleep helper in that tail replaces the whole result field
-with sleep bit `0x04`, losing `0x02`. On the ordinary successful-attack path,
-the common narrator then sees the vanished target's released descriptor and
-can append its generic `<name> killed!` line after the earlier vanish line. If
-the scan finds no party member, `0x02` survives and suppresses that duplicate.
-Do not preserve both bits across this overwrite when reproducing baseline
-behavior.
+party member and sleep succeeds, the sleep helper replaces the whole result
+field with sleep bit `0x04`, losing `0x02`. On the ordinary successful-attack
+path, the attack's existing impact cue and separating newline occur before
+damage resolution, hence before the vanish line and faint tail. The later
+common narrator has already cached the vanished target's released descriptor
+state. Its dead/passive test precedes its sleep test, so it appends the vanished
+target's `<name> killed!` line—not `<name> slept!`—after the faint tail and
+plays no additional sound. It sets kill-narrated bit `0x01`, clears the
+transient sleep bit, and leaves `0x01` until the combat walker zeroes the whole
+field before the next actor dispatch.
+
+If the scan finds no party member, `0x02` survives and suppresses the duplicate.
+The same suppression survives when a matching member is already Dead: that
+case still prints the faint line, plays its envelope, and removes the Sword of
+Chaos, but the sleep helper returns without replacing the result field. Do not
+preserve both `0x02` and `0x04` across the successful-sleep overwrite when
+reproducing baseline behavior.
 
 #### Single-cell terrain reveal
 
@@ -738,21 +750,40 @@ mutations in order:
 
 1. Clear the controlled/charmed bit.
 2. Print the linked character's name followed by ` passes out!`.
-3. Play the long faint sound.
+3. Play the controlled-party faint envelope specified below.
 4. Remove the first Sword of Chaos (item 35) found among that character's six
    equipment bytes, replacing it with the ordinary empty-equipment sentinel.
 5. Apply the normal sleep-state helper to that combat slot.
+
+The faint sound is exactly the software envelope also used by monster
+possession success: phase period 3100, initial comparison 1000, comparison
+delta `+2`, 30,000 iterations, and idle count 1. The 16-bit phase accumulator
+starts at zero and advances by 3100 modulo 65,536 each iteration; comparison
+starts at 1000 and advances by two. A fixed divisor-60 carrier is connected
+only while phase is strictly greater than comparison. Thus the carrier pitch
+is fixed (about 19.9 kHz), while the roughly 1.1 kHz gate and its changing duty
+cycle form the audible swell-and-decay contour. The envelope blocks until all
+30,000 iterations finish, then forces silence. With sound disabled, it still
+runs the complete phase/comparison recurrence and remains blocking, but omits
+speaker I/O and completes faster: about 999 ms rather than about 1.29 seconds
+under the calibrated baseline. `audio.md` Sections 5.4 and 10.3 define the
+shared envelope more fully.
 
 The sleep helper does nothing further when the linked roster status is already
 Dead; the control clear, faint narration, sound, and item removal have already
 happened by then. Otherwise it changes the roster status to Sleeping, sets the
 descriptor's asleep/disabled bit, switches the linked object's displayed byte
 to the prone presentation, clears the active-player selection if it names that
-slot, writes sleep bit `0x04` to the shared result field, redraws the stats
-panel, and may run one world tick according to the ordinary presentation
-guard. The scan returns the matched slot, including five for the last party
-slot, but the vanish caller ignores it. With no match it returns the no-match
-sentinel and performs none of these effects.
+slot, replaces the whole shared result field with sleep bit `0x04`, and redraws
+the full stats panel. It then runs exactly one blocking world tick unless the
+combat-entry cache carries the rest/camp alternate-entry bit `0x04`. Entry
+modes 4 and 6 set that guard bit and skip the tick; ordinary terrain combat and
+dungeon ambush/wandering combat leave it clear and take the tick. The sleep
+helper itself plays no sound.
+
+The scan returns the matched slot, including five for the last party slot, but
+the vanish caller ignores it. With no match it returns the no-match sentinel
+and performs none of these effects.
 
 There is no full-arena redraw after the vanished actor's records are released.
 The guaranteed visible state comes from the earlier direct reveal: all 256
