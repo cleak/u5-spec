@@ -60,16 +60,23 @@ game's shared acting-member selection - the same selection that decides who
 performs Search, Jimmy, Get, Open, Look and Cast. That selection resolves in
 priority order:
 
-1. **During a combat-class scene**, the slot is the party member bound to the
-   combatant whose turn is currently in progress. It is chosen silently: no
-   prompt, no status test, and no check that the named party position is inside
-   the party.
+1. **During combat**, the chooser reads the owner field of the current combat
+   descriptor. The combat round walker sets that descriptor cursor to each
+   value from 0 through 31 and invokes commands before advancing it. Reaching
+   32 leaves the record pass; the all-ones lifecycle sentinel is never present
+   while Open is being dispatched. A manually entered Open therefore selects
+   the roster member owned by the live party descriptor whose turn is in
+   progress. The chooser itself performs no second range, faction, or status
+   check, but the enclosing round walker supplies those reachability guarantees.
 2. **Otherwise, when a single active character is set**, that character is
-   returned directly and silently, with **no** status re-check. The
-   active-character setting screens only for Dead and Asleep at the moment it is
-   made, so the character delivered here can be one who has since become
-   disabled - a member who is Asleep or Charmed by the time the container is
-   opened can still be the trap victim.
+   returned directly and silently, with **no local** status re-check. The setter
+   rejects Dead and Sleeping members. Every traced shipped transition that
+   makes the selected member Dead or Sleeping also clears the hint, and a stats
+   redraw independently clears a hint naming either status. Consequently no
+   shipped gameplay path leaves a Dead or Sleeping hint for a later Open.
+   Imported statuses other than those two are accepted by the setter and
+   survive the redraw, so an edited or legacy member with such a status can be
+   the victim through this override.
 3. **Otherwise**, the game considers the roster positions inside the current
    party count whose status is Good or Poisoned. If exactly one qualifies it is
    chosen silently: no prompt appears **and the chosen member's name is not
@@ -102,34 +109,25 @@ resolver. The two override cases above do not consult status at all and are
 therefore *not* covered by that guarantee. An earlier draft of this rule was
 circulated without that scope; the unscoped form is wrong and is withdrawn.
 
+Combat adds a stricter reachable-status boundary. Dead party descriptors are
+marked and skipped before actor dispatch. An actor carrying the combat
+sleep/disabled bit takes its recovery/refusal loop before command input, and a
+controlled party actor is routed through automatic action instead of the
+player's Open prompt. Thus a combat container victim reached through player
+input is ordinarily Good or Poisoned. An imported roster status other than Dead
+or Sleeping can also reach the prompt because combat does not reject that
+outside-domain value. Dead, Sleeping, and combat-disabled members cannot be
+player-selected trap victims on this branch.
+
 `systems/containers.md` describes the surface/town container path as asking for
 "the party member who opens it". That is the same selection, but the prompt is
 only one of its three outcomes; see the priority list above.
 
-**Open gaps in this selection, stated rather than left silent.**
-
-- Whether the combatant index the first branch reads really means "the
-  combatant whose turn is in progress" is **not established**. It is used as an
-  index into the live combatant records by several systems and is advanced like
-  a turn cursor, but the combat round engine itself has not been traced. The
-  container contract does not depend on the interpretation - the slot is
-  whatever party position that combatant record names - but an implementation
-  should not treat the phrase as derived fact. Tracing the combat round engine
-  would settle it.
-- The combat branch neither range-checks that index nor tests the "is a party
-  member" flag on the record it reads, although the interactive picker tests
-  exactly that flag. Some entry paths park an all-ones sentinel in that index in
-  the same breath as they set a combat-class scene, and in that window the
-  selection would read past the end of the combatant records. Whether a
-  container can actually be opened inside that window is **UNVERIFIED**; it
-  would be settled by tracing which scenes accept an Open while the index holds
-  the sentinel. A port that range-checks the index is safe against every
-  reachable case published here.
-- The claim that only death clears the active-character hint - the hazard in
-  branch 2 - rests on a scan of direct-addressing writes only; a write made
-  through a computed pointer would not have been seen. Treat "a disabled active
-  character can be the trap victim" as strongly indicated by the control flow
-  but **not** proven reachable.
+*Corrected:* an earlier revision left the combat cursor and sentinel as open
+questions and said a later-disabled active-character hint could reach the trap.
+Those statements are withdrawn. The round walker closes the sentinel window,
+and the status writers plus redraw close the Dead/Sleeping active-hint window;
+the imported-status exception above remains intentional.
 
 ## 3. Effect Families
 
@@ -338,31 +336,39 @@ share one implementation. Note that the mixer does **not** use the § 2.1
 acting-member selection; it supplies its victim slot itself. The mixer owns the
 reagent loss and no-charge result; before calling the trap-effect resolver it
 refreshes its target slot to the first travelling member currently marked Good
-or Poisoned when such a member exists. When no such member exists the slot is
-left holding whatever it last held, and the trap lands on that stale value; a
-port should treat that as undefined behaviour and decide deliberately rather
-than inventing a fallback.
+or Poisoned. Every exploration mode runs that same capability scan before it
+accepts a command: sleepers-only takes a sleep pass and no-recognized-member
+takes defeat/rescue. Mix performs no status mutation before repeating the scan.
+Therefore every normally dispatched wrong Mix has a Good-or-Poisoned member,
+refreshes the target to the first such in-party slot, and never uses stale data.
 
-Two things bound the damage that stale value can do. The status helper behind
-effect ids 1 and 3 gates its slot with an **unsigned** party-count comparison,
-so a stale value at or above the party count is a silent no-op there and cannot
-corrupt anything; the undefined-behaviour framing applies to a stale value that
-happens to land *below* the party count, which poisons an arbitrary member. The
-single-slot damage effect (effect id 0) has no such gate, so a stale value out
-of range would be written through by that path.
+The literal forced-call behavior is still useful for robust ports. If an
+external harness invokes Mix while no Good-or-Poisoned member exists, the scan
+leaves a shared transient word unchanged and the resolver receives that prior
+16-bit value. It is not a fixed sentinel and not a coordinate. Single-target
+poison ignores an out-of-range value through its unsigned party-count gate and
+skips an in-range Dead member; an in-range Sleeping or imported status becomes
+Poisoned. Bomb and gas ignore the supplied target. Acid has no bound at all and
+uses an out-of-range value to access memory outside the roster, so this forced
+edge is memory-unsafe rather than a deterministic gameplay mutation.
 
-*Corrected, and flagged as needing its own trace:* an earlier revision called
-the mixer's target a "scratch slot" whose stale content is "whatever party index
-it last held". That is true in letter but misleading in substance. The word the
-mixer writes is not dedicated scratch: it is the same resident word the
-world-coordinate bookkeeping uses as a map origin, incremented and decremented
-by movement handling and added to the party's local coordinate to form a world
-coordinate. When no Good-or-Poisoned member exists, the value the trap lands on
-is therefore most likely a map coordinate rather than a previous party index.
-**UNVERIFIED:** whether the mixer's overwrite of that word also disturbs the
-party's world position - that is, whether the map origin is recomputed
-afterwards - has not been traced, and it should be settled before anyone writes
-a confident sentence about wrong-mix side effects.
+A safe implementation should preserve the normal first-Good-or-Poisoned rule.
+If a forced/corrupt state supplies no valid single target, it may still play the
+rolled message and apply a party-wide Bomb or Gas result, but must make Acid or
+single-target Poison a no-op instead of emulating an out-of-bounds access or
+choosing an arbitrary fallback member. This safety rule changes no reachable
+shipped case.
+
+After any wrong-mix resolver result, the caller runs its normal interface
+cleanup and returns to the invoking mode. It does not branch on the selector or
+resolver result. A resulting defeat is observed by the mode loop's next
+capability check.
+
+*Corrected:* an earlier revision called the shared word a world map origin,
+said the no-Good-or-Poisoned stale target was normally reachable, and left a
+possible world-position mutation open. Those claims are withdrawn. The word is
+transient focus/direction scratch, separate from the live map-position state;
+neither the successful nor failed scan moves the party.
 
 A spell name the parser cannot match takes the same wrong-recipe path, so a
 mistyped incantation also springs the trap. The trap resolver then applies the
@@ -416,10 +422,6 @@ These items are published as explicit gaps rather than omitted, and an
 implementation should treat them as genuinely unspecified rather than as
 oversights:
 
-- The meaning of the combatant index in § 2.1.
-- Whether a container can be opened while that index holds its sentinel.
-- Whether the mixer's reuse of the map-origin word disturbs the party's world
-  position.
 - What the fixed constant stamped into the world-object entry by the
   surface/town combat cleanup in § 4 denotes.
 - In the caller layer, the dungeon chest lock/trap sub-type is documented here
@@ -456,8 +458,8 @@ private address maps.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/CMDS_OVL/`.
 - `u5-decomp/notes/` — the
-  wrong-mix branch's exact three steps, the stale victim-index edge, and the
-  unmatched-spell-name route into the same branch.
+  wrong-mix branch's exact three steps, the forced-call prior-word edge, and
+  the unmatched-spell-name route into the same branch.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/SJOG_OVL/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
@@ -475,15 +477,27 @@ Source provenance for the 2026-08-23 revision - § 2.1's acting-member selection
 and its scoped consequence, the per-site container differences and the Open
 dispatcher's scene routing, the exact two gates and single status comparison in
 the poison helper, the absence of any status or party-count gate on the
-single-slot damage effect, the non-uniform shape of that effect's damage roll,
-and the map-origin identity of the mixer's target word: re-derived directly from
-the shipped binaries during that revision, with private analysis in
+single-slot damage effect, and the non-uniform shape of that effect's damage
+roll: re-derived directly from the shipped binaries during that revision, with
+private analysis in
 `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/` and
 `u5-decomp/functions/ULTIMA_EXE/` used only to locate starting points. The
 private notes for the acting-member selection and for the surface container
 handler mislabel that selection (as a party-join prompt and as a direction
 prompt respectively) and read the status byte as a class byte; those private
 notes are wrong against the binaries and this document does not follow them.
+That revision's map-origin interpretation of the mixer word was also wrong and
+is withdrawn in § 4 and retraction R299.
+
+Source provenance for the 2026-08-27 closure of issue 174 - the combat cursor
+range and sentinel reachability, player-command status gates, active-hint
+lifecycle, exploration-loop capability gates, wrong-Mix forced-call behavior,
+and separation of transient focus scratch from live map position - derived
+from private analysis in `u5-decomp/functions/COMBAT_OVL/`,
+`u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+`u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/MAINOUT_OVL/`,
+`u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/ULTIMA_EXE/` and
+`u5-decomp/notes/`.
 
 Source provenance for the later 2026-08-23 revision - the closure of the
 Open-clears-the-trap-flag gap in § 4, the two corrected phrases in the
