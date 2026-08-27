@@ -980,7 +980,7 @@ may subsequently invoke the damage rumble.
 | Common committed spell pre-effect | Use the named spell's variant from Section 6. It brackets the viewport inversion and blocks until both envelopes and restoration complete. |
 | Common spell failure tail | After `Failed!`, play the 50-update 800-to-2000 Hz cast-failure glissando. |
 | Vanish success | Vanish first runs variant 1 when direction input commits. After the accepted tile rewrite, `POOF!`, dirtying, and redraw, it plays the 40-update action snap. Pass is silent. A nonmatching tile retains the earlier variant-1 presentation, then reaches the common failure tail. |
-| Monster possession success | After possession narration, run software envelope `(delta 2, initial comparison 1000, 30000 iterations, idle 1, period 3100)`. Resistance skips this success envelope. |
+| Monster possession success; controlled-party faint after a vanish-on-death kill | These two triggers use the identical software envelope: `(delta 2, initial comparison 1000, 30000 iterations, idle 1, period 3100)`. Possession runs it after success narration; resistance skips it. The faint path prints `<party member> passes out!`, runs this envelope, and only then removes the Sword of Chaos and applies sleep. |
 | Monster summon success | After successful placement and narration, run `(15, 1000, 5000, 1, 2760)`, then perform the summon tile flash. Failed chance, coordinate, legality, or allocation gates are silent. |
 | Player Summon | The committed cast uses its shared spell variant. An accepted placement additionally runs `(5, 500, 12000, 1, 2760)` before actor finalization. Cancellation before commit is silent. |
 | Moongate transit | During an accepted transit, run `(2, 2000, 30000, 1, 5900)`. No destination handoff means no transit envelope. |
@@ -1659,7 +1659,7 @@ envelope's idle count does not affect its baseline duration.
 | Shared variant 6 | 34,000 | **1.46 s** | about 1.13 s |
 | Shared variant 7 | 38,000 | **1.63 s** | about 1.27 s |
 | Shared variant 8 | 42,000 | **1.81 s** | about 1.40 s |
-| Monster possession success (section 8.3) | 30,000 | **1.29 s** | about 999 ms |
+| Monster possession success or controlled-party faint (sections 8.3 and `combat.md` 6.3) | 30,000 | **1.29 s** | about 999 ms |
 | Monster summon success (section 8.3) | 5,000 | **215 ms** | about 167 ms |
 | Player Summon placement (section 8.3) | 12,000 | **516 ms** | about 400 ms |
 | Moongate transit (section 8.3) | 30,000 | **1.29 s** | about 999 ms |
