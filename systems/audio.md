@@ -278,7 +278,7 @@ Common recipes are:
 | Trap or failed reagent mix | 40 | 3000 | 100..500 Hz | 75 |
 | Ordinary damage presentation | 10 | 1600 | 100..2000 Hz | 160 |
 | Shared potion/wind lead, variant `v` | 800 | `8000 + 1600v` | 100..700 Hz | 10 through 26 for variants 0 through 8 |
-| Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold |
+| Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; this is the live Blackthorn cinematic movement stinger specified in Section 8.6 |
 
 ### 5.4 Software envelope
 
@@ -1205,7 +1205,7 @@ stage; that event owns the sound, not the movement command.
 | Return-to-View strip 2 | Each scheduled inner tick runs rumble `(20, 60, 10000)`, exactly three random pitches in 100..10000 Hz. The enclosing tick is BIOS-clock paced. |
 | Return-to-View strip 3 | At local phase 0 play a 3000 Hz blocking tone for 3 calibrated units; at phase 4 play 2000 Hz for 3. The enclosing tick remains BIOS-clock paced. |
 | Harpsichord digit puzzle | Each accepted digit plays its digit-specific note through the software envelope generator, only while sound is enabled. The note **blocks** for its full 4,000 iterations, about 172 ms, and ends in a hard silence. Muting skips the generator call outright and therefore removes the hold as well as the sound - the one caller-level exception to section 3. `town-mode.md` section 13.1 owns the ten-note table, the ascending scale, and the plucked amplitude contour. Ordinary name or text typing does not reuse this behavior. |
-
+| Blackthorn cinematic movement or stinger pause | Run the Section 5.3 short two-part sting: 25 sound-LFSR updates at `100..1000 Hz`, hard silence, a 20-unit calibrated silent hold, 25 updates at `100..1500 Hz`, then hard silence. The cinematic VM then requests its separate two-tick quiet redraw pause. Sound mute preserves both rumble loops, all fifty sound-state advances and timer writes, the silent hold, and the cinematic pause. |
 
 #### 8.6.1 The intro rectangle-dissolve click
 
@@ -1413,6 +1413,35 @@ broadband noise, independently of the band-edge growth. This paragraph is
 - **Interrupt jitter.** Whether a timer interrupt handler is live during the
   intro dissolve, and what it does to a run of this length with a continuously
   gated speaker, was not determined.
+
+#### 8.6.2 Blackthorn rescue envelope sequence
+
+After the refuge tableau first places and redraws the party-on-foot actor, the
+Blackthorn rescue runs these six software envelopes consecutively. “Phase
+increment” is the same field called *phase period* elsewhere in this document.
+
+| Row | Phase increment | Idle count | Iterations | Initial comparison | Comparison delta | Approx. gate pitch | Approx. audible / muted duration |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 4400 | 1 | 50,000 | 3000 | +1 | 1.56 kHz | 2.15 s / 1.67 s |
+| 2 | 4125 | 1 | 50,000 | 3000 | +1 | 1.47 kHz | 2.15 s / 1.67 s |
+| 3 | 3667 | 1 | 50,000 | 3000 | +1 | 1.30 kHz | 2.15 s / 1.67 s |
+| 4 | 2933 | 1 | 30,000 | 1000 | +1 | 1.04 kHz | 1.29 s / 999 ms |
+| 5 | 3300 | 1 | 40,000 | 100 | +1 | 1.17 kHz | 1.72 s / 1.33 s |
+| 6 | 3300 | 1 | 40,000 | 40,100 | -1 | 1.17 kHz | 1.72 s / 1.33 s |
+
+All parameter values and counts are exact; frequencies and wall-clock figures
+are calibrated approximations. There is no explicit delay or non-audio work
+between rows. Each row is nevertheless a separate speaker program: it writes
+the fixed divisor-60 carrier, resets phase to zero, initializes comparison from
+the row, completes its own iteration count, and forces the audible speaker gate
+off before returning. Thus each audible row ends at hard silence before the
+next begins, without an intentional inter-row hold.
+
+Muted playback still programs the carrier and executes all six complete
+recurrences. It omits comparison and speaker-gate traffic, so the sequence
+remains blocking but contracts from approximately 11.18 seconds audible to
+8.66 seconds muted on the reference machine. `blackthorn.md` Section 7 owns
+the surrounding visual, narration, restoration, and scene-handoff order.
 
 ### 8.7 Endgame
 
@@ -1760,6 +1789,8 @@ listed in `RETRACTIONS.md`.
 | Envelope cue before a summon | Monster summon on successful placement; player Summon on accepted placement. | Failed chance, coordinate, legality, or allocation gates - all silent. |
 | Wind-change sequence | The Wind Change spell (variant 2) and the Wind Change scroll (variant 1). See section 7.3. | The autonomous wind drift, which is silent on every path. The wind setter itself, which contains no sound call. |
 | Nothing at all, on a passed direction prompt | Blink and Vanish both return the shared cancelled sentinel, which matches neither epilogue branch. See section 8.3.2. | There is no Blink pass in combat: the scene gate takes an arm that never prompts. |
+| Blackthorn cinematic stinger | Every Blackthorn VM stinger-pause repetition and every animated movement step while per-step pauses are enabled. See Section 8.6 and `blackthorn.md` Section 6. | The unreachable post-certificate endgame call is a separate dormant site; its dormancy does not make the Blackthorn trigger dormant. |
+| Blackthorn rescue envelopes | One fixed six-row sequence after the refuge tableau first redraws the party actor. See Section 8.6.2 and `blackthorn.md` Section 7. | The Blackthorn VM movement scripts, which use the random-rumble stinger instead. No visual operation occurs inside the six-row loop. |
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |
 
@@ -1791,6 +1822,11 @@ The sailing-collision and rough-seas trigger, order, and random-stream details
 were derived from private analysis under
 `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and
 `u5-decomp/notes/`.
+
+The Blackthorn movement-stinger identity, mute-preserved timing boundary, and
+ordered six-row rescue-envelope table were derived from private analysis under
+`u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
 
 Confidence is high for the numeric inputs, step counts, trigger/cancellation
 order, random-stream ownership, and mute behavior. The phase and comparison
