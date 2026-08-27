@@ -362,15 +362,16 @@ harpsichord digit handler below for the latter.
 Town mode has one pre-dispatch stage no other mode has. Over-drinking at a
 tavern arms a counter at twenty-five; while that counter is non-zero, every
 command the player enters is subject to an even-odds scramble. When the scramble
-fires, the engine discards the entered command and substitutes a random cardinal
-step, prints the short hiccup line, runs the same one-shot schedule-rewrite
-sweep over the NPC roster that Section 14 describes, and decrements the
-counter by one; when it does not fire, the entered command runs normally and the
-counter is untouched. The counter therefore drains only on scrambled commands,
-not on every turn. Entering a town clears it outright, so the effect never
-survives leaving and re-entering a location, and the tavern branch that arms it
-is the only producer anywhere in the game. `systems/shops.md` owns the tavern
-prompt that arms it.
+fires, the engine runs the same one-shot schedule-rewrite sweep over the NPC
+roster that Section 14 describes, decrements the counter by one, prints the
+fixed line `Hic!` followed by a line break, and then draws and substitutes one
+of the four cardinal steps with equal probability. The hiccup text is not a
+pool and consumes no random draw of its own. When the scramble does not fire,
+the entered command runs normally and the counter is untouched. The counter
+therefore drains only on scrambled commands, not on every turn. Entering a town
+clears it outright, so the effect never survives leaving and re-entering a
+location, and the tavern branch that arms it is the only producer anywhere in
+the game. `systems/shops.md` owns the tavern prompt that arms it.
 
 ### 7.2 Digits
 
