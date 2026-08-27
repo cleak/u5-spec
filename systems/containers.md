@@ -597,6 +597,12 @@ The visible consumed-object rules are:
   follows the ordinary object-table grant rule above. *Corrected:* an earlier
   revision had this backwards, attributing the slot clear to the plague outcome
   alone and the rewrite into a pickup to every non-plague search.
+- **Corpse-search scope and victim.** This branch belongs only to a
+  surface/town Search whose active-object lookup finds a moldy corpse. A
+  rotting body does not enter it. Before the lookup, Search chooses the
+  searching member through the shared acting-member selection specified in
+  `systems/traps.md` § 2.1; cancellation aborts before any corpse roll. That
+  selected slot is also the Plague victim.
 - **Corpse-search odds.** Every roll below is over a **closed** range - both
   bounds are attainable - which is the detail most likely to be mis-implemented
   as an exclusive upper bound.
@@ -611,13 +617,61 @@ The visible consumed-object rules are:
   against two thirds, and the plague chance as one in thirty-one; **both figures
   are withdrawn**. Each was an inclusive/exclusive off-by-one on a closed range.
 
-  The remaining narration in the cleared arm - the several "nothing"-style
-  results - is **not uniform**. It is drawn through a chained roll rather than a
-  flat four-way choice, which weights it heavily toward the least interesting
-  outcome: roughly **52%**, **27%**, **15%** and **6%** across the four messages
-  in order. An implementation that picks one of the four with equal probability
-  will show the rarest message about twice as often as the original does. This
-  is presentation only and stages neither food nor gold.
+  The exact branch tree and shared gameplay-PRNG consumption are:
+
+  | Stage or completed path | Inclusive range and predicate | Shared draws consumed |
+  |---|---|---:|
+  | Arm split | Draw `0..7`; zero stages contents, while `1..7` clear the slot. | 1 |
+  | Contents | Draw `0..3`; zero stages food and `1..3` stage gold. Then draw the staged quantity in `1..3`. | 3 |
+  | Cleared-arm Plague | After clearing the slot, draw `0..31`; exactly `19` selects Plague. | 2 |
+  | Cleared-arm ordinary narration | When the preceding draw is not `19`, first draw an upper bound in `0..3`, then draw the narration selector in `0..upper_bound`. | 4 |
+
+  Plague therefore has unconditional probability `7/256` per moldy-corpse
+  Search. Conditional on reaching ordinary narration, selectors zero through
+  three have exact probabilities `25/48`, `13/48`, `7/48`, and `3/48`.
+  They are not equal quarters.
+- **Corpse-search transcript.** Search prints `Thou dost find` followed by a
+  line break before entering this branch. The branch then appends exactly one
+  of these lines, with no member name or intervening line:
+
+  | Selector | Exact appended line |
+  |---:|---|
+  | Plague | `Plague!` |
+  | Ordinary `0` | `nothing!` |
+  | Ordinary `1` | `worms!` |
+  | Ordinary `2` | `guts!` |
+  | Ordinary `3` | `a bloody pulp!` |
+  | Contents food | `food!` |
+  | Contents gold | `gold!` |
+
+  Every listed line ends with one line break.
+  The four ordinary lines are presentation only and stage neither food nor
+  gold.
+- **Plague consequence.** After printing its line, Plague plays the blocking
+  PC-speaker random-rumble effect with step `40`, total `3000`, and maximum
+  pitch `500`: 75 short frequency fragments, each in the inclusive
+  `100..500 Hz` range. The rumble uses the audio sequence rather than consuming
+  more shared gameplay-PRNG draws. Turning sound off suppresses speaker output
+  but preserves all 75 timing iterations and audio-sequence advances. When the
+  rumble finishes, the game directly replaces the selected member's status
+  with Poisoned and requests a full stats-panel repaint. There is no
+  current-status gate, damage roll, HP change, or active-member change. Normal
+  selection supplies an in-party member; an imported status admitted by the
+  active-member override is overwritten with Poisoned as well. The repaint is
+  deferred to the enclosing mode's next refresh boundary rather than called
+  inside the Plague branch. Literal forced invocation with an in-range Dead or
+  Sleeping slot would also overwrite it; an out-of-range slot is a memory-unsafe
+  call edge because this helper performs no local bound check. Neither case is
+  reachable through normal Search selection.
+- **Corpse-search completion.** The contents arm marks the inventory/status
+  view dirty and refreshes the full stats panel immediately after staging its
+  food or gold record; it still changes no inventory counter until a later
+  pickup, and it plays no sound. Ordinary cleared-arm narration requests no
+  stats repaint and also plays no sound. Every completed branch returns through
+  Search, and the resident command dispatcher retains its normal-action result,
+  so the current mode performs one ordinary consumed-action tail. The helper
+  itself does not move
+  the party, advance time separately, save a file, or enqueue another action.
 - **Combat-created body/retrieval slots.** The ordinary post-combat
   trigger-slot reconciler can rewrite a restored `0x2C..0x2F` body-family
   active-object slot into the same broad body/retrieval family consumed by
@@ -678,6 +732,9 @@ Modern implementations should therefore separate:
 - **Inventory subtypes.** Potion, scroll, odd-key, shard, ammunition bundle
   grants, and ordinary counter caps are now public. No container-owned
   inventory subtype gap remains.
+- **Corpse-search branch.** The exact chained rolls and draw counts, output
+  lines, Plague status and rumble consequence, repaint cadence, slot mutation,
+  and ordinary action continuation are specified in § 9.
 - **Search trap/feature table.** Surface/town Search distinguishes regular
   treasure, per-object simple/complex/generic trap narration, hidden doors,
   fixed furniture/location prefixes, and empty feature descriptions, and
@@ -695,7 +752,6 @@ ordinary counter caps, or inventory-add subtypes.
 This cleanroom spec was derived from private analysis notes. It intentionally
 does not reproduce decompiled code, assembly, or raw data dumps.
 
-- `u5-decomp/functions/SJOG_OVL/OVERVIEW.md`.
 - `u5-decomp/functions/SJOG_OVL/`.
 - `u5-decomp/functions/SJOG_OVL/` (filename is
   historical; the note's 2026-08-22 banner withdraws the "trap" reading and
@@ -707,7 +763,7 @@ does not reproduce decompiled code, assembly, or raw data dumps.
   `u5-decomp/functions/SJOG_OVL/` (filename is
   historical; the routine is the slot allocator, not a party check).
 - `u5-decomp/functions/SJOG_OVL/`.
-- `u5-decomp/notes/oq-closures_2026-08-22_sjog-traps-locks.md` — source
+- `u5-decomp/notes/` — source
   provenance for the retraction of the "broken-lock" state, the guarantee that
   a failed pick preserves a container's contents, the identification of the
   secondary pool as the equipment array, and the absence of any caller-side
@@ -718,5 +774,11 @@ does not reproduce decompiled code, assembly, or raw data dumps.
   arm being the only one that stages a pickup -- re-derived on 2026-08-22 from
   the shipped overlay and recorded in the banner and Behavior section of
   `u5-decomp/functions/SJOG_OVL/`.
+- Source provenance for the 2026-08-27 closure of issue 175: the exact chained
+  rolls and draw counts, transcript order, selected-member status overwrite,
+  stats-panel refresh cadence, rumble parameters, normal-action continuation,
+  and negative side-effect census were derived from private analysis in
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and
+  `u5-decomp/notes/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
-- `u5-decomp/formats/saves.md`.
+- `u5-decomp/formats/`.
