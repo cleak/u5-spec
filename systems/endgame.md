@@ -318,11 +318,14 @@ then does the next record print. There is no on-screen cursor prompt beyond the
 record's own `You reply: ` tail.
 
 The seven rite messages are printed as **seven discrete pages**. After the
-first of them the sequence runs a short timed pause and then prints a fixed
-`He says:` lead-in with exactly one blank row before it and one after; from
-there every remaining rite
-message is separated from the next by a blocking key read, so the player
-advances each page. Nothing in this stretch is timed out or auto-advanced.
+first of them the sequence pauses for **forty shared world-animation ticks**
+and then prints a fixed `He says:` lead-in with exactly one blank row before it
+and one after. Each tick carries the shared one-BIOS-timer-tick delay, making
+the pause approximately 2.20 seconds when world animation is enabled. If the
+world-animation gate is disabled, the pause helper skips the forty-tick loop
+entirely. From there every remaining rite message is separated from the next
+by a blocking key read, so the player advances each page. Nothing in this
+stretch is timed out or auto-advanced.
 
 ## 6. Refusal or missing-box branch
 
@@ -589,6 +592,9 @@ re-selected at entry and after every line break, which is what makes the prose
 flow around the panel. Line advance is nine pixels and glyph output stops once
 the pen reaches vertical position 192. The endgame never writes the space
 advance, so all six windows lay out with the shipped default of five.
+On the shipped EGA presentation path, every set bit of a proportional glyph is
+stamped as palette index 15 (white), while unset bits leave the panel or page
+background unchanged. The prose has no outline, shadow or opaque cell backing.
 
 | Window | Pen start | Outside band: left, right | Inside band: left, right | Band low, high |
 |---:|---|---|---|---|
@@ -610,7 +616,7 @@ clipped to a right margin of 154 — the space to the left of its right-hand
 panel — until the pen passes y = 112, after which it uses the full width.
 
 Two windows also draw decorative title strips from the shared `TEXT` strip
-archive on top of the panel, before the prose is laid out:
+archive before the panel and prose are laid out:
 
 | Window | Strips drawn, in order |
 |---:|---|
@@ -621,6 +627,11 @@ Those two strip pairs read as the chapter titles "The Homecoming" and
 "The Dream" respectively; the words are part of the artwork, not typeset text.
 The overlap between the two strips of window 4 is intentional kerning — the
 second strip is drawn opaque over the first.
+
+**Retraction.** Earlier revisions said that these title strips were drawn "on
+top of the panel". That is withdrawn. The strips are drawn first and the opaque
+panel is drawn afterward, as section 8.3 specifies, so the panel replaces any
+strip pixels where their rectangles overlap. See `RETRACTIONS.md` R272.
 
 ### 8.3 Presentation model
 
