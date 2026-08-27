@@ -34,6 +34,10 @@ In the surface and town encoding, the tile codes J-Jimmy and O-Open care about f
   shipped Look description for `0xAF` is a heavy footlocker, so this is an
   Open-command case rather than evidence for a general standing-open-door
   family.
+- **Too-heavy Open case.** Exact tile `0x99` is the sole selector for Open's
+  "Too heavy!" refusal. It changes no tile and does not fall through to the
+  lock, magic, or chest paths, but the command still commits the action and
+  consumes one turn.
 - **Restraint tiles.** Exact tile `0x84` is stocks and `0x85` is a set of
   manacles. These are not containers and not doors: J-Jimmy treats them as
   prisoner releases (§ 3.1), and they never convert to an "unlocked"
@@ -271,8 +275,9 @@ O-Open is the lighter cousin of Jimmy: it acts only on already-unlocked doors an
 The non-dungeon Open handler always begins with one piece of bookkeeping: the door auto-close pass (§ 5). It then runs the shared pre-flight reachability gate, computes target coordinates, fetches the front-tile byte, and cascades:
 
 - **Already-open door** — "It's open!" and return.
-- **Too-heavy target** — "Too heavy!" and return. This is a refusal distinct
-  from a locked target; Open does not try to pick or force it.
+- **Too-heavy target** — exact tile `0x99`: print "Too heavy!" and return. This
+  is a refusal distinct from a locked target; Open does not try to pick or
+  force it.
 - **Locked door / chest / lockable NPC** — "Locked!" and return. Open does not pick.
 - **Closed-and-unlocked door / closeable chest** — open path: snapshot the previous tile id, X, and Y into the door-close-tracker, set the tracker countdown to four, rewrite the cell to the open-container byte, set the tile-changed bit, and print "Opened!".
 - **Magic-locked door** — treated as locked.
@@ -287,6 +292,11 @@ magic, trap, or chest-content handling. If the tile cascade does not recognise
 the target as a door/openable/locked/heavy case, ownership passes to the
 chest-on-floor helper; that helper owns object-table matching, traps, empty
 chests, content grants, and its own "nothing" or "can't" refusals.
+
+Every resolved non-dungeon Open attempt returns the dispatcher's ordinary
+committed-action status, including the already-open, too-heavy, locked, and
+generic refusal paths. The too-heavy result therefore consumes one turn; it is
+not a free re-prompt.
 
 ## 5. The auto-close timer
 
