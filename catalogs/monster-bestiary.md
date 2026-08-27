@@ -56,9 +56,14 @@ The confirmed per-class data supports these fields:
   the excluded arena terrain values never run it at all
   (`systems/combat.md` Section 6.3).
 - **Charm threshold** - the class byte used by Mass Charm's target-selection
-  remap gate. While Mass Charm's shared `C` tag is active, a monster target pick
-  rolls one uniform random byte in `[0, 255]`; the acting monster is remapped to
-  neutral group 0 only when the roll is strictly greater than this threshold.
+  remap gate for an ordinary monster-side automatic actor. While Mass Charm's
+  shared `C` tag is active, the target pick rolls one uniform random byte in
+  `[0, 255]`; the acting slot is treated as party-aligned group 0 for that pick
+  only when the roll is strictly greater than this threshold. Its descriptor is
+  not rewritten. The generic selector uses a linked party member's Dexterity in
+  the reachable controlled party-side automatic case instead of this class
+  byte. *Corrected 2026-08-27:* the earlier description called group 0
+  "neutral"; that label is withdrawn (Retraction R297).
 - **Traits** - decoded combat flags or class-specific death paths. Undecoded flag
   bits are deliberately omitted rather than named speculatively. A blank trait
   cell therefore means "no decoded trait here," not "no flag bits are set."

@@ -1335,15 +1335,22 @@ byte. It is forced to 1 for a monster while Negate Time is active, for class 26
   filter is not the same as the special suppression-filter bypass above.
 
 When Mass Charm is active, the same target picker first checks the shared
-active-effect tag for `C`. It resolves the acting monster's class charm
-threshold from the per-class combat record, then rolls one uniform random byte
-in `[0, 255]`. If the roll is strictly greater than the threshold, the acting
-monster's faction for this target pick is forced to neutral group 0 before the
-filter above runs; otherwise the monster keeps its normal faction. This does not
-mark individual actors as charmed; it changes which candidates survive the
-normal same-faction filter for the current AI decision. For a threshold `T`, the
-remap chance is `(255 - T) / 256` for `0 <= T <= 255`; the current class
-thresholds are catalogued in `catalogs/monster-bestiary.md`.
+active-effect tag for `C`. For an ordinary monster-side automatic actor, it
+resolves the actor's class charm threshold from the per-class combat record.
+The generic selector instead supplies the linked party member's Dexterity when
+a controlled party-side actor reaches this automatic path. It then rolls one
+uniform random byte in `[0, 255]`. If the roll is strictly greater than the
+selected threshold, the acting slot is treated as **party-aligned group 0** for
+this target pick; otherwise it keeps its resolved group. This is a caller-local
+override: it does not mark an actor as charmed, rewrite its descriptor, change
+cell occupancy, or alter side counts. It changes only which candidates survive
+the normal same-group filter for the current AI decision. For a threshold `T`,
+the remap chance is `(255 - T) / 256` for `0 <= T <= 255`; a threshold of 255
+can never remap. The current class thresholds are catalogued in
+`catalogs/monster-bestiary.md`.
+
+*Corrected 2026-08-27:* the earlier description called group 0 "neutral";
+that label is withdrawn. Group 0 is the party-aligned group (Retraction R296).
 
 The target's distance is `floor(sqrt(dx^2 + dy^2))`, computed from the acting actor's arena coordinate and the candidate's arena coordinate. It is not Manhattan distance, Chebyshev distance, or a squared-distance table lookup. Backwards walk plus strict less-than comparison means *the lowest-numbered slot among candidates of equal distance wins*, biasing toward party members (low slots) when distances tie.
 
@@ -1799,8 +1806,10 @@ Quickness's `Q` tag randomly gates the automatic actor driver with a 0..1 roll,
 so self-acting actors act about half as often while it runs and the player's
 own command prompt is untouched (Sections 8 and 9); Mass
 Charm's `C` tag lets the AI target picker roll against the acting monster's
-class charm threshold and, on success, remap that monster to neutral group 0
-before friend/foe filtering; Negate Magic's `N` tag absorbs party combat casts
+selected threshold and, on success, treat that slot as party-aligned group 0
+for that target pick only (ordinary monsters select the class threshold; the
+reachable controlled party-side case selects linked-member Dexterity); Negate
+Magic's `N` tag absorbs party combat casts
 before the shared spell dispatcher spends charge or MP and also feeds the
 class-special, teleport, and scene-resistant ranged/effect checks specified in
 Sections 9 and 11. Three different things can put
@@ -2098,13 +2107,82 @@ without independent behavioral consumers remain opaque metadata.
 
 - **Round counter wrap at ten.** The per-round counter wraps at ten and fires a tile-render on every wrap. Likely a "render every N actor-turns" cadence balancing CPU cost on original hardware. A modern implementation can treat it as "redraw every frame" without preserving the cadence.
 
-- **Faction edge cases.** The ordinary party, hostile monster, and passive/neutral faction tags are identified in the combat-instance descriptor table. Remaining exactness work is limited to any additional class-specific remaps beyond the Mass Charm threshold path.
+- **Faction edge cases — closed.** An exhaustive census found no additional
+  reachable class-specific faction remaps. Section 16.1 gives the complete
+  placement map, runtime overrides, downstream effects, and verification
+  vectors.
 
 - **The thirty-two-slot table size.** Plausibly: six party slots + sixteen monster placement slots + ten "dynamic" slots for replicated/summoned creatures. The round walker's "less than thirty-two" test is the only hard upper bound.
+
+### 16.1 Exhaustive Faction And Remap Closure
+
+Combat has two acting sides plus a passive descriptor form. Group 0 is
+party-aligned and group 1 is hostile-aligned. Passive actors are filtered before
+the side comparison; if their descriptor is nevertheless passed directly to
+the group resolver, it yields group 0, but that fallback does not make them
+party actors.
+
+The complete placement map is:
+
+| Placement source | Class or identity | Initial faction state | Randomness and prerequisites |
+|---|---|---|---|
+| Monster placement | Class 8 (Pirate) or class 9 (reserved) | Passive/nonacting descriptor tag `0x20` | Deterministic after the final class is chosen. |
+| Monster placement | Every other class: `0..7` and `10..47` | Ordinary hostile descriptor tag `0x40`, group 1 | Deterministic after the final class is chosen. An earlier spawn stage may independently replace the encounter class with its companion class on a one-in-nine draw; the resulting class is then mapped by these same rows. Placement-speed randomness has no faction effect. |
+| Party placement | Any seated roster member | Party descriptor tag `0x80`, group 0; an independently applicable disabled-state bit may also be present | The descriptor's owner field is a roster index, not a combat class id. No faction draw occurs. |
+
+Those base tags have only the following reachable runtime remaps or overrides:
+
+| State or effect | Resolved group | Scope |
+|---|---|---|
+| Controlled/charmed bit on an ordinary party descriptor | Group 1 | Persistent for that combat descriptor until the bit is cleared or combat ends. |
+| Controlled/charmed bit on an ordinary monster descriptor | Group 0 | Persistent for that combat descriptor until the bit is cleared or combat ends. |
+| Shipped traitor roster identity | Group 1, with or without the controlled bit | Roster-identity exception for a party descriptor; it is not a class remap and cannot be triggered by a player-chosen name. |
+| Active Mass Charm and `roll > threshold` | Group 0 | Local to one target-picker call. The descriptor and its ordinary group remain unchanged. Ordinary monster-side actors use the class charm threshold; the reachable party-side automatic case uses the linked member's Dexterity. |
+
+No per-class faction-override flag exists. The former candidate flag is only a
+stat-selector trait and is not read by faction resolution. Once group identity
+is known, its downstream effects are exact:
+
+- Target selection first removes empty, dead, passive, suppressed, or invisible
+  candidates as applicable, then rejects candidates in the acting slot's group.
+- The round walker sends group-1 actors to the automatic action driver. Group-0
+  actors enter the combined command handler; it prompts only for an eligible
+  selected party member, while a monster descriptor that control moved to group
+  0 still synthesizes an automatic action.
+- Side counting skips empty, dead, and passive descriptors, then uses the same
+  group resolver. Group 1 counts as foes and group 0 as friends. Control and the
+  traitor identity therefore affect victory detection. Mass Charm's local
+  target-picker override does not.
+- Faction does not remove physical occupancy. Ordinary occupied cells either
+  block movement or become attack destinations according to the normal
+  same-group/opposite-group rules. Classes 8 and 9 retain an active object and
+  reject movement into their occupied cell even though their passive descriptor
+  is not a target.
+- Combat descriptors and controlled bits are encounter-local and there is no
+  mid-combat save. Base tags are rebuilt at the next placement. The shared Mass
+  Charm effect tag and counter are save-backed and can remain active into a
+  later fight; the traitor's roster identity is also save-backed. No per-actor
+  local Mass Charm remap is serialized.
+
+Conformance vectors:
+
+| Setup | Required result |
+|---|---|
+| Place monster classes 7, 8, 9, and 10 | Initial tags are respectively `0x40`, `0x20`, `0x20`, `0x40`; resolved groups are 1, 0, 0, 1. Classes 8 and 9 are skipped for action, targeting, and side counts, leaving two foes, but all four occupied cells reject movement. |
+| Compare ordinary and controlled descriptors | Party `0x80` resolves to group 0 and controlled party `0x81` to group 1. Monster `0x40` resolves to group 1 and controlled monster `0x41` to group 0. No random draw occurs. |
+| Mass Charm with threshold 0 | Roll 0 leaves the ordinary group unchanged; roll 1 locally supplies group 0. In both cases the descriptor stays `0x40` and side counting still sees a foe. With threshold 255, no roll remaps. |
+| Resolve the shipped traitor roster identity | Party descriptors `0x80` and `0x81` both resolve to group 1. |
 
 ## 17. Sources
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
+
+- The exhaustive faction/remap census, including placement tags, group
+  resolution, automatic dispatch, occupancy, side counting, Mass Charm's local
+  override, and the roster-identity exception, is derived from private analysis
+  in `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/COMBAT_OVL/`, `u5-decomp/functions/SJOG_OVL/`, and
+  `u5-decomp/notes/`.
 
 - The status-byte producer boundary, including the absence of an Ashes writer,
   is derived from private analysis in `u5-decomp/notes/` and the status-owning
