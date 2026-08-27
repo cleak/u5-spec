@@ -463,10 +463,10 @@ identical. (The two tails around them are not byte-identical — the broadside
 rebuilds the viewport once more before the impact presentation, and the two pass
 different effect-figure indices — but nothing in the payload itself differs.)
 
-The same payload is also reached from the sand-trap adjacency reaction and from
-the whirlpool engagement described in Section 8 and in
-`systems/active-objects.md` Section 8. Two further outdoor sites reach it whose
-triggers are not established; see Section 6.2.5.
+The same payload is also reached from the sand-trap adjacency reaction, the
+whirlpool engagement described in Section 8 and in
+`systems/active-objects.md` Section 8, a refused hoisted-sail movement, and the
+post-action rough-seas check. Section 6.2.5 specifies the latter two triggers.
 
 **Stage one — impact presentation.** An impact figure is drawn at the party's
 own map coordinates (converted to viewport-relative coordinates), a short tone
@@ -554,7 +554,7 @@ pass different effect-figure indices, selecting what is drawn at each sampled
 position. An inherited description, not re-derived by the verification pass, has
 the ship's broadside drawing a small solid burst travelling along the line and
 the breath painting a coloured spark cloud around each sampled position with no
-outline; treat the appearance itself as unverified (Section 6.2.5). The firing
+outline; treat the appearance itself as unverified (Section 6.2.6). The firing
 sound is played by the caller before the flight begins, not per sampled
 position. Neither the generic "attacked" message nor any melee narration belongs
 to these paths; that message is the adjacent-engagement case.
@@ -562,19 +562,87 @@ to these paths; that message is the adjacent-engagement case.
 None of this changes turn cadence, the encounter-spawn formula, or active-object
 pruning.
 
-#### 6.2.5 Named gaps in this section
+#### 6.2.5 Sailing Collision And Rough Seas
+
+These two callers share the absorption rules above, but not the same trigger,
+presentation, or turn-tail behavior.
+
+**Sailing collision.** This is part of a directional movement attempt by a
+frigate with sails hoisted. All four hoisted facings qualify. Wind and the
+existing sail-cadence counter decide when a cached movement is released; once
+released, the collision has no additional cadence or random gate. It occurs
+when the destination step is refused by either an occupying active object or
+the ship's terrain-passability test, except that exact pier terrain takes the
+docking outcome instead.
+
+The destination is examined before party coordinates are changed. A destination
+whose rendered tile is the exact shoal value `0x03` prints `BREAKING UP!`;
+every other refused, non-pier destination prints `COLLISION!`. The collision
+then plays its rumble and immediately runs the frigate arm of the absorption
+stage. The rumble advances its separate audio LFSR twenty times, even when sound
+is disabled; it does not advance the shared
+gameplay PRNG. Absorption consumes one gameplay draw in `1..30`. If that sinks
+the ship, the existing loss ladder can add its published carpet-facing draw or
+drowning-loop draws.
+
+The step remains refused, party coordinates do not change, and the cached sail
+direction is cleared. The movement command returns zero, so this released
+collision adds no ordinary action-time increment and skips the later underfoot,
+encounter, and active-object tail. Wind-cadence wait passes that occurred before
+release have already paid their own one- or two-minute costs. A total party loss
+is observed at the next overworld loop head; the collision does not itself
+switch scene or plane.
+
+Exact pier terrain is the negative control: it prints `Docked!`, changes the
+marker to the same-facing furled frigate, clears the sailing cache, refuses the
+coordinate step, and performs neither rumble nor absorption.
+
+**Rough seas.** This check occurs within an ordinary consumed-action tail,
+after its time increment, underfoot-tile read, post-action work, and party
+cleanup. It fires exactly when the current underfoot terrain is deep water
+`0x01` and the transport marker is any skiff facing (`0x28..0x2B`) or either
+carpet frame (`0x14` or `0x15`). Neighbouring water and shoal values do not
+qualify. There is no random gate, cadence counter, wind/weather check, plane
+check, or fixed-coordinate check; coordinates are used only to place the
+impact figure. Consequently every otherwise eligible consumed action on that
+terrain triggers it, including an automatic consumed turn while everyone is
+asleep. Zero-result actions and actions that already switched out of overworld
+mode do not reach it.
+
+Order is `Rough seas!`, impact figure at the party cell, impact rumble, one
+world repaint tick, then absorption. The impact rumble advances the separate
+audio LFSR three hundred times even with sound disabled. Since skiffs and
+carpets are not frigates, absorption performs one independent gameplay-PRNG
+draw in `1..8` per active non-Dead member, in roster order. Each member's
+damage application also plays the shared 160-update damage rumble before
+changing HP, as specified in Section 6.2.4. Thus `N` damaged members advance
+the audio LFSR `300 + 160N` times in all, while consuming exactly `N` gameplay
+draws. The rough-seas check adds no second turn cost and does not abort the
+remaining ordinary epilogue; any encounter draw made later is the epilogue's
+normal draw, not part of the rough-seas trigger. A wipe is
+noticed at the next loop head.
+
+Neither trigger owns a durable event flag, queue, or cooldown. Collision clears
+the existing sail-direction cache and its released cadence state and sets the
+ordinary fresh-frame request. That request is presentation state, not a pending
+collision. Durable results are only those already belonging to hull, transport,
+carpet stock, and party damage/status state. Rough seas has no reset state at
+all and persists only its party-damage results.
+
+Conformance vectors:
+
+| Setup | Required result |
+|---|---|
+| Hoisted north-facing frigate, cached direction, hull 50, refused ordinary destination | Print `COLLISION!`; advance the audio LFSR twenty steps; consume one hull draw; clear the sail cache; keep coordinates; skip the ordinary per-turn tail. |
+| Same setup, rendered destination tile `0x03` (shoal) | Replace only the first line with `BREAKING UP!`; rumble, absorption, refusal, cache clear, and tail skip are unchanged. |
+| Same setup, exact pier destination | Print `Docked!`; become the same-facing furled frigate; clear the cache; consume neither audio-LFSR nor gameplay-PRNG values. |
+| Consumed action on deep water under any skiff facing or either carpet frame, with `N` active non-Dead members | Print `Rough seas!`; advance the audio LFSR `300 + 160N` steps; consume exactly `N` gameplay draws in `1..8`; continue to the ordinary epilogue. Changing the terrain to either neighbouring water value or the marker to a frigate suppresses this trigger. |
+
+#### 6.2.6 Named gaps in this section
 
 These are open. The engine must not treat their absence from the text above as
 licence to invent a rule.
 
-- **Two further absorption sites, triggers unestablished.** Besides the two
-  ranged attacks and the Section 8 adjacency reactions, the outdoor code reaches
-  the same impact-absorption stage from a sailing-collision site and from a
-  per-turn site preceded by a rough-seas line and guarded on the party marker
-  being a skiff or a carpet. Both calls, and the second one's marker guard, are
-  established; neither enclosing routine was read to its end, so **neither
-  trigger is published as a mechanic**. Reading those two routines would settle
-  what schedules them.
 - **Call discovery is near-call only.** The census of sites reaching this
   payload — and the count of creatures that can fire a ranged shot at all — is
   an exhaustive byte scan for near calls across the shipped executable and every
@@ -1228,6 +1296,12 @@ unresolved outdoor loop control flow.
 
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
+- The complete sailing-collision and rough-seas trigger audit — movement and
+  underfoot predicates, scheduling, narration/sound order, separate audio and
+  gameplay random streams, continuation, and reset behavior — is derived from
+  private analysis in `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
+
 - The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/`.
 - The shared per-turn party-capability check that precedes the overworld input
   block; the full ordinary consumed-turn processing of its asleep arm; and the
@@ -1322,7 +1396,7 @@ The behaviour described above was derived by reading the function and format not
   pass, were **re-derived from the shipped binaries** in a verification pass
   that did not consult the earlier notes for any claim. Routine boundaries were
   read from entry to exit and the caller censuses were exhaustive near-call
-  scans; the limits of both are published in Section 6.2.5 rather than left
+  scans; the limits of both are published in Section 6.2.6 rather than left
   implicit. Working directories: `../u5-decomp/functions/MAINOUT_OVL/`,
   `../u5-decomp/functions/COMSUBS_OVL/`, `../u5-decomp/functions/OUTSUBS_OVL/`,
   `../u5-decomp/functions/CMDS_OVL/` and `../u5-decomp/functions/ULTIMA_EXE/`. Record

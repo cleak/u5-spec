@@ -864,10 +864,12 @@ the dungeon (both silent)**, and combat (beeps).
 refused, whether by a blocking object or by terrain impassable for the current
 transport:
 
-1. **Under sail**, the path prints `BREAKING UP!`, `COLLISION!`, or `Docked!`.
-   Docking is silent and furls the sails; the other two run the ship-collision
-   rumble `(100, 2000, 300)` and then apply ship damage. **No 165 Hz beep occurs
-   on any under-sail path.**
+1. **Under sail**, rendered destination tile `0x03` selects `BREAKING UP!`,
+   exact pier terrain selects `Docked!`, and every other refusal selects
+   `COLLISION!`. Docking is silent and furls the sails; the other two run the
+   twenty-update ship-collision rumble `(100, 2000, 300)` and then apply ship
+   damage. **No 165 Hz beep occurs on any under-sail path.** The refused
+   movement then skips the normal outdoor turn tail.
 2. **Aboard a vehicle, when the blocking object is of the whirlpool class**, the
    step returns completely silently, with no message at all. That is the refused
    *step into* the whirlpool cell. The whirlpool's own engagement is a different
@@ -881,6 +883,14 @@ transport:
      So this branch emits one rumble per living member in place of the beep.
    - otherwise it plays the 165 Hz / 200-unit beep.
 4. Both non-whirlpool branches then flush keyboard type-ahead.
+
+Rough seas is not a refused-step cue. After an eligible consumed outdoor action
+on exact deep water, any skiff facing or either carpet frame prints
+`Rough seas!`, runs the 300-update impact rumble `(10, 3000, 2000)`, repaints
+one world tick, and then damages every active non-Dead member. Each member adds
+the ordinary 160-update damage rumble before its HP mutation. For `N` damaged
+members, the rough-seas sequence therefore advances the sound-only random state
+`300 + 160N` times. It continues into the ordinary outdoor epilogue.
 
 The `OUCH!` destination tile is **unidentified**: it is known only as one frame
 of a four-frame animated-terrain block, and no shipped string names it. The
@@ -1776,6 +1786,11 @@ analysis under `u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`. The
 blocked movement, trap, dungeon decoration, conversation warning, ring,
 Stonegate, Return-to-View, and endgame trigger boundaries were cross-checked
 against their owning overlay analyses under `u5-decomp/functions/`.
+
+The sailing-collision and rough-seas trigger, order, and random-stream details
+were derived from private analysis under
+`u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and
+`u5-decomp/notes/`.
 
 Confidence is high for the numeric inputs, step counts, trigger/cancellation
 order, random-stream ownership, and mute behavior. The phase and comparison

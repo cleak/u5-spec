@@ -108,8 +108,8 @@ change the clock increment and it is not a player movement-speed table.
 | Foot | Default state. | No vehicle object; normal terrain restrictions. | None at this level. |
 | Horse | Boardable. X-Xit can leave a horse object behind. | Overland transport; requires the party to be on foot before boarding. Directional movement uses the ordinary one-cell overland step with mounted-horse passability. | None at this level. |
 | Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; an earlier revision of this row gave that hull as `100`, and that is retracted; boarding warns when hull is below ten or no skiffs are aboard. While aboard, the hull absorbs outdoor impact damage under the closed-interval `[1, 30]` rule in "Hull Condition And What Destroys A Ship" below, and no party member loses hit points while the ship survives. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
-| Skiff | Boardable. | Water transport at the ordinary mode turn cost; no vehicle-specific time modifier. The shared movement spec names the facing-sensitive skiff predicate family. | None at this level. |
-| Magic carpet | Boardable as a carpet. | Boarding changes the party transport state to the carpet transport marker. Boarding does not touch the timing tag byte at all - the `T` tag is Negate Time, never a carpet marker; outdoor Klimb is a separate Grapple-gated command, not a carpet ownership test. The shared movement spec names the carpet predicate family. | None at this level. |
+| Skiff | Boardable. | Water transport at the ordinary mode turn cost; no vehicle-specific time modifier. The shared movement spec names the facing-sensitive skiff predicate family. Every consumed action ending on exact deep water runs the rough-seas impact specified in `systems/overworld.md` Section 6.2.5. | None at this level. |
+| Magic carpet | Boardable as a carpet. | Boarding changes the party transport state to the carpet transport marker. Boarding does not touch the timing tag byte at all - the `T` tag is Negate Time, never a carpet marker; outdoor Klimb is a separate Grapple-gated command, not a carpet ownership test. The shared movement spec names the carpet predicate family. Every consumed action ending on exact deep water runs the same rough-seas impact as a skiff. | None at this level. |
 | Balloon | Vehicle tile family only in the analyzed baseline. | Balloon art and manual-facing references can be preserved as assets, but no traced B-Board, X-Xit, U-Use, shipwright, or ordinary movement branch promotes a live balloon transport state. | No command-level balloon mechanics are specified for v1; do not infer a boardable vehicle from art alone. |
 
 ## 4. B-Board
@@ -349,19 +349,28 @@ the pier selector. A step that takes a ship onto that tile while the ship is
 under sail prints the exact line `Docked!` followed by a line break and applies
 the same one-run furl. No other member of the neighbouring bridge/road/plank
 passability band selects docking.
-The neighbouring outcomes for a ship that hits something it cannot enter are a
-collision message and, when the hull gives way, a breaking-up message.
+The neighbouring outcomes for a ship that hits something it cannot enter are
+now closed. When a wind-cadence release attempts to move any hoisted-sail
+frigate facing into an object-blocked or ship-impassable destination, exact pier
+terrain docks without damage; every other refusal plays the collision rumble
+and reaches the shared impact-absorption stage. Rendered destination tile
+`0x03` (shoal) uses the `BREAKING UP!` line and other non-pier refusals use
+`COLLISION!`, but both run the same hull roll. The refused movement returns
+zero, clears the cached sail
+direction, changes no coordinate, and skips the ordinary per-turn tail. See
+`systems/overworld.md` Section 6.2.5 for presentation order, randomness,
+persistence, and conformance vectors.
 
-*Named gap — the sailing-collision hull rule.* The sailing-collision path is one
-of the outdoor sites that reaches the shared impact-absorption stage of
-`systems/overworld.md` Section 6.2.4, which is consistent with the breaking-up
-message above. The call is established; the enclosing routine was **not** read
-to its end, so **the exact condition under which a collision costs hull is not
-published**, and an implementation must not assume it is the same trigger as the
-collision message. A second per-turn outdoor site, preceded by a rough-seas line
-and guarded on the party marker being a skiff or a carpet, reaches the same
-stage; what schedules it is likewise unestablished, and no rough-seas mechanic
-is published here. Reading either enclosing routine to its end would settle it.
+*Corrected 2026-08-27:* the earlier text tied `BREAKING UP!` to the hull giving
+way; that trigger is withdrawn. Rendered destination tile `0x03` selects the
+line before the hull roll, regardless of whether the ship survives
+(Retraction R298).
+
+Rough seas is separate from sailing collision and does not damage a frigate.
+After any otherwise eligible consumed action on exact deep water, a skiff in
+any facing or a carpet in either frame receives the rough-seas presentation and
+then the non-frigate whole-party damage arm. It has no wind, weather, plane,
+coordinate, cadence, or random trigger gate and owns no persistent cooldown.
 
 ### Hull Condition And What Destroys A Ship
 
@@ -594,6 +603,11 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/MAINOUT_OVL/`.
 - Private movement analysis under `u5-decomp/notes/`.
 - Local MAINOUT outer-loop analysis for pending shipwright delivery placement.
+- Source provenance: the complete sailing-collision and rough-seas trigger
+  audit — movement and underfoot predicates, scheduling, narration/sound order,
+  separate audio and gameplay random streams, continuation, and reset behavior
+  — is derived from private analysis in `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - Private data-layout analysis under `u5-decomp/formats/`.
 - Source provenance: the hull-condition impact rule (the closed-interval
