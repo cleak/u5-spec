@@ -342,6 +342,32 @@ secondary-drink threshold described below:
 | The Fallen Virgin | B | 4 |
 | The Folley Tap | M | 5 |
 
+After crediting the food counter, a successful primary round/meal performs the
+following ordered probe at the party's column:
+
+| Probe order | Candidate row | Accepted existing tile | Replacement tile |
+|---:|---|---:|---:|
+| 1 | One row north of the party | `0x95` | `0x9B` |
+| 2 | One row south of the party | `0x95` | `0x9A` |
+
+The south probe runs only when the north probe does not see `0x95`. A rewrite
+ends the probe and performs one world refresh, so at most one cell changes even
+when both in-bounds neighbours are `0x95`. If neither candidate matches, no
+table cell changes and this serving step performs no world refresh.
+
+The row edges preserve the shared town-grid lookup's fallback rather than
+wrapping or suppressing the probe. Any out-of-range coordinate aliases the
+live grid's southeast cell `(31,31)`:
+
+- At party row `0`, the north probe reads `(31,31)`. If it contains `0x95`,
+  that cell becomes `0x9B` and the valid south cell on row `1` is not tested.
+  Otherwise the row-`1` south probe proceeds normally.
+- At party row `31`, the valid north cell on row `30` is tested first. Only if
+  that fails does the south probe read `(31,31)`; a matching `0x95` there
+  becomes `0x9A`.
+
+The fallback cell is ordinary live map storage, not a detached sentinel.
+
 The Blue Boar Tavern also exposes a special drink-list branch under its `W`
 menu letter. It presents six fixed choices and debits the selected price
 directly:
@@ -1341,8 +1367,8 @@ so the lore letter stays inert until something is actually bought.
 One state-specific letter buys a round/meal for each living party member using
 the stock per-person table in Section 6. A successful purchase deducts gold,
 adds one food unit per living member, and, when a bare table setting is directly
-above or below the party, places the corresponding food-bearing setting there.
-It does not count toward drunkenness.
+above or below the party, applies Section 6's ordered `0x95`-to-`0x9B`/`0x9A`
+rewrite contract. It does not count toward drunkenness.
 
 The separate secondary letter buys Ale, Wines, Rum, or Stout according to the
 current menu state; the Blue Boar Tavern's `W` branch opens its six-choice
@@ -1810,9 +1836,11 @@ The behaviour described here was derived from the private function and format no
   food ceiling, surcharge timing, and the five outcome cases including the
   table-scraps gift.
 - `u5-decomp/functions/SHOPPES2_OVL/` -- tavern primary serving effects and
-  secondary drinks: non-Blue headcount pricing and state effects, short-funds
-  exit routing, the visit-local successful-drink count, exact three-drink
-  warning gate and continuation route, `N` drunkenness arming and one-point
-  moral-standing debit, pre-affordability ordering, and Blue Boar list count.
+  secondary drinks: the primary adjacent-table tile bytes, north-first probe,
+  southeast-cell row-boundary fallback and single-rewrite rule; non-Blue
+  headcount pricing and state effects; short-funds exit routing; the visit-local
+  successful-drink count; exact three-drink warning gate and continuation
+  route; `N` drunkenness arming and one-point moral-standing debit;
+  pre-affordability ordering; and Blue Boar list count.
 - `u5-decomp/functions/SHOPPES_OVL/` -- arms sell
   browser and its side-panel geometry.
