@@ -247,7 +247,9 @@ Shadowlord. The pass reads the runtime record of which Shadowlord is resident
 in the location being entered and returns immediately when that record says
 "none", which is the ordinary case for every location in the game. A decoder or
 an editor therefore never needs to model it, and an engine must not apply it as
-a general harvest.
+a general harvest. Earlier revisions of this section, published as "Farmland and
+orchard harvest scatter", described the pass as unconditional and gated only on
+the player's actor slot; that is retracted (`RETRACTIONS.md` R250).
 
 Where it does run:
 

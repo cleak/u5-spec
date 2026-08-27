@@ -338,7 +338,12 @@ The authoritative forty-row plane, coordinate, class, exact continuation,
 center column, and live-tile guard table is in `catalogs/gazetteer.md` Section
 5.1. A line such as `Entered CASTLE:0 from BRITANNIA` or one containing raw
 coordinates has no counterpart in the original and must not appear in the
-production transcript.
+production transcript. An earlier revision of this section stated the broader
+absolute that the town's proper name is *never* printed and that any
+`Entered <name> ...` line should be dropped or hidden behind a debug flag; that
+is retracted — the proper name is printed, and only the bracketed diagnostic
+form with a level number and raw coordinates is prohibited (`RETRACTIONS.md`
+R271).
 
 #### Entry failure, extension, and ordering contract
 
