@@ -344,11 +344,12 @@ hoisted/wind-control range `0x20..0x23`. The furled/manual ship range is
 `0x24..0x27`. In both ranges, the low two bits carry heading as north, east,
 south, west.
 
-**Docking furls automatically.** On the overworld, a step that takes a ship onto
-a pier tile, while the ship is under sail, prints a docking message and applies
-the same one-run furl. The neighbouring outcomes for a ship that hits something
-it cannot enter are a collision message and, when the hull gives way, a
-breaking-up message.
+**Docking furls automatically.** On the overworld, exact static tile `0x47` is
+the pier selector. A step that takes a ship onto that tile while the ship is
+under sail prints a docking message and applies the same one-run furl. No other
+member of the neighbouring bridge/road/plank passability band selects docking.
+The neighbouring outcomes for a ship that hits something it cannot enter are a
+collision message and, when the hull gives way, a breaking-up message.
 
 *Named gap — the sailing-collision hull rule.* The sailing-collision path is one
 of the outdoor sites that reaches the shared impact-absorption stage of

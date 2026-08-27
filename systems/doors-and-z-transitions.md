@@ -567,7 +567,13 @@ The transitions across the major boundaries are:
 - **Active-object table.** Vehicle dismount allocates a slot for the abandoned vehicle; `vehicles.md` owns the broader parked-vehicle persistence contract. Town floor changes re-link the NPC table. Combat enter/exit replaces and restores the table wholesale.
 - **Per-turn epilogue.** Door auto-close runs from the tile-effect pass. Pit triggers, chasm triggers, and energy-field triggers run from the same pass.
 - **Visibility.** Door state changes mark the dirty flag so the renderer rebuilds the visibility set. Z transitions reset visibility entirely — the new floor or level paints from scratch.
-- **Save image.** Scene byte, floor or level index, party chunk-X / chunk-Y, the four-byte door-close-tracker block, and the per-character Dexterity values that drive both lockpick rolls are all persisted. Loaded saves resume mid-floor, mid-dungeon, mid-vehicle, or mid-combat.
+- **Save image.** Scene byte, floor or level index, party chunk-X / chunk-Y, the
+  four-byte door-close-tracker block, and the per-character Dexterity values
+  that drive both lockpick rolls are all persisted. The tracker occupies
+  `SAVED.GAM` offsets `0x03A9..0x03AC` in previous-tile, X, Y, countdown order,
+  one byte per field; `formats/saved-gam.md` Section 10 is authoritative for the
+  file layout. Loaded saves resume mid-floor, mid-dungeon, mid-vehicle, or
+  mid-combat.
 - **Spells.** Unlock Magic clears magic locks, Magic Lock applies them, and the
   Open spell steps an ordinary locked door down to its unlocked form — all three
   change lock state without keys and without arming O-Open's auto-close tracker,
