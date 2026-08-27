@@ -968,8 +968,12 @@ and nothing restores it.
 The cell parked at row 15, column 23 is not an on/off blink. It cycles the same
 four consecutive fixed-cell glyph codes `0x05` through `0x08` that the gameplay
 message window's input cursor uses (`text-output.md` section 10.6), one phase
-per menu poll pass. Each
-of the four is a diagonal hatch of two-pixel steps, and the four are the same
+per menu poll pass. The shared phase counter begins at zero when the process is
+started, and the poll draws the current phase before advancing it, so the first
+menu poll of a cold intro session draws glyph `0x05`. The counter is global and
+is not reset when the menu is repainted or re-entered; later returns resume its
+current phase rather than necessarily beginning again at `0x05`. Each of the
+four glyphs is a diagonal hatch of two-pixel steps, and the four are the same
 hatch shifted two pixels along, so the cell reads as a diagonal pattern marching
 steadily across it. The instant a poll returns a key the cell is overwritten
 with a space.
