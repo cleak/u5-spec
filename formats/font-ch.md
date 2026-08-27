@@ -137,6 +137,9 @@ The `.CH` fonts are separate from the compressed tile-graphics files. The
 chapter-heading images in the tile-graphics container family, not a font: they
 carry no glyph data and are drawn whole. `.CH` is a direct per-code-point
 bitmap font with no LZW envelope and no slicing.
+An earlier revision of `formats/tiles.md` described the `TEXT` records as font
+and glyph strips sliced per character at draw time; that is retracted, and no
+font data of any kind lives in `TEXT`.
 
 The `.HCS` font family, described in `formats/font-hcs.md`, carries the same
 one hundred twenty-eight code points at a larger fixed cell size. It should be

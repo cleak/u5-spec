@@ -118,6 +118,12 @@ monster, and writes one record per spawned monster.
 
 The ordinary terrain setup helper also contains an optional placement-shuffle branch, but the only traced terrain caller passes flags that leave that branch inactive. Live ambush and rest/camp alternate setup use separate entry-mode helpers, so do not model those paths as the dormant terrain-helper shuffle unless a caller is found. Specifically, the ambush helper is the room-combat setup helper specified in `formats/cbt.md` Section 5: it runs its own party-entry readback and its own sixteen-source scan over the resident arena metadata band, and it never touches the terrain helper's count roll, companion-class roll, or shuffle.
 
+Earlier revisions of this section, and the answers published against it, seated
+the party at the placement slots following the monster count -
+`placement[count .. count+5]` - for both terrain and room combat. That is
+retracted: party seats come from the arena record's own six party-entry X and Y
+values and never depend on the monster count.
+
 **Order of operations.** Ordinary terrain combat setup is strictly:
 
 1. Clear all thirty-two combat descriptors (every field) and the first seven
@@ -505,6 +511,10 @@ performed on the next combat entry. Nothing writes it into the save image.
 ### 6.2 Active-object link (byte 4)
 
 Byte 4 of the descriptor is the renderer-facing active-object back-reference.
+An earlier revision of this document called byte 4 the status sub-flags byte
+and put the non-party asleep/charmed/disabled bit in it; that is retracted, and
+that bit is byte 2. Using byte 4 as a bitfield collides with ordinary
+active-object slot ids.
 It is an index into the temporary combat-instance active-object table, not a
 status flag byte. Death-marker writers, movement synchronization, and loot/drop
 presentation all use this byte to locate the active-object record that mirrors
@@ -599,6 +609,8 @@ Notes that an implementation must not get wrong:
 - **Gargoyle does not fall through to the ordinary path.** After stamping the
   lava terrain byte it goes directly to the slot-clear helper, so a Gargoyle
   death produces no corpse marker and no drop.
+  An earlier revision of this section routed Gargoyle death through the default
+  monster-killed path and left a lava pool under a corpse; that is retracted.
 - **The Gazer death spawns a real combatant, not a cosmetic effect.** After
   writing `0x1F` into its own record's bytes 0 and 1, the Gazer branch calls the
   same monster-placement primitive that per-encounter setup and dungeon-room

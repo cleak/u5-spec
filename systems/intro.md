@@ -193,6 +193,10 @@ The resident title helper first builds a hidden source surface. It stamps
 horizontally, starting at hidden `y = 0`, and advancing hidden `y` by the drawn
 slot's height before stamping the next slot. That hidden stack is only an
 animation source. It must not be rendered directly to the visible title page.
+An earlier revision of this section had the seven slots drawn cumulatively onto
+the visible title surface as a single built-up mark; that is retracted, and an
+implementation carrying it renders a stack of fragments instead of the
+flourish.
 
 | `TITLE.BIT` slot | Top-left X | Top-left Y | Size |
 |---:|---:|---:|---|

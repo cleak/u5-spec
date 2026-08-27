@@ -276,7 +276,7 @@ The *order* of the gates matters:
 
 The forty-eight spell effects fall into seven broad categories. Each handler takes the active-player slot and the dispatcher's per-spell context as input; each returns a success/failure code that the dispatcher uses to print the trailing `Failed!` if appropriate.
 
-**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. Most utility effects have a short narration message and finish in a single handler call.
+**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. An earlier published range of `0..2`, which admitted a successful zero-food cast, is retracted. Most utility effects have a short narration message and finish in a single handler call.
 
 **Directed utility tile helpers.** Four utility spells — Vanish (*An Ylem*),
 Open (*An Sanct*), Magic Lock (*An Ex Por*) and Unlock Magic (*In Ex Por*) —
@@ -694,7 +694,8 @@ The arena helper receives the field kind and active target slot instead of
 writing dungeon terrain directly. It splits marker placement from later
 field-contact/application work. Combat placement is not governed by the
 dungeon byte-placement helper, and there is no Fire/Sleep/Energy random
-acceptance gate for marker materialization.
+acceptance gate for marker materialization. An earlier revision of this section
+put such a gate on Fire, Sleep and Energy; that is retracted.
 
 For player combat C-Cast, these four field spells are not adjacent-direction
 spells. The CAST field helper maps the spell to its combat field-kind byte and

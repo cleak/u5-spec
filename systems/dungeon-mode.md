@@ -272,7 +272,9 @@ current Z level, and lazily loads the sprite source if placement succeeds. The
 two per-record bytes are distinct: one is presentation, the other is the combat
 class the wandering-monster combat path consumes directly (§ 14.1). The eight
 classes are Giant Rat, Bat, Giant Spider, Ghost, Slime, Gremlin, Gazer, and
-Reaper. Placement makes up
+Reaper. An earlier revision of this section described this record as a general
+registry covering the Codex, Shadowlords and quest-scene sprites; that is
+retracted, and class zero is Giant Rat rather than an empty marker. Placement makes up
 to eight random attempts on the current 8-by-8 level, accepting only cells in
 the pit and open-chest spawn families (`0x6?` or `0x7?`) — both of which the
 renderer paints as passage — and rejecting the party's
@@ -468,7 +470,9 @@ they are their plain counterparts *plus* scenery rather than unrelated artwork.
 Difference masks for slots 20-23 against 0-3, and for slots 25-27 against 9-11,
 trace the added scenery silhouettes while leaving the shared wall structure
 aligned. This is a structural identification rule, not a numeric pixel-ratio
-contract.
+contract. An earlier revision of this section published the pixel-ratio
+form as a self-check; that is retracted — it is not bank-invariant and its
+ranges overlap within a single bank once depth band is accounted for.
 
 Two invariants make the widths self-checking:
 
@@ -1815,6 +1819,8 @@ specifically removed.
 **Post-combat bracket.** The two triggers differ here. Only the **A-Attack** path
 applies the combat result code, and it applies it in the same polarity K-Klimb
 uses (Section 13): a smaller level byte is nearer the surface.
+An earlier revision of this document had result codes five and six the other way
+round — five down and six up; that is retracted.
 
 - **Result code five - go up one level.** Decrement the level byte. If the
   party is already on the topmost level, do not decrement; take the

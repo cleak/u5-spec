@@ -1,5 +1,9 @@
 # Sage Rumours
 
+> Earlier public answers described a per-sage sixteen-entry name table and
+> free rumours. Both are retracted: the topic table below is shared and every
+> matched row charges its fee. See `RETRACTIONS.md`.
+
 Cleanroom catalog for the sage rumour lookup used by tavern-style sage menus.
 This is authored gameplay data, not a transcript dump. The row strings below
 are the semantic keyword, subject, location, and price values needed to

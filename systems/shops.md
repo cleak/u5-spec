@@ -264,6 +264,10 @@ Several read-only pricing tables live in the resident data segment:
 - **Per-room-rate table** (innkeeper). A per-inn base/minimum-rate table feeds
   the room quote and affordability checks. Inn charges use this adjustment:
   `adjusted(raw, Intelligence) = raw + trunc(raw * (100 - 3 * Intelligence) / 100)`.
+  Two earlier readings are retracted: that the inn quote applied the arms
+  *discount* form `base * (100 - 3 * Intelligence) / 100`, and the interim
+  answer that inns apply no Intelligence adjustment at all. The adjustment is a
+  surcharge above the raw figure, not a reduction below it.
   The division truncates toward zero. Rest uses
   `raw = base_rate * travelling_party_size`. Leave deposits use
   `raw = base_rate * 10`. Pickup first computes that same adjusted ten-unit
@@ -732,6 +736,11 @@ in the resident shop-data region. The search is a plain forward scan of that
 kind's list, and the **index of the matching entry** is the shop-instance row
 used by every other per-shop table in this document: prices, stock rows,
 delivery cells, menu states, shop names, and vendor names all share it.
+
+The scene-to-row tables below have carried these values since they were first
+published. Earlier *issue answers* gave wrong mappings for several inn, healer,
+reagent and guild rows; those answers are retracted and the tables here are
+authoritative.
 
 Two resident name tables are indexed by the same row and filled in before the
 shop overlay runs: the shop's display name, which fills the `#` substitution,

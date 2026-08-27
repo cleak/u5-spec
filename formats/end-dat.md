@@ -15,7 +15,9 @@ specified in `systems/endgame.md`.
 
 ## 2. File Structure
 
-The shipped file is 3,698 bytes of narrative text carrying the layout markers of section 3 — first-line indents, soft hyphens and hard line breaks. It carries **no page markers**: nothing in the file divides a record into separately presented pages, and the one-record-per-window binding of section 4 is the only pagination there is.
+The shipped file is 3,698 bytes of narrative text carrying the layout markers of section 3 — first-line indents, soft hyphens and hard line breaks. It carries **no page markers**: nothing in the file divides a record into separately presented pages, and the one-record-per-window binding of section 4 is the only pagination there is. Earlier revisions of this document described page or paragraph-start markers
+and a closing brace; both are retracted — `{` is a first-line indent and the
+file contains no `}` byte.
 
 | Property | Value |
 |---|---|

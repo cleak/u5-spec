@@ -82,6 +82,12 @@ The currently documented high-nibble dispatch families are:
 | `0xE` | Door presentation variant | Door-like presentation class used by runtime wall/search variants; not the cleared-room reload state. |
 | `0xF` | Room trigger | Low nibble selects the room arena; combat and reload paths demote cleared triggers to `0xA?`, not `0xE?`. |
 
+Earlier revisions of this table demoted cleared triggers to `0xE?` on reload,
+making a cleared and reloaded room a non-walkable wall, and rejected forward
+movement onto classes `0xA` through `0xE`. Both are retracted: the demotion
+target is `0xA?` with the low nibble preserved, and forward movement rejects
+only `0xB?`, `0xC?` and `0xD?`.
+
 The complete low-nibble enumeration is still not fully pinned down. Treat it as opaque variant data unless a system spec names a specific subtype, and do not infer full behaviour from the upper nibble alone.
 
 The energy-field family has one exact mapping already established. Base bytes `0x80`, `0x81`, `0x82`, and `0x83` are sleep, poison gas, wall of fire, and electric field respectively. Runtime spell placement can preserve the map's `0x08` marker bit, producing `0x88`, `0x89`, `0x8A`, and `0x8B` variants in the loaded dungeon image. These marker variants are runtime state and do not imply that the static file was rewritten.

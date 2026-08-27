@@ -288,7 +288,9 @@ directions and Space:
 The cancel word is the same word the Pass command echoes. A cancelled Look
 therefore renders as the verb, the hyphen and the cancel word on one line.
 Escape does not reach a cancellation arm: it emits nothing and the prompt reads
-again. This is the same adjacent-tile prompt contract published in `input.md`
+again. An earlier revision of this table listed `Space` **or** `Esc` as producing
+`Pass` and a cancelled result, and section 8 said Escape at the P-Push prompt
+cancels silently; both are retracted. This is the same adjacent-tile prompt contract published in `input.md`
 Section 10.
 
 **Movement keys echo the same four words.** On the overworld and in town-family

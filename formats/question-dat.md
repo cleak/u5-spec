@@ -1,5 +1,10 @@
 # QUESTION.DAT
 
+> An earlier revision of the marker contract called `{` a paragraph or
+> page-start marker. That is retracted: it is a first-line indent that advances
+> the pen fifteen pixels and never breaks a page. See `formats/story-dat.md`
+> section 3.
+
 Format specification for `QUESTION.DAT`, the character-creation questionnaire
 text file. The file stores the gypsy introduction and the virtue-dilemma
 paragraphs used when creating a new avatar.
