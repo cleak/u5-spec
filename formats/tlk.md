@@ -178,12 +178,19 @@ printable text (after bit-7 strip). The full dispatch table:
 | `0x8D` | LITERAL-NEWLINE     | Force-emit a literal newline through the text-output system.                                                              |
 | `0x8E` | ALTERNATE-FONT      | Toggle the print mask's high bit. While flipped, printable bytes are queued without their high bit, which selects the alternate (runic) font at flush time and also stops the run's internal spaces and newlines from forcing word-buffer breaks. Used in matched pairs around mantras and Words of Power. |
 | `0x8F` | WAIT-KEY            | Block for one keystroke. Unlike PAUSE, no redraw work is done.                                                            |
-| `0x90` | LABEL-RECORD        | Labelled-block record separator used by the label-search and scoped-prompt machinery. It is data structure, not ordinary printable text. |
+| `0x90` | LABEL-RECORD        | Structural separator used by label search. The ordinary byte runner has no dedicated case for it: if reached sequentially, it takes the printable fall-through, queues a value that flushes as glyph codepoint `0x10`, and continues to the next byte. |
 | `0x91`-`0x9F` | LABEL / scoped prompt | Up to fifteen label bytes per blob. Encountered in a response stream, they enter the label handler; inside labelled blocks, repeated label bytes mark records and sub-records. Empty input inside the scoped prompt is local to that prompt, and top-level reserved words are suppressed there before label-scoped keyword matching. |
 | `0xFE` | IF-ELSE-ALT         | Multi-byte introducer (two argument bytes follow): moral-standing threshold branch with a target label byte.              |
 | `0xFF` | END-OF-RESPONSE     | Flush the word buffer and return control to the keyword input loop.                                                      |
 
 Multi-byte introducers (`0x85`, `0x86`, `0x8C`, `0xFE`) consume one or more bytes following the introducer as arguments, not as ordinary stream bytes. The number of argument bytes is fixed per introducer (Section 9.1 below). Argument bytes themselves are passed through to the introducer's handler as literal argument values; they are not subject to bit-7 strip or dictionary expansion.
+
+*Corrected:* the earlier `0x90` row said the marker was "not ordinary
+printable text" without limiting that statement to its structural use. **That
+absolute is retracted.** Label scanners treat it as structure; the ordinary
+runner accidentally treats it as printable if a stream reaches it. Shipped
+declarations are immediately preceded by NUL, so valid content stops before
+the accidental path.
 
 The full runtime semantics of each code — how PAUSE redraws, how IF-ELSE walks its arms, how RECRUIT-SPEAKER interacts with party state — belong in `systems/conversation.md`. This format spec restricts itself to the on-disk arrangement and the byte-by-byte type tags.
 
@@ -194,6 +201,12 @@ immediately past `L` on a match; otherwise it keeps scanning. This is a
 byte-for-byte scan with no case folding and no id normalisation, and it is the
 same mechanism used by the `0x91`..`0x9F` GOTO codes and by an `0x8C` branch
 that is taken.
+
+Sequential execution does not consume the two bytes together. `0x90` joins the
+pending word without a label-specific flush or reset; the following
+`0x91`..`0x9F` byte is then an ordinary active GOTO. The pending word is
+preserved across that transfer and remains subject only to the usual
+space/newline, capacity and response-end flush rules.
 
 Label bytes are not unique declarations. Shipped blobs often contain repeated
 instances of the same value because a response can transfer into a labelled

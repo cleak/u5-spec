@@ -220,9 +220,13 @@ The dispatcher's classification, in order:
 
 - **Bytes `0x01..0x80`.** These are *common-word dictionary tokens*. The byte is itself the index into the shared one-hundred-twenty-eight-entry dictionary published in `catalogs/common-word-dictionary.md`, and the word is expanded inline into the output. The classifier is a single comparison — anything below `0x81` takes this path — so the top token, `0x80`, has its high bit set and is still a dictionary token. See Section 8.
 - **Bytes `0x91..0x9F`.** These are GOTO-LABEL codes; they participate in label dispatch. See Section 7.7.
+- **Byte `0x90`.** This is the structural LABEL-RECORD marker used by scanners,
+  but the ordinary byte runner has no control case for it. If sequential
+  execution reaches it, it takes the printable fall-through described in
+  Section 7.7.
 - **Bytes `0xA0..0xFD` (high bit set, in the printable range).** These bytes enter the printable text path. The word-buffer flush strips the high bit before glyph output; whether the queued byte still carries that bit is what the `0x8E` toggle controls, and it decides both which font the character renders in and whether it acts as a word-buffer break marker. See Section 7.1.
-- **Bytes `0x81..0x9F` (with the exception of the GOTO range above).** Engine
-  control codes. The dispatch table is in Sections 7.2–7.6.
+- **Bytes `0x81..0x8F`.** Engine control codes. The dispatch table is in
+  Sections 7.2–7.6.
 
   *Corrected:* an earlier revision gave this band as `0x80..0x9F`, which
   contradicted the dictionary-token bullet above in the same list. **`0x80`
@@ -244,6 +248,11 @@ The dispatcher's classification, in order:
   Defining one as "one past" the other propagates an error in the first
   silently into the second, in a different subsystem, and removes the only
   independent check that could have caught it.
+
+  *Corrected:* the earlier upper bound `0x9F` also classified `0x90` as an
+  engine control code. **That classification is retracted.** `0x90` is
+  structural to the label scanners but is an accidental printable fall-through
+  if the ordinary runner receives it.
 - **Byte `0xFE`.** A multi-byte command introducer that behaves as an alias for `0x8C` (IF/ELSE).
 - **Byte `0xFF`.** End-of-response. The byte runner flushes any pending word buffer and signals the keyword input loop to start a new iteration.
 
@@ -580,6 +589,32 @@ records inside the labelled block. Implementations must therefore preserve the
 engine's scan discipline rather than treating label values as unique symbols in
 a map. In shipped content the value `0x9F` is conventionally the blob's final
 record marker.
+
+The ordinary runner does **not** recognise the declaration as an inert
+two-byte unit. If execution is positioned on `0x90`, that byte follows the
+printable path: under the default print mode it is queued as `0x90`, and the
+later buffer flush strips the high bit and sends glyph codepoint `0x10` to the
+text sink. It neither ends the stream nor skips its successor. The following
+label byte is then processed independently as an active GOTO, so it rewinds to
+the matching declaration and enters the normal scoped-label handler.
+
+There is no declaration-boundary buffer operation. `0x90` joins the pending
+word, and entering the GOTO handler preserves that word; later quotes, target
+text, spaces, newlines, capacity limits, or response termination perform their
+ordinary queue and flush behavior. If a dictionary expansion had armed the
+pending-space flag, the printable path inserts its ordinary space before
+`0x90`; that space can flush the preceding word, but this is not label-specific.
+
+A minimal synthetic example is `C1 90 91`: ordinary execution queues `A`, then
+queues the value that will flush as codepoint `0x10`, then treats `91` as a GOTO
+to label `91`. It does not consume `90 91` as a silent separator.
+
+This edge is unreachable in the shipped well-formed response streams. Every
+executable label declaration in the four shipped conversation files is
+immediately preceded by NUL, and the stream driver stops before dispatching
+that NUL or the following marker. The behavior above is therefore a
+compatibility rule for a deliberately repositioned or malformed stream, not a
+normal shipped transcript path.
 
 **The label range is `0x91..0x9F`, and that is confirmed by the shipped
 content itself.** Scanning the four shipped conversation files for the
