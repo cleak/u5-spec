@@ -33,7 +33,7 @@ Section 4.
 
 A combat arena is a rectangle of terrain tiles plus a band of metadata describing where actors enter and which terrain pieces hold special meaning (spawn points, hazards, ladders). Two on-disk files hold the engine's full set of arenas: a bank of sixteen outdoor arenas keyed by overworld terrain class (each tied to a tile family — grass, forest, hills, swamp), and a much larger bank of dungeon-encounter arenas (one hundred twelve records).
 
-Each arena occupies a fixed-size record. The first part is the **terrain grid** — an eleven-by-eleven array of tile bytes describing the arena floor. The remainder is the **metadata band** — a flat run of bytes per row that the engine reads at setup. The confirmed outdoor slices provide six party entry coordinate pairs and sixteen monster placement-slot coordinate pairs. Hazard, edge, and other special-cell semantics must stay with their traced runtime consumers until a direct metadata reader is identified. The arena format spec covers the byte-by-byte layout; from combat's perspective the contract is "given an arena ID, the on-disk record tells us a 121-cell terrain grid and the confirmed setup slices."
+Each arena occupies a fixed-size record. The first part is the **terrain grid** — an eleven-by-eleven array of tile bytes describing the arena floor. The remainder is the **metadata band** — a flat run of bytes per row that the engine reads at setup. The outdoor slices provide six party entry coordinate pairs and sixteen monster placement-slot coordinate pairs; the complete traced reader census finds no other outdoor metadata consumption. Hazards remain terrain/object runtime behavior, while edges are geometric and use no record byte. The arena format spec covers the byte-by-byte layout; from combat's perspective the contract is "given an arena ID, the on-disk record tells us a 121-cell terrain grid and the confirmed setup slices."
 
 When the arena loads, its terrain grid is copied into a runtime grid in the data segment with a row stride padded out to thirty-two bytes (a power-of-two stride that lets the renderer index by `(row << 5) + col`). Movement and visibility consult this runtime grid; the on-disk record is not touched again until the next combat enters.
 
@@ -43,14 +43,56 @@ actor whose record places it on a blocked arena tile is silently skipped for the
 round; this corner case is a defensive guard since proper monster placement keeps
 actors on walkable cells.
 
-**Out-of-arena exits.** Any cardinal move whose destination falls outside the
-11-by-11 arena is routed through a shared leave helper. Ship-style combats
-refuse that helper and keep the party aboard. In constrained encounters, once a
-party exit direction is established, later party exits must use the same
-direction or the helper refuses them. Otherwise the helper accepts the
-out-of-arena move as a combat leave/escape trigger. The visible presentation
-depends on whether live foes remain: with foes present it is escape, and with no
-foes present it is ordinary leaving/cleanup.
+**Blocked cells and geometric edges.** A requested cardinal destination that
+stays inside X and Y `0..10` first runs the ordinary collision/passability
+probe. Rejection prints `Blocked!` plus a newline, plays the 165 Hz bump tone
+for 200 calibrated units, flushes pending input, and re-prompts without moving.
+A destination outside that inclusive range bypasses collision and reaches the
+edge helper; there is no open-edge metadata bit or edge terrain marker.
+The movement primitive has already printed the requested cardinal name and a
+newline before either branch, so that direction line precedes `Blocked!` or any
+edge-helper text.
+
+The edge helper applies these rules in order:
+
+1. If the party's transport marker is in the ship family, print a leading
+   newline, `Stay with ship!`, and a trailing newline, then refuse silently with
+   no bump tone.
+2. Only a party-side actor participates in direction sharing. The first such
+   actor attempting an edge stores the cardinal direction if the shared byte is
+   zero. In an encounter whose mode has the high bit set, a later party actor
+   choosing a different direction is refused with a leading newline,
+   `All must use the same exit!`, a trailing newline, and the same 165 Hz bump
+   tone. Ordinary modes permit a different later direction. Monster-side
+   actors neither seed nor test it.
+3. On acceptance, count live unmarked actors before removing anybody. With no
+   foes, print `Leave!`; with one or more foes, print `Escape!`. These two
+   strings have a trailing newline and no leading newline. Both play the rising
+   1200-to-2000 Hz glissando.
+4. Clear active-player selection, remove only the acting combatant, run the
+   party/status check and one world tick, and report success to the command
+   parser. The arena coordinate itself is never committed outside combat.
+
+An accepted edge is therefore an individual actor departure, not an immediate
+fight exit. Remaining actors keep taking turns. An earlier revision said the
+first accepted edge ended the round loop before anyone else could act; that is
+withdrawn.
+
+**Deterministic edge vectors.** Assume the direction name is the first line in
+each transcript:
+
+| Initial condition and request | Observable result |
+|---|---|
+| Actor at `(5,5)` requests North; in-bounds `(5,4)` fails passability | `North\nBlocked!\n`; bump tone and input flush; coordinates and actor tables unchanged; free re-prompt. |
+| Actor at `(0,5)` requests West while the transport marker is ship-family | `West\n\nStay with ship!\n`; no tone; actor remains. |
+| Constrained encounter already records North; a party actor at the east edge requests East | `East\n\nAll must use the same exit!\n`; bump tone; actor remains and the stored direction stays North. |
+| Ordinary encounter, live foes remain, party actor at the east edge requests East | `East\nEscape!\n`; only that actor is released, command result is accepted/committed, and combat continues. |
+| No live foes, party actor at the west edge requests West | `West\nLeave!\n`; only that actor is released. If it was the last actor on either side, the round loop returns word zero. |
+| Live foes remain and the last party actor successfully leaves | The direction and `Escape!` lines occur first; the immediate side recount then prints the loss line and returns word one. |
+
+For every accepted-edge vector, a later framer exit restores the exact saved
+world X, Y and Z and the complete pre-combat active-object snapshot. Changing
+the arena edge or direction in the vector changes no restored world coordinate.
 
 ## 4. Combat enter/exit framing
 
@@ -116,7 +158,51 @@ helper then runs a per-encounter pass that clears both combat tables and seats
 the party, and only afterwards picks a monster count, picks a class per
 monster, and writes one record per spawned monster.
 
-The ordinary terrain setup helper also contains an optional placement-shuffle branch, but the only traced terrain caller passes flags that leave that branch inactive. Live ambush and rest/camp alternate setup use separate entry-mode helpers, so do not model those paths as the dormant terrain-helper shuffle unless a caller is found. Specifically, the ambush helper is the room-combat setup helper specified in `formats/cbt.md` Section 5: it runs its own party-entry readback and its own sixteen-source scan over the resident arena metadata band, and it never touches the terrain helper's count roll, companion-class roll, or shuffle.
+The ordinary terrain setup helper also contains an optional placement-shuffle
+branch, but the complete caller census has one caller and it always leaves the
+branch inactive. The dormant algorithm initializes slots `0..15`, then for
+current indexes `0..14` draws an independent index from the full inclusive
+range `0..15` and swaps the two entries. It is fifteen random transpositions,
+not Fisher-Yates. Its adjacent banner condition cannot be satisfied, so a
+hypothetical call would still print the ordinary conflict banner. The earlier
+source summary that called this a Fisher-Yates ambush branch is withdrawn.
+
+Live ambush and rest/camp alternate setup use separate entry-mode helpers. The
+only reachable ambush-mode callers are the dungeon A-Attack forward contact and
+the dungeon post-action contact/auto-face path. Both synthesize the resident
+arena through the dungeon room painter, then call the framer. The framer loads
+no `.CBT` record, discards the supplied class/slot argument, and invokes the
+room-combat setup helper with mode two and tile zero. Rest/camp entry modes four
+and six dispatch through CMDS and use neither shuffle.
+
+The live room painter uses a distinct sixteen-swap algorithm: initialize
+`0..15`, then for each current index `0..15` draw from the full inclusive
+`0..15` range and swap. During those same sixteen passes it clears all source
+cells. It then uses the already-stored wandering-monster class, always consumes
+one `random_range(1, spawn_count)` draw, and only afterward overwrites the
+result with exact eight or sixteen when that stat byte is a sentinel. It writes
+the class source into the first `count` permuted slots. The later source setup
+scans indexes in ascending order, so actor placement and speed draws occur in
+ascending occupied-source order rather than permutation order.
+
+After party seating, that setup helper consumes four unconditional
+random-special palette draws even though synthesized wandering-monster bands
+contain only ordinary sources. Party ring/equipment effects can insert their
+own draws between the painter's count roll and those four palette rolls. Each
+ordinary monster placement then consumes one speed-variation draw.
+
+**Deterministic shuffle vector.** Starting from shared PRNG state `0x0000`, the
+first sixteen `random_range(0,15)` results are
+`[2,4,4,4,12,7,6,4,4,4,10,11,7,4,4,0]`. The live sixteen-swap result is
+`[15,4,1,0,14,7,6,3,5,8,10,11,12,9,13,2]`, leaving state `0x01C0`.
+For Giant Rat, the next `1..10` draw returns nine and leaves state `0x80DA`;
+the source slots written are `[15,4,1,0,14,7,6,3,5]`, then consumed in order
+`[0,1,3,4,5,6,7,14,15]`. For Bat, the corresponding `1..16` draw returns
+eleven, then the exact-count sentinel overwrites it with sixteen while state
+still advances to `0x80DA`. With no equipment-dependent seating draws, the four
+palette indexes are `[5,1,7,4]` (classes `[24,21,24,33]`) and leave state
+`0x752C` before the first speed draw. The dormant fifteen-swap result from state
+zero would be `[2,4,1,0,14,7,6,3,5,8,10,11,12,9,13,15]`, state `0x0CF4`.
 
 Earlier revisions of this section, and the answers published against it, seated
 the party at the placement slots following the monster count -
@@ -280,8 +366,8 @@ A short combat banner ("CONFLICT") is printed at the start of setup, before any 
 **Picking arrival positions.** Each monster gets one of sixteen arena cells,
 indexed by a placement slot. For ordinary terrain combat, slots are walked in
 identity order so placements are deterministic for the selected arena record.
-The terrain helper has a dormant Fisher-Yates branch behind a flag bit, but no
-traced live caller reaches it. The selected `BRIT.CBT` arena is authoritative
+The terrain helper has the dormant fifteen-transposition branch specified
+above, but no traced live caller reaches it. The selected `BRIT.CBT` arena is authoritative
 for the sixteen slots' `(x, y)` coordinates: the arena loader copies those
 coordinates from the record metadata band into two resident scratch tables, and
 the placement helper then reads the resident copies. A clean engine should
@@ -795,16 +881,22 @@ Each round is one walk over the thirty-two-slot actor table. The round loop has 
 6. **Dispatch the actor's turn.** A single function asks "is this slot a player or a monster?" — for a player, control passes to the player command handler (Section 8); for a monster, to the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch (Section 9).
 7. **Mark the slot acted, run the standing-cell hazard pass, then the post-action render.** These are two separate steps and only the second one draws. The hazard pass reads the arena terrain under the actor that just acted, and — if that terrain is not itself damaging — scans the object table for any object other than the actor's own sitting on the same cell. Three damaging kinds are recognized, each with its own effect: a low tier that applies the party status/damage path with the no-attacker sentinel and plays the hit sound, but only while the actor's own object entry is an ordinary live entry; a middle tier that plays the hit sound, rolls a small random amount, feeds it to the damage-and-status resolver, runs the shared finalize hook and raises the leave-combat flag; and a top tier that routes the actor into the same petrify-style special effect a Gazer's gaze uses. A cell with none of these kinds costs the actor nothing. Only after the hazard pass does the separate render step redraw changed cells and run any post-action sound or particle effect. Death narration runs here when relevant.
 
-**End-of-round exit checks.** Three flags control exit:
+**Post-dispatch and table-terminal checks.** The loop recounts live unmarked
+actors by side after a dispatched action. If no party-side actors remain while
+foes do, it first gives the party control/faint helper a chance to restore one
+actor; if none can be restored, it prints the one-shot defeat line when that
+line has not already been guarded and returns word `1`. If neither side
+remains, it returns word `0` without another announcement. If party actors
+remain and foes do not, it prints `VICTORY!` once and continues; cleanup still
+requires accepted actor departures or the Escape-key sweep described in
+Section 14. Reaching slot 32 with actors still present starts another table
+walk. The framer discards this return word, so it is not a caller-visible
+victory boolean. Earlier revisions labelled `1` as victory/escape and `0` as
+defeat; that polarity is withdrawn.
 
-- **Defeat flag**: the entire party is dead, asleep, or fled. Result is "defeat".
-- **Leave-combat flag**: the out-of-arena leave helper has accepted, a spell or
-  tile effect has ended combat, or the combat-only Escape cleanup path has
-  accepted. The one-shot exit narration and Escape's table cleanup are separate
-  operations; Section 14 gives their exact ordering and text.
-- **Exhausted slots** (loop reached slot 32): start a new round.
-
-When defeat or leave-combat fires, the round loop returns "1" (victory/escape) or "0" (defeat).
+The renderer blink/redraw byte set by an accepted edge is not a leave-combat
+flag. Edge departure ends that actor's action and the recount observes the
+updated sides; it does not by itself return from combat.
 
 **Combat does not own a post-round render pass.** An earlier revision of this
 section described a "post-round maintenance pass" that swept the arena grid
@@ -1770,13 +1862,67 @@ character.
 
 ## 14. Victory, defeat, and escape
 
-Three exit conditions end combat; each sets one of the round-loop's flag bytes, and the per-round epilogue checks them.
+Combat ends when the post-action side recount reaches a terminal table state.
+Victory narration, individual edge departure, and Escape-key cleanup are
+distinct transitions rather than three interchangeable exit flags.
 
-**Victory.** When every hostile actor has been killed (no non-party slot has the "alive and active" flag bits set), the round loop prints the resident combat string `VICTORY!` through the ordinary string printer. The stored string has one leading and one trailing newline, and a one-shot guard prevents a duplicate announcement. The loop exits with result code "1" after cleanup. The framer then restores the suspended world state, refreshes party stats, and returns to the calling mode. Combat death paths may have produced temporary loot markers and a raw reward unit while the combat-instance tables were live, but the traced framer does not merge those active-object bytes into the restored world table or propagate the helper's return value as a post-combat award. The traced SJOG calls reached from COMBAT are command-time delegates and per-round helpers, not an after-victory loot-conversion pass. Ordinary terrain-trigger removal happens after the framer, in the resident caller that invokes the post-combat object reconciler for the original trigger slot. This settles the combat-exit boundary: ordinary attack/spell experience can be credited before the framer restores the world, the original trigger slot can be cleared or rewritten by the caller-side reconciler, and any body-like food/gold result belongs to later Search/Get interaction with that rewritten slot. Arbitrary combat corpse markers, party gold, karma, and any victory bonus are not automatic framer outputs.
+**Victory.** When every hostile actor has been killed (no non-party slot has the
+"alive and active" flag bits set), the round loop prints the resident combat
+string `VICTORY!` through the ordinary string printer. The stored string has one
+leading and one trailing newline, and a one-shot guard prevents a duplicate
+announcement. The announcement does **not** return from combat. Party actors
+remain in the arena and cleanup continues until they walk out with `Leave!` or
+the player invokes the now-accepted Escape-key sweep. An earlier revision said
+the loop exited with result one immediately after victory cleanup; that is
+withdrawn.
 
-**Defeat.** When the entire party is dead, asleep, or otherwise inactive, the engine prints `BATTLE IS LOST!` from the same resident combat string pool and the round loop returns "0". That stored string begins with a newline and has no trailing newline before its terminator. There is no command that reaches the defeat exit deliberately: an earlier revision of this section described combat `Q` as an abandon-party command that did so, and that is withdrawn — the combat parser refuses `Q` like the other meaningless verbs (Section 8). What happens next is not decided by combat: control returns to the exploration loop that framed the fight, and that loop's next per-turn party-capability check sees the result. A wipe with nobody left able to act and nobody asleep runs the rescue/refuge cinematic specified in `systems/blackthorn.md` Section 7 — which restores the party and resumes play at Lord British's Castle, so an ordinary wipe is not a terminal game-over. A wipe that leaves a sleeping member instead simply passes turns until someone wakes or dies.
+After `Leave!` departures or the Escape sweep empty both sides, the round loop
+returns word zero and the framer restores the suspended
+world state, refreshes party stats, and returns to the calling mode. Combat
+death paths may have produced temporary loot markers and a raw reward unit while
+the combat-instance tables were live, but the traced framer does not merge those
+active-object bytes into the restored world table or propagate the helper's
+return value as a post-combat award. The traced SJOG calls reached from COMBAT
+are command-time delegates and per-round helpers, not an after-victory
+loot-conversion pass. Ordinary terrain-trigger removal happens after the
+framer, in the resident caller that invokes the post-combat object reconciler
+for the original trigger slot. This settles the combat-exit boundary: ordinary
+attack/spell experience can be credited before the framer restores the world,
+the original trigger slot can be cleared or rewritten by the caller-side
+reconciler, and any body-like food/gold result belongs to later Search/Get
+interaction with that rewritten slot. Arbitrary combat corpse markers, party
+gold, karma, and any victory bonus are not automatic framer outputs.
 
-**Escape.** Moving outside the arena reaches the out-of-bounds combat leave helper. Ship-style fights can refuse the attempt, and constrained encounters require party exits to share the established exit direction. Once the helper accepts, it sets the leave-combat path; the first accepted trigger per fight prints the exit presentation and the round loop exits with code "1". Surviving party members and monsters are not given a chance to land final blows once that helper accepts.
+**Defeat.** When no party-side actor remains while at least one foe does, the
+engine first runs the party control/faint helper. If it cannot restore an actor,
+the engine prints `BATTLE IS LOST!` from the resident combat string pool and
+returns word `1`. That stored string begins with a newline and has no trailing
+newline before its terminator. The same terminal branch is reached when the
+last party actor successfully flees while foes remain, so that actor's
+`Escape!` line is followed by the loss line. An earlier revision called this
+return word zero and treated one as victory/escape; that polarity is withdrawn.
+The framer discards the word.
+
+There is no command that reaches the defeat exit deliberately: an earlier
+revision of this section described combat `Q` as an abandon-party command that
+did so, and that is withdrawn — the combat parser refuses `Q` like the other
+meaningless verbs (Section 8). What happens next is not decided by combat:
+control returns to the exploration loop that framed the fight, and that loop's
+next per-turn party-capability check sees the result. A wipe with nobody left
+able to act and nobody asleep runs the rescue/refuge cinematic specified in
+`systems/blackthorn.md` Section 7 — which restores the party and resumes play at
+Lord British's Castle, so an ordinary wipe is not a terminal game-over. A wipe
+that leaves a sleeping member instead simply passes turns until someone wakes
+or dies.
+
+**Edge departure.** Moving outside the arena reaches the geometric edge helper
+specified in Section 3. A successful attempt removes only the acting actor and
+prints `Escape!` while foes remain or `Leave!` after they are gone. Remaining
+party members and monsters continue to receive turns, so further blows are
+possible after a party member flees. If the last party actor leaves while foes
+remain, the subsequent side recount prints `BATTLE IS LOST!` and returns word
+one. The previous claim that the first accepted edge ended combat immediately
+is withdrawn.
 
 The Escape key uses a distinct cleanup handler and always prints the bare prefix
 `Escape` first. Contrary to the earlier contract, its table scan does **not**
@@ -1802,7 +1948,15 @@ ring hook sees the already-cleared acting descriptor and is therefore inert.
 The `X` letter does not reach this handler at all — the combat parser produces
 `X-it what?` and re-prompts (Section 8).
 
-The framer's restore phase runs the same way for all three — the only difference is the result code returned. Combat time advances from the round loop's round-counter wrap, which fires the per-turn cleanup with a one-minute increment; a separate one-minute exit increment is not part of the currently traced framer restore.
+The framer's restore phase is independent of which terminal table state caused
+the round loop to return. It restores the exact pre-combat X, Y and Z; no arena
+edge coordinate or chosen exit direction becomes a world coordinate. It also
+restores the complete pre-combat active-object snapshot, so individual actor
+departures are combat-local. Any persistent ordinary encounter-trigger rewrite
+is the caller-side reconciliation after the framer. Combat time advances from
+the round loop's round-counter wrap, which fires the per-turn cleanup with a
+one-minute increment; a separate one-minute exit increment is not part of the
+currently traced framer restore.
 
 ## 15. Hooks into other systems
 
@@ -1967,7 +2121,10 @@ The behaviour described here was derived from the private function and format no
 - The combat-exit tile-graphics restoration dispatch reached from the framer's
   sampled restoration flag -- derived from
   `u5-decomp/functions/ULTIMA_EXE/`.
-- The terrain-combat setup, the class-row spawn-count lookup, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion-class roll, and the single-attacker town-style override — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The terrain-combat setup, the class-row spawn-count lookup, the dormant
+  fifteen-transposition branch in the terrain helper, the early-spawn
+  companion-class roll, and the single-attacker town-style override — derived
+  from `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat monster-placement writer that initializes renderer-facing and combat descriptor records -- derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The ambush/camp-attack reveal-slot helper, including mode gating, one-shot
   reveal-coordinate consumption, arena terrain stamping, and redraw ordering --
@@ -2161,8 +2318,14 @@ The behaviour described here was derived from the private function and format no
   assignment, and the marker-only mode -- derived from the 2026-08-22 retrace in
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The framer's ambush entry branch, its setup target, and its discarded slot
-  argument -- derived from `u5-decomp/functions/ULTIMA_EXE/`
-  and `u5-decomp/notes/`.
+   argument -- derived from `u5-decomp/functions/ULTIMA_EXE/`
+   and `u5-decomp/notes/`.
+- The exact edge classification and presentation, per-actor departure rather
+  than immediate fight exit, post-victory cleanup requirement, complete ambush
+  caller census, two distinct full-range-swap algorithms, PRNG ordering and
+  deterministic vectors were re-audited in private analysis under
+  `u5-decomp/notes/` and the ULTIMA, DNGLOOK, DUNGEON, COMBAT, SJOG, and CMDS
+  function directories.
 - The per-letter combat command map of Section 8 — the two shared delegate
   shapes, the exact three refusal tails and newline/audio ordering, the
   direct-call letters, the exact pre-maintenance re-prompt rule, and the

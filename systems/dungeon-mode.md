@@ -1747,6 +1747,13 @@ post-action contact/auto-face path above - use the same four-step launch, and it
 is **not** the room-trigger `DUNGEON.CBT` path. No arena record is read from disk
 on this path.
 
+Presentation remains caller-owned. The A-Attack path keeps its ordinary Attack
+command transcript before the matching forward contact. The automatic contact
+path, when it must rotate the party, prints its approach-from-direction line,
+commits the new facing, redraws and pauses before launch; when already facing the
+monster it skips that rotation narration. Neither caller prints the outdoor
+conflict banner, and the framer's ambush arm adds no replacement banner.
+
 1. **Set the combat kind byte to the ambush value.** The contact path also
    clears the combat result code first.
 2. **Tear down the first-person view resources.**
@@ -1796,13 +1803,25 @@ on this path.
      `Y = [5,4,6,3,7,2,8,5,2,8,7,3,2,4,6,8]`; facing south swaps the east pair;
      facing west swaps the north pair. A facing value outside zero through three
      leaves both rows untouched.
-   - **Source band.** All sixteen source cells are cleared, a shuffled
-     permutation of the sixteen slot indices is built, and then `count` copies of
-     the ordinary source byte `class * 4 + 0x40` are written into the first
-     `count` permuted slots. `class` is the active dungeon monster's stored
-     class byte. `count` is a uniform integer in `[1, spawn_count]` where
-     `spawn_count` is the class's spawn-count stat byte, except that a
-     spawn-count of eight or sixteen is taken as an exact count with no roll.
+   - **Source band.** Initialize a permutation to `[0,1,...,15]`. For current
+     indexes zero through fifteen, independently draw a second index from the
+     full inclusive range `0..15`, swap those entries, and clear that current
+     source cell. This is sixteen full-range transpositions, not Fisher-Yates.
+     Then write `count` copies of the ordinary source byte
+     `class * 4 + 0x40` into the first `count` permuted slots. `class` is the
+     active dungeon monster's stored class byte. The painter always consumes
+     one `random_range(1, spawn_count)` draw. For spawn-count bytes eight and
+     sixteen it then overwrites the draw with that exact count; the sentinel
+     does not suppress PRNG consumption. An earlier revision said those exact
+     counts used no roll; that is withdrawn.
+   - **Setup-order consequence.** The room setup later scans source indexes in
+     ascending order rather than walking the permutation. After party seating
+     it first consumes four unconditional random-special palette draws, even
+     though this synthesized band contains only ordinary sources, and then one
+     speed-variation draw for each placed monster in ascending occupied-source
+     order. Equipment-dependent party-seating draws can occur before the four
+     palette draws. The state-zero deterministic vector is published in
+     `systems/combat.md` Section 5.
 
 4. **Call the combat framer with the ambush entry mode**, passing the active
    monster's class byte. The framer's ambush branch performs no arena load and

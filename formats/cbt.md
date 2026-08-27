@@ -11,7 +11,7 @@ Each `.CBT` file is a bank of fixed-size arena records. Every record has the sam
 - The first eleven bytes of each row are visible terrain cells.
 - The remaining twenty-one bytes of each row are combat metadata.
 
-The visible terrain is therefore an eleven-by-eleven grid. The row stride is already the same stride the runtime terrain grid uses, so the engine can copy an arena row into its in-memory combat terrain with minimal reshaping. The metadata band is loaded with the arena. Several outdoor-combat slices are now identified, but the remaining bytes should still be preserved until their consumers are traced.
+The visible terrain is therefore an eleven-by-eleven grid. The row stride is already the same stride the runtime terrain grid uses, so the engine can copy an arena row into its in-memory combat terrain with minimal reshaping. The metadata band is loaded with the arena. Every metadata slice consumed by the traced shipped runtime is identified below; bytes outside those slices have no traced reader and remain opaque round-trip material.
 
 The files have no header, no arena table, no compression, and no per-record names. Arena identity comes from the index used by the caller. A complete arena record is three hundred fifty-two bytes: eleven rows times a thirty-two-byte row stride.
 
@@ -66,7 +66,7 @@ Here `x` is a visible terrain coordinate in `0..10`, and `column` is a metadata-
 
 ## 4. Terrain Cells
 
-Terrain cells are one-byte tile indices drawn from the game's global tile vocabulary. They identify walls, floors, water, swamp, bridges, doors, ladders, open exit edges, hazards, and other combat-map scenery.
+Terrain cells are one-byte tile indices drawn from the game's global tile vocabulary. They identify walls, floors, water, swamp, bridges, doors, ladders, hazards, and other combat-map scenery.
 
 Combat uses terrain in three ways:
 
@@ -74,11 +74,11 @@ Combat uses terrain in three ways:
 - **Movement.** The step-or-attack primitive rejects impassable cells and allows walkable cells.
 - **Round safety.** The round loop defensively skips any actor whose record says it is standing on a wall-class terrain cell.
 
-The terrain byte alone is not the entire collision model. Metadata, resident tables, and tile-class tables may refine edge exits, hazards, placement, and special encounter behaviour.
+The terrain byte alone is not the entire collision model. Resident passability and tile-class tables refine collision, hazards, placement, and special encounter behaviour. Arena exits are geometric rather than encoded: a cardinal destination outside X or Y `0..10` reaches the runtime edge handler, independent of terrain and metadata.
 
 ## 5. Metadata Band
 
-The twenty-one metadata bytes after each terrain row are combat-specific annotations. The full sub-layout is not complete, but the outdoor arena loader consumes four fixed slices from each selected `BRIT.CBT` record after loading the whole three-hundred-fifty-two-byte block:
+The twenty-one metadata bytes after each terrain row are a mixed setup band. The outdoor arena loader consumes exactly four fixed slices from each selected `BRIT.CBT` record after loading the whole three-hundred-fifty-two-byte block:
 
 | Record row | Metadata columns | Known role |
 |---:|---:|---|
@@ -87,7 +87,7 @@ The twenty-one metadata bytes after each terrain row are combat-specific annotat
 | 6 | 11-26 | Sixteen monster placement-slot X coordinates. |
 | 7 | 11-26 | Sixteen monster placement-slot Y coordinates. |
 
-Rows and columns in this table are zero-based within the arena record. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a placement-slot shuffle branch, but the traced ordinary terrain caller does not set it; live ambush and rest/camp setup must be specified from their own helpers rather than inferred from this dormant branch.
+Rows and columns in this table are zero-based within the arena record. These are all outdoor metadata reads found in the complete traced caller/consumer chain. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a dormant placement-slot shuffle branch, specified in `systems/combat.md`; live dungeon ambush and rest/camp setup use different helpers.
 
 The two six-byte slices are the outdoor arena's **party entry coordinates**, and
 they use exactly the convention the `DUNGEON.CBT` party rows use below: for
@@ -168,33 +168,81 @@ an engine must reproduce:
 Both paths write the source-owned X and Y into the active-object record and
 stamp the current dungeon level into it.
 
-Special setup ids have one additional post-placement rule that overwrites the
-placed active object's auxiliary byte (byte five of the record):
+Special setup ids map directly to renderer-visible object families. The special
+placer creates no combat descriptor and changes no terrain cell; it writes the
+raw setup id to the active object's tile and tile-mirror bytes, writes the
+source X and Y plus current dungeon Z, writes the no-descriptor sentinel, and
+initially writes the raw id to auxiliary byte five. The visual identity comes
+from the upper active-object tile bank:
 
-| Setup id | Auxiliary-byte rule |
+| Setup id | Visible identity |
 |---:|---|
-| `1` | Write `Z * 3 + 7`, where `Z` is the current dungeon level. |
-| `2` | Write `random_range(1, 10 * Z + 10)`. |
-| `3` | Write `random_range(0, 7)`. |
-| `4` | Write `random_range(0, 7)`. |
-| `5` | Write `30 + random_range(0, 3)`. |
-| `6` | Write `4 + random_range(0, 2)`. |
-| `7` | Write `1 + random_range(0, 7)`. |
-| `8` | Write `1 + random_range(0, 7)`. |
-| `9` | Write `random_range(0, 3)`. |
-| `10` | Write `42 + random_range(0, 2)`. |
-| `11` | Write `9 + random_range(0, 5)`. |
-| `12` | Write `45 + random_range(0, 2)`. |
-| `13` | Write `1 + random_range(0, 7)`. |
-| `14` | Write `1`. |
-| `15` | Write `1 + random_range(0, 7)`. |
-| `16+` | No auxiliary-byte post-write in this helper. |
+| `1` | Chest |
+| `2` | Gold |
+| `3` | Potion |
+| `4` | Scroll |
+| `5` | Weapon |
+| `6` | Shield |
+| `7` | Key |
+| `8` | Gem |
+| `9` | Helm |
+| `10` | Ring |
+| `11` | Armour |
+| `12` | Amulet |
+| `13` | Torch |
+| `14` | Sandalwood box |
+| `15` | Food |
+| `0x1E`, `0x1F` | The two corpse variants |
+| `0x3C` | Trapped soul; the final Doom absorption marker |
+| `0xE8` | Poison field |
+| `0xEB` | Force field |
+
+Ids one through fifteen then receive an additional post-placement rule that
+overwrites the auxiliary byte:
+
+| Setup id | Auxiliary-byte rule | PRNG draws |
+|---:|---|---:|
+| `1` | Write `Z * 3 + 7`, where `Z` is the current dungeon level. | 0 |
+| `2` | Write `random_range(1, 10 * Z + 10)`. | 1 |
+| `3` | Write `random_range(0, 7)`. | 1 |
+| `4` | Write `random_range(0, 7)`. | 1 |
+| `5` | Write `30 + random_range(0, 3)`. | 1 |
+| `6` | Write `4 + random_range(0, 2)`. | 1 |
+| `7` | Write `1 + random_range(0, 7)`. | 1 |
+| `8` | Write `1 + random_range(0, 7)`. | 1 |
+| `9` | Write `random_range(0, 3)`. | 1 |
+| `10` | Write `42 + random_range(0, 2)`. | 1 |
+| `11` | Write `9 + random_range(0, 5)`. | 1 |
+| `12` | Write `45 + random_range(0, 2)`. | 1 |
+| `13` | Write `1 + random_range(0, 7)`. | 1 |
+| `14` | Write `1` after consuming the degenerate `random_range(0, 0)`. | 1 |
+| `15` | Write `1 + random_range(0, 7)`. | 1 |
+| `16+` | No auxiliary-byte post-write in this helper; retain the raw id. | 0 |
 
 The auxiliary-byte post-write above applies **only to special placements**. It
 is gated on the placement path, not on the numeric value of the id, and it is
 the only write this helper performs after the placer returns. A special
 placement whose id is `16` or higher therefore keeps whatever the placer itself
 stored in that byte, which for the special path is the setup id.
+
+PRNG ordering is part of the source-scan contract. After party readback and its
+setup pre-pass, every gated sixteen-source scan consumes four palette draws,
+whether or not the record contains a random-special source. It then visits
+source indexes `0..15`. Each ordinary
+combatant placement consumes one speed-variation draw. Each special id consumes
+the post-write draw shown in the table above at that same point in the scan.
+Thus ordinary and special draws interleave in source-index order after the four
+unconditional palette draws.
+
+**Deterministic setup vectors.** In every row below the source cell's arena
+terrain byte remains unchanged:
+
+| Source and state | Result |
+|---|---|
+| Special id `1` at `(2,4)`, dungeon Z `3` | One active object with raw tile pair `1`, `(X,Y,Z) = (2,4,3)`, auxiliary `16`, no descriptor, no PRNG draw. |
+| Special id `14` at `(6,7)` | One sandalwood-box active object with raw tile pair `14`, auxiliary `1`, no descriptor; consume one degenerate `random_range(0,0)` draw. |
+| Special id `0x1E` at `(5,5)` | One corpse active object with raw tile pair and retained auxiliary `0x1E`, no descriptor and no post-write draw. |
+| Source `0xEC`, whose low-bit-zero palette draw selected class `24` | Ordinary Slime placement: allocate descriptor and active object, derive its renderer tile from class 24, consume the ordinary speed draw, and perform no special auxiliary post-write. |
 
 **The random-special family `0xEC..0xEF` is an ordinary placement, not a
 marker.** Before the sixteen-source scan, the helper pre-rolls four setup ids by
@@ -251,7 +299,10 @@ selection and party-entry readback but skip the sixteen-source placement scan.
 This dungeon-room metadata pass is separate from the outdoor arena loader. Do
 not infer it from the outdoor placement-coordinate slices alone.
 
-A clean implementation should preserve all metadata bytes even if it only consumes the identified slices. Dropping the metadata band will make combat maps renderable but not behaviourally faithful.
+A clean implementation should consume the slices identified above and preserve
+all other metadata bytes for round-trip fidelity. Dropping the metadata band
+will make combat maps renderable but not behaviourally faithful; assigning new
+meanings to unread bytes is equally unsupported.
 
 ## 6. Outdoor Arena Selection
 
@@ -360,35 +411,29 @@ A renderer can display an arena using only the terrain grid and the global tile 
 - The global tile vocabulary used by terrain cells: `formats/tiles.md`.
 - The static dungeon geometry that triggers dungeon-room combat: `formats/dungeon-dat.md`.
 
-## 12. Format Boundary And Runtime Work
+## 12. Format Boundary And Runtime Closure
 
-The `.CBT` byte-layout contract is complete at arena-record depth: record size,
-row stride, terrain-band width, metadata-band preservation, and stock record
-counts are fixed. Remaining work belongs to runtime consumers of the metadata
-band and to caller discovery.
+The `.CBT` byte-layout and shipped runtime-consumer contract is complete at
+arena-record depth: record size, row stride, terrain-band width, stock record
+counts, every traced metadata read, and preservation of unread bytes are fixed.
 
-- **Remaining metadata sub-layout.** The outdoor loader consumes the two
-  six-byte setup tables and the two sixteen-byte placement-coordinate tables
-  documented above. The remaining metadata bytes, and the per-entry meanings of
-  the two six-byte setup tables, are not fully decoded. Existing third-party
-  breakdowns do not match the record budget cleanly.
-- **Dungeon-room setup scan.** The room-trigger setup pass that consumes
-  dungeon metadata is now identified for the sixteen source cells beginning at
-  row five, metadata column eleven, including the boundary between ordinary
-  class-derived combatants and special-placement sources. Remaining work is
-  per-subtype naming for the non-final special-placement sources, not the scan
-  shape or terminal Doom handoff.
-- **Arena edge semantics.** Open edges, blocked edges, and flee exits are
-  runtime behaviours likely encoded in metadata plus tile-class tables; the
-  exact split is still open.
-- **Non-room dungeon combat callers.** Room-trigger selection is fixed by scene
-  and low nibble. No traced dungeon chest path currently selects from the
-  dungeon arena bank; add any future non-room caller here only after its arena
-  lookup is identified.
-- **Ambush setup callers.** The terrain setup helper has a placement-slot
-  shuffle flag, but the traced ordinary terrain caller does not set it. The
-  caller and presentation details for ambush-style setup remain separate open
-  work.
+- The two outdoor six-byte slices are party X and party Y, indexed by roster
+  slot zero through five. They are not unidentified setup or flag tables.
+- No shipped traced reader consumes the remaining outdoor metadata bytes.
+  Preserve them, but do not synthesize edge flags or hazard meanings from them.
+- Dungeon special sources now have visible subtype identities, exact
+  active-object writes, auxiliary rules, and PRNG consumption above.
+- Arena edges are outside this file format. They are geometric destinations
+  outside the eleven-by-eleven coordinate range; `systems/combat.md` specifies
+  their collision, narration, direction-sharing, removal, and restoration
+  behavior.
+- The outdoor terrain helper's shuffle arm is dormant. The only live ambush
+  callers are the two dungeon wandering-monster contacts, which synthesize an
+  arena and use a different sixteen-swap algorithm. Rest/camp uses the CMDS
+  alternate setup path and neither shuffle. The complete caller and PRNG order
+  is in `systems/combat.md` and `systems/dungeon-mode.md`.
+- Room-trigger selection is fixed by scene and low nibble. No traced dungeon
+  chest path independently selects a `DUNGEON.CBT` record.
 
 ## 13. Sources
 
@@ -415,7 +460,11 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
   ordinary placement path and that the special path allocates an active-object
   record without a combat descriptor.
 - Arena synthesis for the ambush entry mode: derived from private analysis in
-  `../u5-decomp/functions/DNGLOOK_OVL/` and `../u5-decomp/notes/`.
+   `../u5-decomp/functions/DNGLOOK_OVL/` and `../u5-decomp/notes/`.
+- The complete metadata-reader census, special-source identities, edge
+  non-metadata boundary, dormant terrain shuffle, and live ambush PRNG order
+  were re-audited in private analysis under `../u5-decomp/notes/` and the
+  ULTIMA, DNGLOOK, DUNGEON, COMBAT, SJOG, and CMDS function directories.
 - Stock-content census of the dungeon-room source band, counting the
   `0xEC..0xEF` family and each special setup id across all one hundred twelve
   shipped records, performed against the local clean install.
