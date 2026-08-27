@@ -194,6 +194,34 @@ which the shipped table sets to dark yellow rather than the stock brown
 (`formats/tiles.md` section 7). This is the palette that title art, world
 tiles, text glyphs, and every cutscene draw against.
 
+That one deviation is deliberate and worth stating plainly, because it inverts
+the usual expectation. The mode-set entry first asks firmware to set the mode,
+which installs the firmware's own default palette — and that default carries
+the industry-standard brown at index six, a special case the firmware applies
+precisely so the slot does not read as dark yellow. The program then
+immediately overwrites all sixteen registers from its own table, and the only
+slot whose value differs from what firmware had just installed is index six.
+The shipped program is therefore **undoing** the standard brown correction on
+purpose. An implementation that "fixes" index six to brown is reverting a
+deliberate choice, not correcting an error.
+
+**Two cautions for anyone checking this against a screen or a capture.** First,
+dark yellow at index six is a legal value for this adapter; it is simply not a
+member of the firmware-defaulted set. A conformance test that checks rendered
+colours against the firmware default palette will therefore flag this one
+colour as out of gamut when the render is in fact correct. Compare against the
+shipped table, not against the stock set.
+
+Second, what a period player *saw* at this slot is display-dependent, and both
+answers are right for their hardware. Driven at 200 lines into a
+composite-era colour display, the monitor's own correction circuit darkens the
+green component in hardware, so this slot appears brown at the glass whatever
+the register holds. On an enhanced display fed the same signal, it appears dark
+yellow. Implementations targeting the enhanced-display colour space — which is
+the v1 baseline — should render dark yellow. A frontend offering a
+period-monitor emulation mode may legitimately show brown there, and that is a
+display model, not a palette change.
+
 **Nothing reprograms the palette after mode setup.** The palette-register
 load happens once, inside the mode-set entry, and no other entry in any of the
 four drivers and no code path in the resident image or in any overlay — the
