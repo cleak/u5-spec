@@ -23,6 +23,29 @@ per-row dirty list. A refresh:
    band as plain chrome when no effect is running.
 5. Selects the message window before returning.
 
+### 2.1 Complete side-effect census
+
+The full-panel parent is read-only with respect to character records, party
+resources, vehicle and hull state, combat descriptors, calendar state, and the
+timed-effect code and duration. The footer reads those owners only. The sole
+gameplay-state write anywhere in the refresh is in the per-row painter: if the
+row being drawn is both the active-player selection and stored as Dead or
+Sleeping, the painter replaces the marker with a space and resets the selector
+to the none sentinel. A selected row in any other stored status keeps the
+selector. No other gameplay mutation occurs.
+
+The remaining writes are presentation state. Text emission updates the stats
+window's saved cursor and the rendered cells; the divider step updates its
+pixels; and window selection updates the active-window bookkeeping. The refresh
+always leaves the message window selected, but does not reposition that
+window's saved cursor. Temporary inverse-video and cap-rendering style changes
+are balanced before return. The stats window's own cursor ends at local
+`(9, 6)` after the three-cell cap/effect/cap sequence, or local `(6, 6)` when a
+zero effect code selects the graphics-only plain-band repaint.
+
+The refresh emits no message-window text, death line, or status narration, and
+plays no sound. Its text consists only of the panel fields specified below.
+
 The panel does **not** repaint the sky strip, the wind banner, or the
 game-screen frame. Those have their own owners and their own cadences.
 
@@ -43,7 +66,7 @@ game-screen frame are fifteen cells wide: their right rule sits at pixel
 | Absolute row | Contents |
 |---:|---|
 | 1..6 | The six party rows (section 4). |
-| 7 | The upper divider band, carrying the timed-effect slot (section 8). It lies inside the stats window's rectangle, but the panel does not write it through that window — the slot is emitted through the full-screen window instead. |
+| 7 | The upper divider band, carrying the timed-effect slot (section 8). The text glyph and caps are emitted through the still-active stats window. |
 | 8 | The counters row: food, and either gold or ship hull (section 6). |
 | 9 | The date row (section 7). |
 | 10 | The lower divider band. Plain chrome; nothing is written into it. |
@@ -74,11 +97,19 @@ For a live party row the field layout is fixed:
 | 24..32 | 9 | Name | Printed from the character record, then space-padded out to nine cells. A name longer than nine characters is not truncated by the panel; the pad loop simply contributes nothing. |
 | 33 | 1 | Active-player marker | The fixed-cell font's right-pointing arrow, glyph code `0x1A`, or a space. |
 | 34..37 | 4 | Current HP | Decimal, right-justified in a four-column space-padded field. |
-| 38 | 1 | Status | The character record's status byte, emitted verbatim as a glyph. |
+| 38 | 1 | Status | The character record's status byte, forwarded verbatim to the ordinary cell emitter. Shipped statuses render as their letter glyphs. |
 
 A worked example: a nine-column name `BAFF` padded with five spaces, a blank
 marker cell, `  60` right-justified, and the status letter `G` produce the
 fifteen-cell row `BAFF      60G`.
+
+**Correction for imported status bytes.** An earlier revision said every raw
+status byte was emitted "as a glyph". The byte is actually handed to the shared
+cell emitter. Shipped Good, Poisoned, Sleeping, and Dead letters are ordinary
+glyphs, but an edited or legacy save containing one of the emitter's control
+bytes receives the corresponding presentation behavior from
+`systems/text-output.md` Section 5, such as a style change or window clear.
+This still does not mutate a character, party, vehicle, or combat field.
 
 ### 4.1 The active-player marker
 
@@ -200,14 +231,21 @@ three, occupying columns 27..35, also centred. Mixed-width dates such as
 
 ## 8. The Timed-Effect Slot
 
-Absolute row 7, in the upper divider band, written through the full-screen text
-window rather than the stats window:
+Absolute row 7, in the upper divider band, written through the stats text
+window:
 
 | Absolute column | Content |
 |---:|---|
 | 30 | Right-pointing bracket end-cap |
 | 31 | The effect glyph |
 | 32 | Left-pointing bracket end-cap |
+
+**Correction.** An earlier revision said the slot was written through the
+full-screen window. It is not. The refresh keeps the stats window selected,
+positions that window's cursor at local cell `(6, 6)`, emits the cap/glyph/cap
+sequence there, and only afterward selects the message window. With the stats
+window origin this still lands at absolute columns 30..32, row 7, but the saved
+cursor and style state belong to the stats descriptor.
 
 **Correction.** An earlier revision of this document said the slot is framed
 "above and below" the glyph. It is not: the two end-caps flank it **left and
@@ -331,6 +369,9 @@ the resulting state and paints it.
   highlighted.
 - Do not model the panel as the owner of HP, status, food, gold, light, combat,
   or vehicle state. It is a read-side presentation surface.
+- Apart from clearing a selected Dead or Sleeping member, treat refresh-time
+  reads as non-destructive. Leave the message cursor intact and return with the
+  message window selected.
 
 ## 12. Boundaries And Owned Work
 
@@ -346,15 +387,15 @@ private address tables, or implementation listings.
 
 - Full-panel refresh, per-row rendering, combat row overlays, and the middle
   value block: the resident user-interface function notes under
-  `u5-decomp/functions/ULTIMA_EXE/`.
+  `../u5-decomp/functions/ULTIMA_EXE/`.
 - Cadence of the poison, ring-regeneration, and camp-recovery refresh triggers
-  in Section 10: `u5-decomp/notes/issue_retrace_saves_rest_2026-08-22.md`.
+  in Section 10: private analysis under `../u5-decomp/notes/`.
 - Source provenance: the fifteen-column field, the exact column bindings of
   every party-row and counters-row field, the leading-space mechanisms behind the
   gold and date alignment, the persistence of the active-player marker, the
   timed-effect slot's cells, driving byte, code table and font, the plain-band
-  repaint, and the panel label strip are derived from private analysis note
-  `../u5-decomp/notes/gameplay_screen_layout_2026-08-22.md`, cross-checked
+  repaint, the panel label strip, and the exhaustive refresh side-effect census
+  are derived from private analysis under `../u5-decomp/notes/`, cross-checked
   against a fresh local re-read of the shipped executable and shared data
   overlay. Two claims in earlier revisions of this document are withdrawn there:
   that the effect glyph goes through the miniature tile-glyph path, and that its
@@ -363,7 +404,7 @@ private address tables, or implementation listings.
   monster-side clear, dead clear, controlled/charmed bit set, descriptor owner
   field matching the drawn row) and the withdrawal of the earlier "casting and
   self-targeted" reading:
-  `u5-decomp/notes/2026-08-22_combat-status-magic-verify.md`.
+  private analysis under `../u5-decomp/notes/`.
 - Text-window primitives used by the panel: `systems/text-output.md`.
 - Saved calendar, food, gold, transport/action, and character-record fields:
   `formats/saved-gam.md`.
