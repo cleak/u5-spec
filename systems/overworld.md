@@ -510,9 +510,9 @@ whole of the absorption stage, both of which were read from entry to exit:
 
 **The per-member application.** The pass applies each amount through the same
 party-damage helper that the surface chasm/falls row of Section 8 uses for its
-one-point fall damage. That helper:
+one-point fall damage. Before mutating state, that helper inverts the member's
+panel row, plays the shared damage rumble, and inverts the row back. It then:
 
-- flashes the member's row in the stats panel;
 - subtracts the amount from that member's **current hit points** word, character
   record `+0x10` (`formats/saved-gam.md` Section 3.1);
 - if the signed result is zero or below, clamps that word to **zero** and writes
@@ -522,12 +522,27 @@ one-point fall damage. That helper:
   (`formats/saved-gam.md` Section 5). That value is the no-active-member
   sentinel; it is **not** an attacker id, and nothing on this path reads it back
   as one;
-- repaints the stats panel.
+- requests a complete stats-panel repaint, after all HP clamp, Dead-status, and
+  death-triggered selector writes above.
 
 Maximum hit points, experience, level, magic points and equipment are untouched
-by this helper. That list is bounded by the helper's own body, which was read
-from entry to exit; the one routine it calls that was not fully read is named as
-a gap in Section 6.2.5.
+by this helper. That list is exhaustive for the helper and its closing repaint,
+both of which were read from entry to exit together with every per-row repaint
+call.
+
+**Closing repaint side effects.** The refresh selects the stats window; draws
+all six roster rows in slot order; draws food plus gold or ship hull; draws the
+date; draws the timed-effect glyph or the plain divider band; and selects the
+message window before returning. It does not reposition the message window's
+saved cursor. Its only gameplay-state write is a row-level selector safeguard:
+if the currently selected member is already Dead or Sleeping, that row draws no
+marker and clears the active-player selector. The damage helper has already
+performed this clear when the just-damaged member died, so the Dead case is
+normally redundant here; the Sleeping case is independent. The refresh makes
+no character, party-resource, vehicle, hull, combat-descriptor, calendar, or
+timed-effect mutation. Its other writes are panel pixels/cells and ordinary
+text-window cursor/style bookkeeping. `systems/stats-panel.md` Section 2.1 owns
+the reusable census.
 
 **The payload prints no narration line — but it is not silent on screen.** The
 closing stats-panel repaint draws panel text, including the hull readout while
@@ -552,14 +567,6 @@ pruning.
 These are open. The engine must not treat their absence from the text above as
 licence to invent a rule.
 
-- **Stats-panel repaint field census.** The closing repaint called by the
-  per-member helper was read only as far as its frigate hull-readout branch. It
-  is established positively that it prints panel text and that nothing in the
-  part read writes a character record. It is **not** established that it writes
-  no character field and narrates no death. Until that routine is read to its
-  end, treat the field list above as "these fields are written", not as "only
-  these fields are written". Reading that routine, and the per-slot panel-row
-  routine it calls in its loop, would settle it.
 - **Two further absorption sites, triggers unestablished.** Besides the two
   ranged attacks and the Section 8 adjacency reactions, the outdoor code reaches
   the same impact-absorption stage from a sailing-collision site and from a
@@ -1285,8 +1292,8 @@ The behaviour described above was derived by reading the function and format not
 - The render-loop orchestrator — `u5-decomp/functions/ULTIMA_EXE/`.
 - The visibility producer that produces the 11-by-11 viewport scratch grid — `u5-decomp/functions/ULTIMA_EXE/`.
 - The per-turn cleanup that advances time, refreshes daylight, and dispatches the hour-change hook — `u5-decomp/functions/ULTIMA_EXE/`.
-- The on-disk format of the surface and underworld grids — `u5-decomp/formats/`.
-- The data-segment layout, including the shared scratch block read by the light beacon, the single Britannia chunk-index table, and the `WorldLocationTable` — `u5-decomp/formats/`.
+- The on-disk format of the surface and underworld grids — `../u5-decomp/formats/`.
+- The data-segment layout, including the shared scratch block read by the light beacon, the single Britannia chunk-index table, and the `WorldLocationTable` — `../u5-decomp/formats/`.
 - Public scene/name binding for town-mode location rows — `catalogs/gazetteer.md`,
   `formats/npc.md`, and `formats/data-ovl.md`.
 - Public dungeon scene/name/record binding — `systems/dungeon-mode.md`,
@@ -1295,13 +1302,13 @@ The behaviour described above was derived by reading the function and format not
 - Source provenance: the creature step planner's absence of any distance
   comparison, the coin flip's role as attempt ordering only, and the
   single-attempt random-wander fallback are derived from private analysis note
-  `u5-decomp/notes/`.
+  `../u5-decomp/notes/`.
 - Source provenance: the two outdoor ranged attacks, their trigger conditions,
   the shared traced-line resolution with the launch-cell exemption, the
   announcement assignment, and the per-sample effect figures were first derived
   from private analysis note
-  `u5-decomp/notes/`, cross-checked against
-  `u5-decomp/functions/COMSUBS_OVL/`. Earlier readings that treated the shared
+  `../u5-decomp/notes/`, cross-checked against
+  `../u5-decomp/functions/COMSUBS_OVL/`. Earlier readings that treated the shared
   helper as a directed-step probe or a path-clear scan are superseded.
 - Source provenance for Section 6.2 as it now stands: the exact-equality breath
   recognition, the adjacency-before-class ordering, the inclusive range draw and
@@ -1316,9 +1323,9 @@ The behaviour described above was derived by reading the function and format not
   that did not consult the earlier notes for any claim. Routine boundaries were
   read from entry to exit and the caller censuses were exhaustive near-call
   scans; the limits of both are published in Section 6.2.5 rather than left
-  implicit. Working directories: `u5-decomp/functions/MAINOUT_OVL/`,
-  `u5-decomp/functions/COMSUBS_OVL/`, `u5-decomp/functions/OUTSUBS_OVL/`,
-  `u5-decomp/functions/CMDS_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. Record
+  implicit. Working directories: `../u5-decomp/functions/MAINOUT_OVL/`,
+  `../u5-decomp/functions/COMSUBS_OVL/`, `../u5-decomp/functions/OUTSUBS_OVL/`,
+  `../u5-decomp/functions/CMDS_OVL/` and `../u5-decomp/functions/ULTIMA_EXE/`. Record
   field positions are cited from `formats/saved-gam.md`, not from private notes.
   Private notes in those directories that describe the line generator as a
   classical eight-connected line-drawing routine, or that name the sand-trap
