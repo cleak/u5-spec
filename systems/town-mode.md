@@ -712,10 +712,14 @@ digit to the ordinary dispatcher and returns its result, so digits behave as
 normal commands everywhere but the chair.
 
 - **Sound.** Pressing a digit plays one note, and only when the global sound
-  setting is on. The ten keys are a descending major scale: digit `1` is the
-  highest pitch, the pitch falls through `2`..`9`, and digit `0` is the lowest,
-  one whole step below `9`. The scale's two semitone steps fall between `3` and
-  `4` and between `7` and `8`.
+  setting is on. The ten keys are an **ascending** major scale spanning a major
+  tenth: digit `1` is the lowest pitch, the pitch rises through `2`..`9`, and
+  digit `0` is the highest, one whole step above `9`. The scale's two semitone
+  steps fall between `3` and `4` and between `7` and `8`. Digit `8` is an
+  octave **above** digit `1`. Section 13.1 gives the note table, the hold, the
+  envelope, and the mute behaviour. *Earlier revisions of this bullet had the
+  scale descending; that direction is inverted and is withdrawn (see
+  `RETRACTIONS.md`).*
 - **No turn is consumed.** The handler returns the loop's re-prompt result, so
   playing the instrument never advances the clock, never ticks the NPC
   schedule, and never redraws.
@@ -857,6 +861,149 @@ throne-room audience, not a generic town audience-prompt system, and not an
 independent trigger queue. The three-slot producer is the Shadowlord hideout
 state described in `catalogs/quest-graph.md`; values with the vanquished marker
 are skipped, while any living value selects that Shadowlord's atmospheric row.
+
+### 13.1 The harpsichord's ten notes
+
+> **Withdrawal.** The scale direction published before this revision was
+> inverted. See `RETRACTIONS.md`.
+
+Each accepted digit plays exactly one note through the shared software
+envelope generator described in `audio.md` section 5.4. The instrument uses no
+other sound primitive: it never plays a blocking tone, never starts a bare
+timer tone, and never performs a calibrated wait of its own.
+
+**The per-key constants are phase periods, not tone periods and not timer
+divisors.** They are fed to the envelope generator as its phase period
+argument, so under the relation of `audio.md` section 5.4.2 the emitted pitch
+is *proportional* to the constant. There is no reciprocal anywhere on this
+path, which is why the scale ascends.
+
+| Digit | Phase period | Semitones above digit `1` | Pitch at the reference machine |
+|:---:|---:|---:|---:|
+| `1` | 3116 | 0.00 | about 1107 Hz |
+| `2` | 3497 | 2.00 | about 1242 Hz |
+| `3` | 3926 | 4.00 | about 1395 Hz |
+| `4` | 4159 | 5.00 | about 1478 Hz |
+| `5` | 4668 | 7.00 | about 1658 Hz |
+| `6` | 5240 | 9.00 | about 1862 Hz |
+| `7` | 5882 | 11.00 | about 2090 Hz |
+| `8` | 6231 | 12.00 | about 2214 Hz |
+| `9` | 6995 | 14.00 | about 2485 Hz |
+| `0` | 7851 | 16.00 | about 2789 Hz |
+
+Digit `0` is the tenth key, not a zero index: the layout reads `1`..`9` then
+`0` as "ten", and the digit is used directly as the table index. The command
+gate upstream guarantees that only the ten digit keys reach the handler.
+
+**What is exact and what is not.** The ten phase periods are program constants
+and are exact. Every *ratio* between them, and therefore the whole semitone
+column, is exact and machine-independent. The absolute pitch column is
+**approximate**: it is the phase period multiplied by about `0.3553` Hz per
+unit, which is `audio.md` section 5.4.3's reference iteration rate of about
+23,300 iterations per second divided by 65536, and it inherits that section's
+modelling band. Applying the band, digit `1` lies somewhere in **about 990 to
+1185 Hz** - anywhere from B5 to D6 - and the other nine transpose with it as a
+unit. An implementation may place the scale anywhere in that band. It must not
+treat 1107 Hz as a measured original-hardware frequency, and it must not
+transpose one key without transposing all ten.
+
+**Interval structure, all exact:**
+
+- The pattern is the major scale, tone-tone-semitone-tone-tone-tone-semitone,
+  with the two semitone steps between `3`/`4` and between `7`/`8`.
+- Digit `8` is an octave above digit `1`, and digits `9` and `0` continue two
+  whole tones further, so the instrument spans a major tenth in natural
+  left-to-right order.
+- The octave is **not bit-exact**. An exact doubling of digit `1` would be
+  6232; the shipped value is 6231, which is 11.9972 semitones, 0.28 cents flat.
+  An implementation that hard-codes an exact 2:1 octave is inaudibly but
+  measurably different. Reproduce the constants, not the idealised ratios.
+
+> **Inference, not a proof.** Referenced to digit `1`, the ten notes are exact
+> twelve-tone equal temperament to within 0.29 cents, and all ten sit at a
+> single constant offset of about -2.9 cents from standard A440 chromatic
+> pitch. Solving for the iteration cost that would place digit `1` exactly on
+> C#6 agrees with the independently derived cost to 0.16 percent. The natural
+> reading is that the table was authored as **D-flat major anchored on C#6**.
+> This is strong circumstantial support - the prior on ten notes landing within
+> three cents of a chromatic pitch by chance is roughly six percent - but it is
+> **an inference and is labelled as one**. Static analysis alone does not pin
+> the anchor; see the unresolved list below.
+
+**The note blocks, and it does not ring.** The generator runs 4000 iterations
+with no keyboard poll, no clock-tick reference and no early exit, so the
+handler does not return until the note has finished. At the reference machine
+that is **about 172 ms per keypress** - approximate, inheriting the plus or
+minus ten percent band of `audio.md` section 10, so about 160 to 190 ms.
+Entering the whole thirteen-note tune costs about **2.2 s** of blocked time.
+The audible path ends by unconditionally disabling both the timer gate and the
+speaker, and the handler adds nothing after it, so each keypress is one
+self-contained note terminated by a hard silence. There is no note-off state
+and nothing rings into the next key.
+
+> An earlier internal reading gave the hold as "200 calibrated units", the same
+> figure as the blocked-step beep. That is arithmetically close - 200 units is
+> about 176 ms against 172 ms here - but the model is wrong: the instrument
+> never touches the calibrated delay primitive. The two figures also diverge off
+> the reference machine, because calibrated units scale with the boot
+> calibration count while envelope iterations scale with raw instruction
+> throughput. A frontend that models this hold in calibrated units will drift.
+
+**The note has a plucked envelope, and it is audible.** The generator's
+comparison value starts at 20000 and steps by -4 each iteration, finishing at
+4000; it is monotonic and never wraps. By the duty relation of `audio.md`
+section 5.4.6 the connected fraction therefore rises from 69.5 percent to 93.9
+percent across the note, and the fundamental's amplitude falls from about 0.795
+to about 0.190 of full scale - **about a 12.4 dB decay**, with the pitch
+constant throughout. That is a plucked-string contour and is exactly right for
+a harpsichord. **A frontend that plays a constant-amplitude square wave for
+172 ms will not sound like the original.**
+
+A second-order effect touches only the upper seven keys. Once the comparison
+value falls below that key's phase period, some accumulator wraps produce no
+disconnected sample and whole gate cycles drop out, thinning the tail. As a
+fraction of the note the onset is about 99 percent for digit `4`, 96 percent
+for `5`, 92 percent for `6`, 88 percent for `7`, 86 percent for `8`, 81 percent
+for `9` and 76 percent for `0`; digits `1` through `3` never enter the regime.
+The sustained pitch is unaffected - measured over the first quarter of the note
+every key tracks the closed form to within 0.7 percent - so this is a timbre
+detail of the decay, not a tuning error.
+
+**Muting removes the note entirely, hold included.** Unlike every other cue in
+the game, the instrument tests the sound boolean in its own handler and skips
+the generator call outright, so the generator's timing-matched silent arm is
+never reached from here. With sound off there is no hold at all: the tune is
+enterable about 2.2 s faster. The sequence matcher runs identically either way,
+so mute changes timing only and never changes the puzzle outcome. `audio.md`
+section 3 records this as the one caller-level exception to the mute-invariance
+contract.
+
+**Unresolved, and stated so the engine stops waiting on it:**
+
+- **The absolute pitch anchor is not recoverable from static analysis.** The
+  interval structure is exact; the anchor is not, because the per-iteration
+  cost is an instruction-timing estimate rather than a constant stored in the
+  game. The band above is the honest answer. One cycle-accurate run of a
+  4.77 MHz reference machine, measuring the gate period at the speaker while a
+  digit is held, collapses it to a single number.
+- **The iteration cost is inherited, not re-derived here.** It comes from the
+  calibration work in `timing.md` section 7, which itself records a
+  pass-to-pass disagreement over the figure. If that resolution is wrong every
+  absolute pitch and the 172 ms hold shift proportionally. The interval
+  structure and the ascending direction do not move.
+- **Faster machines are unmodelled.** Above a boot calibration count of 100 the
+  generator inserts extra idle work per iteration, lengthening the iteration
+  and *lowering* the pitch - a crude partial self-compensation. No cross-machine
+  model was built and none should be guessed. Everything above is scoped to the
+  reference machine.
+- **Not re-verified:** whether any second harpsichord tile elsewhere in the
+  shipped map data reaches the same handler, and whether the castle chair is
+  the handler's only caller. The known trigger was verified; the sole-caller
+  claim is inherited from earlier work that did not cover indirect or far calls.
+
+**No runtime verification of any kind was performed for this section.** Nothing
+was run under an emulator and no audio was captured. Every duration and
+absolute pitch here is a static model carrying the tolerance stated with it.
 
 ## 14. Town alarms and hostile NPCs
 
