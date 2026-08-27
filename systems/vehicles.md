@@ -415,12 +415,34 @@ independent draw from the closed interval `[1, 8]` per qualifying member, per
 iteration. A party that is already entirely dead when the ladder reaches this
 rung takes no damage at all, because the test comes first.
 
-Two gaps sit on this rung and are named rather than papered over. The damage
-pass skips only members whose status byte is the dead marker, while the scan
-that ends the loop counts only good, poisoned and sleeping members; a member in
-some other living state would keep taking damage while no longer being counted
-alive by the exit test, and whether that state is reachable is unexamined. What
-runs after the loop exits was not traced.
+**Status domain and exit predicate.** Shipped gameplay produces only Good,
+Poisoned, Sleeping, and Dead roster statuses. Save loading is byte-preserving,
+however, so an edited or legacy save can introduce another value. The drowning
+loop continues when the scan finds at least one Good, Poisoned, or Sleeping
+member: both the Good-or-Poisoned result and the Sleeping-only result run the
+damage body. It exits when none of those three statuses remains. Consequently,
+within shipped-origin state it exits exactly when every member is Dead.
+
+An imported status outside that set exposes the deliberate asymmetry between
+the two shared helpers. Such a member is damaged whenever some Good, Poisoned,
+or Sleeping member causes the body to run, because the damage pass skips only
+Dead. The outside-domain status does not itself keep the loop alive. If no
+Good, Poisoned, or Sleeping member exists at the initial test, the loop returns
+without applying another damage pass even if an outside-domain member has
+positive hit points.
+
+**After the loop.** The sinking helper itself neither invokes the defeat scene
+nor performs a special all-dead transition. It returns with the party marker
+still sprite-suppressed, and its caller completes its local continuation. A
+blocked sailing step finishes as a refused move; an active-object caller
+resumes its object update; and a whirlpool caller can still commit the fixed
+Underworld destination before control reaches the next overworld loop head.
+That loop head runs the same capability scan, persists the active-object table
+as its defeat preamble, and invokes the ordinary Blackthorn rescue/refuge path
+when no Good, Poisoned, or Sleeping member exists. The rescue contract is in
+`systems/blackthorn.md` Section 7: active members return Good at maximum hit
+points, on foot, in the fixed Castle refuge state. Thus total drowning is not a
+terminal game-over, and caller-local work may occur before rescue begins.
 
 Y-Yell's word-of-power and Shadowlord-name branches are command-system
 features, not vehicle behavior.
@@ -581,7 +603,10 @@ tables, or implementation-specific addresses.
   values, and the test-first shape of the drowning loop were **re-derived from
   the shipped binaries** in a verification pass that read the impact-absorption
   stage, the whole-party damage pass, the per-member helper and the
-  living-member scan each from entry to exit. Record field positions are cited
+  living-member scan each from entry to exit. A later continuation pass also
+  established the complete shipped status-writer domain, imported-save
+  exception, direct return from the drowning helper, caller-local continuations,
+  and the next-loop defeat/rescue handoff. Record field positions are cited
   from `formats/saved-gam.md`. Working directories:
   `u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. The
   numeric contract is published once, in `systems/overworld.md` Section 6.2.4;

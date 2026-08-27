@@ -560,21 +560,6 @@ licence to invent a rule.
   end, treat the field list above as "these fields are written", not as "only
   these fields are written". Reading that routine, and the per-slot panel-row
   routine it calls in its loop, would settle it.
-- **The status-byte domain.** The pass's only status test is inequality against
-  the dead marker, and that inequality is what is published. Whether "not dead"
-  is equivalent to membership in any particular set of living letters is **not**
-  established: the scan for status writes covered one addressing form only and
-  found writers for good, poisoned and dead; the shared living-member scan tests
-  good, poisoned and sleeping; no write of the charmed letter was found.
-  `formats/saved-gam.md` Section 3.1 carries the same caution about the letter
-  space. Implement the inequality, not a living-letter whitelist. A scan for
-  status stores through computed pointers would settle it.
-- **Drowning-loop asymmetry.** The whole-party pass skips only dead members,
-  while the living-member scan that decides whether the drowning loop of
-  `systems/vehicles.md` Section 6 continues counts only good, poisoned and
-  sleeping members. A member in some other living state would keep taking damage
-  while no longer being counted alive by the exit test. Whether that state is
-  reachable is unexamined, and what runs after that loop exits was not traced.
 - **Two further absorption sites, triggers unestablished.** Besides the two
   ranged attacks and the Section 8 adjacency reactions, the outdoor code reaches
   the same impact-absorption stage from a sailing-collision site and from a

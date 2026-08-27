@@ -1466,7 +1466,7 @@ Those two sites are the only users of that recipe in the shipped game.
 
 | Trigger | Mode scope | Sound, and where it sits in the sequence | Suppression | Cancellation boundary | Turn cost |
 |---|---|---|---|---|---|
-| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the death that follows is scripted: the loop alternates the damage presentation, which plays its own rumble on every pass, with unavoidable damage to every living member, and exits only on a total party wipe. It has no input branch of its own. | Not applicable; the party is dying. |
+| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the damage sequence is scripted: while any Good, Poisoned, or Sleeping member remains, the loop alternates the damage presentation, which plays its own rumble on every pass, with unavoidable damage to every non-Dead member. In the shipped status domain this exits on a total party wipe. Imported outside-domain status values do not keep it alive; see `vehicles.md` Section 6. It has no input branch of its own. | Not applicable; the party is dying. |
 | **Whirlpool.** The party, **in any vehicle**, moves orthogonally adjacent to a whirlpool active object. Diagonal adjacency does not trigger it. | Overworld. | The whirlpool object is cleared, `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool sprite**, and the viewport repaints, so the player watches a whirlpool standing where the party was - **then** the long descent - then the sprite is restored, the shared impact payload runs, and the party is teleported to fixed Underworld coordinates (`overworld.md` section 8). | The global sound toggle, tones only; see the shared recipe below. | **None** during the sound. The state commit - the teleport - happens strictly after it. For about seven seconds the player has a non-interactive cinematic beat. | Owned by `overworld.md`; the sound itself adds none. |
 
 **The shared recipe: the long descent.** Both rows play one glissando,
@@ -1475,6 +1475,12 @@ updates, about **6.86 s** with a band of 6.2 to 7.6 s. It is by a wide margin
 the longest sound in the game: every other glissando in the shipped build has a
 span of 300 units or less, so 264 ms or less, which makes this one roughly
 twenty-six times the next longest.
+
+**Correction.** The earlier unqualified claim that the drowning loop "exits
+only on a total party wipe" is retracted for imported or edited roster status
+bytes. It is exact for shipped-origin `Good/Poisoned/Sleeping/Dead` state. The
+loop's broader exit predicate and its post-loop rescue handoff are owned by
+`vehicles.md` Section 6.
 
 **It does not reach 150 Hz.** Under the truncation contract of section 5.2 the
 increment is -2 Hz rather than the -2.615 the endpoints imply, so the last tone
