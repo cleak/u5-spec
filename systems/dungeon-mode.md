@@ -963,12 +963,17 @@ Flavour-class divergence applies to the L-Look description in non-normal dungeon
 
 The exact base bytes are `0x80` sleep, `0x81` poison, `0x82` fire, and `0x83` electric. Magic field placement preserves the dungeon visit marker bit when it writes into the live dungeon image, so the corresponding marker variants are `0x88`, `0x89`, `0x8A`, and `0x8B`. L-Look names only exact bytes `0x80..0x83` with the distinct field descriptions; other `0x8?` values collapse to the generic energy-field description.
 
-The fields can be dispelled by *An Grav* / Dispel Field. The field check is part of the movement primitive: stepping into a field cell triggers the effect *before* the move completes, so the party receives the hit even though they're now standing on the field.
+The fields can be dispelled by *An Grav* / Dispel Field. Sleep, poison and fire
+resolve after the party enters their cell. Electric contact is the exception:
+it resolves during the attempted step and returns the party to the cell from
+which the step began.
 
-Dungeon field resolution applies to each living party member, not just the
-front member. Sleep and poison fields roll `1..30` against the member's current
-HP-derived save threshold; a roll above that threshold changes the member's
-status unless the member is already dead. Sleep fields set status to `'S'`,
+Dungeon field resolution applies to each non-Dead active party member, not just
+the front member. Sleep and poison fields make one independent inclusive
+`1..30` roll per member against that member's current Dexterity. A roll **equal
+to or greater than Dexterity** changes the member's status; a lower roll leaves
+it unchanged. The threshold is not clamped, so Dexterity above 30 always saves
+against this roll. Sleep fields set status to `'S'`,
 redraw the affected status slot, mark the dungeon presentation as needing a
 redraw, and rewrite the live field cell to keep only its visit-marker bit. A
 sleep field therefore behaves as a one-shot contact hazard for the current
@@ -976,10 +981,25 @@ dungeon visit. Poison fields set status to `'P'` and draw the status-effect
 presentation, but do not rewrite the field cell, so standing on or re-entering
 the same poison field can trigger it again.
 
-Electric-field contact has a forced-step presentation path: the display flashes,
-the party is pushed relative to its current facing, and status presentation is
-refreshed afterward. The exact HP-loss side effect behind that presentation is
-still an open verification point.
+Electric-field contact first commits the requested adjacent field cell for the
+flash presentation, then reverses that exact one-cell displacement. An advance
+is pushed one cell backward relative to facing; a backstep is pushed one cell
+forward relative to facing. Both cases finish on the cell occupied before the
+attempt, including across the dungeon's wrapping edge. The reversal does not
+query walls, fields, actors or any alternate destination because its fixed
+destination is the just-vacated origin.
+
+After the flash and coordinate reversal, each non-Dead member among the active
+party's first six slots takes an independently rolled inclusive `1..8` HP
+loss through the ordinary party-damage rule. Damage floors current HP at zero
+and changes status to Dead at zero. Status and dungeon presentation are then
+refreshed.
+
+**Retraction.** Earlier revisions called the sleep/poison threshold HP-derived,
+used a strict-above comparison, and said a step into every field completed with
+the party standing on it. Those claims are withdrawn: the threshold is current
+Dexterity, equality applies the status, and electric contact cancels the step
+back to its origin. See `RETRACTIONS.md` R273.
 
 **Chests.** A chest cell (high nibble `0x4`) prints "a wooden chest" on look.
 The Open command changes it into an open chest for the current visit; the
