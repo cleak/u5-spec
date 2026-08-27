@@ -966,6 +966,17 @@ monster's class flag word and tests three ability bits in fixed order. Every
 random choice below advances the same gameplay PRNG specified in
 `systems/prng.md`; the hook does not precompute branch rolls.
 
+Negate Magic's `N` active-effect tag and the Crown of Lord British's permanent
+active-effect code gate the **whole hook**, not a spell-only sub-branch. Either
+code returns an unhandled result before the class-flag lookup and before every
+target or chance draw below. The automatic actor driver then continues to
+ordinary target selection and attack, and to movement if the attack does not
+consume the dispatch. Thus possession, blink, and hostile daemon summoning are
+all suppressed without costing the actor its ordinary action opportunity. An
+earlier abstraction called this an "enemy-cast gate" that returned "no spell";
+that is withdrawn. The hook includes non-spell special actions, and its actual
+return means "no special handled this dispatch."
+
 - `0x0040` is the possess/charm-on-turn ability. It draws one uniform slot index
   in `[0, 31]` — a single draw, with no retry if the draw lands on an ineligible
   slot. The drawn slot is accepted only if it is party-side and none of
@@ -1158,7 +1169,10 @@ already aligned with it.
 the turn, the movement primitive uses the synthesized step vector. A
 teleport-capable monster first gets a chance to move to a random legal arena
 cell; the candidate is accepted only if the same arena-cell occupancy/hazard
-test used by combat placement allows it. Ordinary stepping asks the surrounded
+test used by combat placement allows it. Negate Magic's tag and the Crown's
+permanent code suppress this teleport arm before its chance roll and random-cell
+probe, but do not suppress movement: control proceeds directly to ordinary
+stepping in the same dispatch. Ordinary stepping asks the surrounded
 helper whether all four cardinal neighbors are blocked, then uses the in-arena
 step test for candidate moves. The engine first tries the target vector on one
 axis, with randomized axis priority, then falls back to random cardinal tries
@@ -1439,10 +1453,15 @@ the visible Amulet/Turning trait. One class trait can route an attack into a
 cast-like ranged/effect branch, rather than ordinary melee, when the combat
 effect prerequisite state is active. That branch prints the cast/effect
 narration, reuses the AI direction/effect dispatch, plays the ranged animation,
-resets the scene state, and consumes the action. A separate magic-immune or
-boss-resistance trait is checked inside the ranged/effect helper for special
-combat contexts; when it accepts, the helper aborts before damage or status
-resolution. Mimic bypasses the ordinary resistance pre-gate while remaining
+resets the scene state, and consumes the action. A separate scene-resistant
+class trait is checked inside the ranged/effect helper against Negate Magic's
+tag and the Crown's permanent code. When either code is active for a class with
+that trait, the helper returns before projectile presentation, hit testing,
+effect dispatch, damage, or status resolution. Its enclosing attack path still
+reports the non-adjacent attack handled, so the actor silently spends that
+attack action and does not fall through to melee or movement. This is checked
+on each qualifying ranged attempt, not once per actor turn or round. Mimic
+bypasses the ordinary resistance pre-gate while remaining
 eligible for the later ranged/effect path rather than becoming melee-only.
 
 Two neighboring one-byte side tables feed this family. The first is read by the
@@ -1575,8 +1594,10 @@ so self-acting actors act about half as often while it runs and the player's
 own command prompt is untouched (Sections 8 and 9); Mass
 Charm's `C` tag lets the AI target picker roll against the acting monster's
 class charm threshold and, on success, remap that monster to neutral group 0
-before friend/foe filtering; Negate Magic's `N` tag absorbs combat casts before
-the shared spell dispatcher spends charge or MP. Three different things can put
+before friend/foe filtering; Negate Magic's `N` tag absorbs party combat casts
+before the shared spell dispatcher spends charge or MP and also feeds the
+class-special, teleport, and scene-resistant ranged/effect checks specified in
+Sections 9 and 11. Three different things can put
 a `C` on screen and none of them is a "casting" state: the character status
 byte's `C` letter means *charmed* (see the status-byte paragraph below), the
 shared active-effect `C` tag above is Mass Charm's timed tag, and the stats
@@ -1775,8 +1796,9 @@ without independent behavioral consumers remain opaque metadata.
   advancement. Confirmed consumers are the equipped-item statistic helper's
   Protection `P` bonus, Quickness's `Q` 0..1 gate and Negate Time's `T`
   outright skip at the head of the automatic actor driver, Mass Charm's `C`
-  class-threshold AI-target remap, and Negate Magic's `N` combat-cast
-  absorption path. The `Q` gate was previously attributed to the player
+  class-threshold AI-target remap, and Negate Magic's `N` party-cast
+  absorption plus the three enemy-side automatic-action checks specified in
+  Sections 9 and 11. The `Q` gate was previously attributed to the player
   command handler; it is on the automatic driver, which is why it slows
   hostiles rather than the player (Sections 8 and 9).
 
@@ -1981,6 +2003,12 @@ The behaviour described here was derived from the private function and format no
   class-flag assignments, derived from
   `u5-decomp/functions/COMSUBS_OVL/`
   and `u5-decomp/functions/COMBAT_OVL/`, with the `DATA.OVL` class-flag table.
+- Negate Magic's and the Crown's three enemy-side combat checks -- the complete
+  class-special-hook bypass, teleport-arm bypass, and scene-resistant
+  ranged/effect abort -- including their different fall-through meanings and
+  per-dispatch cadence, are derived from
+  `u5-decomp/functions/COMSUBS_OVL/`,
+  `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/notes/`.
 - The shared spell-resistance rating sources, signed score formula, strict
   comparison, caller census, and the distinct Tremor/Poison Wind target-only
   gate are derived from private analysis in
