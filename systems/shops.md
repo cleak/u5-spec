@@ -324,9 +324,11 @@ each unit costs in the pay loop.
 | The Fallen Virgin | 25 |
 | The Folley Tap | 30 |
 
-The stock tavern drink branch has two pricing surfaces. The primary round
-branch charges the listed base once per living party member and has no traced
-durable inventory effect:
+The tavern menu has two different paid surfaces. The primary round/meal branch
+charges the listed base once per living party member, adds one unit to the
+shared food counter for each living member, and may replace an adjacent bare
+table setting with a food-bearing setting. It does not contribute to the
+secondary-drink threshold described below:
 
 | Tavern or meal counter | Menu letter | Round base per living party member |
 |---|---|---:|
@@ -404,6 +406,28 @@ by the tavern continuation state: if it is pressed before a prior accepted menu
 branch has established continuation, it is ignored and the menu waits for
 another post-list key. Blue Boar therefore has no `C` lore conflict: `C` is its
 round/meal letter, while its lore letter is `T`.
+
+The secondary letter is also the only drunkenness-producing branch. The
+tavern visit starts with a successful-secondary-drink count of zero. Each paid
+Ale, Rum, or Stout increments it once; at the Blue Boar, each paid bottle from
+the `W` list increments the same count once. Primary round/meals and provisions
+do not increment it. When the player selects the secondary letter with the
+count exactly three, the barkeep asks whether the party has had enough to
+drink. `Y` ends that attempt without buying another drink. `N` arms the town
+drunkenness counter at twenty-five, subtracts one point from the shared
+moral-standing value with a floor of zero, and then continues into the requested
+fourth drink. Other answers repeat the question.
+
+The arming and moral-standing debit happen before the fourth drink's ordinary
+affordability check. Consequently, answering `N` while unable to pay still
+leaves the party drunk and one standing point lower. The successful-drink count
+is local to this tavern visit; leaving and talking to a barkeep again starts it
+from zero. `systems/town-mode.md` Section 7.1 owns how the armed counter changes
+later commands.
+
+Earlier revisions said the primary round had no durable inventory effect and
+that paid drinks had no traced persistent party-state effect. Both statements
+are withdrawn (`RETRACTIONS.md` R275).
 
 The gate matches what the player is shown. The post-`Y` list text advertises
 only the round/meal, secondary, and provision items; the sage/lore letter is
@@ -1288,12 +1312,19 @@ reports "nothing was bought" — such as a provision purchase with a quantity of
 zero — still runs the "anything else" tail but does not establish continuation,
 so the lore letter stays inert until something is actually bought.
 
-One state-specific letter buys a round for each
-living party member using the stock per-person table in Section 6. The Blue
-Boar Tavern's `W` branch instead opens a six-choice fixed-price drink list. A
-paid drink branch deducts gold and prints the tavern success line; the drink
-itself has no traced persistent effect on party state. Failed payment returns
-to the menu without changing gold.
+One state-specific letter buys a round/meal for each living party member using
+the stock per-person table in Section 6. A successful purchase deducts gold,
+adds one food unit per living member, and, when a bare table setting is directly
+above or below the party, places the corresponding food-bearing setting there.
+It does not count toward drunkenness.
+
+The separate secondary letter buys Ale, Wines, Rum, or Stout according to the
+current menu state; the Blue Boar Tavern's `W` branch opens its six-choice
+fixed-price list. Successful secondary purchases deduct gold, print the tavern
+success line, and increment the visit-local drink count used by the exact-three
+warning in Section 6. Failed payment normally returns without changing gold,
+but it does not undo drunkenness or the moral-standing debit if the player
+already answered `N` at that warning.
 
 One tavern/meal-counter menu branch sells provisions rather than flavour
 drinks. It is reached through the state's *provision* letter, which is `R`
@@ -1647,9 +1678,14 @@ gold for paid rumours; horse traders write a horse active object through the
 Talk-entered vehicle-sale helper; ship brokers write a pending vehicle
 acquisition state consumed by overworld entry to place a frigate or skiff active
 object.
-The tavern drink branch writes nothing persistent in the traced flavour-drink
-flow. The tavern/meal-counter provision branch writes the shared food counter
-and debits gold per served unit; this branch is intentionally not atomic across
+The tavern's primary round/meal branch writes the shared food counter and can
+change one adjacent table setting in the live location grid. The secondary
+drink branch increments a visit-local threshold count; on the attempted fourth
+drink, the player's `N` answer arms the town drunkenness counter and lowers
+moral standing by one. The successful-drink count does not survive leaving the
+shop; the armed counter does, and the next town entry clears it. The
+tavern/meal-counter provision branch writes the shared food counter and debits
+gold per served unit; this branch is intentionally not atomic across
 the requested quantity because partially affordable purchases persist. The
 analyzed baseline has no separate Talk-entered food merchant write; the formerly
 suspected provisions/capacity state belongs to the shipwright pending-vehicle
@@ -1743,5 +1779,9 @@ The behaviour described here was derived from the private function and format no
   twenty-five-serving pack size, the per-unit pay loop with its gold floor and
   food ceiling, surcharge timing, and the five outcome cases including the
   table-scraps gift.
+- `u5-decomp/functions/SHOPPES2_OVL/` -- tavern primary serving effects and
+  secondary-drink threshold: the visit-local successful-drink count, exact
+  three-drink warning gate, `Y` stop, `N` drunkenness arming and one-point
+  moral-standing debit, pre-affordability ordering, and Blue Boar list count.
 - `u5-decomp/functions/SHOPPES_OVL/` -- arms sell
   browser and its side-panel geometry.

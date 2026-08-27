@@ -236,6 +236,7 @@ Negative boundaries for unpromoted action families:
 | Third-party healing | Healer shop or dialogue path for curing a stranger | Shop treatment costs and no-price exceptions are shop/town-scene rules. No karma-owned healer price or standing writer is promoted. |
 | Betraying a shrine's mantra to Blackthorn | The mantra interrogation in `systems/blackthorn.md` Section 4 | **Confirmed scalar writer.** Each correct answer given to Blackthorn debits five points from the shared moral-standing selector, clamped at zero, and separately sets the interrogated shrine's durable ruin flag. This is the only path that sets a shrine ruined. |
 | Paying or refusing a regime guard | The Blackthorn guard-demand handler in `systems/blackthorn.md` Section 7a: the Minoc "charity" demand, the per-living-member tribute, and the palace-gate password | Resolved as a non-writer. The handler's only durable effect is on party gold; it writes no virtue standing, no scalar selector, and no character status, whether the party pays, refuses, or fails the password. Do not model consenting to the "charity" demand as a Compassion gain or refusing the tribute as a Honesty loss. |
+| Insisting on a fourth tavern drink | After three successful secondary drinks in one tavern visit, answer `N` when asked whether the party has had enough | **Confirmed scalar writer.** The answer subtracts one from shared moral standing with a floor of zero and arms the town drunkenness counter before the fourth drink's affordability check. Primary round/meals and provisions do not reach this writer. |
 | Attacking a non-hostile NPC | Combat-mode strike on a peaceful or friendly actor | No combat-overlay write to the scalar selector or a per-virtue standing byte is promoted in the current census. Town-family cannon hits are the covered hostile/destructive scalar penalty. |
 | Initiating or refusing combat | Combat engagement or combat-end stay-and-fight branch | Combat framer, ordinary combat exit, reward, and flee paths have no traced post-combat virtue delta. |
 | Fleeing a winnable combat | Combat-end flee branch while advantaged | No scalar or per-virtue writer is promoted from the traced flee/exit paths. |
@@ -651,6 +652,8 @@ The behaviour described here was derived from the private function and format no
 - The chargen-time seeding of stat tallies and the lack of avatar-class write — derived from `u5-decomp/functions/FONT_OVL/`.
 - The shop pricing model (not karma-modulated, with arms Intelligence adjustment handled in the shop spec) — derived from `u5-decomp/functions/SHOPPES_OVL/`.
 - The sage topic/fee/destination/template path, and the absence of a confirmed sage-shop karma selector — derived from `u5-decomp/functions/SHOPPES2_OVL/`.
+- The secondary tavern drink threshold and its one-point moral-standing debit —
+  derived from `u5-decomp/functions/SHOPPES2_OVL/`.
 - The conversation profanity/default reserved-keyword rebuke and negative karma-write boundary -- derived from `u5-decomp/functions/TALK_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and private correction analysis at the `u5-decomp/` root.
 - The conversation gold-payment scalar boundary -- derived from
   `u5-decomp/functions/TALK_OVL/`.

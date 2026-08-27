@@ -359,9 +359,15 @@ harpsichord digit handler below for the latter.
 
 ### 7.1 Drunkenness
 
-Town mode has one pre-dispatch stage no other mode has. Over-drinking at a
-tavern arms a counter at twenty-five; while that counter is non-zero, every
-command the player enters is subject to an even-odds scramble. When the scramble
+Town mode has one pre-dispatch stage no other mode has. A tavern's secondary
+drink branch counts successful drinks within the current visit. On the next
+secondary-drink attempt after exactly three successes, the barkeep asks whether
+the party has had enough. Answering `Y` stops; answering `N` arms this counter
+at twenty-five, costs one point of moral standing, and continues to the fourth
+purchase. The arming precedes the affordability check, so short funds do not
+undo either effect. Primary round/meals and provisions do not count, and a new
+tavern visit starts the drink count over. While the armed counter is non-zero,
+every command the player enters is subject to an even-odds scramble. When the scramble
 fires, the engine runs the same one-shot schedule-rewrite sweep over the NPC
 roster that Section 14 describes, decrements the counter by one, prints the
 fixed line `Hic!` followed by a line break, and then draws and substitutes one

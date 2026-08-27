@@ -308,6 +308,19 @@ Three observations:
 - Doors closed by the auto-close pass do not re-lock — the snapshot is the unlocked closed form, not the locked form. A door the player Jimmied open and walked through stays unlocked across the visit.
 - The pass is suppressed in dungeon mode; dungeon doors are toggled by Open and stay in whatever state Open last left them in until the player leaves the dungeon.
 
+The four tracker bytes fall inside the serialized save window, but an active
+tracker does **not** resume after Journey Onward. The load first restores all
+four bytes. Before the town becomes playable, location setup clears only the
+previous-tile byte that gates the tracker, then reloads the authored location
+grid from disk. It neither reapplies the transient open-cell tile at the saved
+coordinates nor clears the saved X, Y, and countdown bytes. Those three bytes
+therefore remain inert, the authored closed door is visible, and the first
+loaded town turn has no pending auto-close. This is a concrete example of a
+serialized scratch block whose runtime owner normalizes it during mode entry.
+The earlier unqualified statement that loaded saves resume mid-floor is
+withdrawn for this tracker specifically (`RETRACTIONS.md` R276); the saved
+floor remains current, but this transient per-floor state does not resume.
+
 ## 6. The "BOOOM!" outcome
 
 The "BOOOM! Door destroyed!" string pair belongs not to Jimmy or Open but to the F-Fire ship-cannon handler. Firing a ship's cannon at a door (or wall) prints "BOOOM!" with the cannon's hit narration; on a hit at a door cell, the engine rewrites the cell to the open-door tile (or rubble) and prints "Door destroyed!".
@@ -572,8 +585,9 @@ The transitions across the major boundaries are:
   that drive both lockpick rolls are all persisted. The tracker occupies
   `SAVED.GAM` offsets `0x03A9..0x03AC` in previous-tile, X, Y, countdown order,
   one byte per field; `formats/saved-gam.md` Section 10 is authoritative for the
-  file layout. Loaded saves resume mid-floor, mid-dungeon, mid-vehicle, or
-  mid-combat.
+  file layout. Scene, floor, vehicle, and other durable state resume, but the
+  town loader immediately disarms a restored door tracker as Section 5
+  specifies.
 - **Spells.** Unlock Magic clears magic locks, Magic Lock applies them, and the
   Open spell steps an ordinary locked door down to its unlocked form — all three
   change lock state without keys and without arming O-Open's auto-close tracker,
