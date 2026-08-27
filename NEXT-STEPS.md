@@ -2559,12 +2559,15 @@ poison/status class-row assignments are now published in the monster bestiary.
 
 **Current magic-ring/amulet cleanup:** 2026-05-12 - inventory, combat, item-list, monster-bestiary, and extraction docs now correct the prior one-shot-ring interpretation: Ring of Invisibility and Ring of Regeneration are ring-slot equipment, but accepted R-Ready has a 1-in-16 immediate vanish check; combat also consumes either worn ring on a separate 1-in-16 round-loop check, with Invisibility tied to the hidden/suppressed combat flag and Regeneration tied to wearer healing. Amulet/Turning is an amulet/neck equipment row with a combat-passive target-side branch: against flagged ranged/effect attackers, half of attempts are forced into the scattered-impact path rather than the ordinary hit-roll result.
 
-**Current combat vanish cleanup:** 2026-05-13 - combat, monster-bestiary, and
-extraction now correct the older boss-vanish wording. Local
-asset verification and the finished combat death-handler trace assign the
-vanish-on-death branch to Wanderer, Blackthorn, Lord British, and Shadow Lord;
-component-bit labels are now treated as opaque metadata when they have no
-independent behavioral consumer.
+**Current combat vanish cleanup:** 2026-08-27 - combat, monster-bestiary, and
+extraction assign the vanish-on-death branch to Wanderer, Blackthorn, Lord
+British, and Shadow Lord. `systems/combat.md` now also publishes the exact
+narration/result/marker/reveal/release/faint-scan order; the shared action-result
+bit's readers, clears, save-image boundary, and sleep-overwrite edge; the EGA
+256-pixel reveal order and 31-tick blocking cadence; partial slot-clear fields;
+and the Sword-of-Chaos removal and sleep mutations in the final party scan. The
+older fade and post-turn-flush descriptions are retracted. Component-bit labels
+remain opaque metadata when they have no independent behavioral consumer.
 
 **Current combat class-flag cleanup:** 2026-05-13 - combat, DATA.OVL,
 monster-bestiary, and extraction docs now promote the traced ranged/effect

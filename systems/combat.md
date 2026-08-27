@@ -571,13 +571,113 @@ general terrain/drop path.
 | Death branch | Selected when | Tile byte written into active-object bytes 0 and 1 | Other writes | Slot released? |
 |---|---|---|---|---|
 | Party member | Descriptor carries the party-side bit and the damage meets or exceeds current HP, or the damage is the instant-kill sentinel `99` | `0x1E` (corpse) | Character HP forced to zero, roster status byte set to `'D'`, marked-dead bit ORed in, death audio played, active-player sentinel set to `0xFF` if the dead character was active | No |
-| Vanish-on-death class | Monster whose class-flag word has the vanish bit set — Wanderer, Blackthorn, Lord British, Shadow Lord | `0x16` (vanish marker) | Prints `<name> vanishes!`, sets the per-combat status byte to `2`, runs the fade animation on the terrain under the actor, then the post-turn flush | **Yes** |
+| Vanish-on-death class | Monster whose class-flag word has the vanish bit set — Wanderer, Blackthorn, Lord British, Shadow Lord | `0x16` (temporary vanish marker) | Prints `<name> vanishes!`, sets shared action-result bit `0x02`, restores the underlying terrain through the single-cell pixel reveal, releases the slot, then runs the party control/faint scan described below | **Yes** |
 | Incorporeal class | Monster whose class-flag word has the low bit set but **not** the vanish bit — Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon | **none** | none | **Yes** |
 | Gazer | Monster of the Gazer class | `0x1F` (eye-burst special) | **Places a live Insect Swarm combatant (class 31) at the death coordinate** through the ordinary monster-placement primitive, then redraws the arena. See "The Gazer death spawns a real combatant" below | No |
 | Gargoyle | Monster of the Gargoyle class | **none** | Writes `0x4C` (lava pool) into the combat-arena **terrain** cell under the actor; that terrain edit persists for the rest of the combat instance | **Yes** |
 | Ordinary monster, terrain rejects | Any other monster whose underlying arena terrain byte is `0x87`, or is numerically below `4` | **none** | none | **Yes** |
 | Ordinary monster, drop roll rejected | Terrain accepted, and the first roll exceeds the class drop-cap byte | `0x1F` | none — byte 5 keeps whatever the per-encounter reset left there | No |
 | Ordinary monster, drop roll accepted | Terrain accepted, and the first roll is less than or equal to the class drop-cap byte | `0x01` (dead-monster / drop marker) | Byte 5 of the active-object record receives **the class drop-cap byte itself**. A second independent roll strictly below the same drop cap ORs bit `0x80` into byte 5 as the special-drop marker | No |
+
+#### Vanish ordering and the shared result field
+
+The vanish branch has this exact order:
+
+1. Print the monster's name and then the ` vanishes!` suffix.
+2. Replace the shared combat action-result/narration field with `0x02`.
+3. Put `0x16` into both tile bytes of the actor's linked active-object record.
+4. Reveal the underlying arena-terrain tile into that viewport cell as defined
+   below. The marker remains in the active-object record throughout the reveal.
+5. Release the combat descriptor and its linked active-object record. This
+   erases the marker after the terrain reveal has completed.
+6. Run the party control/faint scan below, ignore its return value, and return
+   from death resolution.
+
+The field in step 2 is **global action-result scratch**, not a field in the
+dying actor's descriptor and not a persistent vanish status. Bit `0x02` means
+that branch-specific narration has already been printed. The common attack
+result narrator is its only relevant bit reader: when `0x02` is still present,
+it skips the generic killed/slept/hit chain and clears `0x02` in its cleanup.
+If that narrator is not reached, the combat walker replaces the whole field
+with zero before the next actor dispatch. The automatic actor driver reads the
+same byte's unrelated cancelled-step bit but does not read `0x02`.
+
+This scratch byte happens to lie inside the fixed saved-game image and is
+therefore serialized mechanically. That storage fact does not extend its
+behavioral lifetime: combat cannot be saved and resumed, and the next actor
+dispatch resets it before use. A loader must not reconstruct a pending vanish
+from a saved value.
+
+There is one original ordering collision. If the control/faint scan finds a
+party member, the sleep helper in that tail replaces the whole result field
+with sleep bit `0x04`, losing `0x02`. On the ordinary successful-attack path,
+the common narrator then sees the vanished target's released descriptor and
+can append its generic `<name> killed!` line after the earlier vanish line. If
+the scan finds no party member, `0x02` survives and suppresses that duplicate.
+Do not preserve both bits across this overwrite when reproducing baseline
+behavior.
+
+#### Single-cell terrain reveal
+
+The vanish visual is **not a palette fade** and has no page-flip or buffered
+frame sequence. It copies the prepared pixels of the arena terrain tile that
+was under the dying actor into the corresponding 16-by-16 cell on the visible
+viewport page, one pixel per display-driver operation. Direct visible-page
+writes make each completed pixel operation observable without a later flush.
+
+The reveal always performs 256 pixel operations. In the EGA baseline, the
+first paints the cell's top-left pixel. The other 255 follow an eight-bit
+maximal-length shift-register sequence: start at one; interpret the high
+nibble as X and the low nibble as Y; after each pixel, shift right and, when
+the discarded low bit was one, exclusive-OR the state with `0xB8`. This visits
+every nonzero `(X,Y)` pair exactly once, so together with the first operation
+every pixel in the cell is written once in pseudo-random order.
+
+After every eighth completed operation except the last — after counts 8, 16,
+through 248 — the reveal runs one world tick. There are exactly 31 such ticks,
+no fixed-delay call, and no checkpoint after pixel 256. The combat branch does
+not test input or the tick's return value, so the operation is blocking and
+unskippable and always completes all 256 writes. Its cadence is therefore the
+cost of 256 driver operations plus 31 world ticks, not a separately timed
+animation. The pixel-order claim is the EGA compatibility baseline; other
+original display-driver pixel packing is not specified here.
+
+#### Party control/faint tail — not a flush
+
+The call after slot release is a gameplay scan, not a post-turn flush, redraw,
+clock advance, or visibility barrier. It examines party combat slots zero
+through five in order and stops at the first descriptor carrying both the
+party-side and controlled/charmed bits. For that first match it performs these
+mutations in order:
+
+1. Clear the controlled/charmed bit.
+2. Print the linked character's name followed by ` passes out!`.
+3. Play the long faint sound.
+4. Remove the first Sword of Chaos (item 35) found among that character's six
+   equipment bytes, replacing it with the ordinary empty-equipment sentinel.
+5. Apply the normal sleep-state helper to that combat slot.
+
+The sleep helper does nothing further when the linked roster status is already
+Dead; the control clear, faint narration, sound, and item removal have already
+happened by then. Otherwise it changes the roster status to Sleeping, sets the
+descriptor's asleep/disabled bit, switches the linked object's displayed byte
+to the prone presentation, clears the active-player selection if it names that
+slot, writes sleep bit `0x04` to the shared result field, redraws the stats
+panel, and may run one world tick according to the ordinary presentation
+guard. The scan returns the matched slot, including five for the last party
+slot, but the vanish caller ignores it. With no match it returns the no-match
+sentinel and performs none of these effects.
+
+There is no full-arena redraw after the vanished actor's records are released.
+The guaranteed visible state comes from the earlier direct reveal: all 256
+pixels of the cell already show the underlying terrain before record cleanup.
+A matched faint may additionally redraw the stats panel and run its conditional
+world tick, but those are faint-state consequences, not a vanish flush.
+
+*Corrected (2026-08-27).* Earlier text called the visual a terrain fade and
+the final call a post-turn flush, and treated value `2` as an unspecified
+per-combat status byte. Those descriptions are withdrawn; the contracts above
+identify the pixel reveal, shared action-result bit, and mutating party scan.
 
 Notes that an implementation must not get wrong:
 
@@ -645,7 +745,14 @@ combat and restores it on exit, so default-kill markers do not leak as world
 loot. A compatible implementation must not promote combat-instance drop markers
 into automatic world loot.
 
-When an actor dies, the "marked dead" bit is set; when a slot is freed completely (a vanishing monster or a fled character), the record is cleared to all zeros and the slot becomes available for re-allocation.
+When an actor dies, the "marked dead" bit is set. When the negative-form release
+used by a vanishing monster or fled actor frees a slot, it zeros descriptor
+bytes 0, 1, 2, 4, 5, 6, and 7 but deliberately preserves byte 3, the overloaded
+owner/target/class field. It also zeros linked active-object bytes 0 through 5
+while preserving that record's two trailing auxiliary bytes. The zero flags
+byte makes the descriptor available for re-allocation; an all-zero record is
+not required. *Corrected (2026-08-27): an earlier revision said release cleared
+the record to all zeros; the preserved fields make that statement false.*
 
 A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the step-or-attack primitive (Section 11): when an actor moves, its (X, Y) is written into both.
 
@@ -1509,7 +1616,14 @@ damage.
 
 **Special-class death paths.** Each monster class has a sixteen-bit flag word in a per-class table that encodes several death behaviours. Two of its bits gate the death branch: the low *incorporeal* bit and the *vanish-on-death* bit. When either is set, the death leaves the ordinary path entirely.
 
-- **Vanish on death** (vanish bit set; Wanderer, Blackthorn, Lord British, Shadow Lord in the analyzed baseline) prints `<monster name> vanishes!`, changes the active-object tile to the vanish marker, sets the per-combat status byte, plays the fade-out animation, and releases the slot.
+- **Vanish on death** (vanish bit set; Wanderer, Blackthorn, Lord British,
+  Shadow Lord in the analyzed baseline) prints `<monster name> vanishes!`,
+  writes the temporary marker and shared action-result suppression bit, restores
+  the underlying terrain with the blocking 256-pixel reveal, releases the slot,
+  and runs the party control/faint scan. Section 6.3 specifies the exact order,
+  cadence, scratch-field lifetime, and the scan's mutations. *Corrected
+  (2026-08-27): the former fade-out and post-turn-flush description is
+  withdrawn.*
 - **Incorporeal death** (low bit set, vanish bit clear; Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon) releases the slot immediately and leaves **no tile marker and no drop at all**. This is a distinct branch, not a variant of the default kill.
 - **Special death transitions** for the Gazer (eye-burst tile on its own record, slot kept, and a **live class-31 Insect Swarm placed at the death cell** through the ordinary monster-placement mode, then a redraw) and the Gargoyle (lava-pool byte written into the arena terrain under the corpse, then the slot released with no corpse marker and no drop) are hand-written class exceptions taken only when neither class-flag bit above is set. The Gazer case is a real combatant, not a visual effect; § 6.3 carries the seeded values.
 - **Default kill** applies to every other monster and is gated first on the arena terrain under the actor: the excluded terrain values release the slot with no marker. On accepted terrain the path runs two independent rolls against the class's drop-cap byte. If the first roll is within the cap, the active-object tile becomes the dead-monster/drop marker and byte five of that record stores **the class drop-cap value itself** (not a random amount); a second roll strictly within the cap ORs bit `0x80` into that byte as a special-drop marker. If the first roll exceeds the cap, the tile becomes the alternate no-drop death marker and byte five is left alone. Neither outcome releases the slot.
@@ -2036,6 +2150,11 @@ The behaviour described here was derived from the private function and format no
   terrain gate, which branches release the slot, and the drop-cap byte written
   into the active-object auxiliary byte -- derived from the 2026-08-22 retrace in
   `u5-decomp/functions/COMBAT_OVL/`.
+- The vanish branch's action-result lifetime and overwrite edge, pixel-reveal
+  sequence and cadence, partial slot cleanup, and party control/faint tail --
+  derived from private analysis in `u5-decomp/functions/COMBAT_OVL/`,
+  `u5-decomp/functions/COMSUBS_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
 - The `1..30` range of the roll helper used by both drop gates -- derived from
   `u5-decomp/functions/ULTIMA_EXE/`.
 - The three placement modes, the party-side versus monster-side flag-bit
