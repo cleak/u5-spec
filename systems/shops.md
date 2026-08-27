@@ -473,12 +473,15 @@ Earlier revisions said the primary round had no durable inventory effect and
 that paid drinks had no traced persistent party-state effect. Both statements
 are withdrawn (`RETRACTIONS.md` R275).
 
-The gate matches what the player is shown. The post-`Y` list text advertises
-only the round/meal, secondary, and provision items; the sage/lore letter is
-advertised only by the follow-up text that appears after a branch has been
-accepted, which is the same moment continuation is established. An
-implementation that renders the shipped list and follow-up records therefore
-never offers the lore letter before it works.
+The initial post-`Y` list text advertises only the round/meal, secondary, and
+provision items. The sage/lore letter appears in the follow-up text after the
+`Anything else for thee?` prompt. Ordinarily that follow-up first appears after
+the same accepted branch that establishes continuation. Quantity-zero
+provisions are the deliberate exception: their return value suppresses the
+continuation assignment, but `Y` at the anything-else prompt still renders the
+follow-up and visibly advertises a lore letter that remains inert. The earlier
+absolute claim that the shipped records never offer lore before it works is
+withdrawn (`RETRACTIONS.md` R293).
 
 ### 6.1 The affordability check
 
@@ -659,7 +662,7 @@ day.
 | Reagent-vendor entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the reagent stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted reagent purchase |
 | Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
 | Horse-trader sale | Shared non-arms entry greeting, deterministic horse quote record, resident confirmation/refusal text | Entry greeting draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the nothing-bought closing bark. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote and also exits through the nothing-bought bark. Short funds prints resident refusal text and takes the silent exit, rendering no closing bark at all | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and places a horse active object adjacent to the player |
-| Tavern drink flow | Tavern entry bark and list `SHOPPE.DAT` records selected by the active tavern state | Entry/list records are deterministic from the current tavern state; sage-style success records draw only in the sage subflow described below | The tavern clears the conversation text window before its greeting. `N` or Space prints the resident pardon/refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
+| Tavern drink flow | Shared tavern arrival records `57..60`, then a list record selected by the active tavern state | Arrival draws uniformly from `57..60`; list records `69..72` and follow-up records `73..76` are deterministic from the state. Sage-style success records draw only in the sage subflow described below | The arrival greeting appends in the inherited conversation window. After a branch returns to continuation, the tavern clears the window before `Anything else for thee?`. `N` or Space at entry prints the resident refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
 | Tavern provision branch | Six-record quote pool, `SHOPPE.DAT` ordinals `77..82`, plus resident quantity prompt, refusal, and partial-purchase literals; the table-scraps outcome renders ordinal `90` | Uniform `0..5` draw when the quote is rendered, once per entry into the branch. The quantity prompt, the pay loop, and every outcome line are deterministic | The quote and quantity prompt append to the tavern text already on screen. The typed-quantity prompt waits for the number; the outcome line does not wait for a key before the branch returns | Gold and food move one unit at a time inside the pay loop. The surcharge runs only on the completed-purchase exit. The two nothing-served outcomes end the visit |
 | Sage rumour flow | `SHOPPE.DAT` record `84` for fee quote, records `85..88` for paid success, record `91` for short funds | Record `84` is deterministic after topic match. Paid success draws uniform `0..3` across records `85..88` only after confirmation and successful debit. Short funds deterministically uses record `91` | Refusal does not consume a success draw. Short funds does not consume a success draw | Gold is deducted before the success rumour record is drawn and rendered |
 | Shipwright sale | Resident/menu text plus deterministic quote text for Frigate or Skiff | Selection is driven by accepted `F` or `S` branch and current shipwright row | The branch prompts for confirmation and affordability before queueing delivery | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and queues the pending watercraft placement |
@@ -676,7 +679,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Guild entry | Shared non-arms preamble row, resident acceptance/refusal literals, then guild stock menu | Appends; no shop-local clear | Natural text advance only | `Y`, `N`, and Space are accepted. Other keys leave the prompt visible and keep polling |
 | Reagent entry | Shared non-arms preamble row, resident acceptance/refusal literals, then reagent stock menu | Appends; no shop-local clear | Natural text advance only | Same as guild entry; ignored keys do not redraw or consume a random draw |
 | Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service choices re-prompt from the service menu rather than selecting a new shared preamble |
-| Tavern / meal entry | Per-shop tavern greeting and menu records selected by the tavern state | Clears the inherited conversation text window before the greeting, then appends | No shop-local cursor origin after the clear | Entry accepts `Y`, `N`, or Space. Other keys leave the greeting visible and keep polling |
+| Tavern / meal entry | One shared tavern greeting record selected uniformly from `57..60`; the later menu record is selected by tavern state | Appends in the inherited conversation text window; there is no entry clear | No shop-local cursor origin | Entry accepts `Y`, `N`, or Space. Other keys leave the greeting visible and keep polling |
 | Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
 | Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input returns; unknown topics print the no-help line and re-prompt. `N` exits before a success draw; short funds exits without a success draw |
 | Horse-trader entry and quote | Shared non-arms entry-greeting row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space echoes the resident `No` literal and exits through the nothing-bought closing bark, not silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
@@ -713,6 +716,11 @@ meal/provision, horse-trader, and shipwright overlay paths do not install
 shop-local text-window rectangles or cursor origins. They render into the active
 text window inherited from the conversation/text system, with the clear/append
 ordering captured above where it affects dialogue behavior.
+
+Earlier versions made the tavern arrival record deterministic by menu state and
+put a text-window clear before it. Both details are withdrawn: arrival uses the
+shared randomized tavern row and appends; the tavern-owned clear in this flow is
+the post-branch clear before the anything-else prompt (`RETRACTIONS.md` R294).
 
 There are exactly **two** shop-owned geometry exceptions, and they share one
 shape: a framed side panel drawn in text window `1` and then handed back to
@@ -1353,16 +1361,21 @@ records are `73`, `74`, `75`, `76` for the same states. Both sets sit
 immediately after the shared tavern farewell row in Section 8.A, which is a
 useful cross-check.
 
-After any accepted branch completes, the tavern clears the text window, prints
-the resident "anything else for thee?" line, and waits for `Y` or `N`. `N`
-prints the resident decline echo, prints the beg-thy-pardon continuation, and
-leaves. `Y` renders the state's follow-up record and returns to the post-list
-key wait. Completing a branch also sets the tavern continuation state, which is
-what makes the sage/lore letter reachable; before that, pressing the sage/lore
-letter is ignored. One branch outcome is deliberately excluded: a branch that
-reports "nothing was bought" — such as a provision purchase with a quantity of
-zero — still runs the "anything else" tail but does not establish continuation,
-so the lore letter stays inert until something is actually bought.
+After any recognized branch that does not force an immediate exit, the tavern
+clears the text window, prints the resident `Anything else for thee?` line, and
+waits for `Y` or `N`. `N` echoes `No` and leaves through the shared closing-bark
+path. It does not print a separate beg-thy-pardon continuation. `Y` echoes
+`Yes`, renders the state's follow-up record, and returns to the post-list key
+wait. The earlier beg-thy-pardon ordering is withdrawn (`RETRACTIONS.md` R295).
+
+Fresh tavern entry initializes the continuation state to zero. A completed
+round, secondary purchase, or provision purchase normally sets it to one before
+the anything-else prompt; this is what makes the sage/lore letter reachable.
+The provision helper instead returns a distinct result of `2` for typed quantity
+zero. That result still enters the anything-else tail but skips the only
+continuation assignment. Thus `Y` displays the follow-up record and its lore
+letter while the gate remains zero; pressing that advertised letter is ignored
+until a later successful branch establishes continuation.
 
 One state-specific letter buys a round/meal for each living party member using
 the stock per-person table in Section 6. A successful purchase deducts gold,
@@ -1414,6 +1427,34 @@ The outcomes, and what each does to the visit, are:
 That last row is the only charitable food source in the shop family, and it is
 one unit of food, not one pack. It fires only when the party could not afford a
 single pack *and* is nearly out of food, so it cannot be farmed for provisions.
+
+**Zero-quantity transcript and effects.** After the six-way provision quote and
+quantity prompt, zero prints `Hrumph.` and returns immediately; there is no wait
+on that dismissal. The caller then clears the text window and prints `Anything
+else for thee?`. `N` echoes `No`, then draws and renders one no-sale closing bark
+from tavern records `61..64`. `Y` echoes `Yes`, renders the state follow-up
+record `73..76`, and resumes the post-list key wait. Space, Escape, or Return
+from that wait exits directly to the same no-sale closing-bark row; the lore key
+shown in the follow-up emits nothing and keeps waiting while continuation is
+zero.
+
+This path does not call the Falsehood surcharge helper and changes neither gold
+nor food. It leaves both visit-local words—continuation and successful-secondary
+count—at zero on a fresh visit. It adds no shop-local clock advance; after the
+overlay returns, the enclosing Talk command has its ordinary town-turn cost.
+The observable nondialogue effect is advancement of the shared PRNG by the
+provision-quote draw and, when the visit exits, the closing-bark draw; fresh
+entry had already consumed its own arrival-greeting draw.
+
+**Deterministic fresh-entry vector.** At a state-0 tavern, force successive
+bounded PRNG results `2`, `4`, and `1`, then enter `Y`, `R`, quantity `0`, `Y`,
+`C`, Space. The rendered `SHOPPE.DAT` ordinals are, in order, `59` (arrival),
+`69` (initial list), `81` (provision quote), `73` (follow-up), and `62`
+(no-sale closing bark). The first, third, and fifth records correspond to
+uniform draws over `0..3`, `0..5`, and `0..3`; the other two are deterministic
+state records. `C` renders nothing and consumes no draw. Final continuation and
+successful-secondary count are both zero, with gold and food unchanged and no
+surcharge.
 
 ### 8.6 Food and provisions boundary
 
@@ -1833,8 +1874,9 @@ The behaviour described here was derived from the private function and format no
   tavern/meal-counter provision branch: state-indexed provision letter, the
   Intelligence-adjusted per-unit quote, the six-record quote pool, the
   twenty-five-serving pack size, the per-unit pay loop with its gold floor and
-  food ceiling, surcharge timing, and the five outcome cases including the
-  table-scraps gift.
+  food ceiling, surcharge timing, the five outcome cases including the
+  table-scraps gift, and the zero-quantity continuation/lore gate and transcript
+  ordering.
 - `u5-decomp/functions/SHOPPES2_OVL/` -- tavern primary serving effects and
   secondary drinks: the primary adjacent-table tile bytes, north-first probe,
   southeast-cell row-boundary fallback and single-rewrite rule; non-Blue
