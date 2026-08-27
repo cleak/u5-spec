@@ -122,7 +122,9 @@ what was established and how - and let the path name only the directory.
 When an edit **withdraws or inverts** a statement this repository has already
 published, two things MUST land in the same change:
 
-1. **A row appended to `RETRACTIONS.md`.** The table is append-only and ordered
+1. **A row appended to `RETRACTIONS.md`,** taking the next free `Row` id.
+   Ids are permanent and never reused or renumbered, so a consumer can record
+   an "audited through" watermark. The table is append-only and ordered
    by spec commit. Give the commit (or the issue number, if the withdrawn text
    was only ever published in an issue answer), the document, the section, what
    was withdrawn, and what replaced it. Quote the withdrawn claim closely enough
