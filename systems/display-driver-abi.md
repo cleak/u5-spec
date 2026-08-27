@@ -515,18 +515,31 @@ ever re-enables it. While the gate is enabled, the dissolve does extra work on
 alternating visited pixels, and only there. The alternating flag starts at
 zero in a freshly loaded driver; each copied pixel toggles it, and the extra
 work runs when the new value is one. The first gated dissolve therefore checks
-visits `1, 3, 5, ...`, not `2, 4, 6, ...`. On each checked visit it emits one
-short percussive speaker click and samples keyboard status. Both the click and
-the poll sit behind the same alternating flag, so neither happens on every
-pixel. **Earlier
+visits `1, 3, 5, ...`, not `2, 4, 6, ...`. On each checked visit it **retunes the
+speaker** and samples keyboard status. Both the retune and the poll sit behind
+the same alternating flag, so neither happens on every pixel. **Earlier
 revisions of this section said the speaker effect was per-pixel and that its
 pitch tracked progress through the rectangle; both halves are withdrawn.** The
-click frequency is drawn from a driver-internal scrambling sequence rather than
+frequency is drawn from a driver-internal scrambling sequence rather than
 rising monotonically, and the width of the range it is drawn from grows as the
-transfer advances, so the effect reads as a scatter of clicks that spreads out
-over the transition rather than a glissando. A pending keystroke aborts the
-call immediately, leaving the rectangle **partly** transferred and the speaker
-silenced. The four-plane copy of the checked pixel happens before its click and
+transfer advances, so the effect reads as a rising, broadening rasp rather than
+a glissando.
+
+> **Withdrawal.** A further revision of this paragraph called each checked visit
+> "one short percussive speaker click" and treated the abort's silencing as part
+> of that per-click behaviour. Both are withdrawn (see `RETRACTIONS.md`). The
+> speaker is enabled at the first checked visit and **nothing disables it until
+> the dissolve exits**: what each checked visit does is retune one continuously
+> running square wave, whose pitch is randomised across a band whose upper edge
+> grows. Each visit also pays a short calibrated hold of roughly 50 to 60
+> microseconds, so the gated dissolve is not free-running like the ungated one.
+> `audio.md` section 8.6.1 owns the frequency contract, the band growth, and the
+> exact per-click arithmetic.
+
+A pending keystroke aborts the
+call immediately, leaving the rectangle **partly** transferred; the speaker is
+silenced at the dissolve's shared exit block, which both the abort path and
+normal completion reach. The four-plane copy of the checked pixel happens before its click and
 status test. Thus a key already pending when the first start/menu dissolve
 begins leaves exactly one pixel transferred before abort: the first visit,
 `(1,0)`. The driver's status test does not consume the key, so it is still

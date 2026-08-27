@@ -486,7 +486,12 @@ The loader runs the following sequence:
    The driver's test does not consume it. Immediately after the transfer
    returns, the animated loader runs the normal nonblocking keyboard reader;
    that read consumes the same pending key and downgrades the rest of this
-   loader invocation to the plain path.
+   loader invocation to the plain path. While the gate is set, this dissolve is
+   also **audible**: every second visited pixel retunes a continuously running
+   speaker carrier, which is silenced only when the dissolve exits. It is not a
+   click train and its band is not the ignition's 100..1500 Hz; `audio.md`
+   section 8.6.1 owns the contract, including the parts of it that are
+   unresolved.
 5. Select the hidden surface, clear it, and draw records `1`, `2`, `3`, `4` at
    `(16, 0)`, `(16, 50)`, `(16, 100)`, `(16, 150)` respectively — opaque, no
    mirroring, no transparency mask. This lays out the four idle-animation bands

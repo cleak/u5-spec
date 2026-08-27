@@ -111,6 +111,12 @@ candidate selection repeats. The result is that a successful outer event always
 eventually changes or re-announces a wind state, but Calm is much rarer than any
 cardinal direction.
 
+**The autonomous drift is silent.** It contains no sound call, no wrapper, and
+no ambient hook; the wind sound belongs to the spell and scroll handlers, never
+to the setter (`audio.md` section 7.3). The drift also passes the **raw**
+direction index to the setter, without the transform the spell applies in
+section 3, so the two paths are not interchangeable.
+
 The accepted value routes through the same resident wind set-and-repaint helper
 used by world entry. Supplying a new value stores it as the current wind state
 and clears the cached wind-cadence byte used by sailing and wind-driven actors.
@@ -142,9 +148,12 @@ four-cardinal Rel Hur prompt, but the shared setter supports it for callers
 that deliberately pass a calm target. Calling the setter with both old wind and
 new wind Calm is a no-op. Any other accepted transition plays the wind sound
 before storing and displaying the resulting wind state. Unrecognised target
-values do nothing. The sound variant is selected from the prior Calm/non-Calm
-state, not from the requested direction; `audio.md` gives the exact transition
-matrix and waveform recipe.
+values do nothing. The sound variant is selected by the **caller tag** — spell
+or scroll — and by nothing else: the Wind Change spell plays variant 2 and the
+Wind Change scroll plays variant 1, whatever the old and new winds are.
+*Earlier revisions of this sentence said the variant is selected from the prior
+Calm/non-Calm state; that is withdrawn, see `RETRACTIONS.md`.* `audio.md`
+section 7.3 gives the recipe and the one silent accepted path.
 
 Rel Hur should not:
 
