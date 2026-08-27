@@ -355,6 +355,22 @@ directly:
 | E | 275 |
 | F | 98 |
 
+At every other tavern, the state-specific secondary letter (`A` for Ale, `R`
+for Rum, or `S` for Stout) has one uniform price contract: one gold for each
+non-Dead member in the active party, with no Intelligence adjustment. The
+quoted count and base price therefore equal the non-Dead headcount. A
+successful purchase debits that base price, then applies the ordinary
+Falsehood surcharge when its settlement gate is active. It adds no food,
+changes no table setting, and performs no serving redraw or world-turn step;
+its only non-gold state effect is to increment the visit-local successful-
+secondary-drink count once.
+
+The secondary-drink branch itself does not require a positive headcount. If it
+is invoked with zero non-Dead party members, it mechanically accepts a
+zero-gold purchase and increments the count. Normal town command eligibility
+prevents an all-Dead party from reaching the shop, so this is a branch-level
+edge rather than an ordinary playable route.
+
 A shop purchase deducts the price (or price × quantity) from the party's gold
 word — the shared resident counter every gold-handling system reads and writes,
 including the conversation engine's bribe handler and the find-treasure
@@ -413,9 +429,11 @@ Ale, Rum, or Stout increments it once; at the Blue Boar, each paid bottle from
 the `W` list increments the same count once. Primary round/meals and provisions
 do not increment it. When the player selects the secondary letter with the
 count exactly three, the barkeep asks whether the party has had enough to
-drink. `Y` ends that attempt without buying another drink. `N` arms the town
-drunkenness counter at twenty-five, subtracts one point from the shared
-moral-standing value with a floor of zero, and then continues into the requested
+drink. `Y` ends that attempt without buying another drink, leaves the count at
+three, and enters the standard `Anything else for thee?` continuation prompt;
+it does not jump directly to the post-list key menu. `N` arms the town
+drunkenness counter at twenty-five, subtracts one point from the shared moral-
+standing value with a floor of zero, and then continues into the requested
 fourth drink. Other answers repeat the question.
 
 The arming and moral-standing debit happen before the fourth drink's ordinary
@@ -439,9 +457,17 @@ never offers the lore letter before it works.
 ### 6.1 The affordability check
 
 Most purchases are gated by an affordability check against the gold word. If
-the player can't pay, the shop refuses with a kind-specific bark ("Beat it!" at
-the tavern, "Highwaymen!" at an upmarket inn, "Thou canst afford only N" at a
-vehicle broker) and returns to the main menu without deducting.
+the player cannot pay, the shop refuses with a kind-specific bark and makes no
+base-price deduction. The branch-specific continuation route still matters:
+for an ordinary Ale, Rum, or Stout purchase, the barkeep prints the `CAN'T
+PAY?` / `Beat it!` refusal and ends the entire tavern visit immediately. It
+does not show `Anything else for thee?` and does not print a closing farewell.
+It also applies no Falsehood surcharge and does not increment the successful-
+drink count. If this refusal follows an `N` answer at the exact-three warning,
+the earlier drunkenness arming and moral-standing debit remain in force.
+
+An earlier revision grouped the tavern refusal with branches that return to a
+shop main menu. That continuation claim is withdrawn (`RETRACTIONS.md` R277).
 
 The tavern/meal-counter provision branch is the exception: it processes a
 requested quantity one unit at a time. Each pass compares party gold against
@@ -1320,11 +1346,15 @@ It does not count toward drunkenness.
 
 The separate secondary letter buys Ale, Wines, Rum, or Stout according to the
 current menu state; the Blue Boar Tavern's `W` branch opens its six-choice
-fixed-price list. Successful secondary purchases deduct gold, print the tavern
-success line, and increment the visit-local drink count used by the exact-three
-warning in Section 6. Failed payment normally returns without changing gold,
-but it does not undo drunkenness or the moral-standing debit if the player
-already answered `N` at that warning.
+fixed-price list. The non-Blue `A`/`R`/`S` branches charge one gold per non-Dead
+party member without an Intelligence adjustment. Their successful purchases
+deduct gold, apply the ordinary post-transaction surcharge, print the tavern
+success line, and increment the visit-local drink count used by the exact-
+three warning in Section 6; they add no food and change no table tile. Their
+short-funds refusal exits the tavern visit immediately without a debit,
+surcharge, count increment, continuation prompt, or farewell. It does not undo
+drunkenness or the moral-standing debit if the player already answered `N` at
+that warning.
 
 One tavern/meal-counter menu branch sells provisions rather than flavour
 drinks. It is reached through the state's *provision* letter, which is `R`
@@ -1780,8 +1810,9 @@ The behaviour described here was derived from the private function and format no
   food ceiling, surcharge timing, and the five outcome cases including the
   table-scraps gift.
 - `u5-decomp/functions/SHOPPES2_OVL/` -- tavern primary serving effects and
-  secondary-drink threshold: the visit-local successful-drink count, exact
-  three-drink warning gate, `Y` stop, `N` drunkenness arming and one-point
+  secondary drinks: non-Blue headcount pricing and state effects, short-funds
+  exit routing, the visit-local successful-drink count, exact three-drink
+  warning gate and continuation route, `N` drunkenness arming and one-point
   moral-standing debit, pre-affordability ordering, and Blue Boar list count.
 - `u5-decomp/functions/SHOPPES_OVL/` -- arms sell
   browser and its side-panel geometry.
