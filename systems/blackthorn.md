@@ -237,6 +237,24 @@ The exact presentation commands are:
 | Stinger pause | Repeat the current count: play the shared two-tone PC-speaker sting, then request a two-tick quiet redraw pause. The repeat count resets to one afterward. |
 | Animated movement step | After changing the selected actor coordinates, run one stinger-pause repetition when per-step animation is enabled. Per-step animation starts enabled. |
 
+The shared stinger is the short two-part random-rumble recipe from
+`audio.md` Sections 5.3 and 8.6. It has this exact blocking order:
+
+1. Run 25 audio-LFSR updates at inclusive random pitches `100..1000 Hz`,
+   using step 1 and target 25, then force the speaker off.
+2. Hold silence for 20 calibrated units (about 17.6 ms on the reference
+   machine).
+3. Run another 25 updates at inclusive random pitches `100..1500 Hz`, again
+   using step 1 and target 25, then force the speaker off.
+
+The sting itself lasts about 27 ms under the calibrated baseline. The
+two-tick quiet redraw pause follows it; it is not part of the audio recipe.
+Sound mute skips neither rumble call nor the silent hold. Both 25-update loops,
+all fifty audio-state advances and timer-divisor writes, both final speaker-off
+operations, and the later two-tick cinematic pause remain. The independent
+cinematic-animation setting can suppress the quiet redraw pause, but sound mute
+cannot.
+
 The so-called output-byte command is therefore not output. Its six shipped
 operands are pause lengths, not character codes:
 
@@ -437,8 +455,9 @@ The rescue contract:
 The exact visible tableau between the two rectangle dissolves is:
 
 1. After the first dissolve-to-black and the refuge narration, install the
-   party-on-foot actor at cell `(5,5)` and redraw. The following six-entry
-   software-envelope sequence is PC-speaker audio only and changes no pixels.
+   party-on-foot actor at cell `(5,5)` and redraw. Run the six software
+   envelopes in the table below. They are PC-speaker audio only and change no
+   pixels.
 2. Temporarily suppress an actor at `(2,7)`, clear that underlying cell, and
    reveal Guardian image `0x5E` there with the blocking 256-pixel cell reveal.
    Commit `0x5E` as terrain, suppress the temporary actor again, redraw, then
@@ -462,6 +481,34 @@ The tile identities, cell positions, pixel origins, and single-cell reveal
 cadence are in Sections 6.1 and 6.2. Text is ordered around these operations as
 stated above; none of the delay, envelope, redraw, or reveal calls advances a
 text cursor or selects a font.
+
+The rescue envelopes execute in this exact order. “Phase increment” is the
+field called *phase period* in `audio.md`: it is added to the 16-bit phase
+accumulator once per iteration.
+
+| Row | Phase increment | Idle count | Iterations | Initial comparison | Comparison delta | Approx. gate pitch | Approx. audible / muted duration |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 4400 | 1 | 50,000 | 3000 | +1 | 1.56 kHz | 2.15 s / 1.67 s |
+| 2 | 4125 | 1 | 50,000 | 3000 | +1 | 1.47 kHz | 2.15 s / 1.67 s |
+| 3 | 3667 | 1 | 50,000 | 3000 | +1 | 1.30 kHz | 2.15 s / 1.67 s |
+| 4 | 2933 | 1 | 30,000 | 1000 | +1 | 1.04 kHz | 1.29 s / 999 ms |
+| 5 | 3300 | 1 | 40,000 | 100 | +1 | 1.17 kHz | 1.72 s / 1.33 s |
+| 6 | 3300 | 1 | 40,000 | 40,100 | -1 | 1.17 kHz | 1.72 s / 1.33 s |
+
+All counts and parameters are exact; pitches and durations are the calibrated
+approximations defined by `audio.md`. The sequence has no explicit delay,
+world tick, draw, or text operation between rows. It is nevertheless six
+separate speaker programs, not one continuous envelope: each row programs the
+fixed divisor-60 carrier, resets phase to zero, initializes comparison from
+the table, and forces the audible speaker gate off before returning. The next
+row then starts from its own fresh state. The audible rows therefore have a
+hard-silence boundary but no intentional hold between them.
+
+With sound disabled, every row still programs the carrier and runs its complete
+phase/comparison recurrence and iteration count. The muted arm omits the gate
+comparison and speaker-control traffic, so it remains blocking but is about
+23 percent faster. The full six-row sequence is approximately 11.18 seconds
+audible or 8.66 seconds muted on the reference machine.
 
 **Retraction.** Earlier revisions called the six-entry software-envelope loop
 a timed scene animation. It is audio only; the visible rescue animation is the
@@ -724,3 +771,8 @@ matching the direct reveal/flash/dissolve helpers to their shared contracts.
 Source provenance: private analysis in `u5-decomp/functions/BLCKTHRN_OVL/`,
 `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/EGA_DRV/`,
 `u5-decomp/formats/`, and `u5-decomp/notes/`.
+
+The movement-stinger identity, mute boundary, and ordered six-row rescue audio
+table were derived from private analysis in
+`u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
