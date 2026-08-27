@@ -114,6 +114,15 @@ The subsequent save-read sequence is:
 
 7. **Final commit.** A display-mode flag is set to indicate "transition to gameplay", and the intro overlay returns to the main game loop. The next iteration reads the loaded scene byte and dispatches to the correct mode-loop overlay (overworld, town, or dungeon).
 
+For a loaded town-family scene, that following mode entry performs a
+location-grid reload before accepting input. One observable normalization
+happens there: although the four door auto-close bytes were restored by step
+one, setup clears the previous-tile byte that makes the tracker active, leaves
+its X, Y, and countdown bytes inert, and does not stamp an open tile back into
+the grid. A save made while a door is transiently open therefore loads with the
+authored closed door and no pending auto-close. See
+`systems/doors-and-z-transitions.md` Section 5.
+
 The load flow does not load the world map data files (`BRIT.DAT`, `UNDER.DAT`, `LOOK.DAT`, `.TLK`, `.NPC`, `.PTH`). Those are loaded on demand by the gameplay mode loops when the player crosses scene boundaries. If the empty-save guard fires, the intro returns to its menu loop and the title menu re-renders. There is no "auto-create" fallback — a fresh install or a wiped save requires the player to explicitly pick `C` or `T`.
 
 The load flow needs no special case for the `.OOL` ordering emitted by chargen
@@ -172,7 +181,9 @@ opened door, or a revealed secret door survives only until the owning scene is
 re-entered or the overworld window re-streams that region, and cannot survive a
 save/load round trip. Systems whose changes *are* meant to persist do so through
 saved flags that the loader re-applies to the tiles on entry, not by editing the
-map.
+map. The door auto-close tracker is not such a flag: its bytes are serialized
+incidentally, but town entry disarms it and never reapplies its transient open
+cell.
 
 ## 6. The Ultima IV character-transfer producer
 

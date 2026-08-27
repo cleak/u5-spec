@@ -346,8 +346,9 @@ south, west.
 
 **Docking furls automatically.** On the overworld, exact static tile `0x47` is
 the pier selector. A step that takes a ship onto that tile while the ship is
-under sail prints a docking message and applies the same one-run furl. No other
-member of the neighbouring bridge/road/plank passability band selects docking.
+under sail prints the exact line `Docked!` followed by a line break and applies
+the same one-run furl. No other member of the neighbouring bridge/road/plank
+passability band selects docking.
 The neighbouring outcomes for a ship that hits something it cannot enter are a
 collision message and, when the hull gives way, a breaking-up message.
 
