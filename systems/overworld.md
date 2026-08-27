@@ -386,6 +386,29 @@ is a coordinate comparison, not a "skip the first sample" rule, and it is why
 the attacker's own cell never obstructs its own shot. Any other blocking cell
 ends the walk and reports *blocked*.
 
+The complete blocking set is below. Ranges are inclusive; every tile id not
+listed is passable to this test.
+
+| Blocking tile ids |
+|---|
+| `0C–0D`, `12–15`, `19–1B`, `3A–3F`, `42`, `46`, `4D–55`, `5A`, `70–7F`, `B8–B9`, `DF` |
+
+The lookup key is the byte currently held in the **primary viewport grid**
+after active-object compositing. That does not mean it normally sees an actor's
+sprite id. A successful ordinary actor stamp places the effective sprite in a
+companion render band and places the routing sentinel `00` in the primary cell;
+the projectile test reads that sentinel, which is passable. It does not recover
+the terrain hidden beneath the actor. Special direct compositor markers are
+also passable. If an actor stamp is suppressed, the existing terrain byte stays
+in the primary cell and is tested normally. Thus a successfully composited
+ordinary creature does not itself obstruct the shot, while an unstamped actor
+does not hide the terrain test.
+
+This bitmap is private to the shared projectile walker. A whole-binary direct
+reader census and a caller census found no other gameplay consumer: the
+walker's five callers are the three player-Fire sites and the two outdoor
+creature ranged-attack sites already described here.
+
 Return polarity, stated positively: **a run that reaches the end of the
 generated line reports clear, and clear is what both outdoor call sites treat as
 a hit.** *Blocked* means the shot stops where it stopped and nothing further
@@ -574,17 +597,6 @@ licence to invent a rule.
   the player's Fire command calls the same walker with a different argument set
   that was not traced, and no combat or dungeon breath analogue was examined. Do
   not carry this section into those modes without redoing the work.
-- **Unresolved viewport cells and stamped actors.** An unresolved viewport cell
-  — one the visibility pass never filled — holds a value the passability bitmap
-  marks passable, so darkness of that kind does not block a shot. That is a
-  positive result about the fill and the bitmap. The broader claim "no cell the
-  party cannot see ever blocks" is **not** established: the shadow-casting pass
-  that fills visible cells, and the pass that stamps active-object sprites into
-  the same grid, were not read. Whether a creature standing between attacker and
-  party blocks the line is therefore open.
-- **The blocking tile-id set is uncharacterised.** The 46 blocking ids are
-  established as a set of ids; they were not mapped to named terrain, and
-  whether other systems read the same bitmap was not checked.
 - **Frigate sub-state narrowing.** The absorption stage's ship branch covers both
   hoisted and furled markers. The per-turn walker that reaches the ranged
   branches was not read to its end, so a gate above it that narrows which frigate
@@ -1311,6 +1323,8 @@ The behaviour described above was derived by reading the function and format not
   the exact one-in-eight, the sub-tile line generation with its column-driven
   accumulator, the fixed sampling interval and the untested last sample, the
   viewport-grid obstruction test and its passable/blocking split, the
+  exact blocking-id set, the post-compositor primary-grid lookup and companion
+  sprite routing, the bitmap's sole-consumer census,
   direction-dependence result and the axis-aligned player shot that hides it,
   and the two-stage damage payload with its frigate hull branch and whole-party
   pass, were **re-derived from the shipped binaries** in a verification pass
