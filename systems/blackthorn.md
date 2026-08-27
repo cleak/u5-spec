@@ -72,8 +72,8 @@ The setup contract is:
    as temporary cinematic actors.
 4. Load the Blackthorn audience map from `MISCMAPS.DAT`.
 5. Load the Blackthorn message cluster from `MISCMSG.DAT`.
-6. Place the party, Blackthorn, attendants or guards, and throne markers into
-   cutscene actor slots.
+6. Place the party, two guards, and the initially suppressed seated-Blackthorn
+   tableau into cutscene actor slots.
 7. Run the scripted throne approach and Blackthorn presentation beats.
 8. Greet the current leader by name and print the gendered release line.
 9. Enter the challenge loop.
@@ -186,7 +186,7 @@ The visible sequence is:
 
 1. Build and print the failure reaction text.
 2. Play the failed-demand cutscene beat.
-3. Move Blackthorn and the victim through the audience scene.
+3. Move one of the two guards and the victim through the audience scene.
 4. Print the static punishment fragments around the named victim.
 5. Wait for player acknowledgement before returning to the caller branch.
 
@@ -221,18 +221,44 @@ The Blackthorn overlay uses a compact byte-script interpreter for these
 cinematics. The interpreter is local to the Blackthorn audience/challenge
 presentation and is separate from `.TLK` conversation scripts.
 
-The script language supports:
+The script language supports ending a script, setting a repeat count, selecting
+single- or paired-actor movement, enabling or disabling animated per-step
+pauses, writing one terrain byte into the cutscene buffer, requesting a redraw,
+running either of two pause forms, clearing one temporary actor slot, and
+moving one or two actor slots by cardinal steps.
 
-- ending a script;
-- setting a repeat count for following movement commands;
-- switching between single-actor and paired-actor movement;
-- enabling or disabling per-step pauses;
-- emitting a control byte to the text or glyph output stream;
-- writing one tile into the cutscene tile buffer;
-- clearing the cutscene screen;
-- running a timed pause;
-- clearing one temporary actor slot; and
-- moving one or two actor slots by cardinal steps.
+The exact presentation commands are:
+
+| Command | Exact effect |
+|---------|--------------|
+| Quiet redraw pause | Consume one following byte as an unsigned count. If cinematic animation is enabled, repeat that many times: run one world tick, then one shared one-BIOS-tick delay. It neither reads nor changes any text window, cursor, font, glyph style, or text pixels. |
+| Terrain write | Consume `(value, column, row)` and replace that byte in the 32-byte-stride cutscene terrain buffer. The write itself draws nothing. |
+| Explicit redraw | Run one unconditional world tick. This rebuilds and repaints the viewport; it does not clear the viewport or either text window. |
+| Stinger pause | Repeat the current count: play the shared two-tone PC-speaker sting, then request a two-tick quiet redraw pause. The repeat count resets to one afterward. |
+| Animated movement step | After changing the selected actor coordinates, run one stinger-pause repetition when per-step animation is enabled. Per-step animation starts enabled. |
+
+The so-called output-byte command is therefore not output. Its six shipped
+operands are pause lengths, not character codes:
+
+| Operand | Script location | Meaning |
+|--------:|-----------------|---------|
+| 22 (`0x16`) | Failed-challenge opening | Quiet 22-tick redraw pause before the acting guard moves. |
+| 3 (`0x03`) | Failed-challenge middle | Quiet 3-tick redraw pause after the victim's last southward step. |
+| 12 (`0x0C`) | Failed-challenge return | Quiet 12-tick redraw pause after the acting guard returns. |
+| 8 (`0x08`) | Audience approach | Quiet 8-tick redraw pause after the two guards separate. |
+| 11 (`0x0B`) | Guard release route | Quiet 11-tick redraw pause before the acting guard moves. |
+| 4 (`0x04`) | Conditional cleanup | Quiet 4-tick redraw pause before the seated-Blackthorn tableau moves. |
+
+There is consequently no glyph code, font selection, cursor position or
+movement, text overwrite, or text compositing rule for any of these six
+operands. Text printed before a pause remains exactly as the ordinary text
+contract left it, and the next explicit string print resumes from that same
+text state.
+
+**Retraction.** Earlier revisions called the quiet-pause operand a byte sent to
+the text/glyph stream and called the explicit-redraw command a cutscene-screen
+clear. Both claims are withdrawn: the first is a tick count and the second is
+one ordinary world-tick redraw.
 
 The interpreter maintains three small pieces of modal state while it walks a
 script:
@@ -243,13 +269,14 @@ script:
 - **Paired movement mode.** A mode command makes the next movement consume a
   second movement descriptor, so two actors step together on each repeated
   tick. The mode resets after that movement.
-- **Per-step pause mode.** A mode command enables or disables a one-tick pause
-  after each individual movement step. This controls whether the actor motion
-  is visibly animated one cell at a time or applied without per-cell delay.
+- **Per-step pause mode.** A mode command enables or disables the
+  sting-plus-two-tick pause after each individual movement step. This controls
+  whether actor motion is visibly animated one cell at a time or accumulated
+  without intermediate redraws.
 
 Movement descriptors combine an actor family with a cardinal direction. The
-known actor families are the Avatar, the second party member, Blackthorn, the
-attendant, and the throne marker; the direction component moves that actor one
+known actor families are the Avatar, the second party member, two guards, and
+the seated-Blackthorn tableau; the direction component moves that actor one
 cell north, east, south, or west. A byte-compatible implementation may model
 the compiled scripts as data, but the visible contract is actor-indexed
 cardinal stepping with the modal repeat, paired-step, and pause rules above.
@@ -260,38 +287,83 @@ The public actor roles identified so far are:
 |------|------|
 | 0 | Avatar / party leader presentation actor |
 | 1 | Second party member, used by the failure punishment beat |
-| 6 | Blackthorn |
-| 7 | Attendant or guard |
-| 8 | Throne or throne-marker tile |
+| 6 | Left/acting guard; actor byte `0x70` |
+| 7 | Right/secondary guard; actor byte `0x70` |
+| 8 | Seated Blackthorn and throne tableau; initially suppressed, then actor byte `0x78` |
 
 The known script beats are the per-question intermission, the failed-answer
-punishment, the audience throne approach, Blackthorn's rise or movement to the
-throne, and a conditional throne cleanup after a successful audience flag. A
+punishment, the audience guards' approach and separation, the acting guard's
+release route after Blackthorn's order, and a conditional seated-Blackthorn
+cleanup after a successful audience flag. A
 modern engine can model these as named cinematic actions as long as it
 preserves actor order, pauses, tile writes, and final scene handoff.
 
-The five traced scripts have these clean roles:
+**Retraction.** Earlier revisions assigned slot 6 to Blackthorn and described
+that sprite as approaching the throne, rising, and dragging the victim. Slot 6
+and slot 7 are both guards; seated Blackthorn is slot 8. The movements formerly
+attributed to Blackthorn belong to the acting guard.
 
-| Script beat | Caller context | Visible contract |
-|-------------|----------------|------------------|
-| Per-question intermission | Challenge prompt resolves through the early-exit branch | Drops a temporary marker into the cutscene tile buffer, walks Blackthorn and the Avatar through a short paired movement, moves the throne setup off-stage, clears the throne, Blackthorn, and attendant actors, then pauses. |
-| Failed-challenge reaction | Challenge loop reaches the wrong-answer reaction | Emits formatting/control bytes around the reaction text, moves Blackthorn toward the second party member, drags that member off-stage with paired movement, clears the member actor, resets Blackthorn and the attendant, and writes two temporary scene tiles. |
-| Audience throne approach | Audience opening before Blackthorn's main speech | Pauses, then moves Blackthorn and the attendant north together before splitting them horizontally so Blackthorn approaches the throne and the attendant shifts aside. |
-| Blackthorn rises | After the release line and before the challenge loop | Emits a formatting/control byte, moves Blackthorn up onto the throne axis, and leaves him positioned for the challenge. |
-| Conditional throne cleanup | Successful-audience cleanup flag is set | Emits a formatting/control byte, slides the throne marker away, clears the throne actor, and clears the cutscene screen. |
+### 6.1 Exact tile identities and domains
 
-The tile-write commands and output-byte commands are specified only at the
-semantic layer here: tile writes modify the cutscene tile buffer at an explicit
-cell, and output-byte commands send one byte through the current text/glyph
-output stream. The exact visual identities of the written tile bytes and the
-exact cursor/glyph effects of those output bytes remain visual-parity work.
+The viewport is an eleven-by-eleven cell rectangle whose EGA pixel origin is
+`(8,8)`. A cell `(column,row)` therefore begins at
+`(8 + 16*column, 8 + 16*row)`. Terrain bytes select the lower half of the
+512-tile atlas directly. Cinematic actor bytes select the upper half by adding
+256; the direct reveal and blit operations instead receive the full atlas
+index.
+
+| Value or index | Storage context | Exact visual | Cell and pixel origin in this cinematic |
+|---------------:|-----------------|--------------|-----------------------------------------|
+| `0x44` | VM terrain byte | Cobble: the red-and-grey cobble pattern. | `(0,4)`, pixels `(8,72)`. |
+| `0xBB` | VM terrain byte | A locked wooden door with a window, drawn as a grey frame with yellow bars. | Replaces `0x44` at `(0,4)`, pixels `(8,72)`. |
+| `0x82` | VM terrain byte | The top-down pendulum fixture. This is not the dungeon first-person fire-field interpretation of the same low byte. | `(5,7)`, pixels `(88,120)`. |
+| `0xE9` | VM terrain byte | An hourglass. | `(5,9)`, pixels `(88,152)`. |
+| `0x70` / `0x170` | Guard actor byte / full atlas index | A silver-armoured guard in a blue surcoat, carrying a polearm or sword-and-shield silhouette depending on frame. Both slots 6 and 7 start in this family. | Slots begin at `(4,10)` and `(6,10)`. |
+| `0x16` | Actor byte sentinel | Draw nothing. In actor storage this must not be interpreted as full atlas tile `0x116`. | Used to suppress slots before direct reveals. |
+| `0x178` | Full atlas index; then actor byte `0x78` | The Dark King Blackthorn seated on his red throne. | `(5,5)`, pixels `(88,88)`. |
+| `0x5E`, `0x5F` | Rescue terrain bytes | The two complementary blue circular Guardian images; both are Guardian-named art. | `(2,7)` / `(8,7)`, pixels `(40,120)` / `(136,120)`. |
+| `0x174` | Full atlas index; then actor byte `0x74` | A cyan-and-blue crowned spectral humanoid with bright eyes and both arms raised. Its general description-table row is intentionally unnamed. | `(5,2)`, pixels `(88,40)`. |
+| `0x11C` | Full atlas index | The party-on-foot sprite. | `(5,5)`, pixels `(88,88)`. |
+
+### 6.2 Direct drawing and redraw boundaries
+
+A VM terrain write becomes visible only on a later world tick. Actor-coordinate
+changes behave the same way. By contrast, each caller-level single-cell reveal
+draws directly to the visible page: exactly 256 pixel writes in the shared EGA
+LFSR order, with one world tick after each eight completed pixels except the
+last group—31 checkpoints in all. These Blackthorn reveals are blocking and
+cannot be skipped. There is no final flush. The caller commits the same terrain
+or actor identity afterward so the next ordinary redraw preserves the revealed
+image.
+
+The rescue's two whole-viewport transitions are the shared blocking rectangle
+dissolve over inclusive pixels `(8,8)..(183,183)`. The thunder beat also runs
+the shared full-viewport flash/low-rumble operation from `systems/audio.md`
+Section 8.4 twice back-to-back. Those are direct-screen operations; none is a
+text-window clear.
+
+### 6.3 Minimal deterministic audience vectors
+
+| Beat | Observable sequence |
+|------|---------------------|
+| Per-question intermission | The acting guard first steps west with one animated stinger pause. Cobble `0x44` is buffered at `(0,4)` and the next explicit world tick exposes it. The subsequent guard/Avatar repositioning remains animated one step at a time. Door `0xBB` replaces the cobble and the following one-repetition stinger pause exposes the door. The seated-Blackthorn tableau and both guards then continue moving or are cleared with per-step redraws; each cleared actor disappears on the next movement or pause redraw. The first repetition of the final six-repetition stinger pause exposes the empty tableau and the remaining five hold it. |
+| Failed challenge | Quiet pause 22; the acting guard moves to and with the second member; quiet pause 3; buffer pendulum `0x82` at `(5,7)` and clear that member; one explicit world tick exposes both changes together. The acting guard returns with animated steps; quiet pause 12; the secondary guard walks west three animated steps; hourglass `0xE9` is buffered at `(5,9)`; the first of that guard's three animated east steps exposes it. |
+| Guard approach | One stinger-pause repetition; both guards move north together one animated step; then slot 6 moves west while slot 7 moves east for three animated paired steps, opening the centre; quiet pause 8. The caller then hides slot 8 at `(5,5)`, reveals seated Blackthorn `0x178` there with the 256-pixel transition, assigns actor byte `0x78` to preserve it, and performs another quiet pause 8 before Blackthorn's speech. |
+| Guard release route | After Blackthorn orders the guard to release the captive: quiet pause 11; the acting guard moves west once, north four times, and east once, with a stinger-plus-two-tick redraw after every step. Blackthorn remains seated in slot 8. |
+| Conditional Blackthorn-tableau cleanup | Quiet pause 4; seated Blackthorn and the throne move east once and south five times with an animated redraw after every step; slot 8 is cleared; one explicit world tick repaints the resulting tableau. It does not clear the screen. |
+
+These vectors deliberately test visible checkpoints rather than duplicating the
+already-published movement byte stream. A conforming renderer must additionally
+preserve the actor order, repeat counts, paired movement, and final coordinates
+described above.
 
 ## 7. Rescue / Refuge Sequence
 
 The second Blackthorn family is a rescue or refuge cinematic. It waits for the
 overworld resource file to be available, switches into cutscene mode, prints a
-darkness/refuge/thunder sequence, runs timed animation passes, places the
-rescue scene tiles, then prints a selected `KARMA.DAT` verdict message.
+darkness/refuge/thunder sequence, runs its audio and direct-screen effects,
+places the rescue scene tiles, then prints a selected `KARMA.DAT` verdict
+message.
 
 **Entry condition: the shared party-capability check.** Every exploration mode
 opens each turn by asking the same resident question of the party roster, and
@@ -341,8 +413,8 @@ The rescue contract:
    black. This happens before clearing terrain or temporary-object scratch
    state and before building the refuge tableau.
 3. Clear terrain and temporary-object scratch state for the cinematic.
-4. Print the refuge, thunder, and fortune-themed narrative beats and run the
-   timed scene animation and tile placement passes.
+4. Print the refuge, thunder, and fortune-themed narrative beats; run the
+   audio-envelope sequence, three cell reveals, and paired viewport flash.
 5. Select and print one `KARMA.DAT` record through the five-band rescue
    selector.
 6. Restore every party member: the member's status is reset to able-bodied and
@@ -359,6 +431,42 @@ The rescue contract:
    reads 06:00.
 11. Clear both light counters. If and only if the full two-byte food word is
     zero, replace it with 63; preserve every nonzero value unchanged.
+
+### 7.1 Minimal deterministic rescue/refuge vector
+
+The exact visible tableau between the two rectangle dissolves is:
+
+1. After the first dissolve-to-black and the refuge narration, install the
+   party-on-foot actor at cell `(5,5)` and redraw. The following six-entry
+   software-envelope sequence is PC-speaker audio only and changes no pixels.
+2. Temporarily suppress an actor at `(2,7)`, clear that underlying cell, and
+   reveal Guardian image `0x5E` there with the blocking 256-pixel cell reveal.
+   Commit `0x5E` as terrain, suppress the temporary actor again, redraw, then
+   wait four BIOS ticks without changing text or pixels.
+3. Repeat that pattern at `(8,7)` for complementary Guardian image `0x5F`,
+   followed by another redraw and four-tick wait.
+4. Print the thunder line, then run the shared full-viewport flash/low-rumble
+   effect twice consecutively. Each invocation performs 1,856 band draws and
+   consumes 1,856 gameplay-PRNG draws even when sound is muted; the pair
+   therefore consumes 3,712 draws.
+5. Temporarily suppress the actor at `(5,2)`, clear the underlying cell, and
+   reveal full atlas tile `0x174` there. Assign actor byte `0x74` at that cell
+   and redraw, leaving the blue crowned spectral figure persistent while the
+   verdict text is printed.
+6. After party restoration and the `Vertigo...` beat, select the hidden page,
+   fill the inclusive viewport rectangle black, and immediately blit party tile
+   `0x11C` at `(5,5)`. Restore the visible-page target, then run the second
+   blocking rectangle dissolve to expose exactly black plus the centred party.
+
+The tile identities, cell positions, pixel origins, and single-cell reveal
+cadence are in Sections 6.1 and 6.2. Text is ordered around these operations as
+stated above; none of the delay, envelope, redraw, or reveal calls advances a
+text cursor or selects a font.
+
+**Retraction.** Earlier revisions called the six-entry software-envelope loop
+a timed scene animation. It is audio only; the visible rescue animation is the
+redraws, three single-cell reveals, paired viewport flash, and two rectangle
+dissolves enumerated here.
 
 Both viewport transitions are single blocking rectangle dissolves over the
 inclusive rectangle `(8,8)..(183,183)`. The first hidden rectangle contains
@@ -549,11 +657,12 @@ Section 2; the rescue/refuge cinematic is entered only from the shared
 party-capability check of Section 7, with no mode-local condition of any kind.
 Neither a defeat/capture context byte nor a death-route marker exists.
 
-Remaining exactness is presentation parity only:
+The pixel-level Blackthorn presentation boundary is now public as well:
+Sections 6 and 7 identify every scripted terrain byte, the actor-bank identities
+used by the direct reveals, all quiet-pause operands, the absence of any
+output-byte/text effect, every redraw boundary, the three single-cell reveals,
+the paired flash/rumble, and both rectangle dissolves.
 
-- Verify the exact visual identities of the cutscene tile-write bytes and the
-  exact cursor/glyph effects of the output-byte commands if pixel-level
-  Blackthorn cutscene parity is required.
 - ~~The per-member Blackthorn-jail flag band is claimed by more than one
   reader.~~ **Resolved.** That band is the shrine ruin flags. It is *shared*
   world state, not a Blackthorn-owned band: the interrogation sets a shrine's
@@ -606,3 +715,12 @@ effects; the mode-local asleep and defeat preambles were cross-checked against
 the cinematic presentation was cross-checked against
 `u5-decomp/functions/BLCKTHRN_OVL/` and the display-driver notes under
 `u5-decomp/functions/EGA_DRV/`.
+
+The Section 6 and 7 pixel-exact tables were derived by resolving the
+Blackthorn overlay's resident-call targets against the established overlay
+base, cross-checking the five script consumers and rescue caller ordering,
+decoding the relevant fixed-size atlas entries and description-table rows, and
+matching the direct reveal/flash/dissolve helpers to their shared contracts.
+Source provenance: private analysis in `u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/EGA_DRV/`,
+`u5-decomp/formats/`, and `u5-decomp/notes/`.

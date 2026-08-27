@@ -788,10 +788,13 @@ remain authored data, but the traced challenge loop does not iterate them.
 **Current Blackthorn script-VM cleanup:** 2026-05-13 -
 `systems/blackthorn.md` and extraction now publish the cutscene VM's clean
 modal contract: repeat counts, paired movement, per-step pause mode,
-actor-indexed cardinal steps, and the five traced script beats. Remaining
-visual exactness is now limited to pixel-level identities for tile-write bytes
-and output-byte glyph/cursor effects, plus the existing external entry
-predicates.
+actor-indexed cardinal steps, and the five traced script beats. **Superseded
+2026-08-27:** the remaining visual work is closed. The supposed output-byte
+operation is a redraw pause with no text effect, the supposed clear is one world
+tick, and the exact tile identities and direct-screen boundaries are now in
+Sections 6 and 7. The same pass also corrects the actor roles: slots 6 and 7
+are guards, while slot 8 is the seated-Blackthorn tableau; the mobile
+punishment and release role is a guard, not Blackthorn.
 
 **Current Blackthorn audience-entry cleanup:** 2026-05-13 -
 `systems/blackthorn.md`, `systems/town-mode.md`, and extraction now pin the
@@ -822,8 +825,13 @@ cinematic-contract depth: audience setup, challenge matching, punishment and
 release branches, byte-script movement semantics, rescue/refuge restoration,
 `KARMA.DAT` verdict selection, durable state writes, and the direct town-side
 audience entry predicate are public. The exploration-mode rescue entry predicate
-and all persistent fields are also closed; remaining exactness is limited to
-pixel-level cutscene tile/output-byte identities.
+and all persistent fields are also closed. A later same-day presentation pass
+also closes pixel-level exactness: every terrain/actor tile identity and cell,
+all pause/redraw semantics, the blocking cell reveals, paired flash, and both
+rectangle dissolves now have deterministic vectors. The alleged output-byte
+glyph and screen-clear commands are withdrawn. The former slot-role reading is
+withdrawn as well: both mobile throne-side actors are guards, and seated
+Blackthorn occupies the separately revealed tableau slot.
 
 **Current rest/camp ambush presentation cleanup:** 2026-05-13 -
 `systems/rest-and-camp.md`, `systems/encounters.md`, and extraction now publish
@@ -2071,8 +2079,11 @@ challenge shape" and "durable jail/progression state". There are no jail flags;
 the eight-byte band is the shrine ruin flags, the four prompts are four
 wordings of one question, and the punishment is an irreversible execution.) Later challenge-table, script-VM, audience-entry, and
 status passes complete the BLCKTHRN overlay contract at cinematic depth. Any
-remaining exactness is external caller predicates or pixel-level
-tile-write/output-byte identities, not a Blackthorn overlay blocker.
+formerly remaining caller-predicate and pixel-level tile/output questions are
+now closed by later 2026-08-27 passes; the supposed output bytes are pause
+counts and do not enter the text system. Those passes also correct the actor
+roles from a mobile Blackthorn/attendant pair to two guards plus a distinct
+seated-Blackthorn tableau.
 
 **Current shop surcharge cleanup:** 2026-05-12 - `systems/shops.md` and
 extraction now distinguish quoted headline prices from the traced
