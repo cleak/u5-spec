@@ -369,17 +369,20 @@ counter at twenty-five, costs one point of moral standing, and continues to the
 fourth purchase. The arming precedes the affordability check, so short funds do
 not undo either effect. Primary round/meals and provisions do not count, and a
 new tavern visit starts the drink count over. While the armed counter is non-zero,
-every command the player enters is subject to an even-odds scramble. When the scramble
-fires, the engine runs the same one-shot schedule-rewrite sweep over the NPC
-roster that Section 14 describes, decrements the counter by one, prints the
-fixed line `Hic!` followed by a line break, and then draws and substitutes one
-of the four cardinal steps with equal probability. The hiccup text is not a
-pool and consumes no random draw of its own. When the scramble does not fire,
-the entered command runs normally and the counter is untouched. The counter
-therefore drains only on scrambled commands, not on every turn. Entering a town
-clears it outright, so the effect never survives leaving and re-entering a
-location, and the tavern branch that arms it is the only producer anywhere in
-the game. `systems/shops.md` owns the tavern prompt that arms it.
+every command the player enters is subject to exactly one inclusive `0..1`
+draw from the shared PRNG stream. Draw `0` does not fire: the entered command
+runs normally and the counter is untouched. Draw `1` fires the scramble: the
+engine runs the same one-shot schedule-rewrite sweep over the NPC roster that
+Section 14 describes, decrements the counter by one, prints the fixed line
+`Hic!` followed by a line break, and then makes a separate inclusive `0..3`
+draw to substitute one of the four cardinal steps with equal probability. The
+hiccup text is not a pool and consumes no random draw of its own. Thus an armed
+non-firing command consumes one PRNG value, while an armed firing command
+consumes two; with the counter at zero this stage consumes none. The counter
+drains only on scrambled commands, not on every turn. Entering a town clears it
+outright, so the effect never survives leaving and re-entering a location, and
+the tavern branch that arms it is the only producer anywhere in the game.
+`systems/shops.md` owns the tavern prompt that arms it.
 
 ### 7.2 Digits
 
@@ -1384,8 +1387,9 @@ Blackthorn-castle branch, the resident-Shadowlord entry effects, and the
 harpsichord's arming condition, key-to-pitch mapping, thirteen-note tune,
 mistake re-sync, and completion effect.
 
-- The town drunkenness stage (the tavern-armed counter, the even-odds command
-  substitution with its hiccup line and NPC schedule-rewrite sweep, the decrement
-  rule, and the town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
+- The town drunkenness stage (the tavern-armed counter, the exact inclusive
+  `0..1` gate and result-one firing polarity, the command substitution with its
+  hiccup line and NPC schedule-rewrite sweep, the decrement rule, and the
+  town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
   status, and the town loop's four-way reading of the command status. Source
   provenance: derived from private analysis in `../u5-decomp/notes/`.
