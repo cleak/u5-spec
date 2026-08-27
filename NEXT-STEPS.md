@@ -206,13 +206,14 @@ inclusive/exclusive off-by-one in the shared range draw — the surface tile-1
 special is one-in-eight, the parched-desert special one-in-four, and the
 low-water allowance die sixteen-in-sixty-five.
 
-Ten items were published as **explicit named gaps** in a new Section 6.2.5
+Ten items were published as **explicit named gaps** in a then-new subsection
 rather than left silent, including the unread tail of the stats-panel repaint
 (the one hole in the "these fields and no others" claim), the status-byte
 domain, the drowning loop's exit-test asymmetry, the two impact-absorption call
-sites whose triggers are unestablished (a sailing collision and a per-turn
-"rough seas" event), and the near-call-only limit of every caller census on this
-path. Interior, dungeon and combat modes are explicitly out of scope: the
+sites that were then unestablished (a sailing collision and a per-turn
+"rough seas" event, now closed in `systems/overworld.md` Section 6.2.5), and
+the near-call-only limit of every caller census on this path. Interior, dungeon
+and combat modes are explicitly out of scope: the
 sampling interval differs there and none of Section 6.2.2 may be carried across.
 
 
