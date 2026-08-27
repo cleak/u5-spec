@@ -36,6 +36,29 @@ row plus a one-line inline note in the affected section whenever an edit
 withdraws or inverts published text, including text published only in an issue
 answer.
 
+**Addendum — 2026-08-26, issue #150 and the #146 install-cost follow-up.**
+Issue #150's two orphan effects are both attributed and both reachable; neither
+was an unreachability finding. The descending two-tone pair is the **combat
+command refused as inapplicable** - twelve verbs, every kind of combat scene,
+text before sound, no cancellation, no turn cost - and the long descent has
+**two** triggers, drowning and whirlpool engagement, which are the only two
+users of that recipe in the shipped game (`audio.md` sections 8.8 and 8.9).
+Three further headlines. **No sweep ever reaches its nominal target**: the
+integer increment is computed once and the loop stops one step short, so the
+long descent ends at 272 Hz rather than 150 Hz and a second shipped recipe ends
+at 1005 Hz rather than 800 (`audio.md` section 5.2). **The per-tone install cost
+and the rumble's per-iteration cost are now published as derived quantities**
+(`timing.md` sections 7.4.1 and 7.4.2); the install cost is 17.4 inner units
+against the 12 the implementation side fitted, a 45 percent disagreement that
+only a cycle-accurate run can settle, and the rumble's cost is **linear in the
+step**, so the fitted 53 is right only for the one recipe it was fitted against.
+And **the refusal beep is a movement-rejection cue only**: a missed melee or
+weapon attack does not produce it (`audio.md` section 7.4). Failed *spell*
+attacks were not traced and remain the one gap that could change that answer for
+a subset of misses. One reversal was found while confirming where the real
+attack roll lives and is filed as `RETRACTIONS.md` R232: the to-hit comparison
+in `combat.md` section 11 runs the other way.
+
 **Addendum — 2026-08-26, calibrated-unit delay contexts and wall-clock anchor.**
 Issue #146 is answered by `systems/timing.md` sections 6 and 7 and
 `systems/audio.md` sections 4, 5.4, and 10. Four of the five questions are
@@ -54,8 +77,10 @@ collapse most of the band in `timing.md` section 7 in one shot. An audio capture
 would settle the envelope carrier outright. Two derived figures are worth
 checking in play because they are much longer than they sound: the 26.5-second
 Stonegate trapdoor sweep and a 6.9-second long glissando. Two audio effects were
-also found that `audio.md` section 8 does not attribute to a trigger; they are
-recorded in `audio.md` section 10.6 and each deserves its own small issue.
+also found that `audio.md` section 8 did not attribute to a trigger; they were
+recorded in `audio.md` section 10.6 and filed as issue #150. **Both are now
+attributed** - see the issue #150 addendum above - and section 10.6 now records
+what is left instead: seven further glissando recipes with no known trigger.
 
 **Addendum — 2026-08-25, PC-speaker effect contract.** Issue #145 is covered
 by `systems/audio.md`. The public contract now centralizes the procedural

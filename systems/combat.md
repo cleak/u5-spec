@@ -1385,9 +1385,20 @@ the ranged/projectile/effect path.
 The shared to-hit helper is used by ordinary melee and ranged/effect attacks
 unless a caller has forced the outcome. Certain special action/effect tile
 families are always-hit cases. Otherwise the helper resolves attacker and
-defender combat ratings, computes `(attacker - defender + 30) / 2`, and accepts
-the hit when that score beats a uniform random byte. This is the public hit-roll
-shape. One of the ratings the selector can return is not a stat-table byte at
+defender combat ratings, computes `(attacker - defender + 30) / 2`, and compares
+that score against a uniform random draw. **The hit is accepted when the drawn
+value is at or above the score**, so the score behaves as a difficulty number: a
+larger score means a *smaller* chance to hit. *An earlier revision said the
+opposite - that the hit is accepted when the score beats the draw - and that is
+withdrawn; see `RETRACTIONS.md`.* Two limits come with the correction and are
+stated rather than papered over. Because the polarity inverts how the score
+reads, the attacker/defender labelling of the two ratings feeding it is
+**suspect and was not re-derived**. And the draw's own range is unverified: two
+private analyses disagree about which random source the helper calls, and it was
+not re-located in the pass that found the comparison direction, so the earlier
+description of the draw as a byte is no longer load-bearing. **No hit percentage
+is published**, and any percentage computed under the old direction is upside
+down. This is the public hit-roll shape. One of the ratings the selector can return is not a stat-table byte at
 all but a per-actor *combat weight*: normally the actor's own speed seed, and
 the floor value one in three override cases — while the Negate Time tag is
 running and the actor is a monster, for one specific actor class, and for any

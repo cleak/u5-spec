@@ -326,11 +326,12 @@ implementer never has to guess which scale a named effect sits on.
 
 | Recipe | Route | Outer count | Entered |
 |---|---|---:|---|
-| Blocked step / blocked combat attack beep | Blocking-tone wrapper | 200 | Once |
-| Two-tone "not here" pair, each tone | Blocking-tone wrapper | 150 | Once per tone |
+| Blocked step, including the combat arena's refused step | Blocking-tone wrapper | 200 | Once |
+| Combat command refused as inapplicable, each tone | Blocking-tone wrapper | 150 | Once per tone |
 | Return-to-View strip 3 blip | Blocking-tone wrapper | 3 | Once per phase |
 | Action snap glissando | Glissando helper | 1 | Once per update, 40 updates |
 | Cast-failure glissando | Glissando helper | 1 | Once per update, 50 updates |
+| Long descent (drowning, whirlpool) | Glissando helper | 40 | Once per update, 195 updates |
 | Dungeon wall drip | Glissando helper | 1 | Once per update |
 | All other glissandi | Glissando helper | The recipe's per-update delay | Once per update |
 | Stonegate trapdoor descending sweep | Direct wait | 40 | Once per tone, 750 tones |
@@ -452,9 +453,14 @@ plus-or-minus-10-percent tolerance of section 7.1 unless stated otherwise.
 | Inner unit | Outer unit divided by 87, about 10.0 microseconds | Only needed in order to model the subdivisions |
 | Random-rumble wait, per step unit | About 60 microseconds | Stable integer at baseline, section 7.3 |
 | Software-envelope idle wait | Zero | The gate always fires at baseline |
-| One glissando update | `delay_unit x 0.88 ms` plus about 0.12 ms of retune and bookkeeping overhead | For `delay_unit = 1` this is a convenient **1.00 ms** |
-| Retuning the speaker to a new frequency | About 89 microseconds | Dominated by the divisor computation; already folded into the glissando figure |
-| Random-rumble per-iteration setup | About 130 microseconds | Jitter advance, divisor computation, divisor install, accumulator update |
+| One glissando update | `delay_unit x 0.88 ms` plus a per-tone install cost of about **0.17 ms** | For `delay_unit = 1` this is **1.05 ms**. See section 7.4.1 |
+| Per-tone install cost, sweep | About **0.173 ms**, that is **17.4 inner units**, band 16.3 to 18.5 | The whole cost of putting one tone on the speaker from inside a sweep loop. Section 7.4.1 |
+| Per-tone install cost, blocking-tone wrapper | About **0.187 ms**, that is **18.8 inner units** | Higher because that wrapper pays a stop and its own frame per tone. Section 7.4.1 |
+| One-time setup, per sweep invocation | About 0.18 ms | The generator's own frame plus the interpolation multiply and divide; roughly one extra update's worth |
+| Stopping a tone | About 0.014 ms, that is 1.4 inner units | It only clears the speaker gate; it never reprograms the timer |
+| Tone-start routine body alone | About 0.08 ms | Dominated by the divisor division. This is the part earlier revisions published as "retuning the speaker", about 89 microseconds; it is a component of the install cost, not the whole of it |
+| Random-rumble per-iteration fixed cost | About **0.125 ms**, that is 12.5 inner units | Jitter advance, pitch mapping, retune core, shift setup, bookkeeping, loop test. Section 7.4.2 |
+| Random-rumble per outer pass | About 0.0596 ms | Five inner units plus the per-outer-pass overhead; an iteration performs `step` of these, so the per-iteration cost is **linear in the step**. Section 7.4.2 |
 | Title-sequence (driver-local) unit | About 0.92 ms, roughly 4 percent slower than the resident unit | The driver's copy of the wait is marginally more expensive per pass |
 | Software-envelope iteration, audible | About 43.0 microseconds, band 40.4 to 48.2 | See `audio.md` section 5.4 |
 | Software-envelope iteration, muted | About 33.3 microseconds | About 23 percent faster than the audible arm; see `audio.md` section 3 |
@@ -469,6 +475,162 @@ publishes, near its low end, consistent with that section's own statement that
 the wait loop is the cheaper of the two loops. This is a cross-check between two
 derivations, not a measurement, and it **does not** change the normative 14 ms
 cadence decided in section 5.1. That cadence remains a deliberate modernisation.
+
+#### 7.4.1 The per-tone install cost
+
+> **Derived, approximate.** Installing one tone costs about **0.173 ms** -
+> **17.4 inner units**, band 16.3 to 18.5 - on top of whatever calibrated wait
+> the recipe then performs. Through the blocking-tone wrapper it is about
+> **0.187 ms** (**18.8 inner units**), because that wrapper additionally pays a
+> speaker stop and its own call frame on every tone.
+
+The point of publishing this as a first-class quantity is that a recipe should
+read as **per-tone install plus updates times interval**, rather than as a total
+an implementer has to back out:
+
+```text
+sweep = one_time_setup + updates x (delay x outer_unit + per_tone_install)
+tone  = hold x outer_unit + per_tone_install_blocking
+```
+
+Where the cost goes, per sweep update:
+
+| Component | Inner units |
+|---|---:|
+| Tone-start routine body, sound enabled | about 8.1 |
+| Caller-side argument setup, call, instruction-queue refill | 0.9 |
+| Delay-helper argument setup, call, refill | 1.6 |
+| **The delay helper's own entry, table lookup, exit and return** | **about 5.1** |
+| The sweep loop's own arithmetic and test | 1.7 |
+| **Total** | **about 17.4** |
+
+Three consequences are worth stating plainly.
+
+- **The install cost is the divide.** Starting a tone is dominated by the
+  32-by-16-bit division that computes the timer divisor. *Stopping* a tone is
+  cheap - about 1.4 inner units, call inclusive - because it only clears the
+  speaker gate and never reprograms the timer. The two sweep loops that were
+  priced call the stop once, after the loop, not per update; a loop that stopped
+  per tone would pay that 1.4 extra every tone.
+- **Every sweep also pays a one-time setup of about 0.18 ms** - its own frame
+  plus the interpolation multiply and divide - roughly one extra update's worth,
+  which no earlier published figure carried.
+- **The delay helper's own call frame is the term that gets missed.** At about
+  5.1 inner units it is larger than the loop arithmetic at 1.7, it is roughly
+  30 percent of the total, and it is invisible to any model that prices only the
+  code inside the loop body.
+
+**This figure disagrees with the value the implementation side currently uses,
+and the disagreement is published rather than smoothed over.** An implementation
+reported (issue #146 follow-up) a fitted per-tone constant of **12 inner
+units**. The derivation above gives **17.4**, so the fitted figure is **too low
+by about 45 percent** - about 5.4 inner units, or 0.054 ms, per tone. Two things
+about that gap matter:
+
+- **The derivation was not fitted to this repository's published totals.** It
+  was priced component by component from the shipped code and then independently
+  recounted. Neither is the 12 an independent measurement: it is this
+  repository's own earlier per-update overhead of 0.12 ms re-expressed, and that
+  overhead omitted the delay helper's call frame. Anyone who checked the 12
+  against our published totals was checking our arithmetic against itself.
+- **Almost no published cross-check can tell the two apart.** On the blocked-step
+  beep the install cost is 0.11 percent of the total; on the Stonegate descent,
+  0.48 percent per tone. Both agree with any per-tone constant between zero and
+  forty inner units, so reporting them as confirmation would be circular. The
+  only discriminating check in either document is the 40-update action snap,
+  where the install cost is about 16 percent of each update: **42.2 ms derived
+  against 40.0 ms fitted, against a published 40 ms.** That is a 5 percent
+  disagreement, comfortably inside the plus-or-minus-10-percent band of section
+  7.1 - which is exactly why it went unnoticed, and exactly why it needs a
+  cycle-accurate run rather than more desk work.
+
+**What moves if 17.4 replaces 12.** Only recipes whose update interval is one
+calibrated unit move materially, from 1.000 ms to 1.048 ms per update: the
+action snap 40 to 42 ms, the cast failure 50 to 52 ms, the 2500-to-800 sweep 301
+to 314 ms, the dungeon wall drip 20/12/4 to 21/12.6/4.2 ms. Five-unit-interval
+recipes shift by under 1 percent; the long descent, the Stonegate sweep and the
+blocking beeps are unchanged to within 0.5 percent. Every sweep additionally
+gains the one-time 0.18 ms setup term. All of those movements land inside the
+bands `audio.md` section 10 already publishes, so this is a refinement within a
+stated tolerance rather than a withdrawal - but the underlying per-tone figure
+is nonetheless 45 percent different, and an engine carrying the old one will
+drift on any recipe with a short update interval.
+
+**Mute.** The tone-start path returns early when sound is off, saving about
+0.046 ms of the install cost per tone. That is 0.13 percent of the long descent
+and about 4 percent of a one-unit-interval sweep, so **muting does not preserve
+duration exactly**: it shortens an effect in proportion to how little of that
+effect is spin. `audio.md` section 3 carries the same statement in audio terms.
+
+**A note on the constant behind the anchor.** The same pricing pass refined the
+calibrated wait's fixed per-outer-pass overhead from about 10.5 to about **9.8
+microseconds**, because the inner-count reload needs no address calculation.
+That puts one outer unit at **0.8757 ms**. The published anchor of 0.88 ms in
+section 7.1 is unchanged: the two agree to 0.5 percent, far inside its own band.
+Use 0.88 ms. The third digit is only needed when separating an install cost from
+a recipe total.
+
+**Tolerance.** Install costs carry about plus or minus 6 percent in clocks,
+driven by the data-dependence of the division instructions, the I/O wait-state
+count, and instruction-queue refill after calls. Expressed in inner units they
+carry between 6 and 8 percent, the wider figure applying when the inner-unit
+band enters as the denominator; the band quoted at the head of this subsection
+is the narrower one. Whole-recipe totals stay at the plus or minus 10 percent of section
+7.1, dominated by the calibration count; the install cost contributes materially
+to that band only when the update interval is one unit.
+
+#### 7.4.2 The rumble's per-iteration cost is linear in the step
+
+> **Derived, approximate.** One random-rumble iteration costs a fixed
+> **0.125 ms** - about 12.5 inner units - **plus `step` outer passes of about
+> 0.0596 ms each**, each pass being five inner units plus the per-outer-pass
+> overhead. It is **not** a constant.
+
+```text
+iterations    = ceil(target / step)
+per_iteration = 0.125 ms + step x 0.0596 ms
+duration      = iterations x per_iteration
+```
+
+The fixed part itemises as the jitter-state advance, the pitch mapping (a second
+division), the retune core, the shift setup, the spin bookkeeping and the loop
+test. Two independent recounts of it landed 2 percent apart, at 12.5 and 12.8
+inner units, which is inside the tolerance stated in section 7.4.1; 12.5 is the
+value used in the closed form.
+
+Derived durations, with nothing fitted to them:
+
+| Recipe | Step | Target | Iterations | Derived | `audio.md` 10.2 |
+|---|---:|---:|---:|---:|---:|
+| Trap or failed reagent mix | 40 | 3000 | 75 | 188 ms | 188 ms |
+| Ordinary damage presentation | 10 | 1600 | 160 | 115 ms | 115 ms |
+| Short sting, each half | 1 | 25 | 25 | 4.6 ms | 4.6 ms |
+
+**A single fitted per-iteration constant is wrong, and the way it is wrong is
+instructive.** Expressed in the shape an implementation is likely to hold it -
+"five inner units per outer pass, plus K per iteration" - the derived K is
+
+```text
+K(step) = 12.5 + 0.99 x step   inner units
+```
+
+so K is 52.1 at step 40, 22.4 at step 10 and 13.5 at step 1. An implementation
+reported a single fitted **K of 53** (issue #146 follow-up). That is right,
+within 2 percent, for the trap rumble - and only for the trap rumble, whose step
+happens to be 40. It is **2.4 times too high** for the damage rumble and **3.9
+times too high** for the short sting. The 53 is a composite of a genuinely
+per-iteration 12.5 and forty copies of a per-outer-pass 0.99: **the step count
+leaked into what was recorded as a constant.** Replace the constant with the
+linear form above.
+
+**Why the two fitted numbers looked like siblings, and why they are not.** The
+rumble's per-iteration fixed part and the per-tone install cost contain the same
+retune atom - one division plus two divisor writes. Around that shared atom,
+tone-start spends its remaining budget on a call frame and a flag test, while a
+rumble iteration spends rather more on a pseudo-random advance, a second
+division and spin setup. Two different routines, one shared atom, superficially
+comparable totals. They are not the same quantity in any sense, and neither is a
+constant of the kind a single fitted number can capture.
 
 ### 7.5 Why the anchor is robust across original hardware
 
@@ -535,6 +697,26 @@ pending answers and treats them as known gaps:
    50-unit publication waits and the 25-pitch burst are established for the EGA
    driver. The same wait shape exists in the other three drivers, but whether
    they use the same pitch count, subdivision, and thresholds is unverified.
+9. **The per-tone install cost of section 7.4.1 disagrees with the value the
+   implementation side is using**, 17.4 inner units against a fitted 12, and
+   nothing in this repository can settle the disagreement: only one published
+   cross-check discriminates between them, and it disagrees by 5 percent, which
+   is inside the band. A cycle-accurate run of the 40-update action snap would
+   settle it in minutes and has not been done. Until then, both figures are on
+   the record and the derived one is the published contract.
+10. **Only two per-tone loops were priced.** The four-phase swept envelope and
+    the shrine dispatch were not priced at all, and other call sites may wrap
+    the same primitives in more or less bookkeeping. Nothing in 7.4.1 should be
+    generalised to them.
+11. **Whether an implementation applies its per-tone constant to the
+    blocking-tone wrapper as well as to sweeps was not established.** If it
+    does, the right figure there is 18.8 inner units, not 17.4.
+12. **The timer's mode and access latch are assumed, not verified.** The game
+    never writes the mode port, so every divisor and carrier figure that depends
+    on it inherits the assumption that the inherited BIOS latch is the
+    conventional mode with low-then-high byte access (`audio.md` section 8.6.1
+    records the same assumption for the driver's own carrier).
+    If it were low-byte-only, several derivations collapse rather than shift.
 
 ## 8. Sources
 
