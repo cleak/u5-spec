@@ -316,7 +316,10 @@ across party and monster actors:
 - The shared to-hit helper accepts certain special action/effect tiles as
   always-hit cases; otherwise it computes a score from attacker and defender
   combat ratings, `(attacker - defender + 30) / 2`, and compares that score
-  with a uniform random byte.
+  with a uniform random draw. The direction of that comparison - the hit is
+  accepted when the draw is at or above the score, so a larger score is a
+  *worse* chance to hit - and the limits on it are owned by `systems/combat.md`
+  section 11.
 
 The traced weapon-dispatch range table is item-id keyed and independent of the
 `Attack max` damage ceiling. A range cap of zero means the ordinary

@@ -61,9 +61,20 @@ The practical contract is that Ctrl-S changes output, not command or animation
 cadence. A silent frontend may omit physical synthesis, but it must preserve
 the effect's blocking and state-advance behavior.
 
-One correction to that invariant. Blocking tones, glissandi, and random rumble
-are genuinely mute-invariant in duration: their mute checks gate only the
-tone-start work and never the calibrated wait. The **software envelope is not**.
+One correction to that invariant, and one precision qualifier on it. Blocking
+tones, glissandi, and random rumble keep their calibrated holds under mute:
+their mute checks gate only the tone-start work and never the calibrated wait,
+so muting never skips an effect and never shortens its blocking. What is not
+exactly true is "identical duration". The tone-start path returns early when
+sound is off, so each suppressed tone also skips about **0.046 ms** of divisor
+computation and speaker-gate work. Where the hold dominates, that is invisible -
+about three parts in ten thousand on the blocked-step beep, under 0.2 percent on
+the long descent of section 8.9. On a glissando whose per-update interval is one
+calibrated unit it is about **4 percent** of the whole effect, because there
+each update is mostly install and very little spin. The general rule is that
+muting shortens an effect in proportion to how little of it is spin
+(`timing.md` section 7.4.1), and the **software envelope is the far end of that
+scale**.
 Its silent arm is matched in structure and iteration count but not in cost per
 iteration; it omits the comparison and the speaker-control work and therefore
 runs about **23 percent faster** than the audible arm. Earlier revisions
@@ -90,7 +101,8 @@ not cadence" reading above; see `RETRACTIONS.md`.*
 For contrast, and verified in the same pass: the blocking-tone primitive that
 produces the blocked-step beep tests the same boolean but gates only the tone.
 Its calibrated wait and its final speaker stop run regardless, so blocked-step
-timing **is** mute-invariant.
+timing **is** mute-invariant to within a few parts in ten thousand - the
+0.046 ms of tone-start work it skips, against a 175 ms hold.
 
 ## 4. Timing units
 
@@ -135,7 +147,14 @@ speaker is enabled. A stop operation unconditionally disables it.
 
 A blocking tone is `(hold, frequency)`: begin the frequency, wait `hold` outer
 calibrated units, then stop. Muting omits the audible begin but retains the wait
-and stop, and does not change the duration.
+and the stop; it shortens the tone only by the skipped tone-start work, about
+0.046 ms (section 3).
+
+Each tone also pays a fixed **install cost** that sits outside its hold: about
+**0.19 ms** through this blocking wrapper, which pays for its own call frame and
+a speaker stop on every tone as well as for the divisor computation. One
+blocking tone therefore costs `hold x 0.88 ms + 0.19 ms`. `timing.md` section
+7.4.1 derives that figure and itemises it.
 
 The wait uses the single delay context of `timing.md` section 6.1, so the hold
 is `hold x 0.88 ms` to within the anchor's tolerance. Earlier revisions of this
@@ -153,8 +172,24 @@ signed integer increment
 
 with the fractional part discarded. It starts at `initial`, emits
 `ceil(span / delay)` tone updates, waits `delay` calibrated units after every
-update, and stops once at the end. The target is normally the interpolation
-endpoint rather than a played update.
+update, and stops once at the end. The target is the interpolation endpoint,
+not a played update.
+
+**In the shipped game it is never a played update, and the shortfall can be
+large.** The increment is computed once, before the loop, and the loop stops one
+increment short of the span, so the last frequency actually played is
+
+```text
+initial + increment x (updates - 1),   where updates = ceil(span / delay)
+```
+
+Where the division is exact, that costs exactly one step. Where it truncates,
+the lost fraction compounds over every update: the long descent of section 8.9
+asks for 660 Hz down to 150 Hz and realises 660 Hz down to **272 Hz**, losing
+more than ten semitones of the intended fall. An implementation **must** play
+the sequence the integer increment produces. It must not interpolate from
+`initial` to `target`, and it must not append the target as a final update. The
+recipe table below gives realised endpoints, not nominal ones.
 
 The common recipes are:
 
@@ -162,17 +197,39 @@ The common recipes are:
 |---|---:|---:|---|
 | Action snap | 40 | 1 | 40 updates: 1200, 1220, ... 1980 Hz, rising toward 2000 Hz. |
 | Cast failure | 50 | 1 | 50 updates: 800, 824, ... 1976 Hz, rising toward 2000 Hz. |
-| Dungeon wall drip, near to far | 20, 12, 4, or -4 | 1 | Starts at 3200 Hz and rises toward 3500 Hz. The four depth bands emit 20 updates in steps of 15 Hz, 12 in steps of 25 Hz, 4 in steps of 75 Hz, or no tone at all. |
+| Dungeon wall drip, near to far | 20, 12, 4, or -4 | 1 | Starts at 3200 Hz and rises toward 3500 Hz. The four depth bands emit 20 updates in steps of 15 Hz, 12 in steps of 25 Hz, 4 in steps of 75 Hz, or no tone at all. Realised tops **3485**, **3475** and **3425 Hz**; 3500 Hz is never emitted (`dungeon-mode.md` section 6.8). |
+| Long descent | 7800 | 40 | 195 updates: 660, 658, ... **272 Hz**, against a nominal target of 150 Hz. The exact increment would be -2.615 Hz and the truncated one is -2 Hz, so the realised fall is about 15.4 semitones rather than the 25.7 the endpoints imply. Section 8.9 owns its two triggers. |
+| Unattributed 2500-to-800 recipe | 300 | 1 | 300 updates: 2500, 2495, ... **1005 Hz**. Truncation from -5.67 to -5 leaves a 205 Hz shortfall. Fully characterised, but its triggering event is not attributed - section 10.6. |
 
 A negative span produces no tone update and only performs the final stop. No
 confirmed caller supplies zero.
 
+Two further recipes are named in section 6.1 - the 20-update 1300-to-350 Hz
+impact fall and the 400-to-750 Hz projectile rise, whose frequency pair the
+30-update weapon-swing cue of section 7.4 shares.
+Their span and per-update delay were not established, so their realised
+endpoints are not published; under the rule above they stop strictly above
+350 Hz and strictly below 750 Hz respectively, and must not be implemented as
+reaching those values.
+
 **In real time.** The per-update wait is `delay` outer units in the single delay
-context, and each update also pays about 0.12 ms of retune and loop bookkeeping.
-One update therefore costs `delay x 0.88 ms + 0.12 ms`, which for the common
-`delay = 1` recipes is a convenient **1.00 ms**. The three recipes above run
-about **40 ms**, **50 ms**, and **20 / 12 / 4 / 0 ms** respectively. Section 10
+context, and each update also pays a per-tone **install cost** of about
+**0.17 ms** - the divisor computation, the tone-start call, the delay helper's
+own call frame, and the loop's own arithmetic (`timing.md` section 7.4.1). One
+update therefore costs `delay x 0.88 ms + 0.17 ms`, which for the common
+`delay = 1` recipes is **1.05 ms**. Each invocation additionally pays a one-time
+setup of about 0.18 ms, roughly one extra update's worth, which the totals here
+exclude. The five recipes above run about **42 ms**, **52 ms**,
+**21 / 12.6 / 4.2 / 0 ms**, **6.86 s**, and **314 ms** respectively. Section 10
 collects these with their tolerance.
+
+*These supersede an earlier per-update overhead of 0.12 ms, and the 1.00 ms
+per-update figure derived from it. That overhead omitted the delay helper's own
+call frame, which is about 30 percent of the true per-tone cost. Both the old
+and the new totals sit inside the plus-or-minus-10-percent band section 10
+publishes for them, so this is a refinement within a stated tolerance rather
+than a withdrawal; `timing.md` section 7.4.1 states the size and direction of
+the change, and what it disagrees with.*
 
 ### 5.3 Random rumble
 
@@ -195,14 +252,19 @@ randomness and preserves the frequency range, iteration count, and timing.
 The `floor(boot_calibration / 16)` subdivision is a fixed scale, not a second
 delay context (`timing.md` section 6.2), and the division truncates. On
 reference-class hardware it evaluates to exactly **5** inner units across the
-whole plausible calibration band (`timing.md` section 7.3), so one step unit
-costs about **60 microseconds** and one iteration also pays about 130
-microseconds of jitter, divisor, and accumulator work.
+whole plausible calibration band (`timing.md` section 7.3), so one outer pass of
+one step unit costs about **59.6 microseconds** and one iteration also pays
+about **0.125 ms** of jitter, pitch mapping, divisor, and accumulator work.
+`timing.md` section 7.4.2 derives and itemises both, and makes the point that
+matters for anyone holding a single per-iteration constant: **the per-iteration
+cost is linear in the step**, because each of the `step` outer passes carries
+its own overhead. A constant fitted against one recipe is wrong for every other
+step size.
 
 **In real time** the total is therefore, to within the anchor's tolerance:
 
 ```text
-duration = target x 60.5 microseconds + iterations x 130 microseconds
+duration = target x 59.6 microseconds + iterations x 125 microseconds
 ```
 
 Note that this depends on `target` and only weakly on `step`, because the number
@@ -740,7 +802,7 @@ blocked-step recipe - a blocking 165 Hz tone held for 200 calibrated units:
 |---|:-:|---|
 | Overworld | 1 | Prints `Blocked!`, beeps, flushes keyboard type-ahead - subject to the three exceptions below. |
 | Town | 1 | Prints `Blocked!`, beeps, flushes type-ahead. Two refusal arms (object occupancy, tile-class refusal) share one tail. |
-| Combat | 2 | The step-or-attack refusal, and the out-of-arena exit refusal that prints `All must use the same exit!`. Both beep. |
+| Combat | 2 | A refused **step** inside the arena, and the out-of-arena exit refusal that prints `All must use the same exit!`. Both beep. Neither is an attack result - see the block below. |
 | Dungeon | 0 | **Silent.** No sound call on either refusal arm. |
 
 Ctrl-S suppresses the tone but not the 200-unit hold. Two hundred outer units
@@ -752,6 +814,34 @@ correctly from it.
 Successful top-down movement has no corresponding footstep sound. The beep is a
 rejection cue and must not be attached to ordinary movement.
 
+**"Combat" in that table means movement, not attacking.** Both combat sites sit
+in the *move* arm of the shared step-or-act handler that arena movement uses;
+the dungeon's own refusal arms are elsewhere and are silent, as the table says. The beep answers "you cannot move there". It is never the answer to
+"your attack failed", and the phrase "step-or-attack refusal" that earlier
+revisions used here should not be read as "the attack failed, so beep".
+
+- **A missed melee or weapon attack produces no beep.** The attack-application
+  path plays its own rising sweep - 400 Hz toward 750 Hz, 30 updates, roughly
+  130 ms, the same frequency pair as the projectile branch named in section 6.1,
+  though the two were not proved to be one recipe - *unconditionally,
+  before the to-hit roll*, and only then branches. The hit arm runs damage,
+  narration and effect. The miss arm prints `Failed!` or `<name> missed!`
+  through the ordinary string printer and returns, and there is **no audio call
+  anywhere on it**. The other in-combat roll site returns silently on a miss,
+  with no narration at all.
+- **A miss is therefore not silent overall, but it adds nothing.** The swing has
+  already been heard, and it sounds identical on a hit. The audible difference
+  between a hit and a miss is the printed line plus whatever the hit arm's
+  effect plays - never the swing cue, and never a refusal tone.
+- **Why the two never meet.** The `A` verb reaches the arena attack helper
+  directly (`combat.md` section 8), while the direction keys reach the
+  step-or-act handler. The cell query gating that handler's move arm is a
+  read-only occupancy predicate that rejects any cell holding a live actor, so
+  if attacking ran through the move arm then attacking an adjacent monster would
+  always print `Blocked!`. It does not. When a direction step is answered by an
+  attack instead, the attack arm is entered before the move arm's rejection
+  test, so the attack's own outcome never reaches the beep.
+
 **Complete census of the blocking-tone primitive.** The primitive takes a
 frequency and a hold in outer calibrated units. Every user in the shipped game:
 
@@ -761,7 +851,7 @@ frequency and a hold in outer calibrated units. Every user in the shipped game:
 | Town blocked step | 165 Hz, 200 units |
 | Combat step-or-attack refused | 165 Hz, 200 units |
 | Combat exit refused, `All must use the same exit!` | 165 Hz, 200 units |
-| An unidentified combat refusal, two-tone pair | 220 Hz for 150 units, then 150 Hz for 150 units |
+| Combat command refused as inapplicable, two-tone pair (section 8.8) | 220 Hz for 150 units, then 150 Hz for 150 units |
 | A Return-to-View presentation strip | 2000 Hz, 3 units |
 | The ambient shrine/flame tick | 3000 Hz, 3 units |
 
@@ -779,7 +869,10 @@ transport:
    rumble `(100, 2000, 300)` and then apply ship damage. **No 165 Hz beep occurs
    on any under-sail path.**
 2. **Aboard a vehicle, when the blocking object is of the whirlpool class**, the
-   step returns completely silently, with no message at all.
+   step returns completely silently, with no message at all. That is the refused
+   *step into* the whirlpool cell. The whirlpool's own engagement is a different
+   event, triggered by orthogonal adjacency rather than by a step, and it is
+   emphatically not silent (section 8.9).
 3. Otherwise the path prints `Blocked!` and then splits:
    - if the destination tile is a particular animated-terrain tile, it prints
      `OUCH!` and applies random party damage **instead of beeping**. That helper
@@ -818,21 +911,25 @@ matters:
 
 **Unresolved in this section:**
 
-- **Does a missed attack beep, or only a blocked step?** The combat beep fires
-  when a destination-cell query returns zero, and two private analyses of that
-  query directly contradict each other - one calls it the to-hit roll, the other
-  a read-only cell-occupancy predicate with inverted polarity. This was **not
-  adjudicated**. Until it is, the contract says "a refused combat
-  step-or-attack" and **must not** assert whether a whiffed attack roll is
-  included.
+- **A missed attack does not beep**, and the contradiction that used to block
+  this question is adjudicated: the query gating the two combat sites is the
+  read-only cell-occupancy predicate, not the to-hit roll. It is deterministic,
+  writes nothing, and reads non-zero for "this mover may occupy this cell",
+  a polarity corroborated by every one of its callers. See the block above.
+  **Failed spell attacks remain unresolved.** A second roll site inside the
+  spell-effect path stores its result and passes it onward as an argument rather
+  than branching locally, and that downstream path was not followed. Nothing
+  published here says whether a failed spell attack makes a sound; only the
+  melee and weapon miss arm was read to its return. This is the one gap that
+  could still change the answer for a subset of misses.
 - **Dungeon rumble parity was not simulated.** The mechanism above is
   established; which specific blocked steps land on the emitting phase is not,
   because the parity across all redraw and tick entry points was not enumerated.
   What *is* established is that the rejection branch itself makes no sound call.
-- **The two-tone 220/150 Hz combat refusal pair is still unidentified.** It is a
-  refusal-shaped sound in the same subsystem as the combat blocked beep, it is
-  **not** the blocked-step recipe, and its game event is unknown (section 10.6).
-  Do not conflate it with the blocked step.
+- **The two-tone 220/150 Hz pair is no longer unidentified**, so it is no longer
+  an open question here: it is the combat command refused as inapplicable,
+  section 8.8. It is still **not** the blocked-step recipe, and must not be
+  conflated with it.
 - **The two three-unit blips in the census.** Section 8.6 attributes both a
   3000 Hz and a 2000 Hz three-unit blip to Return-to-View strip 3, while the
   census above labels one of them an ambient shrine/flame tick. Whether these
@@ -1288,6 +1385,107 @@ These are ending presentation effects. They do not create a reusable
 resurrection-service sound contract and do not make the cinematic roster
 changes durable.
 
+### 8.8 Combat command refused as inapplicable
+
+The descending two-tone pair in the section 7.4 census is this event, and this
+event is the only thing that produces it. It is not a blocked step, and it is
+not an attack result. `combat.md` section 8 owns the command table; this row
+owns the sound.
+
+| Trigger | Mode scope | Sound, and where it sits in the sequence | Suppression | Cancellation boundary | Turn cost |
+|---|---|---|---|---|---|
+| At a party member's combat command prompt, the player presses one of twelve verbs the combat scene does not implement: `B` Board, `E` Enter, `F` Fire, `H` Hole up, `I` Ignite, `L` Look, `M` Mix, `N` New order, `Q` Quit, `T` Talk, `V` View, `X` X-it. | Combat scenes only, and **all** of them - overworld-triggered, town-triggered and dungeon-room combat alike. The responder has exactly one caller in the whole program, so there is no non-combat path to this sound. | The verb label and its message tail print first and the line is completed; **then** 220 Hz for 150 calibrated units, then 150 Hz for 150 units. The speaker is de-gated between the two tones and re-gated under a millisecond later, so it is two discrete pitches with a brief hard break, not a glide. It ends in hard silence. Text always completes before the sound starts. | The global sound toggle, tones only. Both holds still run, so a muted refusal is a silent stretch of about 263 ms of dead time. A frontend that skips the whole effect when muted diverges from the original. | **None.** No key poll, no timer reference and no early exit anywhere in the chain. Keys pressed during the sound are buffered - the keyboard read on this path is a non-destructive peek and nothing flushes the buffer - and are consumed by the re-prompt that immediately follows. | **None.** The same combatant is re-prompted and the committed-action bookkeeping is skipped, so the refusal does not spend the actor's turn. |
+
+Three details a frontend will otherwise get wrong:
+
+- **The message tail varies; the sound does not.** The tail is `" what?"` for
+  Board and X-it, `"-Not here"` for the nine middle verbs, and
+  `"-Funny, no response!"` for Talk (`combat.md` section 8 gives the exact
+  strings). All three arms, and the out-of-range fall-through, play the
+  identical two-tone pair. One sound, one event class, twelve keys.
+- **Do not generalise to the neighbouring keys.** `D` and `W` print their own
+  short `What?` line with **no sound**, and any unrecognised key prints a bare
+  `What?` with no sound. That silence is real behaviour, not an omission here.
+- **The interval is 6.63 semitones descending**, realised 220.0 Hz then
+  150.0 Hz. Each tone is about 132 ms, so the whole effect is about **263 ms**,
+  band 237 to 289 ms (section 10.1).
+
+**Confidence.** High on the trigger, the mode scope, the twelve-key set, the
+message text, the text-before-sound ordering, the single call site, the absence
+of any cancellation path, and the absence of a turn cost. **Medium** on the
+absolute duration, which is the static model of section 10 and not a
+measurement. This one is cheap to settle in play: start any combat and press
+`L`.
+
+**Unresolved.** The set of states in which the combat command prompt never
+appears at all, so that no refusal is possible that turn, is partly inherited
+from earlier analysis rather than re-derived in this pass. The twelve-key set
+was established for one shipped build and was not checked against other versions
+or localisations. Nothing here was verified at run time.
+
+### 8.9 The sea takes the party: drowning and the whirlpool
+
+Two overworld events share one sound. They are separate triggers with different
+sequences, and both hand identical parameters to the same glissando recipe.
+Those two sites are the only users of that recipe in the shipped game.
+
+| Trigger | Mode scope | Sound, and where it sits in the sequence | Suppression | Cancellation boundary | Turn cost |
+|---|---|---|---|---|---|
+| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the death that follows is scripted: the loop alternates the damage presentation, which plays its own rumble on every pass, with unavoidable damage to every living member, and exits only on a total party wipe. It has no input branch of its own. | Not applicable; the party is dying. |
+| **Whirlpool.** The party, **in any vehicle**, moves orthogonally adjacent to a whirlpool active object. Diagonal adjacency does not trigger it. | Overworld. | The whirlpool object is cleared, `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool sprite**, and the viewport repaints, so the player watches a whirlpool standing where the party was - **then** the long descent - then the sprite is restored, the shared impact payload runs, and the party is teleported to fixed Underworld coordinates (`overworld.md` section 8). | The global sound toggle, tones only; see the shared recipe below. | **None** during the sound. The state commit - the teleport - happens strictly after it. For about seven seconds the player has a non-interactive cinematic beat. | Owned by `overworld.md`; the sound itself adds none. |
+
+**The shared recipe: the long descent.** Both rows play one glissando,
+span 7800, per-update delay 40, initial 660 Hz, nominal target 150 Hz, 195
+updates, about **6.86 s** with a band of 6.2 to 7.6 s. It is by a wide margin
+the longest sound in the game: every other glissando in the shipped build has a
+span of 300 units or less, so 264 ms or less, which makes this one roughly
+twenty-six times the next longest.
+
+**It does not reach 150 Hz.** Under the truncation contract of section 5.2 the
+increment is -2 Hz rather than the -2.615 the endpoints imply, so the last tone
+played is **272 Hz** and the heard fall is about 15.4 semitones rather than
+25.7. Realised endpoints are 660.3 Hz and 272.0 Hz. A frontend that interpolates
+660 Hz to 150 Hz plays an effect more than ten semitones deeper than the
+original.
+
+**Suppression.** The toggle suppresses the tones only. Every calibrated wait
+still runs, so muting turns this into a silent seven-second freeze rather than
+skipping the beat. Muting is marginally *faster* here - under 0.2 percent,
+because the skipped tone-start work is a negligible fraction of a 35 ms update -
+and that difference is not worth modelling for this recipe (section 3).
+
+**On foot there is no long descent.** Both the whirlpool's plane change and this
+sound require a vehicle. What the on-foot arm does instead is owned by
+`overworld.md` section 8, which has it reach the shared impact payload; this
+document claims only that the long descent does not play, and makes no claim
+about what that payload sounds like.
+
+**Where whirlpools come from.** They are spawned dynamically on surface water
+rather than read from map data, at one chance in eight behind a restricted
+terrain gate that passes roughly a quarter of candidates - net about three
+percent of each candidate water cell that reaches the spawn picker
+(`encounters.md`). How often a cell reaches the picker per turn was not derived,
+so no per-turn rate is published here. An earlier private note that called this
+object a "wisp" and placed it on mountain terrain was wrong on both counts; no
+published text in this repository carried that reading.
+
+**Confidence.** High on both triggers, on the exclusivity of the two sites, on
+both orderings, on the truncation contract, and on the absence of any
+cancellation path. **Medium** on the absolute duration, which is the static
+model of section 10. The claim that the drowning death loop *as a whole* is
+input-free is also **medium**: its exit condition and the absence of an explicit
+input branch are established, but one routine it calls on each pass was not read
+to its end.
+
+**Unresolved.** Type-ahead across the sweep: neither site flushes the keyboard
+buffer around it, so keys pressed during those seven seconds should survive into
+the next command read - but that is established only by absence within the two
+paths themselves, and whether the mode loop or an interrupt handler drains the
+buffer elsewhere was not determined. Treat it as an open question, not a
+contract. The equivalent question for section 8.8 **is** settled. Nothing in
+either row was verified at run time; sailing into a whirlpool would settle the
+whole of this section in one sitting.
+
 ## 9. Explicit silence boundaries
 
 The following actions have no universal acknowledgement sound in the analyzed
@@ -1304,9 +1502,13 @@ baseline:
 - **the autonomous wind drift**, on every path (section 7.3);
 - **a passed direction prompt**, in Blink and in Vanish alike (section 8.3.2);
 - the combat `Stay with ship!` refusal, and the overworld dock and
-  whirlpool-class refusals (section 7.4); and
+  whirlpool-class refusals (section 7.4);
 - both look/peer helpers, and a `Not here!` refusal of the View or Summon
-  Daemon scroll (section 6.1).
+  Daemon scroll (section 6.1);
+- **a missed melee or weapon attack**, which adds no sound of its own to the
+  swing cue that has already played (section 7.4); and
+- **whirlpool engagement while the party is on foot**, which plays no long
+  descent (section 8.9).
 
 Specific handlers can still produce a listed effect after one of these actions.
 For example, blocked top-down movement beeps, a dungeon redraw can land a wall
@@ -1339,8 +1541,9 @@ One outer unit is about 0.88 ms.
 
 | Effect | Outer units | Duration | Band |
 |---|---:|---:|---|
-| Blocked step / blocked combat attack beep, 165 Hz (section 7.4) | 200 | **176 ms** | 166 to 183 ms |
-| Two-tone "not here" pair, each of its two tones | 150 each | **132 ms each** | 125 to 138 ms |
+| Blocked step, including the combat arena's refused step, 165 Hz (section 7.4) | 200 | **176 ms** | 166 to 183 ms |
+| Combat command refused as inapplicable, each of its two tones (section 8.8) | 150 each | **132 ms each** | 125 to 138 ms |
+| Combat command refused as inapplicable, whole effect (section 8.8) | 300 | **263 ms** | 237 to 289 ms |
 | Two-tone sting inter-part silent gap (section 5.3) | 20 | **17.6 ms** | 16.6 to 18.3 ms |
 | Return-to-View strip 3 blip, each phase (section 8.6) | 3 | **2.6 ms** | 2.5 to 2.8 ms |
 | Projectile flight animation, per step | 40 | **35.3 ms** | 33 to 37 ms |
@@ -1355,25 +1558,32 @@ The driver-local unit is about 0.92 ms rather than 0.88 ms; `timing.md` section
 
 ### 10.2 Glissandi and rumbles
 
-A glissando update costs `delay x 0.88 ms + 0.12 ms`.
+A glissando update costs `delay x 0.88 ms + 0.17 ms`, of which the 0.17 ms is
+the per-tone install cost of `timing.md` section 7.4.1. Each invocation pays a
+further one-time setup of about 0.18 ms, which the totals below exclude.
 
 | Recipe | Updates | Per update | Total |
 |---|---:|---:|---:|
-| Action snap, span 40, delay 1 | 40 | 1.00 ms | **40 ms** (36 to 44 ms) |
-| Cast failure, span 50, delay 1 | 50 | 1.00 ms | **50 ms** (45 to 55 ms) |
-| Dungeon wall drip, spans 20 / 12 / 4 / -4, delay 1 | 20 / 12 / 4 / 0 | 1.00 ms | **20 / 12 / 4 / 0 ms** |
+| Action snap, span 40, delay 1 | 40 | 1.05 ms | **42 ms** (38 to 46 ms) |
+| Cast failure, span 50, delay 1 | 50 | 1.05 ms | **52 ms** (47 to 58 ms) |
+| Dungeon wall drip, spans 20 / 12 / 4 / -4, delay 1 | 20 / 12 / 4 / 0 | 1.05 ms | **21 / 12.6 / 4.2 / 0 ms** |
+| Long descent, span 7800, delay 40 (section 8.9) | 195 | 35.2 ms | **6.86 s** (6.2 to 7.6 s) |
+| Unattributed 2500-to-800 recipe, span 300, delay 1 (section 10.6) | 300 | 1.05 ms | **314 ms** (283 to 345 ms) |
 
-A rumble costs about `target x 60.5 microseconds + iterations x 130
-microseconds`.
+A rumble costs about `target x 59.6 microseconds + iterations x 125
+microseconds`. The per-target term is the `step` outer passes each iteration
+spins; the per-iteration term is its fixed cost. Both are derived and itemised
+in `timing.md` section 7.4.2, which also warns against collapsing them into one
+per-iteration constant.
 
 | Recipe | Iterations | Total |
 |---|---:|---:|
-| Trap or failed reagent mix, step 40, target 3000 | 75 | **190 ms** (180 to 200 ms) |
-| Ordinary damage presentation, step 10, target 1600 | 160 | **118 ms** (112 to 124 ms) |
-| Shared potion/wind lead, variant 0, step 800, target 8000 | 10 | **485 ms** (455 to 515 ms) |
-| Shared potion/wind lead, variant `v` | 10 + 2`v` | **485 ms plus about 97 ms per variant step** |
-| Two-tone sting, each half (step 1, target 25) | 25 | **about 4.8 ms** |
-| Two-tone sting, whole effect | 25 + 25 | **about 9.5 ms**, plus the 17.6 ms gap between the halves, so about **27 ms** end to end |
+| Trap or failed reagent mix, step 40, target 3000 | 75 | **188 ms** (179 to 198 ms) |
+| Ordinary damage presentation, step 10, target 1600 | 160 | **115 ms** (110 to 121 ms) |
+| Shared potion/wind lead, variant 0, step 800, target 8000 | 10 | **478 ms** (450 to 506 ms) |
+| Shared potion/wind lead, variant `v` | 10 + 2`v` | **478 ms plus about 96 ms per variant step** |
+| Two-tone sting, each half (step 1, target 25) | 25 | **about 4.6 ms** |
+| Two-tone sting, whole effect | 25 + 25 | **about 9.2 ms**, plus the 17.6 ms gap between the halves, so about **27 ms** end to end |
 | Return-to-View strip 2, step 20, target 60 | 3 | **about 4.0 ms** |
 
 The trap rumble's band is narrower than its inputs suggest. Its inner count
@@ -1412,15 +1622,15 @@ unresolved:
 
 | Variant | Lead rumble | Both envelopes | Audio-timed total, audible | Audio-timed total, muted |
 |---:|---:|---:|---:|---:|
-| 0 | 485 ms | 860 ms | **about 1.35 s** (1.26 to 1.48 s) | about 1.15 s |
-| 1 | 582 ms | 1.20 s | about 1.79 s | about 1.51 s |
-| 2 | 679 ms | 1.55 s | about 2.23 s | about 1.88 s |
-| 3 | 776 ms | 1.89 s | about 2.67 s | about 2.24 s |
-| 4 | 873 ms | 2.24 s | about 3.11 s | about 2.61 s |
-| 5 | 970 ms | 2.58 s | about 3.55 s | about 2.97 s |
-| 6 | 1.07 s | 2.92 s | about 3.99 s | about 3.33 s |
-| 7 | 1.16 s | 3.27 s | about 4.43 s | about 3.70 s |
-| 8 | 1.26 s | 3.61 s | about 4.87 s | about 4.06 s |
+| 0 | 478 ms | 860 ms | **about 1.34 s** (1.25 to 1.47 s) | about 1.14 s |
+| 1 | 574 ms | 1.20 s | about 1.78 s | about 1.51 s |
+| 2 | 669 ms | 1.55 s | about 2.22 s | about 1.87 s |
+| 3 | 765 ms | 1.89 s | about 2.66 s | about 2.23 s |
+| 4 | 861 ms | 2.24 s | about 3.10 s | about 2.59 s |
+| 5 | 956 ms | 2.58 s | about 3.54 s | about 2.95 s |
+| 6 | 1.05 s | 2.92 s | about 3.98 s | about 3.32 s |
+| 7 | 1.15 s | 3.27 s | about 4.42 s | about 3.68 s |
+| 8 | 1.24 s | 3.61 s | about 4.86 s | about 4.04 s |
 
 The muted column is a real, mute-state-dependent difference in scene length, not
 a rounding artifact: it follows from the uncompensated silent arm described in
@@ -1445,26 +1655,40 @@ the two figures most worth an emulator run:
 - **The Stonegate trapdoor descending sweep runs about 26.5 seconds.** It plays
   750 discrete tones, every integer frequency from 1000 Hz down through 251 Hz,
   holding each for 40 outer units including the retune.
-- **A long glissando present in the shipped game — 660 Hz falling toward 150 Hz,
-  span 7800, per-update delay 40 — runs about 6.9 seconds** across 195 updates.
+- **The long descent runs about 6.86 seconds** across 195 updates: 660 Hz
+  falling toward a nominal 150 Hz, span 7800, per-update delay 40, realised
+  endpoint **272 Hz** rather than 150 Hz (section 5.2). It is no longer
+  unattributed - drowning and whirlpool engagement, section 8.9 - and it is
+  roughly twenty-six times longer than the next longest glissando in the game.
+  Sailing into a whirlpool settles it in one sitting.
 
 If an implementation finds either implausible in play, re-check the anchor
 rather than the counts.
 
-### 10.6 Gaps in the trigger inventory found while deriving these figures
+### 10.6 The two trigger gaps found while deriving these figures, and what is left
 
-Two effects exist in the shipped game that section 8 does not account for. They
-are recorded here so they are not silently lost, and both need their own
-investigation rather than a timing answer:
+**Both gaps this section originally recorded are now closed.** They are kept
+here as pointers rather than deleted, because an implementation may have been
+told to leave them unimplemented:
 
-- **An uninventoried two-tone pair**: 220 Hz then 150 Hz, 150 outer units each,
-  so two 132 ms tones. Reached through a three-way selection. Its game event was
-  not identified.
-- **The long glissando of section 10.5** is likewise not attached to a named
-  trigger in section 8.
+- The **uninventoried two-tone pair** - 220 Hz then 150 Hz, 150 outer units each
+  - is the combat command refused as inapplicable, **section 8.8**. Twelve verbs
+  reach it, through the three-way tail selection, in every kind of combat scene.
+- The **long glissando of section 10.5** is the long descent, and it has two
+  triggers, both overworld and both the sea taking the party: drowning and
+  whirlpool engagement, **section 8.9**. Exactly two sites in the shipped game
+  use that recipe. The endgame, Blackthorn and shrine-restoration sequences -
+  all three previously suspected - contain no call to it at any parameter shape.
 
-Neither should be implemented until its trigger is established; an effect with
-no known trigger cannot be placed correctly.
+Both should now be implemented at those triggers.
+
+**What is still unattributed.** The glissando generator has many more call sites
+than section 8 accounts for: the remaining twenty-nine carry seven further
+recipes whose triggering events were not attributed in this pass. One of them is
+the 2500-to-800 Hz, 300-update recipe of sections 5.2 and 10.2, which is
+otherwise fully characterised down to its realised endpoint. An effect with no
+known trigger still cannot be placed correctly, so those seven should not be
+implemented until their triggers are established.
 
 ## 11. Caller scope index
 
@@ -1476,7 +1700,9 @@ listed in `RETRACTIONS.md`.
 
 | Cue | Produced by | Explicitly **not** produced by |
 |---|---|---|
-| Blocked-step beep, 165 Hz for 200 units | Exactly four sites: one overworld, one town, two combat (step-or-attack refused; out-of-arena exit refused). See section 7.4. | The dungeon, on either refusal arm. Any under-sail refusal. A whirlpool-class refusal aboard a vehicle. The overworld `OUCH!` branch, which rumbles instead. Successful movement in any mode. |
+| Blocked-step beep, 165 Hz for 200 units | Exactly four sites: one overworld, one town, two combat (a refused arena step; out-of-arena exit refused). See section 7.4. | The dungeon, on either refusal arm. Any under-sail refusal. A whirlpool-class refusal aboard a vehicle. The overworld `OUCH!` branch, which rumbles instead. Successful movement in any mode. **A missed melee or weapon attack**, which reaches no beep site at all. |
+| Combat command refused as inapplicable, 220 Hz then 150 Hz | The combat command prompt only, on twelve unimplemented verbs, in every kind of combat scene: one caller in the whole program. See section 8.8. | Any non-combat mode. A refused arena step, which plays the 165 Hz beep instead. A missed attack. The `D` and `W` stubs and any unrecognised key, all of which print `What?` silently. |
+| Long descent, 195 updates from 660 Hz, realised endpoint 272 Hz | Exactly two sites, both overworld: drowning after a frigate is lost with no skiff and no carpet, and whirlpool engagement in any vehicle. See section 8.9. | The endgame, Blackthorn and shrine-restoration sequences, none of which calls this recipe at any parameter shape. Whirlpool engagement on foot. |
 | Action snap, 40 updates 1200 toward 2000 Hz | The stolen-action warning; the Ready-path ring destruction; the combat-entry ring destruction; the Jimmy key break; the borrowed fixed object; a matching Vanish tile; the accepted combat exit (`Escape!`); per-victim combat damage or kill narration. Eight further sites share the recipe; it is the generic action snap, not a ring-specific sound. | Ordinary pickup, crop pickup, or a successful Jimmy. |
 | Shared variant sequence (section 6) | 41 of the 48 spell ids, at variant = circle; all 8 scrolls, at variant = scroll index; all 8 potions, at variant = bottle index. | The seven spell ids of section 6.1's second table - the three combat effect-template spells and the four mass-target spells - on any path. The combat arm of the four field spells. |
 | Summon tile flash | The monster summon and the player Summon spell, identically: one invocation of the shared single-cell converge on the flash tile. See section 8.3.1. | The shared full-viewport XOR flash, which neither summon path invokes. |
@@ -1486,11 +1712,13 @@ listed in `RETRACTIONS.md`.
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |
 
-Two scope questions in this table are **open** rather than answered, and are
-flagged at their own sections rather than resolved here: whether a *missed
-combat attack* also produces the blocked-step beep (section 7.4), and whether the
-ambient shrine/flame tick can sound during an arbitrary keyboard prompt
-(section 8.3.2).
+One scope question in this table is **open** rather than answered, and is
+flagged at its own section rather than resolved here: whether the ambient
+shrine/flame tick can sound during an arbitrary keyboard prompt (section 8.3.2).
+The other question this paragraph used to carry - whether a *missed combat
+attack* also produces the blocked-step beep - is now answered for melee and
+weapon attacks: **it does not** (section 7.4). Failed *spell* attacks were not
+traced and remain an open gap there.
 
 ## 12. Sources and confidence
 
@@ -1537,6 +1765,26 @@ cover absolute-address encodings only. The three non-EGA display drivers were
 never opened, so nothing in sections 8.3.1 or 8.6.1 may be generalised beyond an
 EGA install. No evidence of any of those uncovered mechanisms was found. Their
 absence was **not** proved.
+
+**The material added in sections 5.2, 7.4, 8.8, 8.9, 10.1, 10.2, 10.5, 10.6 and
+11 in the issue-#150 pass** was derived from private analysis of the combat
+command dispatcher, the overworld vehicle-loss and active-object engagement
+paths, and the shared tone, sweep and delay primitives, under
+`u5-decomp/functions/`. Its exact parts are the twelve-key refusal set and its
+three message tails, the two event orderings in section 8.9, the truncation rule
+of section 5.2 and the realised endpoints it produces, the exclusivity of the
+two long-descent sites, and the absence of any audio call on the melee and
+weapon miss arm. Its approximate parts are every duration, inheriting the band
+of section 10. The split is deliberate: **high confidence on structure, medium
+on absolute duration.** The censuses behind "exactly one site" and "exactly two
+sites" are direct-call sweeps supported, for these effects, by an exhaustive
+literal-pattern scan over every shipped file; neither method can see an indirect
+call through a register or memory operand, a dispatch through a runtime-built
+pointer table, self-modified code, a tail-jump into a primitive, or entry
+through the module loader by a computed index. No evidence of any of those was
+found; their absence is **not** proved. **Nothing in this pass was verified at
+run time either.** Two of its claims are cheap to settle in play: start any
+combat and press `L`, and sail into a whirlpool.
 
 The wall-clock material added in sections 4, 5.4.3, and 10, and the delay-context
 material it depends on in `timing.md` sections 6 and 7, is a **static timing
