@@ -66,6 +66,11 @@ The row-`4` guard of Section 5 suppresses the blight for the same reason it
 suppresses the install: with no host recorded there is nothing for the pass to
 act on.
 
+Earlier revisions of this subsection, published under the heading "Harvest
+scatter on farmland and orchards", described an unconditional pass gated only
+on the player's actor slot and running in every town-family location; that is
+retracted (`RETRACTIONS.md` R250).
+
 The shipped location files store every farm cell as standing crops and every
 orchard cell as a fruit tree. Where the pass does run, it knocks most of them
 down to their spoiled counterparts:

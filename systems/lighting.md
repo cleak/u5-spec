@@ -222,6 +222,10 @@ the dungeon loop calls at the end of each turn, exactly as in town and
 overworld mode. Underground the counters are read as a plain lit/unlit gate.
 The observable contract is still turn-based: active light sources burn down as
 the party takes dungeon turns, and no-light dungeon rendering blacks out.
+An earlier revision of this section published a second, dungeon-local
+torch/light upkeep hook running before the first-person draw; that is retracted
+— there is no such hook, and an engine carrying one burns light at roughly
+double rate underground (`RETRACTIONS.md` R248).
 
 The mapped dungeon and weather paths do not extinguish a torch through a
 wind/breeze contact tile. Torch state changes through Ignite, through the
