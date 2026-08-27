@@ -466,14 +466,16 @@ preservation, secret-room mechanism delegation, and save/load reconstruction
 are public; Stonegate presentation, authored secret-location inventory, and
 rare nested script-return checks remain presentation/data/empirical work.
 
-**Current Blackthorn status cleanup:** 2026-05-13 - `EXTRACTION.md` now
+**Current Blackthorn status cleanup:** 2026-08-27 - `EXTRACTION.md` now
 promotes both `BLCKTHRN.OVL` and Blackthorn capture/rescue to complete at
 cinematic-overlay contract depth, matching `systems/blackthorn.md`. Audience
 setup, challenge prompts and answers, punishment/release, local byte-script
 movement, rescue/refuge restoration, `KARMA.DAT` verdict selection, durable
-state writes, direct town-side captive entry, and caller-family reachability
-are public; upstream mode predicates and pixel-level cutscene effects remain
-caller/presentation work.
+state writes, exact town/overworld/dungeon entry predicates, direct town-side
+captive entry, and the rescue tail's zero-only Food grant and existing
+moral-standing floor are public. The alleged captive counter, parallel rescue
+progression byte, and capture-context field do not exist. Pixel-level cutscene
+effects remain presentation work.
 
 **Current CBT status cleanup:** 2026-05-13 - `EXTRACTION.md` now promotes
 `BRIT.CBT` and `DUNGEON.CBT` to complete at file-layout and record-selection
@@ -814,13 +816,14 @@ dungeon reachability, but not the local story predicates inside those mode
 callers. That predicate work remains open rather than being inferred from the
 overlay entry itself.
 
-**Current Blackthorn boundary cleanup:** 2026-05-13 -
+**Current Blackthorn boundary cleanup:** 2026-08-27 -
 `systems/blackthorn.md` now frames the traced overlay behavior as complete at
 cinematic-contract depth: audience setup, challenge matching, punishment and
 release branches, byte-script movement semantics, rescue/refuge restoration,
 `KARMA.DAT` verdict selection, durable state writes, and the direct town-side
-audience entry predicate are public. Remaining exactness is limited to external
-entry predicates and pixel-level cutscene tile/output-byte identities.
+audience entry predicate are public. The exploration-mode rescue entry predicate
+and all persistent fields are also closed; remaining exactness is limited to
+pixel-level cutscene tile/output-byte identities.
 
 **Current rest/camp ambush presentation cleanup:** 2026-05-13 -
 `systems/rest-and-camp.md`, `systems/encounters.md`, and extraction now publish

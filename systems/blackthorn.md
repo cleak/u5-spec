@@ -115,6 +115,8 @@ After the challenge resolves, the handler can run a final throne cleanup beat
 and then hands control to a captive-cell scene. The traced handoff uses scene
 byte eighteen, the gazetteer's `CASTLE:1` location associated with Lord
 Blackthorn's Castle, with local position `(10, 7)`.
+Entering that location does not create a captivity timer or context field; the
+scene and position are the complete persistent handoff.
 
 ## 4. Challenge Loop
 
@@ -355,6 +357,8 @@ The rescue contract:
    `CASTLE:0` location associated with Lord British's Castle, on logical floor
    one at local position `(10, 10)`, with the clock spun forward until the hour
    reads 06:00.
+11. Clear both light counters. If and only if the full two-byte food word is
+    zero, replace it with 63; preserve every nonzero value unchanged.
 
 Both viewport transitions are single blocking rectangle dissolves over the
 inclusive rectangle `(8,8)..(183,183)`. The first hidden rectangle contains
@@ -442,7 +446,7 @@ The Blackthorn overlay uses several kinds of state with different lifetimes:
 |-------|----------|
 | Shrine ruin flags | Durable world state, shared with `systems/quest-flags.md` and `formats/saved-gam.md`. **Correction:** this row previously read "Jailed or handled party-member flags"; those bytes are the shrine ruin flags. |
 | Roster removal of an executed companion | Durable and irreversible: record lifted from the party, party count decremented, record parked with an unmatchable whereabouts value |
-| Moral standing | Durable; debited five per correct interrogation answer, floored to seventy-five by the rescue path |
+| Moral standing | Durable scalar at saved-game offset `0x02E2`; debited five per correct interrogation answer and floored to seventy-five by the rescue path. This one byte is both the verdict selector and the formerly duplicated "standing/progression" row. |
 | Active-object table during audience/rescue | Temporary cinematic actors |
 | `MISCMAPS.DAT` cutscene map | Temporary scene background |
 | `MISCMSG.DAT` audience records | Temporary message source |
@@ -450,13 +454,48 @@ The Blackthorn overlay uses several kinds of state with different lifetimes:
 | Scene byte and local position handoff | Next ordinary gameplay location |
 | Timed magic-effect slot and both light counters | Cleared by the rescue restoration; see `systems/magic.md` and `systems/lighting.md` |
 | Carried-key count zeroed by the audience cleanup | Durable inventory effect of the capture |
-| Captive-cell duration/progression counter | Durable or semi-durable post-capture state; initialized if empty by the rescue path |
-| Standing/progression byte clamp | Durable rescue/story floor |
+| Food/provisions rescue floor | The existing durable two-byte food word, not Blackthorn progression state. Rescue changes exactly zero to 63 and leaves every nonzero value alone. |
 
 Implementations should not conflate these. In particular, the active-object
-table is repurposed for cinematic drawing, while the shrine ruin flags, the
-roster removal, the moral-standing debit, the post-capture counter, and the
-rescue progression counter are the durable gameplay outputs.
+table is repurposed for cinematic drawing, while the shrine ruin flags, roster
+removal, moral-standing changes, key loss, and ordinary food word are durable
+gameplay state.
+
+### 8.1 No captive counter or parallel progression field
+
+The two save-backed scalars touched at the rescue tail are existing global
+fields:
+
+| Field | Saved-game storage | Factory value | Normal gameplay domain | Blackthorn behavior |
+|---|---:|---:|---:|---|
+| Food/provisions | `0x0202`, two-byte little-endian word | 63 | `0..9999`; ordinary grants saturate at 9999 and consumption floors at zero | Rescue compares the complete word with zero once. Zero becomes 63, represented by bytes `0x3F, 0x00`; any nonzero word is preserved exactly, even if a save editor supplied a value above the normal cap. Audience/capture never reads or writes it. |
+| Moral-standing selector | `0x02E2`, one byte | 75 | `0..99` in normal play; moral gains cap at 99 and debits floor at zero | Rescue selects its verdict from the pre-change value, then raises values below 75 to 75. Values 75 and above remain unchanged. This is the same field named Moral standing in the table above, not a second rescue-progress byte. |
+| Captive-cell duration/progression | **No field** | — | — | No writer, reader, increment, decrement, cadence, saturation, wrap, or reset exists. The earlier counter was a misidentification of Food. |
+| Capture context | **No field** | — | — | Audience entry is selected by the town arrest path and current location; rescue entry is selected by the shared party-capability result. Neither path reads a saved capture tag. |
+
+“Initialized if empty” therefore means one literal food safety grant at the end
+of rescue, after the wait to 06:00 and after both light counters are cleared:
+test the full food word, store 63 only when it equals zero, and return to the
+ordinary handoff. There is no later Blackthorn-owned update cadence. All
+subsequent food reads and changes belong to the ordinary provision, inventory,
+shop, spell, pickup, and party-upkeep contracts.
+
+Within the Blackthorn overlay this adjacent test/store pair is the food word's
+only real access; the audience/capture entry has none. Outside Blackthorn, the
+stats panel reads the word for display, the provision pass reads and subtracts
+it at the meal-hour cadence in `systems/time.md`, and shops, tavern meals,
+Create Food, crop pickup, inventory grants, and conversation grants can add to
+it under their owning contracts. None treats it as capture progress.
+
+The original save format needs no `SAVED.BTH` sidecar and no reserved legacy
+capture byte. A compatible implementation may discard both extension fields;
+the captive-cell location, food word, moral-standing selector, party roster,
+and ordinary scene state contain every durable value these paths use.
+
+*Corrected (2026-08-27).* Earlier revisions published a durable or
+semi-durable captive-cell counter and a separate rescue progression output.
+Both are withdrawn: the first is Food and the second is the already-listed
+moral-standing byte.
 
 **Retraction.** An earlier revision of this table also listed a "capture
 death-route marker" and a "conversation Blackthorn signal". Both are withdrawn.
@@ -510,7 +549,7 @@ Section 2; the rescue/refuge cinematic is entered only from the shared
 party-capability check of Section 7, with no mode-local condition of any kind.
 Neither a defeat/capture context byte nor a death-route marker exists.
 
-Remaining exactness is presentation parity and one shared-state question:
+Remaining exactness is presentation parity only:
 
 - Verify the exact visual identities of the cutscene tile-write bytes and the
   exact cursor/glyph effects of the output-byte commands if pixel-level
@@ -547,6 +586,15 @@ tables, raw script bytes, or implementation-specific addresses.
 - `formats/location-dat.md`.
 - `formats/miscmsg-dat.md`.
 - `formats/karma-dat.md`.
+
+The Section 8 storage correction -- identification of the alleged captive
+counter as the ordinary food word, confirmation that the standing clamp uses
+the existing moral-standing byte, exact rescue-tail ordering, and the negative
+capture-context census -- is derived from private analysis in
+`u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/CAST_OVL/`,
+`u5-decomp/functions/SHOPPES2_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+`u5-decomp/formats/`, and `u5-decomp/notes/`.
 
 Source provenance: derived from private analysis in `u5-decomp/notes/` for the
 audience entry path, the withdrawal of the death-route marker, the
