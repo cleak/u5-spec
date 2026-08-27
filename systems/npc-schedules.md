@@ -188,6 +188,13 @@ The state byte takes values in `0..8`:
 | 5     | off this floor, below          | NPC's floor is below the displayed floor and the active waypoint is on the displayed floor. Search the displayed floor for a **descend-link** cell (`0xC9`), route to it, then surface there. |
 | 6     | on this floor, waypoint above  | Ask the floor-transition gate whether the NPC already stands on an **ascend link** (`0xC8`) or a stairway tile. If it does, hand the NPC off to the waypoint's floor. If not, route toward the nearest `0xC8` cell.                |
 | 7     | on this floor, waypoint below  | Mirror of state 6 using the **descend link** (`0xC9`).                                                            |
+
+Earlier revisions of this table had states `4` and `5` bound to the opposite
+link ids — state `4` steering toward a down-stairway and state `5` toward an
+up-stairway — and described both floor-link ids as blocked intermediate cells
+matched against a paired marker on the destination floor. All of that is
+retracted: the assignment above is the correct one, both link ids are ordinary
+open ground, and no paired destination-floor marker exists.
 | 8     | neither end on this floor      | The NPC is placed directly at the active waypoint's `(x, y, z)` with no gate; the cached waypoint is updated, the move queue is deactivated, and the state returns to idle. |
 
 A few observations. State 3 is the queue-replay path: once the pathfinder
@@ -478,7 +485,10 @@ walk-through.
 terrain-query families from `systems/movement.md`. Its workspace builder uses a
 dedicated one-bit-per-tile-id resource covering the full `0x00..0xFF` terrain
 id space. **A set bit marks the tile id as an obstacle for NPC pathfinding; a
-clear bit marks it open.** This is a pathfinding workspace rule, not a general
+clear bit marks it open.** An earlier revision of this section stated that
+polarity the other way round — set means open — while listing the same id
+ranges; that is retracted, and an implementation built on it has passability
+inverted for every tile id. This is a pathfinding workspace rule, not a general
 claim about which tiles are physically walkable by the player, and it is not
 the same set as any of the player transport sets.
 

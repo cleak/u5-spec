@@ -857,7 +857,9 @@ of the game rather than of the EGA renderer, and `0x116` as the scratch id on
 every display path.
 
 **Lifetime of the presence counter: persistent, not turn-scoped and not
-call-scoped.** There is exactly one such byte in the whole engine, it is
+call-scoped.** Two earlier public answers gave this byte a per-turn
+cleanup tick and then a lifecycle contained inside a single call; both are
+retracted. There is exactly one such byte in the whole engine, it is
 save-backed at `SAVED.GAM` offset `0x02E1`, and it survives turns, mode changes,
 scene changes and save/load alike. Three consequences an implementation should
 check itself against:

@@ -60,6 +60,7 @@ u5-spec/
 |-- README.md
 |-- NEXT-STEPS.md       # durable handoff and current priorities
 |-- EXTRACTION.md       # master inventory and status table
+|-- RETRACTIONS.md     # append-only index of withdrawn/inverted claims
 |-- systems/            # behavior specs for gameplay systems
 |-- formats/            # file-format specs
 `-- catalogs/           # cross-cutting reference catalogs
@@ -115,6 +116,40 @@ not hypothetical: 1056 such citations across 77 files once exposed 440 distinct
 private entry points here, and they were introduced by a repair pass that was
 improving the document's sourcing. Put the real provenance in the prose - say
 what was established and how - and let the path name only the directory.
+
+## Retractions are mandatory
+
+When an edit **withdraws or inverts** a statement this repository has already
+published, two things MUST land in the same change:
+
+1. **A row appended to `RETRACTIONS.md`.** The table is append-only and ordered
+   by spec commit. Give the commit (or the issue number, if the withdrawn text
+   was only ever published in an issue answer), the document, the section, what
+   was withdrawn, and what replaced it. Quote the withdrawn claim closely enough
+   that a consumer can grep their own code for it.
+2. **A one-line inline note in the affected section**, in that document's own
+   voice, at the point of the change. `systems/timing.md` section 4 is the model:
+   the corrected contract is stated, then one sentence says the earlier text said
+   the opposite and is retracted. Do not restructure the section to make room for
+   it - one line is the whole convention.
+
+This applies whether the earlier statement lived in spec prose or in a closing
+comment on an issue. Issue answers are this project's delivery channel to the
+implementation, so a withdrawn answer strands an implementation exactly the same
+way a withdrawn paragraph does.
+
+It does **not** apply to a clarification: added detail, a narrowed scope that
+leaves the old text still true, a gap filled for the first time, or a rename
+with no behavioural consequence. Be strict. A row that sends a consumer to
+re-audit a section that did not change costs them real work and erodes trust in
+the whole index, so when in doubt, leave it out and say why in the commit
+message.
+
+The reason the convention exists: an audit against spec HEAD found 106 contracts
+the clean engine did not implement, and most were not oversights. The engine had
+faithfully implemented a spec revision that was later reversed, its tests pinned
+the retracted behaviour, and nothing signalled the reversal. `RETRACTIONS.md` is
+the signal.
 
 ## Status and open questions
 

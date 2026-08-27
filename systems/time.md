@@ -131,6 +131,9 @@ order and, per member:
   turn, independently, not a shared roll and not an hourly effect. Poison
   damage that brings a member to zero sets that member's status to Dead and
   clears the active-member selector if it pointed at that member.
+  An earlier revision of this section placed the poison tick inside the
+  hour-gated part; that is retracted, and the difference is visible - a
+  town-bed hour costs a poisoned member six points, not one.
 - Every member that was neither Dead nor Sleeping increments the
   provision-consumer count, Poisoned members included.
 

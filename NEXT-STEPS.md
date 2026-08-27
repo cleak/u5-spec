@@ -18,6 +18,24 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**Retraction convention — 2026-08-26.** Reversals are now tracked in
+`RETRACTIONS.md` at the repository root: an append-only, commit-ordered table of
+every published statement this repository has withdrawn or inverted, naming the
+document, the section, the withdrawn claim and its replacement. Issue #149
+asked for it after an audit found that most of the clean engine's 106 missing
+contracts were faithful implementations of spec revisions that were later
+reversed with no signal. The first backfill publishes 230 rows and carries an
+explicit completeness caveat; it is not proven exhaustive.
+
+Two consequences for work in this file. First, the 2026-08-22 supersession
+notice above is no longer the only place withdrawn claims are recorded — every
+item it lists now has a row in `RETRACTIONS.md` with the affected sections named
+individually, and new withdrawals belong there rather than in a fresh prose
+notice here. Second, `CLAUDE.md` and `AGENTS.md` now require a `RETRACTIONS.md`
+row plus a one-line inline note in the affected section whenever an edit
+withdraws or inverts published text, including text published only in an issue
+answer.
+
 **Addendum — 2026-08-26, calibrated-unit delay contexts and wall-clock anchor.**
 Issue #146 is answered by `systems/timing.md` sections 6 and 7 and
 `systems/audio.md` sections 4, 5.4, and 10. Four of the five questions are

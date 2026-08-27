@@ -176,7 +176,10 @@ underneath it.
 `WD.BIT` is the one shipped member stored without the LZW envelope. Parsed
 directly it is a one-sub-image resource: count `1`, single offset `4`, then a
 288x49 image whose rows occupy 36 bytes each. Header plus offset table plus
-`36 * 49` accounts for the whole file exactly.
+`36 * 49` accounts for the whole file exactly. An earlier revision of this section read
+`WD.BIT` as a sparse strip table whose single pointer targets a metadata word,
+and treated the record as lettering artwork to blit; both are retracted — the
+record is never drawn, it is a mask.
 
 Earlier revisions of this document described `WD.BIT` as a sparse strip table
 whose entry count happened to be one and whose pointer targeted a metadata

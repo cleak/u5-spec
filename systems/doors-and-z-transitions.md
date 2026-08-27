@@ -393,6 +393,8 @@ reads the cell under the party: the ascend link `0xC8` moves to the floor above,
 and the descend link `0xC9` or a metal grate `0x86` moves to the floor below.
 **There is no two-way ladder cell in town mode** and no up-or-down prompt on
 this path; the two link ids are directional and a cell is one or the other.
+An earlier revision of this section gave the town arm a two-way ladder cell
+that prompts up-or-down; that is retracted.
 When the underfoot cell is none of the three, K instead prompts for a direction
 and inspects the neighbour: the pile of rocks `0x4C` or either wooden-fence id
 `0xCA`/`0xCB` there moves the party one cell onto it **without any floor
