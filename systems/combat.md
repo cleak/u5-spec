@@ -14,7 +14,7 @@ Combat enters from one entry point - a single function call from a mode or scrip
 
 **Terrain combat.** The default. Reached when the player walks into (or attacks) a hostile creature on the overworld or in a town. The dynamic-objects-table slot of the offending creature is passed along. Two independent selections happen before the round loop: the **outdoor arena** is chosen from the world terrain under that creature plus the party's vehicle state, and the encounter's **base combat class** is derived from the creature's own sprite byte by a small linear formula. The arena is loaded first; the terrain-combat setup then seats the party, rolls the monster spawn count from the base class's stat row, and places each monster at one of the arena's sixteen arrival positions. `encounters.md` Section 4 publishes both selectors.
 
-**Ambush combat.** A separate setup branch from ordinary terrain combat. The current resolved setup target is the DNGLOOK room-NPC setup entry used by dungeon/rest-style room setup, not the ordinary terrain helper and not the town hostile-NPC alarm path. Do not infer its arena choice, monster count, or placement order from the dormant shuffle branch inside the terrain setup helper unless a live caller is identified.
+**Ambush combat.** A separate setup branch from ordinary terrain combat. The current resolved setup target is the DNGLOOK room-NPC setup entry used by dungeon/rest-style room setup, not the ordinary terrain helper and not the town hostile-NPC alarm path. Do not infer its arena choice, monster count, or placement order from the placement-shuffle branch inside the terrain setup helper: that branch is live, but its caller is the surface camp-ambush route, not this one (Section 5).
 **Rest/camp "alternate" setup.** Reached by H-Hole-up rest/camp callers. The
 alternate setup target is the CMDS H-Hole-up helper rather than an SJOG or
 scripted-fight dispatcher. It may finish the rest/camp outcome without combat
@@ -38,10 +38,21 @@ Each arena occupies a fixed-size record. The first part is the **terrain grid** 
 When the arena loads, its terrain grid is copied into a runtime grid in the data segment with a row stride padded out to thirty-two bytes (a power-of-two stride that lets the renderer index by `(row << 5) + col`). Movement and visibility consult this runtime grid; the on-disk record is not touched again until the next combat enters.
 
 **Wall and blocked tiles** in the runtime grid are recognised through combat's
-own arena passability lookup, not through the world/town tile-id bitmap. An
-actor whose record places it on a blocked arena tile is silently skipped for the
-round; this corner case is a defensive guard since proper monster placement keeps
-actors on walkable cells.
+own arena passability lookup, not through the world/town tile-id bitmap. That
+lookup governs **movement only**. An actor standing on a cell it could not have
+walked onto still takes its turn on schedule.
+
+**Retraction - the per-round skip is a restraint guard, not a walkability
+guard.** Earlier revisions of this paragraph, and of Section 7's per-actor body,
+said that an actor whose record places it on a blocked arena tile "is silently
+skipped for the round" as a defensive guard against bad placement. That is
+**withdrawn**. The round loop's pre-decrement skip reads the arena terrain under
+the actor and tests it against exactly two tile ids - the stocks `0x84` and the
+manacles `0x85` - and nothing else. Water, swamp, mountains, walls, force
+fields and every other terrain are outside the test. Section 7.1 gives the full
+contract for both cases. An engine that implements the withdrawn wording freezes
+every actor the original leaves acting, which in the water arenas is every
+monster in the fight (Section 5.4 and `encounters.md` Section 4).
 
 **Blocked cells and geometric edges.** A requested cardinal destination that
 stays inside X and Y `0..10` first runs the ordinary collision/passability
@@ -158,22 +169,50 @@ helper then runs a per-encounter pass that clears both combat tables and seats
 the party, and only afterwards picks a monster count, picks a class per
 monster, and writes one record per spawned monster.
 
-The ordinary terrain setup helper also contains an optional placement-shuffle
-branch, but the complete caller census has one caller and it always leaves the
-branch inactive. The dormant algorithm initializes slots `0..15`, then for
-current indexes `0..14` draws an independent index from the full inclusive
-range `0..15` and swaps the two entries. It is fifteen random transpositions,
-not Fisher-Yates. Its adjacent banner condition cannot be satisfied, so a
-hypothetical call would still print the ordinary conflict banner. The earlier
-source summary that called this a Fisher-Yates ambush branch is withdrawn.
+**Retraction - the placement-slot shuffle is live, and the terrain setup helper
+has two callers, not one.** Earlier revisions of this section said the helper's
+placement-shuffle branch was dormant because "the complete caller census has one
+caller and it always leaves the branch inactive". **That is withdrawn.** There
+are exactly two routes into the terrain setup helper and they pass different
+setup flags:
 
-Live ambush and rest/camp alternate setup use separate entry-mode helpers. The
-only reachable ambush-mode callers are the dungeon A-Attack forward contact and
-the dungeon post-action contact/auto-face path. Both synthesize the resident
-arena through the dungeon room painter, then call the framer. The framer loads
-no `.CBT` record, discards the supplied class/slot argument, and invokes the
-room-combat setup helper with mode two and tile zero. Rest/camp entry modes four
-and six dispatch through CMDS and use neither shuffle.
+- The **ordinary wilderness or town encounter** passes a flag word that leaves
+  the shuffle bit clear. Monsters are placed in identity slot order: the first
+  monster takes authored cell 0, the second cell 1, and so on.
+- The **surface camp ambush** - overworld `H` Hole up, which rolls once per
+  elapsed hour for an interruption and prints its ambush line when it fires
+  (`rest-and-camp.md` Section 6, `encounters.md` Section 6) - reaches the same
+  setup helper through its CMDS wrapper, and reaches it **only** with the
+  shuffle bit set, which it forwards verbatim. The earlier statement that
+  rest/camp entry "uses neither shuffle" is withdrawn with the rest.
+
+The permutation itself is unchanged from the earlier description and is worth
+restating precisely, because it is not a uniform shuffle: initialise slots
+`0..15`, then for each current index `0..14` draw an independent index from the
+full inclusive range `0..15` and swap the two entries. That is fifteen random
+transpositions, and it does **not** produce a uniform permutation - an engine
+that substitutes a correct Fisher-Yates shuffle will not reproduce the
+original's distribution. With `N` monsters the permuted order makes them occupy
+a random `N`-subset of the sixteen authored cells in a random order, rather than
+the first `N`. The camp ambush loads arena record 0, whose sixteen monster cells
+are all distinct and all on grass, spread around the arena's corners and edges,
+so the permutation is observable in play rather than a no-op. The shuffle
+permutes only which authored cell each monster receives; it reads no terrain, so
+it does not affect Section 5.4's "no terrain validation" contract. The earlier
+source summary that called this a Fisher-Yates ambush branch remains withdrawn.
+
+**One further difference on the camp route.** The camp-ambush entry also skips
+the pre-placement pass that clears the combat tables and seats the party from the
+arena record's party-seat rows. **Where the party's arena coordinates come from
+on that route is not established** and should be settled by observation before it
+is implemented; do not assume the arena-record party seats apply there.
+
+Dungeon ambush-mode entry is a separate matter and is unchanged. The only
+reachable ambush-mode callers are the dungeon A-Attack forward contact and the
+dungeon post-action contact/auto-face path. Both synthesize the resident arena
+through the dungeon room painter, then call the framer. The framer loads no
+`.CBT` record, discards the supplied class/slot argument, and invokes the
+room-combat setup helper with mode two and tile zero.
 
 The live room painter uses a distinct sixteen-swap algorithm: initialize
 `0..15`, then for each current index `0..15` draw from the full inclusive
@@ -201,8 +240,10 @@ the source slots written are `[15,4,1,0,14,7,6,3,5]`, then consumed in order
 eleven, then the exact-count sentinel overwrites it with sixteen while state
 still advances to `0x80DA`. With no equipment-dependent seating draws, the four
 palette indexes are `[5,1,7,4]` (classes `[24,21,24,33]`) and leave state
-`0x752C` before the first speed draw. The dormant fifteen-swap result from state
-zero would be `[2,4,1,0,14,7,6,3,5,8,10,11,12,9,13,15]`, state `0x0CF4`.
+`0x752C` before the first speed draw. The fifteen-swap result from state zero -
+the permutation the camp-ambush route actually applies - is
+`[2,4,1,0,14,7,6,3,5,8,10,11,12,9,13,15]`, state `0x0CF4`. (*Corrected:* this
+vector was previously labelled dormant.)
 
 Earlier revisions of this section, and the answers published against it, seated
 the party at the placement slots following the monster count -
@@ -244,12 +285,27 @@ never depend on the monster count and never consume a placement slot.
   marked asleep: status stays `'S'`, the descriptor's disabled bit is set, the
   presentation record shows the prone marker, and the active-player sentinel is
   cleared if that member was the active player.
-- A member wearing a Ring of Invisibility is marked hidden and its presentation
-  byte switched to the suppressed-sprite value; a member wearing a Ring of
-  Regeneration runs the regeneration tick once at entry.
-- Independently of the above, each member wearing either of those two rings
-  faces a one-in-sixteen check at combat entry that destroys the ring with the
-  "a ring has vanished" message.
+- Before a living member is placed, if that member wears either the Ring of
+  Invisibility or the Ring of Regeneration, one uniform draw in `[0, 15]` is
+  taken. The single outcome `11` destroys the ring: the "a ring has vanished"
+  message, a tone, and the matching equipment slot set to the empty marker.
+- After the member is placed, a ring-effect step runs - but **only** for members
+  whose status byte is exactly `'G'` (good) or `'P'` (poisoned). A wearer of the
+  Ring of Invisibility is marked hidden and its presentation byte switched to the
+  suppressed-sprite value. The Ring of Regeneration arm is a **whole-party
+  regeneration sweep**, not a single tick for the member that triggered it: it
+  draws one uniform value in `[0, 7]` for every party member who is alive and
+  wearing the regeneration ring *at that moment*, including members whose status
+  is neither good nor poisoned. *(Corrected: an earlier revision said a wearer
+  "runs the regeneration tick once at entry". That understates both the draw
+  count and the healing - with two eligible wearers in good condition the pass
+  runs two sweeps of two draws each. See `catalogs/item-list.md`, Ring of
+  Regeneration, whose combat-cadence note is scoped by this correction.)*
+
+The exact per-member ordering is load-bearing for PRNG reproduction, because the
+vanish check lands **before** the same member's own ring-effect step and before
+every later member's vanish check: one vanish lowers every subsequent count in
+the same seating pass. Section 5.3 gives the full entry-order contract.
 
 **How the two tables are indexed.** Each seated actor gets one combat
 descriptor and one renderer-facing active-object record, allocated by two
@@ -366,8 +422,8 @@ A short combat banner ("CONFLICT") is printed at the start of setup, before any 
 **Picking arrival positions.** Each monster gets one of sixteen arena cells,
 indexed by a placement slot. For ordinary terrain combat, slots are walked in
 identity order so placements are deterministic for the selected arena record.
-The terrain helper has the dormant fifteen-transposition branch specified
-above, but no traced live caller reaches it. The selected `BRIT.CBT` arena is authoritative
+The terrain helper's fifteen-transposition branch specified above is inactive on
+this route but live on the surface camp-ambush route. The selected `BRIT.CBT` arena is authoritative
 for the sixteen slots' `(x, y)` coordinates: the arena loader copies those
 coordinates from the record metadata band into two resident scratch tables, and
 the placement helper then reads the resident copies. A clean engine should
@@ -407,7 +463,7 @@ tile-mirror bytes, the arena coordinates, and the current Z plane. The parallel
 combat-effect descriptor receives: the class's maximum HP as its HP/wound
 counter; a base-step of the class speed seed randomised by a uniform `[-4, +3]`
 adjustment, reverted to the unadjusted seed whenever the adjusted value would
-exceed thirty; a phase counter of thirty-six minus the base-step; the class id
+exceed thirty (Section 5.2); a phase counter of thirty-six minus the base-step; the class id
 in its owner/target/class field; the active-object link; and the hostile
 faction tag — except for class ids eight and nine, which get the
 passive/neutral tag instead so they render and can be interacted with but are
@@ -424,6 +480,277 @@ Dungeon-room special sources use this mode; see `formats/cbt.md` Section 5.
 Descriptor slots are considered free when their flags byte is zero, so an
 implementation that leaves stale nonzero flags on a released slot makes that
 slot permanently unallocatable.
+
+### 5.1 The party actor's base step is the raw dexterity byte
+
+**Is the party descriptor's base step floored, clamped or scaled before the
+`36 - base_step` reset?** No. *(Established, for every combat entry: the
+party-seeding arm is shared by the terrain, town and both dungeon entries.)*
+
+The seating pass copies the character's dexterity byte into the actor's base
+step verbatim. There is no minimum, no maximum, no level scaling, no equipment
+adjustment and no random variation applied on the way - nothing sits between
+reading the roster stat and writing the descriptor field. The phase counter is
+then set to `36 - base_step` in eight-bit arithmetic, and the identical constant
+and formula are used again at every in-combat refresh (Section 7). A dead member
+is skipped before any of this and never receives a base step at all. The speed
+variation in Section 5.2 belongs to the monster arm of the same placement
+primitive and never touches a party actor.
+
+**The floor is in character creation, not in combat, and the "DEX 3 fresh
+Avatar" premise is false.** A questionnaire-created Avatar cannot have a
+dexterity below 15, so the pathological case that motivated this contract is not
+reachable from chargen. Both halves below matter, because an engine implementing
+chargen needs the floor and an engine implementing transfer needs the
+conversion:
+
+- **Questionnaire chargen floors dexterity at 15.** The questionnaire's
+  dexterity tally starts from the shipped seed record's dexterity of `15`, not
+  from zero, and every virtue's dexterity delta is zero or positive
+  (`chargen.md` Section 6 publishes the delta table; its dexterity column reads
+  0, 2, 0, 1, 1, 0, 1, 0 across the eight virtues in canonical order). Dexterity
+  receives no floor at commit time - unlike strength, which is floored to 20 -
+  because 15 is simply where the tally starts. A questionnaire Avatar therefore
+  enters play with dexterity 15 or better, giving a phase counter of **21 or
+  less**. Against a bat, whose class speed rating is 30 and whose post-variation
+  phase counter is 6 to 10, that is roughly one party action per two to three
+  bat actions, not one per five or six. *(The floor of 15 is established. The
+  **upper** end of the questionnaire's dexterity range is deliberately not
+  published: it is an inference from the shape of the virtue tournament rather
+  than a traced enumeration of the question-pair table, so bound it by the delta
+  table and the tournament structure, not by a stated ceiling.)*
+- **The Ultima IV transfer can produce a single-digit dexterity.** The
+  transfer's three-region attribute conversion maps a source value below 10 to
+  itself unchanged, and dexterity is one of the two attributes the transfer does
+  not floor (`u4-transfer.md` Section 7 publishes the conversion; both of its
+  divisions truncate toward zero). A transferred Avatar really can carry a
+  single-digit dexterity - 1 through 9 - and therefore, by the `36 - base_step`
+  formula above, a phase counter of **27 to 35** for the whole early game. The
+  scenario is real; it is transfer-only. *(Established.)*
+- **The shipped companions are unaffected either way.** Their seed dexterity
+  values run from 17 to 26, giving phase counters of 10 to 19. *(Established.)*
+- **Dexterity is never reduced by any game mechanic.** The only movement is
+  upward, for the Avatar alone, through shrine meditation, and it is capped at
+  30. *(Established, with this scope: the negative covers every direct reference
+  to the dexterity field across the shipped executable, all of its overlays and
+  all four display drivers, including indexed and negative-displacement forms,
+  and every site that takes the field's address was opened individually - each
+  is a dexterity-versus-roll saving throw whose only write is to the character's
+  condition letter. A write reaching the field through a pointer built from an
+  unrelated base would still fall outside the scan.)*
+
+**The base step is written once.** A party actor's base step is written at
+seating and is not touched again for the life of the encounter. The only writers
+of that field anywhere in the shipped game are the encounter-setup table wipe
+(which zeroes it), the two seeding arms of the placement primitive, and the
+slot-clear that runs when an actor is removed from the arena. The round loop
+only reads it. The party-seeding mode of the placement primitive has exactly one
+caller in the whole game - the encounter-setup routine - which is what makes
+"written once at seating, never again" safe to build on; every other caller
+anywhere, including the mid-combat spawns from spell handlers and the Gazer's
+death effect, uses the monster mode or the marker mode. *(Established, with this
+residual scope: the writer census is exhaustive by construction over the shipped
+executable, all twenty-three overlays and all four display drivers for direct
+byte writes and for every occurrence of a literal inside the descriptor table's
+address span, and the exclusivity census covers every direct near call plus an
+exhaustive far-call scan. Still outside it: a write through a descriptor pointer
+received as a function argument or built from a literal outside the table's
+span, an indirect call through a pointer table reaching such a writer, and the
+near-call negative over the four display drivers, which have no established load
+base.)*
+
+Two field-level details that do not change the model:
+
+- An area-effect spell handler temporarily sets the top bit of the **phase
+  counter** as an "already affected by this cast" marker, so one cast cannot hit
+  the same actor twice. It clears that bit on all thirty-two actor slots before
+  returning, through its single exit, and the round loop never observes the
+  marker. An engine may therefore model the phase counter as a plain value in
+  the 6-to-36 range.
+- The speed floor of one that applies to time-stopped actors, to asleep or
+  disabled actors, and to one particular actor class feeds only the to-hit score
+  (Section 11). Turn order reads the unmodified base step, so that floor never
+  affects initiative.
+
+### 5.2 The monster speed variation reverts; it does not clamp
+
+Each ordinary monster placement takes one uniform draw in `[0, 7]`, subtracts 4
+to give an offset in `[-4, +3]`, and adds that to the class's shipped speed
+rating in eight-bit arithmetic. If the result **exceeds 30**, the engine reverts
+to the class's unmodified speed rating - it does not clamp to the boundary.
+Because that test is an unsigned above-30 test, two behaviours follow and both
+are worth building deliberately:
+
+- A class already at the 30 maximum keeps 30 whenever the variation would push
+  it above 30. Its reachable base steps are 26, 27, 28 and 29 at one chance in
+  eight each, and 30 at four chances in eight - phase counters of 10, 9, 8, 7
+  and 6, with 6 at even odds. *(These distribution figures are for a class whose
+  shipped speed rating is 30. The general rule - uniform `[-4, +3]`, revert to
+  the shipped rating when the result exceeds 30 - holds for every class.)*
+- A very slow class is protected from wrapping below zero by the same revert,
+  because an eight-bit underflow also fails the unsigned test.
+
+Turn order is a consequence of these numbers rather than of any separate
+initiative roll: the round loop walks the thirty-two actor slots in index order,
+decrements every eligible actor's phase counter once per sweep, and lets an
+actor act when its counter reaches zero. A larger phase counter is a longer
+wait, so higher dexterity means acting more often. Ties within a sweep resolve
+in slot order, and because the placement primitive seats party actors into the
+low descriptor slots and monsters into the slots above them, **the party's slots
+always resolve ahead of the monsters' in a tie**.
+
+### 5.3 PRNG consumers at combat entry, in order
+
+**Is combat-entry PRNG order exactly "clear tables, seat party with no draws,
+banner, count roll, one speed-variation draw per monster placement"?** The
+*ordering* is correct. The *draw accounting* is not: three of the steps can
+draw, one of them without any bound, and there is an additional world tick
+nobody had accounted for.
+
+**Confidence and scope.** The ordering, the placement gates, the shuffle count,
+the sentinel set, the count-roll nesting and the cap are established at
+instruction level for the terrain and town entry chain, and the seating rules
+and the round-loop prologue are established for every entry that reaches the
+shared seating routine. **The draw counts of all three world ticks in this
+window are undetermined and need live capture** - they are marked below and no
+maximum is published for any of them. The dungeon in-room and dungeon
+wandering-monster variants were traced far enough to establish which route seats
+the party, that each reaches setup with a source band the dungeon room painter
+has already permuted by its own sixteen-swap (Section 5), and that neither
+alters base step or phase; they were not traced end to end, and the deterministic room-painter
+vector published earlier in this section is not re-derived here.
+
+| # | Step | Draws |
+|---:|---|---|
+| 1 | Combat framer entry through to the setup routine | None. |
+| 2 | Clear both combat tables | None. |
+| 3 | Seat the party | **Variable; not draw-bounded in general.** Free with the shipped starting roster. |
+| 3a | Placement-slot shuffle (**surface camp ambush only**) | The terrain setup helper has exactly two callers (Section 5). The ordinary wilderness or town encounter leaves the shuffle bit clear and draws **zero** here. The surface camp ambush sets and forwards the bit, and draws exactly fifteen uniform `[0, 15]` draws, taken after seating and before the banner; on that route step 3 is skipped entirely, so the shuffle is the first drawing step there. **This row does not cover the dungeon entries.** Their permutation is a different mechanism on a different array - the dungeon room painter's own sixteen-swap over the source band, run before the framer is entered (Section 5; `dungeon-mode.md` Section 14.1) - and it is outside this table's terrain/town scope. |
+| 4 | Conflict banner, arena-record load, encounter-name print | None. |
+| 5 | Monster count | Zero, one, or two. |
+| 6 | World tick, on the same branch that rolled a count | **Variable and unbounded. Needs live capture.** |
+| 7 | Monster placement | One or two draws per monster. |
+| 8 | Round-loop entry prologue, before any actor slot is examined | **One world tick: variable and unbounded. Needs live capture.** |
+
+Nothing between entering the combat framer and the setup routine consumes a
+draw, and nothing between the setup routine returning and entry into the round
+loop consumes one.
+
+**Step 3, seating.** Party slots are walked in roster order. Per slot:
+
+1. A dead member is skipped outright - no draw and no seat.
+2. The ring vanish check runs **before** the member is placed: one uniform draw
+   in `[0, 15]` if the member wears the Ring of Invisibility or the Ring of
+   Regeneration, destroying the ring on the single outcome `11`.
+3. The member is placed.
+4. The ring-effect step runs, gated on status exactly `'G'` or `'P'`, and its
+   regeneration arm sweeps the **whole party**, drawing one uniform `[0, 7]` for
+   every member alive and wearing the regeneration ring at that moment.
+5. A member whose status is `'S'` (asleep) takes a branch that runs a **full
+   world tick**, itself a variable consumer - so seating is not draw-bounded at
+   all whenever anyone in the party is asleep.
+
+Seating's cost therefore has **no closed form**, for two independent reasons: a
+vanish destroys the ring before every later count in the same pass, and the
+population that *triggers* a regeneration sweep (good or poisoned wearers) is
+not the population *counted inside* one (all living wearers). **Any closed-form
+ring cost - in particular "one draw per wearer plus the square of the wearer
+count" - is withdrawn. Implement the two rules and the ordering, not a
+formula.** With the shipped starting roster none of it fires: no starting
+character carries either ring value and all start in good condition, so seating
+is genuinely draw-free in the default case.
+
+**Step 5, the monster count.** The count is rolled only when the class's spawn
+count rating is not one of the three exact-count sentinels 1, 8 and 16. When it
+is rolled it is one uniform draw in `[1, rating]`; and when the early-game
+damper flag is set, a second uniform draw in `[1, result of the first]`
+immediately follows, taking the first result as its new upper bound. The result
+is capped at 26. Sentinel ratings consume nothing here.
+
+**Step 6, the mid-setup world tick.** The same non-sentinel branch that rolls a
+count runs a **full world tick before any monster is placed**. That tick is a
+variable PRNG consumer with three distinct drawing arms: an autonomous
+wind-drift roll, an active-object animation pass that rolls for each qualifying
+on-screen object, and a visibility pass that takes a further uniform `[0, 3]`
+draw unless the pending command is the Talk command. At that moment the object
+table has just been wiped and repopulated with the seated party, every one of
+whom qualifies for at least one animation draw. **The total could not be pinned
+statically** - it depends on the redraw gate, the first-tick flag, the party
+size, and which arm of the animation dispatch each record takes - so it is a
+measured quantity, not a modelled one.
+
+**Step 7, placement.** Placement is not uniformly one draw each. The **first**
+monster is placed with exactly one speed-variation draw and never gets a
+companion draw. Each subsequent monster whose spawn index is below
+`count / 4 + 1` is preceded by one additional uniform `[0, 8]` draw that
+substitutes the class's companion species on a zero result; the remaining
+monsters take only the speed draw.
+
+**Step 8, the round loop's entry prologue.** The combat round loop's entry
+prologue runs a **second world tick, as its very first action, before any actor
+slot is examined**. It runs once per entry into the loop, the loop is entered
+once per encounter, and the sweep restart jumps past the prologue - so exactly
+one extra world tick sits between the last monster placement and the first
+actor's action. At that point the object table holds the party *and* every
+placed monster, so this tick has strictly more qualifying records than the
+mid-setup one and its count is at least as undetermined. The prologue's other
+calls draw nothing, directly or transitively.
+
+**Do not publish or assume a maximum for any of the three world ticks.** The
+autonomous wind-drift roll draws once in the common case; on an uncommon result
+it enters a retry loop that draws in pairs until it settles, so its draw count
+per invocation is one, two, or an unbounded sequence above that. **No maximum is
+published, and an engine must not assume one** - the loop has no static bound,
+63 invocations in 64 stop at a single draw, and its expected value has not been
+measured. This is the same contract, in the same words, as `systems/prng.md`
+Section 4 and `systems/visibility.md` Section 8; a pairs-based retry does not
+make every integer above two reachable, so do not restate the count as "any
+integer from one upward".
+
+**A clean lever for a black-box harness.** A class whose shipped spawn-count
+rating is one of the sentinels 1, 8 or 16 skips both the count roll and the
+mid-setup world tick entirely, leaving only the placement draws before the
+prologue tick. The bat's shipped spawn rating is 16, so a bat encounter isolates
+the prologue tick cleanly.
+
+One consumer outside this window, for completeness: the turn-clock advance run
+after combat ends is itself a draw consumer, sitting between the encounter and
+the next outdoor turn.
+
+### 5.4 Placement performs no terrain validation
+
+**Does initial monster placement validate arena terrain, re-roll, or skip?** It
+does none of the three, on every placement path. *(Established for terrain
+combat setup and its actor placer, read end to end with their complete callee
+sets enumerated, plus dungeon-room setup. Shipped-data claims below are from a
+full parse of both combat-arena files - 16 outdoor records and 112 dungeon
+records.)*
+
+For an outdoor encounter the monster placement coordinates are read verbatim
+from the selected arena record's metadata - sixteen X values and sixteen Y
+values - and handed straight to the actor placer, one per spawned monster. The
+setup routine never reads the arena terrain grid, never consults the
+cell-occupancy predicate, and never re-rolls a coordinate. The actor placer
+likewise reads no terrain; its only helper call is the per-actor speed roll. The
+dungeon-room path is the same: it walks the sixteen source entries in the room
+record, skips entries whose source byte is zero, and places everything else at
+the stored coordinates with no terrain test.
+
+**Placement onto impassable cells is authored, not accidental.** The water arena
+- the one selected when the party is on land and the hostile is standing on
+water, shoals or deep water, arena 15 in `encounters.md` Section 4 - is authored
+with **all sixteen** monster placement cells on water tiles and all six party
+seats on grass and brush. A land-class monster fought over water is therefore
+placed on water by design. The equivalent arena for a party aboard ship likewise
+puts all sixteen monster cells on deep water or water. This is deliberate
+original behaviour and a port should reproduce it; what happens to such an actor
+afterwards is specified in Section 7.1, and the short answer is that it acts
+normally and simply cannot move.
+
+**In-combat spawn effects are the exception.** The conjure, swarm and summon
+spells each probe a random arena cell against the cell predicate and place only
+on an accepted cell. That validation belongs to those spells, not to encounter
+placement, and it must not be generalised back onto placement.
 
 ## 6. The actor table
 
@@ -871,7 +1198,7 @@ byte makes the descriptor available for re-allocation; an all-zero record is
 not required. *Corrected (2026-08-27): an earlier revision said release cleared
 the record to all zeros; the preserved fields make that statement false.*
 
-A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the step-or-attack primitive (Section 11): when an actor moves, its (X, Y) is written into both.
+A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the movement step primitive (Section 11): when an actor moves, its (X, Y) is written into both.
 
 The combat actor table is the authoritative combat-instance descriptor, not the persistent world active-object table. Its first byte is the current monster HP or wound counter for non-party actors, while another byte links the descriptor back to the renderer-facing active-object slot. Friend/foe classification also lives in this combat-instance descriptor: party slots are tagged as the party faction, ordinary monster slots as the hostile faction, and a passive/neutral tag is used for non-combatant combat props. The passive override is keyed by the placed actor's class id — classes eight and nine — not by the arena index. Public specs should not model the persistent active-object table as the owner of the combat faction byte.
 
@@ -898,15 +1225,37 @@ combat placement probe agrees that the cell can hold the cloned actor.
 
 ## 7. Per-round structure
 
-Each round is one walk over the thirty-two-slot actor table. The round loop has start-of-round setup, a per-actor body that runs zero or one times per slot, and end-of-round exit checks. When the body has visited all thirty-two slots, the round restarts (unless an exit fires).
+Each round is one walk over the thirty-two-slot actor table. The round loop has a one-time entry prologue, a per-actor body that runs zero or one times per slot, and end-of-round exit checks. When the body has visited all thirty-two slots, the round restarts (unless an exit fires).
 
-**Start-of-round setup.** A small bundle of housekeeping work: screen redraw, combat-begin overlay refresh, screen flush, per-round init that resets per-slot scratch state, and clearing the "any spell cast this round" flag.
+**Loop-entry prologue.** A small bundle of housekeeping work: screen redraw,
+combat-begin overlay refresh, screen flush, per-slot scratch state reset, and
+clearing the "any spell cast this round" flag.
+
+**It runs once per encounter, not once per round, and its first action draws.**
+Two corrections belong here, and an engine that seeds its stream from this
+section needs both. First, the prologue runs once per entry into the round loop,
+and the loop is entered once per encounter: the sweep restart jumps back past
+the prologue, so the bundle is *not* re-run at the top of each table walk. Any
+earlier reading of this as per-round start-of-round setup is **withdrawn**.
+Second, the prologue's very first action - before any actor slot is examined - is
+a **full world tick**, a variable and unbounded PRNG consumer whose draw count
+needs live capture (Section 5.3, step 8). The prologue's other calls draw
+nothing, directly or transitively.
 
 **Per-actor body.** For each slot 0–31:
 
 1. **Skip empty slots and slots already marked dead.** The "alive" flag and "marked dead" flag bits gate this.
 2. **Sweep deaths from prior rounds.** If the slot is alive but its linked character record's status byte is now `'D'`, mark the slot dead, fire a death-narration effect, and advance to the next slot. This catches party members who died between rounds (poison, ongoing spells).
-3. **Skip wall-cell slots.** A defensive guard against bad placement.
+3. **The restraint skip.** Read the arena terrain under the actor and compare it
+   against exactly two tile ids - the stocks `0x84` and the manacles `0x85`. On a
+   match, skip the slot entirely. This happens **before** the phase decrement in
+   step 4, so a restrained actor's counter never advances and it never takes a
+   turn at all. No other terrain participates: water, swamp, mountains, walls and
+   force fields are all outside the test. *(**Corrected.** Earlier revisions
+   called this step "skip wall-cell slots, a defensive guard against bad
+   placement". That is withdrawn - it is a restraint guard, and reading it as a
+   walkability guard freezes actors the original leaves acting. Section 7.1 has
+   the full contract.)*
 4. **Decrement the actor's phase counter.** While non-zero, the slot does not act this round. When it reaches zero, the actor *does* act.
 5. **On zero, refresh the counter and act.** The counter is reset to `36 - base_step`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine fires a tile-render pass for animation.
 6. **Dispatch the actor's turn.** A single function asks "is this slot a player or a monster?" — for a player, control passes to the player command handler (Section 8); for a monster, to the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch (Section 9).
@@ -1025,6 +1374,73 @@ is not real.
 
 The phase-counter / base-step structure means actors act at *staggered* paces. There is no "player turn then monster turn" — initiative is *interleaved* by phase counter, so a fast monster might act twice between the player's turns.
 
+### 7.1 Actors on cells they cannot leave
+
+Two different situations get confused here, and only one of them is a freeze.
+
+**A monster placed on terrain it cannot walk on is not frozen.** It takes its
+turn every round on schedule; only its *movement* is constrained. So for the
+case that prompted this section - a land class fought over water, placed by
+Section 5.4 onto one of arena 15's sixteen authored water cells - there is no
+freeze at all. The "permanently stuck actor" hypothesis is refuted for that
+case. Such an actor still selects a target and attacks anything in reach, and it
+remains a live, targetable, killable combatant. A class flagged teleport-capable
+can additionally relocate, and *that* relocation is validated against the cell
+predicate, so a stranded monster of such a class may free itself. It is
+immobile, not inert. *(The water case is traced through the automatic driver,
+the mover and the cell predicate, but was not observed live.)*
+
+The random-cardinal movement arm behaves in a way an engine will not guess; see
+Section 9 for its exact contract.
+
+**The real freeze is restraint, and it is authored, visible, and recoverable.**
+The round loop's step-3 skip fires on exactly two tiles, the stocks `0x84` and
+the manacles `0x85`. Because the skip precedes the phase decrement, an actor on
+one of those tiles never advances its counter and never acts. Exactly one
+shipped arena - a dungeon room - places an actor on a restraint tile, and the
+class placed there is a villager: an authored prisoner. No shipped party seat in
+either combat-arena file lands on a restraint tile. Such an actor:
+
+- never takes a turn while it stands on the restraint tile;
+- is still a live combatant for every other purpose. It is returned by the
+  cell-occupancy lookup, so it can be targeted, attacked and killed normally. The
+  one exception is the Charm spell, whose own cursor explicitly refuses restraint
+  cells;
+- **can be released with `J` Jimmy**, which works in combat and targets the
+  acting combatant's own cell plus the chosen direction. Jimmy first requires the
+  party to hold at least one key: with a key count of zero it prints `No keys!`
+  and returns immediately, before the direction prompt and before any tile is
+  examined. Given a key, on a restraint tile in a combat scene the engine skips
+  the live-occupant branch, rolls the selected member's Dexterity against a
+  uniform draw of 0 to 29, and on Dexterity **strictly greater** than the draw
+  rewrites that arena cell to cobble `0x44`, marks the display dirty, and prints
+  `Unlocked` - consuming no key. The cell then no longer matches the restraint
+  test, so the actor begins taking turns again from the next pass. A failed roll
+  prints the broken-key result and destroys one key. The full Jimmy contract,
+  including how the combat tail differs from the town prisoner release, is in
+  `doors-and-z-transitions.md` Section 3.1.
+
+**Consequence for victory.** The friend/foe census that gates the victory
+announcement counts every descriptor that is non-empty and not dead-marked, with
+**no terrain filter at all**. A restrained hostile therefore keeps the hostile
+count above zero and suppresses `VICTORY!` until it is either freed or killed
+(Section 14).
+
+**Nothing displaces an actor between its own turns - scoped honestly.** Every
+routine that writes an actor's arena coordinates during play acts either on the
+slot whose turn it currently is (the combat movement step, the Klimb handler, the
+combat arm of the Blink spell, the teleport commit, and the Push command's
+in-combat tail) or at entry/camp time on a specific chosen slot (the two
+placement passes, and the Hole-up watcher reposition, which selects its target by
+roster identity rather than by whose turn it is). A restrained actor never takes
+a turn, so none of the between-turns writers reach it. *(This finding carries
+confidence **probable**, not established, and the reason is stated rather than
+hidden: the exhaustive search behind it covers only direct absolute-displacement
+writes across every shipped binary. Register-relative writers were checked case
+by case rather than enumerated to exhaustion, and a redone search did find one
+direct-write site an earlier scan had missed. Treat the negative as a strong
+inference, not a proof.)*
+
 ## 8. Player commands in combat
 
 When the round walker dispatches a player slot, the player command handler
@@ -1059,7 +1475,7 @@ The remaining letters call their targets directly, as the table below records.
 
 | Key   | Combat behaviour |
 |-------|------------------|
-| **A** | Attack. Routes into the shared arena attack helper with the acting combatant and a flag saying whether that combatant is armed; the helper announces the actor and the weapons it is wielding (or bare hands) before the attack resolves. Resolution is Section 11. Ends the actor's action. |
+| **A** | Attack. Routes into the shared arena attack helper with the acting combatant and a flag saying whether that combatant is armed. It produces **one attempt per readied item that can be swung**, each opening its own targeting cursor; Section 8.2 has the full contract. Resolution is Section 11. Ends the actor's action. *(**Corrected.** Earlier revisions said this helper "announces the actor and the weapons it is wielding (or bare hands) before the attack resolves". That is withdrawn: the actor-and-armament line is the **turn banner**, printed before the keystroke is read and therefore printed identically whatever the player then presses. See Section 8.1.)* |
 | **B** | Board — shared refusal responder, first tail. No cost. |
 | **C** | Cast a spell: the combat prerequisite check, then either the in-arena prompt loop or the shared spell dispatcher (Section 10). Ends the actor's action unless the caster is dead, which re-prompts. |
 | **D** | Prints the combat-specific `D-What?` refusal and re-prompts at no cost. |
@@ -1095,15 +1511,22 @@ Other inputs:
 - **Ctrl-S** — toggle sound. Re-prompts without even reaching the turn test.
 - **Ctrl-B** — combat's own copy of the typeahead-buffer toggle, writing the
   same engine-wide setting as the resident one (`commands.md`). Re-prompts.
-- **Digit `0`** — clear the active-player selection and repaint the panel.
-- **Digits `1`–`6`** — select party member 1 through 6 as the active player. A
-  failed selection re-prompts at no cost.
-- **Cardinal direction codes** — move one cell in the requested cardinal
-  direction. Movement uses the step-or-attack primitive: if the cell is
-  occupied by a hostile, attack instead; if the destination leaves the arena,
-  run the out-of-arena helper described in Section 3. A blocked step re-prompts
-  at no cost. Diagonal direction codes are not combat movement commands; they
-  fall through to the ordinary invalid-command refusal.
+- **Digit `0`** - clear the active-player selection and repaint the panel. `0`
+  is never remapped to a direction (Section 8.3).
+- **Digits `1`-`6`** - select party member 1 through 6 as the active player. A
+  failed selection re-prompts at no cost. **Reachable only while the input
+  layer's numpad flag is clear** - that is, with NumLock off and no shift key
+  held. With NumLock on, eight of the ten digits arrive as direction codes
+  instead and a typed `4` steps west rather than selecting member 4. Section 8.3
+  states the rule and the remap table.
+- **Cardinal direction codes** - move one cell in the requested cardinal
+  direction. If the destination leaves the arena, run the out-of-arena helper
+  described in Section 3. A blocked step re-prompts at no cost. **A direction key
+  is purely a step: there is no bump attack.** *(**Corrected.** Earlier revisions
+  said "movement uses the step-or-attack primitive: if the cell is occupied by a
+  hostile, attack instead". That is withdrawn - see Section 8.3 and Section 11.)*
+  Diagonal direction codes are not combat movement commands; they are rejected
+  with the stock `What?` refusal and cost no turn.
 - **Anything else** — the stock `What?` refusal and a free re-prompt.
 
 **The turn rule.** The parser keeps a single re-prompt flag, cleared at the head
@@ -1143,15 +1566,194 @@ handler has cleared the combat descriptors, so the later ring hook has no
 eligible acting slot and does nothing.
 
 **Diagonal input and the targeting cursor.** Combat is the one place in the game
-that accepts eight-way input, and it is not movement. While combat asks the
-player to pick a cell, the four cardinal keys move the targeting cursor one cell
-and the four corner keys (Home / End / PgUp / PgDn, or the numpad corners) move
-it one cell diagonally. Enter or the attack letter confirms, Escape cancels, and
-Space runs the self-target check. An implementer should not generalise this into
-diagonal stepping: no mode loop, and no letter dispatcher, accepts a diagonal
-step.
+that accepts eight-way input, and it is not movement. The full cursor contract is
+in Section 8.2. An implementer should not generalise it into diagonal stepping:
+no mode loop, and no letter dispatcher, accepts a diagonal step.
 
 Several commands are **multi-stage** (Attack, Cast, Get, Jimmy, Open, Ready, Search, Use, Yell, and some delegated arena handlers): they print a short prompt or call a sub-handler that reads a follow-up keystroke. The combat command handler's dispatch is structured so multi-stage commands return control to the same handler for their continuation rather than recursing through the round walker. The command set mirrors the world mode loops' visible vocabulary so muscle memory transfers cleanly between play modes, but the combat parser owns its own branches and refusals. The most distinctive combat-only paths are Attack, Cast, active-player selection, the arena targeting cursor, combat Yell's no-effect scene fallthrough, out-of-bounds fleeing, and the Escape cleanup exit.
+
+### 8.1 The turn banner is printed before the keystroke, for every command
+
+**Does only `A` print the announce-actor-and-weapons line, or does a bare
+direction key attack identically?** Neither half of that premise holds.
+*(Established for the keyboard-driven per-actor handler in the combat overlay and
+its whole entry path. Not verified for the automatic driver, which narrates
+monsters' actions elsewhere.)*
+
+The actor-and-weapons line is **not** Attack's announcement. It is the **turn
+banner**, emitted at the start of every keyboard-driven combatant's turn, *before
+any key is read*: a newline, the actor's name, and - for a party-side actor - the
+clause `, armed with ` followed by the names of that actor's readied items
+separated by `, `, or `bare hands` when none qualifies, terminated by a colon.
+
+- Only the helm, weapon-hand and shield-hand slots are scanned, and only items
+  whose per-item weapon-capability entry is non-zero are named. Ordinary helms,
+  ordinary shields and all body armour therefore never appear in the clause -
+  while the **spiked helm and spiked shield do**, because they carry a non-zero
+  capability entry.
+- A charmed monster acting under player control gets only its name and the colon,
+  with no armament clause.
+- Because the banner precedes the keystroke, it appears identically whether the
+  player then presses `A`, a direction key, `Space`, or anything else.
+
+What `A` adds on top of the banner is `Attack-` and `Aim! ` per attempt, plus a
+per-item name line when two or three items qualify (Section 8.2).
+
+The banner is unconditional once the actor passes the active-player gate, the
+Sword-of-Chaos gate and the invisible-reveal / asleep early-outs. Note that a
+free re-prompt after a refusal uses the short form and does **not** reprint the
+banner.
+
+**A bare direction key does not attack.** It is purely a step. The engine prints
+the direction word (`West`, `East`, `North`, `South`), checks that the
+destination stays inside the arena, and asks the arena-cell predicate whether
+this mover may stand there. On acceptance the actor moves and its turn ends. On
+rejection - which includes both terrain the mover cannot enter **and a cell
+already occupied by a live actor** - the engine prints `Blocked!`, plays the low
+bump tone (roughly 165 Hz for 200 duration units), drains pending input, and
+re-prompts the same actor without spending the turn. There is **no bump attack**:
+walking into an occupied cell never produces a to-hit roll, never prints
+`Attack-` or `Aim! `, and never resolves damage. A destination outside the arena
+takes the separate edge-exit path (Section 3) and does not print `Blocked!`.
+
+### 8.2 `A` Attack: attempts, the interference abort, and the targeting cursor
+
+**After `A` is accepted, does the engine enter a distinct direction read?** Yes -
+accepting Attack opens a second, separate input read, and it is not a one-shot
+direction key but an **interactive targeting cursor**. It is entered once per
+readied weapon, not once per Attack command, and it is not reached
+unconditionally. *(Established for the keyboard-driven handler and everything
+downstream of its Attack branch: the per-character attack walker, the per-item
+dispatcher, the melee and ranged arms, the cursor, the interference gate and the
+cell-occupancy lookup; verified for the zero-reach, non-zero-reach and
+bare-handed arms and for both the party-side and charmed-monster-side entries.
+Not verified for the automatic driver, which never reads the keyboard, nor for
+spell targeting beyond the shared cursor.)*
+
+**What Attack runs.** The engine walks the acting character's three readied
+equipment slots in order - helm, weapon hand, shield hand. Each slot holding an
+item with a non-zero weapon-capability entry produces **one attack attempt**;
+body armour is never scanned, and ordinary helms and shields have a zero entry
+and are skipped. A character with no qualifying item makes a single bare-handed
+attempt, which behaves as melee with range one. Each attempt prints `Attack-` and
+then consults the item's **reach** (`catalogs/item-list.md` publishes the
+per-item reach values): reach zero opens the cursor with maximum range one; a
+non-zero reach opens it with that reach as the maximum range. Immediately before
+the cursor opens the engine prints `Aim! `. When two or three items qualify, each
+attempt additionally prints a newline, that item's name, and a colon on its own
+line before its `Attack-`; with exactly one qualifying item, or none, no
+item-name line is printed.
+
+Two notes on the reach values, because the split is easy to get wrong. A non-zero
+reach does **not** mean "missile weapon": the morning star and the halberd are
+in-hand melee weapons with reach 2 and open a two-cell cursor, and the dagger
+(reach 3) and spear (reach 5) are throwables. On the monster side, a class reach
+of exactly 1 is normalised to zero, so it takes the fixed-range-one melee path
+rather than a one-cell ranged cursor.
+
+**The one case where no cursor opens: the adjacent-attacker interference abort.**
+Five items - **sling, flaming oil, bow, crossbow and magic bow** - run an
+interference test before the cursor. The engine keeps, per combatant, the
+identity of whichever actor most recently struck that combatant; the value is set
+when damage is resolved against them and cleared at the end of that combatant's
+own next turn. The attempt is aborted if **all** of the following hold:
+
+- that recorded actor exists, and its slot is not empty;
+- it is on the automatic-driver side - a monster, or a party member acting under
+  Sword-of-Chaos / charm control. **An adjacent ordinary party member never
+  interferes;**
+- it is neither invisible nor asleep;
+- the Negate Time effect is not currently active;
+- its distance from the attacker is exactly one. Distance uses the same truncated
+  Euclidean metric as the cursor, so "exactly one" means any of the eight
+  surrounding cells, diagonals included.
+
+On abort the engine prints a newline, the interfering actor's name, and
+` interferes!`, opens no cursor, **and the turn is still spent**. This is the
+common, gameplay-visible "you cannot fire a missile weapon while something is on
+top of you" rule, not an edge case. The other reach-bearing items - dagger,
+spear, throwing axe, morning star, halberd, magic axe - do **not** run this test,
+and neither does any zero-reach melee attempt or a bare-handed attempt.
+*(**Corrected.** An earlier revision implied every Attack reaches the cursor.
+That universal claim is withdrawn.)*
+
+**The cursor.** It starts on the attacker's remembered previous target when that
+target is still a valid, live, visible actor within the maximum range, and on the
+attacker's own cell otherwise. Inside the loop:
+
+Two different code spaces meet in this loop, and the numeral `1` occurs in both.
+The table below writes an **internal direction code** as a bare number and a key
+the player presses in `code` font, so *direction code 1* (west) and the *typed
+key* `1` (the numpad key marked End, south-west) are never the same thing.
+Section 8.3 gives the remapping that connects them.
+
+| Input | Effect |
+|---|---|
+| Internal direction codes 1, 2, 3, 4 - delivered by the arrow keys, or by a typed digit the shared reader has already remapped (Section 8.3), never by the characters `1`-`4` reaching the loop unremapped | Move the cursor one cell west, east, north, south. |
+| The four corner keys - Home, End, PgUp, PgDn, which are the numpad keys marked `7`, `1`, `9`, `3` | Move it one cell diagonally: Home/`7` north-west, End/`1` south-west, PgUp/`9` north-east, PgDn/`3` south-east. Note that the key `1` on this row is End, and is unrelated to internal direction code 1 on the row above. |
+| Enter, or the letter `A` (either case) | Confirm at the cursor cell - **unless** the cursor is on the attacker's own cell, in which case nothing happens and the loop reads another key. |
+| Space | Cancels if the cursor is on the attacker's own cell; anywhere else it confirms exactly like Enter. |
+| Escape | Cancels. |
+| Anything else | Discarded; the loop reads again. |
+
+A move is applied only if the destination stays inside the eleven-by-eleven arena
+**and** its distance from the attacker does not exceed the maximum range. If
+either test fails the cursor simply does not move: no message, no beep, no turn
+consumed, and the loop reads another key. Because the range test is the truncated
+Euclidean distance, all eight neighbours are within range one, so **a melee
+attack can target diagonals**.
+
+On cancel the engine prints `Nothing!` (melee arm) or returns silently (ranged
+arm). On confirm it looks for an actor occupying the cursor cell; if there is
+none, or the occupant is dead-marked, invisible, or an empty/decoration slot, it
+prints `Nothing!`. **The occupancy lookup does not filter by side**, so confirming
+on a party member's cell attacks that party member. The acting character's turn
+is consumed either way: cancelling with Escape or Space does not return to the
+command prompt and does not give the turn back.
+
+### 8.3 Direction keys, digits, and the numpad flag
+
+The engine team's premise here was half right: direction codes 1-4 are not
+produced by typing the digit characters directly - but the two namespaces **do**
+collide, and the collision is the normal case rather than an edge case.
+*(Established. This behaviour belongs to the shared keyboard poll and command
+reader specified in `input.md` Section 5, so it applies to every prompt those
+serve, not only to combat.)*
+
+The shared input routine sets an internal **numpad flag** in two ways:
+
+1. A key arriving as an extended scancode is matched against a small table - the
+   four arrow keys plus Home / End / PgUp / PgDn - and translated to the
+   direction codes; the flag is set.
+2. A key arriving as one of the ASCII characters `1` through `9` causes the
+   routine to read the BIOS keyboard shift-status byte and set the flag if
+   **either shift key is down OR NumLock is currently active**.
+
+When the flag is set, the command reader remaps the typed digits through a fixed
+table: `1` south-west, `2` south, `3` south-east, `4` west, `6` east, `7`
+north-west, `8` north, `9` north-east. `5` passes through unchanged, and `0` is
+outside the window and is never remapped.
+
+The consequences for combat:
+
+- **NumLock off, no shift held.** Typed digits keep their ASCII meaning and reach
+  the active-player-selection handler at the command prompt (Section 8), and they
+  are inert inside the targeting cursor.
+- **NumLock on, or either shift held.** Eight of the ten digits become direction
+  codes. At the combat command prompt a typed `4` means "step west" rather than
+  "select member 4", and inside the targeting cursor a typed `4` moves the cursor
+  west. **Member selection by digit is therefore only reachable with NumLock
+  off.**
+- Only `0` and `5` are unconditionally inert inside the cursor.
+
+This is deliberate: it is how the game reads the numeric keypad when NumLock is
+on, because the keypad then emits plain ASCII digits and the shift-status byte is
+the only distinguishing evidence available. *(**Corrected.** An earlier answer
+said typed digits are inert as directions and that "the two namespaces never
+collide". That is withdrawn and replaced by the conditional rule above.)*
+Whether NumLock is on in a given player's session is an environment fact, not a
+game fact; an engine should expose it as one.
+
 
 ## 9. Monster AI
 
@@ -1409,14 +2011,30 @@ cell; the candidate is accepted only if the same arena-cell occupancy/hazard
 test used by combat placement allows it. Negate Magic's tag and the Crown's
 permanent code suppress this teleport arm before its chance roll and random-cell
 probe, but do not suppress movement: control proceeds directly to ordinary
-stepping in the same dispatch. Ordinary stepping asks the surrounded
-helper whether all four cardinal neighbors are blocked, then uses the in-arena
-step test for candidate moves. The engine first tries the target vector on one
-axis, with randomized axis priority, then falls back to random cardinal tries
-when the direct axes are blocked. An accepted move updates both the combat
-actor/effect record and the linked renderer-facing active-object record before
-the post-step terrain/effect check runs. If no tested direction is legal, the
-actor's move is blocked for that turn.
+stepping in the same dispatch. Ordinary stepping first tries the target
+vector on one axis, with randomized axis priority, then falls back to random
+cardinal tries when the direct axes are blocked. An accepted move updates both
+the combat actor/effect record and the linked renderer-facing active-object
+record before the post-step terrain/effect check runs.
+
+**The random-cardinal fallback is four independent draws, not a neighbour
+scan.** *(**Corrected.** An earlier revision described this arm as asking a
+"surrounded" helper whether all four cardinal neighbours are blocked and
+returning "no action" when they are. That is withdrawn.)* The arm makes **up to
+four independent attempts**; each attempt draws one of the four cardinal
+directions uniformly at random and tests **only that direction** against the cell
+predicate, retrying on rejection. It commits the first accepted direction. Two
+consequences an engine must reproduce rather than optimise away:
+
+- A monster with exactly one open direction can still fail to move within its
+  four attempts, purely because the draws never landed on it.
+- When all four attempts fail, the routine still reports the action as consumed
+  unless the final draw happened to be the first direction tried, and the
+  committed displacement in that case is zero.
+
+This is what makes a monster stranded on terrain it cannot enter (Section 7.1)
+look stuck without being frozen: it acts every round, it attacks anything in
+reach, and its movement simply never succeeds.
 
 The per-turn morale writer for the fleeing flag is the monster wound-score
 classifier. Cause Fear and Repel Undead are the two spell-side writers: each
@@ -1492,15 +2110,27 @@ premixed charges, MP, or player circle gates.
 
 ## 11. Attack resolution
 
-Movement and attack share a single primitive, called once per actor turn. The primitive takes a direction code (1 = west, 2 = east, 3 = north, 4 = south, the same mapping the world-mode-loops use) and the actor's slot index:
+Movement and attack are reached through one per-turn dispatch, and the movement
+step primitive is called once per actor turn. The primitive takes a direction code (1 = west, 2 = east, 3 = north, 4 = south, the same mapping the world-mode-loops use) and the actor's slot index:
 
 1. **Translate direction to a unit step.** Cardinals map to `(dx, dy)` of `(±1, 0)` or `(0, ±1)`. A direction code of zero or out of range produces `(0, 0)` — "attack in place".
 2. **Print the direction word** ("North", "South", "East", or "West") followed by a newline. Movement narration is part of the primitive.
 3. **Range-check the destination.** `(new_x, new_y) = (self_x + dx, self_y + dy)` must fall in `[0, 10]`. If off the arena, route to the out-of-bounds handler. That handler decides between ship-style refusal, same-direction refusal for constrained exits, and an accepted leave/escape trigger.
-4. **Run the step-or-attack inner pass.** A separate function handles whichever case applies:
+4. **Run the step inner pass.** A separate function handles whichever case applies:
    - **Empty walkable cell:** the actor moves. Update its (X, Y) in both the actor table and the parallel dynamic-objects table.
-   - **Hostile actor at the destination:** run the attack roll. Hit/miss decision, raw damage, defense subtraction, and the target HP/status writes are computed from the attacker/target combat state, class stats, cached party defense bytes, active effects, and random rolls. The formerly suspected data-region lookup is not a combat damage or hit-chance matrix.
-   - **Friendly actor or wall at the destination:** treat as blocked.
+   - **Any live actor at the destination, or terrain the mover cannot enter:** treat as blocked.
+
+   *(**Corrected.** Earlier revisions of this step listed a third case -
+   "hostile actor at the destination: run the attack roll" - and described the
+   primitive as a step-or-attack primitive. **That is withdrawn.** There is no
+   bump attack in combat: a direction key or a synthesised step into an occupied
+   cell prints `Blocked!` and resolves no damage, and the cell-occupancy check
+   does not distinguish friend from foe for this purpose. Attacks are reached
+   only through `A` and its targeting cursor (Section 8.2) or through the AI
+   attack path (Section 9). An engine built on the withdrawn text lets players
+   attack by walking, which the original does not. The separate observation that
+   the formerly suspected data-region lookup is not a combat damage or hit-chance
+   matrix is unaffected and still stands.)*
 5. **On success**, the primitive commits the new positions and returns the completed command to the actor dispatcher.
 6. **On failure**, narrate "Blocked!", play the 165 Hz blocking tone for 200 calibrated units, and leave the actor in place. The exact mute and timing behavior is specified in `audio.md`.
 
@@ -1908,7 +2538,11 @@ distinct transitions rather than three interchangeable exit flags.
 
 **Victory.** When every hostile actor has been killed (no non-party slot has the
 "alive and active" flag bits set), the round loop prints the resident combat
-string `VICTORY!` through the ordinary string printer. The stored string has one
+string `VICTORY!` through the ordinary string printer. The census that decides
+this counts every descriptor that is non-empty and not dead-marked, with **no
+terrain filter**, so a hostile standing on a restraint tile - which never takes a
+turn (Section 7.1) - still holds the hostile count above zero and suppresses the
+announcement until it is freed or killed. The stored string has one
 leading and one trailing newline, and a one-shot guard prevents a duplicate
 announcement. The announcement does **not** return from combat. Party actors
 remain in the arena and cleanup continues until they walk out with `Leave!` or
@@ -2230,8 +2864,8 @@ The behaviour described here was derived from the private function and format no
 - The combat-exit tile-graphics restoration dispatch reached from the framer's
   sampled restoration flag -- derived from
   `u5-decomp/functions/ULTIMA_EXE/`.
-- The terrain-combat setup, the class-row spawn-count lookup, the dormant
-  fifteen-transposition branch in the terrain helper, the early-spawn
+- The terrain-combat setup, the class-row spawn-count lookup, the
+  fifteen-transposition placement-slot branch in the terrain helper, the early-spawn
   companion-class roll, and the single-attacker town-style override — derived
   from `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat monster-placement writer that initializes renderer-facing and combat descriptor records -- derived from `u5-decomp/functions/ULTIMA_EXE/`.

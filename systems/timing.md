@@ -718,7 +718,276 @@ pending answers and treats them as known gaps:
     records the same assumption for the driver's own carrier).
     If it were low-byte-only, several derivations collapse rather than shift.
 
-## 8. Sources
+## 8. Gameplay Idle Cadence And Catch-Up
+
+Sections 5 through 7 cover the intro and the calibrated audio/presentation
+waits. This section covers the loop the player actually spends the game in: the
+wait-for-command pump. It was previously unpublished.
+
+### 8.1 One hardware timer tick per idle pass
+
+> **Normative.** Each pass of the wait-for-command loop paints one frame of the
+> animated text cursor, polls the keyboard once, and — if no key was pressed —
+> waits until the next hardware timer tick and then performs **at most one**
+> world step. There is exactly **one** wait per pass. Not two, and not
+> unthrottled polling.
+
+The keyboard poll is a non-blocking peek, so the poll itself never waits; the
+timer wait is the only blocking operation in a pass.
+
+**The two-tick figure published for the main menu is not transferable to
+gameplay.** A menu pass contains two separate one-tick waits — one in the shared
+cursor-poll helper and a second inside the title-animation step — and the menu
+additionally disarms the elision of Section 8.3. Gameplay has only the first
+wait and disarms nothing. See the "Menu idle pump" row of Section 5.1, which
+remains correct for the menu.
+
+**The timer rate is the stock BIOS rate, and that is structural rather than
+estimated.** Nothing in the executable, in any overlay, or in any of the four
+display drivers programs the interval timer's counter 0 — there is not a single
+write to its command or data port anywhere in the shipped code, and no read of
+it either. The tick period is therefore exactly **54.9254 ms (18.2065 Hz)**,
+given the untouched divisor.
+
+**Independent measurement agrees.** The clean implementation side timed the
+shipped game's idle-screen animation onto one shared clock at **54.913 ms
+(18.2105 Hz)** over 89.948 s and 1638 transitions — within 0.02 percent — and
+obtained the identical figure at two very different emulated CPU speeds. That
+control is what establishes empirically that the loop is timer-driven rather
+than CPU-calibrated. Where a figure in this document and that measurement meet,
+**the measurement is authoritative**; nothing in Sections 8.1 to 8.5 was
+verified at run time on this side.
+
+**Model the wait as "block until the next timer edge", not "block for one full
+period".** The helper zeroes its own counter, installs a counting interrupt
+handler, spins until that counter reaches the requested count, then uninstalls
+and restores the previous handler. The loop therefore synchronises itself to the
+timer grid: each pass ends on a tick boundary, and the effective steady-state
+period is the per-pass work rounded up to a whole number of ticks. Only the
+first pass after entering the loop blocks for an arbitrary fraction of a tick.
+
+Whether the per-pass work fits inside one tick on the original 4.77 MHz baseline
+was deliberately not modelled. If it does not, the steady-state cadence on a
+throttled host is a whole multiple of 54.9254 ms rather than exactly one.
+
+### 8.2 The same loop paces every prompt in the game
+
+This wait is not specific to the three mode loops. It is the game's universal
+wait-for-a-keystroke routine, reached from **at least 100 call sites across 20
+of the shipped code images**: the overworld, town and combat command waits, but
+also shop and merchant prompts, conversation prompts, spell and item prompts,
+the character status pages, the endgame sequence, the Look command, and the
+Blackthorn audience. All of them run the identical loop, so all of them pace at
+one tick per pass and all of them perform the same per-pass world step whenever
+the current scene value permits it. **That shared behaviour belongs to the
+routine, and it is what an engine must reproduce: implementing any of these
+prompts as a plain blocking key read - one that stops the world for as long as
+the prompt is up - is wrong.**
+
+*What that implies for any one caller is an inference from the shared routine,
+not a traced result for that caller.* On that inference a shop prompt inside a
+town, whose scene value lies outside the suppressed band below, keeps the world
+animating and rolling creature AI while it waits for a key. What the shop path
+does with the returned key was not traced, and the census that places it among
+the callers covers direct near calls only (scope note below), so publish that
+instance as *probable*; a capture at a shop prompt settles it.
+
+*Scope.* That census covers direct near calls only; calls routed through the
+overlay trampoline table, indirect calls and computed targets are not covered,
+so 100 is a lower bound. What each caller does with the returned key was not
+traced — the shared behaviour above follows from its being one routine.
+
+Two further idle pumps share the one-tick wait but not the world step: a
+Look-object print-and-wait loop that waits one tick per pass and performs no
+world step, and a Look redraw loop that performs a single world step on exit
+rather than one per pass. On the overworld the input helper performs one
+scripted step-and-wait — one world step followed by one one-tick wait — before
+either entering the command wait or, when sails are set, performing a bare
+cursor poll instead; so an **under-sail auto-advance pass costs two ticks and one
+world step and never enters the command wait at all**.
+
+**The world step is suppressed for a contiguous band of scene values.** The
+shared wait tests the current scene value and performs no world step for values
+`0x21` through `0x7F` **inclusive**; both the bound and its inclusiveness are
+exact. First-person dungeon scenes occupy `0x21..0x28` and therefore get no idle
+world step — they run their own loop instead, which uses the same cursor-poll
+helper and so inherits the same one-tick pacing and four-frame cursor, but whose
+per-pass work is a first-person re-render and a rumble step, with no viewport
+rebuild, no sprite animation, no wind check and no moongate or beacon work.
+Combat sets scene value `0xFF` and does run the world step. Implement the gate
+as a numeric range test on the scene value, **not** as an "is this dungeon mode"
+test: the band is a strict superset of the dungeon scenes, and the intro,
+character-creation and Return-to-View animation states (`0x40`, `0x41`, `0x42`)
+also lie inside it. On present evidence those three matter to the gate's
+definition rather than to observable gameplay, because neither the intro nor the
+character-creation code appears in the shared wait's caller census.
+
+### 8.3 The one place the cadence is conditional — *probable*
+
+The one-tick wait has a fast path, and an engine must not drop this
+qualification.
+
+> **A request for exactly one tick returns immediately, performing no wait at
+> all, when the boot speed-calibration value of Section 2 is at or below 240.**
+
+Nothing on the gameplay path overrides that value (Section 8.4), so during play
+the decision is made by the host's actual measured speed. Above the threshold
+the wait runs and the cadence is one world step per timer tick. At or below it,
+the gameplay idle loop performs no wait at all and free-runs at whatever the
+per-pass rendering costs.
+
+**Which side of that threshold the original hardware falls on is modelled, not
+measured, and is published as `probable`.** The calibration is produced at boot
+by counting iterations of a short memory-increment loop between two consecutive
+timer ticks and scaling the count by `18 / 750`. A cycle model of that loop on a
+stock 4.77 MHz 8088 puts the result near 87, with a hard ceiling near 92 imposed
+by the bus rate (Section 7.2); reaching 240 would require about 26 processor
+clocks per iteration, which is below the instruction-plus-bus floor. The
+direction is robust — original XT-class hardware almost certainly falls below the
+threshold and free-runs — but it rests on a static cycle model and a black-box
+capture outranks it. The observable signature is direct: **on a throttled host
+the animated text cursor steps at a uniform interval of about 55 ms; where the
+fast path fires it runs faster than that and varies with machine load.** The
+capture cited in Section 8.1 shows the uniform 55 ms signature, so on that host
+the wait was performed.
+
+Two properties of this gate a naive implementation gets wrong:
+
+- **The mapping from host speed to "throttled" is not monotonic.** The boot
+  loop's iteration counter is a 16-bit quantity with no clamp, so a host fast
+  enough to complete more than 65,535 iterations within one timer tick — roughly
+  1.19 million iterations per second, well within reach of a modern machine or a
+  high-speed emulator configuration — wraps the counter and the calibration
+  restarts from a small value. That can drop an extremely fast host back below
+  the threshold and **re-arm** the elision. Do not model "faster host implies
+  larger calibration" without bound.
+- **The comparison against the threshold is signed.** For every value the boot
+  routine can actually produce this is immaterial, because the scaling caps the
+  result near 1572, well inside the positive range. An implementation that
+  stores the calibration in a wider type and lets it grow past 32,767 would
+  diverge from the original.
+
+This is the reverse of the intro and menu pumps, which deliberately *raise* the
+calibration to 275 for the duration of their loops precisely so their waits can
+never be elided (Section 5.2).
+
+### 8.4 Calibration overrides during play
+
+Nothing on the gameplay path overrides the calibration. Across the executable
+and every overlay only three routines write it: the boot routine that measures
+it, the intro sequence, and the "display a message and wait for a key" helper.
+
+The message-wait helper raises the calibration to 500 for its own duration, but
+**only when its count argument is greater than one**; the raise and the restore
+are gated identically. So a message-box key wait with a count above one is paced
+at one timer tick per poll on every host, including hosts where the main idle
+loop's wait is elided, and its count argument is effectively a timeout expressed
+in timer ticks. With a count of one (a single poll) or zero (wait indefinitely
+for a key) the calibration is left alone and the elision can still fire.
+
+*Scope.* Covers accesses to the calibration value encoded with an absolute
+displacement, over the executable and all overlays: 19 sites, each attributed. A
+write through a computed base or index register, a block store with a computed
+destination, or an indirect call reaching the calibration store is not excluded;
+none was found. This is the same residual Section 7.6 item 7 records for the same
+value.
+
+### 8.5 Catch-up: there is none, and it is structural
+
+> **Normative.** The gameplay loop cannot run catch-up steps, and the surplus is
+> dropped. In outcome this is exactly the "at most one step per interval, drop
+> the surplus" rule Section 5.3 publishes for the intro pumps, and an
+> implementation of that rule behaves correctly here.
+
+It is worth recording *why*, because the mechanism differs from a deadline check
+in one respect that matters:
+
+- The loop keeps **no elapsed-time accumulator** and performs **no deadline
+  comparison** anywhere.
+- The wait helper zeroes its own counter at the start of every call and installs
+  its counting handler only for the duration of that one wait, restoring the
+  previous handler afterwards. Timer ticks that elapse while the world step
+  itself is running are counted nowhere and are invisible to the program.
+- Outside a wait, the game is not measuring time at all. Across the executable,
+  every overlay and every display driver, only two routines touch the periodic
+  timer interrupt vector: the boot calibration routine and this wait helper. The
+  only other wall-clock source in the build is the system time-of-day read,
+  which occurs at exactly one place and is called from exactly two sites, both
+  inside the copy-protection check — never from any gameplay path.
+- The loop body performs at most one world step per pass, unconditionally on the
+  no-key path, with no repeat count and no "while behind" construct. A step that
+  overruns its interval simply finishes late; the following wait then runs to the
+  next timer edge, the loop re-locks to the timer grid, and the intervening edges
+  are never replayed.
+
+**The difference from a deadline check:** because the pacing is a wait rather
+than a comparison, it disappears entirely rather than degrading gracefully when
+the fast path of Section 8.3 elides it. An engine implementing the Section 5.3
+rule with a real accumulator is *more* stable than the original, which is an
+acceptable modernisation, but it is not identical behaviour on a host below the
+threshold.
+
+The game's own scripted-pause primitive states the same discipline explicitly:
+it runs a requested number of steps as a strict alternation of one world step
+followed by one one-tick wait, sequentially, never batching, and it is itself
+gated off when the master redraw gate is clear.
+
+One detail for anyone modelling interrupt behaviour: the counting handler **does
+not chain**. It reloads its own data segment from a fixed constant, increments
+the counter and returns from the interrupt without calling the handler it
+displaced, so any resident periodic-timer hook installed by the host environment
+is suppressed for the duration of every wait.
+
+*Scope.* "No other periodic-timer handler is installed anywhere" covers the
+standard vector get and set encodings over the executable, all overlays and the
+four display drivers; six matches, all inside the two named routines. A vector
+write built from a computed register value, or a direct poke of the vector
+table, is not excluded and none was seen. "No other elapsed-time reader" covers
+direct near-call sites to the time-of-day reader across the executable and all
+overlays. The "at most one step per pass" claim is verified for the shared
+command-wait loop and for the first-person dungeon loop; the intro and menu
+pumps were not audited for catch-up behaviour.
+
+### 8.6 What the idle pass does, and what it does not
+
+The per-pass world step and its two gates — including the freeze that runs for
+the whole duration of the Negate Time effect and the Tandy-only first-pass
+sentinel — are specified in `systems/animation.md` Section 13, which also gives
+the relative rates of the animated tile families. The re-composition of actors
+that happens on the same pass, and the variant re-roll it performs, are in
+`systems/visibility.md` Section 8.
+
+What is *not* on this path, confirmed by capture: the game clock, the calendar,
+food and gold, party status, and the NPC schedule walk. Over 160 s of idle with
+no input none of them changed, and town NPCs animated in place without stepping.
+They advance in the per-turn epilogue after a command has been executed. **The
+one world state observed to change with no player input is the prevailing
+wind**, which is a per-pass random event rather than a timed one
+(`systems/animation.md` Section 13.2); two capture sessions gave visibly
+different rates for it (about 0.22 and about 0.117 visible changes per second)
+with a broad irregular interval distribution in both, so no wall-clock rate for
+it should be committed to.
+
+### 8.7 Open items for this section
+
+1. Whether the per-pass work fits inside one timer tick on the original
+   4.77 MHz baseline. Deliberately not modelled; needs a capture, not desk work.
+2. Which side of the 240 threshold a given emulator configuration lands on. The
+   calibration is measured at boot from the host's real speed and no attempt was
+   made to convert an emulator cycles setting into a calibration value. The
+   cursor signature in Section 8.3 settles it observationally in seconds.
+3. Whether the calibration counter's 16-bit wrap is reachable on any host the
+   implementation will actually be tested against.
+4. Whether the intro, menu, conversation and message-wait pumps share the
+   no-catch-up property. Only the shared command wait and the dungeon loop were
+   audited.
+5. Membership of the suppressed scene band beyond the two pinned sub-ranges. The
+   dungeon scenes and the intro/front-end states are established to sit inside
+   `0x21..0x7F`; roughly half the band is unmapped. Do not implement it as "the
+   dungeon range" and do not implement it as anything narrower than the numeric
+   test.
+
+## 9. Sources
 
 This public description is a cleanroom prose rewrite from private timing-helper
 analysis. It does not reproduce decompiled source, assembly listings, raw bytes,
@@ -730,6 +999,17 @@ display-driver wait loops, cross-checked against a second independent derivation
 that reached the same anchor once its own machine model was applied
 consistently. Neither derivation was validated at run time; section 7.6 records
 that as the largest open gap in this contract.
+
+Section 8 is a cleanroom restatement of a static analysis of the shipped
+wait-for-command loop, the shared tick-wait primitive and its fast path, the
+boot calibration's writers, and the periodic-timer and time-of-day censuses,
+across the executable, all code overlays and the four display drivers; it was
+repaired after an adversarial verification pass, and the scope limits that pass
+attached to each negative are carried in the prose rather than dropped. The
+wall-clock measurement it cites, and the two-CPU-speed control that establishes
+the loop as timer-driven, are black-box runtime observations contributed by the
+clean implementation side on issue #179 and are authoritative over any figure
+derived here.
 
 The boot calibration, delay, dissolve-wrapper, and input-helper evidence is
 under `u5-decomp/functions/ULTIMA_EXE/`; intro phase ownership, title ticking,

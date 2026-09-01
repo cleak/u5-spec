@@ -700,7 +700,15 @@ The EGA driver owns several visual effects that are not gameplay systems:
 - Animated tile shimmer and moongate row splice: mutates selected loaded tile graphics entries rather
   than writing framebuffer pixels directly, then runs its own propagation and
   composite pass. In the ordinary world path the effect becomes visible when the
-  viewport redraws those tiles. The entry also takes a target cell as a screen
+  viewport redraws those tiles. **The behavioural contract for the carry-clear
+  body — which tiles it rotates, which it composites and through which masks,
+  and how it flickers the fire fixtures — is `systems/animation.md` Section 12.**
+  That body writes tile pixels **exclusively** into the loaded tile asset: never
+  to the visible screen and never to the back buffer, re-checked by decoding the
+  whole body and by scanning it for the video-memory address constant with zero
+  hits. The one exception is a few bytes parked in a driver-private scratch area
+  to carry a wrapping pixel row across each rotation, shared with this entry's
+  other body. The entry also takes a target cell as a screen
   tile row and column plus the current viewport pixel origin and a step value,
   and the Return-to-View preview and endgame gate drive it that way for a local cell effect,
   stepping `1..15` to open a cell and `15..1` to close it. The caller marks the
@@ -720,10 +728,38 @@ The EGA driver owns several visual effects that are not gameplay systems:
 - Loaded-tile palette-plane mutation: dispatch offset `0x6C` mutates tile
   graphics in the loaded asset segment rather than drawing directly to the
   framebuffer. Publicly confirmed modes are save-original tile bytes, restore
-  saved tile bytes, a byte-parameterized mutation mode, and a batch red/green
-  plane-swap mode used for combat-style terrain coloration. The combat framer's
-  reached call uses mode value `1`, so it is a restoration step before ordinary
-  world redraw rather than an independent presentation effect.
+  saved tile bytes, a byte-parameterized mutation mode, a batch red/green
+  plane-swap mode, and a whole-tileset remap. The combat framer's reached call
+  uses mode value `1`, so it is a restoration step before ordinary world redraw
+  rather than an independent presentation effect.
+
+  **Caller correction.** An earlier revision described the red/green plane-swap
+  mode as "used for combat-style terrain coloration", and the entry as reached
+  from three resident dispatch sites. Both are withdrawn. Those three sites are
+  thin trampolines, not callers. The five real callers and the modes they
+  select are: the dungeon look/view code, twice — one mode that saves eight
+  bytes of two unrelated tiles and sets a flag, and the red/green plane-swap
+  mode itself; the **per-turn clock advance**, which selects the moon/sun phase
+  painter and edits only the moon/sun phase tiles (this runs once per game turn,
+  not at a scene transition, so "this entry fires only on scene transitions" is
+  also withdrawn); the post-combat restore path, which selects the
+  restore-eight-bytes mode gated on the flag the dungeon path set; and the
+  endgame sequence, which selects the whole-tileset remap. Only the last of
+  these touches fire fixtures, and only `0xB0`, `0xB1` and `0xBF` of them,
+  through a fixed sixteen-entry nibble map; it is one-shot at the endgame and is
+  not an animation.
+
+  **One interaction worth knowing.** The plane-swap mode covers tiles `0x05`,
+  `0x1E`, `0x1F`, `0x4C`, `0xCA`, `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`.
+  It touches no water tile and no fire fixture directly, but `0x34..0x37` and
+  `0x60..0x6F` are two of the three destination groups of the per-step water
+  composite (`systems/animation.md` Section 12.3), so the swap and the water
+  animation write to the same bitmaps and interact. This entry is not irrelevant
+  to water. *Scope: the mode-to-caller mapping rests on the pushed argument at
+  each of the five call sites, each disassembled; the caller enumeration is a
+  rebased near-call and near-jump census across the resident image and all code
+  overlays and would miss a far or indirect call. What resident state causes the
+  dungeon path to run at all was not traced.*
 - Animation-script playback: dispatch offset `0x6F` takes the boot CPU
   calibration value in its primary register, holds the plane write mask at the
   blue-plus-intensity pair for the whole call, and walks a driver-resident byte

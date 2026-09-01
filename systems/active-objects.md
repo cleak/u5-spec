@@ -280,7 +280,7 @@ The animation cycle uses byte 6's low nibble. It counts down each tick:
 | any non-zero  | Mid-cycle. Decrement and write back. The renderer combines the phase with the tile class to pick a frame.     |
 | zero          | Cycle ended. Eligible for an AI tick: roll RNG, possibly turn or move, possibly reseed phase.                 |
 
-Each animated class has its current-frame index in a separate animation-frame table; the renderer combines the tile class with that counter to pick the actual byte to paint. The classes this per-slot pass animates are actor classes — vehicles, monsters and the other sprite-only tiles that live in the table. (An earlier revision of this paragraph listed "water (a four-frame cycle), lava, torches, and a small handful of 'special' tiles" as the animated classes. That list is **withdrawn**: no water, lava, brazier or torch tile animates through any per-tick pass. The separate world-tick tile animator touches exactly five terrain families — waterfall, fountain, pendulum, the standard of Britannia, and the clock/bellows pair — and none of them is a water or fire terrain family. See `systems/animation.md` Section 6 and `catalogs/tile-catalog.md` Section 4.)
+Each animated class has its current-frame index in a separate animation-frame table; the renderer combines the tile class with that counter to pick the actual byte to paint. The classes this per-slot pass animates are actor classes — vehicles, monsters and the other sprite-only tiles that live in the table. (An earlier revision of this paragraph listed "water (a four-frame cycle), lava, torches, and a small handful of 'special' tiles" as the animated classes. That list is **withdrawn**: no water, lava, brazier or torch tile animates through any per-tick pass. The separate world-tick tile animator touches exactly five terrain families — waterfall, fountain, pendulum, the standard of Britannia, and the clock/bellows pair — and none of them is a water or fire terrain family. **Further correction:** that withdrawal was then over-generalised in this document and elsewhere into "water, lava and fire tiles do not animate". That is also withdrawn. They have no frame family and no selector, but they are animated by a third layer — a driver-side pass that rewrites the loaded tile artwork in place on every animation step — specified in `systems/animation.md` Section 12. See `systems/animation.md` Sections 6 and 12 and `catalogs/tile-catalog.md` Section 4.)
 
 Two responsibilities sit slightly outside the per-slot loop. A *frame-counter advance* runs at the end of the pass, incrementing a shared frame counter and toggling a few alternate-frame tile classes. A *video-driver flush* runs immediately after, sending the post-tick frame to the display driver. Both are part of the "advance one tick of on-screen state and present it" contract.
 
@@ -357,6 +357,14 @@ The adjacency reactions, in the order the handler tests them:
   | `0xD0..0xDF` | Classes 36..39, one class per four-byte run. |
   | `0xE0..0xEF` | Classes 40..43, one class per four-byte run. The Sand Trap, excluded `0xE8..0xEB`, and whirlpool subfamilies do not reach this generic fallback through the ordinary walker. |
   | `0xF0..0xFF` | Classes 44..47, one class per four-byte run. |
+
+  Every value in that table is an active-object **type/sprite byte**, never a
+  map-cell terrain id. The atlas entry it draws is `type + 0x100`
+  (`catalogs/tile-catalog.md` Section 3.1), so the `0xC0..0xCF` and
+  `0xD0..0xDF` rows above are the Orc-through-Wisp creatures at atlas
+  `0x1C0..0x1DF` — not the identically numbered terrain ids, which are the
+  display driver's flame and wedge stencils (`systems/animation.md`
+  Section 12).
 
   Equivalently, every ordinary type at or above `0x40` uses
   `(type - 0x40) / 4`, discarding the remainder. This is a complete mapping,
@@ -746,7 +754,7 @@ said the round walker reads slot zero for the player and slots one and up for
 monsters; that is withdrawn, and it is the same withdrawn "reserved player
 slot" claim Section 7 corrects.
 
-**Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. It animates only the actor classes held in the table; it drives no water, lava or torch terrain cycle. Animated *terrain* belongs to the separate world-tick tile animator and its five families (`systems/animation.md` Section 6).
+**Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. It animates only the actor classes held in the table; it drives no water, lava or torch terrain *cycle*. Animated *terrain* belongs to the separate world-tick tile animator and its five families (`systems/animation.md` Section 6) and, for water, lava, rivers and fire fixtures, to the driver-side tile-asset pass that runs in the same step (`systems/animation.md` Section 12) - which is also where the banner and sail tiles are animated, on a stage of that pass published only as *probable* and not observed at runtime (`systems/animation.md` Section 12.5). Neither of those is an active-object concern, but neither is absent: an earlier revision's "no water, lava or torch animation" reading of this sentence is withdrawn.
 
 **Save / load.** The table is a persistent region in the save image, byte-for-byte.
 

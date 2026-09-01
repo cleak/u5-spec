@@ -343,6 +343,28 @@ index.
 | `0x174` | Full atlas index; then actor byte `0x74` | A cyan-and-blue crowned spectral humanoid with bright eyes and both arms raised. Its general description-table row is intentionally unnamed. | `(5,2)`, pixels `(88,40)`. |
 | `0x11C` | Full atlas index | The party-on-foot sprite. | `(5,5)`, pixels `(88,88)`. |
 
+**The hourglass cell is written more than once, and by two different
+mechanisms.** The cutscene map ships with the `0x80..0x83` fixture in its
+unoccupied member at `(5,7)` and the hourglass in its spent frame `0xE8` at
+`(5,9)`, two cells below it in the same column. The script swap listed in
+Section 6.3 (`0x80` becomes `0x82`, `0xE8` becomes `0xE9`) runs on the **first**
+wrong answer only. On any *later* wrong answer an open-coded stamp selected by
+question index writes the hourglass cell directly instead: index 1 writes
+`0xEB`, index 2 writes `0xE8`, and index 3 executes a companion (Section 5)
+rather than stamping. The visible sequence for an all-wrong run is therefore
+`0xE8` → `0xE9` → `0xEB` → `0xE8`.
+
+The index-0 arm would write `0xEA`, and it is **unreachable**: the stamp block is
+entered only when an earlier answer was already wrong, and at index 0 no earlier
+answer exists, so control necessarily takes the first-wrong-answer path. That
+the sequence therefore skips the third frame of what the artwork draws as a
+monotone drain looks like an off-by-one in the original — but that reading is an
+inference from the frame order of the art, not something the code establishes.
+The unreachability itself is established, and an implementation should reproduce
+the sequence above rather than "repair" it. This cutscene is the **only**
+consumer of the hourglass frames anywhere in the game; the tile animator never
+advances them (`formats/tiles.md` Section 6.1).
+
 ### 6.2 Direct drawing and redraw boundaries
 
 A VM terrain write becomes visible only on a later world tick. Actor-coordinate

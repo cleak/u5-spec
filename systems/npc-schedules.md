@@ -422,10 +422,15 @@ place of a link marker, which is what lets NPCs use a stairwell where the map
 author placed one instead of a ladder. The two acceptance tests are not
 identical in the analysed baseline: the on-floor gate accepts a slightly wider
 band of tile ids than the off-floor arrival test does, additionally treating
-`0xCC..0xCF` as stairway-like. Those four ids carry no description text and do
-not appear as authored floor links in shipped location data, so the widening has
-no observed effect on shipped maps; an implementation aiming at byte-level
-parity should still reproduce it.
+terrain-half ids `0xCC..0xCF` as stairway-like. Those four carry only the
+terrain half's placeholder description record, are the display driver's flame
+stencils for the fireplace, street lamp, candelabrum and stove
+(`systems/animation.md` Section 12.4), and do not appear as authored floor links
+— or in any cell — in shipped location data, so the widening has no observed
+effect on shipped maps; an implementation aiming at byte-level parity should
+still reproduce it. Do not read this run as the Ettin sprite run of
+`catalogs/monster-bestiary.md`: that is an actor byte of the same numerals and a
+different atlas half.
 
 ## 9. AI behaviours
 
@@ -537,7 +542,7 @@ for NPC pathfinding:
 | `0x94..0xA9` | Tables, odd door, portcullis, table with food, the three mirror ids, deep well, hitching post, stack of logs, desk, barrel, wine cask, vanity, and pitcher. |
 | `0xAB..0xB7` | Bed, chest of drawers, end table, heavy footlocker, flickering torch, hot brazier, meat on a spit, and cannon. |
 | `0xB9` | Locked door. |
-| `0xBB..0xC3` | Locked door with a window, fireplace, street lamp, candelabrum, hot stove, and the unnamed ids up to the stairway family. |
+| `0xBB..0xC3` | Locked door with a window, fireplace, street lamp, candelabrum, hot stove, and the four flame-stencil ids `0xC0..0xC3` up to the stairway family. |
 | `0xCA..0xFF` | Wooden fence, waterfall, moon gate, desert, the Flame family, collapsed dungeon entrance, flagpole, water, hourglass, the Britannia standard, the shop signs, the grandfather clock, bellows, wall, and darkness. |
 
 Everything not listed above is open. Written out, the open ids are `0x00`,

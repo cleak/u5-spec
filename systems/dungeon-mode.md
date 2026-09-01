@@ -1807,6 +1807,11 @@ conflict banner, and the framer's ambush arm adds no replacement banner.
      indexes zero through fifteen, independently draw a second index from the
      full inclusive range `0..15`, swap those entries, and clear that current
      source cell. This is sixteen full-range transpositions, not Fisher-Yates.
+     It is the room painter's own permutation of the synthesized source band,
+     and it is a different mechanism from the terrain setup helper's fifteen-transposition
+     placement-slot shuffle (`systems/combat.md` Section 5 and Section 5.3 step
+     3a), whose two-caller census is the ordinary wilderness/town encounter and
+     the surface camp ambush. Do not conflate the two counts or the two arrays.
      Then write `count` copies of the ordinary source byte
      `class * 4 + 0x40` into the first `count` permuted slots. `class` is the
      active dungeon monster's stored class byte. The painter always consumes

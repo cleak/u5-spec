@@ -63,6 +63,17 @@ The table has two public lookup domains:
   absolute string-pool offset, and then read the NUL-terminated description at
   that position.
 
+The two domains line up one-for-one with the two halves of the tile atlas: table
+entry *n* describes atlas tile *n*, so a terrain id addresses the same entry
+number in both, and an object-domain id `k` describes atlas tile `k + 0x100`
+(`catalogs/tile-catalog.md` Section 3.1). **The same numeral therefore names two
+unrelated things.** Object-domain `0xC0..0xC3`, `0xCC..0xCF` and `0xD0..0xD3`
+read "an orc", "an ettin" and "a headless" — the monster sprite runs of
+`catalogs/monster-bestiary.md` — while the identically numbered terrain-domain
+entries are sentinel rows belonging to the display driver's flame and wedge
+stencils (`systems/animation.md` Section 12). Resolve the domain before
+indexing; an implementation that does not will describe a stencil as an orc.
+
 Valid terrain ids and object-domain ids are zero through two hundred
 fifty-five within their respective domains. A renderer or tool that receives an
 out-of-range id should not wrap or mask it; it should report a content error or
@@ -88,6 +99,22 @@ encoded inside `LOOK2.DAT`.
 
 The sentinel string is a normal string in the pool. It is shared by many table
 entries and means "there is no meaningful look description for this target."
+
+**There are two sentinel strings, one per domain.** The terrain domain's is a
+single `*` and the object domain's is a single `x`; neither appears in the
+other domain. The shipped table has twenty-three terrain-domain sentinel rows —
+`0x00`, `0x59`, `0x89`, `0x8A`, `0xA0`, `0xA4`, `0xC0..0xC3`, `0xCC..0xD3`,
+`0xD8..0xDB`, `0xF8` — and sixteen object-domain ones, at object ids `0x00`,
+`0x12..0x16`, `0x1C..0x1D`, `0x74..0x77` and `0x7C..0x7F`. Each glyph occupies
+several distinct positions in the string pool rather than one shared position,
+so a reader must compare the *string*, not the offset, to recognise a sentinel.
+
+**A sentinel row says nothing about whether the tile is drawn.** Most
+terrain-domain sentinel rows are ordinary artwork placed in shipped map data;
+they are sentinel because a Look handler owns their output, or because the
+driver uses the entry as a stencil, or for no established reason at all. Do not
+derive a set of undrawable, private or handler-owned ids from the sentinel rows;
+see `catalogs/tile-catalog.md` Section 3 and `formats/tiles.md` Section 6.2.
 Public specs should refer to it semantically rather than requiring user
 interfaces to display the original sentinel glyph. In the original default
 LOOK2 path, the selected sentinel string is still handed to text output like

@@ -292,7 +292,16 @@ renderer table are relative to the cell anchor and use `(x,y)` order.
 | `0x10` | secondary terrain, frame-fill and frame-line banks | The road class; its seven tile ids are the whole road family and nothing else maps here. The cell opens with the class-`1` sparse checker, then a centre fill `(1,1)..(2,2)` — the road body. A per-tile four-bit connection mask then adds a stub out to each connected cell edge: top `(1,0)..(2,0)`, right `(3,1)..(3,2)`, bottom `(1,3)..(2,3)`, left `(0,1)..(0,2)`. The shipped masks are north-south for `0x20`, east-west for `0x21`, the four single elbows for `0x22`, `0x23`, `0x24` and `0x25`, and all four edges for `0x26`. For the four elbow ids only, one further micro-cell is stamped with the blank source over the quarter of the centre fill diagonally opposite the elbow — `(1,2)`, `(1,1)`, `(2,1)` and `(2,2)` respectively — which rounds the unused corner off the road body. *Corrected:* an earlier revision called this a fence/wall renderer whose last stamp was an interior orientation marker. It is neither. |
 | `0x5A` | frame-line bank | Compatibility/direct-call class. It uses the same source family and filled-cell frame chain as class `7`; no shipped tile-id table entry maps here. |
 
-The resident view-class table maps tile ids to these classes as compact ranges:
+The resident view-class table maps tile ids to these classes as compact ranges.
+**Every id below is a terrain-half tile id in `0x00..0xFF`** — the values that
+appear in map and arena grids. They are not active-object sprite bytes, and the
+runs that share numerals with monster sprite runs elsewhere in this spec set
+(`0xC0..0xC3`, `0xCC..0xCF`, `0xD0..0xD3`) are terrain here: the flame and wedge
+stencils of `systems/animation.md` Section 12, not Orc, Ettin and Headless. The
+table itself corroborates the split — it gives the two flame-mask runs and
+`0x00` the no-op class `0`, while `0xD0..0xD3` get the ordinary class `7`
+renderer, which is consistent with those four being placed, drawable terrain.
+
 
 | View class | Tile ids |
 |---:|---|

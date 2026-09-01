@@ -156,6 +156,27 @@ helper at all: every one of its uses feeds the game PRNG's seed primitive. A
 compatible implementation must not skip that seeding on the mistaken
 assumption that it is presentation-only.
 
+**Rendering and idling perturb the gameplay stream, so it is not reproducible
+from the player's action sequence alone.** Two per-pass consumers run on the
+idle path, before any command is entered:
+
+- Every viewport composite pass consumes **one draw per qualifying actor** —
+  each actor standing on the furniture terrain that selects a four-frame merged
+  sprite (`systems/visibility.md` Section 8.1). That is one draw per such actor
+  per idle pass, on the order of eighteen passes a second.
+- The per-pass wind check draws once in the common case. On an
+  uncommon result it enters a retry loop that draws in pairs until it settles, so
+  its draw count per invocation is one, two, or an unbounded sequence above that.
+  **No maximum is published, and an engine must not assume one** - the loop has no
+  static bound and its real-world distribution needs live capture
+  (`systems/animation.md` Section 13.2).
+
+Neither is gated on player input, so how long the player stood at a prompt
+changes the stream position of the next combat roll. Any engine aiming at
+deterministic replay must either reproduce those idle draws exactly, with the
+same idle cadence, or accept that its stream will diverge from the original's;
+it cannot get parity by seeding alone.
+
 The generator is entirely integer arithmetic. No floating point, heap allocation,
 or formatted I/O is involved.
 

@@ -303,6 +303,217 @@ The naming is a trap worth calling out, because it has been got wrong before:
 `STARTSC` is **not** the start screen. The start/menu screen is built from
 `ULTIMA`; `STARTSC` is used by the acknowledgement path and by nothing else.
 
+### 6.1 Frame groups in the atlas that the animator never advances
+
+The atlas is authored with many contiguous runs of two or four frames, and a
+reader is strongly tempted to treat "four adjacent frames of the same subject"
+as proof of an animated family. It is not proof, in either direction, and both
+mistakes have been made here.
+
+- **A four-frame authoring run does not imply animation.** `0xE8..0xEB` is four
+  coherent frames of one hourglass — sand fully in the upper bulb, two
+  intermediate levels, then sand fully in the lower bulb, a clean drain loop in
+  the cyclic order `0xE9`, `0xEA`, `0xEB`, `0xE8`. **No animator advances any of
+  them.** The tile-animation selector table has five windows and this is not one
+  of them (`systems/animation.md` Section 6), and the driver-side pass does not
+  touch it either. A map cell holding an hourglass id draws that exact frame for
+  the whole program run.
+- **Placing only the base id does not imply staticness.** The shipped maps place
+  only `0xE8`, in exactly two grids — one castle-interior upper floor and the
+  Blackthorn throne-room cutscene tableau — and that looked like corroboration.
+  It is not: the standard of Britannia `0xEC..0xEF` is likewise placed exactly
+  once and only as its base id, and the animator does advance it.
+
+**What consumes the other three hourglass frames.** They are used as discrete
+narrative states rather than as a cycle, by the Blackthorn throne-room
+interrogation. That cutscene's fixed eleven-by-eleven map ships with the
+`0x80..0x83` family's base member and, two cells below it in the same column,
+the hourglass in its spent frame `0xE8`. During the four-question challenge:
+
+| Wrong answer | Hourglass cell becomes |
+|---|---|
+| The first wrong answer, whichever question it is | `0xE9`, written by the cutscene script alongside the `0x80` → `0x82` swap in the cell above |
+| A later wrong answer at question index 1 | `0xEB` |
+| A later wrong answer at question index 2 | `0xE8` |
+| A later wrong answer at question index 3 | Nothing is stamped; a companion is executed instead |
+
+The visible sequence for an all-wrong run is therefore `0xE8` → `0xE9` → `0xEB`
+→ `0xE8`. **`0xEA` is unreachable.** The index-0 arm would write it, but that arm
+is entered only when an earlier answer was already wrong, and at index 0 no
+earlier answer exists, so control necessarily takes the first-wrong-answer path.
+That the observed sequence skips the third frame of a monotone drain looks like
+an off-by-one in the original, but that reading is an inference from the
+artwork's frame order and not something the code establishes; the unreachability
+itself is established. See `systems/blackthorn.md` Section 6.1.
+
+**Scope of the "nothing else consumes them" negative.** It covers a byte-for-byte
+scan of every shipped map, location, cutscene, intro-screen and combat-arena
+terrain grid; a search of every shipped file for a four-byte hourglass
+frame-sequence table in any rotation or reversal; and an exhaustive per-byte
+instruction decode of the resident executable, all code overlays and both the
+EGA and CGA drivers for every comparison or move with an immediate in
+`0xE8..0xEB`, with each hit classified from its surroundings. It does **not**
+cover a tile write whose value comes from a data table that was not enumerated,
+and the compressed graphics archives were deliberately excluded because their
+bytes are compression codes.
+
+**A namespace hazard that will otherwise mislead every reader of this range.**
+Two different id spaces use these byte values. *Map and terrain* bytes index the
+atlas directly, so `0xE8..0xEB` there is the four hourglass frames. *Active-object
+marker* bytes — the live-object table, and the placement-metadata band of
+combat-arena records — index the atlas offset by one sprite bank, so the same
+byte values there are the four **combat field-effect tiles**, second-bank ids
+`0x1E8..0x1EB`. **Refer to these four by id, not by label.** They carry two
+roles at once, and the two roles have produced two different naming habits:
+authored as drawable combat field effects, they are named in `systems/animation.md`
+Section 12.4 as `0x1E8` a poison field, `0x1E9` a sleep field, and `0x1EA` and
+`0x1EB` each a force field, while a "poison, sleep, fire, energy" labelling of the
+same four ids has also circulated in this document. This specification does not
+resolve which of the two labels for `0x1EA`/`0x1EB` matches the shipped
+description table, so nothing here should be keyed off the name. Independently of
+the field-effect role, the display driver reuses the same four tiles as its own
+randomness store: it refreshes all four with fresh pseudo-random pixel bits on
+every animation step and XORs the fire fixtures from `0x1EA` (and the shrine
+flame from `0x1EB`) through per-fixture masks — Section 6.2 below and
+`systems/animation.md` Section 12.4. A tile being a drawable field effect and a
+driver noise source is not a contradiction; it is both. Every routine in the
+engine that tests
+this range as a family is working in the second space, not the first; seven such
+sites exist and each was traced to the writer of the value it tests. Anyone
+citing one of those classifiers as evidence about hourglass behaviour gets a
+wrong answer. Two related precision points: the town-side test covers the wider
+band `0xE8..0xEF`, eight marker values, not four; and the outdoor tile
+classifier's polarity is the opposite of the usual assumption — it returns true
+for `0x2C..0x2F` and for values at or above `0x80` generally, but **false** for
+`0xB4..0xB7`, false for `0xE8..0xEB`, and false for everything below `0x80`.
+
+By contrast the two lookup tables that really are keyed by raw terrain id — the
+NPC-pathfinding blocking bitmap and the projectile-passability bitmap — draw no
+distinction between the frames of a family at all. All four hourglass ids block
+NPC pathfinding and all four pass projectiles, and the same holds for all four
+clock and bellows ids.
+
+### 6.2 The loaded atlas is mutated at run time, and a few entries serve the driver as masks
+
+Two facts about `TILES` are invisible from the file but change what a reader may
+conclude from it.
+
+**The loaded copy is not the shipped copy.** Once the atlas has been loaded and
+prepared for blitting, the display driver rewrites tile pixels inside it on
+every animation step: it rotates the water, shoals and lava tiles by one pixel
+row, stamps a water frame into three groups of composited tiles, and XORs
+pseudo-random noise into every fire fixture through a mask. The full contract is
+`systems/animation.md` Section 12. Consequences for anyone working with the
+asset:
+
+- A dump of the tile buffer taken from a running game is **not** the shipped
+  artwork, and for the fire fixtures the divergence is cumulative and never
+  undone — the pristine bytes inside each flame mask are gone after the first
+  animation step of the session.
+- The archive on disk is nevertheless the authoritative source. Every effect
+  above is derived from these shipped bytes; nothing is generated from a second
+  asset.
+- None of this is a palette effect. The palette is programmed once at mode set
+  and never revisited (Section 7 and Section 10).
+
+> **Read every id in this section as an atlas index, never as an actor byte.**
+>
+> The atlas is five hundred twelve entries and splits in half. Indices
+> `0x000..0x0FF` are the **terrain half** — the one-byte values that appear in
+> map grids, arena grids and scene records. Indices `0x100..0x1FF` are the
+> **actor half** — what a live actor resolves to, reached by adding `0x100` to
+> the actor byte stored in an active-object record
+> (`catalogs/tile-catalog.md` Section 3.1). Section 6.1 calls the same two
+> halves the first and second sprite bank; the terms are interchangeable.
+>
+> Every bare id in Section 6 is an atlas index in the terrain half unless it is
+> written with a leading `0x1`. The same numerals also name actor bytes
+> elsewhere in this spec set, and they mean something completely different
+> there. The three collisions that have actually misled readers:
+>
+> | Numeral | As a terrain-half atlas index | As an actor byte (atlas index) |
+> |---|---|---|
+> | `0xC0..0xC3` | Flame masks for the torch, brazier and spit | Orc, four frames (`0x1C0..0x1C3`) |
+> | `0xCC..0xCF` | Flame masks for the fireplace, street lamp, candelabrum and stove | Ettin, four frames (`0x1CC..0x1CF`) |
+> | `0xD0..0xD3` | Diagonal wedge tiles, reused as the water composite mask | Headless, four frames (`0x1D0..0x1D3`) |
+>
+> An engine that conflates the two halves draws monsters as masks and masks as
+> monsters. `catalogs/monster-bestiary.md` and `systems/encounters.md` publish
+> the right-hand column; this document and `systems/animation.md` publish the
+> left.
+
+**A few terrain-half entries are the driver's mask assets.** The driver reads
+them as stencils during the animation step of `systems/animation.md`
+Section 12:
+
+| Terrain-half ids | Role in the driver |
+|---|---|
+| `0xC0..0xC3`, `0xCC..0xCF` | Per-fixture flame masks. Each is a small two-value blob sitting exactly over its fixture's flame; the XOR touches only pixels inside it. |
+| `0xD0..0xD3` | The four diagonal half-tile wedges used as the water composite's stencil. |
+| `0x70..0x7F` | The river composite's stencil. |
+
+Actor-half `0x1E8..0x1EB` are the driver's noise store: all four are
+re-randomised on every animation step, and the fire effect XORs from `0x1EA`
+for every fixture except the shrine flame, which uses `0x1EB`. Those same four
+ids are **also** the drawable combat field-effect tiles of Section 6.1: they
+hold both roles at once. Name them by id; see Section 6.1 on the two naming
+habits.
+
+**Serving as a mask does not make an id undrawable, and the shipped data says
+so twice.** All sixteen of `0x70..0x7F` are ordinary, placeable terrain named
+"strange walls" in the shipped description table (they are the
+Sceptre-dissolvable barrier family of `catalogs/tile-catalog.md`), and they are
+placed as arena terrain in both shipped combat-arena banks. `0xD0..0xD3` are
+the same kind of dual-role id: all four appear as arena terrain cells in the
+shipped dungeon-room arena bank, and `0xD1` and `0xD2` are placed on both
+shipped Ararat pages of the keep location file, where the two complementary
+wedges form the prow of the wrecked ship. Independently, the resident view-class
+table of `systems/view.md` Section 4 gives `0xD0..0xD3` a real ornament renderer
+while giving `0x00`, `0xC0..0xC3` and `0xCC..0xCF` the no-op class. A reader
+enumerating drawable tiles must not exclude `0x70..0x7F` or `0xD0..0xD3`.
+
+**A placeholder description record proves nothing about drawability.** The
+terrain half's placeholder record is a lone `*` and the actor half's is a lone
+`x` — two different strings, one per half. Twenty-three terrain-half ids carry
+`*`: `0x00`, `0x59`, `0x89..0x8A`, `0xA0`, `0xA4`, `0xC0..0xC3`, `0xCC..0xD3`,
+`0xD8..0xDB` and `0xF8`. Eleven of those twenty-three hold cells in shipped map
+or arena data — the telescope `0x59`, the sign and poster ids, the fountain
+`0xD8`, and `0xD0..0xD3` — and ten of the twenty-three carry the placeholder
+only because a Look handler produces their output instead of the table
+(`formats/look2-dat.md` Section 5, `catalogs/tile-catalog.md` Section 3).
+Sixteen actor-half ids carry `x`: `0x100`, `0x112..0x116`, `0x11C..0x11D`,
+`0x174..0x177` and `0x17C..0x17F`.
+
+**Scope of the placement statements above.** "Placed in shipped map or arena
+data" here means a terrain cell in one of eight shipped files: the surface and
+underworld world-map files, the four per-class location files, and the two
+combat-arena banks — counting, in the arena files, only the eleven visible
+terrain columns of each record and not the metadata band
+(`formats/cbt.md` Section 3). Nothing else was counted: not dungeon-level cell
+data, which uses its own byte encoding (`formats/dungeon-dat.md`), not cutscene
+or endgame scene records, and not anything a runtime path writes into a live
+grid. Absence from this set is therefore weak evidence on its own — several
+plainly drawable ids are absent from it because they are animation frames or are
+only ever placed at run time — which is why the mask-only conclusion for
+`0xC0..0xC3` and `0xCC..0xCF` rests on their driver role first and this census
+second.
+
+*Corrected:* an earlier revision of this subsection declared `0x00`,
+`0xC0..0xC3`, `0xCC..0xCF`, `0xD0..0xD3` and `0x100` to be driver-private
+entries that are never drawn, on the strength of their all carrying "the shared
+placeholder `*`". Three things in that sentence are withdrawn
+(`RETRACTIONS.md` R314): `0xD0..0xD3` are drawn, as placed terrain, in shipped
+map and arena data; `0x100` does not carry `*` at all, it carries the actor
+half's `x`; and the placeholder itself is not evidence of anything, as the
+twenty-three-id list above shows. Of the original list only `0xC0..0xC3` and
+`0xCC..0xCF` are confirmed mask-only, and that confirmation comes from their
+role in the driver and from their absence from every shipped map and arena
+terrain cell, not from their description record. `0x00` is neither: no
+composite or XOR step in `systems/animation.md` Section 12 uses it as a stencil,
+its shipped artwork is a full-colour radial burst rather than a two-value
+stencil, and no shipped map or arena cell holds it — what draws it, if anything
+does, is not established here.
+
 ## 7. Palette and rendering
 
 The format does not embed a palette. The sixteen-entry `.16` palette is a table of sixteen attribute-controller palette values that ships inside the resident screen descriptor, at a fixed offset from the descriptor pointer (`systems/display-driver-mode.md` section 5). The EGA and Tandy drivers hand that table to the BIOS "set all palette registers" call during mode setup and never touch it again; nothing colour-related is baked into a driver image. Fifteen of the sixteen entries are the stock IBM values for that mode — index zero black, index one dark blue, index two dark green, and so on up to index fifteen bright white. The one deviation is index six: the shipped table selects **dark yellow** where the stock mode table selects **brown**. That single substitution is the only way the game's palette differs from the hardware default, and a reader that renders index six as brown will get the game's dark-yellow tones wrong.
@@ -367,7 +578,13 @@ archive decoding:
   shipped presentation is always either a draw performed under a restricted plane
   write mask or a mutation of the loaded asset bytes, never a palette change. A
   reader can therefore render every `.4` file against one four-colour set and
-  every `.16` file against one sixteen-entry set.
+  every `.16` file against one sixteen-entry set. The largest such asset mutation
+  — the per-animation-step rewrite of the water, lava, river and fire-fixture
+  tiles — is specified in `systems/animation.md` Section 12, and Section 6.2
+  above records what it means for anyone dumping the loaded atlas. That negative
+  covers the EGA driver by a scan for immediate video-range port addresses and
+  BIOS video calls; the CGA, Hercules and Tandy drivers were not examined for
+  palette handling at all.
 
 - **Per-strip roles in `TEXT`.** Closed. The six records are whole-image chapter headings, not glyph strips; their sizes, words and consumers are published in Section 6. There is nothing to slice and no font data in this file.
 
@@ -416,3 +633,14 @@ The format described above was derived from the analysis notes listed below. Non
 - Per-record inventories and roles for `ULTIMA`, `STARTSC` and `ENDSC`, the depth difference in `ULTIMA`'s last record, and the `STARTSC`-is-not-the-start-screen correction — private analysis under `u5-decomp/notes/`, with every record shape re-decoded from the shipped files before publication.
 - The active-object table whose per-slot tile byte indexes the world tile atlas — `u5-spec/systems/active-objects.md`.
 - The location tile grids' per-cell tile byte that indexes the world tile atlas — `u5-spec/formats/location-dat.md`.
+- Section 6.1: the hourglass frame group's staticness, the cutscene consumers of
+  its non-base frames and the unreachable arm, the placement census, and the
+  marker-space namespace hazard with the seven classifier sites and the two
+  raw-terrain bitmaps — cleanroom rewrite of private analysis under
+  `u5-decomp/functions/ULTIMA_EXE/` and the Blackthorn overlay analysis under
+  `u5-decomp/functions/`, repaired after an adversarial verification pass. The
+  frame ordering of the drain loop and the mask and noise artwork of Section 6.2
+  were rendered from the decompressed shipped tile file.
+- Section 6.2: the run-time mutation of the loaded atlas and the private/drawable
+  split of the mask and noise ids — see `u5-spec/systems/animation.md` Section 12
+  for the behavioural contract and its own provenance.
