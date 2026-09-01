@@ -130,7 +130,9 @@ Between keystrokes the input pipeline runs a world tick — the resident *redraw
 
 After producing the scratch grid, the tick refines visibility by toggling certain marker tiles through the shared squared-distance lookup centred on the viewport, then renders. On the very first tick after a mode entry, an additional full-panel repaint runs, painting the side panels, status bars, and frame borders that the in-loop renderer otherwise leaves alone.
 
-The world tick also runs three secondary subsystems before producing the grid: an active-object animator for per-frame sprite phases and eligible ambient wandering, a small RNG dispatcher, and a lighting / torch presentation timer.
+The world tick also runs three secondary subsystems before producing the grid: an active-object animator for per-frame sprite phases, a small RNG dispatcher, and a lighting / torch presentation timer.
+
+> **Corrected 2026-08-31 (R315).** This sentence previously read "an active-object animator for per-frame sprite phases **and eligible ambient wandering**". The wandering clause is withdrawn. The world tick advances presentation only; it steps no actors of any kind. Ambient creature wandering and scheduled NPC movement both happen in the per-turn path, alongside the in-world clock. Confirmed independently by runtime capture on the clean side: an adjacent hostile creature neither moved nor attacked across 28 seconds of continuous idling, and an in-castle townsperson took zero steps in 31 seconds, while sprites animated in place throughout. See `systems/input.md` section 2 and `systems/animation.md` section 5.
 
 The world tick is only called from inside the input pipeline's idle wait. It does not run when the pipeline is in prompt mode (a Y/N or numeric prompt has set a printable prompt-character byte). Prompt mode freezes the world while the player thinks. Cleanup time is gameplay time; prompt time is real time.
 
