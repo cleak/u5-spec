@@ -190,9 +190,14 @@ tables:
 
 For implementation, treat autonomous wandering as a narrow supplement to the
 active-object system. Scheduled town NPCs remain schedule-driven; combat actors
-remain combat-round-driven; the player remains input-driven. The animator's
-wandering path covers ambient map creatures and similar actors that exist in
-the world table between explicit commands.
+remain combat-round-driven; the player remains input-driven. > **Corrected 2026-08-31 (R315).** This paragraph previously ended: "The
+> animator's wandering path covers ambient map creatures and similar actors
+> that exist in the world table **between explicit commands**." That is
+> withdrawn. The animator has no wandering path — it advances sprite phases and
+> nothing else. Ambient map creatures do move, but on the **per-turn** path
+> together with scheduled NPCs and the in-world clock, never on the idle tick.
+> An engine that wanders actors from the animator will move the world while the
+> player is standing still, which the original does not do.
 
 ## 6. Global Tile Animation
 
