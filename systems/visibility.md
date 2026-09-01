@@ -347,8 +347,8 @@ rather than by their resident table order.
 | Odd door `0x97` | Stops propagation. |
 | Wooden door `0xB8`, locked door `0xB9` | Stop propagation. |
 | Fireplace `0xBC` | Stops propagation. It is also a local-light source (Section 12.3): a tile can both stop the carve and light its neighbourhood. |
-| Unnamed fixtures `0xD0..0xD3` (shared placeholder description) | Stop propagation. |
-| Sign/poster tile `0xF8` (shared placeholder description) | Stops propagation. |
+| Diagonal wedge tiles `0xD0..0xD3` (terrain-half ids that carry the placeholder description; the driver also uses them as the water composite's stencil, `systems/animation.md` Section 12.3) | Stop propagation. |
+| Sign/poster tile `0xF8` (terrain-half id carrying the placeholder description) | Stops propagation. |
 | Wall `0xFE`, and the void tile `0xFF` ("darkness!") | Stop propagation. |
 | Arrow slit `0x4A`, window `0x4B` | Propagate only when orthogonally adjacent to the centre cell. |
 | Odd door `0x98` | Propagates only when orthogonally adjacent to the centre cell. |
@@ -359,11 +359,17 @@ doors block sight outright, while the four openings you can only see through
 from immediately in front — an arrow slit, a window, and the two windowed doors —
 propagate exactly one cell.
 
-**Correction.** Earlier revisions of this table named these ids after monsters:
-`0x97` a Bat frame, `0xB8..0xBB` Gargoyle frames, `0xBC` an Insect Swarm frame,
-`0xD0..0xD3` Headless frames, `0xF8` a Rot Worm frame, `0xFE..0xFF` Shadow Lord
-frames, `0x4A..0x4B` and `0x4D..0x4F` bookshelf/dresser/vanity/trunk variants,
-and `0x5A` a sign post. All of those names are **withdrawn**. They were read out
+**Correction — the monster names below are withdrawn, and nothing in this
+document names these ids after a creature.** Earlier revisions of the table
+above named them after monsters: `0x97` a Bat frame, `0xB8..0xBB` Gargoyle
+frames, `0xBC` an Insect Swarm frame, `0xD0..0xD3` Headless frames, `0xF8` a Rot
+Worm frame, `0xFE..0xFF` Shadow Lord frames, `0x4A..0x4B` and `0x4D..0x4F`
+bookshelf/dresser/vanity/trunk variants, and `0x5A` a sign post. **Every one of
+those names is withdrawn**, and they are reproduced here only so a reader who
+implemented them can recognise what to remove. The creature names were not
+invented: they are real names, but of the **actor-half** atlas entries
+`0x197`, `0x1B8..0x1BB`, `0x1BC`, `0x1D0..0x1D3`, `0x1F8` and `0x1FE..0x1FF`,
+which this classifier can never see. They were read out
 of the nominal index ranges of `catalogs/tile-catalog.md` Sections 2 and 3.
 That catalog's Section 3.1 precedence rule marks those range names as working
 hypotheses for **every** band that has not been confirmed index by index — the
@@ -467,21 +473,191 @@ few edge shapes:
 
 The four-entry variant choices above (`0x60..0x63`, `0x64..0x67`,
 `0x38..0x3B`, `0x34..0x37`, and `0x3C..0x3F`) use the shared variant selector:
-when the current active character's class letter is Tinker, select the first
-entry; otherwise select a uniform random entry from the four-value range.
+**unless the Negate Time timed effect is active, select a uniform random entry
+from the four-value range; while it is active, the selector short-circuits and
+returns the first entry for every actor.**
+
+*Retracted:* an earlier revision of this paragraph said the first entry is
+selected "when the current active character's class letter is Tinker". There is
+no character-class input to this selector. The byte it tests is the single
+global timed-magic-effect code, and the value that short-circuits it is the one
+Negate Time writes; the resemblance is that both are stored as a letter. An
+implementation that wired this to the party's classes will pick variant 0 for
+the wrong reason and will animate through Negate Time. See `RETRACTIONS.md`.
+
+Negate Time is the only producer of that effect code in the shipped game. A
+census of every direct-store instruction form across the executable and all code
+overlays finds one site that writes it as an immediate — the Negate Time spell
+handler, which also writes the effect's ten-turn duration — four that
+unconditionally clear both the code and its duration, and one generic
+three-argument effect setter whose only three call sites anywhere pass the
+Protection code twice and a non-letter code once, never this one. *Scope: that
+negative is closed over every direct-address store form; a write through a
+computed pointer, a string store, or a bulk restore of the surrounding
+saved-state band would not have been seen, and the last of those would be a
+reload of a previously set effect rather than a new producer.*
 
 Before the per-slot loop runs, the compositor refreshes slot zero's bytes from the world-state globals: the avatar tile id, the player's world coordinates, the player's floor. This ensures the player slot reflects the current frame's truth before anything else is composited; the slot's data may otherwise be stale because the active-object animator runs only on certain ticks.
 
 The end state, after the compositor: the visibility grid contains either real tile bytes resolved by the carve, markers (`0xFF`, `0x1C`, `0xDD`, `0x00`, `0x87`), or direct marker writes from terrain-aware compositor cases. Active-object visual tiles that survive the cell guards normally live in the terrain band behind the `0x00` marker. Both grids are then handed to the renderer.
+
+### 8.1 When the variant is drawn, and how often
+
+> **Normative.** The variant is drawn **once per composite pass, per actor** —
+> not once per placement — and **it is never cached anywhere.**
+
+The selector is a helper that takes no arguments and writes nothing to memory:
+it returns a value in `0..3` which the caller consumes immediately. It is
+reached from five mutually exclusive arms of the terrain-substitution table
+above, so no actor draws more than once in a pass, and the compositor is invoked
+once per qualifying live actor from the compositing pass. There is exactly one
+draw per qualifying actor per pass.
+
+Nothing about the actor's placement, arrival or movement enters the decision.
+The drawing path reads five fields of an actor record — a type byte, a sprite
+id, a map column, a map row and a map level — and derives the variant afresh
+from the terrain beneath the actor every time the actor is drawn.
+
+**There is no cache to find.** The compositor's complete write set is three
+places: the visibility grid, one cell of that grid on the row above (for the
+mirror-reflection rule of the table above), and the companion sprite band. It
+never writes back into the actor record; the selector writes nothing at all;
+there is no per-actor variant field, no scratch table keyed by actor, and no
+frame counter anywhere in the path. The one place a chosen variant survives the
+call is the companion-band cell the renderer reads — and that is a destination,
+not a cache. Nothing reads it back to decide a later variant, and every
+composite pass overwrites it.
+
+The visibility grid does not preserve the composited cell either, and the
+correct statement is narrower than "the producers restore it":
+
+- **The cheap path** (Section 10) refills exactly the cells carrying the
+  use-companion value from the map — precisely the set the previous composite
+  consumed — so every one of them is re-composited.
+- **The combat path** block-copies the arena terrain over the whole grid, so
+  likewise every cell is restored.
+- **The full rebuild** first clears the entire grid to the hidden marker, and
+  what comes back depends on the current lighting scalar: with a positive light
+  radius only cells the radial visibility pass marks visible are restored, so an
+  actor outside line of sight is correctly skipped rather than re-composited;
+  with the scalar negative (full daylight) every cell is refilled from the map;
+  with it zero the grid stays entirely hidden.
+
+While the player is standing still the dirty flag is clear and the cheap path is
+what runs, so for the idle case every pass re-enters the same arm and draws
+again.
+
+### 8.2 The composite is not gated on the dirty flag
+
+> **Normative.** The composite and the raster run **unconditionally** at the tail
+> of the redraw routine. The visibility dirty flag exists, but it does not gate
+> either of them.
+
+This corrects a premise rather than a published claim, and it is worth stating
+because the natural reading of Sections 10 and 11 is that a clean frame does
+less work. It does less *producer* work. The redraw routine has exactly one
+early exit — the master redraw-enable gate — and past it every path converges on
+the same two steps, composite then rasterize. The dirty flag is tested upstream
+of that convergence and only chooses **which** of the three grid producers above
+runs. Nothing is gated on a turn boundary, and no branch skips either tail step.
+The composite still runs while Negate Time is active; it just draws variant 0
+every time.
+
+*Scope on the early exit.* A widened scan covering every direct-address store
+form across the executable and all overlays finds exactly two writers of the
+master redraw-enable gate, both **setting** it (one on outdoor scene entry, one
+on town entry), and the shipped data image has it clear. Indexed and
+computed-pointer writes were not covered, so "nothing ever clears it in a world
+scene" is an observation, not an invariant.
+
+### 8.3 The variant therefore changes while the player stands still — *probable*
+
+An actor standing on stocks, on manacles, on a mirror, or on a chair facing an
+adjacent laden table is redrawn with a freshly chosen variant on **every idle
+pass**, so its sprite changes on about **three passes in four** while the player
+presses nothing.
+
+That three-in-four figure is a property of the shipped pseudo-random generator,
+computed by re-running it, not a timing measurement: the generator's state
+advances on every call, the requested span of four divides its output range
+exactly so the four outcomes are equally likely, its state cycle is 47,343 long,
+the `0..3` histogram over 200,000 draws is flat to within about 0.7 percent, and
+the probability that two draws separated by one to five steps differ is 0.7508.
+
+**This is not a rendering artefact to be smoothed away. It is how the original
+produces idle animation for these merged sprites — a random frame per redraw
+instead of a phase counter — and an engine should reproduce it.** The shipped
+tile-name table names the four-frame sets "a prisoner", "an occupied chair" and
+"a trapped soul!", and every non-animating case in the same table uses a single
+fixed combined tile instead of a four-frame set. Independent capture on the
+implementation side saw the same shape in combat, where party actors re-rolled a
+weapon-angle variant on 95 percent of ticks among roughly eight variants in
+scrambled order.
+
+The exceptions that keep this from being universal:
+
+- Chairs that do not face a laden table, and chairs in the other two facings,
+  take a single fixed occupied-chair tile with no draw at all; a bed takes the
+  single occupied-bed tile and the two ladder tiles take single fixed tiles.
+  None of these ever changes.
+- Ship and monster sprites never merge, so they never animate this way: monsters
+  are stamped through unchanged, and frigate/ship sprite values are routed by
+  the compositor's entry test straight to the plain stamp before terrain is even
+  sampled.
+- The appearance freezes on variant 0 for the whole duration of Negate Time.
+- Scenes in the suppressed idle band — the eight dungeon scenes and the
+  intro/front-end screens among them — do not run the idle redraw at all
+  (`systems/timing.md` Section 8.2), so nothing animates this way there.
+
+This is published as **probable** rather than established for one reason only:
+every link in the chain was read — a fresh draw per qualifying actor per pass, no
+cache to carry a choice forward, an unconditional composite-and-rasterize tail, a
+rasterizer with no change detection, and one redraw per key-less input poll — but
+the final step, from "a new value is painted every pass" to "a person perceives
+it changing", is inference. It is directly observable, and a short capture of a
+seated tavern patron or a prisoner in stocks settles it. The *perceived rate*
+depends on the idle cadence and is owned by `systems/timing.md` Section 8.
+
+### 8.4 What the merge actually is, and a consequence for randomness
+
+The substitution these variants belong to is a **furniture merge**: an actor
+standing on a piece of furniture is not drawn as an actor on top of terrain, it
+is replaced wholesale by a combined "occupied furniture" sprite drawn from the
+second tile bank. The companion-band values in the table above are second-bank
+ids — the stocks set is `0x160..0x163`, the manacles set `0x164..0x167`, the two
+occupied-chair sets `0x134..0x137` and `0x138..0x13B`, and the trapped-soul set
+`0x13C..0x13F` — and the merge applies only to the party's own sprite families
+(on foot, horse, magic carpet, skiff) and to the humanoid NPC sprite range.
+
+Whether combat arena maps actually contain the stocks, manacles, chair or mirror
+terrain values was not checked, so reachability of the merge in combat is
+unverified; the compositor itself is scene-independent and reads whatever
+terrain source the scene uses, so it would apply if they do.
+
+**A consequence that belongs to `systems/prng.md` as much as to this document:
+every composite pass consumes one draw per qualifying actor from the single
+global pseudo-random stream, and the per-pass wind check consumes further draws
+of its own.** The per-pass wind check draws once in the common case. On an
+uncommon result it enters a retry loop that draws in pairs until it settles, so
+its draw count per invocation is one, two, or an unbounded sequence above that.
+**No maximum is published, and an engine must not assume one** — the loop has no
+static bound and its real-world distribution needs live capture.
+
+Gameplay randomness is therefore perturbed by rendering and by
+wall-clock idling, and **cannot be reproduced from the player's action sequence
+alone.** An engine aiming at deterministic replay must either reproduce the idle
+draws exactly or accept that its stream will diverge.
 
 ## 9. The renderer's contract
 
 The renderer (a separate system, described in its own spec) walks the visibility grid one cell at a time and paints the corresponding tile into the on-screen viewport. For each cell:
 
 - If the cell holds the hidden marker (`0xFF`), nothing is painted. The previous frame's pixels remain; if the cell was visible last frame and is hidden this frame, a clear of those pixels is the renderer's responsibility.
-- If the cell holds the use-companion marker (`0x00`), the renderer reads the corresponding cell of the terrain band and paints that tile.
+- If the cell holds the use-companion marker (`0x00`), the renderer reads the corresponding cell of the terrain band and paints that tile **from the second tile bank**. This is exactly the set of cells the compositing pass stamped a sprite into, since that path is the only writer of the value. It is also the only branch that honours the reserved draw-nothing companion value `0x16`, which skips the cell.
 - If the cell holds the dim-periphery marker (`0x1C`) or clear-visible marker (`0xDD`), the renderer reads the terrain band and paints the tile, applying a dim or full-brightness palette respectively.
-- If the cell holds any other byte, the renderer paints that byte as a tile id directly.
+- If the cell holds any other byte, the renderer paints that byte as a tile id directly, **from the first tile bank and through the engine's 256-entry animated-tile frame table** (`systems/animation.md` Section 6.1). That table is runtime state, not a fixed translation: it is identity-filled at startup and then advanced per animation step for the five animated families, so an ordinary terrain cell is repainted with that tile's *current* frame on every pass. An implementation that paints the authored id here will draw every waterfall, fountain, pendulum, banner and clock in the game motionless.
+
+Those four branches are the whole of the per-cell dispatch an implementation should build. The trace also found one further branch that this document cannot specify; it is recorded as an open item in Section 13 rather than as contract, and an engine should not attempt it.
 
 The renderer does not own the visibility-grid zeroing that enables lazy refill.
 That zeroing is performed by the active-object compositor path when it prepares
@@ -502,6 +678,8 @@ and `0xDD` as render-visible brightness markers: visibility production and
 fog refinement decide which marker is present, while non-render gameplay
 queries must not infer separate collision, interaction, or memory-map state
 from either value.
+
+There is no previous-frame buffer, no per-cell comparison against the last frame, and no skip path other than the reserved draw-nothing value on the first branch. The cell loop is flat and emits a blit for every one of the one hundred twenty-one cells on every pass.
 
 The renderer does not consult the producer or the post-pass; it sees only the resulting bytes in the two grids. This decoupling is what lets the engine support different visibility producers (overworld, dungeon, combat) feeding the same renderer, with each producer responsible for materialising the grid into the renderer's expected end-state.
 
@@ -724,11 +902,12 @@ modelling something the original does not do.
 
 The visibility-grid contract is complete at gameplay depth: producer fill
 states, centre-out carve behavior, blocker rules, marker refinement,
-active-object compositing, renderer/effect read contract, cheap terrain refill,
-mode boundaries, local-light mask ownership, beacon-mask ordering, and the
-negative-light full-fill compatibility branch are fixed. Remaining work is
-visual parity or external-tool synchronization policy rather than ordinary
-gameplay visibility behavior.
+active-object compositing, the renderer/effect read contract for the four
+per-cell branches of Section 9, cheap terrain refill, mode boundaries,
+local-light mask ownership, beacon-mask ordering, and the negative-light
+full-fill compatibility branch are fixed. Remaining work is visual parity, one
+unspecified renderer branch, or external-tool synchronization policy rather than
+ordinary gameplay visibility behavior.
 
 - **Renderer marker live palette.** The producer/compositor writes and the
   read-only renderer/effect consumption for `0x00`, `0x1C`, `0xDD`, `0x87`,
@@ -743,6 +922,17 @@ gameplay visibility behavior.
   renderer and V-View visual glyph/pixel parity, not to this visibility-grid
   system.
 
+- **One special-cased renderer branch, not implementable from this document.**
+  Beyond the four per-cell branches of Section 9, the renderer carries one more:
+  a single visibility value is routed to a separate animated blit driven by its
+  own counter while that counter is within a gating range, and takes the
+  ordinary direct-tile-id path otherwise. **Neither the value nor the gating
+  range was established**, so the branch has no contract here and is
+  deliberately absent from Section 9's normative list. An engine should
+  implement Section 9 as written; if a capture shows one tile id animating on
+  the direct path in a way the animated-tile frame table does not explain, this
+  is the branch to chase.
+
 - **The asynchronous-read race window.** External readers sampling the visibility grid mid-frame see partial state — static-analysis notes record eleven distinct hashes during a thirty-sample passive read of one settled scene. Implementations that expose the grid to external readers should provide a synchronisation point.
 
 ## 14. Sources
@@ -752,6 +942,20 @@ The behaviour described above was derived by reading the function and format not
 - The visibility producer's three-stage shape (hidden-fill, visibility-carve
   delegation, post-pass), the negative-light full-fill path, and the branching
   on the lighting value's sign — `u5-decomp/functions/ULTIMA_EXE/`.
+- Source provenance: Sections 8.1 through 8.4, and the frame-table clarification
+  in Section 9 — the corrected identity of the variant selector's short-circuit
+  input, the once-per-pass-never-cached contract and the compositor's complete
+  write set, the three grid producers' differing restoration behaviour, the
+  unconditional composite-and-rasterize tail, the rasterizer's two-branch cell
+  rule, the furniture-merge substitution and its second-bank sprite sets, and the
+  exclusive-producer census for the Negate Time effect code — are a cleanroom
+  rewrite of private analysis under `u5-decomp/functions/ULTIMA_EXE/`, repaired
+  after an adversarial verification pass whose scope limits are carried in the
+  prose. The three-in-four change figure was obtained by re-running the shipped
+  generator, not by observing the game. Idle cadence, and therefore the perceived
+  rate of the re-roll, is owned by `systems/timing.md` Section 8 and rests on a
+  black-box measurement contributed by the clean implementation side on issue
+  #179.
 - Source provenance: the finding that the lighting byte is the squared-distance
   threshold itself rather than a sight radius, the unaltered four-hop chain of
   custody from the per-turn ambient computation to the carve's comparison, the

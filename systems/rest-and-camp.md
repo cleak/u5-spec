@@ -429,9 +429,18 @@ British's castle services.
 ## 9. Boundaries And Residuals
 
 The clean ordering of narration, interruption, row selection, ambush message,
-status restoration, and selected-row handoff is public here. The dormant
-placement-shuffle branch in the ordinary terrain setup helper is not evidence
-for this live rest/camp path.
+status restoration, and selected-row handoff is public here.
+
+**Corrected (issue #178).** An earlier revision said the placement-shuffle branch
+in the ordinary terrain setup helper was dormant and "not evidence for this live
+rest/camp path". Both halves are withdrawn. The surface camp ambush reaches that
+same terrain setup helper through its CMDS wrapper, and reaches it **only** with
+the shuffle bit set, so its monsters occupy a randomly permuted subset of the
+authored placement cells rather than the first `count` of them; the same route
+also skips the pre-placement pass that clears the combat tables and seats the
+party from the arena record's party-seat rows, and where the party's arena
+coordinates come from on that route is **not established**. See `combat.md`
+Section 5 and `encounters.md` Section 4.
 
 The camp cooldown counter, the greater-than-five-hours duration gate, the
 caller-context mapping, suppression-before-PRNG ordering, per-member `1..63`

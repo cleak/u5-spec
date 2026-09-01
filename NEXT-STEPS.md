@@ -250,6 +250,20 @@ boundaries are covered. Per-frame visual attribution, marker-label polish,
 render-only sentinel naming, field-frame duration checks, and pixel/runtime
 trace cross-checks are presentation/catalog QA rather than extraction blockers.
 
+*Closed 2026-08-31 (`RETRACTIONS.md` R314):* the description table's two
+placeholder strings are decoded — a lone `*` on twenty-three terrain-half rows
+and a lone `x` on sixteen actor-half rows — and the rule that a placeholder row
+implies nothing about drawability is published in `catalogs/tile-catalog.md`
+Section 3, `formats/look2-dat.md` Section 4 and `formats/tiles.md`
+Section 6.2. The same pass settled the terrain-half / actor-half numeral
+collision between the driver's flame and wedge stencils and the Orc, Ettin and
+Headless sprite runs; the namespace statement is now carried by
+`catalogs/tile-catalog.md`, `catalogs/monster-bestiary.md`,
+`systems/encounters.md`, `systems/animation.md`, `formats/tiles.md`,
+`formats/look2-dat.md`, `systems/movement.md`, `systems/active-objects.md`,
+`systems/view.md`, `systems/visibility.md` and `systems/npc-schedules.md`.
+Still open: what, if anything, draws terrain-half `0x00`.
+
 **Current quest-graph closure cleanup:** 2026-05-13 -
 `catalogs/quest-graph.md` and extraction now promote Quest graph to complete
 at main-quest dependency depth. Major artifact, word, shard, mantra,
@@ -414,8 +428,13 @@ details remain visual QA.
 Rest and camp to complete at gameplay-contract depth, matching
 `systems/rest-and-camp.md`. H-Hole-up routing, terrain and bed gates, duration
 input, town-hour loop, watch validation, interruption, recovery, sleep-ambush
-handoff, dormant helper non-use, Lord British camp event, and hourly
-food/provision delegation are public; low-level string-window, audio/delay, and
+handoff, Lord British camp event, and hourly
+food/provision delegation are public;
+**(corrected 2026-08-31, R306: this entry previously listed "dormant helper
+non-use" among the public findings. That is withdrawn — the surface
+camp-ambush route reaches the shared terrain setup helper with its
+placement-shuffle flag set, so the helper is used and the branch is live.
+See `RETRACTIONS.md` R306 and `systems/rest-and-camp.md`.)** low-level string-window, audio/delay, and
 refresh-helper parity remains presentation work.
 
 **Rest/camp caller-gate closure:** 2026-08-23 - The camp-event context gate is
@@ -483,7 +502,11 @@ effects remain presentation work.
 metadata slice, the roster-slot meaning of both outdoor six-byte coordinate
 tables, every shipped dungeon special-source identity and state write,
 geometric edge behavior, individual leave/escape removal and restore semantics,
-the dormant fifteen-swap terrain branch, both live wandering-monster callers,
+the fifteen-swap terrain branch (**corrected 2026-08-31**: this entry called
+that branch "dormant"; it is not - the helper has two callers, and the surface
+camp-ambush route reaches it with the shuffle bit set, so the permutation is live
+and observable. `RETRACTIONS.md` R306; contract in `systems/combat.md`
+Section 5), both live wandering-monster callers,
 the distinct sixteen-swap arena synthesis, exact PRNG order, caller-owned
 presentation, and deterministic vectors. Unread metadata bytes remain opaque
 round-trip material; no runtime blocker remains under the earlier CBT heading.
@@ -843,8 +866,9 @@ precedes the interruption test; an interrupt picks the eight-row monster entry,
 prints the ambush message, restores the rest-local party status snapshot, and
 then hands the selected row to the CMDS alternate rest/camp setup path.
 Remaining rest/camp exactness is low-level sound, delay, or prompt-control
-helper identity, not row selection, status restoration, or the dormant terrain
-placement shuffle.
+helper identity, not row selection, status restoration, or the terrain placement
+shuffle (**corrected 2026-08-31** from "the dormant terrain placement shuffle":
+the shuffle is live on the surface camp-ambush route - `RETRACTIONS.md` R306).
 
 **Current shared arithmetic caller-census cleanup:** 2026-05-13 -
 `systems/stat-arithmetic.md` now promotes the finished helper-family caller
@@ -1742,9 +1766,12 @@ handlers, while custom room-id persistence is variant-content policy.
 **Current CBT format-boundary cleanup:** 2026-08-27 - the fixed layout and all
 traced runtime consumers are closed. Bytes outside the published outdoor and
 dungeon slices have no traced reader and are preserved without invented
-semantics. Arena edges are geometric, the dormant outdoor shuffle has no live
-caller, and the live dungeon ambush synthesis/caller/PRNG contract is published
-in the combat and dungeon-mode specs.
+semantics. Arena edges are geometric, the outdoor placement-slot shuffle has
+**two** callers and is live on the surface camp-ambush route (**corrected
+2026-08-31**: this entry said "the dormant outdoor shuffle has no live caller";
+that is withdrawn - `RETRACTIONS.md` R306, contract in `systems/combat.md`
+Section 5), and the live dungeon ambush synthesis/caller/PRNG contract is
+published in the combat and dungeon-mode specs.
 
 **Current NPC format-boundary cleanup:** 2026-05-13 -
 `formats/npc.md` now labels blank location names and sprite-class labels as
@@ -2047,9 +2074,16 @@ SJOG or a separate scripted-fight dispatcher.
 
 **Current combat placement-shuffle cleanup:** 2026-08-27 - `systems/combat.md`,
 `systems/dungeon-mode.md`, `systems/rest-and-camp.md`, and `EXTRACTION.md`
-separate the dormant fifteen-full-range-swap terrain branch from the live
-sixteen-swap dungeon wandering-monster synthesis and the CMDS rest/camp path.
-The sole terrain caller leaves its branch inactive; both live dungeon callers,
+separate the fifteen-full-range-swap terrain branch from the live sixteen-swap
+dungeon wandering-monster synthesis and the CMDS rest/camp path. (**Corrected
+2026-08-31**: this entry called that terrain branch "dormant" and said "the sole
+terrain caller leaves its branch inactive". Both are withdrawn. The helper has
+**two** callers: the ordinary wilderness or town encounter leaves the shuffle bit
+clear, giving identity slot order, while the surface camp ambush - overworld `H`
+Hole up - reaches the same helper with the bit set and forwards it, so the
+fifteen-random-transposition permutation is live and observable. It is not a
+uniform shuffle and must not be replaced with Fisher-Yates. `RETRACTIONS.md`
+R306; contract in `systems/combat.md` Section 5.) Both live dungeon callers,
 PRNG order, banner boundary, and deterministic state-zero vectors are public.
 
 **Current hourly food/status cleanup:** 2026-05-12 - `systems/time.md`,

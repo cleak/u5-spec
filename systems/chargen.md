@@ -261,7 +261,25 @@ Britannia has eight virtues. The chargen code numbers them zero through seven, a
 | Spirituality  | 1         | 1         | 1         |
 | Humility      | 0         | 0         | 0         |
 
-The rows follow the Britannian principle mapping: Honesty is Truth/INT, Compassion is Love/DEX, Valor is Courage/STR, the compound virtues add the corresponding paired principles, Spirituality adds all three, and Humility adds none. The total stat tally a player can accumulate is bounded by seven questions times the per-virtue maximum delta (two for any single stat), giving a hard ceiling well below twenty for any of the three stats.
+The rows follow the Britannian principle mapping: Honesty is Truth/INT, Compassion is Love/DEX, Valor is Courage/STR, the compound virtues add the corresponding paired principles, Spirituality adds all three, and Humility adds none. The **delta contribution** a player can accumulate is bounded by seven questions times the per-virtue maximum delta (two for any single stat), so the questionnaire itself never adds more than fourteen to any one stat.
+
+**Retraction (2026-08-31) - a bound on the deltas is not a bound on the stat.**
+This paragraph previously ended: "The total stat tally a player can accumulate
+is bounded by seven questions times the per-virtue maximum delta (two for any
+single stat), giving a hard ceiling well below twenty for any of the three
+stats." **That sentence is withdrawn** (`RETRACTIONS.md` R312). It treats the
+accumulated deltas as the whole stat, which holds only if each running tally
+starts at zero. Section 7 establishes that the **dexterity** tally instead
+starts from the shipped seed record's dexterity of `15`, and every virtue's
+dexterity delta is zero or positive, so the committed dexterity byte is 15 or
+better and no ceiling "well below twenty" describes it; Section 7 deliberately
+publishes **no** upper bound for questionnaire dexterity, and an engine must not
+assume one. Whether the **strength** and **intelligence** tallies likewise start
+from their seed values was **not re-derived**, so this specification does not
+currently know where those two start: read the fourteen above as the
+questionnaire's contribution only, and treat any starting-point or ceiling claim
+for STR and INT as unverified pending that check. Section 7's "Scope caveat on
+the neighbouring STR and INT statements" carries the same scope.
 
 The questionnaire is structured as a single-elimination tournament across the eight virtues, paced in three rounds:
 
@@ -304,6 +322,41 @@ regardless of which virtue was drawn first. On a valid answer, chargen adds the 
 ## 7. Stat assignment
 
 After the seven questions complete, chargen converts the running stat totals into the avatar's STR, DEX, INT, and MP fields. The INT total is written directly into the INT byte; the same value is also written into the MP byte (a freshly created avatar's magic points equal intelligence — subsequent gameplay depletes and restores MP independently). The DEX total is written directly into the DEX byte. The STR total is written after a one-step floor: if below twenty, it is replaced with twenty.
+
+**Retraction — the dexterity tally does not start at zero, and questionnaire
+dexterity is floored at 15.** Earlier revisions of this section, read together
+with Section 6's statement that the accumulated tally has "a hard ceiling well
+below twenty", implied that a questionnaire Avatar's DEX byte is the sum of the
+virtue deltas alone and could therefore be as low as zero. **That is withdrawn.**
+The running dexterity tally starts from the shipped seed record's dexterity of
+`15`, and every virtue's dexterity delta is zero or positive, so a
+questionnaire-created Avatar always emerges with **dexterity 15 or better**.
+Dexterity itself is still written with no floor of its own — the 15 is where
+the tally starts, not a clamp applied at commit.
+
+The consequence an implementation cares about is in `systems/combat.md`
+Section 5.1: a party actor's combat base step is the raw dexterity byte, so a
+single-digit dexterity would make the character act roughly a fifth as often as a
+fast monster — and that state is **unreachable from chargen**. It is reachable
+only through the Ultima IV transfer (`systems/u4-transfer.md` Section 7), which
+does not floor dexterity and maps a source value below 10 to itself unchanged.
+*(The floor of 15 is established. The upper end of the questionnaire's dexterity
+range is deliberately not published: it is an inference from the tournament's
+shape rather than a traced enumeration of the question-pair table.)*
+
+**Scope caveat on the neighbouring STR and INT statements.** The paragraph below,
+which concludes that "every newly-created questionnaire avatar emerges with
+exactly STR twenty", and Section 6's "hard ceiling well below twenty" sentence,
+rest on the same zero-start reading that the dexterity correction has now
+falsified for DEX. Section 6's sentence has since been withdrawn in place, with
+the same scope this caveat gives it: withdrawn outright for dexterity, and no
+longer usable as a ceiling for strength or intelligence either, because the
+premise it rests on is unverified for those two. Whether the strength and intelligence tallies likewise start
+from their seed values was **not re-derived** in the pass that established the
+dexterity floor. Treat the STR-always-twenty and low-double-digit-INT statements
+as unverified pending that check. The strength floor of twenty applied at commit
+time is itself established, as is the fact that dexterity and intelligence
+receive no such floor.
 
 The floor always fires for the questionnaire path. The maximum STR contribution from any virtue is two, and seven questions of two-per-question contribute at most fourteen, well below twenty. So every newly-created questionnaire avatar emerges with exactly STR twenty, and STR is the one stat the questionnaire does not influence. INT and DEX, by contrast, do reflect the player's choices — the spread is small (low double-digits at the high end) but real.
 

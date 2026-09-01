@@ -141,7 +141,17 @@ chair run even though the base bitset alone would otherwise allow it.
 Additional non-vehicle query families are promoted at predicate-family depth.
 Many of their sprite-run names are owned by `systems/encounters.md` and
 `catalogs/monster-bestiary.md`; the movement contract here is the terrain
-predicate each family uses while an outdoor active object is trying to step:
+predicate each family uses while an outdoor active object is trying to step.
+
+**The left-hand column is an active-object sprite byte; the right-hand column
+talks about terrain ids.** They are indices into different halves of the tile
+atlas and the same numerals mean different things in each
+(`catalogs/tile-catalog.md` Section 3.1). The `0xC0..0xD7` row below is the Orc
+through Wisp sprite runs, drawing atlas entries `0x1C0..0x1D7`; the identical
+numerals as terrain ids are the display driver's flame and wedge stencils
+(`systems/animation.md` Section 12), which no mover ever is.
+
+
 
 | Query family | Public role | Static terrain predicate family |
 |---|---|---|

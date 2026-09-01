@@ -137,7 +137,7 @@ The full breakdown by contiguous index range. The ranges below correspond to run
 | 256..271    | monster         | Sea horse, squid, sea serpent, shark (aquatic)                           |
 | 272..287    | monster         | Giant rat, bat, giant spider, ghost, slime, gremlin (lesser)             |
 | 288..303    | monster         | Mimic, reaper, gazer, crawler, gargoyle, insect swarm                    |
-| 304..319    | monster         | Orc, skeleton, python, ettin, headless, wisp                             |
+| 304..319    | monster         | *Superseded — see Sections 3.1 and 7.* The Orc, skeleton, python, ettin, headless and wisp runs are at 448..471. |
 | 320..335    | monster         | Daemon, dragon (greater)                                                 |
 | 336..351    | monster         | Sand trap, troll, mongbat, corpser, rot worm                             |
 | 352..367    | monster         | Shadow lord (named, three variants)                                      |
@@ -173,6 +173,16 @@ That indexing rule resolves a reported contradiction: actor byte `0x44` is not
 the floor tile whose *terrain* index is `0x44`, it is tile 324; actor byte
 `0x0E` is not furniture, it is tile 270. An engine reading actor bytes straight
 into this catalogue will render furniture and floor where people should be.
+
+The costliest instance of that mistake in this repository runs the other way.
+`catalogs/monster-bestiary.md` gives the Orc, Ettin and Headless sprite runs as
+`0xC0..0xC3`, `0xCC..0xCF` and `0xD0..0xD3`; those are actor bytes and resolve
+to tiles 448..451, 460..463 and 464..467. The identical numerals in the terrain
+half are the display driver's flame stencils and water-composite wedges
+(`systems/animation.md` Section 12, `formats/tiles.md` Section 6.2). Both
+statements are true at once because they index different halves, and the shipped
+description table confirms both: the terrain rows carry the placeholder while
+tiles 448, 460 and 464 read "an orc", "an ettin" and "a headless".
 
 **The nominal names given above for the actor half are provisional and at least
 two of them are wrong.** Decoding the shipped tile atlas directly shows the
@@ -226,10 +236,32 @@ variants `0x4D..0x4F`; window shelf `0x5A`; stairway family `0xC4..0xC7`; ascend
 `0xDC`; shrine flame `0xDE`;
 collapsed dungeon entrance `0xDF`; shop-sign family `0xF0..0xF7` and `0xF9`;
 grandfather clock `0xFA..0xFB`; **telescope** `0x59`. A further group is
-confirmed as *sentinel* rows — ids whose description record is the shared
-placeholder string because a command handler produces their output instead:
-`0x59` again, the sign/poster ids `0x89`, `0x8A`, `0xA0`, `0xA4` and `0xF8`, and
-the fountain band `0xD8..0xDB`. The telescope appears in both lists because its
+confirmed as *sentinel* rows — ids whose description record is the terrain
+half's placeholder string. Decoded from the shipped table, the terrain half has
+exactly twenty-three such rows: `0x00`, `0x59`, `0x89`, `0x8A`, `0xA0`, `0xA4`,
+`0xC0..0xC3`, `0xCC..0xD3`, `0xD8..0xDB` and `0xF8`. Ten of them are sentinel
+*because a command handler produces their output instead* — `0x59` again, the
+sign/poster ids `0x89`, `0x8A`, `0xA0`, `0xA4` and `0xF8`, and the fountain band
+`0xD8..0xDB`. The other thirteen are sentinel for unrelated reasons:
+`0xC0..0xC3` and `0xCC..0xCF` are the driver's flame stencils and `0xD0..0xD3`
+its water-composite wedges (`systems/animation.md` Section 12), and `0x00` has
+no established consumer at all.
+
+**Carrying the placeholder means only that the table has nothing to say.** It is
+not a marker for "engine-private", "never drawn", or "no handler". Eleven of the
+twenty-three rows above hold cells in shipped map or arena data: `0x59`, `0x89`,
+`0x8A`, `0xA0`, `0xA4`, `0xD8` and `0xF8` in the world and location grids;
+`0xD1` and `0xD2` there too, as the prow of the wrecked ship on both shipped
+Ararat pages of the keep location file; and all four of `0xD0..0xD3` as arena
+terrain in the shipped dungeon-room arena bank. Three more, `0xD9..0xDB`, are
+the later animation frames of the placed fountain `0xD8`. Only `0x00`,
+`0xC0..0xC3` and `0xCC..0xCF` are absent from every shipped map and arena
+terrain cell counted — `formats/tiles.md` Section 6.2 states exactly which files
+that census covers and why absence from it is weak evidence by itself. The two halves also use
+**different** placeholder strings: the terrain half's is a lone `*` and the
+actor half's is a lone `x`, the latter on the sixteen actor-half rows `0x100`,
+`0x112..0x116`, `0x11C..0x11D`, `0x174..0x177` and `0x17C..0x17F`. A reader
+enumerating either set must not mix them. The telescope appears in both lists because its
 name is confirmed from its **art**, not from a description record: its row in
 the description table holds only the placeholder, since looking at it runs the
 sky renderer instead of printing a string. Those ids are used as Look predicates in `systems/view.md`
@@ -294,6 +326,29 @@ that too is **withdrawn** — only the waterfall and fountain rows are ungated, 
 the remaining three sit behind nested gates. `systems/animation.md`
 Section 6 carries the full contract and the same correction.
 
+**A second correction, because that withdrawal also overshot.** This catalog and
+its companions then read the absence of those ids from the table above as
+"water, lava, torch and brazier tiles do not animate". **That is withdrawn.**
+They animate, on the same step, through a *different* mechanism that has no
+entry in a family table because it substitutes no tile id: a driver-side pass
+that rewrites the loaded tile artwork in place. It rotates `0x01..0x03` and
+`0x8F` down one pixel row per step, composites the shoals frame into
+`0x60..0x6F`, `0x34..0x37` and `0xE4..0xE7`, XORs pseudo-random noise into
+`0xB0..0xB3`, `0xBC..0xBF` and `0xDE` through per-fixture masks, and - on a
+further stage published only as *probable* and never observed at runtime
+(`systems/animation.md` Section 12.5) - swaps row pairs in the banner and sail
+tiles. Both the water roll and the fire flicker have since been confirmed by
+black-box capture of the shipped game. The contract is
+`systems/animation.md` Section 12; the atlas-side consequences are
+`formats/tiles.md` Section 6.2. **Nothing in the table above changes** — it is a
+table of frame-selector families, and those ids still have none.
+
+The atlas also carries a four-frame authoring run, the hourglass `0xE8..0xEB`,
+that **no** animator advances at all. Its frames are consumed as discrete
+cutscene states rather than as a cycle; see `formats/tiles.md` Section 6.1,
+which also records the namespace hazard that makes the same byte range mean the
+four combat field effects when it appears in an active-object marker.
+
 The active-object animator runs as part of the per-turn epilogue. It walks the
 table in **increasing** slot order, classifies each slot's tile id, and for
 animated classes advances the slot's frame-counter and rewrites the slot's tile
@@ -309,8 +364,16 @@ persistent map cell is *not* modified; the animation is render-only. A saved gam
 loaded mid-cycle re-starts from the selectors' current values — no save data
 records the animator's phase counter.
 
-Animated-static ids are deliberately rare. Walls, doors, paths, terrain,
-vegetation, and the great majority of furniture do not animate.
+Animated-static ids are deliberately rare, and this is a statement **about the
+frame-selector animator only**: walls, doors, paths, terrain, vegetation, and the
+great majority of furniture have no frame family and no selector byte, so none of
+them is advanced by the per-turn world-tick animator described above. It is
+**not** a claim that those tiles are visually still. Open water, shoals and lava
+are terrain, they carry no selector, and they do animate on every animation step
+- through the driver-side pass that rewrites the loaded tile artwork in place,
+corrected earlier in this section and specified in `systems/animation.md`
+Section 12. Any reading of this paragraph as "terrain does not animate" is
+withdrawn with the rest of that over-generalisation (`RETRACTIONS.md` R301).
 
 ## 5. Passability
 

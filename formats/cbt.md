@@ -71,8 +71,8 @@ Terrain cells are one-byte tile indices drawn from the game's global tile vocabu
 Combat uses terrain in three ways:
 
 - **Rendering.** The combat renderer paints each visible terrain byte as a top-down tile, then composites actors over it.
-- **Movement.** The step-or-attack primitive rejects impassable cells and allows walkable cells.
-- **Round safety.** The round loop defensively skips any actor whose record says it is standing on a wall-class terrain cell.
+- **Movement.** The movement step primitive rejects impassable cells and cells holding a live actor, and allows empty walkable cells. It never converts a blocked step into an attack; see `systems/combat.md` Section 11.
+- **Restraint.** The round loop reads the arena terrain under each actor and, before decrementing that actor's phase counter, tests it against exactly two tile ids - the stocks `0x84` and the manacles `0x85`. An actor standing on either never advances its counter and never acts, while remaining a live, targetable combatant. Every other terrain - water, swamp, mountains, walls, force fields - is outside the test, and an actor on it acts on schedule. **Retraction:** an earlier revision of this bullet called this a defensive skip of "any actor whose record says it is standing on a wall-class terrain cell"; that is withdrawn (`RETRACTIONS.md` R305). See `systems/combat.md` Section 7.1 for the full contract.
 
 The terrain byte alone is not the entire collision model. Resident passability and tile-class tables refine collision, hazards, placement, and special encounter behaviour. Arena exits are geometric rather than encoded: a cardinal destination outside X or Y `0..10` reaches the runtime edge handler, independent of terrain and metadata.
 
@@ -87,7 +87,7 @@ The twenty-one metadata bytes after each terrain row are a mixed setup band. The
 | 6 | 11-26 | Sixteen monster placement-slot X coordinates. |
 | 7 | 11-26 | Sixteen monster placement-slot Y coordinates. |
 
-Rows and columns in this table are zero-based within the arena record. These are all outdoor metadata reads found in the complete traced caller/consumer chain. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a dormant placement-slot shuffle branch, specified in `systems/combat.md`; live dungeon ambush and rest/camp setup use different helpers.
+Rows and columns in this table are zero-based within the arena record. These are all outdoor metadata reads found in the complete traced caller/consumer chain. The two sixteen-byte coordinate slices are indexed by the terrain-combat placement-slot array. Ordinary terrain combat walks the slots in identity order. The terrain setup helper contains a placement-slot shuffle branch, specified in `systems/combat.md`; it is inactive for ordinary terrain encounters and active on the surface camp-ambush route. Dungeon ambush setup uses a different helper.
 
 The two six-byte slices are the outdoor arena's **party entry coordinates**, and
 they use exactly the convention the `DUNGEON.CBT` party rows use below: for
@@ -427,10 +427,14 @@ counts, every traced metadata read, and preservation of unread bytes are fixed.
   outside the eleven-by-eleven coordinate range; `systems/combat.md` specifies
   their collision, narration, direction-sharing, removal, and restoration
   behavior.
-- The outdoor terrain helper's shuffle arm is dormant. The only live ambush
-  callers are the two dungeon wandering-monster contacts, which synthesize an
-  arena and use a different sixteen-swap algorithm. Rest/camp uses the CMDS
-  alternate setup path and neither shuffle. The complete caller and PRNG order
+- The outdoor terrain helper's shuffle arm is **live** on one route.
+  (*Corrected, issue #178:* an earlier revision called it dormant and said
+  rest/camp "uses neither shuffle".) The ordinary terrain caller leaves it
+  inactive; the surface camp-ambush route, which reaches the same helper through
+  its CMDS wrapper, enables it and permutes the sixteen placement slots with
+  fifteen random transpositions. The dungeon wandering-monster contacts are
+  separate: they synthesize an arena and use a different sixteen-swap
+  algorithm. The complete caller and PRNG order
   is in `systems/combat.md` and `systems/dungeon-mode.md`.
 - Room-trigger selection is fixed by scene and low nibble. No traced dungeon
   chest path independently selects a `DUNGEON.CBT` record.
@@ -462,7 +466,7 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 - Arena synthesis for the ambush entry mode: derived from private analysis in
    `../u5-decomp/functions/DNGLOOK_OVL/` and `../u5-decomp/notes/`.
 - The complete metadata-reader census, special-source identities, edge
-  non-metadata boundary, dormant terrain shuffle, and live ambush PRNG order
+  non-metadata boundary, terrain placement-slot shuffle, and live ambush PRNG order
   were re-audited in private analysis under `../u5-decomp/notes/` and the
   ULTIMA, DNGLOOK, DUNGEON, COMBAT, SJOG, and CMDS function directories.
 - Stock-content census of the dungeon-room source band, counting the

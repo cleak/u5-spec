@@ -24,14 +24,36 @@ separately because the combat notes identify them as hostile or special NPC
 classes that use the same damage, reward-unit, and death-resolution machinery
 as monsters.
 
+> **The sprite-run column is an actor-byte column, and several of its values
+> collide with unrelated terrain ids.** A sprite byte and a map-cell terrain id
+> are indices into different halves of the same atlas, so the same numerals name
+> different artwork. The three collisions that have actually misled readers of
+> this repository, all with the tile-asset masks of `systems/animation.md`
+> Section 12:
+>
+> | Sprite run in this catalog | Atlas entry it draws | The identical numerals as a terrain id |
+> |---|---|---|
+> | Orc `0xC0..0xC3` | `0x1C0..0x1C3` | The flame masks for the torch, brazier and spit |
+> | Ettin `0xCC..0xCF` | `0x1CC..0x1CF` | The flame masks for the fireplace, street lamp, candelabrum and stove |
+> | Headless `0xD0..0xD3` | `0x1D0..0x1D3` | The diagonal wedge tiles the water composite uses as its stencil |
+>
+> The shipped description table settles it independently: its actor-half records
+> for `0x1C0..0x1C3`, `0x1CC..0x1CF` and `0x1D0..0x1D3` read "an orc", "an
+> ettin" and "a headless", while its terrain-half records for `0xC0..0xC3`,
+> `0xCC..0xCF` and `0xD0..0xD3` hold the terrain half's placeholder. An engine
+> that feeds a sprite byte straight to the atlas draws a stencil where the
+> monster should be.
+
 The confirmed per-class data supports these fields:
 
 - **Class** - the combat class id stored in a combat actor record.
-- **Sprite run** - the active-object sprite byte run produced from the class id,
-  four sequential frames per class. This is a runtime active-object identifier,
-  not a file offset. Final sprite-sheet tile-id verification belongs to
-  `catalogs/tile-catalog.md` and renderer presentation QA, not to the class
-  stat table.
+- **Sprite run** - the active-object **sprite byte** run produced from the class
+  id, four sequential frames per class. This is a runtime active-object
+  identifier, not a file offset and **not a tile-atlas index**. The atlas entry
+  a sprite byte draws is `sprite_byte + 0x100`, because every actor resolves
+  into the atlas's actor half (`catalogs/tile-catalog.md` Section 3.1). Final
+  sprite-sheet tile-id verification belongs to `catalogs/tile-catalog.md` and
+  renderer presentation QA, not to the class stat table.
 - **HP** - initial monster HP loaded into the combat actor record at placement.
 - **Reward unit** - the small raw value returned by the damage/death handler
   when the class dies. Current analysis shows it is derived from HP as
@@ -420,6 +442,12 @@ distribution per class. The contexts below are therefore broad.
 | 44 | Mongbat | `0xF0..0xF3` | 20 | 6 | 5 | 15 | - | Flying or cave-style encounter |
 | 45 | Corpser | `0xF4..0xF7` | 40 | 11 | 0 | 8 | - | Underworld or fixed dungeon encounter |
 
+The Sprite-run column here is an actor-byte column (Section 1). Three of its
+runs — Orc `0xC0..0xC3`, Ettin `0xCC..0xCF` and Headless `0xD0..0xD3` — share
+their numerals with driver mask ids in the atlas's terrain half; the atlas
+entries these rows actually draw are `0x1C0..0x1C3`, `0x1CC..0x1CF` and
+`0x1D0..0x1D3`.
+
 Classes 42 and 43 are not listed as monsters because the name table has blank
 entries for both. Their sprite runs would fall between Troll and Mongbat, but no
 monster identity is currently supported by the local notes. Both rows have
@@ -473,18 +501,30 @@ For a terrain fight:
   and off permanently afterwards (`systems/encounters.md` Section 5).
 - Town-style hostility overrides the count to one attacker.
 - Placement uses sixteen arena slots supplied by the selected arena's metadata
-  and cached in resident scratch before placement. Terrain fights walk those
-  slots in identity order, and that is the only order any traced caller
-  produces. The terrain setup helper does contain a placement-slot shuffle
-  branch, but no live caller sets the flag that reaches it: ambush and
-  rest/camp setup run through different helpers entirely, and the ambush helper
-  reads its own source band instead of the terrain helper's slot array
-  (`systems/combat.md` Section 5, `formats/cbt.md` Section 5). An earlier
-  revision of this list said "ambushes can shuffle the slots"; that is
-  withdrawn. Where an ambush-style fight does get a randomised arrangement —
+  and cached in resident scratch before placement. Ordinary terrain fights walk those
+  slots in identity order. **Corrected 2026-08-31 (R306).** An earlier revision
+  of this bullet said the terrain setup helper's placement-slot shuffle branch
+  had no live caller, and that "ambush and rest/camp setup run through
+  different helpers entirely"; both statements are withdrawn. The helper has
+  **two** callers: the ordinary encounter route leaves the gating flag clear,
+  and the surface camp-ambush route reaches the *same* helper through its
+  command-overlay wrapper with the flag **set**, and forwards it — so the
+  branch is live, and rest/camp does not bypass the helper
+  (`systems/combat.md` Section 5, `systems/rest-and-camp.md`,
+  `formats/cbt.md` Section 5). A still-earlier revision said "ambushes can
+  shuffle the slots"; that remains withdrawn as stated, because the shuffle is
+  reached by the *camp-ambush* route specifically rather than by ambushes in
+  general.
+
+  When the branch does run, it performs **fifteen random transpositions**, which
+  is not a uniform permutation — an engine must reproduce the transposition
+  sequence rather than substituting a uniform shuffle. Where an ambush-style fight does get a randomised arrangement —
   dungeon wandering-monster combat — the randomisation is performed upstream by
   the dungeon room painter when it writes the synthesised source band, not by
-  the terrain helper's dormant branch (`systems/dungeon-mode.md` Section 14.1).
+  the terrain helper's own placement-slot branch (`systems/dungeon-mode.md`
+  Section 14.1). That branch is not dormant either - it is enabled on the
+  surface camp-ambush route, where it does randomise which authored cells the
+  monsters occupy (`systems/combat.md` Section 5).
 - The first placed monster uses the encounter's base class. For later
   placements, actors whose placement index is below `(count / 4) + 1` may use
   the base class's **companion class** when the one-in-nine predicate permits
@@ -566,7 +606,10 @@ classes.
    and does not grant party gold, karma, score, or a separate victory bonus.
 5. Final sprite-sheet tile-id verification belongs to `catalogs/tile-catalog.md`
    and renderer presentation QA. The sprite-run bytes published here are the
-   runtime class identifiers used by combat actor setup.
+   runtime class identifiers used by combat actor setup, and they are **actor
+   bytes**: the atlas entry drawn is `sprite_byte + 0x100`. Do not read a
+   sprite-run value as a map-cell terrain id; see the collision box in
+   Section 1.
 6. Class-specific death behavior is specified in `systems/combat.md`; the
    bestiary records the assigned classes and traits. Pixel-level death visuals
    and animation timing are presentation QA, not class-row metadata.

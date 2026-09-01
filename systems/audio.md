@@ -814,11 +814,16 @@ correctly from it.
 Successful top-down movement has no corresponding footstep sound. The beep is a
 rejection cue and must not be attached to ordinary movement.
 
-**"Combat" in that table means movement, not attacking.** Both combat sites sit
-in the *move* arm of the shared step-or-act handler that arena movement uses;
-the dungeon's own refusal arms are elsewhere and are silent, as the table says. The beep answers "you cannot move there". It is never the answer to
-"your attack failed", and the phrase "step-or-attack refusal" that earlier
-revisions used here should not be read as "the attack failed, so beep".
+**"Combat" in that table means movement, not attacking.** A bare direction key in
+the arena is **purely a step** - there is no step-or-attack primitive and no bump
+attack (`combat.md` section 8.1) - so both combat sites are step-rejection sites:
+the beep is what a refused step sounds like, whether the refusal came from terrain
+the mover cannot enter or from a cell already occupied by a live actor. The
+dungeon's own refusal arms are elsewhere and are silent, as the table says. The
+beep answers "you cannot move there". It is never the answer to "your attack
+failed". *(Corrected, issue #178: earlier revisions of this paragraph called the
+combat site the move arm of a shared "step-or-act" handler and spoke of a
+"step-or-attack refusal"; that framing is withdrawn - `RETRACTIONS.md` R310.)*
 
 - **A missed melee or weapon attack produces no beep.** The attack-application
   path plays its own rising sweep - 400 Hz toward 750 Hz, 30 updates, roughly
@@ -835,12 +840,16 @@ revisions used here should not be read as "the attack failed, so beep".
   effect plays - never the swing cue, and never a refusal tone.
 - **Why the two never meet.** The `A` verb reaches the arena attack helper
   directly (`combat.md` section 8), while the direction keys reach the
-  step-or-act handler. The cell query gating that handler's move arm is a
+  step-only movement path. The cell query gating that path is a
   read-only occupancy predicate that rejects any cell holding a live actor, so
-  if attacking ran through the move arm then attacking an adjacent monster would
-  always print `Blocked!`. It does not. When a direction step is answered by an
-  attack instead, the attack arm is entered before the move arm's rejection
-  test, so the attack's own outcome never reaches the beep.
+  a direction step into an occupied cell **does** print `Blocked!` and beep -
+  there is no bump attack (`combat.md` sections 8.1 and 11). *(Corrected, issue
+  #178: an earlier revision of this bullet said "when a direction step is
+  answered by an attack instead, the attack arm is entered before the move arm's
+  rejection test". No direction step is ever answered by an attack.)* The point
+  the bullet exists to make survives: an attack's own outcome never reaches this
+  beep, because attacks are reached only through `A` and its targeting cursor,
+  or through the AI attack path.
 
 **Complete census of the blocking-tone primitive.** The primitive takes a
 frequency and a hold in outer calibrated units. Every user in the shipped game:
@@ -849,7 +858,7 @@ frequency and a hold in outer calibrated units. Every user in the shipped game:
 |---|---|
 | Overworld blocked step | 165 Hz, 200 units |
 | Town blocked step | 165 Hz, 200 units |
-| Combat step-or-attack refused | 165 Hz, 200 units |
+| Combat blocked step refused | 165 Hz, 200 units |
 | Combat exit refused, `All must use the same exit!` | 165 Hz, 200 units |
 | Combat command refused as inapplicable, two-tone pair (section 8.8) | 220 Hz for 150 units, then 150 Hz for 150 units |
 | A Return-to-View presentation strip | 2000 Hz, 3 units |

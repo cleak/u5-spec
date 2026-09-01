@@ -49,8 +49,11 @@ on which flag bit was set. From the encounter system's perspective:
 - **Ambush flag.** Requests the framer's ambush setup branch. This dispatch uses
   a separate setup helper - the same room-combat setup helper that dungeon room
   triggers use - and not the ordinary terrain helper. Do not infer this path's
-  arena choice, monster count, or placement order from the dormant Fisher-Yates
-  branch inside the terrain helper; that branch has no traced live caller. Two
+  arena choice, monster count, or placement order from the placement-slot
+  permutation branch inside the terrain helper; that branch belongs to the
+  terrain helper and its live caller is the surface camp-ambush route, not this
+  one. (*Corrected:* an earlier revision called that branch dormant and said it
+  had no traced live caller; see Section 4.) Two
   properties of this branch matter to callers:
 
   - It **loads no arena**. It reads the arena terrain and metadata band that are
@@ -149,7 +152,7 @@ Monster selection is terrain-bucketed before the active-object write:
 | Terrain tile 7 (parched desert) | **One-in-four** chance of the **Sand Trap** sprite run `0xE0..0xE3`; a failed special roll rejects the candidate. (*Corrected:* an earlier revision said "one-in-three chance of the outdoor sea-serpent adjacency class". **Both halves are withdrawn.** The draw is over the closed interval `[0, 3]` accepted on one value, which is one in four; and `0xE0..0xE3` is the Sand Trap run, `catalogs/monster-bestiary.md` class 40 — the Sea Serpent run is `0x88..0x8B`.) |
 | Terrain tile 4 on the full underworld plane marker | Directly selects the Rot Worm sprite run. Other tile-4 cases continue to the land bucket selected by plane. |
 | Surface mountain tiles `0x0C` (mountains) and `0x0D` (high peaks) | Reject. |
-| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the open-water family `0xE4..0xE7` (the shipped description table names all four ids "water"; despite the earlier "animated-water" label they are static tiles — no water family is animated, see `systems/animation.md` Section 6) | Run an extra allowance die before any bucket selection; a failed die rejects. The die is a draw over the closed interval `[0, 64]`, inclusive, accepted when the result is below sixteen — **sixteen outcomes in sixty-five**. (*Corrected:* an earlier revision called this "one-in-four". That is withdrawn as an approximation; the exact figure is slightly under one in four.) Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
+| Low tiles below 4 (the water/shoals family), the river-and-bridge family `0x60..0x6F`, the waterfall family `0xD4..0xD7`, and the open-water family `0xE4..0xE7` (the shipped description table names all four ids "water"; they are not members of any frame-selector family, but they are **not** static — `0xE4..0xE7` receive the water composite of `systems/animation.md` Section 12.3 and animate, and an earlier revision of this parenthesis calling them "static tiles" is withdrawn; the encounter rule below is unaffected either way) | Run an extra allowance die before any bucket selection; a failed die rejects. The die is a draw over the closed interval `[0, 64]`, inclusive, accepted when the result is below sixteen — **sixteen outcomes in sixty-five**. (*Corrected:* an earlier revision called this "one-in-four". That is withdrawn as an approximation; the exact figure is slightly under one in four.) Allowed surface candidates use the surface default/aquatic bucket unless they take the tile-1 special branch above. Allowed underworld candidates use the underworld default/aquatic bucket. |
 | Tile ids below `0x10` after the special and hard-reject cases, plus tile ids `0x30..0x33` | Use the land bucket selected by plane: surface land on the surface, underworld land below. |
 | Other tile ids at or above `0x10` | Reject. |
 
@@ -206,13 +209,24 @@ is out of 256.
 | 8 | Dragon sprite run (`0xDC..0xDF`) |
 
 The bucket payload is an **overworld active-object sprite byte**, not a combat
-class id and not a town-map marker byte. Interpret it in the active-object
-sprite domain before starting combat. This matters for byte values that have
-different meanings in other domains: for example, in a town tile grid `0xC8` is
-the ascend floor-link marker the NPC scheduler routes to (`catalogs/tile-catalog.md`
-Section 6), while the same byte in the overworld active-object sprite domain is a
-random-spawn payload in the Python sprite run. Earlier drafts called `0xC8` a
-chair marker; that is wrong, and chairs are `0x90..0x93`.
+class id, not a town-map marker byte, and **not a tile-atlas index**. Interpret
+it in the active-object sprite domain before starting combat. The atlas entry a
+sprite byte draws is `sprite_byte + 0x100`, because actors resolve into the
+atlas's actor half (`catalogs/tile-catalog.md` Section 3.1).
+
+This matters for byte values that have different meanings in other domains. In a
+town tile grid `0xC8` is the ascend floor-link marker the NPC scheduler routes
+to (`catalogs/tile-catalog.md` Section 6), while the same byte in the overworld
+active-object sprite domain is a random-spawn payload in the Python sprite run.
+Earlier drafts called `0xC8` a chair marker; that is wrong, and chairs are
+`0x90..0x93`. Three sprite runs in the tables above collide the same way with
+the driver's tile-asset masks, which are terrain-half atlas ids of the same
+numerals (`systems/animation.md` Section 12): the payloads `0xC0..0xC3`,
+`0xCC..0xCF` and `0xD0..0xD3` are the Orc, Ettin and Headless runs and draw
+atlas entries `0x1C0..0x1C3`, `0x1CC..0x1CF` and `0x1D0..0x1D3`, while the
+identical terrain ids are the flame and wedge stencils. An engine that resolves
+a spawn payload against the terrain half spawns an invisible stencil instead of
+a monster.
 
 The currently named payload families are:
 
@@ -321,7 +335,9 @@ the fight started on:
 | anything else | - | 2 when the scene byte is zero (overworld), otherwise 8 |
 
 Arena 0 is not reachable from this selector; it is the record loaded by the
-scripted single-combat/duel entry. Arena 9 is not selected by this selector
+scripted single-combat/duel entry and by the surface camp ambush (`combat.md`
+Section 5). Its sixteen monster placement cells are all distinct and all on
+grass, spread around the arena's corners and edges. Arena 9 is not selected by this selector
 either, and its shipped placement metadata is all zeroes. Attacking a hostile
 NPC inside a town therefore normally fights on the cobble arena 8, since the
 town scene byte is non-zero and town streets are cobble.
@@ -402,10 +418,26 @@ contract, including descriptor seeding and asleep/ring handling.
 arena cells, indexed by a *placement slot*. The selected `BRIT.CBT` arena
 record supplies the slot coordinates; the loader copies them into resident
 scratch tables before the setup helper reads them. Slots 0-15 are walked in
-identity order for ordinary terrain encounters. The terrain setup helper
-contains a dormant Fisher-Yates branch, but the only traced live terrain caller
-leaves it inactive; ambush and rest/camp alternate setup should be specified
-from their own helpers rather than from that branch. The first monster uses the
+identity order for ordinary terrain encounters.
+
+**Retraction - the placement-slot shuffle is not dormant.** Earlier revisions of
+this paragraph said the terrain setup helper "contains a dormant Fisher-Yates
+branch, but the only traced live terrain caller leaves it inactive". **Both
+halves are withdrawn.** The helper has two callers, not one: the ordinary
+wilderness or town encounter leaves the shuffle bit clear (identity order, as
+above), and the **surface camp ambush** - overworld `H` Hole up, Section 6 -
+reaches the same helper only with the shuffle bit set, and forwards it. And the
+algorithm is not Fisher-Yates: it is fifteen random transpositions, each drawing
+from the full inclusive `0..15` range, so it does **not** produce a uniform
+permutation. On the camp route the sixteen slot indices are permuted first and
+the `count` monsters then fill the permuted order, occupying a random subset of
+the sixteen authored cells in random order rather than the first `count`.
+`combat.md` Section 5 has the full contract, including the fact that the camp
+route also skips the clear-and-seat pre-pass, so the party's arena coordinates on
+that route are **not established** and should be observed before implementing
+them.
+
+ The first monster uses the
 encounter's base combat class. Later monsters normally use that same class. For
 spawn indexes below the `count / 4 + 1` threshold, each monster rolls a
 one-in-nine check; only a zero result substitutes the base class's **companion
@@ -413,6 +445,38 @@ class**, taken from a forty-eight-entry per-class table whose values are class
 ids (published in `catalogs/monster-bestiary.md`). Later spawn indexes never
 roll for the substitution. The spawned actor's sprite follows from whichever
 class was chosen.
+
+**Placement does not validate arena terrain.** The setup pipeline does not
+check, re-roll, or skip a placement cell on the basis of what terrain is under
+it. The sixteen monster coordinates are read verbatim from the selected arena
+record's metadata and handed straight to the actor placer; the setup routine
+never reads the arena terrain grid and never consults the cell-occupancy
+predicate, and the placer's only helper call is the per-actor speed roll. The
+dungeon-room path behaves the same way.
+
+This is authored behaviour, not an oversight, and the land-over-water case is its
+clearest instance. Arena 15 - selected whenever the hostile is standing on water,
+shoals or deep water while the party is on land - is authored with **all
+sixteen** monster placement cells on water tiles and all six party seats on grass
+and brush. A land-class monster fought over water is therefore placed on water by
+design; arena 14, for a party aboard ship, likewise puts all sixteen monster
+cells on deep water or water. A port should reproduce this rather than "fixing"
+it.
+
+Such an actor is **not** frozen: it takes its turn every round, selects a target
+and attacks anything in reach, and remains live, targetable and killable. Only
+its movement is constrained, and a teleport-capable class can free itself because
+teleport relocation *is* validated. `combat.md` Section 7.1 specifies the case in
+full, together with the genuinely frozen case - an actor standing on the stocks
+or the manacles - which is a different mechanism with a different trigger and a
+`J` Jimmy recovery path. The in-combat spawn spells (conjure, swarm, summon) are
+the one exception to the no-validation rule: they probe the cell predicate and
+place only on an accepted cell.
+
+Whether any shipped scenario actually routes a land-only monster class into the
+water arena is **not established**: the arena selector keys on the world terrain
+under the hostile object rather than on the monster's own class, so answering it
+belongs to the encounter/spawn side and is best settled with a black-box capture.
 
 After the pipeline writes all `count` records to the active-object table, the framer enters the round loop and combat plays out as described in `combat.md`.
 
@@ -475,10 +539,15 @@ The confirmed rest loop is:
    result, restores sleeping members to good status, applies capped HP recovery
    to eligible living party members, and stamps the current rest/camp marker.
 
-When an interruption becomes a combat encounter, the combat framer has entered
-its alternate rest/camp setup path rather than the ordinary terrain setup path.
-Combat-local placement and reveal behavior after that handoff remain owned by
-`systems/combat.md`.
+When an interruption becomes a combat encounter, the combat framer enters its
+alternate rest/camp setup path. *(Corrected, issue #178: an earlier revision
+added "rather than the ordinary terrain setup path". That contrast is withdrawn.
+On the surface camp route the CMDS wrapper reaches the **same** terrain setup
+helper, and reaches it only with the placement-slot shuffle bit set, which it
+forwards; it also skips that helper's clear-and-seat pre-pass, so the party's
+arena coordinates on this route are not established. See Section 4 and
+`combat.md` Section 5.)* Combat-local placement and reveal behavior after that
+handoff remain owned by `systems/combat.md`.
 
 The interruption predicate is now pinned down: after the rest entry and
 rest-surface gates accept a dangerous wilderness or dungeon rest pass, the rest
@@ -641,7 +710,7 @@ owned outside the encounter system, source-free data-publication choices for
 engines that do not load the original data, or future-evidence hooks that do not
 change the current encounter contract.
 
-- **Companion-class substitution.** Only spawn indexes below the `count / 4 + 1` threshold can be substituted with the base class's companion class, and each eligible index still needs a one-in-nine random zero roll. In ordinary terrain encounters, the placer walks the placement-slot array in identity order, so substitution-eligible indexes occupy the earliest placement slots. A dormant terrain-helper branch would shuffle the slot array before placement, but no traced live caller reaches that branch. The engine has no deterministic "boss flag" that forces every early slot to substitute.
+- **Companion-class substitution.** Only spawn indexes below the `count / 4 + 1` threshold can be substituted with the base class's companion class, and each eligible index still needs a one-in-nine random zero roll. In ordinary terrain encounters, the placer walks the placement-slot array in identity order, so substitution-eligible indexes occupy the earliest placement slots. The terrain helper's placement-slot branch shuffles the slot array before placement, but the ordinary terrain caller leaves it inactive; only the surface camp-ambush route enables it, and there the substitution-eligible indexes land on a random subset of the authored cells instead of the earliest ones (Section 4, `combat.md` Section 5). The engine has no deterministic "boss flag" that forces every early slot to substitute.
 
 - **Underworld encounters.** The framer tags the class id with an underworld flag when the hostile object sits on the underworld plane. The only consumer of that flag is the town-style single-attacker override; no table is re-indexed and no separate underworld arena bank exists on disk. The arena terrain grid is the same on both planes; the player-Z value written by the placer selects underworld lighting/renderer treatment rather than a different encounter-layout source.
 
@@ -757,7 +826,7 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/ULTIMA_EXE/`,
   `u5-decomp/functions/DNGLOOK_OVL/`, and
   `u5-decomp/notes/2026-08-22_dungeon-ambush-arena.md`.
-- The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the dormant optional Fisher-Yates branch in the terrain helper, the early-spawn companion roll, the town-style single-attacker override, and the damper's second downward count roll — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The terrain-combat setup pipeline, the class-row spawn-count field and the per-class companion table, the optional fifteen-transposition placement-slot branch in the terrain helper and its two callers, the early-spawn companion roll, the town-style single-attacker override, and the damper's second downward count roll — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The combat-arena file layout — outdoor arena bank versus dungeon-encounter arena bank, 11×11 terrain grid plus placement metadata band, per-record stride, room-trigger arena indexing, and the single-plane arena model (one outdoor bank serving both the surface and the underworld, with no plane-specific variant records) — derived from `u5-decomp/formats/maps.md` and the dungeon room-entry helper.
 
 - The identification of the spawn-count reroll flag as an early-game
