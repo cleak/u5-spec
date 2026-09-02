@@ -130,11 +130,28 @@ Between keystrokes the input pipeline runs a world tick — the resident *redraw
 
 After producing the scratch grid, the tick refines visibility by toggling certain marker tiles through the shared squared-distance lookup centred on the viewport, then renders. On the very first tick after a mode entry, an additional full-panel repaint runs, painting the side panels, status bars, and frame borders that the in-loop renderer otherwise leaves alone.
 
-The world tick also runs three secondary subsystems before producing the grid: an active-object animator for per-frame sprite phases, a small RNG dispatcher, and a lighting / torch presentation timer.
+The world tick also runs three secondary subsystems before producing the grid: an active-object animator for per-frame sprite phases, a small RNG dispatcher, and a lighting / torch presentation timer. `systems/animation.md` Section 13.2 gives the exact per-step effect list and Section 13.1 the two gates that can suppress all of it.
 
 > **Corrected 2026-08-31 (R315).** This sentence previously read "an active-object animator for per-frame sprite phases **and eligible ambient wandering**". The wandering clause is withdrawn. The world tick advances presentation only; it steps no actors of any kind. Ambient creature wandering and scheduled NPC movement both happen in the per-turn path, alongside the in-world clock. Confirmed independently by runtime capture on the clean side: an adjacent hostile creature neither moved nor attacked across 28 seconds of continuous idling, and an in-castle townsperson took zero steps in 31 seconds, while sprites animated in place throughout. See `systems/input.md` section 2 and `systems/animation.md` section 5.
 
-The world tick is only called from inside the input pipeline's idle wait. It does not run when the pipeline is in prompt mode (a Y/N or numeric prompt has set a printable prompt-character byte). Prompt mode freezes the world while the player thinks. Cleanup time is gameplay time; prompt time is real time.
+**Blocking presentations may pump this tick, and that does not make them turns.**
+Many commands run a visual sequence that calls the world tick or the paced-pause
+helper between beats. Such a sequence never runs autonomous world simulation:
+no presentation anywhere in the game invokes the town NPC schedule processor,
+the town object walker for loose horse-family objects, or the outdoor creature
+walker, all three of which are called only from turn-consuming paths. It may nevertheless *place*
+specific actors or the party, by writing their positions directly — the
+Blackthorn cutscenes, the shrine entry, the endgame entry and the falls all do.
+The two statements are separate contracts and `systems/animation.md`
+Section 13.5 owns both, together with the search scope behind the negative and
+the short list of scripted-movement exceptions. Note also that a paced sequence
+of *real turns* — sailing into the wind, crossing difficult terrain, holing up,
+resting at an inn — is not a presentation at all, however much it looks like
+one from the outside.
+
+The input pipeline's idle wait is where the world tick runs most often, but it is not the only caller: presentations, cutscene beats and paced turn loops call it directly, dozens of call sites across the resident image and the overlays (`systems/animation.md` Section 13). What the idle wait owns is the *idle* pump, and that pump does not run when the pipeline is in prompt mode (a Y/N or numeric prompt has set a printable prompt-character byte). Prompt mode freezes the idle world while the player thinks. Cleanup time is gameplay time; prompt time is real time.
+
+> **Corrected (R319).** This paragraph previously opened "The world tick is only called from inside the input pipeline's idle wait." That is withdrawn. A whole-code-set census of direct calls to the world tick and to the paced-pause helper finds them throughout the command overlays; an engine that can only reach its world tick from an idle poll cannot implement the paced presentations at all. `systems/animation.md` Section 13 published the census; this document had not been updated to match.
 
 ## 10. Disk-Prompt Presentation
 

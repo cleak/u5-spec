@@ -575,7 +575,7 @@ do not have town/dungeon scene rows.
 | Moongates | Saved-slot-driven surface gates whose live-terrain refresh and live `0xDC` entry handling are specified in `systems/overworld.md`. Their eight shipped positions are tabulated below; the positions are save state, so burying a moonstone moves that gate. |
 | Lighthouses | Four surface landmarks that double as the outdoor night-time light source (below). Each is also a town-family scene row in Section 5.1. |
 | Shrine of the Codex | One surface cell at `(233, 233)`, approached from `(233, 235)` (below). |
-| Falls / chasms | The confirmed surface chasm at Britannia `(54, 138)` damages the party, swaps the plane to the Underworld, and reseeds active objects. |
+| Falls / chasms | Triggered by the waterfall tile family, south of the party or under it, on either plane - not by a coordinate. The chain damages the party and force-steps it two cells south; only a landing on Britannia `(54, 138)` also swaps the plane to the Underworld and reseeds active objects. Britannia has three brink cells and the Underworld 116; only one of them reaches the gate. See `systems/overworld.md` Section 8.1. |
 | Whirlpools | Outdoor active objects, not fixed cells. Being swallowed while aboard a vessel always deposits the party at the fixed Underworld coordinate `(34, 18)`. |
 | Underworld ascents | **There are none.** No outdoor Underworld terrain feature lifts the party to the surface; see Section 8.3. |
 | Telescopes | Three indoor fixtures - in Moonglow, Skara Brae, and West Britanny - each standing near a ladder inside its building. Looking at one shows the sky (`systems/view.md`). |
@@ -622,9 +622,11 @@ according to the saved ordained-progress state. `systems/overworld.md` owns the
 branch; it is an outdoor coordinate gate and has nothing to do with dungeon
 exits.
 
-**The two fixed plane-transition cells.** The surface chasm at `(54, 138)`
-drops the party into the Underworld, and every whirlpool deposits them at
-`(34, 18)`.
+**The two fixed plane-transition landing cells.** A falls chain that ends on
+Britannia `(54, 138)` drops the party into the Underworld, and every whirlpool
+deposits them at `(34, 18)`. The falls *trigger* is the waterfall tile family
+rather than that coordinate; an earlier revision that called `(54, 138)` the
+trigger cell is withdrawn (`RETRACTIONS.md` R320).
 
 ### 8.2 What the Enter command recognises
 
@@ -645,7 +647,9 @@ Shadowlord gate of Section 6.1.
 
 The inventory of plane transitions is closed, and it is asymmetric.
 
-**Surface to Underworld**, three routes: the fixed chasm at `(54, 138)`; being
+**Surface to Underworld**, three routes: a falls chain that lands the party on
+Britannia `(54, 138)`, the chain itself being triggered by the waterfall tile
+family and not by that coordinate; being
 swallowed by a whirlpool while aboard a vessel, which always lands at
 `(34, 18)`; and leaving a dungeon through the bottom of its lowest level.
 

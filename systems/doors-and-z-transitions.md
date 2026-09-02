@@ -372,12 +372,15 @@ under *Directed utility tile helpers*.
 Secret doors are walls that look like walls until the player searches the cell.
 
 - **In dungeons**, Search owns several visit-local reveal rewrites rather than
-  one generic "secret door" bit. Exact pit-family byte `0x61` reports a found
-  secret door, clears the searched pit to `0x60`, and marks the same X/Y one
-  level below with the visit bit when there is a deeper level. Flavour-class
+  one generic "secret door" bit. Exact pit-family byte `0x61` reports
+  `A pit!\n`, clears the searched pit to `0x60`, and marks the same X/Y one
+  level below with the visit bit when there is a deeper level. *Corrected:* an
+  earlier revision said that byte "reports a found secret door"; the found-door
+  line `A hidden door!\n` belongs to the `0xD?` wall branch instead, and the
+  `0x61` claim is withdrawn (`RETRACTIONS.md` R322). Flavour-class
   cells `0xC?` narrate only for flavour values one and two; other flavour
-  values convert to `0xB0` or `0xB8`. Wall-class cells `0xD?` print the
-  hidden-wall result and convert to `0xE0` or `0xE8`. These rewrites preserve
+  values convert to `0xB0` or `0xB8`. Wall-class cells `0xD?` print
+  `A hidden door!\n` and convert to `0xE0` or `0xE8`. These rewrites preserve
   only the visit marker bit and affect the loaded dungeon image for the current
   dungeon entry.
 - **In towns and dwellings**, secret doors are wall tiles flagged in the location's per-map object table. Search matches the target cell's coordinates to the table and replaces the wall tile with a normal door tile.
@@ -469,12 +472,20 @@ bottom. `systems/dungeon-mode.md` Section 13 owns both contracts.
 Three movement events change Z without a Klimb:
 
 - **Dungeon fall traps.** Exact bytes `0x61` and `0x69` trigger an automatic drop. Each fired step prints the pit/fall messages, increments Z by one, and lands the party at the same X and Y on the next level. The handler rewrites the loaded dungeon image as it falls: it clears marker bits on the departure cell and, when the destination byte is below the wall/door band (`< 0x90`), marks bit `0x08` in that destination cell. If the destination is another `0x61` or `0x69`, the fall repeats, so multi-level drops are vertical trap chains rather than a direct subtype-to-distance table. If the chain increments past the deepest level, the dungeon scene byte is cleared with the off-bottom level byte and same X/Y still in resident state; this is not the surface-reset helper. The pit family `0x6?` is not a fall trap at all under K-Klimb: it is a climb-down feature that descends one level through the ordinary apply helper and reaches the surface-reset helper only from the deepest level (§ 9). Bomb traps `0x62` and `0x6A` share the high-nibble family but do not change Z.
-- **Overworld chasms.** The traced surface chasm trigger is Britannia
-  coordinate `(54, 138)`. Walking onto it prints the falls/underworld
-  transition messages, applies fall-damage, swaps the world plane to the
-  underworld value, and re-initialises the active-object table. There is no
-  mirror outdoor underworld-to-surface ascent cell anywhere - the plane-writer
-  census is complete - so do not infer one from the traced falls handler.
+- **Overworld chasms.** The trigger is the **waterfall tile family**
+  `0xD4..0xD7` - south of the party, or under it - on **either** plane, not a
+  coordinate. The handler prints its banner, force-steps the party two cells
+  south, runs the sweep and the Dexterity-gated damage check, and only then
+  tests where the party ended up: a landing on Britannia `(54, 138)` prints the
+  transition line, swaps the world plane to the underworld value, and
+  re-initialises the active-object table. Every other landing - two other
+  Britannia brinks and 116 underworld brinks in shipped data - gets the whole
+  presentation and no plane change. *Corrected:* the earlier text here said the
+  trigger is `(54, 138)` and that the party "walks onto it"; both are withdrawn
+  (`RETRACTIONS.md` R320). `systems/overworld.md` Sections 8 and 8.1 own the
+  contract and the exact wording. There is no mirror outdoor
+  underworld-to-surface ascent cell anywhere - the plane-writer census is
+  complete - so do not infer one from the falls handler.
 - **Town-family trap-doors.** Trapdoor cells (`0x8C`) appear in several
   interiors and are dense in the upper floors of Blackthorn's castle. Walking
   onto one prints "A TRAPDOOR!" and drops the party one floor, the same Z-down
@@ -563,9 +574,13 @@ The transitions across the major boundaries are:
   exterior-coordinate reset table.
 - **Town floor ↔ town floor.** Klimb on a ladder or grate cell, a walk-on staircase, or a trapdoor step rewrites the active floor index and reloads the tile buffer from the page selected by the location's base page plus the new signed floor (`formats/location-dat.md` Section 4). The scene byte does not change. NPCs on the new floor are linked into the active-object table; NPCs on the old floor are unlinked. Quick and stateless: a single tile-buffer reload, a single NPC re-link, no save-game write.
 - **Dungeon level ↔ dungeon level.** Klimb on an up-ladder, down-ladder, or two-way cell, casting either of the two dungeon level-change spells, stepping on an automatic fall-trap pit, or standing on a scripted teleport changes the level index. The new level's eight-by-eight slice of DUNGEON.DAT becomes active. The scene byte does not change unless the change would carry the party past the top or bottom of the stack, in which case the exit contract runs; a fall-trap chain running past the deepest level is the separate off-bottom case.
-- **Surface and underworld.** The confirmed outdoor plane swap is the surface
-  fall at `(54, 138)`, which writes the underworld plane and re-initialises the
-  active-object table while leaving the scene byte at the overworld value.
+- **Surface and underworld.** The confirmed outdoor plane swap is the falls
+  chain, which writes the underworld plane and re-initialises the active-object
+  table while leaving the scene byte at the overworld value. It is triggered by
+  the waterfall tile family rather than by a coordinate; `(54, 138)` is the
+  *landing* cell the handler tests after force-stepping the party two cells
+  south, and it alone gates the plane write. *Corrected:* an earlier revision
+  called `(54, 138)` the trigger (`RETRACTIONS.md` R320).
   The overworld spec also owns the later-traced whirlpool forced-underworld
   writer and the town-family exit branch that selects the underworld plane for
   scene byte `0x19`. The writer census is complete and identifies no outdoor
@@ -574,6 +589,89 @@ The transitions across the major boundaries are:
   dungeon-owned scene clear reached from inside a dungeon, not an outdoor
   ascent tile.
 - **Any mode → combat.** A movement step onto a hostile, an encounter roll firing in the per-turn block, or a room-cell trigger inside a dungeon swaps the scene byte to the combat-class marker. Combat saves the active-object table, reloads it with combatants from a `.CBT` arena file, and runs the combat loop; exit restores the saved table and resets the scene byte to its pre-combat value. Coordinates are preserved.
+
+### 12.1 Exact transcripts for the two plane-changing exits
+
+Two of the transitions above are the game's only *interior* plane writers, and
+both narrate. The strings below are exact; `\n` is one line feed and is part of
+the string, so a leading `\n` produces a blank row. Neither exit clears the
+message window and neither carries a style or centring control. Both print into
+the ordinary gameplay message window.
+
+**Dungeon exit.** Two prints, in this order, with no screen clear, **no key
+wait and no sound at all**:
+
+| Order | Exact text |
+|---|---|
+| 1 | `\nExit to ` - trailing space, no line feed of its own |
+| 2 | `Underworld!\n\n` when the party left through the bottom of the deepest level, or `Britannia!\n\n` when they climbed off the topmost one |
+
+The branch reads the level byte the party was standing on when the edge was
+reached: level zero selects Britannia, any other level selects the Underworld.
+Rendered into the fifteen-column gameplay message window, starting on a fresh
+row:
+
+| Rendered row |
+|---|
+| *(blank)* |
+| `Exit to` |
+| `Underworld!` |
+| *(blank)* |
+
+The break between `Exit to` and the plane name is **not** in the data. The
+first string leaves the cursor at column eight, the plane name has no space to
+break on, and the printer therefore emits a line feed and restarts the word at
+column zero - so the word lands whole on the new row. An implementation with a
+wider message window renders `Exit to Underworld!` on one line, which is a
+visible divergence. `systems/commands.md` Section 5.5 publishes the same two
+literals in its own notation.
+
+**Town-family boundary exit.** This is the only key wait on any plane-change
+path. In order:
+
+| Order | Exact text | Wait |
+|---|---|---|
+| 1 | `\nDost thou wish to leave? ` - trailing space, no line feed | Yes: the prompt re-polls until `Y`, `N` or Escape. Every other key is discarded. The reader ticks the world and blinks a cursor while it waits, and it does **not** echo, so the answer word below is printed by the handler |
+| 2a | Accepted: `Yes\n\nExit to\n`, then `Underworld!\n` for scene `0x19` - Ararat, whose exterior cell is `(49, 58)` and the only location on the underworld plane - or `Britannia!\n` for every other scene | no |
+| 2b | Declined (`N` or Escape): `No\n` and nothing else | no |
+
+Rendered, starting on a fresh row, for the accepted Ararat case:
+
+| Rendered row |
+|---|
+| *(blank)* |
+| `Dost thou wish` |
+| `to leave? Yes` |
+| *(blank)* |
+| `Exit to` |
+| `Underworld!` |
+
+Note how this differs from the dungeon form: here the break before the plane
+name **is** in the data, and the blank row sits *before* `Exit to` rather than
+after the plane name. Accepting and declining are both silent.
+
+**The refused boundary step** never reaches the prompt. It prints `Blocked!\n`,
+plays the blocked-step tone of `systems/audio.md` section 7.4 - 165 Hz for 200
+delay units - and flushes type-ahead. This is one of that tone's four sites.
+
+**Not a plane writer: outdoor K-Klimb.** The outdoor climb verb writes no plane
+byte at all, and its per-member fall check is a *different* contract from the
+falls chain's: it draws a flat `1..30` directly rather than the halved `0..60`
+roll, it gates on a **strict** comparison rather than an inclusive one - the
+member falls when Dexterity is strictly less than the roll, where the falls
+chain applies damage when Dexterity is less than **or equal to** it - and it
+applies `1..5` damage rather than a flat one point (Section 9). Low Dexterity
+is the bad outcome on both paths; only the strictness differs. Do not share one
+implementation between the two. Town K-Klimb's
+`Up!\n` / `Down!\n` move the same byte, but there it is the floor index, not the
+plane.
+
+Source provenance: derived from private analysis under `u5-decomp/notes/`,
+`u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/TOWN_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/` - the plane-change wording pass, which
+re-read every literal from the shipped resident data image and hand-traced the
+word-wrap printer against the message window's rectangle. The rendered line
+breaks are derived from that printer rather than observed in an emulator.
 
 ## 13. Hooks into the rest of the engine
 
@@ -685,6 +783,12 @@ The behaviour described here was derived from the private function notes listed 
   that a failed pick leaves the container completely untouched while a
   successful pick clears the lock/trap flag and preserves the content class --
   derived from `u5-decomp/functions/SJOG_OVL/` and `u5-decomp/notes/`.
+- The exact plane-change exit wording of Section 12.1, the town-exit prompt's
+  key set and non-echoing reader, Ararat as the single underworld scene, the
+  rendered line breaks and the corrected chasm trigger — derived from private
+  analysis under `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/OUTSUBS_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`.
 - The O-Open command's tile cascade, the auto-close countdown's record format and decrement, the pre-flight gate shared with Jimmy and Search, and the route to the chest-on-floor helper — derived from `u5-decomp/functions/SJOG_OVL/`.
 - The magic Open/Unlock helper's ordinary wooden-door tile rewrites,
   Space/Pass no-effect branch, dirty marking, and separation from O-Open's

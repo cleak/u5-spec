@@ -31,11 +31,40 @@ The probe is an overworld-mode-only routine. The town loop's per-turn block does
 not run it, so towns have no random encounters; a town fight instead starts
 directly, when the party attacks an NPC or an NPC-conflict event fires
 (Section 7). The dungeon mode loop has its own room-trigger logic (Section 8).
-The Quickness (`Q`) alternate-turn gate and the traced horse/carpet
-transport-marker pendulum pairs therefore reduce the effective random-encounter
-cadence by skipping some probe opportunities; they do not change the threshold
-formula itself. `Q` is the Quickness magic effect of `systems/magic.md`, not a
-slow-water or skiff timing state — that earlier reading is withdrawn.
+
+**The three effect gates, in the order the outdoor block tests them.** All three
+sit ahead of the encounter probe *and* ahead of the outdoor creature walker, so
+a gate that fires costs the turn its probe as well as its creature movement:
+
+1. **Negate Time.** While that timed effect is active, the whole per-turn block
+   returns immediately — no probe, no creature movement.
+2. **Quickness.** A stored parity bit flips each turn and the block returns on
+   the turns it comes up set, so probe and walker run on alternate turns.
+3. **The transport marker.** While the party's marker is one of the four values
+   `0x12`–`0x15`, a second stored parity bit does the same on its own phase.
+
+Implement the third as that **value window**, not as an "is the party mounted or
+on a carpet" test. The traced gate is a numeric range on the marker byte, and
+the two readings of what the range *means* do not agree.
+`systems/vehicles.md` Section 2 has those four values as exactly the
+mounted-horse pair (`0x12`, `0x13`) and the magic-carpet pair (`0x14`, `0x15`),
+which would make the gate coincide with "mounted or on a carpet" for every
+marker the shipped game writes; the private tile-family mapping instead puts the
+window across the top half of one four-tile family and the bottom half of the
+next, which would leave two vehicle facings ungated. The value window is
+*established*; the family mapping behind the second reading is only *probable*
+and the reading of the low bits as facing is *inferred*. A value test is correct
+under both readings, a family test only under one.
+
+These gates therefore reduce the effective random-encounter cadence by skipping
+some probe opportunities; they do not change the threshold formula itself. `Q`
+is the Quickness magic effect of `systems/magic.md`, not a slow-water or skiff
+timing state — that earlier reading is withdrawn. The town turn loop applies the
+**same three** gates to its two walkers, but tests them in the **opposite
+order** — transport marker first, then Negate Time, then Quickness — and because
+an early return leaves the later gates' parity bits un-flipped, the two modes'
+alternate-turn phases drift apart rather than staying in step.
+`systems/npc-schedules.md` Section 5 owns the town side.
 
 ### 2.2 Scripted encounters
 

@@ -77,10 +77,12 @@ a boolean:
   head of the iteration, before the command is even parsed, so no dungeon
   command is distinguished by this status for timekeeping purposes.
 - **Town.** `3` jumps straight back to the input parser with no turn and no
-  epilogue; `0` skips the epilogue; `1` runs the epilogue *including* the
-  NPC schedule step; `2` runs the common time/underfoot epilogue but skips the
-  NPC schedule step and fires town post-action cleanup with the arrest
-  discriminator. The clock still advances by one minute. In the shipped
+  epilogue; `0` skips the epilogue; `1` runs the epilogue *including* both town
+  walkers — the object walker and the NPC schedule step — unless one of the
+  three effect gates suppresses them (`systems/npc-schedules.md` Section 5, and
+  `RETRACTIONS.md` R328); `2` runs the common time/underfoot epilogue and the
+  town object walker, skips the NPC schedule step, and fires town post-action
+  cleanup with the arrest discriminator. The clock still advances by one minute. In the shipped
   command set no value above `3` is a designed producer.
 - **Combat.** Never calls this dispatcher at all; the combat parser keeps its
   own re-prompt flag (`combat.md`).
@@ -224,7 +226,7 @@ plain block of text rather than as a table addressed by the key code.
 | `H` | `Hole_up-_` | Hyphen **then** a space. Bed refusal: `Only_in_bed!\n`. Shipboard and camp forms in section 5.5. |
 | `I` | `Ignite_torch!\n` | |
 | `J` | `Jimmy-` | |
-| `K` | `Klimb-` | Dungeon form `Klimb-U/D-`, then `Up!\n`, `Down!\n` or `Failed!\n`. Gearless dungeon form: `Klimb-\nWith_What?\n` |
+| `K` | `Klimb-` | Dungeon form `Klimb-U/D-`, then `Up!\n`, `Down!\n` or `Failed!\n`; Space at the up/down chooser answers `Pass\n\n` and climbs nothing. Gearless dungeon form: `Klimb-\nWith_What?\n`; the no-feature dungeon form is `Klimb-what?\n`. In a dungeon the resident dispatcher prints no `Klimb-` prefix of its own - all four prompt forms are the overlay's. |
 | `L` | `Look` then either `-` or `...\n` | See section 5.3. |
 | `M` | `Mix_Reagents\n\n` | |
 | `N` | `New_Order` | **No** trailing newline. |
@@ -560,8 +562,12 @@ trap resolver when a caller selects one.
 
 Dungeon Search does not use the surface object-table scan. It routes to the
 dungeon inner handler, which first enforces the dungeon light gate: with no
-torch light and no light-spell duration remaining, Search reports that it is too dark and
-does not inspect the cell. In light, it reads the packed dungeon cell ahead of
+torch light and no light-spell duration remaining, Search prints exactly
+`\nYou_find:\ndarkness.\n` and does not inspect the cell. *Corrected:* an
+earlier revision said "Search reports that it is too dark". There is no
+too-dark literal anywhere in the resident data image; the unlit refusal is a
+*find* line with a leading blank row, and the L-Look twin is
+`You_see:\ndarkness.\n` (`RETRACTIONS.md` R323). In light, it reads the packed dungeon cell ahead of
 the party and classifies by high nibble. Ordinary ladders, doors, walls, pits,
 fountains, open chests, fields, and flavour objects print feature-specific
 search descriptions. Chest cells use the dungeon chest trap/detail branch.

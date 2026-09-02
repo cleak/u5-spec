@@ -199,7 +199,7 @@ The common recipes are:
 | Cast failure | 50 | 1 | 50 updates: 800, 824, ... 1976 Hz, rising toward 2000 Hz. |
 | Dungeon wall drip, near to far | 20, 12, 4, or -4 | 1 | Starts at 3200 Hz and rises toward 3500 Hz. The four depth bands emit 20 updates in steps of 15 Hz, 12 in steps of 25 Hz, 4 in steps of 75 Hz, or no tone at all. Realised tops **3485**, **3475** and **3425 Hz**; 3500 Hz is never emitted (`dungeon-mode.md` section 6.8). |
 | Long descent | 7800 | 40 | 195 updates: 660, 658, ... **272 Hz**, against a nominal target of 150 Hz. The exact increment would be -2.615 Hz and the truncated one is -2 Hz, so the realised fall is about 15.4 semitones rather than the 25.7 the endpoints imply. Section 8.9 owns its two triggers. |
-| Unattributed 2500-to-800 recipe | 300 | 1 | 300 updates: 2500, 2495, ... **1005 Hz**. Truncation from -5.67 to -5 leaves a 205 Hz shortfall. Fully characterised, but its triggering event is not attributed - section 10.6. |
+| Surface falls descent | 300 | 1 | 300 updates: 2500, 2495, ... **1005 Hz**, against a nominal target of 800 Hz. Truncation from -5.67 to -5 leaves a 205 Hz shortfall. Its trigger is the overworld falls chain (systems/overworld.md section 8.1); this document previously listed the recipe as unattributed - section 10.6. |
 
 A negative span produces no tone update and only performs the final stop. No
 confirmed caller supplies zero.
@@ -1657,7 +1657,7 @@ further one-time setup of about 0.18 ms, which the totals below exclude.
 | Cast failure, span 50, delay 1 | 50 | 1.05 ms | **52 ms** (47 to 58 ms) |
 | Dungeon wall drip, spans 20 / 12 / 4 / -4, delay 1 | 20 / 12 / 4 / 0 | 1.05 ms | **21 / 12.6 / 4.2 / 0 ms** |
 | Long descent, span 7800, delay 40 (section 8.9) | 195 | 35.2 ms | **6.86 s** (6.2 to 7.6 s) |
-| Unattributed 2500-to-800 recipe, span 300, delay 1 (section 10.6) | 300 | 1.05 ms | **314 ms** (283 to 345 ms) |
+| Surface falls descent, span 300, delay 1 (section 10.6) | 300 | 1.05 ms | **314 ms** (283 to 345 ms) |
 
 A rumble costs about `target x 59.6 microseconds + iterations x 125
 microseconds`. The per-target term is the `step` outer passes each iteration
@@ -1771,13 +1771,20 @@ told to leave them unimplemented:
 
 Both should now be implemented at those triggers.
 
+**A third gap, closed later.** The 2500-to-800 Hz, 300-update recipe of
+sections 5.2 and 10.2 - realised endpoint 1005 Hz - was listed here as fully
+characterised but unattributed. It is the **overworld falls presentation**: it
+plays once, immediately after the falls banner and the two forced southward
+steps, on every waterfall brink on either plane, whether or not the fall ends in
+a plane change. `systems/overworld.md` section 8.1 owns that chain. Implement
+it at that trigger.
+
 **What is still unattributed.** The glissando generator has many more call sites
 than section 8 accounts for: the remaining twenty-nine carry seven further
-recipes whose triggering events were not attributed in this pass. One of them is
-the 2500-to-800 Hz, 300-update recipe of sections 5.2 and 10.2, which is
-otherwise fully characterised down to its realised endpoint. An effect with no
-known trigger still cannot be placed correctly, so those seven should not be
-implemented until their triggers are established.
+recipes whose triggering events were not attributed in that pass, and the falls
+attribution above reduces the open set by one. An effect with no known trigger
+still cannot be placed correctly, so the rest should not be implemented until
+their triggers are established.
 
 ## 11. Caller scope index
 
@@ -1792,6 +1799,7 @@ listed in `RETRACTIONS.md`.
 | Blocked-step beep, 165 Hz for 200 units | Exactly four sites: one overworld, one town, two combat (a refused arena step; out-of-arena exit refused). See section 7.4. | The dungeon, on either refusal arm. Any under-sail refusal. A whirlpool-class refusal aboard a vehicle. The overworld `OUCH!` branch, which rumbles instead. Successful movement in any mode. **A missed melee or weapon attack**, which reaches no beep site at all. |
 | Combat command refused as inapplicable, 220 Hz then 150 Hz | The combat command prompt only, on twelve unimplemented verbs, in every kind of combat scene: one caller in the whole program. See section 8.8. | Any non-combat mode. A refused arena step, which plays the 165 Hz beep instead. A missed attack. The `D` and `W` stubs and any unrecognised key, all of which print `What?` silently. |
 | Long descent, 195 updates from 660 Hz, realised endpoint 272 Hz | Exactly two sites, both overworld: drowning after a frigate is lost with no skiff and no carpet, and whirlpool engagement in any vehicle. See section 8.9. | The endgame, Blackthorn and shrine-restoration sequences, none of which calls this recipe at any parameter shape. Whirlpool engagement on foot. |
+| Surface falls descent, 300 updates from 2500 Hz, realised endpoint 1005 Hz | One site: the overworld falls chain, played once per fall, immediately after the banner and the two forced southward steps. It fires on every waterfall brink on either plane, including the ones that produce no plane change. See `systems/overworld.md` section 8.1. | Any dungeon pit fall, which narrates but plays no sweep of its own. The dungeon Klimb `Failed!` refusal, which uses a different, much shorter recipe. |
 | Action snap, 40 updates 1200 toward 2000 Hz | The stolen-action warning; the Ready-path ring destruction; the combat-entry ring destruction; the Jimmy key break; the borrowed fixed object; a matching Vanish tile; the accepted combat exit (`Escape!`); per-victim combat damage or kill narration. Eight further sites share the recipe; it is the generic action snap, not a ring-specific sound. | Ordinary pickup, crop pickup, or a successful Jimmy. |
 | Shared variant sequence (section 6) | 41 of the 48 spell ids, at variant = circle; all 8 scrolls, at variant = scroll index; all 8 potions, at variant = bottle index. | The seven spell ids of section 6.1's second table - the three combat effect-template spells and the four mass-target spells - on any path. The combat arm of the four field spells. |
 | Summon tile flash | The monster summon and the player Summon spell, identically: one invocation of the shared single-cell converge on the flash tile. See section 8.3.1. | The shared full-viewport XOR flash, which neither summon path invokes. |

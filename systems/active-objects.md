@@ -278,17 +278,35 @@ The animation cycle uses byte 6's low nibble. It counts down each tick:
 |---------------|---------------------------------------------------------------------------------------------------------------|
 | steady marker | Steady; do not animate this slot. The animator skips. (Encoded as the all-ones nibble.)                       |
 | any non-zero  | Mid-cycle. Decrement and write back. The renderer combines the phase with the tile class to pick a frame.     |
-| zero          | Cycle ended. Eligible for an AI tick: roll RNG, possibly turn or move, possibly reseed phase.                 |
+| zero          | Cycle ended. Eligible for a direction/frame decision: roll RNG, possibly change the stored facing, possibly reseed phase. It never changes the slot's coordinates. |
 
 Each animated class has its current-frame index in a separate animation-frame table; the renderer combines the tile class with that counter to pick the actual byte to paint. The classes this per-slot pass animates are actor classes — vehicles, monsters and the other sprite-only tiles that live in the table. (An earlier revision of this paragraph listed "water (a four-frame cycle), lava, torches, and a small handful of 'special' tiles" as the animated classes. That list is **withdrawn**: no water, lava, brazier or torch tile animates through any per-tick pass. The separate world-tick tile animator touches exactly five terrain families — waterfall, fountain, pendulum, the standard of Britannia, and the clock/bellows pair — and none of them is a water or fire terrain family. **Further correction:** that withdrawal was then over-generalised in this document and elsewhere into "water, lava and fire tiles do not animate". That is also withdrawn. They have no frame family and no selector, but they are animated by a third layer — a driver-side pass that rewrites the loaded tile artwork in place on every animation step — specified in `systems/animation.md` Section 12. See `systems/animation.md` Sections 6 and 12 and `catalogs/tile-catalog.md` Section 4.)
 
 Two responsibilities sit slightly outside the per-slot loop. A *frame-counter advance* runs at the end of the pass, incrementing a shared frame counter and toggling a few alternate-frame tile classes. A *video-driver flush* runs immediately after, sending the post-tick frame to the display driver. Both are part of the "advance one tick of on-screen state and present it" contract.
 
-Some slots also receive AI ticks during the same pass: hostile creature classes
-that wander on the overworld (or in towns past their schedule) get an RNG roll
-on their phase-zero tick that may turn or step them one cell. Probability is
-gated by tile class, and the resident animation pass owns the simple frame and
-direction updates for environment-like animated classes.
+Some slots also receive a direction decision during the same pass: a slot whose
+phase reaches zero gets an RNG roll that can rewrite its stored facing and its
+displayed frame. The roll is gated by tile class, and the resident animation
+pass owns these simple frame and direction updates for every animated class.
+**It cannot move anything.** The animator's complete set of record writes is the
+displayed-tile byte and the packed phase/facing byte; it never writes a slot's
+column or row.
+
+> *Corrected (R316).* This paragraph previously said the phase-zero roll "may
+> turn or step them one cell" for "hostile creature classes that wander on the
+> overworld (or in towns past their schedule)". The stepping half is withdrawn,
+> and so is the town clause. The animator changes appearance only; ambient
+> creature movement happens in the outdoor per-turn walker below, and a town's
+> non-schedule roamers are walked by a separate town-mode walker. This completes
+> the propagation of R315, which withdrew the same reading from
+> `systems/main-loop.md`, `systems/animation.md` and `systems/input.md` but left
+> these sentences standing here. Search scope for the negative: the animator was
+> read end to end, and every function reachable from the world tick to a depth
+> of six calls — fifty-six routines — was swept for writes into the
+> active-object table. The only such write anywhere in that tree is the
+> renderer's mirror of the **party's own** coordinates into slot zero. The sweep
+> did not follow indirect or far calls, and outside the animator and the
+> renderer it did not chase writes made through a pointer held in a register.
 
 The outdoor per-turn walker is separate from that resident frame animator. It
 walks overworld slots from high to low, skips slot zero, and applies only to the
@@ -297,6 +315,51 @@ monster-range tiles, excluding the small environment-animation ranges handled by
 the resident frame animator. Its first phase handles immediate hostile
 reactions. Orthogonal adjacency is tested **before** any class test, so an
 adjacent creature engages rather than firing.
+
+**There is no outdoor equivalent of the town wander gate.** An ordinary land
+monster has no per-turn "do I move at all" roll: every turn the walker runs, an
+eligible slot goes straight to the directed step planner. The per-turn
+randomness an implementation has to reproduce outdoors is only these, and they
+are all downstream of the decision to move:
+
+- the fair coin that picks **which axis to attempt first** — an ordering roll,
+  never a gate;
+- the destination-terrain cadence gates in the step committer (one-in-two and
+  one-in-three, tabulated later in this section), which can refuse an already
+  validated candidate;
+- the class-specific pacing of the whirlpool parity bit and the wind cadence for
+  ship-like frames.
+
+The planner reduces each axis offset to a sign and never compares the two
+magnitudes, so a creature on the far edge of the window closes at the same
+nominal rate as one two cells away — there is no distance band and no
+"activation radius". *Scope of that negative:* the directed planner, the random
+fallback walker and the reaction pass were each read end to end, and the only
+distance-shaped tests in them are the ones this section already publishes (the
+orthogonal adjacency test, the breath/broadside proximity tests, the Shadow Lord
+proximity mask, and the off-screen prune). The three class special cases named
+in the third bullet were not re-derived, so a distance test inside one of those
+is not excluded.
+
+The adjacency reaction is likewise ungated: it is evaluated before any class
+test and behind no roll. That is why an adjacent hostile engages on the *first*
+turn the player passes, rather than after a variable delay — and why it does not
+move on that turn, since a returning reaction both consumes the slot's turn and
+zeroes out movement for every remaining slot in that pass.
+
+**Towns do not use this walker.** A town's non-schedule roaming objects are
+advanced by a separate town-mode object walker that runs once per turn,
+immediately before the NPC schedule processor and under the same three effect
+gates (`systems/npc-schedules.md` Section 5). It considers only slots whose type
+byte is in the loose-horse family `0x10..0x11` and whose floor byte matches the
+displayed floor, and it applies its own independent one-in-two per-slot coin
+before probing directions, drawn from the same shared random stream. On a
+committed step it also rewrites the slot's type/frame byte to the facing value
+implied by the direction, exactly as the outdoor water-creature movers do. Town roamers, town schedule NPCs and outdoor
+creatures are three separate movement systems that happen to share this table.
+*Scope:* established by a call census over the town overlay covering direct near
+calls only; indirect and far call forms were not enumerated, and no claim is
+made here about whether the overworld module is resident during town mode.
 
 The adjacency reactions, in the order the handler tests them:
 
@@ -754,7 +817,7 @@ said the round walker reads slot zero for the player and slots one and up for
 monsters; that is withdrawn, and it is the same withdrawn "reserved player
 slot" claim Section 7 corrects.
 
-**Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling AI movement decisions for monster classes. It animates only the actor classes held in the table; it drives no water, lava or torch terrain *cycle*. Animated *terrain* belongs to the separate world-tick tile animator and its five families (`systems/animation.md` Section 6) and, for water, lava, rivers and fire fixtures, to the driver-side tile-asset pass that runs in the same step (`systems/animation.md` Section 12) - which is also where the banner and sail tiles are animated, on a stage of that pass published only as *probable* and not observed at runtime (`systems/animation.md` Section 12.5). Neither of those is an active-object concern, but neither is absent: an earlier revision's "no water, lava or torch animation" reading of this sentence is withdrawn.
+**Per-tick animator.** Runs once per world tick (the input system's idle loop), advancing each non-empty slot's animation phase and rolling facing/frame decisions for monster classes. It moves no actor (Section 8, R316). It animates only the actor classes held in the table; it drives no water, lava or torch terrain *cycle*. Animated *terrain* belongs to the separate world-tick tile animator and its five families (`systems/animation.md` Section 6) and, for water, lava, rivers and fire fixtures, to the driver-side tile-asset pass that runs in the same step (`systems/animation.md` Section 12) - which is also where the banner and sail tiles are animated, on a stage of that pass published only as *probable* and not observed at runtime (`systems/animation.md` Section 12.5). Neither of those is an active-object concern, but neither is absent: an earlier revision's "no water, lava or torch animation" reading of this sentence is withdrawn.
 
 **Save / load.** The table is a persistent region in the save image, byte-for-byte.
 
@@ -779,7 +842,14 @@ The behaviour described above was derived by reading the function and format not
 
 - The dungeon loop's first-person rendering path and its absence of NPC/active-object population during exploration — `u5-decomp/functions/DUNGEON_OVL/`.
 
-- The per-tick animator that walks the table to advance animation phases and roll monster AI movement — `u5-decomp/functions/ULTIMA_EXE/`.
+- The per-tick animator that walks the table to advance animation phases and roll monster facing changes — `u5-decomp/functions/ULTIMA_EXE/`.
+- The animator's complete record-write set, the depth-six sweep of the world
+  tick's call tree that found no other write into this table, the absence of any
+  per-turn movement roll in the outdoor walker, and the separate town-mode
+  object walker for loose horse-family objects, with its own one-in-two
+  per-slot coin. Source
+  provenance: derived from private analysis note
+  `u5-decomp/notes/2026-09-02_issue-180_per-turn-wander-gate.md`.
 - The compositor's companion-band write, the renderer's zero-grid-cell branch,
   the `+256` actor index rule and the reserved transparent value —
   `u5-decomp/notes/`.

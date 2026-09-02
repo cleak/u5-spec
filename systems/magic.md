@@ -289,7 +289,7 @@ The *order* of the gates matters:
 
 The forty-eight spell effects fall into seven broad categories. Each handler takes the active-player slot and the dispatcher's per-spell context as input; each returns a success/failure code that the dispatcher uses to print the trailing `Failed!` if appropriate.
 
-**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. An earlier published range of `0..2`, which admitted a successful zero-food cast, is retracted. Most utility effects have a short narration message and finish in a single handler call.
+**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. An earlier published range of `0..2`, which admitted a successful zero-food cast, is retracted. Most utility effects have a short narration message and finish in a single handler call. X-Ray (*Wis An Ylem*) is one of the two callers of the shared visibility sweep — the other is the White potion — and that sweep is a full reveal of the whole eleven-by-eleven viewport window straight from the map, ignoring line of sight, followed by twenty repaint frames; the complete contract, including the withdrawn distance-threshold reading, is in `catalogs/item-list.md` Section 7.2. Because it blocks for twenty frames, it is also a worked example of the presentation contract in `systems/animation.md` Section 13.5: the sweep pumps the sprite animator and the world tick, and moves no actor while it does.
 
 **Directed utility tile helpers.** Four utility spells — Vanish (*An Ylem*),
 Open (*An Sanct*), Magic Lock (*An Ex Por*) and Unlock Magic (*In Ex Por*) —
@@ -570,7 +570,10 @@ the otherwise permanent regalia auras:
   the player command handler; both readings are withdrawn.
 - **`T` Negate Time.** The per-turn cleanup skips the entire time advance, so
   the clock is frozen and neither torches nor light spells burn down, and the
-  overworld epilogue returns before animating anything. In combat the automatic
+  overworld epilogue returns before animating anything. In town the same tag
+  skips **both** per-turn walkers, so neither a scheduled NPC nor a loose
+  horse-family object moves while it lasts (`systems/npc-schedules.md`
+  Section 5). In combat the automatic
   actor driver returns immediately, so every self-acting actor's turn is
   skipped outright while the tag lasts; the party is still prompted normally.
 - **`N` Negate Magic.** On the party's combat C-Cast path, the cast is absorbed

@@ -4,7 +4,7 @@
 
 Ultima V's overworld is the open-air mode the player spends the most time in. Two surfaces share the mode: **Britannia**, the surface world the game opens on, and the **Underworld**, the lightless mirror beneath it. Both are 256-by-256 tile grids driven by the same mode loop, the same camera, the same per-turn cadence. They differ only in which on-disk grid the engine reads tiles from, what default lighting the time system applies, and which surface features distinguish them: town and dungeon entries, runtime moongate presentation, and a confirmed falls trigger on Britannia, plus a uniformly dark and chasm-strewn cavern below.
 
-Within either surface the player commands a small party (or a vehicle carrying that party) and walks one cell per turn. Around the party live the *active objects* -- wandering monsters, vehicles, dropped items, and the player avatar slot itself -- while render-only effects such as spell and projectile frames are stamped into the viewport scratch outside that table. Each turn, the engine reads a command, dispatches it, advances time by two minutes, ticks every animated entity, rolls the random-encounter check, refreshes the daylight value, and rebuilds the on-screen viewport. When the command is "Enter" on a fixed town-mode or dungeon location coordinate, the loop sets a scene byte that the resident main-game loop sees on its next iteration, and overworld mode exits back to the dispatcher, which spins up town mode or dungeon mode. Falling through the confirmed surface chasm is different: it swaps the world plane while staying in overworld mode. Gate-like world-transition branches are handled as explicit underfoot special cases rather than as part of the general scene-entry dispatch.
+Within either surface the player commands a small party (or a vehicle carrying that party) and walks one cell per turn. Around the party live the *active objects* -- wandering monsters, vehicles, dropped items, and the player avatar slot itself -- while render-only effects such as spell and projectile frames are stamped into the viewport scratch outside that table. Each turn, the engine reads a command, dispatches it, advances time by two minutes, ticks every animated entity, rolls the random-encounter check, refreshes the daylight value, and rebuilds the on-screen viewport. When the command is "Enter" on a fixed town-mode or dungeon location coordinate, the loop sets a scene byte that the resident main-game loop sees on its next iteration, and overworld mode exits back to the dispatcher, which spins up town mode or dungeon mode. Falling through the waterfall-family falls chain is different: at the one landing cell that gates it, it swaps the world plane while staying in overworld mode. Gate-like world-transition branches are handled as explicit underfoot special cases rather than as part of the general scene-entry dispatch.
 
 The overworld is a thin shell over the resident systems. Almost everything that has its own spec — input, time, active objects, visibility, save/load — does the same work in this mode that it does anywhere else. The overworld's specific logic is small: which command goes where, when to load a chunk from disk, how to recognise the eight or nine tile types that mean "something special happens here", and a per-turn animator that is the dual of the town-mode NPC scheduler but does *not* consult the in-world hour. This spec describes those overworld-specific pieces and how they hook into the rest of the engine.
 
@@ -28,7 +28,7 @@ The player crosses between planes through exactly the routes below. The list is
 closed: it comes from a complete census of everything that writes the plane
 byte, not from a search that happened to stop.
 
-- **Falling.** The traced falls handler has a confirmed fixed trigger at Britannia coordinate `(54, 138)`. When the party steps onto that chasm cell, the handler prints a falls banner and an underworld-transition line, applies the Dexterity-gated fall-damage check described in Section 8 to each non-dead party member, restores the pre-fall transport marker after the presentation clear, swaps the world plane to the underworld value, and re-initialises the active-object table for the new plane. The coordinate is hard-wired and fixed across all playthroughs.
+- **Falling.** The falls handler is triggered by the **waterfall tile family** `0xD4..0xD7` - either in the cell immediately south of the party, tested before the turn's key is read, or under the party itself, tested in the post-action pass. It is not a coordinate test and it is not plane-specific. The handler always runs its whole presentation: the falls banner, **two forced one-cell steps south**, the descending sweep, the hidden party marker, and the Dexterity-gated one-point damage check of Section 8 on each non-dead member. Only *after* that does it test the party's new position, and only the single coordinate `(54, 138)` writes the underworld plane, prints the transition line, and re-initialises the active-object table for the new plane. The transport marker is saved across the damage block and restored **before** that coordinate test, so the plane write happens with the original transport in place; the handler never forces the durable post-fall transport to foot. Exact wording is in Section 8.1. *Corrected:* an earlier revision said the trigger is Britannia `(54, 138)` and that the party "steps onto that chasm cell". Both halves are withdrawn - the coordinate is the *landing* cell that gates the plane flip, reached because the handler force-steps the party two cells south from a brink, and the presentation fires with no plane change at all at two other Britannia brinks and at every underworld brink (`RETRACTIONS.md` R320).
 
 - **Whirlpool forced-underworld transition.** Outdoor whirlpool active objects
   are another traced surface-to-underworld writer. When the adjacent-engagement
@@ -79,6 +79,18 @@ byte, not from a search that happened to stop.
   Travel to a surface Moonstone slot, and reloading a saved position.
 
 The mode loop itself does not branch on Z. The chunk loader, the visibility producer, the renderer, the daylight calculator, and the random-encounter spawner treat the two planes identically — what differs is the data the helpers consult: a different on-disk grid (Section 3), a forced full-darkness ambient light on the underworld plane, and a different active-object seed file.
+
+*Confidence: this is **inferred**, not established.* The claim that the
+underworld enters the same per-turn outdoor loop rests on the loop's own
+helpers reading only plane-agnostic state; the mode's entry sites were not
+traced. A terrain test that earlier private analysis cited as the gate admitting
+the outdoor per-turn block turned out not to gate it at all — it selects a side
+action for a party standing on the waterfall family, and the per-turn block runs
+on both of its arms — so that support is withdrawn and has no replacement. No
+evidence against the shared-loop reading was found, and it remains the working
+assumption of this document; an engine should treat it as an inference rather
+than as a traced contract, and any behaviour that would differ between the
+planes needs its own derivation before it is relied on.
 
 ## 3. Map structure
 
@@ -247,8 +259,10 @@ The animator does not consume the in-game hour; nothing in the overworld animato
 A small *pendulum gate* sits on top of the animator. The `T` timing/state tag
 returns before animation, while the `Q` timing/state tag lets the animator and
 encounter probe run only on alternate turns. A separate transport-marker
-pendulum covers the traced horse/carpet marker pairs described in
-`vehicles.md`. This is the same mechanism town mode uses to slow NPCs to
+pendulum covers the four traced marker values `0x12`–`0x15` (`vehicles.md`
+Section 2 lists them). Test the values, not vehicle identity:
+`systems/encounters.md` Section 2.1 gives the outdoor gate order and why the
+value reading is the safe one. This is the same mechanism town mode uses to slow NPCs to
 half-speed, but in overworld mode it gates active-object and encounter cadence
 rather than the clock directly.
 
@@ -736,13 +750,26 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 
 - **Moongate.** Section 9.
 
-- **Falls (chasm).** A confirmed fixed Britannia coordinate, `(54, 138)`, triggers the fall-into-underworld transition.
+- **Falls (chasm).** The waterfall tile family `0xD4..0xD7`, either south of the
+  party or under it, triggers the falls chain on **both** planes. The chain is
+  unconditional; only a landing on Britannia `(54, 138)` also flips the plane.
+  In shipped data Britannia has exactly three waterfall cells, so exactly three
+  brink cells - `(46, 90)`, `(100, 96)` and `(54, 136)` - and only the last of
+  those lands on the gate. The Underworld has 116 brink cells and none of them
+  can reach it, because no underworld waterfall stands in column 54. Exact
+  wording, sound and rendered line breaks are in Section 8.1. *Corrected:* an
+  earlier revision made the trigger the coordinate itself
+  (`RETRACTIONS.md` R320).
 - **Whirlpool.** Outdoor whirlpool active-object engagement can force the
   party to the fixed underworld emergence coordinate `(34, 18)` on the
   underworld plane. This is an active-object engagement effect, not a dungeon
   or town scene-entry route. It also applies the Section 6.2.4 impact payload,
   on foot as well as aboard a vehicle; see the forced-movement table below for
-  the two withdrawn statements this corrects.
+  the two withdrawn statements this corrects. There is **no advance warning
+  line**: the swallow banner of Section 8.1 is the first and only text, and
+  *stepping* a vehicle into a whirlpool is a fully silent refusal - no text, no
+  tone, and no type-ahead flush, unlike the other two refusal arms of the same
+  movement gate.
 
 - **Water and current-like movement.** The traced overworld loop does not
   publish a general player-facing waterfall/current sweep that repeatedly
@@ -754,7 +781,7 @@ A small set of tile classes triggers special handling in the per-turn block, rec
   |---|---|---|---|---|
   | Ordinary water travel | Player directional movement into a destination cell accepted by the current transport predicate | One committed cardinal step; no sweep, queue, or multi-cell current is installed | Ships accept the deep-water/water predicate; skiffs use the facing-sensitive skiff predicate; foot and horse reject ordinary water through their predicates; carpets use their own carpet predicate; balloon has no promoted live transport path | Normal consumed-turn timing only; no drowning roll or queued forced-movement state |
   | Pre-loop `0xFF` underfoot state | The tile under the party is the special all-ones tile and the exemption state is not active | Suppresses the next movement commit while forcing the cached light/radius to zero | Applies to the mode loop state rather than to a vehicle family | No damage, no status change, and no scene/plane transition; clearing the state recomputes light with a zero-minute cleanup |
-  | Surface chasm/falls | Britannia coordinate `(54, 138)` | Prints the falls presentation, switches the world plane to the underworld value, and reloads the destination plane/object state | Vehicle marker is saved across the presentation clear and restored before the plane swap completes; the traced falls handler does not force the durable post-transition transport marker to foot | Each non-dead party member is checked once during the fall presentation: draw one random byte `0..255`; if the member's Dexterity byte is greater than the roll, no damage is applied, otherwise the normal party-damage helper applies `1 HP` damage. That helper is the same per-member application specified in Section 6.2.4. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, transport marker, party HP/status, and active-object table |
+  | Surface chasm/falls | A waterfall-family tile `0xD4..0xD7` in the cell south of the party (tested before the turn's key is read) or under the party (tested in the post-action pass), on either plane | Prints the falls presentation and **pushes the party two cells south, unconditionally, on both planes**, with one world tick between the two steps. Only if the party then stands on Britannia `(54, 138)` does it also print the transition line, switch the world plane to the underworld value, and reload the destination plane/object state | Vehicle marker is saved across the damage block and restored **before** the coordinate test, so the plane swap runs with the original transport in place; the falls handler does not force the durable post-transition transport marker to foot | Each non-dead party member is checked once during the fall presentation: draw the shared skewed closed-interval `1..30` roll (the shared roll helper `systems/combat.md` publishes: a uniform `0..60` draw halved with truncation, with a zero result promoted to one); if the member's Dexterity byte is **less than or equal to** the roll, the normal party-damage helper applies `1 HP`, otherwise nothing happens. That helper is the same per-member application specified in Section 6.2.4, and it emits a stats-row flash and a short rumble but **no text**. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, transport marker, party HP/status, and active-object table. *Corrected:* an earlier revision gave the trigger as the coordinate, said nothing about the two forced steps, and specified the check as "draw one random byte `0..255`; if Dexterity is greater than the roll, no damage" - which makes fall damage nearly impossible, where a Dexterity-20 member is really hit about one time in three (`RETRACTIONS.md` R320, R321) |
   | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, applies the Section 6.2.4 impact payload, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | *Corrected:* an earlier revision said the on-foot state is a no-op defensive branch; **that is withdrawn**. The on-foot arm tests the marker for the published foot/avatar value and reaches the Section 6.2.4 impact-absorption stage, which under a foot marker is the whole-party damage pass. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached, and that branch reaches the same absorption stage immediately before the plane change | *Corrected:* an earlier revision said no drowning damage is applied by the whirlpool branch; **that is withdrawn**. Both arms reach the Section 6.2.4 payload. One mechanism detail matters here: the swallow presentation temporarily overwrites the party marker with the whirlpool sprite and **restores the original marker before** the absorption call, so aboard a frigate the closed-interval `[1, 30]` hull roll really does apply and can sink the ship in the instant before the teleport — with the coordinate change and overworld re-entry still following. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
   | Water-creature / pirate active-object movement | Outdoor active-object slots in the water-creature/pirate frame family | Active objects move one cardinal cell when their cadence and validation allow it; they do not push the player along a current row | This is actor movement, not player transport. Wind cadence controls ship-like water-creature movement; ordinary player ship/skiff movement remains command-driven | May print the attack line or enter the ordinary engagement/combat path when adjacency/collision rules fire; it does not install a water-current sweep |
 
@@ -779,6 +806,16 @@ The precedence relevant to water/current parity is:
 3. The post-action pass handles fixed coordinate/tile effects such as the
    surface chasm/falls, narrative gate, camp/well checks, status helper, and
    active-object epilogue in the order described by the mode loop.
+   The falls chain has a **second, earlier** entry point: the same handler is
+   also reached from the top of the input helper, before that turn's key is
+   read and before the loop's gated newline and window-top repaint. That is the
+   arm a waterfall directly south of the party takes; the post-action arm is the
+   one a waterfall underfoot takes. Because the earlier arm runs before the
+   gated newline, its banner is appended to whatever the message window's cursor
+   was left on. In practice every overworld command echo ends with a line feed,
+   so the banner starts at column zero anyway - but an implementation that emits
+   its own leading newline here differs from the original by one blank row when
+   the cursor happens to sit mid-row.
 4. Active-object whirlpool transition is not an underfoot terrain effect. It
    runs from the active-object animator's adjacent-engagement path after the
    per-turn block reaches the active-object epilogue.
@@ -790,6 +827,131 @@ No `world_waterfalls.tsv` or equivalent sidecar table is part of the promoted
 runtime contract. Tooling may retain such data as a retired compatibility or
 diagnostic artifact, but baseline movement must not consume it as a current or
 waterfall sweep source.
+
+### 8.1 Exact result lines: the falls chain and the whirlpool
+
+Everything below is player-visible text, given exactly as it is emitted. `\n`
+is one line feed and is part of the string; a leading `\n` therefore produces a
+**blank row** before the text. None of these lines carries a window-clear, a
+style toggle or a centring control, so none of them clears the message window
+or changes its style. Both chains print into the ordinary gameplay message
+window and neither clears it.
+
+**Falls chain.** In print order:
+
+| Step | Exact text or effect |
+|---|---|
+| 1 | `F-A-L-L-S!!!\n` |
+| 2 | Two forced one-cell steps south, with one world tick between them |
+| 3 | The descending sweep of `systems/audio.md`: 300 updates, per-update delay 1, starting at 2500 Hz and stepping -5 Hz, so the last tone is 1005 Hz |
+| 4 | The party marker is hidden; one world tick |
+| 5 | Per living member, the Dexterity check above. A failed check flashes that member's stats-panel row and plays a short rumble. **No text.** |
+| 6 | Two world ticks; the party marker is restored |
+| 7 | `Falling into underworld!!\n` - **only** when the party now stands on Britannia `(54, 138)` |
+
+There is no leading blank row on either line and no trailing blank row, and
+there is no per-member narration anywhere in the chain. An implementation must
+not invent one: the fall's per-member feedback is graphical and audible only.
+
+Rendered into the fifteen-column gameplay message window, starting on a fresh
+row, the full chain reads:
+
+| Rendered row |
+|---|
+| `F-A-L-L-S!!!` |
+| `Falling into` |
+| `underworld!!` |
+
+The break inside `Falling into underworld!!` is **not** in the data. It is
+produced by the message window's word wrap at width fifteen: the printer breaks
+on the space after `into`. An implementation with a wider message window renders
+the line unbroken, which is a visible divergence from the original.
+
+**Whirlpool swallow.** In print order:
+
+| Step | Exact text or effect |
+|---|---|
+| 1 | `\nWHIRLPOOL!\n` - note the leading line feed, which costs one blank row |
+| 2 | The whirlpool slot is cleared and the party marker is replaced by the whirlpool sprite |
+| 3 | One world tick, so the player sees a whirlpool where the party was |
+| 4 | The long descending sweep of `systems/audio.md` section 8.9: 195 updates, per-update delay 40, 660 Hz stepping -2 Hz, last tone 272 Hz - roughly seven seconds, non-interactive |
+| 5 | The party marker is restored |
+| 6 | The Section 6.2.4 impact payload, which may add `Ship sunk!\n` and then either `Abandon ship!\n` or `DROWNING!!!\n` |
+| 7 | The plane write and the move to `(34, 18)`, then overworld re-initialisation. This runs **unconditionally** after step 6, including after the drowning arm |
+
+Rendered, starting on a fresh row:
+
+| Rendered row |
+|---|
+| *(blank)* |
+| `WHIRLPOOL!` |
+
+with the cursor left on the row below. No screen clear and no key wait.
+
+**The on-foot whirlpool arm prints nothing.** When the party marker is the
+on-foot avatar, the engagement path goes straight to the Section 6.2.4 impact
+payload: no banner, no sprite swap, no sweep, no plane write and no teleport.
+The only text it can produce is whatever that payload prints.
+
+**About the fifteen-column figure.** The gameplay message window's rectangle is
+**narrowed** exactly once in the whole program, by the intro overlay. A boot-time
+initialiser first fills every text-window record with full-screen margins; after
+the intro's write nothing widens or re-narrows window two. The printer's wrap
+test uses the difference between the window's right and left columns, which is
+fifteen. The scan behind "narrowed exactly once" covered the resident image and
+all twenty-three overlays; it did **not** cover
+the four display drivers, which are entered through a jump-table interface and
+cannot reach the routine, nor direct byte writes into the window descriptor
+table, which were not scanned.
+
+**Waits and sound.** Nothing in either presentation waits for a key. The world
+tick used for the pauses is key-free and is skipped entirely when the loop's
+pause flag is clear. The one place the falls chain can still stop for a key is
+its disk handoff, below, and that is the disk-swap prompt's wait, not the
+presentation's.
+
+**The falls plane arm's disk handoff.** After the transition line and the plane
+write, the handler writes the surface active-object file from the live object
+table, reads the underworld one into it, requests the disk index that carries
+the underworld data, and spins until the underworld map file opens before
+writing the underworld object file back out and re-initialising the overworld.
+That spin goes through the ordinary file-presence probe, so on a
+disk-swapping configuration it can surface the disk-insert prompt of
+`systems/disk-prompt.md`, which prints and blocks on a key. The falls handler
+itself prints nothing further.
+
+Two notes for a reimplementation of that arm. The read of the underworld object
+file happens **before** the disk request, so on a floppy configuration a failed
+read leaves a stale or empty buffer that the later write then commits over that
+file; in the shipped single-directory install the read/write pair is
+**probably** a no-op round trip, but that is not established - the disk error
+vector and the file primitives were not traced for buffer side effects. And the
+coordinate gate never tests the plane, so a fall that ended at `(54, 138)` while
+already in the Underworld would write the underworld plane again and overwrite
+the *surface* object file with underworld objects. No shipped underworld brink
+can reach that coordinate, so it is unreachable in stock data - but it is a
+landmine for anyone who adds or moves a waterfall.
+
+**Overworld re-initialisation does not redraw the chrome on either transition.**
+The per-turn overworld re-init helper both chains call saves the selected text
+window, selects window zero, and then guards its frame/header block on two
+conditions: the scene must not be Ararat, and the plane byte must be below
+`0x80`. Both chains write the underworld plane *before* calling it, so on
+exactly these two transitions the helper degenerates to save-window,
+select-zero, restore-window. It recomputes the chunk-aligned scroll bases and
+reloads the four map chunks - which is how the destination plane's map appears -
+and it never clears the message window. This is stated because it is easy to
+assume the opposite: the same helper *does* redraw that block on ordinary
+surface turns, and an implementation that repaints it here loses the message
+window's contents at exactly the moment the player needs to read them.
+
+Source provenance: derived from private analysis in `u5-decomp/notes/` -
+the falls, whirlpool and plane-change wording pass, which re-read every literal
+from the shipped resident data image, disassembled both handlers whole, walked
+both shipped world maps for the waterfall family, and hand-traced the word-wrap
+printer against the message window's rectangle. The rendered line breaks are a
+derivation from the printer's own behaviour plus that rectangle, not an
+observation in an emulator; three independent traces agree on them.
 
 ## 9. Moongates
 
@@ -1163,9 +1325,11 @@ The transport state covers the visible vehicle families:
   marker, landing rule, or wind drift from the other vehicle families.
 
 Separately, the overworld active-object and encounter epilogue contains an
-alternate-turn pendulum for traced transport-marker pairs in the horse/carpet
-range. This is cadence evidence for actor and encounter passes, not proof of a
-different clock increment and not a player movement-speed table.
+alternate-turn pendulum for the four traced transport-marker values
+`0x12`–`0x15` (a value window, not a vehicle-identity test —
+`systems/encounters.md` Section 2.1). This is cadence evidence for actor and
+encounter passes, not proof of a different clock increment and not a player
+movement-speed table.
 
 The transport state is part of the save image and persists across save/load. Boarding (B-board) sets it; exiting (X-it) clears it. Dismounted vehicles live as active-object slots on the world stage and remain there indefinitely.
 
@@ -1212,8 +1376,8 @@ overworld effects that consume a successful movement.
 
 The overworld/underworld loop is specified for the traced baseline at outdoor
 mode depth: scene entry, chunk loading, live-buffer substitutions, movement
-commit, special underfoot latch, confirmed surface chasm fall, active-object
-per-turn handling, encounter probe inputs, save/object-overlay ownership, mode
+commit, special underfoot latch, the waterfall-family surface falls chain,
+active-object per-turn handling, encounter probe inputs, save/object-overlay ownership, mode
 hooks, saved-slot natural moongate live-tile refresh, and live `0xDC`
 moongate entry handling are fixed. Encounter
 probe and random-spawn behaviour are complete at overworld-loop depth; visual
@@ -1237,7 +1401,9 @@ unresolved outdoor loop control flow.
   and catalog QA, not overworld loop blockers.
 
 - **Plane-transition inventory.** *Closed.* Descent to the Underworld happens
-  three ways: the fixed Britannia chasm at `(54, 138)`, whirlpool engagement
+  three ways: the falls chain when it lands the party on Britannia `(54, 138)`
+  - the trigger is the waterfall tile family, not that coordinate (Section 8) -
+  whirlpool engagement
   while aboard a vessel (always landing at `(34, 18)`), and leaving a dungeon
   through the bottom of its lowest level. The return has no outdoor counterpart
   at all: a dungeon's top exit, a moongate or Gate Travel to a surface Moonstone
@@ -1317,6 +1483,15 @@ The behaviour described above was derived by reading the function and format not
 - The per-turn epilogue that walks the active-object table, animates and prunes, and rolls the random-encounter trigger — `u5-decomp/functions/MAINOUT_OVL/`.
 - The OUTSUBS overlay's collection of overworld helpers — `u5-decomp/functions/OUTSUBS_OVL/`, covering water and chunk classification, chunk loading and scrolling, world filename selection, town-entry checks, the falls handler, per-plane actor setup, status checks, and the outdoor-camp Lord British service.
 - The world-tile getter that reads from the chunk buffer with the four-quadrant 2-by-2 interpretation — `u5-decomp/functions/ULTIMA_EXE/`.
+- The exact falls and whirlpool wording of Section 8.1, the waterfall-family
+  trigger and its two forced southward steps, the brink-cell census of both
+  shipped world maps, the corrected fall-damage roll, the falls disk handoff,
+  the silent vehicle-into-whirlpool refusal, and the guarded overworld re-init
+  chrome block — derived from private analysis under `u5-decomp/notes/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/functions/MAINOUT_OVL/`, and
+  `u5-decomp/functions/ULTIMA_EXE/`. The rendered line breaks are derived from
+  the word-wrap printer plus the message window's rectangle rather than observed
+  in an emulator.
 - The night-time rotating light beacon that owns the resident scratch block
   formerly attributed to a moongate animator, its inverted light gate, and its
   sixteen-bearing beam plate —

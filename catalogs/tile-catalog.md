@@ -478,18 +478,22 @@ is independently confirmed as a light source by the local-light source list in
 `systems/visibility.md` Section 12.3. This document already named `0x8F` molten
 lava in Section 5, so the two sections contradicted each other.
 
-**Falls.** The traced surface chasm trigger is the fixed Britannia coordinate
-`(54, 138)`. Stepping onto that falls cell triggers the
-fall-into-the-underworld handler: print a banner, run the Dexterity-gated
-one-point damage check described in `systems/overworld.md`, restore the
-pre-fall transport marker after the presentation clear, swap the world plane,
-and re-initialise the active-object table. This falls cell is the only outdoor
-cell in either plane that swaps the world plane when the party steps onto it,
-and it is a coordinate, not a tile class: the shipped surface map stores an
-ordinary water tile at that coordinate, with the waterfall tile in the cell
-directly north of it, so
-there is no distinct "chasm" tile id to look up and an implementation must key
-the fall on the coordinate. The only other outdoor terrain byte that can change
+**Falls.** The falls chain is triggered by the **waterfall family**
+`0xD4..0xD7`, in the cell immediately south of the party or under the party
+itself, on either plane. The handler prints its banner, force-steps the party
+two cells south, and runs the Dexterity-gated one-point damage check described
+in `systems/overworld.md`; the transport marker is saved across the damage block
+and restored before anything else. Only then does it test the resulting
+coordinate, and only Britannia `(54, 138)` swaps the world plane and
+re-initialises the active-object table. *Corrected:* an earlier revision of this
+paragraph said the trigger "is a coordinate, not a tile class" and that "an
+implementation must key the fall on the coordinate"; both are withdrawn
+(`RETRACTIONS.md` R320). The map data that produced that reading is still
+right - `(54, 138)` holds an ordinary water tile with the waterfall in the cell
+directly north of it - but the waterfall the handler tests is the one south of
+the party *before* the forced steps, at the brink cell `(54, 136)`. Britannia
+has three such brinks and the Underworld 116, and every one of them runs the
+full presentation; only `(54, 136)` lands on the gate. The only other outdoor terrain byte that can change
 the plane is the live moongate cell, which copies whatever plane its saved
 Moonstone slot records; every remaining transition is an active object
 (whirlpool) or a scene exit (town-family exit, dungeon exit) rather than an
