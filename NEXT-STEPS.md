@@ -64,6 +64,73 @@ and flagged in place: whether the dungeon's invalid-facing label is reachable
 at all, whether the falls handler's underworld-object-file round trip is truly
 a no-op, and whether the wall banner clears itself.
 
+**Addendum - 2026-09-02, issue #182: the seated-actor variant is real, but its
+arm is much narrower than Section 8 read.** A capture showing seated actors
+that never change tile was reported as falsifying `systems/visibility.md`
+Sections 8.1/8.3. It does not. The selector itself is exactly what was
+published - a uniform draw over four entries, short-circuited only while Negate
+Time is active, with no position input, no frame counter and no cache. **The
+error was reachability.** The two chair rows fire only when the neighbouring
+row on the correct side holds one of the three *laden-table* ids, and the
+accepted set **differs per facing**; a plain table, an end table, a desk or a
+candelabrum all fall through to a single fixed occupied-chair tile with **no
+draw at all**. About half the chairs in the shipped maps are fall-throughs, so
+a seated actor that never moves is the **expected** result for most seats.
+Two of the three `0x92` seats in Lord British's castle are non-qualifying, so a
+capture taken there is more likely than not to have sampled a fall-through -
+but that map does contain one qualifying `0x92` seat, which is what makes the
+castle a clean A/B pair for the re-test rather than a prediction on its own.
+
+Five reversals came out of it: **R329** (the per-actor draw is re-scoped to the
+five selecting rows; drawing once per composited actor desynchronises the shared
+stream, and the bed is one fixed tile rather than a variant), **R330** (the
+`0x5C` compositor arm is one ordinary NPC sprite family, not a vehicle/avatar
+branch), **R331** (three idle-path PRNG consumers, not two - the active-object
+animator draws ahead of the wind check and the composite), **R332** (the wind
+check's retries are single draws, so counts run one, two, three and upward;
+`systems/combat.md` Section 5.3's instruction *not* to say "any integer from one
+upward" was exactly backwards) and **R333** (Negate Time has **two** producers,
+the spell at ten turns and the scroll at twenty, so an engine freezing the
+selector only for the spell animates through the scroll).
+
+Three things closed along the way. Combat reachability of the merge, previously
+"not checked": outdoor arenas contain none of the furniture terrains, dungeon
+arenas contain four manacle cells, one mirror, **no stocks**, and **exactly
+one** selecting chair game-wide - and one arena demonstrates the per-facing
+asymmetry live, with a chair of the other facing under the same laden table
+that makes its neighbour select, correctly not selecting. Section 13's
+previously unspecifiable renderer branch is identified as the **moon-gate**
+cell's rise-and-sink blit, gated on the shared gate-presence counter - and it
+turns out not to need a new contract at all, because
+`systems/overworld.md` Section 9.1 already publishes the counter-to-artwork
+mapping and the counter's lifecycle; `systems/visibility.md` Sections 9 and 13
+now defer to it instead of calling it underived. (Note that overworld.md
+withdrew the moon-*phase* framing: placement and the blit are driven by the
+hour and that one counter, not by a moon phase.) And `systems/intro.md` step 7 now names the empty-save
+predicate exactly - one byte at `SAVED.GAM` offset `0x0002`, on the Journey
+Onward branch only, after the full image read - matching what
+`systems/save-load.md` Section 4.2 already said.
+
+Left open and flagged in place: **which seat the original capture actually
+sampled** is still inferred, not established, and is the one thing standing
+between "scope tightening" and a genuine retraction - a re-capture that names
+its cell and the neighbouring-row terrain settles it in a minute, and the
+permanently manacled Serpent's Hold NPC, scheduled to the same manacle cell at
+every waypoint, is the strongest subject because that row has no neighbour
+predicate at all. Two of the five tile sets are visually marginal
+(one chair set differs by a handful of pixels per frame; the trapped-soul set is
+effectively two images rather than four), so "a new value is painted" and "a
+player sees a change" must be kept apart in any test plan. Also flagged but not
+chased, and now recorded in place as a Section 13 open item rather than only
+here: the fog post-pass's phase A rewrites only cells already holding the two
+marker bytes that the shipped tile-name table gives the *same* terrain name,
+which is hard to square with Section 2's reading of those bytes as general
+clear/dim markers. Section 2 is published contract and is not withdrawn; it was
+not re-derived against this observation. One more scope caveat worth carrying:
+the NPC-schedule census behind "no scheduled occupant on stocks or a mirror"
+covers only waypoints on the two ground-floor index values, under a
+floor-index-to-map-half mapping that is itself only probable.
+
 **Addendum — 2026-08-26, issue #150 and the #146 install-cost follow-up.**
 Issue #150's two orphan effects are both attributed and both reachable; neither
 was an unreachability finding. The descending two-tone pair is the **combat

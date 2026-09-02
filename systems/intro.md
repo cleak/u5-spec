@@ -1058,8 +1058,8 @@ The load path does the following at a behavioural level:
 4. If the intro scene state is still the menu state, load any required transition resource and advance to the post-menu transition state.
 5. Show a wait indicator.
 6. Read the whole `SAVED.GAM` image into the resident save-state region.
-7. Check whether the save contains an active Avatar record.
-8. If the save is empty, display the "no active game" style message, wait for a key, and return to the intro menu.
+7. Check whether the save contains an active Avatar record. **The test is a single byte: `SAVED.GAM` file offset `0x0002` — the first byte of the name field of character record zero — must be non-zero.** Nothing else is examined: not a length, not a checksum, not a party-size field, not any other byte of the name, and not any other field of the record. The test is evaluated only on this Journey Onward branch, and only after step 6's read of the whole 4192-byte image has completed.
+8. If that byte is zero, display the "no active game" style message, wait for a key, and return to the intro menu.
 9. Read `SAVED.OOL`, the object-overlay companion file.
 10. Mirror the surface and underworld object-overlay halves to their per-plane files.
 11. If the loaded state resumes on the underworld surface, prompt/probe for the underworld data disk and refresh the underworld object overlay once the disk is available.
@@ -1070,6 +1070,21 @@ Steps 1 through 5 prepare the display for gameplay before any save data is read.
 After the intro returns, the main loop reads the scene state that came from the loaded save and dispatches to overworld, town, or dungeon as appropriate. The intro does not load map files such as world data, location data, NPC files, or talk files during this path. Those are loaded by the gameplay mode that the main loop selects.
 
 The file roles, empty-save guard, object-overlay mirror writes, and disk-swap semantics are specified in `save-load.md`, `formats/saved-gam.md`, and `formats/ool.md`.
+
+**Two points of exactness on the step 7 guard, both of which an implementation
+can get wrong while looking right.** First, the test is on *that one byte*, so
+an implementation that scans the whole nine-byte name field, or that trims
+spaces before testing, disagrees with the original on a save whose stored name
+begins with a zero byte but has non-zero bytes after it. That is a contrived
+state and the only difference between the two readings, but the exact test is
+free to implement, so implement the exact test. Second, the guard is never
+evaluated against stale memory: step 6's read is performed through a wrapper
+that retries indefinitely until the read returns data, so a missing or
+unreadable `SAVED.GAM` stalls in the wrapper rather than falling through to
+step 7 with whatever the save region previously held. The shipped starting
+template has character record zero's name field entirely zero, so a freshly
+installed game correctly reports "no active game" until character creation
+writes a name.
 
 The empty-save message is written into the current intro text window after the
 failed load check, then the path waits for one keypress and returns to the

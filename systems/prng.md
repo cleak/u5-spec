@@ -157,19 +157,42 @@ compatible implementation must not skip that seeding on the mistaken
 assumption that it is presentation-only.
 
 **Rendering and idling perturb the gameplay stream, so it is not reproducible
-from the player's action sequence alone.** Two per-pass consumers run on the
-idle path, before any command is entered:
+from the player's action sequence alone.** **Three** per-pass consumers run on
+the idle path, before any command is entered, and they draw in this order:
 
-- Every viewport composite pass consumes **one draw per qualifying actor** —
-  each actor standing on the furniture terrain that selects a four-frame merged
-  sprite (`systems/visibility.md` Section 8.1). That is one draw per such actor
-  per idle pass, on the order of eighteen passes a second.
-- The per-pass wind check draws once in the common case. On an
-  uncommon result it enters a retry loop that draws in pairs until it settles, so
-  its draw count per invocation is one, two, or an unbounded sequence above that.
-  **No maximum is published, and an engine must not assume one** - the loop has no
-  static bound and its real-world distribution needs live capture
-  (`systems/animation.md` Section 13.2).
+1. **The active-object animator**, which draws from three separate points
+   inside its per-record loop. Its per-pass count is record-dependent and is
+   not characterised here.
+2. **The per-pass wind check**, which draws **once** and returns in the common
+   case — sixty-three invocations in sixty-four. On the uncommon result it
+   enters a retry loop taking **one further draw at a time**, so its count per
+   invocation is one, two, three, and so on upward, with each extra iteration
+   continuing at roughly `0.15`. **No maximum exists and an engine must not
+   assume one** - the loop has no static bound and its real-world distribution
+   needs live capture (`systems/animation.md` Section 13.2).
+3. **The viewport composite pass**, which consumes **one draw for each
+   composited actor that lands on one of the five selecting terrain rows** -
+   stocks, manacles, a mirror, or a chair whose neighbouring row on the correct
+   side holds a laden-table id - and **zero draws for every other composited
+   actor**, including a seated actor on any chair that does not qualify
+   (`systems/visibility.md` Sections 8 and 8.1). In an ordinary scene with
+   nobody seated at a laid table this consumer takes **no draws at all**, pass
+   after pass, at roughly eighteen passes a second.
+
+*Retracted:* an earlier revision of this section said **two** consumers run on
+the idle path and omitted the active-object animator; described the composite's
+cost as "one draw per qualifying actor" without saying what qualifies, which
+reads as one draw per composited actor; and said the wind check's retry loop
+"draws in pairs". All three are withdrawn. An engine built on that text
+advances the shared stream by the wrong amount on ordinary idle frames, most
+visibly by drawing for every seated actor when the original draws for about
+half of them. See `RETRACTIONS.md` and `systems/visibility.md` Section 8.4.
+
+*Scope on the consumer list:* it comes from a transitive walk of the world
+tick's call graph to the shared draw helper over directly encoded calls, with
+each call site attributed to its enclosing routine. Indirect calls and helpers
+without a standard prologue are not covered by that walk; the one such helper
+in this path, the variant selector, was added by hand.
 
 Neither is gated on player input, so how long the player stood at a prompt
 changes the stream position of the next combat roll. Any engine aiming at
@@ -203,5 +226,13 @@ address tables.
   deterministic day-of-month seed taken by the farmland blight pass, its
   resident-Shadowlord gate, and the clock re-seed that follows it.
 - Source provenance: derived from private analysis in `u5-decomp/notes/`.
+- Source provenance: the corrected three-consumer idle-path inventory, its
+  ordering, the single-draw shape of the wind check's retry loop and its
+  continuation probability, and the narrowing of the composite pass's own
+  cost to actors on selecting terrain (issue #182) -- derived from private
+  analysis in `u5-decomp/notes/`. The inventory rests on a transitive
+  call-graph walk to the shared draw helper over directly encoded calls;
+  indirect calls and prologue-less helpers are outside that walk's scope and
+  the one such helper in this path was added by hand.
 - Earlier engine-wide call-site identification for the routine historically named `make_tag` -- `u5-decomp/functions/ULTIMA_EXE/`.
 - Library fingerprint confirming integer-only game logic and absence of floating-point/runtime allocation dependencies -- `u5-decomp/functions/ULTIMA_EXE/`.
