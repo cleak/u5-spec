@@ -669,15 +669,37 @@ is capped at 26. Sentinel ratings consume nothing here.
 
 **Step 6, the mid-setup world tick.** The same non-sentinel branch that rolls a
 count runs a **full world tick before any monster is placed**. That tick is a
-variable PRNG consumer with three distinct drawing arms: an autonomous
-wind-drift roll, an active-object animation pass that rolls for each qualifying
-on-screen object, and a visibility pass that takes a further uniform `[0, 3]`
-draw unless the pending command is the Talk command. At that moment the object
-table has just been wiped and repopulated with the seated party, every one of
-whom qualifies for at least one animation draw. **The total could not be pinned
-statically** - it depends on the redraw gate, the first-tick flag, the party
-size, and which arm of the animation dispatch each record takes - so it is a
-measured quantity, not a modelled one.
+variable PRNG consumer with three distinct drawing arms, and they draw **in
+this order**:
+
+1. The **active-object animation pass**, which draws from three separate points
+   inside its per-record loop.
+2. The **autonomous wind-drift roll**.
+3. The **viewport composite** - which runs unless the pending command is the
+   Talk command - and which takes one uniform `[0, 3]` draw **only** for a
+   composited actor standing on one of the five selecting terrain rows of
+   `systems/visibility.md` Section 8, and **zero** otherwise.
+
+Arena terrain almost never carries a selecting row: outdoor arenas contain none
+of the furniture terrains at all, and across every dungeon arena there are four
+manacle cells, one mirror cell and exactly one selecting chair
+(`systems/visibility.md` Section 8.4). So in ordinary combat entry the
+composite arm contributes **nothing**. At that moment the object table has just
+been wiped and repopulated with the seated party, so the animation pass has
+that many records to walk; its per-record draw count is record-dependent and is
+not characterised here. **The total could not be pinned statically** - it
+depends on the redraw gate, the first-tick flag, the party size, and which arm
+of the animation dispatch each record takes - so it is a measured quantity, not
+a modelled one.
+
+*Retracted:* an earlier revision of this paragraph listed the three arms in the
+reverse order (wind first, then the animation pass, then the visibility pass),
+said the visibility pass "takes a further uniform `[0, 3]` draw" as though it
+drew on every tick, and said that every seated party member "qualifies for at
+least one animation draw". The order is animator, wind, composite; the
+composite draws only on a selecting terrain row, which arena terrain almost
+never is; and the animator's per-record count is not established. See
+`RETRACTIONS.md` R329 and R331.
 
 **Step 7, placement.** Placement is not uniformly one draw each. The **first**
 monster is placed with exactly one speed-variation draw and never gets a
@@ -698,14 +720,23 @@ calls draw nothing, directly or transitively.
 
 **Do not publish or assume a maximum for any of the three world ticks.** The
 autonomous wind-drift roll draws once in the common case; on an uncommon result
-it enters a retry loop that draws in pairs until it settles, so its draw count
-per invocation is one, two, or an unbounded sequence above that. **No maximum is
-published, and an engine must not assume one** - the loop has no static bound,
-63 invocations in 64 stop at a single draw, and its expected value has not been
-measured. This is the same contract, in the same words, as `systems/prng.md`
-Section 4 and `systems/visibility.md` Section 8; a pairs-based retry does not
-make every integer above two reachable, so do not restate the count as "any
-integer from one upward".
+it enters a retry loop taking **one further draw at a time**, so its draw count
+per invocation is one, two, three, and so on upward. **No maximum is published,
+and an engine must not assume one** - the loop has no static bound, 63
+invocations in 64 stop at a single draw, each extra iteration continues at
+roughly `0.15`, and its expected value has not been measured. This is the same
+contract, in the same words, as `systems/prng.md` Section 4 and
+`systems/visibility.md` Section 8.4.
+
+*Retracted:* an earlier revision of this paragraph said the retry loop "draws
+in pairs until it settles, so its draw count per invocation is one, two, or an
+unbounded sequence above that", and instructed the reader **not** to restate
+the count as "any integer from one upward". The retries are single draws and
+every integer from one upward *is* reachable, so that instruction was exactly
+backwards. A world tick's draw count is also larger than this paragraph implies
+for a second reason: the autonomous wind-drift roll is not the tick's only
+consumer, and `systems/prng.md` Section 4 now lists all three in order. See
+`RETRACTIONS.md`.
 
 **A clean lever for a black-box harness.** A class whose shipped spawn-count
 rating is one of the sentinels 1, 8 or 16 skips both the count roll and the
