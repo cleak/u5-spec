@@ -485,7 +485,7 @@ Container/Search grants use the same eight ids and cap each colour counter at
 | 4 | Orange | Sleep. If the selected target is good, set status to sleeping in non-combat scenes. In combat, apply the persistent combat sleep/disabled state and replace the selected member's ordinary displayed tile with tile `0x1E` until the normal wake path restores it. |
 | 5 | Purple | Combat-only "Poof" presentation. Outside combat, print the no-noticeable-effect feedback. In combat, replace both tile-identity fields of the active combatant's linked object record with ordinary tile asset `0x90`; this is a combat-record rewrite, not a timed overlay. |
 | 6 | Black | Combat invisibility. Outside combat, print the no-noticeable-effect feedback. In combat, mark the active combatant hidden/suppressed and update its linked presentation record. |
-| 7 | White | Surface/town visibility sweep. Dungeon and combat-class scenes print the no-noticeable-effect feedback. Accepted overworld and named interior scenes compute one party-centred visibility carve with the inclusive squared-distance threshold `32`, then repaint that unchanged visibility field twenty times before one ordinary idle redraw. This branch does not spend a gem, enter the modal View overlay, set an active-effect tag, or persist a detector flag. |
+| 7 | White | Surface/town visibility sweep. Dungeon and combat-class scenes print the no-noticeable-effect feedback. Accepted overworld and named interior scenes reveal the **whole** eleven-by-eleven viewport window straight from the map, with no distance test and no line-of-sight test, then repaint that unchanged visibility field twenty times before one ordinary idle redraw. This branch does not spend a gem, enter the modal View overlay, set an active-effect tag, or persist a detector flag. See Section 7.2 for the corrected reveal rule (R318). |
 
 U-Use decrements the selected potion counter and selects a party-member target
 before final effect selection. The final effect is usually the selected colour,
@@ -573,25 +573,48 @@ should not substitute a one-frame magenta star.
 
 White first runs the shared inversion-and-sound presentation above. Its
 accepted two-dimensional scene branch then invokes the ordinary visibility
-producer exactly once, centred on the party's local viewport position, with
-the value `32`. As specified in `systems/visibility.md`, this is the inclusive
-squared-Euclidean gate
-
-```text
-dx * dx + dy * dy <= 32
-```
-
-and not a radius of thirty-two cells. In the eleven-by-eleven viewport it admits
-101 of the 121 cells before ordinary sight blockers and local-light rules are
-applied. A blocker inside the gate is visible but stops propagation past itself.
+producer exactly once, centred on the party's local viewport position — and it
+invokes it in the producer's **no-line-of-sight mode**, by passing the negative
+sentinel in the light argument that `systems/visibility.md` describes. In that
+mode the producer refills **every one of the 121 cells** of the eleven-by-eleven
+window directly from the map. There is no distance test, no propagation
+frontier, and no blocker rule on this branch: a wall does not stop the reveal,
+and a cell in the far corner is revealed exactly as readily as the party's own.
 The normal map reader supplies tiles, so overworld coordinate wrapping and
 named-location bounds remain exactly their ordinary rules; White adds no scan,
-frontier, clipping, or wrapping rule of its own.
+clipping, or wrapping rule of its own.
+
+> **Corrected (R318).** Earlier revisions of this section, and the potion row of
+> `systems/inventory.md`, said White "invokes the ordinary visibility producer …
+> with the value `32`", published that value as the inclusive squared-Euclidean
+> gate `dx*dx + dy*dy <= 32` admitting "101 of the 121 cells", and said "a
+> blocker inside the gate is visible but stops propagation past itself". All of
+> that is **withdrawn**. The `32` is an argument the producer never reads — it
+> is dead in both of the producer's callers — and the branch White actually
+> takes performs no distance or blocker test at all. The visible difference is
+> large: under the withdrawn text a wall hides what is behind it and the window
+> corners stay dark, and under the corrected contract the whole window is
+> revealed. What is *not* settled by this correction is whether some squared
+> threshold governs the producer's ordinary line-of-sight branch; the routine
+> that would implement it was not read, so treat the ambient-path numbers in
+> `systems/visibility.md` as untouched by this row.
+
+Because this reveal ignores obstruction, it is also a working effect rather than
+a cosmetic one, and the same sweep is the body of the sixth-circle spell
+*Wis An Ylem* (X-Ray) — the two are the only callers of it. *Scope:* that
+two-caller claim rests on a census of direct near calls across the whole shipped
+code set; indirect and far call forms were not enumerated.
 
 The completed grid stays unchanged for all twenty frames. Each frame optionally
 advances the normal active-object and animated-tile state (Negate Time suppresses
 that step), runs the normal fog/object compositor, repaints the normal terrain
 and objects in the eleven-by-eleven view, and requests a one-BIOS-tick pause.
+That per-frame animator step advances sprite appearance only and **moves no
+actor**, so running it inside the sweep is faithful; what the sweep must not do
+is walk NPCs or creatures, and the original does not
+(`systems/animation.md` Section 13.5). The twenty extra animator advances and
+the random draws they consume are real side effects an engine should reproduce,
+as is the ordinary world tick that follows the loop.
 Consequently any changing pixels come only from ordinary object and tile
 animation. White draws no colour, circle, mask, line, or cell overlay.
 

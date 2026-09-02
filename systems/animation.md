@@ -59,8 +59,9 @@ intro/display contract, not from this gameplay animation system.
 
 The animation system runs from the resident world-tick path. The input system
 calls that path while polling for a command, so idle time is not visually
-frozen: cursor blinking, animated terrain, monster wandering, and viewport
-refreshes can continue while the player has not pressed a key.
+frozen: cursor blinking, animated terrain, monster sprite animation, and
+viewport refreshes can continue while the player has not pressed a key. Actors
+do not step on this path (Section 5).
 
 The world-tick path may be suppressed for one initial handoff frame after a
 mode transition. Once the mode has settled, animation runs on each steady tick.
@@ -123,7 +124,7 @@ The low half has three behavioural states:
 |---|---|
 | Steady marker | Leave the slot untouched for this tick. |
 | Non-zero animated phase | Decrement the phase; the renderer sees the new phase on the next draw. |
-| Zero | The animation cycle has reached its decision point; the slot may receive an autonomous movement or direction update. |
+| Zero | The animation cycle has reached its decision point; the slot may receive a facing or displayed-frame update. It never receives a position update (Section 5, R316). |
 
 This means animation is countdown-based. A moving or animated entity is seeded
 with a finite phase; each tick reduces that phase until the slot reaches a
@@ -149,55 +150,84 @@ The pass has four cases:
 3. **Mid-cycle slot.** Decrement the phase and keep the slot's direction
    substate unchanged.
 4. **Decision-point slot.** Consult the slot's class behaviour. Some slots do
-   nothing; some roll for a direction change; some attempt a one-cell movement.
+   nothing; some roll for a facing change; some rewrite their displayed frame.
+   None of them moves.
 
 The pass does not allocate or free slots. It also does not run the schedule
 planner for NPCs, resolve player commands, apply combat initiative, or execute
 scripted movement. Those systems can seed phase values or update coordinates,
 but the per-slot animation pass is limited to visual phase advancement and the
-small set of autonomous wandering behaviours.
+facing/frame decisions of Section 5.
 
 Iteration order is deterministic but not a drawing priority. Rendering walks
 the table in the opposite direction so that lower-index slots paint on top.
 Animation walks forward because the phase update itself has no need for
 back-to-front composition.
 
-## 5. Autonomous Wandering
+## 5. Phase-Zero Direction Decisions
 
-When a slot reaches phase zero, a subset of dynamic classes can receive an
-autonomous movement tick. This is the path used by wandering hostile creatures
-and other non-scheduled actors that move without an explicit player command.
+When a slot reaches phase zero, a subset of dynamic classes receives a decision
+tick. This is the path that gives wandering hostile creatures and other
+non-scheduled actors their apparent liveliness while the player stands still.
 
-The movement decision is class-driven. The engine first reduces the slot's
-type/tile byte to a broader behaviour class, then reads the class's movement
-attributes. The attribute determines whether the actor can move, whether it
-turns in place, whether it jitters randomly, and how likely it is to skip this
-tick.
+**What the decision can change, and what it cannot.** The decision rewrites the
+slot's stored facing and its displayed frame byte, and it can reseed the phase
+counter. **It cannot change the slot's map position.** The animator writes
+exactly two fields of an active-object record — the displayed tile and the
+packed phase/facing byte — and never the column or the row.
+
+> **Corrected (R316).** This section previously said that a subset of classes
+> "can receive an autonomous movement tick", that "some classes are gated by a
+> random roll, so they move only on a fraction of eligible ticks", and that "a
+> movement attempt is still subject to the normal collision and terrain rules of
+> the current mode". All three are withdrawn. There is no movement attempt on
+> this path at all, so there is nothing for a collision rule to refuse. R315
+> withdrew the same reading from this document's closing paragraph and from
+> `systems/main-loop.md` and `systems/input.md`, but left the body of this
+> section standing; this completes that propagation.
 
 The observed behaviour can be specified without exposing the private class
 tables:
 
-- Some classes never wander; reaching phase zero leaves them in place.
-- Some classes are gated by a random roll, so they move only on a fraction of
-  eligible ticks.
-- A few classes bypass the ordinary random gate and are effectively always
-  considered when their phase reaches zero.
-- Direction is eight-way. The decision code chooses among the eight compass
-  directions or retains the current direction.
-- A movement attempt is still subject to the normal collision and terrain rules
-  of the current mode. The animator is not allowed to push actors through
-  blocked cells merely because the phase expired.
+- Some classes never react; reaching phase zero leaves them exactly as they
+  were.
+- Some classes are gated by a random roll, so they change facing only on a
+  fraction of eligible ticks; one common form is a fair coin that decides
+  whether this slot's animation advances at all this pass.
+- A few classes bypass the ordinary random gate and are considered on every
+  phase-zero tick.
+- Some arms force a specific facing rather than rolling one; others advance the
+  facing by one step, or swap the displayed frame for the slot's base sprite.
+- Direction is eight-way: the decision chooses among the eight compass
+  directions or retains the current one. This claim is carried forward
+  unchanged from the earlier revision of this section and is not affected by the
+  correction above, which concerns position only.
 
-For implementation, treat autonomous wandering as a narrow supplement to the
-active-object system. Scheduled town NPCs remain schedule-driven; combat actors
-remain combat-round-driven; the player remains input-driven. > **Corrected 2026-08-31 (R315).** This paragraph previously ended: "The
-> animator's wandering path covers ambient map creatures and similar actors
-> that exist in the world table **between explicit commands**." That is
-> withdrawn. The animator has no wandering path — it advances sprite phases and
-> nothing else. Ambient map creatures do move, but on the **per-turn** path
-> together with scheduled NPCs and the in-world clock, never on the idle tick.
-> An engine that wanders actors from the animator will move the world while the
-> player is standing still, which the original does not do.
+*Scope of the negative.* The animator was read end to end and every one of its
+record writes enumerated; the eight arms of its class decision all stay inside
+the routine and touch only those two fields. Beyond the animator, every routine
+reachable from the world tick to a depth of six calls — fifty-six in all — was
+swept for writes into the active-object table, and the only one found is the
+renderer's mirror of the party's own coordinates into slot zero. The sweep did
+not follow indirect or far calls, and outside the animator and the renderer it
+did not chase writes made through a pointer held in a register.
+
+Actor movement lives elsewhere and always on a turn: scheduled town NPCs move in
+the town turn loop (`systems/npc-schedules.md` Sections 5 and 9.1), a town's
+loose horse-family objects in a separate town-mode object walker, outdoor
+creatures in the
+overworld per-turn walker (`systems/active-objects.md` Section 8), combat actors
+in the combat round engine, and the player from input. Section 13.5 states the
+consequence for presentations.
+
+> **Corrected 2026-08-31 (R315).** This section previously ended: "The
+> animator's wandering path covers ambient map creatures and similar actors that
+> exist in the world table **between explicit commands**." That was withdrawn
+> then, and the rest of the section is withdrawn now by R316 above.
+
+Source provenance: derived from private analysis notes
+`u5-decomp/notes/2026-09-02_issue-180_per-turn-wander-gate.md` and
+`u5-decomp/notes/2026-09-02_issue-180_blocking-presentation-world-step-census.md`.
 
 ## 6. Global Tile Animation
 
@@ -495,15 +525,17 @@ An implementation should follow these rules:
   frame rate change game simulation speed.
 - Keep visual animation separate from world time. A day-night transition is a
   lighting/time event, not a tile-animation event.
-- Keep scheduled NPC movement separate from ambient wandering. The NPC
-  scheduler owns schedule targets; the animator owns only phase advancement and
-  class-driven wandering for eligible active-object slots.
+- Keep every kind of actor movement out of the animator. The NPC scheduler owns
+  schedule targets and the per-turn walkers own ambient creature movement; the
+  animator owns only phase advancement and the facing/frame decisions of
+  Section 5.
 - Represent the active-object phase as explicit fields if desired, but preserve
   the steady, countdown, and decision-point states.
 - Advance global tile-family frames once per animation tick, not once per map
   cell.
-- Apply movement/collision rules before accepting any autonomous movement
-  produced by the animator.
+- Do not give the animator a movement path to apply collision rules to. If an
+  implementation finds itself asking whether an animator-produced step is legal,
+  it has already diverged (Section 5, R316).
 - Run the driver-side tile-asset pass of Section 12 in the same step, after the
   selector pass and before presentation. Model it as shared-asset state, not as
   per-cell or per-instance state.
@@ -901,8 +933,9 @@ through a run-time function-pointer table. None was observed at any site read.
 When both gates allow it, one world step advances each of the following exactly
 once:
 
-- every active on-screen object's animation phase, with the turn-or-move AI
-  decision taken behind a random gate when a phase reaches zero;
+- every active on-screen object's animation phase, with the facing/frame
+  decision taken behind a random gate when a phase reaches zero — and no
+  position change of any kind (Section 5);
 - one wind-change check — a single **1-in-64** check, not a drift step. When it
   fires a new prevailing direction is drawn, with "calm" accepted only behind a
   further roughly 1-in-4 confirmation, so a fired event always installs some
@@ -911,7 +944,17 @@ once:
 - outside combat only, the saved-moongate terrain refresh and the rotating
   light-beacon step;
 - the tail pair of Sections 6 and 12;
-- a shrine and lava ambience tick.
+- a shrine and lava ambience tick, which is **not purely cosmetic**: besides
+  scanning the tiles around the party and driving the speaker, it advances two
+  small internal ring counters and, on two of every eight enabled steps,
+  decrements a shared countdown byte. That byte has two irreconcilable readings
+  in this repository — the turn clock also writes it as if it were a display
+  value — so its identity is *unresolved* and only the decrement cadence is
+  published here.
+
+The wind check's draw is taken **unconditionally**, whether or not the wind
+changes, so a presentation that pumps many world steps shifts every later roll
+in the shared random stream (`systems/prng.md`).
 
 The viewport rebuild and redraw run whenever the master redraw gate is set,
 regardless of the second gate.
@@ -947,7 +990,11 @@ consequence: over 160 s of idle with no input, date, food, gold, sun and party
 status never changed, and town NPCs animated in place without ever stepping.
 Town NPC wander was measured at about one step per 2.6 passed turns and exactly
 zero steps per second of wall clock while idle — **express wander per game turn,
-never per tick.**
+never per tick.** The per-turn rule behind that measured rate — a one-in-two
+coin, then a single direction attempt that a wall or an occupant can refuse — is
+published in `systems/npc-schedules.md` Section 9.1, which also shows the
+measurement is consistent with that rule and inconsistent with a one-in-eight
+chance.
 
 The text cursor is also outside the world step: it advances on every pass of the
 cursor-poll helper regardless of the gating above, because it lives one level
@@ -966,6 +1013,85 @@ Section 3 (a seeded countdown gives the guards' clean period; a random movement
 gate gives the decaying tail), but neither has been reconciled against the
 class-attribute tables, and the per-actor phase offset confirms these are
 per-slot counters rather than anything global.
+
+### 13.5 Blocking presentations and actor movement
+
+A *blocking presentation* is a visual sequence that runs to completion inside
+one command, pumping the world redraw between beats and polling no input — the
+potion sweep of Section 13, a shrine flash, a cutscene beat, an endgame text
+page. Whether such a sequence may move actors is two questions, and they have
+different answers. **Do not merge them into one sentence.**
+
+**1. Autonomous simulation never runs inside a presentation.** No blocking
+presentation runs the town NPC schedule processor, the town object walker that
+moves loose horse-family objects, or the outdoor per-turn creature walker. Between them those three
+walkers are invoked from **nine** places in the whole shipped game — the town
+turn loop twice, the hole-up hours command, the overworld main loop, the
+difficult-terrain time penalty three times, the under-sail wind wait, and the
+resident ship-repair hole-up — and every one of the nine is a turn-consuming
+path that also advances the clock. The combat movers are reachable only from
+the combat round engine. Nothing schedules, plans, or rolls a creature's own AI
+while a presentation is on screen. **Exceptions: none.**
+
+**2. Scripted displacement inside a presentation is real, and is a different
+mechanism.** A presentation may still put a named actor or the party somewhere
+else, by writing the position directly rather than by asking a walker. The
+traced cases are:
+
+- the **Blackthorn cutscene's script interpreter**, whose script format has a
+  general "step this actor" instruction: it moves up to two named actors one
+  cell per beat, for a repeat count the script chooses, optionally pacing each
+  step with a blocking world-tick pair (`systems/blackthorn.md`);
+- the **Blackthorn rescue sequence**, which places a companion actor at a
+  succession of absolute cells between blocking cell-reveal beats, despawning
+  and respawning the record rather than walking it;
+- the **shrine/urn entry sequence**, which places the avatar's record at a fixed
+  cell and then walks it north and back south one cell per blocking beat;
+- the **endgame entry sequence**, which walks a record the same way between its
+  paced beats;
+- the **waterfall/falls sequence**, which displaces the *party* between its
+  three blocking beats through the ordinary overworld step-commit path rather
+  than by a record write.
+
+None of those five advances anyone's schedule or rolls anyone's AI. They are
+authored moves, and an engine should implement them as script effects, not by
+letting a presentation call its world simulation.
+
+**One reclassification.** The inn's rest-for-the-night sequence looks like a
+presentation and is not one: it teleports the party onto the bed cell, runs the
+clock forward to six in the morning, and then clears and re-places every
+scheduled NPC for the new hour. Treat it as a turn engine; the three facts are
+specified where they belong, in `systems/shops.md` Section 8.4 (the inn's `R`
+action) and `systems/npc-schedules.md` Section 12 (the clear-and-re-place pass
+and its three callers). The same is true of the
+under-sail wind wait, the difficult-terrain penalty, and hole-up: each is a
+paced sequence of *real turns*, so each moves actors — legitimately, through the
+walkers — and each charges game time for it.
+
+*Scope of the negative in claim 1.* A whole-code-set census of every direct near
+and far call to the world tick, the paced-pause helper, the viewport renderer,
+the fog pass, the visibility producer, the sprite animator, the tile animator,
+the turn clock, the command wait, the four delay primitives, the viewport flash,
+the cell-reveal helper and the shared record setter, plus every call site of the
+three per-turn walkers and their movement helpers; and, separately, a
+whole-code-set instruction sweep for direct writes to the head of the
+active-object table. **Not covered:** a position written through a pointer held
+in a register outside the routines that were read in full; calls made through a
+run-time function pointer, beyond enumerating the two vectors' possible values;
+and the display drivers. The five exceptions in claim 2 were found by the
+instruction sweep, which is why the sweep exists — the earlier call-graph-only
+census published claim 1's evidence under claim 2's wording, and got the answer
+wrong.
+
+*What a presentation does change.* "Presentation-only" never means "no state
+changes". Section 13.2 lists what one world step advances, and a presentation
+that pumps the world redraw pays all of it: sprite phases and facings, the tile
+layers, the wind check, the moongate refresh and beacon step outside combat, and
+the ambience tick — several of which consume the shared random stream and so
+shift every later roll. Both gates of Section 13.1 still apply.
+
+Source provenance: derived from private analysis note
+`u5-decomp/notes/2026-09-02_issue-180_blocking-presentation-world-step-census.md`.
 
 ## 14. Sources
 

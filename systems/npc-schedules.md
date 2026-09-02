@@ -116,6 +116,58 @@ Per call, the processor:
 
 The processor is a single sequential pass — no per-NPC concurrency, no priority queue, no skip-list. Every NPC gets one chance to act per tick, in slot order. An NPC moves at most one cell per turn the player takes.
 
+**Gates the town turn loop applies before the processor runs at all.** These sit
+in the town loop's per-turn epilogue, ahead of both town walkers — the object
+walker that moves loose horse-family objects and this schedule processor — and
+they are
+the difference between "the scheduler ran and every NPC declined to move" and
+"the scheduler never ran". In the order the town loop tests them:
+
+1. **Transport marker.** While the party's transport marker is one of the four
+   values `0x12..0x15`, a stored parity bit flips each turn and the loop skips
+   **both** town walkers on the turns where it comes up set — so scheduled NPCs
+   move on alternate turns only. Implement this as the four-value window, not as
+   an "is the party mounted or on a carpet" test. The traced gate is a numeric
+   range on the marker byte, and the two readings of what that range *means* do
+   not agree: `systems/vehicles.md` Section 2 has those four values as exactly
+   the mounted-horse pair and the magic-carpet pair, which would make the gate
+   coincide with "mounted or on a carpet" for every marker the shipped game
+   writes, while the private tile-family mapping puts the window across the top
+   half of one four-tile family and the bottom half of the next, which would
+   leave two vehicle facings ungated. The value window is *established*; the
+   family mapping behind the second reading is only *probable* and the reading
+   of the low bits as facing is *inferred*. A value test is correct under both
+   readings, a family test only under one. `systems/encounters.md` Section 2.1
+   carries the same wording for the outdoor gate.
+2. **Negate Time.** While that timed effect is active, the loop skips both town
+   walkers outright. Nothing in town moves.
+3. **Quickness.** A second stored parity bit flips each turn, and the loop skips
+   both walkers on the turns where it comes up set — again alternate turns.
+
+The same three gates guard the overworld per-turn walker, but the overworld
+tests them in the **opposite order**: Negate Time, then Quickness, then the
+transport marker (`systems/encounters.md` Section 2.1). The order is
+behaviourally load-bearing, because a gate that returns early leaves the later
+gates' parity bits un-flipped: in town the transport parity advances even on a
+turn that Negate Time or Quickness then suppresses, while outdoors it does not.
+The two modes' alternate-turn phases therefore drift apart, and an engine that
+shares one gate routine between them will eventually put NPC and creature
+movement on the wrong turns.
+
+Two further loop-level gates sit around this block, and they are not both on the
+same side of it. **One precedes everything above:** an action whose result code
+is zero skips the entire epilogue, and so does the shared party-can-act probe —
+when it reports that no party member can act, the epilogue is abandoned before
+the clock advance and before either walker. **One sits after the three effect
+gates and after the town object walker has already made its pass,** immediately
+ahead of the schedule processor: a result code of two or greater skips the
+processor only, leaving the object walker's pass for that turn already done.
+That is why a result-two turn can still move a loose horse-family object while
+no scheduled NPC moves.
+
+Source provenance for this block: derived from private analysis note
+`u5-decomp/notes/2026-09-02_issue-180_per-turn-wander-gate.md`.
+
 ## 6. The schedule-boundary trigger
 
 The boundary trigger is the sub-step the processor calls on idle NPCs. It detects whether the current hour has crossed one of the NPC's four schedule boundaries.
@@ -164,6 +216,32 @@ merely because a new schedule period began.
 
 Both refresh sites do the same three things together: write the cache, return
 the NPC to the idle state, and discard any queued route.
+
+**What a boundary hour does to a wandering NPC.** The trigger is not only a
+state classifier; it is also a fork in the per-turn dispatch. The **direct**
+route to the AI dispatch of Section 9 is taken only when the trigger reports
+"no action" — that is, only while the current hour matches none of the NPC's own
+four `time` bytes. There is a second, indirect route into the same dispatch,
+described below. For
+the whole of an hour that *does* equal one of them, a settled NPC is routed into
+the route/state machine of Section 7 instead, so a wander-AI NPC normally stands
+still for that entire hour, whether or not its waypoint actually changed. This
+is a strong tendency rather than an invariant, and there are exactly two paths
+by which such an NPC moves anyway:
+
+- **The tick's heavy-work budget was already spent.** The walker allows one
+  expensive replan/route operation per pass. If a lower-numbered NPC already
+  consumed it, a diverted NPC takes the cheap arm instead, which re-checks the
+  floor and then enters the AI dispatch after all — using its **cached**
+  waypoint index rather than the freshly resolved one. Such an NPC wanders
+  normally on that turn.
+- **The waypoint actually changed at the boundary.** The NPC is then route-walking
+  under Section 7, and the route paths described in Section 9.1 can take a
+  cap-zero random step from the same wander stepper.
+
+An engine that models the boundary hour as a hard freeze will be right most of
+the time and will diverge in a crowded location, which is exactly where the
+difference is visible.
 
 The behavioural consequence is what makes the scheduler robust. From the hour a
 period changes until the moment the NPC is standing on its new waypoint, every
@@ -442,10 +520,10 @@ waypoint.
 | AI value | Behaviour |
 |---:|---|
 | `0` | Stationary. The NPC remains at the selected waypoint unless another state, such as floor transition routing, is already in progress. |
-| `1` | Bounded random wander. The NPC occasionally takes a random cardinal step but rejects moves that would leave a small radius around the waypoint. |
-| `2` | Unbounded random wander. The NPC occasionally takes a random cardinal step without the waypoint-radius limit. |
+| `1` | Bounded random wander. One wander attempt per player turn, gated by a fair coin; an accepted step must leave the NPC within Manhattan distance **three** of the active waypoint. Section 9.1 gives the complete gate. |
+| `2` | Unbounded random wander. The same one-attempt-per-turn coin and the same single direction draw, with the waypoint-radius test switched off entirely (cap zero). |
 | `3` | **Flee.** The NPC acts only while the player is within about four tiles, and then chooses the neighbouring square that **maximises** distance to the player. It is the only value in this table that moves away; every other acting mode minimises distance. **Correction:** earlier revisions of this row said "follow or shadow the player at distance" and described it as falling into the chase family when the player closes. That was exactly inverted. Values `3` and `6` share a dispatch handler, so they have the same *trigger* — act within four tiles — but the step chooser tests the mode again and gives them opposite directions. |
-| `4` | Approach-and-attack family. While the player is far enough away, the NPC uses the wander step with a shrinking range around the waypoint; when close, it can raise the town-mode attack event. |
+| `4` | Approach-and-attack family. While the player is four or more tiles from the *waypoint*, the NPC takes the ordinary bounded wander step with the **same constant cap of three** that value `1` uses; when the player is closer than that, it enters the engagement path and can raise the town-mode attack event. **Corrected (R317):** earlier revisions said this arm "uses the wander step with a shrinking range around the waypoint". That is withdrawn. The distance this mode measures is used only to choose between wandering and engaging and is then discarded; the wander radius is a constant, identical to value `1`, and never narrows as the player closes. |
 | `5` | Randomized chase with the attack event. No shipped `.NPC` schedule authors this value, but J-Jimmy writes it into all three periods when a prisoner is first released. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test normally raises the same town-mode attack event as value `4` rather than the guard event. Jimmy first clears the released NPC's dialogue/awareness field, which suppresses that adjacent event for the current visit while preserving chase movement; `systems/doors-and-z-transitions.md` owns the full release lifecycle. It is not a reserved hole or a no-op. |
 | `6` | Guard/blocking event family. It **approaches** the player, acting only while the player is within about four tiles, and raises the non-attack guard event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. |
 | `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation. |
@@ -454,6 +532,97 @@ Values greater than `7` fall through to the no-action/default case. The AI byte
 does not affect the *target* the schedule resolves to -- that is purely the
 (x, y, z) for the active waypoint. It only affects what the NPC does once that
 waypoint is active.
+
+### 9.1 The per-turn wander gate
+
+Earlier revisions of this section said only that a wandering NPC "occasionally
+takes a random cardinal step" and gave no rate. The rate is now published. This
+subsection is the complete per-turn contract for AI values `1`, `2` and the
+far-from-player arm of value `4`; it is a first publication, not a reversal.
+
+An NPC that reaches the wander step gets **exactly one attempt per player
+turn**, and that attempt has four stages, each of which can end the turn with no
+movement:
+
+1. **The gate.** A fair coin — **one in two**, not one in eight. The engine
+   draws a uniform byte and tests a single bit of it. On the losing half the NPC
+   does nothing at all this turn; there is no second look and no accumulated
+   credit. *Established.* The draw is the byte-wide form of the range primitive
+   in `systems/prng.md`, whose width divides the generator's magnitude range
+   evenly, so the draw is bias-free and the single bit is an exact half.
+   Enumerating the generator's whole state space gives an empirical rate of
+   `0.5014` for this bit on the dominant state cycle.
+2. **One direction.** A single cardinal direction is drawn: a uniform value over
+   the sixty-five integers `0..64`, folded to its low two bits and mapped to
+   east, north, west, south in that order. Because sixty-five values do not fold
+   evenly into four, the mapping is very slightly biased: east is drawn about
+   `26.2%` of the time and each of the other three about `24.6%`. An
+   implementation that draws a clean uniform `0..3` will be indistinguishable in
+   play but not in a recorded roll sequence.
+3. **The waypoint-radius test**, skipped entirely when the cap is zero. The
+   candidate cell's **Manhattan distance to the active waypoint's stored `(x, y)`**
+   is compared against the cap, and a distance **strictly greater** than the cap
+   rejects the step. Note that the rule caps where the NPC may *stand*, not how
+   far it may travel: an NPC sitting exactly on its waypoint may step to any of
+   the four neighbours, and only a candidate four cells away is refused at cap
+   three.
+4. **The ordinary per-step cell check** of Section 10 — bounds, NPC-passable
+   terrain, closed-door class, and occupancy including the party. Its "permitted"
+   and "permitted, and this is the waypoint" outcomes both commit the step; only
+   a refusal ends the attempt. A wander step that lands on the waypoint does
+   **not** refresh the cached-waypoint field (Section 6); only the arrival paths
+   named there do.
+
+**A rejection at stage 3 or 4 is a spent turn.** The NPC does not try a second
+direction, does not re-roll, and does not fall back to a different rule. One
+coin, one direction, one candidate, one turn.
+
+**Expected rate.** The per-turn probability that a wandering NPC actually moves
+is therefore `0.5 x q`, where `q` is the fraction of the four cardinal
+directions that survive stages 3 and 4 from wherever the NPC is standing. In an
+interior with walls, furniture, closed doors and other occupants, `q` between a
+half and three quarters is the ordinary case, giving roughly one step every two
+to four turns.
+
+**Consistency with the reported measurement.** The reported observation of
+**eight steps in twenty-four passed turns** inside Lord British's castle is
+consistent with this contract: a one-in-two gate with an acceptance rate of
+about two in three has a mean of exactly eight steps in twenty-four turns. The
+exact two-sided 95% interval for the per-turn step probability implied by 8/24
+is `0.156` to `0.553`. That interval **excludes one in eight** — under a
+one-in-eight rule, eight or more steps in twenty-four turns is about a 1-in-150
+outcome — so the measurement independently rules out the eighth-chance reading
+and is compatible with the half-chance gate for any acceptance rate above about
+`0.31`. Two caveats an implementer should carry: a single NPC over twenty-four
+turns bounds the *product* of gate and acceptance, never the two factors
+separately; and an ordinary queued route step (Section 7) carries **no** coin at
+all — only the cap-zero shuffle described just below does — so if any of the
+observed steps came from a route rather than from wandering, the observed rate
+sits above `0.5 x q` rather than equal to it. The factorisation
+above comes from the traced contract, not from the measurement.
+
+**The same stepper is reached with the cap switched off.** Two route-recovery
+paths in the state machine call the identical wander step with cap zero: the
+queued-route replay when its next queued step is refused, and the state-2/3 arm
+whose queue is exhausted and whose replan either failed or was not attempted
+because a queue pointer was still live. Both are still behind the same
+one-in-two coin, so an NPC that is recovering from a blocked route also moves on
+about half its turns, but without the waypoint-radius limit. Separately, when
+the NPC's stuck counter is non-zero the walker only re-plans on a **one-in-three**
+draw and otherwise ages the counter for that turn.
+
+**Random-stream consumption.** A wander-eligible NPC consumes one draw from the
+shared generator on a turn where the gate fails and two on a turn where it
+passes, so the number of draws a turn consumes depends on how many NPCs were
+eligible. Any attempt at roll-sequence parity with the original has to reproduce
+that, not just the resulting positions.
+
+Source provenance: derived from private analysis note
+`u5-decomp/notes/2026-09-02_issue-180_per-turn-wander-gate.md`. The gate, the
+direction distribution, the constant cap, the rejection-is-a-lost-turn rule and
+the absence of a retry are established from the traced dispatch arms; mapping
+the castle's specific geometry onto an acceptance rate is inferred, and no
+emulator capture was taken.
 
 ## 10. Movement constraints
 
@@ -654,6 +823,16 @@ A special-case rule covers the "default human" NPC type: when the type byte is a
 
 **Time.** The scheduler reads the shared hour byte, never writes it. The hour byte is updated by the time spec's per-turn cleanup. A clock running purely in hours is sufficient (Section 3). The cadence of one scheduler tick per player-turn is set by the town turn loop.
 
+**The clear-and-re-place pass.** Three callers run the same pass that clears
+every non-party active-object record and then re-places each live scheduled NPC
+at the position its schedule gives for the *current* hour: entering the location
+(the initialisation described in Section 4), the H-Hole-Up hours command when it
+finishes its rested hours, and an inn's rest-for-the-night, which ends at 06:00
+and re-places the roster for that hour before returning control
+(`systems/shops.md` Section 8.4). After any of the three, an NPC that was
+mid-route is standing on its scheduled position rather than where it had walked
+to, and its queued route is gone.
+
 **Active objects (sprites).** Sprites are owned by the active-object subsystem; the schedule system only holds a slot index in the runtime block and only touches the slot table from the world-mutation helper. The active-object animator, run independently each render frame, draws the per-NPC sprites.
 
 **World tiles.** The schedule system reads the live world-tile array for the tile-ID floor-link variant (Section 8.5). It does not modify the array directly; tile changes that happen as a side effect of NPC movement (e.g. a door tile being walked through) are owned by other code paths.
@@ -799,3 +978,13 @@ The behaviour described above was derived by reading the function and format not
   dialogue/awareness clear, and the resulting pursuit-without-attack exception
   — `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/NPC_OVL/`, and
   `u5-decomp/functions/TOWN_OVL/`.
+- The per-turn wander gate of Section 9.1 — the one-in-two coin, the single
+  direction draw and its slight eastward skew, the constant waypoint cap shared
+  by AI values `1` and `4`, the rejection-is-a-spent-turn rule, the two
+  cap-zero route-recovery entries, and the one-in-three replan draw — together
+  with the schedule-boundary diversion of Section 6 and the town turn loop's
+  three effect gates and their order in Section 5. Source provenance: derived
+  from private analysis note
+  `u5-decomp/notes/2026-09-02_issue-180_per-turn-wander-gate.md`, which
+  supersedes the earlier per-tick trace note's eighth-chance reading and its
+  shrinking-cap reading of AI value `4`.

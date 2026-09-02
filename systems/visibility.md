@@ -115,7 +115,16 @@ Producer behaviour by value:
 |-----------------|---------------------------------------------------------------------|
 | Positive        | Normal case — run the visibility carve with the value as the inclusive squared-distance threshold. |
 | Zero            | Total blackout — the carve is skipped outright and the grid is left fully obscured, including the player's own cell. Reachable only through the void-tile override in `systems/lighting.md` Section 7; it is *not* the ordinary night-time state. |
-| Negative        | Full-fill path — populate every cell from the world map with no carve and no threshold. Structurally unreachable in the shipped 2D pipeline: the redraw orchestrator zero-extends the unsigned byte before the call, so the value handed to the producer is always in the range zero to two hundred fifty-five. Preserve the branch for compatibility, but no shipped scene drives it. |
+| Negative        | Full-fill path — populate every cell from the world map with no carve, no threshold and no line-of-sight test. The **redraw orchestrator** can never present this value, because it zero-extends the unsigned lighting byte before the call. It is nevertheless reachable, and shipped content drives it: the spell/potion visibility sweep — the White potion and the X-Ray spell — calls the producer directly with a negative sentinel in the light argument, which is exactly how those two effects reveal the whole window through walls (`catalogs/item-list.md` Section 7.2). **Corrected (R327):** this row previously said the branch was "structurally unreachable in the shipped 2D pipeline" and that "no shipped scene drives it". |
+
+*Open question on the positive row.* The work that produced R318 and R327
+established that the caller's light value selects the branch above, and that the
+literal the producer passes to its carve helper is hard-coded inside the producer
+and the same for every caller. Whether the caller's value *also* reaches the
+carve as the squared-distance threshold was not re-derived, and the routine that
+would carry such a test was not read. The positive row and the cell counts below
+are therefore un-rechecked by that work — unchanged and uncontradicted, but not
+independently reconfirmed. See the last bullet of Section 14.
 
 **The threshold's cell set.** Before line of sight is applied, the set of cells
 that clear the distance gate is fixed by `L` alone. These are the values the
@@ -220,7 +229,7 @@ The producer runs in three stages.
 
 - **Threshold zero.** The producer skips both the visibility carve helper and the full-fill path. The grid stays fully obscured, the player's own cell included. This is the total-blackout state, and it is *not* the ordinary night-time state: night in the overworld with no light source, the Underworld at any hour, and a dark interior all run at the full-dark threshold of two, which lights a three-by-three neighbourhood. Zero is reached only through the void-tile override described in `systems/lighting.md` Section 7.
 - **Threshold positive.** The producer hands the grid over to the visibility carve helper (Section 5) along with the player's local-window position and the threshold value. The helper starts from the centre cell and expands through candidate neighbours, writing tile bytes for cells it resolves as visible and writing a working all-zero marker for cells it has considered but not resolved as visible. After the helper returns, a post-pass walks the grid and converts every `0x00` byte back to `0xFF` (the hidden marker), so unresolved cells do not trigger the cheap terrain-refill path on the next frame.
-- **Threshold negative.** The producer takes a full-fill path: every cell is populated from the world map directly, without any visibility carve or distance gate. The grid ends up holding exactly the underlying terrain in every cell, no fog applied. This branch is structurally unreachable in the shipped 2D pipeline, because the redraw orchestrator zero-extends the unsigned lighting byte before the call and can therefore never present a negative value. A compatibility implementation can preserve the branch without treating it as ordinary gameplay visibility.
+- **Threshold negative.** The producer takes a full-fill path: every cell is populated from the world map directly, without any visibility carve, distance gate or blocker test. The grid ends up holding exactly the underlying terrain in every cell, no fog applied. The ordinary redraw path never reaches it — the orchestrator zero-extends the unsigned lighting byte before the call and can therefore never present a negative value — but the branch is not dead: the spell/potion visibility sweep passes the negative sentinel deliberately, which is the whole mechanism of the White potion and the X-Ray spell. Implement it as live gameplay behaviour, not as compatibility scaffolding. **Corrected (R327):** this bullet previously called the branch structurally unreachable and told implementers they could treat it as non-gameplay.
 
 **Stage 3 — return.** The producer does not clear or flip any flags itself; the redraw orchestrator handles the dirty-flag reset.
 
@@ -232,8 +241,9 @@ positive threshold:  grid cells resolved by the carve = real tile bytes;
 
 zero threshold:      every cell = 0xFF, the player's own cell included.
 
-negative threshold:  every cell = real tile byte (no fog). Unreachable in the
-                     shipped 2D pipeline.
+negative threshold:  every cell = real tile byte (no fog). Not reached from the
+                     ordinary redraw path; driven by the spell/potion
+                     visibility sweep.
 ```
 
 The grid bytes leaving the producer are then handed to the fog post-pass
@@ -905,7 +915,9 @@ states, centre-out carve behavior, blocker rules, marker refinement,
 active-object compositing, the renderer/effect read contract for the four
 per-cell branches of Section 9, cheap terrain refill, mode boundaries,
 local-light mask ownership, beacon-mask ordering, and the negative-light
-full-fill compatibility branch are fixed. Remaining work is visual parity, one
+full-fill branch — now known to be live gameplay behaviour driven by the
+spell/potion visibility sweep rather than compatibility scaffolding (R327) —
+are fixed. Remaining work is visual parity, one
 unspecified renderer branch, or external-tool synchronization policy rather than
 ordinary gameplay visibility behavior.
 
@@ -962,8 +974,9 @@ The behaviour described above was derived by reading the function and format not
   inclusive sense of that comparison, the per-threshold cell counts and reach
   values, the unconditional centre-cell seed, the local-light rule for
   candidates beyond the threshold, the fixed near/far distance of the fog
-  refinement and its twenty-one-cell core, the zero-extension that makes the
-  negative-value branch unreachable, and the whole-binary census showing a
+  refinement and its twenty-one-cell core, the zero-extension that keeps the ordinary
+  redraw path off the negative-value branch (which the spell/potion sweep
+  nevertheless reaches directly, R327), and the whole-binary census showing a
   single *distance-threshold* consumer of the lighting value, alongside the
   night-time beacon's day/night read of the same byte — derived from private
   analysis note
@@ -1017,3 +1030,20 @@ The behaviour described above was derived by reading the function and format not
 - The overworld map family's chunk layout (BRIT.DAT sparse, UNDER.DAT dense), the four-class location-DAT format, and the combat arena format that combat pre-composites — `u5-decomp/formats/maps.md`.
 - The resident data segment's fixed locations for the visibility grid, the terrain band, and the per-cell scrap regions — `u5-decomp/formats/data-ovl.md`.
 - The visibility-system analysis notebook from the companion-app project, used as a starting reference for buffer addresses, scene-to-routine map, and the asynchronous-read race observations — `ninth-virtue/docs/visibility-re.md:11-352`.
+- The spell/potion visibility sweep's use of the negative sentinel, and with it
+  the reachability of the full-fill branch and the withdrawal of the
+  threshold-32 reading of the White potion (R318, R327). Source provenance:
+  derived from private analysis note
+  `u5-decomp/notes/2026-09-02_issue-180_blocking-presentation-world-step-census.md`.
+  **What that pass leaves open for this document.** It established two things
+  about the producer's argument handling: the light value a caller supplies is
+  what *selects* which of the three branches runs, and the literal the producer
+  hands down to its carve helper is hard-coded **inside the producer** and is
+  identical for every caller. It did **not** re-derive whether the caller's light
+  value *also* reaches the carve as a distance threshold; the routine that would
+  carry a genuine distance or line-of-sight rule was not read. Section 3's
+  positive-value row and Section 4's per-threshold cell counts therefore stand
+  **un-rechecked** by this work rather than re-confirmed by it. They are not
+  withdrawn and no evidence against them was found, but an implementation that
+  depends on the exact per-threshold cell sets should treat them as awaiting
+  their own derivation rather than as corroborated by issue #180.

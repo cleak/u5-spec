@@ -36,6 +36,34 @@ row plus a one-line inline note in the affected section whenever an edit
 withdraws or inverts published text, including text published only in an issue
 answer.
 
+**Addendum — 2026-09-02, issue #181: exact consequence wording.** The four
+families the engine was printing placeholders for are now published as exact
+transcripts, in their owning docs: `systems/overworld.md` section 8.1 (the
+falls chain and the whirlpool swallow), `systems/doors-and-z-transitions.md`
+section 12.1 (the dungeon exit and the town-family boundary exit), and
+`systems/dungeon-mode.md` section 8.1 (every dungeon post-action consequence
+line, plus the movement verbs, refusals, Klimb prompts, darkness refusals,
+Search outcomes, fountain flow, chest lines and the four chest-trap words).
+`systems/traps.md` section 3 now names the four resolver words directly, and
+`systems/audio.md` attributes its formerly unattributed 2500-to-800 recipe to
+the falls presentation. Two rendering facts are load-bearing and easy to miss:
+the gameplay message window wraps at **fifteen columns**, which is what breaks
+`Falling into underworld!!` after `into` and forces the dungeon exit's plane
+name onto its own row, and the blank line the player sees before each dungeon
+message comes from the **loop** - a line feed plus a border repaint before every
+key read - not from the strings. Seven reversals filed: R320 (the falls trigger
+is the waterfall tile family, not a coordinate, and the handler force-steps the
+party two cells south), R321 (the fall-damage roll is the shared `1..30`,
+gated `DEX <= roll`, not a `0..255` byte), R322 (dungeon Search on `0x61`
+reports a pit, not a secret door), R323 (both unlit refusals break after the
+colon and there is no too-dark literal), R324 (the Search preamble is
+`You find:`, not "nothing of note"), R325 (the `0xB?` scenery handler prints
+chamber-name banners, not stalactite ambient lines) and R326 (the
+`SPEC WALL ERR` sentinel sits on the `0xC?` arm and is unreachable). Left open
+and flagged in place: whether the dungeon's invalid-facing label is reachable
+at all, whether the falls handler's underworld-object-file round trip is truly
+a no-op, and whether the wall banner clears itself.
+
 **Addendum — 2026-08-26, issue #150 and the #146 install-cost follow-up.**
 Issue #150's two orphan effects are both attributed and both reachable; neither
 was an unreachability finding. The descending two-tone pair is the **combat
@@ -58,6 +86,68 @@ attacks were not traced and remain the one gap that could change that answer for
 a subset of misses. One reversal was found while confirming where the real
 attack roll lives and is filed as `RETRACTIONS.md` R232: the to-hit comparison
 in `combat.md` section 11 runs the other way.
+
+**Addendum — 2026-09-02, issue #180: the per-turn wander gate and the
+blocking-presentation contract.** The two halves of #180 that spec commit
+`4e570c2` left open are now published, and six reversals came out with them.
+
+*The wander gate.* `systems/npc-schedules.md` Section 9.1 gives the whole
+per-turn contract for a wandering town NPC: exactly one attempt per player turn,
+opening with a **one-in-two** coin (not one in eight — that figure came from
+reading a one-bit mask as a one-in-eight range); then one cardinal direction
+drawn with a slight eastward skew; then the waypoint-radius test against the
+**candidate's** Manhattan distance; then the ordinary cell check; and a
+rejection at any stage is a spent turn, with no retry and no second direction.
+The waypoint cap is the constant three for AI values `1` and `4` alike, which
+withdraws the "shrinking range" reading (R317). The engine's measurement of
+**eight steps in twenty-four passed turns** in Lord British's castle is
+consistent with this rule — a one-in-two gate with a two-in-three acceptance
+rate has a mean of exactly eight — and its exact 95% interval, 0.156 to 0.553,
+**excludes** one in eight. Published alongside it: the schedule-boundary
+diversion (a settled NPC is routed away from the AI dispatch for the whole of
+any hour matching one of its own four boundaries, with two escape paths), and
+the town turn loop's three effect gates, which are the same three the overworld
+uses but tested in the **opposite order**, so the two modes' alternate-turn
+parities drift apart.
+
+*The blocking-presentation contract.* `systems/animation.md` Section 13.5 states
+it as two claims that must not be merged. Autonomous simulation never runs
+inside a presentation — no presentation anywhere invokes the town NPC processor,
+the town object walker for loose horse-family objects, or the outdoor creature
+walker, whose nine call
+sites in the whole game are all turn-consuming — **exceptions: none**. But
+scripted presentations do displace named actors and the party by direct
+placement, and there are **five**: the Blackthorn script interpreter's actor-step
+instruction, the Blackthorn rescue placements, the shrine/urn entry walk, the
+endgame entry walk, and the falls. The inn's rest-for-the-night sequence is
+reclassified from presentation to turn engine. The White potion's own animator
+pass moves nothing, so pumping it inside the sweep is faithful.
+
+*Reversals filed:* R327 (`systems/visibility.md`'s negative-light full-fill
+branch is not unreachable compatibility scaffolding — the spell/potion sweep
+drives it, and it is how White and X-Ray see through walls), R316 (the animator's surviving "may turn or step them one
+cell" wording in `systems/animation.md` and `systems/active-objects.md`, which
+R315 withdrew elsewhere but left in both bodies), R317 (the AI-4 shrinking
+range), R318 (the White potion's threshold-32 reveal — the number is an argument
+the callee never reads), R319 (`systems/main-loop.md`'s claim that the world
+tick is reachable only from the idle wait), and R328 (`systems/town-mode.md`'s
+"sole exception" wording for the town turn loop, and the matching status bullet
+in `systems/commands.md` Section 3, which between them had the arrest-cleanup
+result as the only thing that could skip the schedule processor and omitted the
+town object walker from the turn order entirely).
+
+*Still open after this pass:* whether the underworld enters the same overworld
+turn loop (the gate previously cited for it does not exist, so the claim is now
+labelled inferred); the specific acceptance rate for a named castle wanderer,
+which the 8/24 observation cannot pin because route steps carry no coin; whether
+a genuine distance or line-of-sight rule lives in the visibility producer's
+shadowcast branch, which was not read — so `systems/visibility.md`'s
+positive-threshold row and its per-threshold cell counts stand **un-rechecked**
+by this work rather than reconfirmed by it; the register-held-pointer edge of the
+direct-placement census; and the three outdoor creature-class special cases
+(whirlpool parity, wind-paced ships, the Shadow Lord class), which were not
+re-derived, so a distance test inside one of those is not excluded by the "no
+distance band" finding. Nothing in this pass was verified under emulation.
 
 **Addendum — 2026-08-26, calibrated-unit delay contexts and wall-clock anchor.**
 Issue #146 is answered by `systems/timing.md` sections 6 and 7 and
@@ -166,8 +256,13 @@ selects ordinary tile `0x1E` until the one-in-seventeen scheduled wake path
 restores the actor. Purple has no one-frame magenta star: it rewrites both tile
 fields of the combat-instance object record to ordinary asset `0x90` with no
 timer or Purple-owned restoration. White has no growing disc or white raster:
-it computes one inclusive squared-distance-threshold-32 visibility field, then
-runs twenty ordinary compositor/repaint frames with one-tick pacing. The final
+it computes one visibility field and then runs twenty ordinary
+compositor/repaint frames with one-tick pacing. *(Superseded in part on
+2026-09-02 by issue #180 and `RETRACTIONS.md` R318: the field is **not** an
+inclusive squared-distance-threshold-32 carve. The threshold was read off an
+argument the visibility producer never consults; the sweep selects the
+producer's no-line-of-sight mode and reveals all 121 cells of the window
+straight from the map. The twenty frames and the pacing stand.)* The final
 idle redraw follows normal visibility-dirty policy, and none of this adds a
 second gameplay turn.
 
@@ -1565,7 +1660,7 @@ remains the owner of ordained/Codex/standing changes; whether every successful
 live shrine branch calls this exact helper is left as presentation parity, not
 a separate state-machine gap.
 
-**Current visibility classifier cleanup:** 2026-05-12 - `systems/visibility.md`, tile catalog, DATA.OVL, and extraction now describe the visibility carve as a queue-based centre-out helper rather than a per-cell ray caster, publish the ordinary propagation-blocker set plus the adjacent-only special-case propagation rule, and identify the 32x32 local-light mask refresh. The active-object compositor now covers direct companion-band branches and default-helper terrain remaps. The later marker/local-light cleanup resolved the dim/clear marker reader question, renderer grid-write parity, moongate-mask writer ordering, and the negative-light full-fill branch as a non-production compatibility path; remaining 2D visibility exactness is display-driver palette/art parity for marker bytes if required and external-reader synchronization policy. Dungeon visual exactness is owned by the dungeon-mode spec.
+**Current visibility classifier cleanup:** 2026-05-12 - `systems/visibility.md`, tile catalog, DATA.OVL, and extraction now describe the visibility carve as a queue-based centre-out helper rather than a per-cell ray caster, publish the ordinary propagation-blocker set plus the adjacent-only special-case propagation rule, and identify the 32x32 local-light mask refresh. The active-object compositor now covers direct companion-band branches and default-helper terrain remaps. The later marker/local-light cleanup resolved the dim/clear marker reader question, renderer grid-write parity, moongate-mask writer ordering, and the negative-light full-fill branch as a non-production compatibility path **[Superseded 2026-09-02 by issue #180 / `RETRACTIONS.md` R327: that branch is live gameplay behaviour, driven directly by the spell/potion visibility sweep behind the White potion and the X-Ray spell, not a compatibility path]**; remaining 2D visibility exactness is display-driver palette/art parity for marker bytes if required and external-reader synchronization policy. Dungeon visual exactness is owned by the dungeon-mode spec.
 
 **Current magic metadata cleanup:** 2026-05-12 - `catalogs/spell-list.md`, `systems/magic.md`, `formats/data-ovl.md`, and extraction now separate the dense forty-eight-entry spell token, recipe, and scene-mask tables from the sparse resident long-incantation display phrase table. Recipe enforcement remains documented as M-Mix-time only; C-Cast consumes premixed charges and does not revalidate reagents.
 
@@ -2266,7 +2361,10 @@ roles.
 
 **Current overworld falls cleanup:** 2026-05-12 - overworld, doors/Z-transition,
 tile-catalog, gazetteer, and extraction docs now narrow the traced surface
-falls handler to the confirmed Britannia chasm at `(54, 138)`. A later writer
+falls handler to the confirmed Britannia chasm at `(54, 138)`. **Superseded
+2026-09-02 by issue #181:** the trigger is the waterfall tile family on either
+plane, and `(54, 138)` is only the landing cell that gates the plane flip
+(`RETRACTIONS.md` R320). The plane-writer census below is unaffected. A later writer
 census found no additional outdoor underworld-to-surface writer beyond the
 traced chasm, whirlpool, and interior-exit cases; any future route should be
 added as a new writer rather than implied by the falls path alone.
@@ -2969,7 +3067,10 @@ boundaries rather than ordinary gameplay visibility-grid gaps.
 **Current visibility status cleanup:** 2026-05-13 -
 `EXTRACTION.md` now promotes Visibility to complete at the 2D visibility-grid
 contract layer, matching `systems/visibility.md`. The negative-light full-fill
-compatibility branch is already specified. Pixel parity for marker colours/art
+compatibility branch is already specified. **[Superseded 2026-09-02 by issue
+#180 / `RETRACTIONS.md` R327: it is not a compatibility branch — it is live
+gameplay behaviour driven by the spell/potion visibility sweep, and an engine
+that ships it as dead code has no working White potion and no working X-Ray.]** Pixel parity for marker colours/art
 is display-driver work, external-reader synchronization is tooling policy, and
 dungeon visual parity is presentation QA outside the dungeon-loop behavior
 contract.

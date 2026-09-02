@@ -1300,6 +1300,19 @@ The main menu accepts three actions:
 
 - `R` (Rest for the night) — the party sleeps in the inn's beds. The world clock
   advances through the inn/rest pipeline and the paid rest recovery pass runs.
+  Three world-state effects come with it, and an engine that treats the rest as
+  a pure presentation will miss all three. The party's map position is written
+  to the inn's bed cell for the duration, so the party is standing on the bed
+  while the sequence plays. The clock is then run forward in paced steps until
+  the hour byte reads **six** — the rest always ends at 06:00, whatever hour it
+  began at, so a party that rents a room at 21:00 sleeps nine hours and one that
+  rents at 04:00 sleeps two. On completion the location runs the same
+  clear-and-re-place pass that town entry runs: every non-party active-object
+  record is cleared, and every scheduled NPC is re-placed at the position its
+  schedule gives for the new hour (`systems/npc-schedules.md` Section 12). That
+  is why the town's residents are in their morning positions, not their
+  overnight ones, the moment the party wakes; an NPC that was mid-route when the
+  party lay down is standing on its 06:00 waypoint afterwards.
   Non-dead party members have current hit points restored to maximum. Avatar
   and Mage set current MP to Intelligence; Bard sets current MP to half
   Intelligence; other classes do not receive this MP branch. Sleeping status is

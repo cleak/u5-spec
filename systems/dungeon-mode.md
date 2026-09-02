@@ -33,7 +33,7 @@ Within the dungeon range, the scene byte selects the active dungeon. Subtract th
 | 39 | 6 | Hythloth | Mine |
 | 40 | 7 | Doom | Normal |
 
-The flavour drives cosmetic divergences in corner glyphs, dungeon-view resource selection, class-`0xC?` wall/corpse descriptions, normal-flavour wall decoration, and a Doom-flavour rare text easter egg. The flavour label is a presentation class, not the dungeon's in-world name; for example, the named dungeon Doom uses the normal presentation class in the stock table above. The flavour byte does not change geometry, tile semantics, encounter selection, fountain effects, or trap difficulty. The current dungeon for geometry and room-arena selection is the scene / `DUNGEON.DAT` record; fountain effects come from the fountain tile subtype. Treat any extra entry, facing, or flavour state bytes as runtime auxiliaries rather than as an independent public dungeon index.
+The flavour drives cosmetic divergences in corner glyphs, dungeon-view resource selection, class-`0xC?` wall/corpse descriptions, normal-flavour wall decoration, and a Doom-flavour rare text easter egg. The three `0xC?` flavour descriptions L-Look prints are exactly `a dripping stalactite.\n` for flavour one, `a caved in passage.\n` for flavour two, and for flavour three the corpse line - normally `a less fortunate adventurer.\n`, but on a one-in-255 draw `an unfortunate software pirate.\n`, which is the textual half of that easter egg. The flavour label is a presentation class, not the dungeon's in-world name; for example, the named dungeon Doom uses the normal presentation class in the stock table above. The flavour byte does not change geometry, tile semantics, encounter selection, fountain effects, or trap difficulty. The current dungeon for geometry and room-arena selection is the scene / `DUNGEON.DAT` record; fountain effects come from the fountain tile subtype. Treat any extra entry, facing, or flavour state bytes as runtime auxiliaries rather than as an independent public dungeon index.
 
 ## 3. Coordinate system and floor layout
 
@@ -58,9 +58,16 @@ Each cell byte packs two four-bit fields. The high nibble selects the tile class
 | `0x8`       | Energy field                   | Sub-types: sleep, poison gas, fire, electric (§ 8). |
 | `0x9`       | Energy field (secondary)       | Generic energy field. |
 | `0xA`       | Room-helper / cleared-room state | Routed through the same underfoot helper as room triggers (§ 5). Reloaded cleared rooms use this high nibble. |
-| `0xB`–`0xD` | Wall variants                  | Solid movement blockers (with one debug "SPEC WALL ERR" sentinel at `0xD`). |
+| `0xB`–`0xD` | Wall variants                  | Solid movement blockers. All three describe as a wall; `0xB?` and `0xD?` share the same wording and `0xC?` is the flavour class. |
 | `0xE`       | Door presentation variant      | Door-like rendering/search variant. It is not the room-clear reload state and is not produced by the room-clear demotion pass. |
 | `0xF`       | Room trigger                   | Walkable; low nibble is the room id `0..15` selecting the `DUNGEON.CBT` arena. Stepping onto a `0xF?` cell fires the room-entry helper and rewrites the cell in the loaded image to `0xA?` (room-helper state, same low nibble) for the rest of the visit. |
+
+*Corrected:* an earlier revision annotated the wall row with "one debug
+`SPEC WALL ERR` sentinel at `0xD`". That sentinel exists, but it sits on the
+`0xC?` arm of the L-Look description switch and is **unreachable**, because the
+flavour-wall test intercepts every `0xC?` byte before that arm is examined;
+`0xD?` describes as an ordinary wall. Both halves of the earlier annotation -
+the class and the reachability - are withdrawn (`RETRACTIONS.md` R326).
 
 The high nibble drives wall checks in the renderer and the cell-description string in L-Look. The low nibble varies per class — for fountains it picks cure/heal/poison/bad-taste; for energy fields it picks the four sub-types; for ladders and walls it carries decorative or direction flags. For L-Look only, exact byte `0x61` is normalised to `0x00` before description, so it reports as passage even though the underlying cell byte remains a pit-family variant. Other observed `0x6?` trap bytes, including `0x69`, `0x62`, and `0x6A`, keep their `0x6` class description.
 
@@ -95,7 +102,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 4. **Scene-byte exit check.** If the scene byte has dropped to thirty-two or below, the player has climbed out (§ 13) and the loop breaks.
 5. **Refresh tile cache.** Re-read the underfoot tile and update the cached high nibble.
 6. **Post-action hook.** If the dispatch did anything, call a post-action helper for end-of-turn cleanup.
-7. **Party-capability check.** The iteration then ends by running the shared party-capability check specified in `systems/main-loop.md` Section 6 — the same check town and overworld mode run, with the same three-way result mapping — before the loop reads another command. The check also runs once on entry, ahead of the first command read, and it runs on every iteration regardless of what the dispatch reported, so a command that took no turn (a refused Klimb, say) skips the post-action helper of step 6 but still passes through the check. If at least one member can act, the loop proceeds to the next iteration. If nobody can act but at least one member is asleep, the loop pauses briefly, prints the sleep line ("Zzzzzz..."), and re-runs the check without reading a command, repeating for as long as that result holds; the dungeon takes this pass without running the post-action helper. If nobody can act and nobody is asleep, the inner loop stops and the epilogue runs the total-party-defeat sequence (§ 13.4). Dungeon mode contributes no condition of its own to the check.
+7. **Party-capability check.** The iteration then ends by running the shared party-capability check specified in `systems/main-loop.md` Section 6 — the same check town and overworld mode run, with the same three-way result mapping — before the loop reads another command. The check also runs once on entry, ahead of the first command read, and it runs on every iteration regardless of what the dispatch reported, so a command that took no turn (a refused Klimb, say) skips the post-action helper of step 6 but still passes through the check. If at least one member can act, the loop proceeds to the next iteration. If nobody can act but at least one member is asleep, the loop pauses briefly, prints the sleep line, and re-runs the check without reading a command, repeating for as long as that result holds; the dungeon takes this pass without running the post-action helper. The dungeon's sleep line is exactly `Zzzzzz...\n` - six `z`, three dots, one trailing line feed - and the loop emits its own line feed and repaints the message window's top border immediately **before** it, so the line always starts on a fresh row. Neighbouring literals elsewhere in the game differ in the count of `z`, the count of dots and the number of trailing line feeds, including the camp body's own `Zzzzzz...\n\n` (Section 11); they are separate strings and must not be shared. If nobody can act and nobody is asleep, the inner loop stops and the epilogue runs the total-party-defeat sequence (§ 13.4). Dungeon mode contributes no condition of its own to the check.
 
 **Epilogue.** When the inner loop ends, transition the dungeon-graphics
 lifecycle from “dungeon banks loaded” to “restore ordinary graphics,” then run
@@ -186,10 +193,15 @@ All five are five characters wide, so the label never changes length:
 | 3 | `_West` (leading space) | `West` after two spaces |
 | anything else | `_????` (leading space, four question marks) | `????` after two spaces |
 
-The last row is the **invalid-facing fallback** and is a real, reachable
-presentation state; it is the same five-character width as a real name, so the
-label geometry is unchanged. The facing encoding is north, east, south, west in
-that order.
+The last row is the **invalid-facing fallback**; it is the same five-character
+width as a real name, so the label geometry is unchanged. The facing encoding is
+north, east, south, west in that order. Whether the fallback is *reachable* is
+unsettled and this document no longer asserts that it is: every facing update in
+the traced dungeon movement dispatcher masks the facing to `0..3`, so that path
+alone can never produce it, and it may simply be a defensive arm. Settling it
+means enumerating the other writers of the facing byte, which has not been done.
+Implement the row - it costs nothing and the geometry depends on it - but do not
+build a test that requires reaching it.
 
 **Cell-arithmetic correction.** The facing label's gap between its two end caps
 is **ten cells (7 through 16), not eleven**. The surface wind banner's gap is
@@ -291,7 +303,7 @@ Two underfoot tile classes have *immediate* effects that fire before the player 
 
 **Room-helper state (high nibble `0xA`).** The turn loop routes `0xA?` cells through the same helper as `0xF?` room triggers. The shipped `DUNGEON.DAT` records contain no `0xA?` cells; this class appears as runtime state created after a room trigger resolves, not as ordinary stock geometry. Keep the low nibble intact because the helper still treats it as the room-arena slot.
 
-**Room trigger (high nibble `0xF`).** A subset of cells flagged as "room cells" trigger a room encounter when the party walks onto them. The same room-entry helper used by the `0xA?` state loads the appropriate arena from `DUNGEON.CBT`, sets combat-entry state, and hands off to combat. After combat resolves, the player re-emerges in the dungeon at the room cell. The helper patches the loaded dungeon image for that visit by changing `0xF?` to `0xA?`; the on-disk source cell is unchanged.
+**Room trigger (high nibble `0xF`).** A subset of cells flagged as "room cells" trigger a room encounter when the party walks onto them. The same room-entry helper used by the `0xA?` state prints `Entering room...\n` as its first act (Section 8.1), loads the appropriate arena from `DUNGEON.CBT`, sets combat-entry state, and hands off to combat. After combat resolves, the player re-emerges in the dungeon at the room cell. The helper patches the loaded dungeon image for that visit by changing `0xF?` to `0xA?`; the on-disk source cell is unchanged.
 
 Cleared room state also has an overlay-side bitmap keyed by dungeon and room
 id. This bitmap is part of the save image. It has one bit per dungeon-room arena
@@ -579,8 +591,31 @@ near frame on.
 Two flavour-conditional extras hang off the forward test:
 
 - A `0xB?` wall one cell ahead whose low nibble is non-zero routes to the
-  per-dungeon scenery-text handler, which is what prints the dripping-stalactite
-  family of ambient lines.
+  per-dungeon **chamber-name banner** handler, and the non-zero low nibble is
+  the one-based banner index. That handler leaves the message window entirely:
+  it moves display mode 0's window origin onto the banner's cell, selects mode
+  0 and the runic font, brackets the banner with the inverse-style control,
+  prints, then restores the ordinary font, reselects the message window, and
+  restores mode 0's rectangle to the full screen. The banners are the
+  chamber names carved into the dungeon walls - BOTTOMLESS PIT, THE MAZE OF
+  LOST SOULS, THE PRISON WRONG, THE CRYPT, UPPER CRYPTS, LOWER CRYPTS, DEBTERS
+  ALLY, DEEP, DEEPER, DEEPEST, MOTHER LODE MAZE - each a multi-line block
+  positioned at its own origin, and only Deceit, Despise, Wrong, Covetous,
+  Shame and Hythloth have any; Destard and Doom have none. *Corrected:* an
+  earlier revision said this handler "is what prints the dripping-stalactite
+  family of ambient lines". It prints no ambient line at all; `a dripping
+  stalactite.` is an L-Look flavour description of the `0xC?` class and never
+  reaches this handler (`RETRACTIONS.md` R325). The banners are stored in the
+  runic character set, whose digraph glyphs each stand for two Latin letters.
+  Only the `TH`, `ST` and word-space code points are **established**; the `NG`
+  and `EE` readings that turn the stored bytes into `WRONG`, `DEEP`, `DEEPER`
+  and `DEEPEST` are **probable**, resting on the runic font's glyph shapes plus
+  the fact that they are the only readings that make those bytes into words.
+  Settling them means tracing the runic-font renderer or finding a second
+  corpus that spells a known `NG` or `EE` word. It is also **not traced** whether the
+  banner clears itself: the handler restores the window and font but does not
+  repaint the viewport region it wrote into, so presumably the next
+  first-person repaint covers it.
 - A `0xC?` flavour wall one cell ahead in a **flavour-3** dungeon has a rare
   decorative flourish: on roughly a one-in-sixteen roll it draws four short
   strokes near the vanishing point in a bright accent pen. It is visual only,
@@ -961,7 +996,7 @@ Flavour-class divergence applies to the L-Look description in non-normal dungeon
 - **Sub-type 2: Wall of fire.** "A wall of fire." Walking in applies fire damage.
 - **Sub-type 3: Electric field.** "An electric field." Walking in applies electric damage.
 
-The exact base bytes are `0x80` sleep, `0x81` poison, `0x82` fire, and `0x83` electric. Magic field placement preserves the dungeon visit marker bit when it writes into the live dungeon image, so the corresponding marker variants are `0x88`, `0x89`, `0x8A`, and `0x8B`. L-Look names only exact bytes `0x80..0x83` with the distinct field descriptions; other `0x8?` values collapse to the generic energy-field description.
+The exact base bytes are `0x80` sleep, `0x81` poison, `0x82` fire, and `0x83` electric. Magic field placement preserves the dungeon visit marker bit when it writes into the live dungeon image, so the corresponding marker variants are `0x88`, `0x89`, `0x8A`, and `0x8B` - but `0x8B` alone triggers nothing: the movement-time test is an exact comparison against `0x83` and the post-action pass has no `0x8B` arm, so the marked electric variant is inert on both paths (Section 8.1). L-Look names only exact bytes `0x80..0x83` with the distinct field descriptions; other `0x8?` values collapse to the generic energy-field description.
 
 The fields can be dispelled by *An Grav* / Dispel Field. Sleep, poison and fire
 resolve after the party enters their cell. Electric contact is the exception:
@@ -1069,7 +1104,7 @@ klimbing there descends to level one rather than ejecting the party to
 Britannia.
 
 Exact bytes `0x61` and `0x69` are automatic fall traps. Stepping on either
-prints the pit/fall messages, clears the fired marker bits on the departure
+prints the three-line pit/fall group of Section 8.1, clears the fired marker bits on the departure
 cell in the loaded dungeon image, increments dungeon level by one, and lands
 the party at the same X/Y on the next level. If the destination cell is below
 the wall/door band (`< 0x90`), the engine marks bit `0x08` in that destination
@@ -1090,20 +1125,30 @@ seven fall trap and no same-column vertical fall-trap run that reaches level
 seven. The off-bottom mutation is therefore a defensive compatibility path for
 custom or mutated dungeon data in the analyzed baseline, not a route produced
 by the shipped static dungeon records.
-Exact bytes `0x62` and `0x6A` are bomb traps: they print the bomb
-messages, clear the current trap cell to its fired marker form, and do not
+Exact bytes `0x62` and `0x6A` are bomb traps: they print the two bomb lines of
+Section 8.1, clear the current trap cell to its fired marker form, and do not
 change Z.
 
 Dungeon Search handles the pit/trap family as an inspectable feature as well.
-It first prints the generic "nothing of note" search preamble, then applies
+It first prints its unconditional preamble `You find:\n`, then applies
 extra handling only for exact unmarked pit-family bytes:
 
 | Searched byte | Search result |
 |---:|---|
-| `0x60` | Reports nothing in the pit; no state change. |
-| `0x61` | Reports a found secret door, rewrites the searched cell to `0x60`, and, unless already on the deepest level, marks the same X/Y cell one level below with the visit bit. It then renders the changed first-person view to the hidden surface and dissolves it in as described below. This is a visit-local reveal in the loaded dungeon image. |
-| `0x62` | Rolls `1..30` against `(2 * Z - member Dexterity + 30) / 2`. A roll above the threshold springs the bomb, reports it, and clears the searched cell to `0x00`; a roll at or below the threshold reports nothing on the pit and leaves the cell unchanged. |
-| Other `0x6?` values | No extra Search-specific handling beyond the generic preamble. |
+| `0x60` | `Nothing hidden\nin the pit.\n` - the line break is in the data. No state change. |
+| `0x61` | Reports `A pit!\n`, rewrites the searched cell to `0x60`, and, unless already on the deepest level, marks the same X/Y cell one level below with the visit bit. It then renders the changed first-person view to the hidden surface and dissolves it in as described below. This is a visit-local reveal in the loaded dungeon image. |
+| `0x62` | Rolls `1..30` against `(2 * Z - member Dexterity + 30) / 2`. A roll above the threshold springs the bomb and reports `A bomb trap!\n`, clearing the searched cell to `0x00`; a roll at or below the threshold reports `Nothing of note.\n` and leaves the cell unchanged. |
+| Other `0x6?` values | No extra Search-specific handling beyond the preamble. |
+
+*Corrected, two claims in this paragraph and table.* The preamble was published
+as "the generic 'nothing of note' search preamble"; it is not - the
+unconditional preamble is `You find:\n`, and `Nothing of note.\n` is one of the
+*outcomes*, taken by the plain-passage class and by a `0x62` roll at or below
+the threshold (`RETRACTIONS.md` R324). And the `0x61` row was published as
+"Reports a found secret door"; the line is `A pit!\n`, while
+`A hidden door!\n` belongs to the `0xD?` wall branch instead
+(`RETRACTIONS.md` R322). The mechanical halves of both - the rewrite to `0x60`,
+the deeper-level visit mark, the roll and the threshold - re-derived unchanged.
 
 The `0x61` and `0x62` Search branches are local dungeon mechanics: they do not
 grant inventory, do not use the surface object table, and do not invoke the
@@ -1149,7 +1194,8 @@ narration and working-image rewrite, Search runs the ordinary first-person
 renderer with the changed image, composing the resulting viewport on the
 hidden surface, then performs one blocking rectangle dissolve over
 `(8,8)..(183,183)` to reveal it. The earlier Search light gate means every
-reaching branch is lit; an unlit Search stops with the too-dark refusal and
+reaching branch is lit; an unlit Search stops with the darkness refusal of
+Section 8.1 and
 cannot reach the dissolve. Narration precedes mutation, mutation precedes the
 hidden redraw, and the redraw precedes the dissolve. Search returns after the
 dissolve without a second mutation or redraw.
@@ -1166,6 +1212,184 @@ extinguishes a lit torch while leaving the light-spell counter unaffected. The
 baseline dungeon contract therefore has no wind-contact torch-extinguish cell;
 only the ordinary light counter writers and decay paths change the torch and
 light-spell counters.
+
+### 8.1 Exact consequence lines
+
+The lines below are exact. `\n` is one line feed and belongs to the string, so
+a leading `\n` produces a blank row and a trailing `\n\n` produces a blank row
+after the text. Leading spaces inside a string are significant and are shown.
+None of these lines carries a window-clear, style or centring control, and all
+of them print into the ordinary gameplay message window.
+
+**The blank line before each message is the loop's, not the string's.** Before
+every keystroke read, the dungeon render-and-poll step emits one line feed and
+repaints the message window's top border. That is why almost none of these
+literals needs a leading `\n` of its own, and why an implementation that adds
+one per message will double the spacing.
+
+**Post-action underfoot consequences**, in print order per event:
+
+| Underfoot event | Exact lines, in order | Sound |
+|---|---|---|
+| Room trigger or room-helper cell | `Entering room...\n`, printed by the room-entry helper as its first act | none |
+| Sleep field `0x80` / `0x88` | `Sleep spell!\n` | one short rumble per member whose status actually changes |
+| Poison field `0x81` / `0x89` | `Poison!\n` | one short rumble per member whose status actually changes |
+| Fire field `0x82` / `0x8A` | `Fire!!\n` - two exclamation marks | only the damage helper's flash and rumble, per damaged member |
+| Fall trap `0x61` / `0x69`, **once per descent step** | `Pit Trap!\n`, then `Falling...\n`, then the level change and view repaint, then `      ...splat!\n` - **six leading spaces** | the damage helper's flash and rumble, after `...splat!` |
+| Bomb trap `0x62` / `0x6A` | `Bomb Trap!\n`, then `KABOOM!!\n` | the damage helper's flash and rumble |
+| Any other underfoot byte | nothing | none |
+
+Both field lines print **before** their per-member rolls, so the line appears
+even when nobody is affected. A two-deep fall chain prints the three-line pit
+group twice, with the view repaint and the damage between; the arrival on the
+lower level narrates nothing of its own beyond `      ...splat!`, unless the
+landing cell is a room cell, in which case `Entering room...` follows.
+
+**Electric contact** is a movement-time consequence, not a post-action one. It
+prints `Ouch!\n` then `Electric field!\n` **before** the destination-class test,
+so those two lines precede any `Blocked!` the same step later produces. The
+screen flash, rumble, one-cell push-back and whole-party damage follow.
+
+**Byte `0x8B` - the marked electric variant - is inert.** The movement-time test
+is an exact comparison against `0x83` on the raw cell byte, and the post-action
+pass has no `0x8B` arm; the byte therefore triggers nothing on either path, no
+line and no effect. The population searched for this negative is every
+comparison against an `0x8?` immediate in the dungeon movement dispatcher and
+the post-action pass, and there is no `0x8B` comparison anywhere in the dungeon
+overlay. Do not generalise the other three marker variants' behaviour onto it.
+
+**Movement verbs and refusals.** The verb always prints first, so a blocked
+advance reads `Advance` on one row and `Blocked!` on the next:
+
+| Situation | Exact line |
+|---|---|
+| Forward | `Advance\n` |
+| Back | `Back up\n` |
+| Turn left / right | `Turn left\n` / `Turn right\n` |
+| Any unrecognised movement subcode | `Turn around.\n` - note the terminal period, which the other verbs do not have |
+| Turn refused | `Not in doorway!\n` |
+| Step refused by class, by the active monster's cell, or by the back-step room rule | `Blocked!\n` |
+
+`Not in doorway!` reads backwards and is worth stating plainly: it fires when
+the party's **own** cell is the point-blank door class, i.e. the turn is refused
+*because* you are standing in a doorway. Read it as "not permitted in a
+doorway".
+
+A **completed** move carries a footstep rumble; a blocked move and a turn are
+both silent. Neither refusal plays the blocked-step tone the town and overworld
+loops use - `systems/audio.md` section 11 records the dungeon as explicitly not
+a site for that tone, on either refusal arm.
+
+**Darkness refusals.** Both unlit refusals break after the colon:
+
+| Command | Exact line |
+|---|---|
+| L-Look, unlit | `You see:\ndarkness.\n` |
+| Search, unlit | `\nYou find:\ndarkness.\n` - a *find* line, with a leading blank row |
+
+**Search outcomes.** Search prints `You find:\n` unconditionally, then exactly
+one outcome line. Beyond the pit-family table above, the outcomes are
+`Nothing of note.\n` for plain passage; `Nothing hidden on the ladder.\n`;
+`Nothing hidden on the fountain.\n`; `Nothing hidden on the door.\n` for the
+heavy-door class and for both door-presentation/room classes;
+`Nothing hidden on the wall.\n`; `Treasure!\n` on an open chest;
+`This tile is impossible.\n` for the secondary energy-field class; the four
+trap-tier lines `No trap\n`, `A simple trap\n`, `A trap\n` and
+`A complex trap\n` - **none of which carries a terminal period**; the flavour
+lines `Nothing on the stalactite.\n` and `Nothing in the caved in passage.\n`;
+the two-line skeleton result `Nothing hidden on the skeleton.\n` then
+`It crumbles away.\n`; and `A hidden door!\n` for the wall class. The field
+classes reuse the L-Look wording of this section.
+
+**Fountain drink flow.** After the fountain description, the prompt
+`Will you drink?\n` blocks until `Y` or `N`. `N` answers `No.\n` and returns.
+`Y` answers `Yes.  Gulp!\n` - **two spaces** after the period - and then one of
+`Cured!\n`, `Healed!\n`, `Poisoned!\n` or `Bad taste.\n` by sub-type.
+
+**Chest commands.** The resident dispatcher's prefix and the overlay's line
+share a row unless the overlay's line begins with a line feed:
+
+| Command | Prefix | Overlay lines |
+|---|---|---|
+| `J` Jimmy | `Jimmy-` | a bare `\n` first, so the result always starts on a new row; then one of `No keys!\n`, `Key broke!\n`, `Chest unlocked\n`, `Already open!\n`, `What?\n` |
+| `O` Open | `Open-` | trapped chest: the trap word below, then `\nChest opened\n`; already-open cell: `Already Open!\n` - capital `O`, a **different** literal from Jimmy's; anything else: `What?\n`. Because those last two carry no leading line feed they render on the prefix's own row, as `Open-Already Open!` and `Open-What?` |
+| `G` Get | none in a dungeon | `Get\n` first; then `Must open first!\n` on a closed chest, `Not here!\n` on a non-chest, or `contents\nof chest\nYou find:\n` on an open chest followed by the item lines |
+
+**The chest trap words.** A trapped dungeon chest opens with the shared trap
+resolver of `systems/traps.md`, which prints exactly one of `ACID!\n`,
+`POISON!\n`, `BOMB!\n` or `GAS!\n` before its effect. The dungeon chest site
+prints no trap notice of its own, so with a single eligible party member the
+trap word lands directly after the prefix: `Open-ACID!`.
+
+**Klimb.** `Klimb-U/D-` when both directions are available (it blocks until up
+or down is chosen, and Space answers `Pass\n\n` and climbs nothing);
+`Klimb-` when exactly one is; `Klimb-\nWith What?\n` when neither is but the
+cell is the climb-with-equipment kind and the party lacks the gear; and
+`Klimb-what?\n` when neither is and the cell has no climbable feature at all.
+Applying a climb prints `Up!\n` or `Down!\n` **first**, before any test, and an
+impassable destination then adds `Failed!\n` with the short **rising** sweep
+`systems/audio.md` section 5.2 tabulates as the 50-update, delay-1 recipe -
+800 Hz stepping up to a last tone of 1976 Hz against a nominal 2000 Hz target -
+the same recipe the spell-failure tail uses.
+There is **no** "you are at the top/bottom level" refusal line: on a level edge
+the direction word prints and the dungeon exit lines of Section 13.2 follow it
+immediately. That negative was checked over the whole body of both Klimb
+routines - the dispatcher that chooses the prompt form and the apply helper -
+and rests on the fact that the apply helper's edge test precedes every cell
+lookup it makes.
+
+Whether `Klimb-\nWith What?\n` is specifically the *no-grapple* refusal is
+**probable, not established**: the byte gating the climb-with-equipment arm is
+almost certainly the grapple count, but that identification was not confirmed.
+
+**Who acts.** Dungeon L-Look, Search, Jimmy and Open all run the shared
+acting-member prompt before anything else; dungeon Get does not. That prompt is
+silent when zero or one member is eligible and prints `Player: ` otherwise,
+echoing the chosen member's name. A pick whose status is neither Good nor
+Poisoned answers `Disabled!\n\n` and re-prompts from `Player: `; a cancel, or a
+party with no eligible member at all, answers `None!\n` and the command aborts.
+A cancelled dungeon Look therefore renders as `Look...` then `None!` and
+nothing else.
+
+**What blocks on a key.** Inside the three dungeon overlays exactly five
+prompts block: the acting-member prompt, the relative-direction prompt `Dir-`,
+the Klimb up/down chooser, the fountain's drink question, and the
+`Exit to DOS? ` control binding. This count is established by scanning those
+three overlays for calls to the three resident input primitives; it is **not**
+a claim about resident handlers a dungeon key can reach by forwarding, and
+`H`-Hole-up is a traced counter-example that adds three more (Section 11).
+Everything else prints and returns.
+
+**Sound families on dungeon paths** are seven, established by resolving every
+call in the three dungeon overlays against the resident speaker entry points
+and adding the two resident helpers the dungeon calls: the per-move footstep
+rumble; the sleep-field and poison-field status hits, which are **one** family
+because both call sites emit the identical rumble recipe; the electric-field
+push-back; the wall-decoration drip tone emitted at render time with no text of
+its own; the Klimb `Failed!` sweep; the chest trap resolver's rumble; and the
+damage helper's flash and rumble on every applied HP loss, which dungeon paths
+reach indirectly but which is the seventh member of the scanned set rather than
+an addition to it. The same scope caveat applies: forwarded resident
+handlers were not enumerated.
+
+**A developer diagnostic that should never be reachable.** The dungeon's active
+object painter carries an arm that prints `Hey!! What's going on here???` - no
+trailing line feed - and skips the sprite when the sprite bank pointer it is
+about to use is null. It fires inside the render loop, so it can repeat once
+per frame. Specify it as a condition that must never occur rather than as
+behaviour to reproduce; that the guarded pointer is specifically the monster
+sprite bank is **probable**, its writer having not been traced.
+
+Source provenance: derived from private analysis under `u5-decomp/notes/`,
+`u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/DNGLOOK_OVL/`,
+`u5-decomp/functions/SJOG_OVL/` and `u5-decomp/functions/ULTIMA_EXE/` - the
+dungeon consequence-line pass, which re-read every literal from the shipped
+resident data image and enumerated the dungeon overlays' string references
+exhaustively. That enumeration does **not** cover strings reached through a
+pointer table (the chamber-name banners of Section 6.4 are the one such family,
+enumerated separately), the dungeon arms of the chest/search overlay, which
+were listed by hand instead, or narration in other overlays that a dungeon key
+can reach by forwarding to the resident dispatcher.
 
 ## 9. Movement and turning
 
@@ -1214,10 +1438,12 @@ skipped. **Q** is the ordinary save-game route; the "Exit to DOS?" prompt is a
 Control binding in the mode-local table, not a letter.
 
 The dungeon-mode A-Attack handler is a point-blank forward probe. It prints
-the attack label, computes the wrapped cell one step ahead of the party's
+`Attack\n` - no direction hyphen, because a dungeon attack takes no direction
+argument - computes the wrapped cell one step ahead of the party's
 current facing, and compares that coordinate with the single active dungeon
 monster record. If the active monster is not exactly in that forward cell, the
-handler uses the stock refusal response and does not launch combat.
+handler prints the stock refusal `What?\n` on the following row and does not
+launch combat.
 
 If the active monster is in that forward cell, the handler sets the combat kind
 byte to the ambush value, tears down the first-person view, synthesises a combat
@@ -1279,7 +1505,25 @@ wrapper) rather than the town's inn-tile hours-prompt. The wrapper:
    the same combat framing family as room triggers).
 5. Cures the "asleep" status on every party member who was asleep at the start of the rest.
 
-The rest concludes either with "Party rested!" or "Ambushed!" (and an immediate combat). The dungeon turn loop resumes when the rest finishes; the party's coordinates do not change.
+The rest concludes either with `Party rested!\n` or `Ambushed!\n\n` (and an
+immediate combat). The dungeon turn loop resumes when the rest finishes; the
+party's coordinates do not change.
+
+The prompts on this path are **resident**, not dungeon-overlay, and they are
+three more places a dungeon keystroke can block on a key than Section 8.1's
+count of five. In order: `Hole up & ` then `camp!\n\n`; then
+`For how many hours? (1-9) `, which loops until a digit or Space and echoes the
+key plus a line feed - Space or `0` aborts with no further output; then, when
+two or more members are eligible, `\nWilt thou set a watch? `, answered
+`No\n\n` or `Yes\n\n`; and after `Yes`, `Who will stand guard? `, where a
+cancel or an ineligible pick prints `None posted!\n\n` and re-asks the watch
+question. The two shipboard/on-land refusals that share this handler cannot
+fire in a dungeon. `systems/commands.md` Section 5.5 publishes the same
+literals in its own notation.
+
+The camp body's sleep line is `Zzzzzz...\n\n`, with **two** trailing line feeds.
+It is a different literal from the turn loop's `Zzzzzz...\n` (Section 4) and
+must not be shared with it.
 
 A second H-path is involuntary: some sleep/ambush flows can interrupt rest without requiring the player to press H. The same regeneration and ambush logic applies, but stock `DUNGEON.DAT` room cells use the `0xF?` trigger family rather than authored `0xA?` cells.
 
@@ -1290,7 +1534,7 @@ Two letter commands give the player visibility into the dungeon beyond the first
 **L-Look.** The L letter in dungeon mode routes to a dedicated dungeon-look overlay rather than the overworld/town look overlay. The handler:
 
 1. Prompts for a party-member slot (the standard "by whom?" prompt; ESC cancels).
-2. Checks the lighting gate: if both torch and light-spell counters are zero, prints "You see: darkness." and returns.
+2. Checks the lighting gate: if both torch and light-spell counters are zero, prints exactly `You see:\ndarkness.\n` and returns. *Corrected:* this was published as `You see: darkness.` with a space; the stored line breaks after the colon (`RETRACTIONS.md` R323).
 3. Invokes the shared dungeon relative-focus helper with the current facing
    direction. The helper prompts for a relative choice: ahead, right, left, or
    here. Ahead steps one cell in the current facing direction; right and left
@@ -1554,8 +1798,15 @@ dungeon-to-outdoor path in the build and no per-dungeon special case:
   surface on Britannia; any other level - in practice the lowest one - means
   they went out through the bottom, so they arrive in the Underworld. The two
   arms narrate an exit to Britannia and an exit to the Underworld respectively.
+  The exact wording, the rendered line breaks it produces in the message window,
+  and the fact that this exit is silent and waits for no key are in
+  `systems/doors-and-z-transitions.md` Section 12.1.
 - The dungeon scene byte is then cleared, which is what returns the game to
   outdoor mode.
+- **The pit-chain off-bottom path narrates nothing at all.** That is worth
+  stating because the ordinary exit does narrate: an implementation that shares
+  one code path between them will emit an exit line the original never prints.
+  The negative covers the whole off-bottom body.
 
 Because seven of the eight dungeon mouths carry an entrance tile at the same
 coordinate on **both** world maps, one coordinate serves both arms. Entry is the
@@ -1739,6 +1990,16 @@ from the party to the active monster using wrapped adjacency, prints the
 approach-direction feedback if the party was not already facing that way,
 commits the new facing, redraws and pauses briefly, then launches a dungeon
 combat encounter through the wandering-monster path below.
+
+That feedback is assembled from fragments rather than stored whole. The line is
+`Attacked`, then - only when the computed direction differs from the party's
+current facing - ` from the ` and one of the lower-case compass words `north`,
+`east`, `south`, `west`, and finally `!\n`. So the two reachable renderings are
+exactly `Attacked!` when the party already faces the monster and, for example,
+`Attacked from the north!` when it does not. This is a different string from the
+Doom cave entrance refusal `Attacked_at_entrance!\n` that
+`systems/commands.md` publishes; do not share one literal between them. The line
+is followed by a type-ahead flush and a short pause before the view teardown.
 
 ### 14.1 Wandering-monster combat: arena, setup, and slot handling
 
