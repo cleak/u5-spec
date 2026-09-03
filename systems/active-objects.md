@@ -46,7 +46,7 @@ Each record's eight bytes are interpreted as follows. Different systems read dif
 |   3  | `y`          | World (or arena) Y coordinate, in cells.                                                                          |
 |   4  | `z`          | World floor (or vertical layer). For the overworld, this is the surface/underworld marker.                        |
 |   5  | `dep1`       | Auxiliary state byte. For ship/frigate objects this is hull condition; otherwise class-specific.                  |
-|   6  | `phase`      | Packed animation phase (low nibble) and direction-step counter (high nibble). Advanced by the animator.           |
+|   6  | `phase`      | Packed animation byte: frame-delay countdown (low nibble) and animation-script step (high nibble). Carries **no facing**. Advanced by the animator. |
 |   7  | `dep3`       | Auxiliary flag/aux byte. For ship/frigate objects this is skiffs aboard; otherwise class-specific.                |
 
 Dungeon first-person mode is a deliberate exception to the generic empty-slot
@@ -61,7 +61,15 @@ A few observations on the field encoding:
 
 **Type-byte conventions.** Byte 0 carries both "is this slot allocated?" (zero / non-zero) and a tile-class identifier (the high six bits used as an index into a per-class attribute table that the animator and dispatcher consult). The low two bits of byte 0 are reserved for sub-type or facing info on certain tile classes. Player identity is not encoded by a special byte-0 value: the player is the record at slot zero. The withdrawn player-as-NPC interpretation in Section 5 must not be revived as a second player sentinel or phantom record.
 
-**The phase byte.** Byte 6 packs two pieces of state into one byte: the low nibble counts down through animation frames (with the all-ones value meaning "rest at steady frame, do not animate"), and the high nibble holds a direction-step counter that AI movement uses. The animator's per-tick rule is: if the low nibble is at the steady-state marker, leave the slot alone; if non-zero, decrement; if zero, the slot is eligible for an AI tick that may pick a new direction or move the slot one cell.
+**The phase byte.** Byte 6 packs two pieces of state into one byte: the low nibble is a frame-delay countdown (with the all-ones value meaning "rest at steady frame, do not animate"), and the high nibble is the slot's step within its animation script. The animator's per-tick rule, in the order the gates are actually applied:
+
+1. All-ones low nibble — bail immediately, **writing nothing**. This is the freeze sentinel.
+2. Low nibble in `1..14` — decrement it and write the recombined byte back. **This write is unconditional and has no tile-class precondition**, and it applies to every slot the walk reaches, slot zero included.
+3. Low nibble zero — fall through to the eligibility gates (a frame-byte test, then a tile-class threshold), which may advance the script step and rewrite the byte.
+
+The tile-class gate is therefore *downstream* of the decrement, not upstream of it: a low nibble in `1..14` is decremented on any slot regardless of what class the record holds. An earlier reading of this section had the two gates the other way round and concluded that the player's tile class protects slot zero's byte 6 from the animator. It does not — what protects it in a shipped save is the stored **value** zero, which routes past the decrement into a class gate the player's class fails.
+
+*Corrected (issue #184).* This paragraph previously said the high nibble "holds a direction-step counter that AI movement uses". That reading is withdrawn: the high nibble is an animation-script step, byte 6 carries no facing anywhere, and a producer that writes a facing into it is not byte-compatible. In particular the freeze sentinel is **not** the player's stored value: the shipped player record carries zero in byte 6. See `RETRACTIONS.md` row R340.
 
 **Auxiliary bytes 5 and 7.** Different systems use these slots differently. For
 ship/frigate objects, byte 5 is hull condition and byte 7 is the carried-skiff
@@ -172,7 +180,14 @@ The table is never compacted or defragmented. Repeated allocate-and-free fragmen
 
 ## 5. The player slot
 
-The player occupies slot zero. Every world frame, the compositor refreshes bytes 0..4 of slot zero from the world-state globals (the avatar tile id, the active player's position, the floor index). The renderer then walks the table from slot thirty-one down so slot zero paints on top.
+The player occupies slot zero. Every world frame, the compositor refreshes bytes 0..4 of slot zero from the world-state globals (the transport/action marker into **both** byte 0 and byte 1, then the party X, Y and Z). The renderer then walks the table from slot thirty-one down so slot zero paints on top.
+
+**Bytes 5, 6 and 7 of slot zero are not part of that rebuild.** The per-frame refresh writes bytes 0 through 4 and stops. Within a scene, while the stored byte 6 is either zero or the freeze sentinel, and while the party is on foot, those three bytes round-trip from the save image untouched — that is why the player's record in a shipped town save reads as the marker twice, the coordinates, and then three zero auxiliary bytes. The qualifiers are load-bearing, and this negative is a trace of the routines that own slot zero rather than a census, because dozens of pointer walks index the table:
+
+- A stored low nibble in `1..14` in byte 6 **is** decremented in place by the animator, on slot zero as on any other (Section 3).
+- The NPC purge path zeroes bytes 0..4, 6 and 7 of whichever record an NPC's linked-slot field names, and that is slot zero when the field is zero. In the shipped data the predicate guarding it does not fire, but it is not structurally impossible.
+- Every return to the overworld replaces all eight bytes of all thirty-two slots from the per-plane object list (Section 11).
+- The trace covers the party **on foot**. A transport/action marker that raises slot zero's tile class to or above the animator's class threshold — the whirlpool marker is the traced case — lets the walk reach its *second* byte-6 write even from a zero low nibble. That path is traced as reachable but its animation-script bytes were not read, so treat it as **probable** rather than established.
 
 The world-state globals are the *authoritative* source for player position; slot zero is a *derived* view that other systems read — NPCs computing distance to the player, the visibility producer determining what the player blocks. Slot zero is never freed, compacted, or reallocated; mode entries preserve it; the combat backup-and-restore preserves it.
 
@@ -411,7 +426,7 @@ The adjacency reactions, in the order the handler tests them:
 
   | Active-object type | Base combat class / banner identity |
   |---|---|
-  | `0x2C..0x2F` | Class 1, but the encounter banner uses the fixed Pirates name rather than class 1's ordinary banner entry. |
+  | `0x2C..0x2F` | Class 1 for stats, but the banner is not a table entry: any type whose masked byte is below `0x40` bypasses the group-name table and prints the fixed literal `PIRATES` (`systems/encounters.md` Section 4, `RETRACTIONS.md` R350). The ship family is the only sub-`0x40` family known to reach it, and that is established only on the Attack path. |
   | `0x80..0x8F` | Classes 16..19, one class per four-byte run. |
   | `0x90..0x9F` | Classes 20..23, one class per four-byte run. |
   | `0xA0..0xAF` | Classes 24..27, one class per four-byte run. |
@@ -432,8 +447,10 @@ The adjacency reactions, in the order the handler tests them:
   Equivalently, every ordinary type at or above `0x40` uses
   `(type - 0x40) / 4`, discarding the remainder. This is a complete mapping,
   not a gate limited to `0x40..0x7F`: the whole `0x80..0xFF` actor band maps
-  to bestiary classes 16..47. The class names and encounter-banner identities
-  are the rows of `catalogs/monster-bestiary.md` Section 2.
+  to bestiary classes 16..47. See `catalogs/monster-bestiary.md` Section 2 for
+  class names and Section 2.2 for the group banner names; the two tables are
+  independent, and an entry that looks blank in one is not a cue to fall back on
+  the other.
 
   The combat class is **not** the outdoor arena number. The battlefield is
   selected independently by the terrain under the hostile and party ship
@@ -741,7 +758,17 @@ not a merge of temporary combat death markers.
 
 Each mode's entry handler initialises the table according to its needs.
 
-**Town / dwelling / castle / keep entry.** Clears every slot except slot zero. Runs the per-NPC roster load (building runtime descriptors and schedules), the per-NPC initial-waypoint placement (calling the world-mutation helper for each NPC currently on the player's floor, allocating slots), and finally the Shadowlord install, which runs only in a town that currently hosts one of the three Shadowlords and is skipped entirely otherwise (`systems/town-mode.md` Section 13). Result: slot zero has the avatar and a handful of low-indexed slots have on-screen NPCs; in a hideout town one further active-object slot and the highest empty NPC index hold the resident Shadowlord. The entry pass writes no NPC-table entry for the player.
+**Town / dwelling / castle / keep entry.** This entry takes an **entry-mode argument**, and the argument decides whether the NPC layer is rebuilt at all. Getting it wrong is the difference between a live town and an empty one.
+
+*Mode one — a fresh entry.* Clears every slot except slot zero (writing zero to the type byte of slots one through thirty-one). Runs the per-NPC roster load (reading the location's NPC sub-map into the resident schedule, type and dialogue tables), the per-NPC runtime-state initialisation from the current hour, the per-NPC initial-waypoint placement (calling the world-mutation helper for each NPC whose waypoint floor equals the player's floor, allocating slots), and finally the Shadowlord install, which runs only in a town that currently hosts one of the three Shadowlords and is skipped entirely otherwise (`systems/town-mode.md` Section 13). Result: slot zero has the avatar and a handful of low-indexed slots have on-screen NPCs; in a hideout town one further active-object slot and the highest empty NPC index hold the resident Shadowlord. The entry pass writes no NPC-table entry for the player.
+
+*Mode zero — a preserving entry.* **The entire NPC layer above is skipped**: the slot one-through-thirty-one clear, the roster load, the runtime-state initialisation and the waypoint reseat all do not run. What still runs is everything that is not the cast — the floor tile load, the dawn/dusk substitution, the marker and light-beacon harvest, the moon-phase strip refresh, the wind-banner reprint, the resident-Shadowlord latch reset **and the Shadowlord install pass itself, which sits outside the entry-mode guard and therefore runs in both modes** (`systems/town-mode.md` Section 5 step 6), the mode-zero clock call, and the final redraw. The live cast is whatever the resident image already holds.
+
+*Which mode a caller passes.* Mode one is passed when this dispatch iteration reached the town through the overworld handler or through the dungeon-wrapper return, and by the resident warp helper that moves the party from one town-family scene to another. **Mode zero is passed on the first dispatch iteration after a load** — Journey Onward straight into a town-family scene — and by an already-in-town re-dispatch.
+
+**Mode zero is correct, not a shortcut.** The whole NPC runtime family — schedule table, per-NPC runtime state, path queues and their read pointers, type array, stuck counters — lives *inside the save image* alongside this table (`formats/saved-gam.md` Section 12). A save taken inside a town therefore already carries its complete live cast, and re-running the loader would throw away every NPC's mid-route position, queued path and pursuit target and snap them all back to their scheduled waypoint. An implementation that persists only the active-object table and rebuilds the NPC layer on load produces the opposite failure and produces it visibly: a location that the original resumes fully populated comes up **empty**, and stays empty, because the type array it would have to walk was never loaded.
+
+*Corrected (issue #184).* This entry previously described the town-family entry as unconditionally clearing every slot except slot zero and running the roster load and reseat, and `systems/town-mode.md` Section 5 described the preserving form as differing only in that "the active-object table tail is not zero-cleared". Both are withdrawn. See `RETRACTIONS.md` row R341.
 
 **Overworld entry.** The selected plane's current `.OOL` replaces the entire
 live table byte-for-byte; records are not compacted or copied into newly chosen
@@ -769,11 +796,13 @@ new non-player object is allocated. No mode runs with slot zero empty.
 
 ## 11. Persistence in saves
 
-The active-object table is persisted as part of the save image. The save format reserves a two hundred fifty-six byte region; on save, the engine writes the live table verbatim; on load, it reads the region back into the live table. Persistence is byte-for-byte: empty slots stay empty, filled slots keep their current tile, coordinates, and animation phase.
+The active-object table is persisted as part of the save image. The save format reserves a two hundred fifty-six byte region; on save, the engine writes the live table verbatim; on load, it reads the region back into the live table. Persistence is byte-for-byte **within a scene, between object-list reloads**: empty slots stay empty and filled slots keep their tile, coordinates and animation byte for as long as the party stays in the scene the save was taken in.
 
-The NPC scheduler's runtime descriptor table is *not* persisted. On load, descriptors are re-initialised from the schedule and current hour, "re-snapping" each NPC to its scheduled waypoint. The scheduler then re-allocates active-object slots through the world-mutation helper. The asymmetry produces a brief inconsistency at load time — saved table positions versus freshly-rebuilt waypoint positions — that the runtime initialiser resolves by overwriting NPC slots with re-derived waypoint coordinates. Visible effect: loading reverts NPCs to their currently-scheduled location, as already documented in the schedule spec.
+**The qualifier is not decorative.** Every return to the overworld reads the whole two-hundred-fifty-six-byte per-plane object list straight over the live table, replacing all eight bytes of all thirty-two slots — from both the town return and the dungeon return, not only on the first entry of a new game. Outdoor setup then re-synchronises slot zero (Section 10). A natural-moongate warp performs the mirror operation, writing the live table back out to the per-plane file before the warp. So a slot's bytes round-trip through `SAVED.GAM` inside a scene, and are replaced wholesale the moment the party steps back onto the overworld. *Corrected (issue #184): this section previously called the per-plane object list a seed file "copied into the table on first overworld entry of a new game", which understated it by a whole class of overwrites and contradicted Section 10 of this same document. See `RETRACTIONS.md` row R342.*
 
-The on-disk overworld object overlay (per-map static object list) is a *seed* file, copied into the table on first overworld entry of a new game. The runtime save-overlay is the *current* working copy, written alongside the main save file. The combat backup region is not persisted; saving inside combat is not supported.
+**The NPC runtime family is persisted too, and is not rebuilt on load.** The schedule table, the per-NPC runtime state, the path queues and their read pointers, the type array and the stuck counters all live inside the save image (`formats/saved-gam.md` Section 12), immediately after this table, and a town-family load reaches its entry pass in the preserving mode that skips the roster load and the reseat entirely (Section 10). Loading a town-family save therefore restores the cast **exactly as it stood at the save**, mid-route positions and queued paths included — it does not snap NPCs back to their scheduled waypoint. An implementation that persists this table alone and rebuilds the NPC layer from the schedule and the hour resumes an empty location instead. *Corrected (issue #184): this section previously stated that the runtime descriptor table is "not persisted", that descriptors are "re-initialised from the schedule and current hour" on load, and that the visible effect is that "loading reverts NPCs to their currently-scheduled location". All three are withdrawn; `systems/npc-schedules.md` Section 13 and `systems/town-mode.md` Section 16 carried the same claim and are corrected with it. See `RETRACTIONS.md` row R341.*
+
+The runtime save-overlay is the current working copy of the *other* plane's cast, written alongside the main save file. The combat backup region is not persisted; saving inside combat is not supported.
 
 ## 12. Hooks into other systems
 
@@ -915,3 +944,15 @@ The behaviour described above was derived by reading the function and format not
 - Vehicle byte interpretation for ship boarding, X-it parking, and broadside
   damage -- `u5-decomp/functions/CMDS_OVL/`, and
   `u5-decomp/functions/CMDS_OVL/`.
+- Source provenance: the packed encoding of record byte 6 and the animator's
+  real gate order, the per-frame slot-zero rebuild's write set, the entry-mode
+  argument of the town-family setup pass and everything mode zero suppresses,
+  the presence of the whole NPC runtime family inside the save image, and the
+  wholesale per-plane object-list reload on every return to the overworld are
+  derived from private analysis in `u5-decomp/notes/`, cross-checked against
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/NPC_OVL/` and `u5-decomp/functions/MAINOUT_OVL/`. The
+  slot-zero auxiliary-byte claim in Section 5 is scoped in the text as a trace
+  of the routines that own slot zero rather than a census; a pointer-based
+  census of this table is not feasible, and the three named exceptions are the
+  ones that trace found.

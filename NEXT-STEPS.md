@@ -36,6 +36,117 @@ row plus a one-line inline note in the affected section whenever an edit
 withdraws or inverts published text, including text published only in an issue
 answer.
 
+**Addendum — 2026-09-02, issue #184: the unexplained `SAVED.GAM` bytes, and
+the town cast on Journey Onward.** Seven bytes the engine could not account for
+after a load-and-save round trip are now published, with six reversals
+(R338-R343). The headline for the engine is the last one: **the entire NPC
+runtime family lives inside the 4192-byte save image**, and a town-family scene
+reached by Journey Onward enters its setup pass in the **preserving** mode, which
+skips the `.NPC` roster load, the runtime-state init, the slot one-to-thirty-one
+clear and the NPC reseat. That is correct, not a bug — the save already carries
+the live cast — but a spec that persists only the active-object table, as this
+repository's own prose previously permitted, resumes an **empty** town and keeps
+it empty. `systems/active-objects.md` Section 10 now owns the entry-mode
+contract; `npc-schedules.md` Section 13 and `town-mode.md` Sections 5 and 16 are
+corrected to match.
+
+The rest: `0x02DE` keeps its twelve-hour **value** rule and loses the word
+*display* — no shipped consumer renders it, and the ambient-audio tick decays it
+two counts in every eight of its calls, which is why saves read `00` there;
+`0x02DF`/`0x02E0` are the cached Trammel and Felucca phase digits that
+natural-moongate transit reads (new `formats/saved-gam.md` Section 5.1);
+`0x02FF` is ambient light, with its value rule and its `51`-and-above skip
+sentinel now in the save-format table; `0x03B2` is the resident-Shadowlord latch,
+stamped to the no-host marker on every town-family entry including preserving
+ones; and wind at `0x02EC` is **never** rerolled at load or entry — both call the
+setter in print-only mode — changing only through *Rel Hur* and a one-in-64 roll
+fired once per idle world tick, stationary distribution 1/17 Calm and 4/17 per
+cardinal. Active-object record byte `+6` carries no facing: it is a frame-delay
+countdown plus an animation-script step, the player's shipped record holds zero
+there, and a low nibble in `1..14` is decremented in place on **any** slot.
+Finally, `systems/moons.md` is corrected to match: the status-strip renderer has
+several callers, not one, so its "exactly one place" refresh cadence and the
+below-surface erase-arm unreachability that rested on that census are withdrawn
+(R343). Scene entry is what refreshes the cached glyph digits on a Journey
+Onward, which is the load-bearing half.
+
+*Open, and deliberately not published:* no timing run was made anywhere in this
+pass, so every wall-clock statement (the wind drift interval, the twelve-hour
+byte's decay time) is inferred from per-tick cadence and the world-tick rate
+itself is unmeasured. Also unverified and flagged in the private note rather
+than here: the "combat scenes" gloss on the scene-byte threshold the visibility
+post-pass and the world tick share; the bodies of the two consumers of the
+resident-Shadowlord selector behind the Falsehood price and conversation gates;
+the body of the NPC runtime-state initialiser; the waypoint-index arithmetic for
+any scene whose waypoints differ by hour; the walkability of the four Iolo's Hut
+roster cells; and the animation-script bytes for the whirlpool marker class,
+whose reachability is traced but whose script is not.
+
+**Addendum — 2026-09-02, issue #183: the ordinary melee to-hit score and the
+damage roll.** `systems/combat.md` Sections 11 and 12 now carry the whole
+ordinary-melee contract in both directions, and four reversals came with it.
+The score is `truncate_toward_zero((defender - attacker + 30) / 2)` — the
+**defender's** rating is the added term, the same orientation as the
+spell-resistance predicate — and the draw is the shared skewed `1..30` combat
+roll, not a uniform byte, so hit percentages are publishable and are published
+(R334, R335). The defender term is *always* the per-actor combat weight, which
+makes **Dexterity the party's melee evasion stat and the jittered class speed
+the monster's**; the attacker term is the combat weight too, except for the six
+`zero-selector stat row` classes (tier) and five blunt equipment ids (Strength).
+On damage, a **monster's attack value is its class byte used flat, with no draw
+at all** — the column is renamed `Attack value` in the bestiary and
+`formats/data-ovl.md` (R336) — while the party side keeps its `1..Attack max`
+roll; the defence term is an inclusive `1..rating` roll on both sides and is
+skipped entirely, taking no PRNG draw, when the rating is zero. R337 narrows
+which stat-row bytes a to-hit score reads at all. The worked example a
+Dexterity-15, level-2 starting Avatar against a Bat: **74.6 %** per Bat swing,
+5/4/3/2/1/0/0 HP lost at one seventh each, **1.60** expected HP per attempted
+swing, and about **3.01** Bat attempts per Avatar turn — with level and body
+armour both mechanically inert in melee.
+
+Three things this pass deliberately did **not** publish, all recorded here so a
+later pass can pick them up:
+
+- **The roster-name routing rule.** Private analysis re-derives a hard-coded
+  character-record byte test that hands one shipped roster identity to the
+  automatic actor driver, which would make it a second population affected by
+  the fixed-score-15 boundary in Section 11. The 2026-08-22 supersession notice
+  above deliberately stopped publishing that letter comparison, and this pass
+  keeps that decision: Section 11 names the traitor roster identity by the
+  description Section 9 already uses and does not restate the byte test. The
+  open question is which consumer the predicate actually feeds — the 2026-05-12
+  entry below describes it as a target-selection faction flip, the new analysis
+  as a driver-selection test, and those are different routines.
+- **Whether the Glass Sword's shatter arm clears the readied slot.** This
+  repository publishes, as a traced negative boundary, that the combat attack
+  stack does not clear the readied weapon slot for thrown or glass-family
+  attacks. Private analysis now reads the shatter arm of the damage roller as
+  calling a helper that walks the readied slots and clears the matching one —
+  and the earlier analysis that produced the negative had resolved that call to
+  a past-end-of-image address, which is a plausible cause for the disagreement.
+  The published negative was left standing and the conflict is flagged inline in
+  both documents that carry it — `systems/combat.md` Section 12 and the Glass
+  Sword row of `catalogs/item-list.md`. Resolving it needs one look at that
+  helper, and it earns a retraction row if the clear is real.
+- **Whether the controlled/charmed descriptor bit has any *unreachable* arms,
+  and what the redirected attack branch feeds the rating selector.** Private
+  analysis reports a corpus scan finding no instruction that sets that bit, and
+  concludes two selector routes are dead. That contradicts this repository's
+  traced writers in Section 6.1a (possession, Charm, conjure/summon placement,
+  Sword of Chaos), and the scan's own stated residual — writes through a base
+  register already offset into the record, word-sized writes straddling the
+  byte, and block copies were not enumerated — covers exactly the shape those
+  writers would take. **The spec keeps Section 6.1a and the negative was not
+  published.** A second, independent question rides along with it: an actor
+  carrying the bit takes Section 6.1a's redirected fixed magic-strike branch
+  rather than the ordinary weapon cascade, so whether that branch's fixed action
+  id reaches the rating selector as the neutral value — and therefore whether
+  such an actor also collapses to the fixed score of 15 — was not traced.
+  Section 11 accordingly scopes its fixed-score-15 boundary to a party-side
+  actor on the *ordinary* attack path and publishes only the traitor roster
+  identity as a member. Someone should close both halves properly rather than
+  leaving two documents disagreeing in private.
+
 **Addendum — 2026-09-02, issue #181: exact consequence wording.** The four
 families the engine was printing placeholders for are now published as exact
 transcripts, in their owning docs: `systems/overworld.md` section 8.1 (the
@@ -47,7 +158,10 @@ Search outcomes, fountain flow, chest lines and the four chest-trap words).
 `systems/traps.md` section 3 now names the four resolver words directly, and
 `systems/audio.md` attributes its formerly unattributed 2500-to-800 recipe to
 the falls presentation. Two rendering facts are load-bearing and easy to miss:
-the gameplay message window wraps at **fifteen columns**, which is what breaks
+the gameplay message window wraps at **sixteen columns** (**corrected
+2026-09-02, issue #185**: this entry said fifteen; see R344 and R347 - the
+rendered rows are unaffected, because both figures break these strings at the
+same place), which is what breaks
 `Falling into underworld!!` after `into` and forces the dungeon exit's plane
 name onto its own row, and the blank line the player sees before each dungeon
 message comes from the **loop** - a line feed plus a border repaint before every
@@ -63,6 +177,29 @@ chamber-name banners, not stalactite ambient lines) and R326 (the
 and flagged in place: whether the dungeon's invalid-facing label is reachable
 at all, whether the falls handler's underworld-object-file round trip is truly
 a no-op, and whether the wall banner clears itself.
+
+
+**Addendum - 2026-09-02, issue #185: combat-entry banners and the message-window
+width.** The gameplay message window's capacity is **sixteen** characters per
+row, not fifteen: both corner columns of a window rectangle are inclusive and
+the per-cell emitter wraps only when the cursor steps *past* the right column,
+so capacity is `right - left + 1` and the familiar `right - left` figure is a
+last-legal-index budget. `systems/text-output.md` sections 4 and 6 are corrected
+and now also publish the long-word hard-break rule and the full-row line-feed
+suppression (which applies only within a single source string). The combat entry
+presentation is published in `systems/combat.md` section 4.1: the group-name
+banner (a shipped forty-eight-entry table, now in
+`catalogs/monster-bestiary.md` section 2.2, with no suffix rule - twenty-two of
+forty-eight are `<singular>+S` and twenty-six are not, including six `x`
+placeholders), the `PIRATES` fallback and its `masked < 0x40` guard
+(`systems/encounters.md` section 4), and the conflict banner's exact literal,
+its `0x2A` flank glyph (a solid diamond in the 8x8 font, **not** `0x2B` `+`),
+its edge-to-edge columns 24..39 placement and its suppressed trailing line feed.
+Seven reversals filed: R344-R350. Still open: whether any non-terrain entry
+prints a group banner (probable that none does), whether the `x` placeholder
+banners are reachable in play, whether the message window is provably the
+standing window at every combat entry (probable), and which sub-`0x40` sprites
+can reach the banner through the two ungated entry paths.
 
 **Addendum - 2026-09-02, issue #182: the seated-actor variant is real, but its
 arm is much narrower than Section 8 read.** A capture showing seated actors
@@ -2306,7 +2443,10 @@ publishes the selector, payload, and scene-resistance row values.
 `catalogs/monster-bestiary.md` now publishes the full eight-field stat rows for
 hostile and special combat classes, including tier, speed, endurance rating
 (published as "team-flip HP byte" in the original entry; that name is
-withdrawn), defense, attack cap, HP, spawn count, and drop cap. The older wording that class
+withdrawn), defense, attack cap, HP, spawn count, and drop cap. *(Superseded
+2026-09-02 by issue #183: the attack column is renamed **Attack value** because
+a monster's attack damage is that byte used flat, with no roll; see
+`RETRACTIONS.md` R336.)* The older wording that class
 43 had unresolved nonzero stat bytes is corrected: classes 42 and 43 are both
 unnamed all-zero reserved rows in the analyzed table.
 
@@ -2378,7 +2518,8 @@ boundary.
 extraction now separate confirmed persisted active-object roles from remaining
 unknowns: ship/frigate byte `+5` is hull condition, byte `+7` is skiffs aboard,
 F-Fire applies the generic byte-`+5` depletion rule to struck objects, and byte
-`+6` is the packed animator phase/direction byte. The remaining OOL exactness
+`+6` is the packed animator frame-delay / animation-script-step byte and
+carries no facing (R340). The remaining OOL exactness
 is uncommon family-specific meanings for bytes `+5` and `+7` outside those
 roles.
 
@@ -2804,7 +2945,10 @@ shape: zero-damage rows route to spell or special effect handling, nonzero rows
 route to target selection and attack application, range-gated non-adjacent
 attacks use the ranged/projectile/effect path, adjacent attacks use melee
 damage, and the ordinary hit helper uses special always-hit action/effect cases
-or the `(attacker - defender + 30) / 2` score against a random byte. The later
+or a score computed from the two combat ratings. *(Superseded 2026-09-02 by
+issue #183: the score is `(defender - attacker + 30) / 2` truncated toward zero
+and the draw is the shared skewed `1..30` combat roll, not a random byte; see
+`RETRACTIONS.md` R334 and R335.)* The later
 weapon range/effect table cleanup publishes the item-id keyed non-adjacent
 range caps and effect-code rows for Dagger, Sling, Flaming Oil, Spear, Throwing
 Axe, Morning Star, Bow, Crossbow, Halberd, Magic Bow, and Magic Axe. A later

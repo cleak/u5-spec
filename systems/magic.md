@@ -634,10 +634,12 @@ number at all. This is an original-game defect rather than a gap in the
 analysis; a faithful reimplementation has to decide deliberately whether to
 ship the bug or grant the intended bonus. Note the scope carefully: what is
 established is that this particular per-item defence contribution is
-unreachable and that its total is never read. It is *not* established that worn
-equipment is irrelevant to combat generally — the surviving to-hit computation
-reads other character-record fields whose relationship to equipment has not
-been traced. See `systems/combat.md`.
+unreachable and that its total is never read. Body armour is separately settled:
+it enters neither the to-hit score nor the damage roll. Equipment is still not
+irrelevant to combat generally — the readied item id is a real to-hit input,
+and exactly five ids (Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer)
+switch the attacker term of the to-hit score from Dexterity to Strength. See
+`systems/combat.md` Section 11.
 
 Polymorph removes the accepted
 creature target and places a class 20 Giant Rat at the target's same combat

@@ -239,7 +239,14 @@ Entering a town is a single setup pass that runs once per entry, before the per-
 6. **Shadowlord install.** The last step of the pass compares the town's scene
    byte against the three Shadowlord hideout slots and, on a match, installs a
    live Shadowlord actor in the town. In a town that hosts no Shadowlord — the
-   ordinary case — this step does nothing at all. Section 13 gives the guard,
+   ordinary case — this step installs nothing. It is not, however, entirely
+   inert: the resident-Shadowlord selector at save offset `0x03B2` is stamped
+   with the no-host marker `0xFF` **unconditionally**, once before the map load
+   and again at the head of the install helper, and that write sits *after* the
+   entry-mode guard, so it happens on preserving re-entries as well as on fresh
+   ones. The byte is a per-entry latch, never durable world state; a save taken
+   inside any location carries `0xFF` unless that location is the one currently
+   hosting a Shadowlord (`formats/saved-gam.md` Section 10). Section 13 gives the guard,
    the one-at-a-time reject, the actor-index choice, and the placement. The
    player is present in this mode as slot zero of the active-object table, kept
    in step with the world-state globals by the compositor; the entry pass does
@@ -285,12 +292,31 @@ Entering a town is a single setup pass that runs once per entry, before the per-
 
 After these six steps return, the entry pass calls a final screen redraw and hands off to the per-turn loop. The player is in town mode until the loop's per-turn epilogue notices that the scene byte has been cleared (Section 15).
 
-A *preserving re-entry* runs the same pass with the setup argument clear. In
-that mode the active-object table tail is not zero-cleared, so a Shadowlord
-already standing in the table survives the re-entry and, by the one-at-a-time
-reject of Section 13, suppresses a second install. Preserving re-entry is used when the top-level dispatcher is already in
+A *preserving re-entry* runs the same pass with the setup argument clear, and it
+skips considerably more than the slot clear. **Steps 1 and 5 above do not run at
+all**: the active-object table tail is not zero-cleared, the location's `.NPC`
+sub-map is not read into the resident schedule, type and dialogue tables, the
+per-NPC runtime state is not initialised from the hour, and the NPC reseat does
+not run. Steps 2, 3, 4 and 6 run exactly as on a fresh entry, and so do the
+moon-phase strip refresh, the wind-banner reprint, the mode-zero clock call and
+the final redraw. A Shadowlord already standing in the table therefore survives
+the re-entry and, by the one-at-a-time reject of Section 13, suppresses a second
+install — and so does every other actor in the table.
+
+*Corrected (issue #184).* This paragraph previously said only that "the
+active-object table tail is not zero-cleared". The wider suppression is the
+load-bearing half: the whole NPC family lives inside the save image
+(`formats/saved-gam.md` Section 12), so a preserving entry is how a save taken
+inside a town resumes with its live cast rather than a rebuilt one. An
+implementation that reads the old wording as "same pass, minus the clear" reloads
+the roster on every save resume and discards every NPC's mid-route state — or,
+if it also declines to persist the band, comes up with an empty town. See
+`RETRACTIONS.md` row R341.
+
+Preserving re-entry is used when the top-level dispatcher is already in
 a town-family scene and is re-running setup without having just returned from
-the overworld or the dungeon wrapper.
+the overworld or the dungeon wrapper — which is exactly the case on the first
+dispatch iteration after a Journey Onward into a town-family scene.
 
 Fresh entry paths pass the nonzero setup argument. This path clears active
 object slots one through thirty-one, resets the town-entry scratch flags, runs
@@ -1176,7 +1202,7 @@ The object-table handoff is ordered and replacing, not merging:
    destination plane's current canonical `.OOL`, including slot zero.
 4. Outdoor setup synchronizes slot zero's coordinate to the fixed party
    coordinate and its type/frame to the unchanged transport marker. Its
-   auxiliary bytes, including Frigate hull, packed phase/direction, and
+   auxiliary bytes, including Frigate hull, the packed animation byte, and
    carried-skiff state, retain the reloaded `.OOL` values.
 5. If a shipwright acquisition is queued, the outdoor outer entry materializes
    it in an ordinary free slot **after** the plane-table reload and slot-zero
@@ -1265,7 +1291,7 @@ town-mode spec owns the current floor buffer, NPC collision/scheduling side,
 the grid-boundary exit prompt, and floor-transition hooks around successful
 movement.
 
-**Save / load.** A save inside town freezes the scene byte, the floor byte, the player position, the active-object table, and the world-state clock. On load, the engine notices the non-zero scene byte, re-runs the entry pass, and snaps the player and NPCs to saved-or-re-derived positions. The runtime NPC block is not persisted as a chunk; it is re-derived from the schedule and the saved hour, producing NPCs at their currently-scheduled location regardless of mid-route progress. The dawn/dusk gate pass runs at load time using the saved hour.
+**Save / load.** A save inside town freezes the scene byte, the floor byte, the player position, the active-object table, the world-state clock **and the entire NPC runtime family** — schedule table, per-NPC runtime block, move queues and pointers, type array, stuck counters — all of which live inside the save image (`formats/saved-gam.md` Section 12). On load, the engine notices the non-zero scene byte and re-runs the entry pass in its **preserving** form (Section 5), which skips the `.NPC` roster load, the runtime-state initialisation and the NPC reseat entirely. NPCs therefore resume exactly where and how the save left them, mid-route. The dawn/dusk gate pass, the tile load, the moon-phase strip refresh, the wind-banner reprint and the mode-zero clock call all still run at load time using the saved hour. *Corrected (issue #184): this bullet previously said the runtime NPC block "is not persisted as a chunk" and is "re-derived from the schedule and the saved hour, producing NPCs at their currently-scheduled location regardless of mid-route progress". That is withdrawn — see `RETRACTIONS.md` row R341.*
 
 ## 17. Town Boundaries And Remaining Data Work
 

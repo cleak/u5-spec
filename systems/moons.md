@@ -108,14 +108,18 @@ There are two distinct non-drawing cases, and they behave differently:
   the erase is the marker painter's job.
 
   The marker painter's erase branch also tests for a **below-surface map level**,
-  but that arm is unreachable in the shipped game: the strip's only caller is the
-  hour-change hook of the per-turn cleanup, whose own gate already excludes a
-  party Z with the high bit set (`systems/time.md` Section 5). Earlier wording
-  here listing below-surface levels alongside Ararat as cases that reach the
-  painter is withdrawn — below the surface, nothing is drawn, nothing is erased,
-  and nothing is cached, exactly as for combat and dungeon scenes. Keep the arm
-  as defensive breadth if you reproduce the routine; do not derive behaviour from
-  it. (The *wind banner* in the bottom ribbon is different: its own callers do
+  and that arm's reachability is **unresolved**. The renderer has several callers
+  (Section 3), and only one of them — the hour-change hook of the per-turn
+  cleanup — carries a gate that excludes a party Z with the high bit set
+  (`systems/time.md` Section 5). The overworld and town-family scene-entry
+  callers carry no such gate, so a below-surface entry (the Underworld plane, or
+  a basement floor inside a town-family location) can reach the painter. Keep the
+  arm if you reproduce the routine, and treat it as live-but-untraced rather than
+  as dead code. *Corrected (issue #184):* this paragraph previously said the
+  strip's only caller was the cleanup's hour-change hook and concluded that below
+  the surface "nothing is drawn, nothing is erased, and nothing is cached"; both
+  the caller census and that conclusion are withdrawn. See `RETRACTIONS.md` row
+  R343. (The *wind banner* in the bottom ribbon is different: its own callers do
   reach it below the surface, and its erase branch is live — see
   `systems/weather.md` Section 2.1.)
 
@@ -200,9 +204,13 @@ twenty-eight. There is no day zero, so an implementation should treat a
 zero or out-of-range day as a save-data error rather than looking up a
 twenty-ninth entry.
 
-The strip is presentation only. It caches the selected moon glyph bytes for the
-current render pass, but those cached bytes are not gameplay state and are not
-the saved-slot natural-moongate live-terrain schedule.
+The strip itself is presentation only, but its cache is not. It caches the
+selected moon glyph bytes, and those cached bytes are **persisted gameplay
+state** — `formats/saved-gam.md` Section 5.1 owns them as save fields, and
+natural-moongate transit reads them — but they are **not** the saved-slot
+natural-moongate live-terrain schedule; do not conflate the two. *Corrected
+(issue #184):* this sentence previously said the cached bytes "are not gameplay
+state". See `RETRACTIONS.md` row R339.
 
 The overworld moongate entry hook reads the same cached glyph bytes after it
 has confirmed the party is standing on live moongate terrain. Before noon it
@@ -216,16 +224,24 @@ and entry are specified in `overworld.md`.
 The moon glyphs and fixed hour marker are display state. They do not, by
 themselves, advance time, place moongates, or mutate save data.
 
-**Refresh cadence.** The strip renderer runs from exactly one place: the
-per-turn cleanup pass, and only when that pass observes the hour changing, and
-only in a scene that shows the surface/town status strip. It is **not** driven
+**Refresh cadence.** The strip renderer runs from more than one place. Its
+callers are: every overworld scene entry; every town-family scene entry; the
+per-turn cleanup pass, when that pass observes the hour changing and only in a
+scene that shows the surface/town status strip; the Blackthorn cutscene
+re-entries; and two command handlers that repaint the strip. It is **not** driven
 by ordinary stats-panel redraws, and an earlier statement in this document that
-it should be refreshed on every stats-panel redraw is retracted.
+it should be refreshed on every stats-panel redraw is retracted. *Corrected
+(issue #184):* an earlier revision of this paragraph said the renderer runs from
+**exactly one place**, the cleanup's hour-change hook. That negative is
+withdrawn, and it matters: the scene-entry callers are what refresh the cached
+glyph digits on a Journey Onward, which `formats/saved-gam.md` Section 5.1
+publishes as load-bearing for natural-moongate destination selection. See
+`RETRACTIONS.md` row R343.
 
 The two cadences are different, and both matter:
 
 - The **cell position** of each marker changes every hour, which is why an
-  hour change is the trigger.
+  hour change is one of the triggers.
 - The **glyph identity** changes only when the day rolls over. Between day
   rollovers, every hourly refresh reads the same two glyph bytes.
 
@@ -294,9 +310,9 @@ glyph dumps, or private address tables.
   save-backed, and independent of moon phase, are derived from private analysis
   note `u5-decomp/notes/moongate_transition_2026-08-23.md`.
 - Calendar bounds (day one through twenty-eight, reset after twenty-eight), the
-  single hour-change trigger, and that trigger's own scene-and-floor gate --
-  which is what makes the painter's below-surface erase arm unreachable -- the
-  per-turn cleanup note under `u5-decomp/functions/ULTIMA_EXE/`,
+  hour-change trigger, and that trigger's own scene-and-floor gate -- which does
+  *not* by itself settle the painter's below-surface erase arm, because the
+  scene-entry callers carry no equivalent gate -- the per-turn cleanup note under `u5-decomp/functions/ULTIMA_EXE/`,
   `u5-decomp/notes/retrace_view-vis-font_2026-08-22.md` section 3, and
   `u5-decomp/notes/system-trace_turn-cycle.md`.
 - Source provenance: the strip's location in the top viewport border, the two

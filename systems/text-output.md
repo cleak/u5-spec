@@ -65,7 +65,7 @@ The screen is a 40-column by 25-row grid. The top-left cell is column 0, row 0; 
 
 A cell is one glyph-sized rectangle of pixels. The pixel dimensions of a cell are decided by the loaded display driver and are not part of the text-system contract; the text system only speaks in cell coordinates. When the driver converts a cell rectangle into a pixel rectangle (for clear or scroll), it scales both corners by the cell size and adjusts the bottom-right corner to the *last* pixel inside that cell, not the first pixel of the next cell.
 
-Window rectangles use absolute cell coordinates. Cursor positions and width arguments to the wrap-aware printer use window-local coordinates. The conversion is addition: a cursor at window-local `(cursor_x, cursor_y)` lies at absolute screen cell `(top_left_x + cursor_x, top_left_y + cursor_y)`. A window's width in cells is `bottom_right_x − top_left_x`; this figure is what wrapping decisions use, and it does not include the trailing column. A window whose corners are columns 6 and 33 has width 27 — twenty-seven characters fit before wrapping is forced.
+Window rectangles use absolute cell coordinates. Cursor positions and width arguments to the wrap-aware printer use window-local coordinates. The conversion is addition: a cursor at window-local `(cursor_x, cursor_y)` lies at absolute screen cell `(top_left_x + cursor_x, top_left_y + cursor_y)`. A window's **capacity** in cells is `bottom_right_x − top_left_x + 1`: both corner columns are inclusive, so the trailing column is usable and a glyph is written into it normally. A window whose corners are columns 6 and 33 therefore holds **twenty-eight** characters on one row, and the twenty-ninth is what forces the wrap. The quantity `bottom_right_x − top_left_x` is a real internal value — it is the *last legal window-local column*, and the wrap and centring arithmetic carry it in that inclusive-endpoint form — but it is one less than the capacity and must never be used as one. The gameplay message window spans columns 24 through 39 and so holds **sixteen** characters per row (Section 10.1). *(Corrected: an earlier revision called `bottom_right_x − top_left_x` the window's width, said it “does not include the trailing column”, and gave the 6..33 window twenty-seven characters before a forced wrap. That is withdrawn — twenty-eight fit. `RETRACTIONS.md` R344.)*
 
 ## 5. Output Primitives
 
@@ -100,7 +100,7 @@ carriage-return bytes embedded in the source string force an immediate flush at
 that point and pass through to the per-cell emitter so the cursor moves
 accordingly.
 
-If the active window's centre flag is set, the printer computes a centred starting column for the line and repositions the cursor horizontally to that column before emitting; the cursor's row is left alone, so centring affects only horizontal placement. The computation works from two quantities: the columns still *available* on the current row, which is `(bottom_right_x − top_left_x) − cursor_x` as the printer was entered, and the **index of the last character** of the line about to be emitted, which is one less than its character count. The starting column is `(available − last_character_index) / 2`, truncated toward zero. For the ordinary case of a line emitted with the cursor at the window's left edge, that is exactly `(columns_in_window − characters_in_line) / 2` truncating, where `columns_in_window` is `bottom_right_x − top_left_x + 1` — i.e. plain centring in the window's column count, with even-length lines centred exactly and odd-length lines landing half a cell (four pixels) to the left. Implementations must not drop the “plus one” and centre against `bottom_right_x − top_left_x`: that agrees on odd-length lines but shifts every even-length line one whole cell left. The centre flag applies once per line of output produced by this printer, and only by this printer — the per-cell emitter does not centre.
+If the active window's centre flag is set, the printer computes a centred starting column for the line and repositions the cursor horizontally to that column before emitting; the cursor's row is left alone, so centring affects only horizontal placement. The computation works from two quantities: the columns still *available* on the current row, which is `(bottom_right_x − top_left_x) − cursor_x` as the printer was entered — the printer's internal last-legal-index budget, one less than the number of columns actually still writable on the row (Section 6, `RETRACTIONS.md` R345) — and the **index of the last character** of the line about to be emitted, which is one less than its character count. The starting column is `(available − last_character_index) / 2`, truncated toward zero. For the ordinary case of a line emitted with the cursor at the window's left edge, that is exactly `(columns_in_window − characters_in_line) / 2` truncating, where `columns_in_window` is `bottom_right_x − top_left_x + 1` — i.e. plain centring in the window's column count, with even-length lines centred exactly and odd-length lines landing half a cell (four pixels) to the left. Implementations must not drop the “plus one” and centre against `bottom_right_x − top_left_x`: that agrees on odd-length lines but shifts every even-length line one whole cell left. The centre flag applies once per line of output produced by this printer, and only by this printer — the per-cell emitter does not centre.
 
 An empty string is a no-op.
 
@@ -132,9 +132,11 @@ The printer keeps two pieces of state between input bytes: a fixed-size buffer f
 - A line-feed or a carriage-return: emit the buffer immediately, then pass the break byte through to the per-cell emitter so the cursor moves accordingly. Reset the buffer.
 - A NUL: emit the buffer immediately and stop reading input.
 
-The "available width on the current line" used by the wrap test is `window_width − cursor_x_at_function_entry` for the first emitted line, and full window width thereafter. This honours text already on the current row before the call: the first wrap point is computed against the remaining columns, not the whole window.
+The "available width on the current line" used by the wrap test is `(bottom_right_x − top_left_x) − cursor_x_at_function_entry` for the first emitted line, and `bottom_right_x − top_left_x` thereafter. This honours text already on the current row before the call: the first wrap point is computed against the remaining columns, not the whole window. **That quantity is a last legal index, not a count.** The number of characters the printer will actually accept on the row is that value **plus one** — `(bottom_right_x − top_left_x + 1) − cursor_x` — which is exactly the number of cells the per-cell emitter accepts before wrapping, so the two primitives agree and neither carries an off-by-one. An implementation that treats the available-width figure directly as a character count loses the last column of every row. *(Corrected: an earlier revision published the available-width figure as the count of characters accepted. That is withdrawn; state the capacity, not the budget. `RETRACTIONS.md` R345.)*
 
-The buffer is sized to hold any window's worth of text (at least 64 characters in the original implementation). If a single word exceeds the window width — a degenerate case — the original implementation overflows that word past the right edge before the next break forces a wrap. Implementations may choose a stricter behaviour so long as visible output matches for well-formed input.
+The buffer is sized to hold any window's worth of text (at least 64 characters in the original implementation). A word longer than the row is **not** allowed to overflow the right edge. The collector never gathers more characters than the row can still hold, so nothing is ever written past `bottom_right_x`. When the collected chunk fills the remaining row and contains no break byte to retreat to, the printer keeps the whole chunk, first emits a line feed if the cursor is not already at the window's left edge, and prints the chunk from column 0 of the fresh row; the following chunk then continues on that same row at the column where the first one stopped. The two halves therefore render contiguously and a word that is merely too long for the *remainder* of a row appears whole on the next one — but a word longer than a **full** row is hard-broken at the row edge into successive row-filling pieces, and an implementation that special-cases “restart the whole word on a new line” diverges as soon as that happens. *(Corrected: an earlier revision said the original “overflows that word past the right edge before the next break forces a wrap”. That is withdrawn — nothing is ever written past the right edge. `RETRACTIONS.md` R346.)*
+
+**Line feeds and full rows.** When a chunk exactly fills the row, the per-cell emitter has already wrapped by the time the chunk ends, so an explicit line feed would leave a blank row. The printer suppresses that line feed — but **only** on the arm where the collected chunk overflowed the row, and only for a break byte carried in the *same* source string, which is consumed rather than emitted. A line feed arriving from any **later** call is unconditional and always costs a row, because the per-cell emitter keeps no wrap-state memory. So a row-filling string that carries its own trailing line feed leaves no blank row, while the same text printed and then followed by a separate line-feed emit does leave one. Section 10.4 depends on the second half of this rule.
 
 ## 7. Driver-Side Glyph Dispatch
 
@@ -429,6 +431,24 @@ and keep full-screen defaults for the whole session. That is withdrawn for
 window 2: the gameplay-screen assembly reshapes it to the message-window
 rectangle above, and every later message, echo and prompt is bounded by that
 rectangle rather than by the full screen. The statement stands for window 3.
+
+**Who writes window 2's rectangle, and how often.** The intro overlay is the
+only writer of the message window's rectangle anywhere in the program, but it
+writes index 2 at **three** points, with three different rectangles: once with
+the gameplay rectangle in the table above, and twice with transient narrow
+strips used by the Ultima IV character-conversion screens. The conversion
+screens sit in a subtree whose single return path re-enters the window-setup
+block unconditionally, and no branch reaches the gameplay dispatch without
+passing through the gameplay-rectangle write, so `(24, 11) - (39, 23)` is the
+standing rectangle on every path into play and nothing outside the intro
+touches it. *(This corrects an "assembled once" reading of the paragraph above,
+and the stronger "narrowed exactly once ... nothing widens or re-narrows window
+two" wording that `systems/overworld.md` Section 8.1 published;
+`RETRACTIONS.md` R348.)* Scan scope for that negative claim: the resident image
+and all twenty-three overlays, near-call transfers only. It excludes the four
+display drivers, which are entered through a jump-table interface and cannot
+reach the rectangle setter, and it excludes any direct byte write into the
+window descriptor storage, which was not scanned.
 
 ### 10.2 The command-echo cycle
 
@@ -734,3 +754,13 @@ The behaviour described here was derived from the private function notes listed 
   `u5-decomp/functions/ULTIMA_EXE/`.
 - Intro-frame decoration as another cursor-advance gate writer -- derived from
   `u5-decomp/functions/INTRO_OVL/`.
+- The window-capacity rule of Section 4, the wrap-accounting and long-word
+  rewrites of Section 6, and the three-write history of the message-window
+  rectangle recorded in Section 10.1 (issue #185) -- derived from private
+  analysis in `../u5-decomp/notes/`, re-derived in that pass from the two
+  resident text primitives' own instruction streams rather than from the
+  earlier width prose, and cross-checked against captured frames. Scope on
+  Section 10.1's negative claim is stated inline there: the census covers the
+  resident image and twenty-three overlays by directly encoded near calls, and
+  excludes the four display drivers, far and register-indirect transfers, and
+  direct writes into the descriptor storage.

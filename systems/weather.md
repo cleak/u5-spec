@@ -94,7 +94,30 @@ label into the same gap.
 on mode entry for the overworld and town loops and on loading a save. It is
 repainted **with** a new state by the Wind Change spell and by the idle-redraw
 random wind selector. Setting a new state also clears the cached wind-cadence
-byte used by sailing and by wind-driven actors.
+byte used by sailing and by wind-driven actors — that is save byte `0x02DD`
+(`formats/saved-gam.md` Section 5), and clearing it is the setter's only side
+effect on the save image besides the wind byte itself.
+
+**Entry and load never reroll the wind.** The set-and-repaint helper takes a
+"print only" sentinel in place of a direction, and that is what every scene
+entry passes and what the load path passes after the save image has been read.
+The `Calm Winds` line a player sees on walking into a town, and the line the
+intro prints after a Journey Onward, are **reprints of the restored state**, not
+new draws. There is exactly one writer of the wind byte in the shipped build —
+the store inside this helper — so wind changes can arrive only from *Rel Hur*
+(Section 3) and from the autonomous drift below. That single-writer finding is
+**established for a stated scan scope**: a reference census over the shipped
+executable, all twenty-three code overlays and all four display drivers,
+covering direct, indexed and accumulator-relative forms, with every call site of
+the helper enumerated. An access computed from a pointer base outside the
+scanned window would not appear in it.
+
+One detail of the load path, published for exactness rather than because it is
+observable: before the save image is read, the intro calls the same helper once
+with a **real** direction — Calm — which does store the wind byte and clear the
+cadence byte. The `SAVED.GAM` read then overwrites both a moment later, so the
+restored values are the file's. An implementation is free to omit that
+pre-restore call entirely.
 
 ### Autonomous Wind Drift
 
@@ -109,7 +132,26 @@ Cardinal candidates `1..4` are accepted immediately. Candidate `0` (Calm) is
 accepted only when a follow-up roll in `0..255` is at least `192`; otherwise the
 candidate selection repeats. The result is that a successful outer event always
 eventually changes or re-announces a wind state, but Calm is much rarer than any
-cardinal direction.
+cardinal direction. The stationary distribution of the accepted value is
+therefore **one seventeenth Calm and four seventeenths for each of the four
+cardinal directions**.
+
+**Cadence, stated precisely, because it is easy to get wrong.** The selector
+runs **once per idle world tick** — not once per keyboard poll. The idle
+key-wait loop reaches the world tick on one iteration in four, and many other
+call sites drive the world tick besides (`systems/main-loop.md` Section 9). The
+world tick also skips its entire body while the master redraw-enable byte at
+save offset `0x02FE` is clear, and no roll happens on such a pass. What is
+**established** is one roll per world tick at a one-in-sixty-four trigger; how
+often that is in wall-clock seconds is **inferred**, because no timing run was
+made and the world-tick rate itself is unmeasured. Do not publish a seconds
+figure for the expected drift interval.
+
+**An engine whose idle loop omits the drift shows Calm forever.** That is as
+visible a divergence as rerolling on entry would be: two runs of the original
+that load the same save and press Q shortly afterwards can legitimately record
+different wind values, because the drift fired between the load and the save.
+A wind byte that never changes without a spell is a defect, not parity.
 
 **The autonomous drift is silent.** It contains no sound call, no wrapper, and
 no ambient hook; the wind sound belongs to the spell and scroll handlers, never
@@ -290,6 +332,8 @@ Any modern additions such as rain overlays, thunder, wave animation, or storm en
 
 Wind is part of the runtime game state and should be saved with the rest of the world state. Loading a game should restore the prevailing wind before the overworld loop resumes, so wind-dependent player-ship cadence, active-object cadence, and the wind display agree immediately after load.
 
+The wind byte lives at save offset `0x02EC` and the cached wind-cadence byte at `0x02DD` (`formats/saved-gam.md` Sections 5 and 6). **Neither is recomputed, normalised or rerolled by the load path or by scene entry** (Section 2.1): a load restores whatever the file held, and the banner that follows is a reprint. Save and load are therefore verbatim for wind in both directions.
+
 Because the displayed wind message is cosmetic, it can be recomputed from the mapped wind state on demand rather than saved as text. The rendered text itself is never part of the save.
 
 ## 10. Ownership Boundary
@@ -348,3 +392,14 @@ The behavior described here was derived from cleanroom reading of the following 
   against a fresh local re-read of the shipped executable and shared data
   overlay.
 - Existing cleanroom descriptions of time, magic, and overworld integration - `u5-spec/systems/time.md`, `u5-spec/systems/magic.md`, and `u5-spec/systems/overworld.md`.
+- Source provenance: the single-writer census for the wind byte, the complete
+  call-site list of the set-and-repaint helper (including the two intro calls on
+  the Journey Onward path), the drift roll's per-world-tick cadence and its
+  master-redraw gate, the one-seventeenth/four-seventeenths stationary
+  distribution, and the setter's clear of the cached wind-cadence byte are
+  derived from private analysis in `u5-decomp/notes/`, cross-checked against
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/INTRO_OVL/`,
+  `u5-decomp/functions/TOWN_OVL/` and `u5-decomp/functions/MAINOUT_OVL/`. The
+  census scope is the shipped executable, all twenty-three code overlays and all
+  four display drivers. No wall-clock timing was measured, so every interval
+  statement in Section 2.1's drift subsection is inferred from per-tick cadence.

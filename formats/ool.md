@@ -58,7 +58,13 @@ Each record has eight bytes:
 4. **Y coordinate.** Cell row on the relevant world plane.
 5. **Z or plane marker.** For surface and underworld world objects, the common sentinel means "no local building floor"; other values are used by modes that carry vertical state.
 6. **Auxiliary byte one.** Class-specific state. For ship/frigate objects this is hull condition; the F-Fire broadside path also treats it as a generic depletion counter for any struck active object.
-7. **Auxiliary byte two.** Packed animation state: the low nibble is the per-slot animation phase and the high nibble is a direction or step counter for animator-owned movement.
+7. **Auxiliary byte two.** Packed animation state: the low nibble is a
+   frame-delay countdown, whose all-ones value is the animator's "do not
+   animate this slot" sentinel, and the high nibble is the slot's step within
+   its animation script. **It carries no facing.** *Corrected (issue #184): an
+   earlier revision called the high nibble "a direction or step counter for
+   animator-owned movement"; the direction reading is withdrawn, see*
+   `RETRACTIONS.md` *row R340 and* `systems/active-objects.md` *Section 3.*
 8. **Auxiliary byte three.** Class-specific state. For ship/frigate objects this is the count of skiffs aboard; other families may use it for their own durable or transient state.
 
 The first two bytes are often equal in seed files because objects begin on their base animation frame. They should not be assumed to stay equal after play begins.
@@ -196,7 +202,7 @@ A decoder should:
 4. Preserve every byte of every record, including unknown auxiliary bytes. For
    ship/frigate records, preserve zero-based byte `+5` as hull condition and
    byte `+7` as skiffs aboard. Preserve zero-based byte `+6` exactly as the
-   animator-owned packed phase/direction byte; do not recompute it while
+   animator-owned packed frame-delay / script-step byte; do not recompute it while
    merely decoding or rewriting an `.OOL` file.
 5. Keep slot index stable across read and write.
 
@@ -232,7 +238,7 @@ population sources.
   extension, not as a field or runtime semantic.
 - **Auxiliary byte enumeration.** Ship/frigate zero-based byte `+5` hull
   condition, byte `+7` skiff count, broadside hit resolution for byte `+5`,
-  and byte `+6` packed animation phase/direction semantics are public. The
+  and byte `+6` packed frame-delay / animation-script-step semantics are public. The
   remaining gap is narrower: uncommon family-specific meanings for bytes `+5`
   and `+7` outside those roles are not fully enumerated.
 - **Runtime readers of mirror files.** OUTSUBS owns a traced world-plane
@@ -284,5 +290,7 @@ This spec is a cleanroom prose rewrite derived from the project notes below. It 
 - Vehicle byte interpretation for ship boarding, X-it parking, and broadside
   damage: `u5-decomp/functions/CMDS_OVL/`, and
   `u5-decomp/functions/CMDS_OVL/`.
-- Animator byte interpretation for the packed phase/direction field:
+- Animator byte interpretation for the packed frame-delay / script-step field,
+  including the corrected gate ordering and the withdrawal of the direction
+  reading:
   `u5-decomp/functions/ULTIMA_EXE/`.

@@ -4,7 +4,7 @@
 
 Ultima V persists the entire run-time game state by writing one contiguous slab of memory directly to disk. The save is not a structured serialisation — no record header, no field-by-field marshalling, no version stamp. It is a byte-image dump of a fixed-length region of the engine's data segment, paired with a smaller companion buffer holding the per-map active-object table. Loading is the inverse: read the same bytes back into the same memory region and let the running engine pick up where it left off.
 
-Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` so older plane-entry paths can read the per-plane files directly. The save path runs the mirrors in the opposite direction: it reads both per-plane files back into the two staging halves, writes only `UNDER.OOL` back out — and only when it entered with a disk-prompt mode other than mode 1 — and then writes the canonical files from those halves. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
+Four files participate in this round trip. `SAVED.GAM` and `SAVED.OOL` are the canonical save image and its object-table companion. `BRIT.OOL` and `UNDER.OOL` were shipped as seed object tables for Britannia and the Underworld, and the load path refreshes them from `SAVED.OOL` because every return to the overworld reads the party's plane file straight over the live active-object table (`systems/active-objects.md` Section 11). The save path runs the mirrors in the opposite direction: it reads both per-plane files back into the two staging halves, writes only `UNDER.OOL` back out — and only when it entered with a disk-prompt mode other than mode 1 — and then writes the canonical files from those halves. A separate read-only seed, `INIT.GAM`, holds the factory image the chargen flow clones into `SAVED.GAM` when a new game starts; the engine never writes `INIT.GAM`.
 
 The save flow is gated by non-combat Quit-and-Save (`Q`) and returns to the caller after the save prompt completes; it is not the DOS-exit path by itself. The load flow is the `J` "Journey Onward" branch of the title-menu dispatcher. Transfer uses the same disk-I/O layer but is documented as a fresh-save producer rather than a load variant.
 
@@ -112,7 +112,23 @@ The subsequent save-read sequence is:
 
 6. **Underworld disk-swap (conditional).** If the loaded save indicates the player was standing on the underworld surface at save time — scene byte is the overworld scene and party Z is non-zero — the load enters a disk-swap loop. It tests for the presence of the underworld data file and, while that test keeps failing, re-arms the "swap disk" wait cursor and tests again, so the loop is unbounded and ends only when the file becomes reachable. The presence test is a pure existence check: the engine asks the file system to open the named file and, if the open succeeds, closes it immediately without reading a byte, reporting only present or absent. A failed open records the file-system error code in the shared I/O error cell and routes through the same critical-error/disk-prompt dispatch described in Section 7, which is what makes the player-facing swap prompt appear. An implementation running against a single mounted directory can answer the test directly from a file-exists query and will never enter the wait. Once the disk is present, it re-writes the underworld half of the object overlay to `UNDER.OOL` once more to ensure the mirror is consistent. The disk-swap loop exists because the original game shipped on multiple floppies, with the underworld data on a separate disk.
 
-7. **Final commit.** A display-mode flag is set to indicate "transition to gameplay", and the intro overlay returns to the main game loop. The next iteration reads the loaded scene byte and dispatches to the correct mode-loop overlay (overworld, town, or dungeon).
+7. **Reprint the wind banner.** The load calls the shared wind set-and-repaint helper with its print-only sentinel, so the banner shows the wind the file restored. **No wind is drawn and no wind byte is written** (`systems/weather.md` Section 2.1). For exactness: the same helper is also called once *before* step 1 with a real direction, which does store Calm and clear the cached cadence byte — the `SAVED.GAM` read then overwrites both, so the restored values are the file's, and an implementation may omit that pre-restore call.
+
+8. **Final commit.** A display-mode flag is set to indicate "transition to gameplay", and the intro overlay returns to the main game loop. The next iteration reads the loaded scene byte and dispatches to the correct mode-loop overlay (overworld, town, or dungeon). For a town-family scene it dispatches in the **preserving entry mode**, because neither the overworld nor the dungeon handler ran on that iteration; `systems/active-objects.md` Section 10 owns what that mode does and does not rebuild, and it is what makes the restored NPC cast survive.
+
+**The load path recomputes and normalises no restored byte.** Beyond the file reads themselves, its only effect on the save image is the pre-restore wind pair the read overwrites. It performs no clock call, no ambient-light recompute, no moon-phase refresh, no NPC load and no active-object rebuild, and it validates nothing. Everything a save/load round trip appears to "change" is written by the **first mode dispatch after the load**, not by the load:
+
+| Save byte | Written by | On the first dispatch because |
+|---|---|---|
+| `0x02DE` | the clock's hour-change block | the restored saved-hour snapshot at `0x02DA` disagrees with the restored hour |
+| `0x02DF`, `0x02E0` | the moon-phase strip renderer | every scene entry refreshes the pair, and the hour-change block refreshes it again |
+| `0x02FF` | the clock's ambient recompute | every clock call recomputes it, mode-zero calls included |
+| `0x03B2` | town-family entry and the Shadowlord install | the latch is reset on every entry |
+| `0x06B4..0x06B8` | the per-frame slot-zero rebuild | it runs on every idle redraw |
+| `0x02EC` | the autonomous wind drift | one roll per idle world tick at a one-in-sixty-four trigger |
+| `0x02DE` (decay) | the ambient-audio tick | it runs once per idle world tick while `0x02FE` is set |
+
+An engine whose load path "helpfully" recomputes any of these will not diverge from the original in the same way — it will diverge in ordering, and in the two cases keyed to the *stale* snapshot it will diverge in value.
 
 For a loaded town-family scene, that following mode entry performs a
 location-grid reload before accepting input. One observable normalization
@@ -158,6 +174,8 @@ The save handler is a callable function, distinct from the inline load flow. The
 7. **Write `SAVED.OOL`.** The full 512 bytes - surface and underworld halves concatenated - are written from the staging region to disk in one operation.
 
 8. **Close and acknowledge.** The handler closes the file handles, prints `Done.`, and returns. Control returns to the gameplay mode loop; the player is back in the same scene with the in-memory state unchanged. The resident Q save command saves and continues play; exit-to-DOS is a separate mode-loop control path handled by different code.
+
+**Verbatim for the save image; a round trip for the `.OOL` pair.** Steps 4 and 7 together mean the two halves written out as `SAVED.OOL` are the bytes the two per-plane files held on disk when the save began, concatenated in surface-then-underworld order — the exact inverse of the load's split of `SAVED.OOL` into `BRIT.OOL` and `UNDER.OOL`. `SAVED.GAM` itself is a straight flush: **the save handler contains no store into the save image at all**, no clock call, no renderer call and no recompute of any kind. Every byte an inspector finds in `SAVED.GAM` was already the live value at the moment the player pressed `Q`. The image length is computed inline from the region bounds rather than from a constant, which independently confirms the four-thousand-one-hundred-ninety-two-byte extent.
 
 ### 5.3 What does not happen on save
 
@@ -350,3 +368,12 @@ generic DOS file I/O, not an LZW decompressor.
   from private analysis in
   `u5-decomp/notes/` and
   `u5-decomp/functions/CMDS_OVL/`.
+- Source provenance: the load path's two calls to the wind set-and-repaint
+  helper and the finding that it recomputes and normalises no restored byte; the
+  preserving entry mode the first post-load dispatch passes to a town-family
+  scene; the attribution of each apparently load-written byte to the first mode
+  dispatch instead; and the save handler's absence of any store into the save
+  image together with the `.OOL` pair's read-then-concatenate round trip are
+  derived from private analysis in `u5-decomp/notes/`, cross-checked against
+  `u5-decomp/functions/INTRO_OVL/`, `u5-decomp/functions/CAST2_OVL/`,
+  `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/functions/TOWN_OVL/`.

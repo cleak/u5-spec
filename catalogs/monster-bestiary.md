@@ -96,12 +96,23 @@ The confirmed per-class data supports these fields:
 
 The eight-byte class stat records have a fixed semantic layout even where this
 catalog does not print every per-class value. The row fields are combat tier,
-speed seed for phase timing, an endurance rating, defense rating,
-attack-damage cap, maximum HP, default spawn count, and default kill/drop cap.
-The tier and endurance bytes are the two class-side ratings the shared
-actor-rating selector can return into the to-hit and resistance scores;
-earlier revisions called them inputs to a "chest/encounter team-flip"
-comparison, which is withdrawn. Initial HP, reward-unit input, drop-cap input,
+speed seed for phase timing, an endurance rating, defense rating, attack value,
+maximum HP, default spawn count, and default kill/drop cap.
+
+Which of those a *score* actually reads is narrower than this catalog used to
+say. For an ordinary melee or ranged/effect to-hit, the shared actor-rating
+selector returns the actor's per-actor **combat weight** - the jittered class
+speed for a monster, the raw Dexterity byte for a party member - in every case
+except the classes carrying the `zero-selector stat row` trait, which supply the
+**tier**. The **endurance** byte is the monster-side rating of the separate
+spell-*resistance* predicate. The **defense** byte is read directly by the
+damage roller, never through the selector. *(**Corrected.** This paragraph
+formerly said "the tier and endurance bytes are the two class-side ratings the
+shared actor-rating selector can return into the to-hit and resistance scores",
+which sends an implementer to the tier for forty-two of the forty-eight classes'
+ordinary attacks. It is withdrawn; see `RETRACTIONS.md` R337. Earlier revisions
+before that called the same two bytes inputs to a "chest/encounter team-flip"
+comparison, which remains withdrawn.)* Initial HP, reward-unit input, drop-cap input,
 Mass Charm threshold, and the teleport-capable movement flag consumer are
 called out where they affect visible class behavior. Do not treat the stat
 records as a flat damage or hit-chance matrix. The ranged/effect maximum-range
@@ -116,7 +127,7 @@ The following table publishes the eight stat-record fields for the hostile and
 special classes covered by this catalog. Columns are the clean field names from
 the fixed class-stat layout:
 
-| Class | Actor / creature | Tier | Speed | Endurance | Defense | Attack cap | HP | Spawn count | Drop cap |
+| Class | Actor / creature | Tier | Speed | Endurance | Defense | Attack value | HP | Spawn count | Drop cap |
 |------:|------------------|-----:|------:|--------:|--------:|-----------:|---:|------------:|---------:|
 | 0 | Mage | 10 | 15 | 20 | 0 | 15 | 10 | 3 | 20 |
 | 1 | Bard | 15 | 20 | 10 | 4 | 12 | 15 | 9 | 10 |
@@ -167,6 +178,24 @@ the fixed class-stat layout:
 | 46 | Rot Worm | 5 | 17 | 6 | 0 | 6 | 5 | 10 | 0 |
 | 47 | Shadow Lord | 25 | 30 | 30 | 10 | 30 | 99 | 1 | 0 |
 
+The **Attack value** column was published as `Attack cap` through earlier
+revisions. That name is withdrawn (`RETRACTIONS.md` R336): a monster's ordinary
+melee attack uses this byte **flat, with no random draw**, so it is the damage
+the class brings every time and not the ceiling of a `1..N` roll. A Bat's 6 is
+always 6. Only the *party* side of the ordinary damage roller randomizes its
+attack value, from the readied item's `Attack max` in `catalogs/item-list.md`.
+The **Defense** column is a roll on both sides: the roller subtracts an
+inclusive `1..Defense` draw when this byte is non-zero and takes no draw at all
+when it is zero. `systems/combat.md` Sections 11 and 12 own the full contract
+and the worked Bat example.
+
+Two further readers of these columns, for orientation: **Speed** is the seed of
+the per-actor combat weight, which is both the defender term of every ordinary
+to-hit score and the phase-timing input, so a fast class is harder to hit *and*
+acts more often; and **Tier** becomes the attacker term only for the six
+`zero-selector stat row` classes, which is why a Bat is more accurate than a
+Gargoyle.
+
 Notes on the low rows:
 
 - Classes 0 through 3 are the four party sprites. A character's class letter
@@ -181,10 +210,16 @@ Notes on the low rows:
   visible and addressable but never targeted.
 - The shipped name data is two parallel tables, and classes 8 and 9 differ
   between them. Neither class has an entry in the **singular** name table —
-  which is also blank for 42 and 43 — but the **plural** encounter-banner table
+  which is also blank for 42 and 43 — but the **group** encounter-banner table
   does name class 8, and that banner is where the name "Pirate" used for row 8
-  above comes from; class 9's plural entry is a placeholder, so it has no name
-  in either table. Rows 42
+  above comes from; class 9's group entry is a placeholder, so it has no name
+  in either table. **The placeholder set is larger than the blank set, and the
+  two do not line up:** classes 3, 9, 13, 29, 42 and 43 all carry the
+  one-character placeholder `x` as their group banner, yet classes 3, 13 and 29
+  have perfectly real singular names (Avatar, Wanderer, Crawler). An engine that
+  falls back to the singular name when the group entry looks empty will print
+  `Avatar`, `Wanderer` or `Crawler` where the original prints a single `x`.
+  Section 2.2 has the whole table. Rows 42
   and 43 are all-zero identity gaps; row 9's stats duplicate class 8's. The two
   gap rows sit exactly where the special outdoor animated sprite families
   (`0xE8..0xEB` and `0xEC..0xEF`) would map, which is consistent with those
@@ -221,6 +256,92 @@ are class ids, not tile ids.
 
 Eighteen of the forty-eight classes are their own companion, which makes the
 substitution a no-op for them; it is only observable for the rest.
+
+### 2.2 Group Banner Names
+
+A second forty-eight-entry resident table, parallel to the stat rows and to the
+singular name table and indexed by the same class id, holds the **group banner
+name** — the caption printed when a terrain fight begins
+(`systems/combat.md` Section 4.1). It is a shipped table of finished strings.
+There is no suffix rule to derive it from: nothing appends an `S`, and the
+banner never consults the monster count, so the group form is printed even for a
+single attacker.
+
+Every entry is uppercase, letters and spaces only, with no trailing punctuation
+and no line feed of its own. The longest is twelve characters, so no banner ever
+wraps in the sixteen-column message window. The **Derived?** column says whether
+the entry is exactly the singular name uppercased with an `S` appended: twenty-
+two of the forty-eight are, and twenty-six are not.
+
+| Class | Group banner | Singular name | Derived? |
+|------:|--------------|---------------|----------|
+| 0 | `WIZARDS` | Mage | no — different word |
+| 1 | `BARD` | Bard | no — singular form |
+| 2 | `FIGHTER` | Fighter | no — singular form |
+| 3 | `x` | Avatar | no — placeholder |
+| 4 | `VILLAGER` | Villager | no — singular form |
+| 5 | `MERCHANT` | Merchant | no — singular form |
+| 6 | `JESTER` | Jester | no — singular form |
+| 7 | `BARD` | Bard | no — singular form |
+| 8 | `PIRATES` | *(none)* | no — no singular counterpart |
+| 9 | `x` | *(none)* | no — placeholder |
+| 10 | `CHILD` | Child | no — singular form |
+| 11 | `BEGGAR` | Beggar | no — singular form |
+| 12 | `GUARDS` | Guard | yes |
+| 13 | `x` | Wanderer | no — placeholder |
+| 14 | `BLACKTHORN` | Blackthorn | no — proper noun |
+| 15 | `LORD BRITISH` | Lord British | no — proper noun |
+| 16 | `SEA HORSES` | Sea Horse | yes |
+| 17 | `SQUIDS` | Squid | yes |
+| 18 | `SEA SERPENTS` | Sea Serpent | yes |
+| 19 | `SHARKS` | Shark | yes |
+| 20 | `GIANT RATS` | Giant Rat | yes |
+| 21 | `BATS` | Bat | yes |
+| 22 | `SPIDERS` | Giant Spider | no — different word |
+| 23 | `GHOSTS` | Ghost | yes |
+| 24 | `SLIME` | Slime | no — singular form |
+| 25 | `GREMLINS` | Gremlin | yes |
+| 26 | `MIMICS` | Mimic | yes |
+| 27 | `REAPERS` | Reaper | yes |
+| 28 | `GAZERS` | Gazer | yes |
+| 29 | `x` | Crawler | no — placeholder |
+| 30 | `GARGOYLE` | Gargoyle | no — singular form |
+| 31 | `INSECTS` | Insect Swarm | no — different word |
+| 32 | `ORCS` | Orc | yes |
+| 33 | `SKELETONS` | Skeleton | yes |
+| 34 | `SNAKES` | Python | no — different word |
+| 35 | `ETTINS` | Ettin | yes |
+| 36 | `HEADLESSES` | Headless | no — irregular plural |
+| 37 | `WISPS` | Wisp | yes |
+| 38 | `DAEMONS` | Daemon | yes |
+| 39 | `DRAGONS` | Dragon | yes |
+| 40 | `SAND TRAPS` | Sand Trap | yes |
+| 41 | `TROLLS` | Troll | yes |
+| 42 | `x` | *(none)* | no — placeholder |
+| 43 | `x` | *(none)* | no — placeholder |
+| 44 | `MONGBATS` | Mongbat | yes |
+| 45 | `CORPSERS` | Corpser | yes |
+| 46 | `ROTWORMS` | Rot Worm | no — different word (no space) |
+| 47 | `SHADOW LORD` | Shadow Lord | no — singular form |
+
+The twenty-six non-derived entries break down as six placeholders (3, 9, 13, 29,
+42, 43), eleven written in the singular (1, 2, 4, 5, 6, 7, 10, 11, 24, 30, 47),
+two proper nouns that have no plural (14, 15), five that use a different word
+from the singular table (0, 22, 31, 34, 46), one irregular plural (36), and one
+with no singular counterpart at all (8).
+
+Two entries are reachable without an index into this table. A hostile whose
+masked sprite byte is below `0x40` never indexes it and prints the fixed literal
+`PIRATES` — byte-identical to class 8's entry, but selected by a range test
+rather than a lookup (`systems/encounters.md` Section 4). And class 47's
+`SHADOW LORD` is the caption of the Shadow Lord fight, which is always a single
+opponent.
+
+This table is **not** `LOOK2.DAT`; both name tables are resident data, and the
+banner strings do not appear in that file. *(Scope: literal search of the
+shipped `LOOK2.DAT` for representative banner strings.)*
+
+Source provenance: derived from private analysis in `u5-decomp/notes/`.
 
 ## 3. Ranged/Effect Side Rows
 
@@ -666,6 +787,13 @@ offsets, raw private addresses, binary dumps, or private note prose.
 - `u5-spec/systems/overworld.md`
 - `u5-spec/catalogs/tile-catalog.md`
 - `u5-spec/catalogs/spell-list.md`
+
+- The rename of the `Attack cap` column to **Attack value** and the narrowing of
+  which stat-row bytes an ordinary to-hit score actually reads (issue #183) --
+  derived from private analysis in `../u5-decomp/notes/` and
+  `../u5-decomp/functions/COMBAT_OVL/`. The full contract, the per-score hit
+  table and a worked Bat example live in `systems/combat.md` Sections 11 and 12;
+  `RETRACTIONS.md` R336 and R337 carry the withdrawals.
 
 ## 12. Cross-References
 
