@@ -68,6 +68,20 @@ return early when a key arrives. They may temporarily override the calibration
 used by that blink/poll loop so text prompts feel consistent, but they still do
 not advance the in-world clock.
 
+**Combat's automatic round walk requests neither family.** There is no published
+pacing for the interval between two automatic actions in the same round because
+the original has none: the combat overlay makes no call to any of the four
+resident delay helpers, and the round walker's per-actor body takes no wait of
+its own. The perceived cadence of an automatic round comes entirely from
+**blocking speaker playback** - the per-action slot re-blit ends in a blocking
+rumble, and the attack, theft and escape cues are blocking glissandi - whose
+envelopes are owned by `systems/audio.md` and priced in outer units by Section
+7.4 below. `systems/combat.md` Section 7 states the contract from the combat
+side, including the two exceptional arms that do render and the scope of the
+negative. An engine that models "no delay" literally *and* plays its sounds
+asynchronously will run the automatic round walk visibly faster than the
+original.
+
 ## 5. Intro Animation Cadences
 
 Most visible intro animation steps are driven by the DOS BIOS user-tick

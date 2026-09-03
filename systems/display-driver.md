@@ -586,6 +586,34 @@ framer only samples and clears the resident restoration flag; known flag setup
 belongs to dungeon room-layout state. This is not a standalone presentation
 effect, and it does not advance gameplay time or alter combat results.
 
+**The two modes are a save/restore pair, and the save half also mutates.** Mode
+value `0` is issued by the dungeon room painter's two-way-ladder cell
+(`systems/dungeon-mode.md` Section 14.1) and mode value `1` by the combat framer
+(`systems/combat.md` Section 4). Neither caller passes anything but the mode
+value - no coordinates, no rectangle, no handle, no pointer to a saved pair -
+because the saved bytes never leave the driver: it copies them into **two
+eight-byte blocks of its own private scratch**, one per affected tile.
+
+Mode `0` is **save-and-substitute**, and the substitution is the visible point
+of the whole pair: for each of the two affected tile regions the driver first
+copies the eight live asset bytes into its scratch, and then overwrites those
+same eight bytes with the eight bytes lying one tile-stride-minus-sixteen
+earlier in the same asset segment - so the block is replaced by material taken
+from earlier in the same tile. Mode `1` is a **pure restore**: it copies the two
+scratch blocks back and does nothing else. It is therefore *not* mode zero's
+inverse in the sense of performing a mirrored mutation - it simply undoes the
+substitution.
+
+*Scope.* Everything in this paragraph is scoped to **the EGA driver**, which is
+the only one whose slot for this dispatch offset has been read. Whether the CGA,
+Hercules and Tandy drivers implement the same offset with the same five modes,
+and with the same save-and-substitute mode zero, is **not established**. The
+byte offsets, word counts and copy directions are established from the driver
+itself; the identification of the affected blocks with particular tile glyphs is
+**inferred** from the fact that both substitution sources fall on exact tile
+boundaries under the stride the same routine's batch mode uses, and the driver's
+internal tile layout was not derived.
+
 The Return-to-View script-level visual schedule is owned by
 `formats/location-dat.md`: local cell effects render at tile row `y + 7`,
 temporary actor draws also use actor row `y + 7`, and the fixed wipe command

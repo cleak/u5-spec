@@ -1746,6 +1746,14 @@ directions that cell provides:
   when the cell is marked climbable-with-equipment and the party is carrying the
   climbing gear.
 - **Down** is offered when the cell is a down ladder, a two-way ladder, or a pit.
+- **How "two-way" is recognised.** A two-way ladder is painted with the same
+  glyph as a plain up ladder, so the tile alone cannot distinguish them. In
+  room-entry mode the handler therefore consults the **resident
+  tile-restoration flag** (Section 14.1): party standing on the up-ladder glyph,
+  in room-entry mode, with that flag set, means the ladder goes both ways and
+  the up-or-down prompt is offered instead of an assumed climb up. That is the
+  flag's second consumer, and it is why the combat framer's clear of the same
+  flag must not be reordered ahead of a Klimb.
 - When both are available the handler prompts for up or down, accepting the
   explicit up and down selections and the standard cancel/pass keys.
 - Any other cell returns with no level change.
@@ -1958,6 +1966,47 @@ helper; other non-empty icon classes clear it. If the following room combat
 returns through the combat framer with the flag still set, the framer calls the
 display-driver tile-graphics restore mode before redrawing the world view. This
 flag is a room-layout/display handoff, not a trap-damage or loot signal.
+
+**The centre-icon classes, and what the two-way ladder arm actually does.** The
+underfoot class is the high half of the room-layout cell under the party, and it
+selects one byte from a small icon table that is stamped into the arena grid's
+centre cell. The shipped assignments that matter downstream are: an up ladder,
+a down ladder, a **two-way ladder** (which paints the same glyph as the up
+ladder), a **chest**, and a fountain; two further classes have no icon and stamp
+nothing, and a class of zero, or a high half at or above eight, skips the whole
+step. Two of these are load-bearing outside this section:
+
+- **The chest class stamps the byte the combat setup pass tests at the arena
+  centre** (`systems/combat.md` Section 5, "Arena-centre special"). That is the
+  only way that byte ever reaches the centre cell - no shipped arena record
+  carries it - so dungeon-room combat entered while the party stands on a chest
+  cell is the sole live trigger for that step. Confidence: **established** for
+  the gate, the formula, the destination byte, the terrain overwrite, the
+  three-caller census and the arena-file negative; **probable** for the
+  identification of the icon class as the chest and for the runtime sequencing
+  that puts a party on such a cell, which was not traced.
+- **The two-way-ladder class is the flag's only setter corpus-wide**, and the
+  "associated local presentation helper" it dispatches is the **matching save**:
+  the same display-driver tile-graphics entry the framer later calls, with the
+  save mode value rather than the restore one. The pair is therefore complete
+  and symmetric at the specification level - the painter asks the driver to
+  save, the framer asks the same driver to put back - and the driver keeps the
+  saved bytes in its own private scratch, so neither side passes a handle or a
+  buffer (`systems/combat.md` Section 4, `systems/display-driver.md`). The save
+  half is not *only* a save: see the driver spec for the substitution it
+  performs in the same operation.
+
+**The flag has a second reader, and the ordering matters.** The K-Klimb handler
+consults the same flag (Section 13.1), which is how a two-way ladder is
+distinguished from a plain up ladder at climb time. An implementation must not
+move the combat framer's clear ahead of a Klimb that could still read it.
+
+*Scope of the "only setter" negative:* a displacement census of the flag byte
+across the shipped executable, all twenty-four overlays and all four display
+drivers finds five instructions - the one raise here, the else-arm clear beside
+it, the combat framer's clear, and two reads. A write through a base register
+already carrying a neighbouring constant, or a word-sized write straddling the
+byte, would fall outside it.
 
 **Wandering monsters.** Dungeon mode does **not** run the overworld's
 random-encounter probe: there is no chance-roll in the dungeon per-turn

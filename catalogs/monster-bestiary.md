@@ -346,18 +346,66 @@ Source provenance: derived from private analysis in `u5-decomp/notes/`.
 ## 3. Ranged/Effect Side Rows
 
 The following rows publish the class-indexed side metadata consumed by the
-combat ranged/effect path. The range/effect selector is the attack range cap in
-the AI attack path; the spell/weapon dispatcher also treats value `1` as the
-zero-damage sentinel that routes through effect handling. The payload byte is
-forwarded to the ranged/effect resolver and spell/effect dispatcher as the
-class's effect/accuracy payload. Scene resistance means the class participates
-in the special combat-context ranged/effect abort gate. Cast-like branch marks
-the separate class flag that can consume the action through the cast/effect
-narration branch when its prerequisite state is active.
+combat ranged/effect path. **Both side tables are dense forty-eight-entry
+arrays with a defined byte for every class id, and every one of those rows is
+now published below** (issue #187 question 9). There is no such thing as a class
+without a row; the eleven party/NPC rows one through eleven that earlier rounds
+recorded as "absent" were a gap in this catalog, not in the data, and an engine
+that resolves "a class with no row" to "no attack" is answering a question the
+data never asks.
 
-| Class | Actor / creature | Range/effect selector | Payload | Scene resistance | Cast-like branch | Pre-gate bypass |
+**The range/effect selector.** Its meaning depends on which consumer reads it,
+and the two do not agree above the melee value. In the AI attack resolver, on
+the autonomous driver's path, it is an inclusive **maximum attack range**:
+a target further away than the byte refuses the attack, distance exactly one
+routes to melee, and any greater in-range distance takes the ranged/effect path.
+In the shared spell/weapon dispatcher, on its non-party-side arm - the arm a
+controlled monster acting at the player's prompt reaches, and the arm a
+no-readied-item attempt reaches - value `1` is folded to zero and selects the
+**melee / Aim-cursor arm**, while **any** higher value selects the cast/effect
+arm unconditionally, at every distance including one, because that routine
+contains no distance test at all. (That dispatcher's *party-side* arm does not
+read these tables; it keys the same two decisions off the readied item's own
+reach and payload rows in `catalogs/item-list.md`.) `systems/combat.md`
+Section 11 carries the per-consumer table; do not merge the two into one rule.
+
+*(**Corrected.** This paragraph previously said "the spell/weapon dispatcher
+also treats value `1` as the zero-damage sentinel that routes through effect
+handling". **That polarity is inverted and is withdrawn.** Value `1` is the
+**melee** sentinel: it is normalised to zero and takes the ordinary adjacent
+attack. `systems/combat.md` Section 8.2 has always said so for the same byte.)*
+
+**The payload byte** is forwarded to the ranged/effect resolver and spell/effect
+dispatcher as the class's effect-class payload. Its eight values are effect
+classes, and value `0` is the first of the eight effect classes and selects a
+distinct handler rather than meaning "no effect"; *what* it draws is **not
+established** (a trailing-streak visual is the working reading, confidence
+**probable**). The payload is consumed only on the ranged arm, so for a
+class whose selector keeps it on the melee arm the payload is inert.
+
+**Scene resistance** means the class participates in the special combat-context
+ranged/effect abort gate. **Theft branch** marks the separate class flag that
+replaces ordinary melee damage with the food-theft branch when the party's food
+supply is non-empty; `systems/combat.md` Section 11 gives its sequence and its
+draw. *(**Corrected**: this column was previously described as a "cast-like
+branch" that "can consume the action through the cast/effect narration branch".
+**That description is withdrawn** - the branch is not a cast, narrates no cast,
+aims nothing and animates nothing. The row assignment is unchanged.)*
+
+| Class | Actor / creature | Range/effect selector | Payload | Scene resistance | Theft branch | Pre-gate bypass |
 |------:|------------------|----------------------:|--------:|------------------|------------------|-----------------|
 | 0 | Mage (party row) | 7 | 4 | yes | - | - |
+| 1 | Bard | 3 | 0 | - | - | - |
+| 2 | Fighter | 1 | 0 | - | - | - |
+| 3 | Avatar | 1 | 0 | - | - | - |
+| 4 | Villager | 1 | 0 | - | - | - |
+| 5 | Merchant | 1 | 0 | - | - | - |
+| 6 | Jester | 1 | 0 | - | - | - |
+| 7 | Bard (second row) | 1 | 0 | - | - | - |
+| 8 | Pirate | 1 | 0 | - | - | - |
+| 9 | Unnamed reserved | 1 | 0 | - | - | - |
+| 10 | Child | 1 | 0 | - | - | - |
+| 11 | Beggar | 1 | 0 | - | - | - |
 | 12 | Guard | 15 | 2 | - | - | - |
 | 13 | Wanderer | 9 | 4 | yes | - | - |
 | 14 | Blackthorn | 9 | 3 | yes | - | - |
@@ -394,6 +442,17 @@ narration branch when its prerequisite state is active.
 | 45 | Corpser | 1 | 0 | - | - | - |
 | 46 | Rot Worm | 1 | 0 | - | - | - |
 | 47 | Shadow Lord | 9 | 3 | yes | - | - |
+
+**Reading the eleven newly published rows.** Classes two through eleven all
+carry selector `1` and payload `0`, so under **both** consumers they make an
+ordinary adjacent melee attempt and nothing else: melee-only, adjacent-only,
+with the payload inert. That agreement is the substantive correction, and it is
+what an engine should implement for those ten classes. Class one (Bard) is the
+exception and must **not** be given one merged rule: with selector `3` the AI
+attack resolver gives it maximum range three, routing distance one to melee and
+distances two and three to the ranged/effect path with payload `0`, while the
+spell/weapon dispatcher sends it to the cast/effect arm at every distance
+including one. Publish the entry point with the contract.
 
 These values do not change the trait table's meaning: the Amulet/Turning
 scatter branch is the target-side response to the same scene-resistance class
@@ -538,10 +597,20 @@ room and ambush mappings are encounter data, not additional class-row fields.
 
 Slime division is the only decoded replication behavior in this group.
 Rat, spider, python, and rot-worm poison/status attacks are decoded in the
-shared attack resolver and listed in the trait column above. The Gremlin
-cast-like branch row is published in Section 3; no additional Gremlin-specific
-resource theft or nuisance writer is promoted beyond shared closest-target AI,
-ranged/effect routing, and default damage/death paths.
+shared attack resolver and listed in the trait column above. The Gremlin's own
+branch row is published in Section 3.
+
+*(**Corrected.** This paragraph previously continued "no additional
+Gremlin-specific resource theft or nuisance writer is promoted beyond shared
+closest-target AI, ranged/effect routing, and default damage/death paths."
+**That negative is withdrawn.** The Gremlin has exactly such a writer, and it is
+live in ordinary play: on a landed Gremlin attack, a three-in-four draw followed
+by a non-empty party food supply prints `A <monster> stole some food!`,
+subtracts five from the food supply saturating at zero, plays a rising cue,
+requests a stats-panel refresh, and **consumes the attack in place of all damage
+resolution**. The draw is taken even when the food supply is empty. Class 25 is
+the only class in the shipped table carrying the flag. `systems/combat.md`
+Section 11 gives the ordered sequence and the parity consequences.)*
 
 ## 7. Wilderness And Dungeon Monsters
 
@@ -687,7 +756,7 @@ classes.
   traits for every listed class.
 - Ranged/effect side-table row values for hostile and special classes,
   including the Mage party-row boundary, the range/effect selector, payload,
-  scene-resistance rows, the Gremlin cast-like branch row, and the Mimic
+  scene-resistance rows, the Gremlin food-theft branch row, and the Mimic
   pre-gate bypass row.
 - Shared AI target-selection behavior and the confirmed first-spawn,
   companion-class, and follower placement model.
