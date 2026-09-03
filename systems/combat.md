@@ -899,8 +899,11 @@ the stored coordinates with no terrain test.
 water, shoals or deep water, arena 15 in `encounters.md` Section 4 - is authored
 with **all sixteen** monster placement cells on water tiles and all six party
 seats on grass and brush. A land-class monster fought over water is therefore
-placed on water by design. The equivalent arena for a party aboard ship likewise
-puts all sixteen monster cells on deep water or water. This is deliberate
+placed on water by design. The aboard-ship counterpart, arena 11 (party aboard
+ship, hostile on water), likewise puts all sixteen monster cells on deep water
+or water; the ship-versus-ship boarding arena 14 puts them on the enemy deck
+instead (corrected 2026-09-03, R351 - an earlier revision of the sibling
+sentence in `encounters.md` named arena 14 as the all-water one). This is deliberate
 original behaviour and a port should reproduce it; what happens to such an actor
 afterwards is specified in Section 7.1, and the short answer is that it acts
 normally and simply cannot move.
