@@ -158,6 +158,128 @@ combat exit-message state was set. This is the proved durable trigger-removal
 path for ordinary active-object combat triggers. It is not a COMBAT-round-loop
 loot sweep and it does not consume the temporary combat death/drop markers.
 
+### 4.1 Combat-entry presentation
+
+Two separate banners are printed when a terrain fight begins, by two different
+stages, and an implementation that merges them gets both the order and the
+blank rows wrong.
+
+**Banner one - the group name.** The world-side terrain-combat entry step
+prints it *before* it calls the framer. In emission order:
+
+| Order | Emitted | Effect |
+|---:|---|---|
+| 1 | one line feed | closes whatever the command echo left on the row and moves to column 0 of the next row |
+| 2 | centre-output on | control byte; no cell is written |
+| 3 | the group name for the encounter's class | one row, horizontally centred |
+| 4 | centre-output off | control byte; no cell is written |
+| 5 | two line feeds | ends the name's row and leaves one blank row below it |
+
+The name is a **shipped forty-eight-entry table indexed by class id**, published
+in `catalogs/monster-bestiary.md` Section 2.2. There is no suffix rule: nothing
+appends an `S`, nothing inspects the singular class-name table, and nothing
+consults the monster count. Twenty-two of the forty-eight entries happen to be
+the singular name plus `S`; the other twenty-six are not, so a generating rule
+is impossible and the table must be shipped verbatim.
+
+When the hostile's masked sprite byte is below `0x40` the table is bypassed
+entirely and the fixed literal `PIRATES` is printed instead
+(`systems/encounters.md` Section 4).
+
+Three consequences worth stating flatly:
+
+- **The banner is count-independent.** It is emitted a whole stage before the
+  monster count is chosen, and nothing carries the count backwards, so a lone
+  attacker still gets the group name: one bat announces `BATS`. There is no
+  singular form of this banner anywhere in the game.
+- **The Shadow Lord fight announces `SHADOW LORD`.** No article, no "The", no
+  separate singular caption. The sceptre line of `systems/encounters.md`
+  Section 4 is printed after it.
+- **It is terrain-entry-only.** Only the world-side terrain-combat entry step
+  prints it. The one entry that reaches setup without passing through that
+  step is the surface camp ambush, which reaches terrain setup through its
+  command-overlay wrapper rather than through the world-side entry step
+  (Section 5); it prints the conflict banner below but **no** group name.
+  *Confidence: probable.* The call sites are established by a near-call census
+  of the resident image and all twenty-three overlays; the entry paths
+  themselves were not stepped, and far or register-indirect transfers were not
+  censused.
+
+**Centring is a cursor move, not padding.** The printer computes a window-local
+starting column and repositions the cursor there; the cells to its left are
+never written, so whatever stood there remains. For a line emitted with the
+cursor at the window's left edge - which the preceding line feed guarantees
+here - that starting column is
+`floor((columns_in_window - characters_in_line) / 2)`, truncating;
+`systems/text-output.md` Section 5 owns the general form for a line that starts
+mid-row. In the sixteen-column message window that is
+`floor((16 - length) / 2)`, and the absolute column is 24 plus it - so
+`BATS` occupies absolute columns 30..33 and `LORD BRITISH` occupies 26..37.
+Every shipped entry is twelve characters or shorter, so no group name ever
+wraps. At a capacity of sixteen the formula places every even-length caption
+symmetrically, which is a useful self-check on the width figure but not
+independent evidence for it.
+
+**Banner two - the conflict banner.** Terrain setup prints it at the start,
+before any monster is placed (Section 5, step 3). The literal is:
+
+> `*** CONFLICT ***` followed by one line feed
+
+Exactly sixteen printable characters: three flank glyphs, one space, the eight
+letters of `CONFLICT`, one space, three flank glyphs. Its properties:
+
+- **The flank glyph is character code `0x2A`**, three per side - the ASCII
+  asterisk code point, **not** `0x2B` (`+`). The distinction is visible: in the
+  8x8 gameplay font, `0x2A` is drawn as a solid four-pointed diamond that reads
+  as a **bold cross** at cell size, while `0x2B` is a thin two-pixel cross. A
+  transcript that renders this banner with literal `+` characters differs from
+  the original in glyph shape, which is why player-facing transcripts of this
+  line are commonly written `+++ CONFLICT +++`.
+- **It fills the message window edge to edge**, absolute columns 24 through 39,
+  on one row. Sixteen characters is exactly the window's capacity.
+- **It is not centred, and centring would not move it.** The preceding stage
+  cleared the centre flag and nothing on the terrain path sets it again; even if
+  it were set, a sixteen-character caption in a sixteen-cell window has exactly
+  one centred position, column zero.
+- **Its trailing line feed costs no row.** The row is full when the line feed is
+  reached inside the same source string, so the printer's full-row suppression
+  consumes it (`systems/text-output.md` Section 6). The cursor is left at column
+  0 of the following row and **no blank row** appears under the banner.
+- **It is unconditional.** The test that precedes it cannot fail, so every
+  terrain-setup entry prints it.
+
+**No direct cell writes.** Both banners go through the ordinary wrap-aware
+string printer and the per-cell emitter; neither pre-positions the cursor into
+the frame, rewrites the window rectangle, nor pokes cells. Everything about
+their placement follows from the active window's rectangle and the ordinary
+wrap and centring rules.
+
+**Which window.** Both banners land in whatever window is active; they select
+none of their own. On the traced overworld and town routes that is the gameplay
+message window, columns 24..39 (`systems/text-output.md` Section 10.1), and the
+absolute columns quoted above follow from that. *Confidence: probable.* The
+full-stats redraw that the turn loops run ends by selecting the message window,
+and none of the routines between it and the banners re-selects another; the turn
+loops themselves were not stepped, so the window-local placement is established
+while the absolute columns inherit this caveat.
+
+**The full entry transcript.** For an overworld Attack that lands on a hostile,
+in order:
+
+| Row | Content |
+|---|---|
+| 1 | the command-echo marker, then `Attack-` and the chosen direction word |
+| 2 | *(blank)* |
+| 3 | the centred group name |
+| 4 | *(blank)* |
+| 5 | `*** CONFLICT ***`, filling the row |
+
+with `The Sceptre is reclaimed!` inserted after the group name on the Shadow
+Lord branch when the sceptre is held (`systems/encounters.md` Section 4). The
+echo marker is not an ASCII `>`: it is a composited cap glyph, described in
+`systems/text-output.md` Section 10.2.
+
+
 ## 5. Party seating and monster placement
 
 The arena record is selected and loaded **before** the framer runs, by the
@@ -259,7 +381,7 @@ values and never depend on the monster count.
    by this clear; it is set to the "no linked descriptor" sentinel when the
    record is allocated.
 2. Seat the party from the per-arena party entry coordinates.
-3. Print the combat banner.
+3. Print the conflict banner (Section 4.1).
 4. Choose the monster count.
 5. Place the monsters into the sixteen placement slots.
 
@@ -417,7 +539,7 @@ overworld uses — so attacking an ordinary townsperson produces one attacker,
 while attacking a guard falls through to the Guard row's sentinel count of
 eight.
 
-A short combat banner ("CONFLICT") is printed at the start of setup, before any monsters are placed.
+The conflict banner is printed at the start of setup, before any monsters are placed. Its exact literal, flank glyphs, placement and blank-row behaviour are in Section 4.1.
 
 **Picking arrival positions.** Each monster gets one of sixteen arena cells,
 indexed by a placement slot. For ordinary terrain combat, slots are walked in
@@ -626,11 +748,16 @@ vector published earlier in this section is not re-derived here.
 | 2 | Clear both combat tables | None. |
 | 3 | Seat the party | **Variable; not draw-bounded in general.** Free with the shipped starting roster. |
 | 3a | Placement-slot shuffle (**surface camp ambush only**) | The terrain setup helper has exactly two callers (Section 5). The ordinary wilderness or town encounter leaves the shuffle bit clear and draws **zero** here. The surface camp ambush sets and forwards the bit, and draws exactly fifteen uniform `[0, 15]` draws, taken after seating and before the banner; on that route step 3 is skipped entirely, so the shuffle is the first drawing step there. **This row does not cover the dungeon entries.** Their permutation is a different mechanism on a different array - the dungeon room painter's own sixteen-swap over the source band, run before the framer is entered (Section 5; `dungeon-mode.md` Section 14.1) - and it is outside this table's terrain/town scope. |
-| 4 | Conflict banner, arena-record load, encounter-name print | None. |
+| 4 | Conflict banner (Section 4.1) | None. |
 | 5 | Monster count | Zero, one, or two. |
 | 6 | World tick, on the same branch that rolled a count | **Variable and unbounded. Needs live capture.** |
 | 7 | Monster placement | One or two draws per monster. |
 | 8 | Round-loop entry prologue, before any actor slot is examined | **One world tick: variable and unbounded. Needs live capture.** |
+
+The group-name banner and the arena-record selection both happen in the
+world-side entry step, before the framer is entered, so neither appears in this
+table; see Section 4.1 and `systems/encounters.md` Section 4. Neither consumes a
+draw either, so the ordering above is unaffected.
 
 Nothing between entering the combat framer and the setup routine consumes a
 draw, and nothing between the setup routine returning and entry into the round
@@ -2237,8 +2364,11 @@ The per-marker results and random-consumption order are:
 | Fire | Pass a rolled raw value directly to the shared damage/status endpoint, then run the ordinary no-attacker finalization and status-panel refresh. | After the marker has won the scan, consume one inclusive `0..10` draw. It makes no defense draw. |
 | Energy | The Energy marker is not recognized by this contact hook. The arena movement validator treats it as a blocking marker, while Poison, Sleep, and Fire markers are passable for destination occupancy. | No contact-path draw and no zero-valued damage dispatch. |
 
-The ordinary attack damage roller—which randomizes attack value and defense—is
-not called by Poison or Fire contact. Their raw damage still enters the shared
+The ordinary attack damage roller (Section 12) is not called by Poison or Fire
+contact. *(**Corrected.** This sentence formerly described that roller as the
+one "which randomizes attack value and defense". Only the **party** side of it
+randomizes the attack value; a monster's attack value is the flat class byte
+with no draw at all. See `RETRACTIONS.md` R336.)* Their raw damage still enters the shared
 damage/status endpoint, so its ordinary class modifiers, HP changes, and death
 handling remain applicable.
 
@@ -2294,33 +2424,255 @@ actor's applicable range cap, the attack action exits without applying damage.
 Adjacent targets use the melee damage path; in-range non-adjacent targets use
 the ranged/projectile/effect path.
 
-The shared to-hit helper is used by ordinary melee and ranged/effect attacks
-unless a caller has forced the outcome. Certain special action/effect tile
-families are always-hit cases. Otherwise the helper resolves attacker and
-defender combat ratings, computes `(attacker - defender + 30) / 2`, and compares
-that score against a uniform random draw. **The hit is accepted when the drawn
-value is at or above the score**, so the score behaves as a difficulty number: a
-larger score means a *smaller* chance to hit. *An earlier revision said the
-opposite - that the hit is accepted when the score beats the draw - and that is
-withdrawn; see `RETRACTIONS.md`.* Two limits come with the correction and are
-stated rather than papered over. Because the polarity inverts how the score
-reads, the attacker/defender labelling of the two ratings feeding it is
-**suspect and was not re-derived**. And the draw's own range is unverified: two
-private analyses disagree about which random source the helper calls, and it was
-not re-located in the pass that found the comparison direction, so the earlier
-description of the draw as a byte is no longer load-bearing. **No hit percentage
-is published**, and any percentage computed under the old direction is upside
-down. This is the public hit-roll shape. One of the ratings the selector can return is not a stat-table byte at
-all but a per-actor *combat weight*: normally the actor's own speed seed, and
-the floor value one in three override cases — while the Negate Time tag is
-running and the actor is a monster, for one specific actor class, and for any
-actor carrying the asleep/magically-disabled bit. It is the defender term of
-the score in the ordinary melee case, and can stand in as the attacker term as
-well, so all three overrides make the affected actor markedly easier to hit
-while barely changing what it can land; the Negate Time override is the
-mechanical bite of a time-stopped arena. Earlier revisions described this
-weight as a "team modifier" consumed by a chest-encounter targeting flip; that
-reading is withdrawn. The item catalog now publishes the traced weapon-dispatch range/effect
+The shared to-hit helper is used by ordinary melee and ranged/effect attacks in
+both directions - a monster attacking a party member and a party member
+attacking a monster - unless the caller has forced the outcome. Certain special
+action/effect tile families are always-hit cases. Otherwise the helper asks the
+shared actor-rating selector for one rating per side, computes a score from the
+pair, takes one draw, and compares.
+
+**The score.** With `A` the attacker's rating and `D` the defender's rating,
+
+`S = truncate_toward_zero((D - A + 30) / 2)`.
+
+**The defender's rating is the added term and the attacker's is the subtracted
+one** - the same way round as the shared spell-resistance predicate in Section
+9, where the target's rating is the one added. The arithmetic is signed and
+nothing is clamped; both ratings are unsigned bytes, so the numerator cannot
+leave a signed sixteen-bit intermediate. *(**Corrected.** Earlier revisions
+published `(attacker - defender + 30) / 2` and, separately, called the combat
+weight "the defender term of the score in the ordinary melee case". Taken
+together those are inverted relative to the original, which adds the defender's
+rating and subtracts the attacker's. With the comparison direction below, the
+inversion flips who is favoured on every ordinary melee and ranged/effect
+attack. **The formula is withdrawn; the combat-weight clause is confirmed** -
+the weight really is the defender term, and what was wrong was the surrounding
+formula naming that term the subtracted one. See `RETRACTIONS.md` R334. This
+closes the operand-labelling residual that R232 left open.)*
+
+**The draw.** One standard skewed combat roll `R` in `1..30` - the same shared
+helper used by the drop gate (Section 6.3), the resistance predicate and the
+Tremor/Poison Wind gate (Section 9): one inclusive `0..60` draw halved with
+truncation, with a zero result promoted to one. Across the sixty-one underlying
+values `1` occurs four times, each of `2..29` twice, and `30` once, so the draw
+leans toward low values and therefore toward hits. *(**Corrected.** An earlier
+revision said the draw's range was unverified, that two private analyses
+disagreed about which source the helper called, and that **no hit percentage is
+published**. The source is now identified as this shared helper, and both limits
+are withdrawn; see `RETRACTIONS.md` R335. Percentages are published below.)*
+
+**The comparison.** **The hit is accepted when `R >= S`.** The score is a
+difficulty number: a larger score is a *worse* chance to hit. This is the
+direction R232 established and it is unchanged. Two boundaries follow from the
+arithmetic rather than from any explicit clamp - a score of `1` or less always
+hits, and a score of `31` or more always misses. For `2 <= S <= 30` the
+**idealised** chance to hit is `(2 * (30 - S) + 1) / 61`:
+
+| Score | <=1 | 2 | 5 | 7 | 8 | 9 | 12 | 15 | 20 | 22 | 25 | 30 | >=31 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Chance to hit | 1.000 | 0.934 | 0.836 | 0.770 | 0.738 | 0.705 | 0.607 | 0.508 | 0.344 | 0.279 | 0.180 | 0.016 | 0.000 |
+
+That closed form is an idealisation, not the exact realised law. The underlying
+range primitive carries about 0.16 percent modulo bias toward low values - the
+same caveat `RETRACTIONS.md` R321 already publishes for this shared roll - so
+the realised figures sit a shade off the fractions above: the Bat example below
+is 0.7457 realised against 0.7459 idealised. Parity comes from reproducing the
+helper, not from reproducing the fraction, so an engine that "fixes" the draw to
+be uniform over `1..30` is close but not parity-exact.
+
+The resistance predicate in Section 9 shares this score *shape* but reports the
+opposite outcome: it returns "blocked" when the score beats the roll, while this
+helper returns "hit" when the roll reaches the score. Do not generalise one
+acceptance test across both.
+
+**Which rating each side supplies.** The selector is side-aware, and the two
+sides of an ordinary melee are not symmetric.
+
+| Side | Case | Rating returned |
+|---|---|---|
+| Defender | every ordinary melee and ranged/effect attack, party or monster | that actor's **combat weight** |
+| Attacker | monster whose class carries the `zero-selector stat row` trait | the class **combat tier** |
+| Attacker | any other monster | its own **combat weight** |
+| Attacker | party member attacking with one of the five strength-arm items | the character's **Strength** |
+| Attacker | party member with any other readied item, or bare-handed | its own **combat weight** |
+
+The `zero-selector stat row` trait is the per-class flag
+`catalogs/monster-bestiary.md` already publishes; in the analyzed v1 data six
+classes carry it - Mimic, Reaper, Gargoyle, Orc, Ettin and Headless - and every
+other class, Bat included, feeds its combat weight into the attacker term.
+
+**Combat weight** is the per-actor descriptor field the round loop also uses as
+the base step (Sections 5.1, 5.2 and 9): for a **party** actor it is the raw
+Dexterity byte copied at seating, and for a **monster** it is the class speed
+rating jittered by a uniform `[-4, +3]` at placement, reverting to the shipped
+rating when the sum would exceed 30. It is forced to the floor value one in
+three override cases - while the Negate Time tag is running and the actor is a
+monster, for one specific actor class, and for any actor carrying the
+asleep/magically-disabled bit - so all three overrides make the affected actor
+markedly easier to hit while barely changing what it can land; the Negate Time
+override is the mechanical bite of a time-stopped arena. Earlier revisions
+described this weight as a "team modifier" consumed by a chest-encounter
+targeting flip; that reading is withdrawn.
+
+Because the defender term is *always* the combat weight, **Dexterity is the
+party's melee evasion stat and the jittered class speed is the monster's**. No
+other character field enters the to-hit score: not level, not Intelligence, not
+the cached combat-defense byte, and not any readied armour. And because the
+attacker term is normally the combat weight too, a fast actor is simultaneously
+harder to hit, more accurate, and acting more often.
+
+**The strength arm.** Five equipment ids select Strength instead of the
+attacker's combat weight, through a per-item to-hit-attribute value that is a
+third per-item side table - separate from the `Attack max` damage value and from
+the non-adjacent range cap. In the analyzed v1 data they are **Spiked Helm,
+Spiked Shield, Club, Mace and 2H Hammer** - the catalog's own names for ids 3,
+6, 18, 24 and 31: the blunt/impact family.
+Every other readied item, and bare hands, leaves the attacker term as Dexterity,
+so on the shipped starting weapon a character's Strength does not affect
+accuracy at all. *(Established over the forty-eight-entry equipment id space.
+The same selecting value also occurs at byte positions past the item tables,
+which no readied slot can address.)*
+
+**Always-hit cases, and who can reach them.** In the non-casting path the
+always-hit set is three readied equipment ids - **Sword of Chaos, Glass Sword
+and Jeweled Sword** - and the casting path has its own always-hit range of
+action ids whose spell-level meanings are not established. **Neither is
+reachable from the automatic actor driver**: both driver-side call sites pass a
+fixed neutral item id, so a monster's ordinary attack can never short-circuit to
+an automatic hit. Only the two player-side attack paths reach them, and the five
+true missile items the ranged path gates on contain no always-hit id, so in
+practice only a melee attempt delivers one.
+
+**Boundary: an automatic-driver party attacker has a fixed score of 15.** The
+neutral selector value is normalised on the selector's monster arm - that is
+exactly what the `zero-selector stat row` trait test does - but there is no
+matching normalisation on its party arm, and no party case matches the neutral
+value. The helper then returns a stale value which, by the order of its two
+calls, is precisely the defender rating it returned a moment earlier. The score
+therefore collapses to `(D - D + 30) / 2 = 15`, and the attempt hits about
+**50.8 %** of the time whatever either combatant's stats are. Monster attackers
+are unaffected.
+
+The one party-side route private analysis traces to this call site is the
+**shipped traitor roster identity of Section 9**. Its controlled/charmed bit is
+clear - that identity's override lives in the Section 9 team resolver, which
+reads descriptor and roster bytes, not in the bit - so it reaches the automatic
+driver on the *ordinary* attack path and presents the neutral item id there.
+*(The arithmetic is established from the call sequence and the selector's own
+case list. That this route reaches the call site end to end is **probable**: the
+full path was not executed. A port that initialises the selector's fall-through
+value, or that normalises the party arm the way the monster arm is normalised,
+will silently diverge from the original for that actor.)*
+
+The published boundary is therefore scoped to a party-side actor that reaches
+the automatic driver **on the ordinary attack path**. The other party-side
+actors Section 6.1a routes through that driver - Sword of Chaos compulsion,
+monster possession, and Charm cast on a party member - are *not* published as
+members of this set, for two separate reasons:
+
+- **They do not take the ordinary attack path.** An actor carrying the
+  controlled/charmed bit takes Section 6.1a's redirected fixed magic-strike
+  branch instead of the ordinary weapon cascade, and that branch hands the
+  shared attack primitive a fixed action id as the attack flavour. Whether that
+  fixed id reaches the rating selector as the neutral value - and so whether
+  such an actor's to-hit also collapses to 15 - is an **open question**, not a
+  traced route. Published otherwise, Sections 6.1a and 11 would assert
+  incompatible things about the same three actors.
+- **The reachability of the bit itself is disputed.** Private analysis's
+  encoding-level write scan found no reachable writer of the controlled/charmed
+  bit and concluded these routes dead. This repository keeps Section 6.1a's four
+  traced writers over that negative, because the scan's own stated residual -
+  writes through a base register already offset into the descriptor, word-sized
+  writes straddling the byte, and block copies - covers exactly the shape those
+  writers take. The disagreement is recorded in `NEXT-STEPS.md` and is not
+  resolved here.
+
+Treat the controlled-bit routes as an unresolved second population rather than
+as published members of the fixed-score set.
+
+**Attempts per turn.** One attack per activation on the monster side: the
+automatic driver reaches the attack path once, that path runs one target pick,
+one to-hit and one damage resolution, and there is no multi-attack loop anywhere
+on it. A class range byte smaller than the slot distance skips the attack
+entirely, and melee is taken only at distance exactly one - any other in-range
+distance routes to the ranged/effect path. On the party side an Attack command
+produces **zero to three attempts**, one per readied helm, weapon-hand or
+shield-hand item with a non-zero `Attack max`, body armour never scanned, or
+exactly one bare-handed attempt when none qualifies (Section 8.2).
+
+**Attempts per phase.** Attempts per *turn* is not attempts per unit of time:
+the phase counter decides how often a turn comes round. An actor acts once every
+`36 - base_step` sweeps of the thirty-two-slot walker (Section 7), and that
+period is fixed at placement - except while the actor stands on a restraint
+tile, the stocks or the manacles, where the round loop's per-actor skip precedes
+the phase decrement, so the counter does not advance and the actor never comes
+round at all (Section 7.1). A Bat, class speed 30, has a period of 6 at even
+odds and 7, 8, 9 or 10 at one chance in eight each; a Dexterity-15 Avatar has a
+period of 21. The expected number of Bat attempts per Avatar turn is therefore
+`21 * E[1/period] = 3.01`, **not** `21 / E[period] = 2.90` - the per-bat rate is
+linear in the reciprocal of the period, so the expectation has to be taken
+there. An engine that models a round as "everyone acts once" understates Bat
+pressure roughly threefold before any other difference is counted.
+
+**Worked example: a Bat against the shipped starting Avatar.** The seed roster's
+Avatar has Strength, Dexterity and Intelligence all 15, 60 of 60 HP, level 2, a
+cached combat-defense byte of 7, and the shipped starting loadout. Bat is class
+21: speed 30, attack 6, defense 0, 5 HP (`catalogs/monster-bestiary.md`).
+
+*Bat attacking the Avatar.* The Bat's attacker rating is its combat weight, so
+26 to 30 with 30 at even odds; the Avatar's defender rating is Dexterity 15. The
+score is `(15 - W + 30) / 2` truncated.
+
+| Bat combat weight | Chance | Score | Chance to hit |
+|---:|---:|---:|---:|
+| 26 | 1/8 | 9 | 0.705 |
+| 27 | 1/8 | 9 | 0.705 |
+| 28 | 1/8 | 8 | 0.738 |
+| 29 | 1/8 | 8 | 0.738 |
+| 30 | 4/8 | 7 | 0.770 |
+
+**Per-swing chance to hit: `364/488 = 0.746`.** On a hit the Bat brings its flat
+class attack value 6 and the Avatar's defence roll subtracts an inclusive
+`1..7`, so the seven outcomes are equally likely:
+
+| Defence roll | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| HP lost | 5 | 4 | 3 | 2 | 1 | 0 | 0 (negative; narrated as a miss) |
+
+Five sevenths of landed swings therefore cost HP, the mean cost of a landed
+swing is `15/7 = 2.14`, **a Bat can never take more than 5 HP in one swing and
+cannot one-shot a 60-HP Avatar**, the expected loss per *attempted* swing is
+`0.746 * 15/7 = 1.60` HP, and the chance that a given Bat swing costs the Avatar
+any HP at all is `0.746 * 5/7 = 0.533`.
+
+Two inputs the example is usually asked about turn out not to matter. The
+Avatar's **level** enters neither the to-hit score nor the melee damage roll.
+The **starting body armour** is inert in melee: the damage roll reads the cached
+combat-defense byte and never the armour slot, the to-hit score reads neither,
+and the Attack walker does not scan the body-armour slot at all (Section 8.2 and
+`catalogs/item-list.md`). An asleep defender is not a certainty either - with
+the defender rating floored to one the score is 2, 2, 1, 1 and 0 across the same
+weights, giving **98.4 %**, not 100 %.
+
+*The Avatar attacking the Bat.* The attacker term is Dexterity 15, since the
+starting weapon is not in the strength family; the defender term is the Bat's
+combat weight 26 to 30; the score is 20 to 22, and the per-swing chance to hit
+is `18/61 = 0.295`. Damage is the ordinary `1..Attack max` roll for the readied
+weapon, and the Bat's class defense byte is `0`, so **no defence roll is taken
+at all** and nothing is subtracted - an engine that always rolls a defence term
+both softens the hit and consumes a PRNG draw the original does not. With the
+shipped weapon's `Attack max` of 15 against 5 HP, `11/15` of landed hits kill,
+so one swing kills a Bat with probability `0.216`.
+
+*Accuracy is not tier.* Because a monster's attacker rating is its speed-derived
+combat weight unless its class carries the `zero-selector stat row` trait, a Bat
+is *more* accurate against a Dexterity-15 party member (74.6 %) than a Gargoyle
+is (60.7 %, taken off class tier 20). The Gargoyle compensates with attack 20
+against 6 and defense 15 against 0. On defence the roles reverse: the same
+Avatar hits a Bat 29.5 % of the time and a Gargoyle 60.7 % - numerically the
+same figure as the Gargoyle's own accuracy, by coincidence of the two averages.
+
+The item catalog now publishes the traced weapon-dispatch range/effect
 rows; attack-time ammunition and breakage/consumption remain a negative
 boundary shared with the item catalog. The traced combat attack stack does not
 decrement arrows/quarrels, decrement a readied weapon's carried stock, or clear
@@ -2384,7 +2736,60 @@ Gremlin cast-like branch row, and the Mimic pre-gate bypass row.
 
 The damage-and-status handler bundles "apply damage, update status, narrate the result, and handle special-class death effects" into one function. It takes a damage amount and a target slot.
 
-**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill/Slay Living reaches its death result only after the separate shared resistance predicate permits it and does not use that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat", because the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced. The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
+**The ordinary attack damage roll.** Melee and ordinary weapon attacks reach the
+damage-and-status handler through one shared roller that takes the attacker's
+slot and the defender's slot and returns a signed amount. It runs in two stages,
+and the two sides are not symmetric.
+
+*Stage one, the attacker's raw value.*
+
+| Attacker | Raw value |
+|---|---|
+| Monster | the class's **attack byte, used flat**, with **no random draw at all** |
+| Party member | the readied action item's `Attack max` value; when that value is greater than `1` and is not the instant-kill sentinel `99`, it is replaced by an inclusive `1..value` draw. Values `0` and `1` pass through unchanged, and bare hands are a flat `1`. |
+
+*(**Corrected.** Earlier revisions of this document, of
+`catalogs/monster-bestiary.md` and of `formats/data-ovl.md` described the class
+attack byte as a "cap" or "attacker-side maximum for ordinary monster attack
+damage", which reads as an upper bound on a roll. **It is not rolled.** A Bat
+brings exactly 6 every time. An engine that rolls `1..attack` for monsters
+delivers about 39 % of the original's damage; see `RETRACTIONS.md` R336. The
+party column keeps the `1..Attack max` roll `catalogs/item-list.md` already
+publishes, which is unchanged.)*
+
+Two per-item overrides run before the roll on the party side. The **Glass
+Sword** id narrates `Thy sword hath shattered!` and substitutes the instant-kill
+sentinel `99`; the **Jeweled Sword** id forces the raw value to `0` whatever its table
+entry says. The sentinel short-circuits the whole roller and returns immediately
+- **before the defender's defence byte is read** - so an instant kill takes no
+defence draw. *(One residual on the Glass Sword arm: this document and
+`catalogs/item-list.md` publish, as a traced negative boundary, that the combat
+attack stack does not clear the readied weapon slot for glass-family attacks,
+while private analysis now reads that arm as also clearing the readied slot.
+That conflict is **not resolved here** and the published negative stands until
+it is; it is recorded in `NEXT-STEPS.md`. An engine should treat readied-slot
+consumption on shatter as an open question, not as settled either way.)*
+
+*Stage two, the defence subtraction.* The defender's defence rating is the class
+defense byte for a monster and the cached character combat-defense byte for a
+party member. **When that rating is non-zero the roller subtracts an inclusive
+`1..rating` draw; when it is zero it takes no draw at all and subtracts
+nothing.** The defence term is a roll on *both* sides. Two consequences an
+engine must honour: a flat subtraction of the rating instead of a roll is not a
+near-miss but a different game (against the shipped party defence of 7 it makes
+every Bat swing land for `6 - 7`, i.e. exactly zero HP, forever), and skipping
+the draw on a zero rating is part of PRNG parity, not an optimisation - most
+low-tier classes, Bat included, have defense `0`.
+
+The result may be zero or negative, and both read as a miss. Against a **party**
+defender a negative result short-circuits with the miss narration; against a
+**monster** defender it falls through into the damage-and-status handler below,
+which clamps it and raises the same miss flag, and the party attacker's
+experience-credit step still runs on the clamped value. The two routes are
+therefore gameplay-identical - a printed miss and no HP change - and differ only
+in which code path reports it.
+
+**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill/Slay Living reaches its death result only after the separate shared resistance predicate permits it and does not use that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat". Body armour enters neither the to-hit score nor the damage roll, but the **readied item id is a real to-hit input**: exactly five ids - Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer - switch the attacker term from Dexterity to Strength, and that is the only equipment input the to-hit score has (Section 11). *(An earlier revision of this sentence left the point open, saying "the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced". Section 11 now enumerates every character-record field the score reads, so that hedge is resolved rather than withdrawn.)* The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
 
 **Monster status/effect attacks.** The attack resolver checks monster-only
 status branches before ordinary melee damage. Classes with the poison/status
@@ -2540,8 +2945,23 @@ Several aspects of combat behaviour are driven by per-class tables that the spaw
 | Per-class flag word              | Sixteen bits per class. Includes split-on-damage, halve-damage-when-physical, immune-to-physical, the zero-selector stat-row select (**corrected 2026-08-23** from "faction-override"), vanish-on-death, special death checks, the turnable-attack flag consumed by Amulet/Turning, ranged/effect branch selection, the magic-immune ranged/effect gate, teleport-capable movement, and the turn special bits for possess, blink/phase, and summon-daemon. |
 | Ordinary AI helper state         | Not a class script table. Ordinary monster decisions use the combat actor/effect records, target-selection scratch, per-class flag/stat tables, and shared helper outputs such as the AI step vector. Slot-local position, target, phase, flee, and visibility data remain in the combat actor/effect tables. |
 | Per-class display/narration data | Pointer data used by combat narration and class labels; this is not an AI behavior table.                                                        |
-| Per-class stat record            | Eight bytes per class: combat tier, speed seed/base-step input, endurance rating, defense rating, attack-damage cap, maximum HP, default spawn count, and default kill/drop cap. The tier and endurance bytes are the two class-side ratings the shared actor-rating selector returns into the to-hit and resistance scores; the "chest/encounter team-flip" reading of them in earlier revisions is withdrawn. Maximum HP initializes monster HP and supplies the reward-unit input. The attack and defense bytes are consumed by the computed attack resolver; this row is not a flat damage/hit lookup matrix. |
+| Per-class stat record            | Eight bytes per class: combat tier, speed seed/base-step input, endurance rating, defense rating, attack value, maximum HP, default spawn count, and default kill/drop cap. Maximum HP initializes monster HP and supplies the reward-unit input. The attack and defense bytes are consumed by the ordinary damage roller (Section 12), and this row is not a flat damage/hit lookup matrix. **Which of these the shared actor-rating selector actually returns is narrower than earlier revisions said** - see the correction below the table. |
 | Per-class name pointers          | Sixteen-bit pointers per class to the printable monster name strings.                                                                            |
+
+*(**Corrected.** The stat-record row above formerly read "the tier and endurance
+bytes are the two class-side ratings the shared actor-rating selector returns
+into the to-hit and resistance scores", and formerly named the attack byte an
+"attack-damage cap". Both are withdrawn (`RETRACTIONS.md` R336 and R337). The
+selector has four class-side arms, not two, and for an **ordinary melee to-hit**
+it returns the actor's per-actor **combat weight** in every case except the
+classes carrying the `zero-selector stat row` trait, which supply the **tier**.
+The **endurance** byte is the monster-side rating of the *resistance* predicate
+(Section 9), not of the ordinary to-hit score. The **defense** byte is read
+directly by the damage roller and never reaches a score through the selector at
+all - the selector has an arm that would return it, but no call site in the game
+selects that arm. And the **attack** byte is used flat on the monster side, not
+as the ceiling of a roll. The "chest/encounter team-flip" reading of the tier
+and endurance bytes remains withdrawn from the revision before that.)*
 
 A monster's class id is set at spawn time and never changes (death may cause a tile swap, but the class stays). The forty-eight-row class space is shared: classes 0-3 are the four human party sprites (Mage, Bard, Fighter, Avatar), classes 4-15 are townsfolk and special NPC actors, and classes 16-47 are the bestiary. Note that the descriptor's owner/target/class field is overloaded: for a seated party member it holds the character's roster slot index, and only for monsters and objects does it hold a class id. The AI's friend/foe filter relies on the descriptor faction tag and the slot index range rather than on that field alone.
 
@@ -3124,3 +3544,40 @@ The behaviour described here was derived from the private function and format no
   `../u5-decomp/functions/COMBAT_OVL/`,
   `../u5-decomp/functions/ULTIMA_EXE/`, and
   `../u5-decomp/notes/`.
+- The ordinary melee and ranged/effect to-hit contract of Section 11 -- the
+  operand orientation (defender added, attacker subtracted), the identification
+  of the draw as the shared skewed `1..30` combat roll, the per-score hit table,
+  the side-by-side rating selection including the `zero-selector stat row`
+  normalisation on the monster arm and the strength-arm item family, the
+  always-hit membership and its player-path-only reachability, the fixed score
+  of 15 taken by an automatic-driver party attacker, attempts per activation on
+  both sides, and the worked Bat-versus-starting-Avatar example in both
+  directions -- together with Section 12's two-stage damage roller, the flat
+  monster attack value, the `1..rating` defence roll and its skip on a zero
+  rating (issue #183) -- derived from private analysis in
+  `../u5-decomp/notes/`, `../u5-decomp/functions/COMBAT_OVL/` and
+  `../u5-decomp/functions/COMSUBS_OVL/`. Scope on the negatives in those
+  sections: the call-site enumerations behind "both driver-side call sites pass
+  a fixed neutral item id", "no call site selects the defense arm of the
+  selector" and "there is no multi-attack loop on the monster path" rest on an
+  exhaustive decode of directly encoded near and far calls across the shipped
+  executable, every overlay and all four display drivers, resolved against
+  descriptor-derived load bases, plus a literal scan that rules out a pointer
+  table; a target computed at run time would fall outside them. That an
+  automatic-driver party attacker is reachable end to end through the routes
+  Section 6.1a lists is **probable** rather than established: the arithmetic was
+  re-derived, the full path was not executed.
+- The combat-entry banner presentation of Section 4.1 -- the two-banner
+  split and its emission order, the group-name table's shipped-verbatim status
+  and its indexing by class id, centring-as-cursor-move and the left-edge form
+  of the centring column, count-independence and the Shadow Lord caption, and
+  the conflict banner's literal, flank glyph code point, edge-to-edge
+  placement, suppressed trailing line feed and unconditional print (issue #185)
+  -- derived from private analysis in `../u5-decomp/notes/`. Scope on the two
+  *probable* claims in that section: the terrain-entry-only statement rests on
+  a near-call census of the resident image and all twenty-three overlays,
+  with the entry paths themselves unstepped and far or register-indirect
+  transfers uncensused; and the identification of the active window as the
+  gameplay message window rests on the full-stats redraw's closing selection
+  plus a captured frame, with the turn loops unstepped, so the window-local
+  placement is established while the absolute columns inherit that caveat.

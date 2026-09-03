@@ -309,11 +309,43 @@ the human and NPC classes 0..15. The special case is the ship family: a masked
 sprite byte of `0x2C` (that is, any raw byte in `0x2C..0x2F`) selects **combat
 class 1** — the row `catalogs/monster-bestiary.md` lists as Bard, carrying a
 default spawn count of nine and fifteen maximum HP, which is what gives a
-boarded ship its crew. The banner for this case prints a fixed pirate plural
-literal rather than the class-1 plural name. This quantity is the encounter's class id, and it is what drives the
-plural encounter banner, the spawn count, the spawn HP, the speed seed, the
+boarded ship its crew. This quantity is the encounter's class id, and it is what drives the
+group-name encounter banner, the spawn count, the spawn HP, the speed seed, the
 companion-class lookup, and each spawned actor's sprite. It is **not** an arena
 index.
+
+**The banner fallback is a range test, not a ship test.** The banner is chosen
+before the class table is consulted: if the masked sprite byte is **below
+`0x40`** the banner code prints the fixed literal
+
+> `PIRATES`
+
+- seven characters, uppercase, no punctuation and no line feed of its own -
+and never touches the group-name table. Implement the guard, not the instance.
+The reason it exists is arithmetic: the class formula `(masked - 0x40) / 4`
+would go negative for any family below `0x40`, so the table cannot be indexed
+there at all, and the literal is the out-of-range fallback that happens to be
+the right word for the only family known to reach it. The ship family still
+takes **combat class 1** for stats, so the banner and the stat row disagree by
+design: a boarded ship announces `PIRATES` and fights with the Bard row.
+
+*Corrected.* An earlier revision tied this case to "a masked sprite byte of
+`0x2C`" and said only that the banner "prints a fixed pirate plural literal
+rather than the class-1 plural name". The selecting condition is the broader
+`masked < 0x40`, and the literal is now published exactly. See
+`RETRACTIONS.md` R350.
+
+*Scope.* On the shipped A-Attack path the two statements are behaviourally
+equivalent, because that command's own gate forwards only masked `0x2C` or
+masked values at or above `0x40`. Of the four other entry paths into
+terrain-combat entry, two force a fixed sprite at or above `0x40` before
+calling (the entrance-attack path forces the Shadow Lord family, the refused
+bridge toll forces the Troll family), and two - a world hostile reaching the
+party, and the town entry path - apply no lower-bound test at all. Whether any
+sub-`0x40` sprite other than the ship family can occupy a slot those two reach
+depends on the world spawn tables and the town trigger table, neither of which
+has been established; treat the `< 0x40` guard as the contract and the
+"only ships get here" reading as unproven outside the A-Attack path.
 
 **Outdoor arena selection.** The arena is selected by the terrain-combat entry
 step, before the framer is called, and the chosen record is loaded into the
@@ -864,3 +896,11 @@ The behaviour described here was derived from the private function and format no
   only write. Source provenance: derived from private analysis note
   `../u5-decomp/notes/oq-closures_2026-08-22_combat-encounter.md` and
   `../u5-decomp/functions/ULTIMA_EXE/`.
+- The banner fallback of Section 4 -- that the selector is the masked
+  sprite byte's `< 0x40` range guard rather than an equality test on the ship
+  family, the exact literal it prints, the arithmetic reason the guard exists,
+  and the per-entry-path gate survey behind its scope statement (issue #185)
+  -- derived from private analysis in `../u5-decomp/notes/`. The five entry
+  paths' own gates are established; which sprite values can actually occupy
+  the slots the two ungated paths reach is not, and depends on the world spawn
+  tables and the town trigger table, neither of which was established.

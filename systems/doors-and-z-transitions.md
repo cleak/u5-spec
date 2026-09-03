@@ -608,7 +608,7 @@ wait and no sound at all**:
 
 The branch reads the level byte the party was standing on when the edge was
 reached: level zero selects Britannia, any other level selects the Underworld.
-Rendered into the fifteen-column gameplay message window, starting on a fresh
+Rendered into the sixteen-column gameplay message window, starting on a fresh
 row:
 
 | Rendered row |
@@ -619,12 +619,26 @@ row:
 | *(blank)* |
 
 The break between `Exit to` and the plane name is **not** in the data. The
-first string leaves the cursor at column eight, the plane name has no space to
-break on, and the printer therefore emits a line feed and restarts the word at
-column zero - so the word lands whole on the new row. An implementation with a
+first string leaves the cursor at column eight, so only eight of the row's
+sixteen columns remain; the printer collects the eight characters that still
+fit, finds no space to retreat to, keeps the whole chunk, emits a line feed
+because the cursor is not at the window's left edge, and prints those eight
+characters from column zero of the fresh row. The remaining characters of the
+plane name then continue on that same row at column eight, which is why the
+word *reads* as though it had been restarted whole. An implementation with a
 wider message window renders `Exit to Underworld!` on one line, which is a
 visible divergence. `systems/commands.md` Section 5.5 publishes the same two
 literals in its own notation.
+
+*Corrected.* Earlier revisions of this section called the message window
+fifteen columns wide and described the mechanism as the printer "restarts the
+word at column zero - so the word lands whole on the new row". The width is
+sixteen, and the word is not restarted: it is carried across a hard chunk
+boundary whose halves happen to be contiguous. The rendered rows above are
+unchanged under either figure. The distinction matters for any word longer than
+a **full** row, which the original hard-breaks at the row edge rather than
+moving whole (`systems/text-output.md` Section 6). See `RETRACTIONS.md` R347 and
+R349.
 
 **Town-family boundary exit.** This is the only key wait on any plane-change
 path. In order:
@@ -839,3 +853,10 @@ The behaviour described here was derived from the private function notes listed 
 - The active-object table contract that vehicle dismount and floor changes consult — derived from sibling spec `u5-spec/systems/active-objects.md`.
 - The broader vehicle command and persistence contract — derived from sibling spec `u5-spec/systems/vehicles.md`.
 - The world-clock advance contract that doors, climb, and dismount each consume — derived from sibling spec `u5-spec/systems/time.md`.
+- The Section 12.1 message-window width correction and the replacement of its
+  dungeon-exit line-break mechanism (issue #185) -- derived from private
+  analysis in `../u5-decomp/notes/`, re-derived from the wrap-aware printer's
+  own chunk-collection and overflow behaviour and simulated at both the
+  withdrawn and the corrected width. The rendered rows are identical under
+  either width, which is a coincidence of these particular strings rather than
+  support for the withdrawn figure.

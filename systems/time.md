@@ -17,13 +17,13 @@ The clock is five small fields, each of which the engine treats as an unsigned c
 | year    | 0–65535  | In-world year. Stored as a 16-bit little-endian word.                |
 | month   | 1–13     | One of thirteen months in the Britannian year.                       |
 | day     | 1–28     | Day-of-month. Every month has exactly twenty-eight days.             |
-| hour    | 0–23     | Hour-of-day, 24-hour. The display 12-hour value is derived from this.|
+| hour    | 0–23     | Hour-of-day, 24-hour. The cached twelve-hour value is derived from this.|
 | minute  | 0–59     | Minute-of-hour.                                                      |
 
 Day, month, hour, and minute are bytes; year is a word. Two derived values that the engine maintains alongside the primary fields:
 
-- A 12-hour display hour, recomputed whenever the hour changes. It is `12` when the underlying hour is `0`, the hour itself when the hour is in `1..12`, and `hour − 12` when the hour is in `13..23`. There is no separate AM/PM flag — the caller that displays the time uses the underlying hour to decide which suffix to print.
-- A pre-cascade snapshot of the hour, taken at the start of every cleanup pass. It is compared against the post-cascade hour to detect "the hour just ticked over" so that hour-driven side effects fire exactly once per crossing.
+- A cached twelve-hour value, rewritten whenever the cleanup finds an hour crossing. It is `12` when the underlying hour is `0`, the hour itself when the hour is in `1..12`, and `hour − 12` when the hour is in `13..23`. **Nothing in the shipped game renders it.** Every visible twelve-hour presentation — the Pocket Watch, the view-time line — recomputes the value from the hour byte on demand and does not read this cache; and there is no separate AM/PM flag, because those callers take the suffix from the underlying hour. Section 11 gives the byte's actual consumer and its decay rule. *Corrected (issue #184): earlier revisions of this bullet and of Section 11 called this a "12-hour display hour"; the word* display *is withdrawn — see* `RETRACTIONS.md` *row R338.*
+- A pre-cascade snapshot of the hour. It is compared against the post-cascade hour to detect "the hour just ticked over" so that hour-driven side effects fire exactly once per crossing. It is taken only on a cleanup call that is actually advancing time: a **mode-zero call does not refresh it**, though a mode-zero call still performs the comparison. That asymmetry is load-bearing after a load — Section 11 works it through.
 
 Several other variables sit alongside the clock in the save image (transport marker, timing/state tag, scene byte, party Z, and so on). Those are not part of the time system; the time system only reads them where noted below.
 
@@ -92,7 +92,7 @@ duration, the interruption checks, and any repeated cleanup/world-tick calls.
 
 **Hour tick triggers a side bundle.** At the moment the hour changes, three things happen in addition to the day check above:
 
-1. A 12-hour display value is recomputed from the new hour (Section 2).
+1. The cached twelve-hour value is rewritten from the new hour (Section 2). It is not displayed; Section 11 owns what reads it.
 2. If the active scene is in the surface/town-family range and the party is not
    at dungeon depth, the engine refreshes the sky strip in the top viewport
    border. This resolves the older hourly gameplay-hook note: the work is
@@ -101,9 +101,16 @@ duration, the interruption checks, and any repeated cleanup/world-tick calls.
    `systems/moons.md`.
 3. The displayed hour and the current fixed hour marker, Trammel, and Felucca
    presentation are therefore brought up to date at the top of the hour. The
-   sky-strip display contract is specified in `moons.md`.
+   sky-strip display contract is specified in `moons.md`. The same renderer,
+   before it decides whether either moon glyph is on screen, also rewrites the
+   two cached moon-phase digits in the save image
+   (`formats/saved-gam.md` Section 5.1) from the day of the month. Those digits
+   are what natural-moongate transit reads, so this step has a gameplay
+   consequence beyond the strip.
 
 The hour-change check is made *after* the cascade has had its chance to bump the hour, and uses the pre-cascade snapshot from Section 2 as its baseline. So a turn that increments minutes from 55 to 5 will fire the bundle once (hour changed); a turn from 30 to 31 will not.
+
+Because a mode-zero call performs the comparison without refreshing the snapshot, **a stale snapshot fires the bundle once at scene entry**, with no turn consumed. The shipped factory seed is exactly such a save — its snapshot is zero against a start hour of eight — so the first town-family entry after a new game or a Journey Onward writes the twelve-hour value and refreshes the moon digits before the player has taken a step. From the first time-advancing turn or party-upkeep pass onward the snapshot equals the hour and the bundle stops firing until the next real crossing.
 
 **A separate party status/provision pass runs alongside the cleanup.** This
 pass is a distinct routine from the per-turn cleanup described above, and its
@@ -384,13 +391,24 @@ The clock is part of the runtime save image and is flushed verbatim when the pla
 | `0x02D7` | 1 byte | Month, one-based `1..13`. |
 | `0x02D8` | 1 byte | Day of month, one-based `1..28`. |
 | `0x02D9` | 1 byte | Hour of day, zero-based `0..23`. |
-| `0x02DA` | 1 byte | Pre-cascade hour snapshot used to detect an hour crossing. |
+| `0x02DA` | 1 byte | Pre-cascade hour snapshot used to detect an hour crossing. Written at the head of the time-advancing path, before the minute increment, and again by the per-turn party-upkeep pass; **not** written by a mode-zero call. A load-and-save with no turn consumed therefore leaves it exactly as the file had it. |
 | `0x02DB` | 1 byte | Minute of hour, `0..59`. |
 | `0x02DC` | 1 byte | Combat round counter; combat advances time when this wraps. |
-| `0x02DD` | 1 byte | Adjacent per-turn state byte; preserve byte-for-byte in save tools. |
-| `0x02DE` | 1 byte | Twelve-hour display value recomputed on hour changes. |
+| `0x02DD` | 1 byte | Adjacent per-turn state byte; preserve byte-for-byte in save tools. It is the cached wind-cadence byte, and the wind setter clears it whenever the wind actually changes (`systems/weather.md` Section 2.1). |
+| `0x02DE` | 1 byte | Cached twelve-hour value; also the ambient-audio repeat countdown. See below. |
+| `0x02FF` | 1 byte | Ambient light level. Recomputed by every cleanup call, mode zero included, per Section 6. Not a calendar field, but the clock is its only ordinary writer. |
 
 Only `0x02CE`, `0x02D7`, `0x02D8`, `0x02D9`, and `0x02DB` are the canonical calendar fields. The derived and adjacent bytes are still persistent engine state, so compatibility implementations should round-trip them rather than regenerating the whole span from the calendar alone.
+
+**The twelve-hour byte at `0x02DE` is written by the clock and consumed by the audio system.** Its full contract, and the reason a save almost never shows the live twelve-hour hour there:
+
+- **Write.** On a cleanup call whose snapshot at `0x02DA` disagrees with the hour at `0x02D9`, the byte takes the twelve-hour form of the hour (Section 2). That is the whole write rule; there is no second writer.
+- **Read.** The ambient-audio tick is its only consumer. It reads the byte as a count of remaining loud repeats — non-zero selects the loud envelope for one class of ambient effect — and decrements it toward zero on **two of every eight** of its own calls, using a small free-running sub-tick counter that is not part of the save image. It never writes any other value.
+- **Cadence.** The audio tick runs once per idle world tick, and only while the master redraw-enable byte at `0x02FE` is non-zero; when that byte is clear the world tick skips its whole body and no decrement happens. The world tick is *not* one call per keyboard poll — the idle key-wait loop reaches it on one iteration in four, and many other sites drive it besides (`systems/main-loop.md` Section 9).
+- **Consequence for a save.** A save taken any appreciable time after the last hour crossing reads zero here. An engine that stores a live twelve-hour value and never decays it diverges from the original on essentially every daylight save. The byte-compatible behaviour is: write on a snapshot mismatch, then decay on the audio cadence above.
+- **Confidence.** The write rule, the single-consumer finding, the two-in-eight decrement and the cadence gates are **established** for the scan scope in `formats/saved-gam.md` Section 15 — the shipped executable, all twenty-three code overlays and all four display drivers, searched for direct and indexed references to the byte, with the hit list enumerated in the private note. **How long the byte takes to reach zero in wall-clock terms is inferred, not measured**: no timing run was made and the world-tick rate itself is unmeasured. Do not publish a seconds figure.
+
+*Corrected (issue #184).* This table's `0x02DE` row previously read "Twelve-hour display value recomputed on hour changes". The value rule survives; the word *display* is withdrawn, because no shipped consumer renders the byte, and "on hour changes" is replaced by the snapshot-mismatch gate above. See `RETRACTIONS.md` row R338.
 
 There is no separate "in-game time" file. The save image is the canonical store; loading the save reads the five fields back into the runtime variables, and the next per-turn cleanup uses them as-is.
 
@@ -515,3 +533,14 @@ The behaviour described here was derived from the private function notes listed 
 - The Hole-up command's repeated cleanup invocations and town-hours scheduler burst — derived from `u5-decomp/functions/CMDS_OVL/`.
 - The save-image layout for year/month/day/hour/minute, including adjacent persistent state in the same resident neighbourhood — derived from `u5-decomp/formats/saves.md`.
 - The runtime byte assignments for the clock fields and the surrounding per-turn variables — derived from `u5-decomp/formats/ds-bss-map.md`.
+- Source provenance: the twelve-hour byte's snapshot-mismatch write gate, its
+  single audio consumer, the two-in-eight decrement and the world-tick cadence
+  gates behind it; the saved-hour snapshot's two writers and its non-refresh on
+  a mode-zero call; and the moon-phase renderer's caching of the two glyph
+  digits at every scene entry and hour change — derived from private analysis in
+  `u5-decomp/notes/`, cross-checked against
+  `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/functions/TOWN_OVL/`. The
+  negative claim that nothing renders the twelve-hour byte is scoped to a
+  reference census over the shipped executable, all twenty-three code overlays
+  and all four display drivers; accesses computed through a pointer base outside
+  the scanned window are not covered. No wall-clock timing was measured.

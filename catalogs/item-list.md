@@ -198,7 +198,25 @@ id. For values greater than `1` other than `99`, the default combat damage path
 rolls a pre-soak damage value in the inclusive range `1..Attack max`. A value
 of `99` enters the combat special branch used by glass/special swords. A value
 of `1` is a fixed low-damage entry, and `0` means the row has no ordinary attack
-damage value. This column is not an armour or shield defence table.
+damage value. **One row's published value is never the damage delivered:** for
+the Jeweled Sword (id 40) the combat damage roller overrides this table's `1` to
+`0` before any roll, so that weapon lands no ordinary attack damage at all
+(`systems/combat.md` Section 12). This column is not an armour or shield defence table. It is also
+the *party* side of the damage roller only: a monster's attack value is its
+class byte used flat, with no draw (`systems/combat.md` Section 12).
+
+Three ids are **always-hit** cases in the ordinary attack path - **Sword of
+Chaos (35), Glass Sword (39) and Jeweled Sword (40)** - so an attempt with one
+of them skips the to-hit score entirely. Only a player-driven attack can reach
+them: the automatic actor driver passes a fixed neutral item id, and none of the
+five missile ids the ranged route gates on is in the set, so in practice only a
+melee attempt delivers an always-hit. All three ids are established, and the
+`Attack max` values published above for them agree with private analysis: ids 35
+and 39 both carry the instant-kill sentinel `99`, so an always-hit delivered
+with the Sword of Chaos or the Glass Sword resolves through the sentinel path
+`systems/combat.md` Section 12 publishes - the damage roller short-circuits
+before the defender's defence byte is read and takes no defence draw. Id 40
+carries `1`, which the same roller overrides to `0` before any roll.
 
 ### 5.1.1 Equipment class tags
 
@@ -315,11 +333,21 @@ across party and monster actors:
   helper unless a special effect forces a hit or redirects the impact.
 - The shared to-hit helper accepts certain special action/effect tiles as
   always-hit cases; otherwise it computes a score from attacker and defender
-  combat ratings, `(attacker - defender + 30) / 2`, and compares that score
-  with a uniform random draw. The direction of that comparison - the hit is
-  accepted when the draw is at or above the score, so a larger score is a
-  *worse* chance to hit - and the limits on it are owned by `systems/combat.md`
-  section 11.
+  combat ratings, `(defender - attacker + 30) / 2` truncated toward zero, and
+  compares that score with one skewed `1..30` combat roll. The hit is accepted
+  when the roll is at or above the score, so a larger score is a *worse* chance
+  to hit. *(**Corrected.** This bullet formerly published the score as
+  `(attacker - defender + 30) / 2` and the draw as "a uniform random draw". The
+  operands were the wrong way round - it is the **defender's** rating that is
+  added - and the draw is the shared skewed `1..30` combat roll, not a uniform
+  one. See `RETRACTIONS.md` R334 and R335.)* The rating selection, the published
+  hit percentages, and the strength-arm item list are owned by
+  `systems/combat.md` section 11.
+- Five ids in this table select the character's **Strength** as the attacker
+  term of that score instead of the character's Dexterity: Spiked Helm (3),
+  Spiked Shield (6), Club (18), Mace (24) and 2H Hammer (31). Every other readied item, and bare
+  hands, leaves the attacker term as Dexterity. This is a third per-item side
+  table, independent of both `Attack max` and the non-adjacent range cap.
 
 The traced weapon-dispatch range table is item-id keyed and independent of the
 `Attack max` damage ceiling. A non-zero range cap does **not** mean "missile
@@ -378,8 +406,8 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 | Morning Star | Weapon | Heavy melee weapon with an ordinary attack max value; non-adjacent range cap 2. | None for ordinary damage. |
 | Sword of Chaos | Magical weapon | Named high-tier sword using the combat special attack value. Its drawback is now traced: while item id 35 sits in the wielder's weapon-hand or shield-hand readied slot, that character's combat turns are taken away from the player. The combat turn dispatcher stamps the controlled/charmed descriptor bit on the character, clears the active-player sentinel, and runs the turn through the automatic actor driver instead of reading a command, so the character shows the `C` status letter and acts on its own. See `systems/combat.md` Section 6.1a. | Whether any narration accompanies the compulsion. |
 | Silver Sword | Weapon | Special sword, likely effective against specific enemies. | Exact enemy interactions. |
-| Glass Sword | Weapon | Named weapon using the combat special attack value. | No attack-time breakage in the analyzed baseline. |
-| Jeweled Sword | Weapon | High-tier sword with a fixed low ordinary attack value. | Exact special-purpose use, if any. |
+| Glass Sword | Weapon | Named weapon using the combat special attack value: the damage roller narrates `Thy sword hath shattered!` and substitutes the instant-kill sentinel 99 (`systems/combat.md` Section 12). | No attack-time breakage in the analyzed baseline. *Residual:* private analysis reads that shatter arm as also clearing the readied slot. The published negative stands pending resolution; the conflict is recorded in `NEXT-STEPS.md`. |
+| Jeweled Sword | Weapon | Always-hit id whose table `Attack max` of 1 is never reached: the combat damage roller overrides this id's raw value to 0 before any roll, so it delivers no ordinary attack damage (`systems/combat.md` Section 12). | Exact special-purpose use, if any. |
 | Mystic Sword | Weapon | Top-tier or magical sword with an ordinary attack max value. | Exact special effect, if any. |
 | 2H Hammer | Two-handed weapon | Requires both hands free and has an ordinary attack max value. | Display weight. |
 | 2H Axe | Two-handed weapon | Requires both hands free and has an ordinary attack max value. | Display weight. |

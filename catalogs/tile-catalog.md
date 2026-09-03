@@ -694,7 +694,7 @@ already withdrew for holding person sprites, and it is exactly `128` low, which
 is the signature of reading a monster's actor byte as though the actor half
 began at the monster runs rather than at actor byte zero.
 
-Cross-reference: `catalogs/monster-bestiary.md` for per-monster stats, AI archetype, encounter rate per terrain, and the singular and plural display names from the resident data string tables.
+Cross-reference: `catalogs/monster-bestiary.md` for per-monster stats, AI archetype, encounter rate per terrain, and the singular class names and the group banner names from the resident data string tables (`catalogs/monster-bestiary.md` Sections 2 and 2.2).
 
 Monsters appear in two contexts:
 

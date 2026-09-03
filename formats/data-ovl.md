@@ -338,13 +338,17 @@ global combat metadata that is not stored in arena files:
 - A fixed 48-row combat-class stat table shared by party combat classes,
   special actor classes, NPC-role classes, and monster classes. Each row is
   eight bytes wide. The public row schema is: combat tier, speed seed used for
-  phase timing, an endurance rating, defense rating, attack-damage cap,
-  maximum HP, default spawn count, and default kill/drop cap. The tier and
-  endurance ratings are the two class-side inputs the shared actor-rating
-  selector can return, and they reach the to-hit and resistance scores through
-  it; earlier revisions of this section described them as inputs to a
-  "chest/encounter team-flip" comparison, which is withdrawn — no such
-  comparison exists and no caller flips an actor's faction on these bytes.
+  phase timing, an endurance rating, defense rating, attack value,
+  maximum HP, default spawn count, and default kill/drop cap. *(**Corrected.**
+  This paragraph formerly said "the tier and endurance ratings are the two
+  class-side inputs the shared actor-rating selector can return, and they reach
+  the to-hit and resistance scores through it". That is withdrawn
+  (`RETRACTIONS.md` R337): an ordinary to-hit reads the per-actor combat weight
+  for all but the `zero-selector stat row` classes, and the endurance rating
+  belongs to the separate resistance predicate. Byte `+4` was also renamed from
+  "attack-damage cap" — it is not rolled against; see R336. The still-earlier
+  "chest/encounter team-flip" reading remains withdrawn — no such comparison
+  exists and no caller flips an actor's faction on these bytes.)*
   Maximum HP also supplies the monster spawn HP and the raw reward-unit input. A separate per-class flag table immediately
   follows the class records and should be modeled as class traits, not as
   executable scripts.
@@ -417,11 +421,11 @@ The combat-class stat row is interpreted field-by-field:
 
 | Byte | Clean field | Consumer-facing meaning |
 |------|-------------|--------------------------|
-| `+0` | Combat tier | Class level. One of the two class-side ratings the shared actor-rating selector can return, so it can act as either the attacker or the defender term of the to-hit and resistance scores. |
+| `+0` | Combat tier | Class level. The shared actor-rating selector returns it as the **attacker** term of an ordinary to-hit score, and only for classes carrying the `zero-selector stat row` trait; every other class supplies its per-actor combat weight instead. It is never the defender term of an ordinary melee. |
 | `+1` | Speed seed | Base input for combat phase timing when an actor is placed. Higher values refresh the phase counter sooner after randomization and clamping. |
-| `+2` | Endurance rating | The other class-side rating the shared actor-rating selector can return, used the same way as the tier byte and separate from maximum HP. |
+| `+2` | Endurance rating | The monster-side rating of the shared spell-**resistance** predicate, separate from maximum HP. It is not an ordinary to-hit term. |
 | `+3` | Defense rating | Target-side defense input for attack resolution: it bounds the roll subtracted from the attacker's damage. Higher values make ordinary damage harder to land. The actor-rating selector also has an arm that would return this byte, but no call site in the game selects that arm, so it never reaches a hit or resistance score. |
-| `+4` | Attack cap | Attacker-side maximum for ordinary monster attack damage; the boss-scale maximum has its own special hit behavior in combat. |
+| `+4` | Attack value | The monster's ordinary attack damage, used **flat with no random draw**, not a ceiling; the boss-scale value has its own special hit behavior in combat. *(**Corrected** from "Attacker-side maximum for ordinary monster attack damage"; see `RETRACTIONS.md` R336.)* |
 | `+5` | Maximum HP | Spawn HP for monsters, wound-threshold basis, and raw reward-unit input. |
 | `+6` | Default spawn count | Terrain and dungeon encounter count seed, with special exact-count sentinels handled by encounter setup. |
 | `+7` | Default kill/drop cap | Default kill-path drop marker input before the combat framer restores the world object table. |

@@ -31,14 +31,17 @@ after the roster.
 | Party size                          | `0x02B5`              | 1 byte      | 4       |
 | Calendar (year/month/day/hour/min)  | `0x02CE` – `0x02DE`   | ~17 bytes   | 5       |
 | Party status / active-player bytes  | `0x02D4` – `0x02D6`   | 3 bytes     | 4       |
-| Food gauge / mode scratch           | `0x02DF` – `0x02EB`   | 13 bytes    | 10      |
+| Cached moon-phase glyph digits      | `0x02DF` – `0x02E0`   | 2 bytes     | 5.1     |
+| Food gauge / mode scratch           | `0x02E1` – `0x02EB`   | 11 bytes    | 10      |
 | — of which: moongate presence phase | `0x02E1`              | 1 byte      | 10      |
 | Wind state                          | `0x02EC`              | 1 byte      | 6       |
 | Scene byte and saved-scene scratch  | `0x02ED` – `0x02EE`   | 2 bytes     | 6, 10   |
 | Party position (z/x/y)              | `0x02EF` – `0x02F1`   | 3 bytes     | 6       |
 | Per-turn flags and combat scratch   | `0x02F2` – `0x0325`   | ~52 bytes   | 10      |
+| — of which: ambient light level     | `0x02FF`              | 1 byte      | 10      |
 | Quest progress bitmasks             | `0x0326` – `0x0328`   | 3 bytes     | 9       |
 | Tail of resident state              | `0x0329` – `0x03B3`   | ~139 bytes  | 10      |
+| — of which: resident-Shadowlord selector | `0x03B2`         | 1 byte      | 10      |
 | Dungeon room-clear bitmap           | `0x033A` – `0x0349`   | 16 bytes    | 10      |
 | Active map / dungeon tile buffer    | `0x03B4` – `0x05B3`   | 512 bytes   | 8.2     |
 | Per-location NPC bitmasks (removed, then name-known) | `0x05B4` – `0x06B3` | 256 bytes | 9.2 |
@@ -180,14 +183,31 @@ The world clock lives in a small group of bytes shared with movement, mode, comb
 | `0x02D7` | 1 byte | Month | One-based, range `1..13`. |
 | `0x02D8` | 1 byte | Day | One-based, range `1..28`. |
 | `0x02D9` | 1 byte | Hour | Zero-based, twenty-four-hour, range `0..23`. |
-| `0x02DA` | 1 byte | Saved-hour snapshot | Used by the time cleanup to detect hour crossings. |
+| `0x02DA` | 1 byte | Saved-hour snapshot | The hour as it stood at the last time-advancing cleanup call or party-upkeep pass. The cleanup compares it against the hour at `0x02D9` to decide whether an hour has been crossed. It is **not** refreshed by a mode-zero cleanup call, so a save taken with no turn consumed since load keeps whatever the file carried — in the factory seed that is zero against an hour of eight, which is why the hour-change block fires once on the first scene entry after a load. See `systems/time.md` Section 11. |
 | `0x02DB` | 1 byte | Minute | Range `0..59`. |
 | `0x02DC` | 1 byte | Combat round counter | Combat advances time when this counter wraps. |
 | `0x02DD` | 1 byte | Adjacent per-turn state | Preserve byte-for-byte; no public calendar meaning. |
-| `0x02DE` | 1 byte | 12-hour display | Display-hour value derived from the hour and recomputed on hour changes. |
+| `0x02DE` | 1 byte | Twelve-hour hour value / audio repeat countdown | Written with the twelve-hour form of the hour when the cleanup finds the snapshot at `0x02DA` disagreeing with the hour at `0x02D9`, then counted down toward zero by the ambient-audio tick. Nothing renders it. See `systems/time.md` Section 11 for the full rule. |
 | `0x02E8` | 1 byte | Timed magic-effect duration | Paired with the effect code at `0x02D4`; not clock state. `0xFF` means permanent. |
 
+*Corrected (issue #184).* This table previously called `0x02DE` the "12-hour display" and described it as a "display-hour value derived from the hour and recomputed on hour changes". The **value** rule survives; the word *display* is withdrawn, because no consumer in the shipped game renders this byte, and the recompute is gated on the saved-hour snapshot rather than on an hour boundary as such. See `RETRACTIONS.md` row R338.
+
 The cascade rules - minute to hour to day to month to year - are described in detail in `systems/time.md`. From this spec's perspective the calendar fields are simple little-endian unsigned integers in fixed ranges; the neighbouring bytes are separate save-backed state.
+
+### 5.1 Cached moon-phase glyph digits
+
+The two bytes at `0x02DF` and `0x02E0` are the cached Trammel and Felucca moon-phase digits for the current day of the month, in that order. Each is stored as the printable character for a digit in the range zero through seven — that is, the character code for the phase index, not the phase index itself — and a reader that wants the numeric phase must subtract the character code of `0`.
+
+| Offset | Width | Field | Meaning |
+|--------|------:|-------|---------|
+| `0x02DF` | 1 byte | Cached Trammel phase digit | Phase index `0..7` stored as a printable digit character. |
+| `0x02E0` | 1 byte | Cached Felucca phase digit | Phase index `0..7` stored as a printable digit character. |
+
+Both bytes are rewritten by the moon-phase status-strip renderer, from the day-of-month alone, before the renderer decides whether either glyph is currently visible. That renderer runs on every overworld and town-family scene entry and again from the cleanup's hour-change block while the party is on the surface or in a town-family location, so the pair is refreshed deterministically at least once on any load into such a scene. `systems/moons.md` owns the phase tables the digits come from.
+
+**They are gameplay state, not scratch.** Natural-moongate transit selects its destination from these two cached bytes and from nothing else: before noon it reads the Trammel digit, from noon onward the Felucca digit, converts it to a number and uses it as the Moonstone slot index of Section 7.2, warping the party to that slot's saved destination scene, X, Y and Z. An engine that treats the pair as disposable, or that recomputes the phase by a different route on load, sends the party through the wrong gate. *Corrected (issue #184):* the region table previously folded these two bytes into an undifferentiated "food gauge / mode scratch" band. See `RETRACTIONS.md` row R339.
+
+Factory seed: both bytes are zero, and the first scene entry replaces them with the pair for day five of the shipped start date.
 
 ## 6. Scene and party position
 
@@ -298,10 +318,12 @@ Two hundred fifty-six bytes at file offset `0x06B4` hold the active-object table
 | `+0x03`      | Cell Y coordinate.                                                                                                                         |
 | `+0x04`      | Floor / Z coordinate. `0xFF` is the "above-ground / no z" sentinel for surface objects.                                                    |
 | `+0x05`      | Auxiliary byte. For frigates this is the hull's hit-point count; for other vehicles it carries class-specific state.                       |
-| `+0x06`      | Auxiliary byte. Animation phase / direction-step counter; compositor reads it for water creatures.                                         |
+| `+0x06`      | Packed animation byte: animation-script step in the high nibble, frame-delay countdown in the low nibble. **Not a facing.** See `systems/active-objects.md` Section 3. |
 | `+0x07`      | Auxiliary byte. For frigates this counts skiffs aboard; for other classes carries hit points or other class-specific state.                |
 
-Slot zero is the player. Slots one through thirty-one hold any other on-map cast — vehicles parked or in motion, NPCs that have stepped onto the player's floor, dropped items, summoned creatures, and so on. Most saves zero out most slots; the canonical seed save has the entire region zero. Any pre-placed objects a fresh game starts with come from the per-plane object overlays rather than from the save image, and in the shipped data those are underworld objects: the surface overlay ships empty (Section 13).
+*Corrected (issue #184).* The `+0x06` row previously read "Animation phase / direction-step counter; compositor reads it for water creatures." The direction-step reading is withdrawn: the high nibble is an animation-script step, and no facing is stored in this byte at all. A byte-compatible producer must not write a facing here — in particular, the player's own record carries **zero** in this byte in a shipped save, not the all-ones freeze marker. See `RETRACTIONS.md` row R340.
+
+Slot zero is the player, and only its first five bytes are engine-maintained: the per-tick compositor rebuilds `+0x00` through `+0x04` from the transport/action marker at `0x02D6` and the party position at `0x02EF..0x02F1`, and writes nothing to `+0x05`, `+0x06` or `+0x07`. Those three round-trip from the file within a scene, subject to the qualifiers in `systems/active-objects.md` Section 5 — the party on foot, and byte `+0x06` holding either zero or the freeze sentinel. They are not, however, inviolable across scene changes: see Section 13 and `systems/active-objects.md` Section 11 for the wholesale object-list reload that replaces every byte of every slot on a return to the overworld. Slots one through thirty-one hold any other on-map cast — vehicles parked or in motion, NPCs that have stepped onto the player's floor, dropped items, summoned creatures, and so on. Most saves zero out most slots; the canonical seed save has the entire region zero. Any pre-placed objects a fresh game starts with come from the per-plane object overlays rather than from the save image, and in the shipped data those are underworld objects: the surface overlay ships empty (Section 13).
 
 The active-object table in the save image is the snapshot of the live global table at flush time. In top-down scenes this is the player's current map cast: overworld and underworld saves hold vehicles, dropped objects, and spawned creatures; town, castle, keep, and dwelling saves hold the on-floor NPC/object cast. Dungeon exploration does not use this table as its first-person actor list, so dungeon saves preserve the global table as ambient state rather than as dungeon-renderer contents. Saves taken in combat are not supported: the gameplay loops do not honour `Q` mid-combat, and the combat framer's temporary combat table is restored before control returns to a saveable loop.
 
@@ -463,7 +485,8 @@ A loosely packed band of bytes before the dungeon/map-cell working buffer holds 
 | `0x02B2..0x02B4` | Rare-reagent harvest cooldown cookies | Three bytes, one per fixed rare-reagent Search harvest point, in the harvest-table order published in `systems/containers.md`. Each holds the day-of-month of that point's last successful harvest; a harvest is refused when the byte equals the current day, and success writes the current day into it. These sit between the reagent counters of Section 7 and the party-size byte, and they are not reagent counters — do not read or display them as inventory. The 28-day month rollover zeroes all three. Factory: all zero. |
 | `0x0241`     | Record-15 gate — the Glass Sword equipment counter | Not a dedicated cookie. This is the **equipment-inventory counter for item id `39` (Glass Sword)** from Section 7, and record 15's granted item is that same Glass Sword. Record 15 grants only when the byte is zero and no NPC is present at the searched tile; the skip predicate is `byte != 0` OR an NPC is present. The scan itself never writes the byte and never sets bitmap bit 15 — the ordinary inventory grant increments the counter, and that is what makes the record single-use. An engine that gives record 15 a separate never-written cookie yields an infinitely repeatable Glass Sword. Factory: `0x00`. |
 | `0x02EE`     | Saved scene / mode scratch     | See Section 6. Adjacent to the location tuple; combat uses it for pre-combat scene restore and mode code may reuse it as transition/redraw scratch. |
-| `0x02F2..0x02FB`, `0x02FD..0x02FF` | Animation / cached light | Animation, redraw, and cached ambient-light bytes around the action-result byte below. The active light-source duration counters start at `0x0300`. |
+| `0x02F2..0x02FB`, `0x02FD..0x02FE` | Animation / redraw scratch | Animation and redraw bytes around the action-result byte below. `0x02FE` is the master redraw-enable gate: while it is zero the idle world tick skips its whole body, which suppresses the ambient-audio tick, the autonomous wind drift and the object animator alike. The active light-source duration counters start at `0x0300`. |
+| `0x02FF`     | Ambient light level            | The cached daylight/ambient value the visibility carve consumes, recomputed by **every** clock call including the mode-zero "commit the screen without advancing time" call that scene entry issues. Its rule is owned by `systems/time.md` Section 6; in save-image terms it is `2` in the dark cases (the one scene-numbered dark location, a party Z whose high bit is set, an hour before five or after nineteen), a dawn or dusk gradient sample at hours five and nineteen, and `50` otherwise, then **raised — never lowered** — to `18` while the light-spell counter at `0x0300` is non-zero and to `10` while the torch counter at `0x0301` is non-zero. One trap for producers: a stored value of `51` or higher makes the recompute skip entirely and freezes ambient light for that call. No writer found in the reference census produces a value above `50`, so the branch is believed inert in ordinary play — that is a census result, not a proof, and `systems/time.md` Section 6 states the same hedge. An editor or engine that stores a larger value here permanently disables the recompute. Factory seed: `5`, a stale sample the first clock call overwrites. |
 | `0x02FC`     | Combat action-result/narration scratch | A shared one-byte bitfield, not part of any actor descriptor. The vanish-on-death path replaces it with `0x02`; the common result narrator normally consumes and clears that bit to suppress duplicate generic kill narration, while a later party-faint sleep application can overwrite it with `0x04`. The combat walker zeros the whole byte before each actor dispatch. It round-trips only because the save is a flat resident-memory image: combat cannot resume from a save, so a loader must not treat a stored value as a pending result. See `systems/combat.md` Section 6.3. |
 | `0x0300`     | Light-spell counter         | Duration counter set by *In Lor* and *Vas Lor*.                                                                                                  |
 | `0x0301`     | Torch counter               | Duration counter set or extended by I-Ignite.                                                                                                    |
@@ -473,6 +496,7 @@ A loosely packed band of bytes before the dungeon/map-cell working buffer holds 
 | `0x03AA`     | Door auto-close X            | One-byte X coordinate of the pending door cell. Restored verbatim, but left inert after town setup clears the previous-tile gate. |
 | `0x03AB`     | Door auto-close Y            | One-byte Y coordinate of the pending door cell. Restored verbatim, but left inert after town setup clears the previous-tile gate. |
 | `0x03AC`     | Door auto-close countdown    | One-byte turn countdown, initialized to four by O-Open. The previous-tile byte gates whether the tracker is active; Journey Onward restores this byte but does not resume the tracker. |
+| `0x03B2`     | Resident-Shadowlord selector   | One byte naming which of the three Shadowlords is resident in the location the party is currently inside: `0`, `1` or `2` for a hosting location, `0xFF` for "none". It is a **per-entry latch, not durable world state**. Town-family entry stores `0xFF` unconditionally — on fresh entries and on preserving re-entries alike, because the write sits after the entry-mode guard — and the Shadowlord install helper then replaces it with an index only when the party's row is not `4` and one of the three hideout bytes at `0x0322..0x0324` equals the scene being entered (`systems/town-mode.md` Sections 5 and 13). Its consumers are the hideout blight pass, the entry atmosphere line, the town mass-AI rewrite, and two service/conversation gates. A byte-compatible producer emits `0xFF` for any save taken inside a location; a save tool should preserve whatever it finds. The factory seed's `0` is a stale, semantically wrong value that is inert only because nothing reads the byte before the first town entry overwrites it. |
 | `0x03B3`     | Early-game encounter-size damper | Wilderness encounter spawn-count reroll flag, historically mislabelled the "fortunes of war" or "double encounter" flag. Terrain combat reads non-zero as "replace the first random monster-count roll with a second roll of the same shape", which can only lower the count. **The factory seed sets this byte to `1`** — it is the only non-zero byte in the tail of `INIT.GAM` — so every new game begins with the damper active, and save/load carries it. Nothing in gameplay ever sets it; the only write anywhere in the engine is the clear performed at the 28-day month rollover. Because the shipped calendar starts partway through a month, it survives the first twenty-four in-game days and is then off permanently. See `systems/combat.md` Section 5. |
 
 The remaining per-turn flags are not part of the format's "stable" surface — different dot releases of the original game might have set or cleared bytes here for reasons not modelled in any external spec. An implementation that wants a byte-compatible save can pass these through unchanged: the engine reads the relevant ones during boot, ignores the rest, and rewrites them as it plays. The interference-source map is an explicit exception: preserve its exact bytes and apply the lifecycle in `systems/magic.md` Section 7. It has no encounter-entry, round-start, or combat-exit reset; each victim entry clears only after that victim completes an action. A source left uncleared at combat exit may therefore be written by Q-Save and restored by Journey Onward.
@@ -558,7 +582,7 @@ the seed. The persisted map tuple is scene 13 (Iolo's Hut), saved-scene scratch
 0, floor/Z 0, X 15, Y 15. The wind byte is 0, which maps to Calm; tools should
 still preserve out-of-range wind values they do not understand.
 
-In a chargen-only save with no active map yet, the active-object table at `0x06B4` is zero; the engine populates it on first overworld entry from the surface object overlay. The example is shown only as a guide to reading the layout; the exact bytes a fresh chargen produces depend on the entered name, chosen gender, and questionnaire stat rolls.
+In a chargen-only save with no active map yet, the active-object table at `0x06B4` is zero; the engine populates it on first overworld entry from the surface object overlay, and reloads it from that overlay on every subsequent return to the overworld, not only the first (Section 13). The example is shown only as a guide to reading the layout; the exact bytes a fresh chargen produces depend on the entered name, chosen gender, and questionnaire stat rolls.
 
 ## 12. Reserved and zero-padded regions
 
@@ -566,11 +590,23 @@ Two spans are zero in the factory seed and in clean-state saves:
 
 - `0x07B4..0x105F` — two thousand two hundred twenty bytes between the
   active-object table and the file end. In memory this region holds the NPC
-  schedule blob, NPC runtime state, NPC path queues, and the world-tile render
-  buffer, all of which are repopulated from the location's NPC files and the
-  active-map loader on map entry. Their contents are transient for gameplay:
-  a clean implementation may rebuild them on load, while a byte-compatible save
-  editor should preserve unknown bytes when rewriting an existing save.
+  schedule blob, NPC runtime state, NPC path queues, the NPC type array, the
+  per-NPC stuck counters, and the world-tile render buffer. **This band is
+  durable gameplay state, not scratch.** A save taken inside a town-family
+  location carries that location's entire live cast here, and the load path's
+  town-family entry deliberately does *not* reload it: on a Journey Onward the
+  restored image **is** the cast, and re-running the roster loader would discard
+  every NPC's live position, path queue and pursuit state. An implementation
+  that persists only the active-object table of Section 8.1 will resume a
+  town-family save with an empty location where the original restores a live
+  one. Preserve every byte, and read `systems/active-objects.md` Section 10 for
+  the entry-mode rule that decides when the band is rebuilt.
+
+  *Corrected (issue #184).* This bullet previously said the region's contents
+  "are transient for gameplay" and that "a clean implementation may rebuild them
+  on load". Both are withdrawn; see `RETRACTIONS.md` row R341. The world-tile
+  render buffer at the tail of the band remains genuinely rebuildable — it is
+  the NPC family that is not.
 
 ## 13. The object-overlay companions
 
@@ -584,6 +620,8 @@ The active-object table embedded in `SAVED.GAM` (Section 8) holds the cast on th
 | `INIT.OOL`   | 256 bytes | Factory seed for the underworld (companion to `INIT.GAM`); byte-identical to the shipped `UNDER.OOL`. Read-only at runtime. |
 
 The on-disk record layout in every `.OOL` file matches the eight-byte active-object record from Section 8 exactly. The shipped surface seed `BRIT.OOL` is all zeros; the shipped underworld seed `UNDER.OOL` has the small handful of non-zero records — five of them, a skiff and a four-corpse cluster — with the rest zero. (An earlier revision of this paragraph had the two planes the other way round, attributing the records to a Britannia surface seed and calling the underworld seed empty; that is withdrawn. `formats/ool.md` section 7 enumerates the five records.) The "depends" auxiliary bytes use class-specific encodings; for these bare seed records, `+0x04` is `0xFF` and `+0x05..+0x07` are zero.
+
+**The two tables are not independent at runtime.** The per-plane object list is not consulted only at first entry: every return to the overworld reads the whole two-hundred-fifty-six-byte list for the party's plane straight over the live active-object table, replacing all eight bytes of all thirty-two slots, and a natural-moongate warp writes the live table back out to the same file. Any statement in this document or in `systems/active-objects.md` that a slot's bytes round-trip through `SAVED.GAM` therefore carries the qualifier *within a scene, between object-list reloads*.
 
 The roundtrip across `.OOL` files is owned by `systems/save-load.md`: load refreshes both per-plane mirrors from `SAVED.OOL`, while save reads both per-plane files into its staging halves, writes the underworld file back out only when the entry disk-prompt mode was not mode 1, never writes the surface file, and composes the canonical `SAVED.OOL` from those halves. The "OOL" extension's expansion is unattested; "Object Overlay Layer" is a plausible mnemonic, treated as opaque.
 
@@ -740,3 +778,21 @@ The byte-level layout described here was derived from the project's private save
   factory-seed value, the absence of any gameplay setter, and the month-rollover
   clear as the engine's only write. Cross-checked against
   `u5-decomp/functions/ULTIMA_EXE/`.
+- Source provenance: derived from private analysis in `u5-decomp/notes/` --
+  the issue-184 pass over the save image's previously unexplained bytes. It
+  established the twelve-hour value at `0x02DE` and its audio-tick decay, the
+  saved-hour snapshot's two writers and its non-refresh on a mode-zero clock
+  call, the identification of `0x02DF`/`0x02E0` as the cached Trammel and
+  Felucca phase digits together with their moongate-transit consumer, the
+  ambient-light rule and skip sentinel at `0x02FF`, the resident-Shadowlord
+  latch at `0x03B2`, the packed animation encoding of active-object record byte
+  `+0x06`, the presence of the whole NPC runtime family inside the save image,
+  and the entry-mode rule that decides whether a town-family load reloads that
+  family. Cross-checked against `u5-decomp/functions/ULTIMA_EXE/`,
+  `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/NPC_OVL/`,
+  `u5-decomp/functions/INTRO_OVL/` and `u5-decomp/functions/CAST2_OVL/`. The
+  negative claims taken from it (no renderer for `0x02DE`; a single writer for
+  the wind byte) are scoped to that pass's stated scan scope: the shipped
+  executable, all twenty-three code overlays and all four display drivers,
+  searched for direct and indexed references to the byte. Accesses computed
+  through a pointer base outside the scanned window are not covered.

@@ -853,7 +853,7 @@ There is no leading blank row on either line and no trailing blank row, and
 there is no per-member narration anywhere in the chain. An implementation must
 not invent one: the fall's per-member feedback is graphical and audible only.
 
-Rendered into the fifteen-column gameplay message window, starting on a fresh
+Rendered into the sixteen-column gameplay message window, starting on a fresh
 row, the full chain reads:
 
 | Rendered row |
@@ -863,8 +863,8 @@ row, the full chain reads:
 | `underworld!!` |
 
 The break inside `Falling into underworld!!` is **not** in the data. It is
-produced by the message window's word wrap at width fifteen: the printer breaks
-on the space after `into`. An implementation with a wider message window renders
+produced by the message window's word wrap at a capacity of sixteen columns:
+the printer breaks on the space after `into`. An implementation with a wider message window renders
 the line unbroken, which is a visible divergence from the original.
 
 **Whirlpool swallow.** In print order:
@@ -893,16 +893,36 @@ on-foot avatar, the engagement path goes straight to the Section 6.2.4 impact
 payload: no banner, no sprite swap, no sweep, no plane write and no teleport.
 The only text it can produce is whatever that payload prints.
 
-**About the fifteen-column figure.** The gameplay message window's rectangle is
-**narrowed** exactly once in the whole program, by the intro overlay. A boot-time
-initialiser first fills every text-window record with full-screen margins; after
-the intro's write nothing widens or re-narrows window two. The printer's wrap
-test uses the difference between the window's right and left columns, which is
-fifteen. The scan behind "narrowed exactly once" covered the resident image and
-all twenty-three overlays; it did **not** cover
-the four display drivers, which are entered through a jump-table interface and
-cannot reach the routine, nor direct byte writes into the window descriptor
-table, which were not scanned.
+**About the sixteen-column figure.** The gameplay message window spans absolute
+columns 24 through 39 inclusive, so it holds **sixteen** characters per row. Both
+corner columns of a window rectangle are inclusive, and the per-cell emitter
+wraps only when the cursor steps *past* the right column, so the capacity is
+`bottom_right_x - top_left_x + 1` and the trailing column is written normally
+(`systems/text-output.md` Sections 4 and 6). The difference between the right and
+left columns, fifteen, is the printer's internal *last legal column*, not a
+character count.
+
+The intro overlay is the only writer of that rectangle anywhere in the program,
+but it writes the message-window descriptor at **three** points: once with the
+gameplay rectangle, and twice with transient narrow strips used by the Ultima IV
+character-conversion screens. Every path that leaves the intro for gameplay
+re-establishes the gameplay rectangle afterwards, and nothing outside the intro
+touches it, so `(24, 11) - (39, 23)` is the standing rectangle at play time. A
+boot-time initialiser fills every text-window record with full-screen margins
+before any of that happens. Scan scope: the resident image and all twenty-three
+overlays, near-call transfers only; it did **not** cover the four display
+drivers, which are entered through a jump-table interface and cannot reach the
+routine, nor direct byte writes into the window descriptor storage, which were
+not scanned.
+
+*Corrected.* Earlier revisions of this section called the message window
+fifteen columns wide, described its word wrap as "width fifteen", and said the
+rectangle is "**narrowed** exactly once in the whole program ... after the
+intro's write nothing widens or re-narrows window two". The width figure is
+withdrawn - it is sixteen - and the "exactly once" claim is withdrawn as stated:
+the intro writes that descriptor three times. The rendered rows in this section
+are unaffected; both figures break these particular strings at the same
+space. See `RETRACTIONS.md` R347 and R348.
 
 **Waits and sound.** Nothing in either presentation waits for a key. The world
 tick used for the pauses is key-free and is skipped entirely when the loop's
@@ -1586,3 +1606,12 @@ The behaviour described above was derived by reading the function and format not
   loop's boolean reading of the command status. Source provenance: derived from
   private analysis note
   `../u5-decomp/notes/`.
+- The Section 8.1 message-window width correction and the withdrawal of the
+  "narrowed exactly once" claim (issue #185) -- derived from private analysis
+  in `../u5-decomp/notes/`, from a decode of every directly encoded near call
+  to the window-rectangle setter across the resident image and all
+  twenty-three overlays, plus a call-tree and branch-free-return trace showing
+  the gameplay rectangle is the last of the three intro writes on every path
+  into play. The paragraph's own scan scope is kept: the four display drivers
+  were not swept, and far transfers and direct writes into the descriptor
+  storage were not swept.
