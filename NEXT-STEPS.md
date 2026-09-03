@@ -82,6 +82,55 @@ any scene whose waypoints differ by hour; the walkability of the four Iolo's Hut
 roster cells; and the animation-script bytes for the whirlpool marker class,
 whose reachability is traced but whose script is not.
 
+**Addendum - 2026-09-03, issue #185: who prints what on an attack.**
+`systems/combat.md` has a new **Section 11.1**, the complete printed-and-audible
+census of one attack outcome in both directions - which outcomes print a line on
+each side, the exact lines, whether each ends in a newline, and their order
+relative to the impact presentation, damage application, the cues and the
+stats-panel redraw. The headline answer to the issue: **an ordinary hostile
+monster's melee miss prints nothing and sounds nothing at all**, because the
+automatic driver never passes through the announcement layer and its miss arm
+prints no line; the routine that prints a miss line has exactly two call sites,
+both inside party-side attack helpers. Every result line names the **target**,
+so `Bat missed!` is the party's failed swing *at* a Bat.
+
+Four reversals landed with it, R352-R355. **R352:** Sections 11 and 12 asserted
+in three places that a zero-or-negative damage result is narrated as a *miss*;
+it prints `<target> grazed!` with the rising action-snap cue and suppresses the
+party stats-panel redraw. The withdrawn table row is the one an implementer
+copies when building the defence draw, which is why the wrong line fires on
+roughly two sevenths of *landed* monster swings. **R353:** Section 9 published a
+fabricated monster announcement, `<monster name> attacks <target name>, armed
+with <weapon>!`, plus the synthesised-keystroke framing that made it plausible;
+no string of that shape and no verb composer exists anywhere in the shipped
+game, and the automatic driver calls the shared helpers directly. The same
+framing had also been published in `systems/magic.md` section 9 and in
+`catalogs/monster-bestiary.md` section 4; both are corrected in place. **R354:**
+Section 6.1a, `catalogs/spell-list.md` and `systems/magic.md` section 8 all said
+a conjured or summoned creature is AI-driven and that the controlled bit "never
+hands a creature to the player's prompt" - it does exactly that, and Section
+6.1a already contradicted itself on the point. R354 also **reverses the earlier
+R074 withdrawal**: the reading R074 removed was correct for the dispatch half,
+so an implementer who acted on R074 (or on R247's reference to it) needs to
+re-read R354. **R355:** `systems/audio.md`'s "the other in-combat roll
+site returns silently on a miss" is true of the **melee** arm only; a ranged
+miss scatters, and a scatter onto an occupied cell runs the full hit chain
+against whoever is standing there.
+
+New material with no prior text to withdraw: the graded wound lines
+(`critical!` / `heavily wounded!` / `lightly wounded!` / `barely wounded!`) and
+the fact that they are **monster-target only**, so a party member who takes a
+solid hit always reads the flat `hit!` - or `dragged under!` from a Corpser -
+and eleven further lines the spec had never published verbatim. Two claims in
+11.1 stay *probable*: the stats-row flash as an XOR flash, and the identity of
+the impact-tile draw. Absolute frequencies there are inherited from the
+`audio.md` census; only the sweep directions were established this pass, and the
+monster swing sweeps opposite to the party's. Still open: the spell overlays'
+presentation around the shared result narrator, the standing-hazard tier's
+trigger conditions, the projectile pass behind one of the three silent ranged
+cases, and what a player can usefully do with a controlled monster once the
+prompt hands them one.
+
 **Addendum — 2026-09-02, issue #183: the ordinary melee to-hit score and the
 damage roll.** `systems/combat.md` Sections 11 and 12 now carry the whole
 ordinary-melee contract in both directions, and four reversals came with it.
@@ -1410,8 +1459,8 @@ status boxes now align with public combat and bestiary specs: round-loop
 phase/dispatch/exit behavior, combat command routing and monster command
 synthesis, target-picker filtering/fallback/direction synthesis, and the
 damage/status/death helper are covered in `systems/combat.md` and
-`catalogs/monster-bestiary.md`. Remaining COMBAT exactness is residual
-class-flag component labels and presentation-edge visual parity. The
+`catalogs/monster-bestiary.md`. (Superseded 2026-09-03, issue #185: the automatic actor driver calls the shared attack, movement and special-ability primitives directly and enters no command parser, so there is no monster command synthesis - `RETRACTIONS.md` R353.) Remaining COMBAT exactness is
+residual class-flag component labels and presentation-edge visual parity. The
 ranged/effect selector, payload, scene-resistance row values, and no-target
 centre fallback flee writer are now published.
 Post-combat reward/loot ownership is now a
@@ -2675,7 +2724,7 @@ identified as the ship hull-condition display.
 
 **Current cleanroom wording cleanup:** 2026-05-07 - shop overlay dispatch wording, door/NPC occupancy marker wording, remaining routing phrasing, loop setup labels, input nested-prompt wording, and visibility row-buffer wording cleaned up to avoid source-like implementation terms.
 
-**Current monster-AI cleanup:** 2026-05-11 - public combat/magic/DATA.OVL wording now replaces the stale general runner gap with the bounded class-flag special hook and ordinary target/direction/command synthesis. Later cleanup records compound-only or readerless class-flag component bits as opaque metadata, not class-state field semantics, and records the no-target centre fallback as another direct flee-flag writer.
+**Current monster-AI cleanup:** 2026-05-11 - public combat/magic/DATA.OVL wording now replaces the stale general runner gap with the bounded class-flag special hook and ordinary target/direction/command synthesis. (Superseded 2026-09-03, issue #185: the automatic actor driver calls the shared attack, movement and special-ability primitives directly and enters no command parser, so there is no monster command synthesis - `RETRACTIONS.md` R353.) Later cleanup records compound-only or readerless class-flag component bits as opaque metadata, not class-state field semantics, and records the no-target centre fallback as another direct flee-flag writer.
 
 **Current chargen cleanup:** 2026-05-07 - chargen persistence wording now separates canonical `SAVED.OOL` interpretation from the still-unverified writer scratch order, removes stale questionnaire-class uncertainty, and aligns the transfer summary with the `PARTY.SAV` source path.
 
@@ -2897,7 +2946,7 @@ byte-compatible engine that loads the original resident data should consume
 the shipped reveal rows from `DATA.OVL`; only a source-free reauthored-data
 target still needs curated reveal coordinates and tile identities.
 
-**Current monster AI state cleanup:** 2026-05-11 - combat, magic, DATA.OVL, spell-list, monster-bestiary, and extraction docs now remove the older class-scoped AI-storage interpretation. Slot-local facts stay in the combat actor/effect tables; ordinary AI is target selection, step-vector synthesis, optional movement/teleport helpers, and shared command-parser reuse.
+**Current monster AI state cleanup:** 2026-05-11 - combat, magic, DATA.OVL, spell-list, monster-bestiary, and extraction docs now remove the older class-scoped AI-storage interpretation. Slot-local facts stay in the combat actor/effect tables; ordinary AI is target selection, step-vector synthesis, optional movement/teleport helpers, and shared command-parser reuse. (Superseded 2026-09-03, issue #185: the automatic actor driver calls the shared attack, movement and special-ability primitives directly and enters no command parser, so there is no monster command synthesis - `RETRACTIONS.md` R353.)
 
 **Current combat AI movement cleanup:** 2026-05-12 - combat, monster-bestiary, and extraction docs now specify the ordinary movement fallback helpers: teleport-capable classes can attempt a random legal arena cell, ordinary stepping uses the surrounded check and in-arena step test, and no-target centre fallback now includes the traced flee-flag/critical-HP marker writer. The teleport-capable class-row assignments are now published in the monster bestiary.
 

@@ -832,8 +832,15 @@ combat site the move arm of a shared "step-or-act" handler and spoke of a
   before the to-hit roll*, and only then branches. The hit arm runs damage,
   narration and effect. The miss arm prints `Failed!` or `<name> missed!`
   through the ordinary string printer and returns, and there is **no audio call
-  anywhere on it**. The other in-combat roll site returns silently on a miss,
-  with no narration at all.
+  anywhere on it**. The other in-combat roll site - the self-acting actor's
+  attack - returns silently on a miss, with no narration at all, **on its melee
+  arm**. *(**Corrected.** That last clause used to be stated without the melee
+  qualifier, which reads as covering every miss a monster can make. It does not
+  cover the ranged arm: when a self-acting actor's ranged shot misses, the
+  impact scatters and, whenever the scattered cell turns out to hold an actor,
+  the ordinary hit chain runs against that actor with its full narration and its
+  own sounds. The ranged arm is silent only when the scatter lands on nobody.
+  See `combat.md` section 11.1 and `RETRACTIONS.md` R355.)*
 - **A miss is therefore not silent overall, but it adds nothing.** The swing has
   already been heard, and it sounds identical on a hit. The audible difference
   between a hit and a miss is the printed line plus whatever the hit arm's
@@ -1594,8 +1601,11 @@ baseline:
   whirlpool-class refusals (section 7.4);
 - both look/peer helpers, and a `Not here!` refusal of the View or Summon
   Daemon scroll (section 6.1);
-- **a missed melee or weapon attack**, which adds no sound of its own to the
-  swing cue that has already played (section 7.4); and
+- **a missed melee attack**, which adds no sound of its own to the swing cue
+  that has already played (section 7.4) - a missed *ranged* attack is silent
+  only when its scattered impact lands on nobody, since a scatter onto an
+  occupied cell runs the ordinary hit chain and its sounds (`combat.md` section
+  11.1, `RETRACTIONS.md` R355); and
 - **whirlpool engagement while the party is on foot**, which plays no long
   descent (section 8.9).
 
