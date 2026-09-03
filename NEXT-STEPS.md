@@ -82,6 +82,90 @@ any scene whose waypoints differ by hour; the walkability of the four Iolo's Hut
 roster cells; and the animation-script bytes for the whirlpool marker class,
 whose reachability is traced but whose script is not.
 
+**Addendum - 2026-09-03, issue #190: six residual save-state questions.** All
+six are answered in their owning documents. Two retractions land with them,
+R375 and R376.
+
+- **Q1, the below-surface erase arm.** Live, on four routes: Ararat, the
+  Underworld plane, the Blackthorn audience's first repaint, and a basement
+  floor in any of the four locations that own one. It renders no strip at all
+  — it caches both glyph bytes, then flat-fills the strip footprint and rules
+  the scanline under it, erasing the end-caps with it. `systems/moons.md` 2.2.
+- **Q2, in-place returns.** All of them refresh, and so does the in-place town
+  **floor** change the engine had assumed did not: the staircase, the trapdoor
+  and the NPC-death reload all run the floor loader that a fresh entry runs. The
+  moongate warp is the exception worth reading twice — its two in-helper
+  repaints are guarded on the origin-and-destination *pair*, and the ordinary
+  overworld-to-town warp reaches neither. `systems/moons.md` 3.
+- **Q3, the named callers.** The "two command handlers" are two arms of one
+  command, `H` (Hole up). The audience cutscene repaints **once**, not twice
+  (R375); its post-cutscene refresh comes from the caller's town entry pass. The
+  arrest jail relocation refreshes, on the normal arm. `systems/moons.md` 3.
+- **Q4, the ambient sub-tick phase.** Residues **zero and four** of an
+  eight-phase counter, tested *before* the counter advances, free-running from
+  program start, outside the save image. The engine's existing residue choice
+  was already right; the phase origin and test order were not published.
+  `systems/time.md` 11.
+- **Q5, out-of-range day-of-month.** No sentinel and no check: an unchecked
+  table read, day zero and day twenty-nine caching specific non-digit pairs that
+  reach moongate destination selection. The old instruction to treat it as a
+  save-data error is withdrawn as a description and re-issued as a labelled
+  prescriptive divergence (R376). `systems/moons.md` 2.2,
+  `formats/saved-gam.md` 5.1.
+- **Q6, the inn bed cells.** A per-inn table, not a derivation. Six coordinates
+  published, plus the one-tile eastward step on waking, the untouched floor
+  byte, and the three early exits that skip the step. `systems/shops.md` 8.4.
+
+Left open by this pass, and worth a future issue: whether any shipped location
+map places a down-stair, trapdoor or grate that would drive the floor byte below
+a location's lowest owned page (the handlers apply no bound); whether the six
+inn bed cells and the cells east of them are walkable tiles on the shipped
+pages; and the meaning of the guard that gates the arrest handler's
+already-in-Blackthorn's-castle arm.
+
+**Addendum - 2026-09-03, issue #189: six residual turn-loop questions.** All six
+are answered in their owning documents. Six retractions land with them, R367-R372.
+
+- **Q1, the replan draw's form.** It is a **uniform range draw over three values,
+  accepted on exactly the middle one** - not a byte-and-mask draw. Same advance
+  count as a mask model, different third of the stream.
+  `systems/npc-schedules.md` Section 9.1.
+- **Q2, the stuck counter.** Reserved for **one** event: a queued route step
+  refused by the per-step cell check. Neither cap-zero recovery step can touch
+  it; a successful route step **resets** it; the high value is **assigned** after
+  a failed replan, never counted into. Sections 4, 5 and 9.1; R367.
+- **Q3, the animator's cadence.** **Descriptive**, with two residues a
+  turn-based frontend must carry: the shared-generator advance accounting
+  (`systems/active-objects.md` Section 8) and one class whose animated frame byte
+  a gameplay filter tests. Full-session roll-sequence parity is **unachievable**
+  by any cadence choice, because the original drives the animator from a
+  wall-clock idle pump. `systems/npc-schedules.md` Section 12.
+- **Q4, the encounter gate's "phase nibble".** **It does not exist.** The probe
+  is memoryless. The state is two one-bit parity toggles owned by the outdoor
+  per-turn block, each flipped **by the gate it controls**, so a gated turn
+  advances its own toggle rather than skipping it. `systems/encounters.md`
+  Section 2.1; R370.
+- **Q5, the sail cache.** One setter, four clears, and the rule is
+  **marker-conditioned, not command-conditioned** - a single post-command guard
+  covers furl, board, X-it and every other marker move. A new heading
+  **replaces** the cache rather than clearing it. New: outdoor-mode entry clears
+  it, and a wind change resets the sailing counter. `systems/weather.md`
+  Section 5.1.
+- **Q6, the under-sail auto-advance clause.** **Descriptive of the mechanism,
+  prescriptive of two consequences**: the world step is unconditional and does
+  not inherit the command wait's scene-band suppression, and each pass is a
+  **fully consumed turn**. The two-tick figure is a maximum, not a cost.
+  `systems/timing.md` Section 8.2; R371, R372.
+
+Still open after this pass, and worth a later issue: whether the animator runs
+during dungeon and combat **play** (it certainly runs on dungeon entry), which
+matters because the dungeon overlay reuses two table records as scratch
+(`systems/active-objects.md` Section 13). Every negative claim published here is
+bounded by a static-census scope that excludes pointer-through-memory writes,
+block fills and driver-side accesses; that hole is not theoretical - an earlier,
+narrower census of one of these bytes missed seven real accesses inside it. No
+emulator capture was taken for any of the six.
+
 **Addendum - 2026-09-03, issue #188: the three compositor residuals.** All
 three are closed and `systems/visibility.md` has a new Section 8.5 that owns
 them. **Q1, the grid-versus-map asymmetry, is deliberate and prescriptive** -
@@ -2296,8 +2380,9 @@ boundary through the roster catalog.
 the anonymous hidden-actor naming gap: unnamed hidden slots use the conservative
 sprite-tag role labels already published in the roster catalog, and no hidden
 mask has an additional scheduler behavior behind those labels. Remaining NPC
-scheduler work is presentation parity only: long-stall visibility if later
-observed.
+scheduler work is presentation parity only. (**Issue #189, 2026-09-03**: the
+long-stall band is no longer part of that residue - it is published gameplay,
+`RETRACTIONS.md` row R369.)
 
 **Current NPC long-stall cleanup:** 2026-05-13 -
 `systems/npc-schedules.md` now distinguishes the short stuck-counter replanning
@@ -2308,6 +2393,17 @@ a last-resort stalled-actor helper; no separate durable gameplay state is
 currently specified for it, and no alternate scheduler/pathfinding state is
 assigned to that helper. Remaining work is visual/sound parity only if that
 helper proves presentation-visible.
+
+*Superseded by issue #189 (2026-09-03).* Both halves above are withdrawn. The
+counter is incremented only by a queued route step refused by the per-step cell
+check - not by any "failed-progress tick" tally - and a successful route step
+resets it to zero; the high band is entered by assignment after a failed replan,
+never by counting up, and it is observable gameplay - five consecutive still
+turns, with the entering turn itself not still - not presentation parity. See
+`systems/npc-schedules.md` Sections 4, 5, 9.1 and 14 and `RETRACTIONS.md` rows
+R367 and R369. The surviving negative is narrower than the old permission: there
+is still no separate durable gameplay state, no persistent schedule mutation and
+no alternate pathfinding state behind the band.
 
 **Current NPC stairway-ownership cleanup:** 2026-05-13 -
 `systems/npc-schedules.md` now states the ownership split directly: the

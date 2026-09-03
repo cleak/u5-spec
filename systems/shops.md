@@ -1303,10 +1303,11 @@ The main menu accepts three actions:
   Three world-state effects come with it, and an engine that treats the rest as
   a pure presentation will miss all three. The party's map position is written
   to the inn's bed cell for the duration, so the party is standing on the bed
-  while the sequence plays. The clock is then run forward in paced steps until
-  the hour byte reads **six** — the rest always ends at 06:00, whatever hour it
-  began at, so a party that rents a room at 21:00 sleeps nine hours and one that
-  rents at 04:00 sleeps two. On completion the location runs the same
+  while the sequence plays; the cell for each inn, and where the party stands
+  when it wakes, are published in the table below. The clock is then run forward
+  in paced steps until the hour byte reads **six** — the rest always ends at
+  06:00, whatever hour it began at, so a party that rents a room at 21:00 sleeps
+  nine hours and one that rents at 04:00 sleeps two. On completion the location runs the same
   clear-and-re-place pass that town entry runs: every non-party active-object
   record is cleared, and every scheduled NPC is re-placed at the position its
   schedule gives for the new hour (`systems/npc-schedules.md` Section 12). That
@@ -1323,6 +1324,50 @@ The main menu accepts three actions:
   a paid, safe town rest rather than a wilderness ambush-risk camp.
 - `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. A quoted deposit of `adjusted(base_rate * 10, speaker_intelligence)` is debited before the transfer completes.
 - `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill first computes `adjusted(base_rate * 10, speaker_intelligence)`, then multiplies that adjusted local lodging charge by the selected guest's stored stay counter, treating zero as one billable unit. The guest's record is copied into the next active roster slot, the party-size byte is incremented, the registry view is compacted as needed, and the returned slot's former guest marker is cleared to zero.
+
+**Per-inn bed cells.** The bed the party is moved to is a **per-inn lookup, not
+a derivation from the shop's registered cell and not a fixed offset from
+anything.** Two parallel six-entry byte tables in the shared data overlay hold
+the X and the Y of each inn's bed, indexed by the inn's ordinal within the
+innkeeper shop kind — the same ordinal, in the same order, that Section 8.0's
+inn table is listed in. There is no rule to derive these from the map or from
+the shop cell; they are authored data and must be carried as data.
+
+| Ordinal | Inn | Scene | Location | Bed cell | Position on waking |
+|---:|---|---:|---|---|---|
+| 0 | The Wayfarer Inn | `2` | Britain | `(21, 10)` | `(22, 10)` |
+| 1 | The Warrior's Stead | `3` | Jhelom | `(15, 7)` | `(16, 7)` |
+| 2 | The Haunting Inn | `7` | Skara Brae | `(25, 9)` | `(26, 9)` |
+| 3 | Hotel Brittany | `20` | North Britanny | `(20, 1)` | `(21, 1)` |
+| 4 | The Smugglers' Inn | `22` | Paws | `(27, 6)` | `(28, 6)` |
+| 5 | The King's Ransom Inn | `24` | Buccaneer's Den | `(7, 26)` | `(8, 26)` |
+
+Coordinates are ordinary party map coordinates on the location's 32-by-32 floor
+grid — the same pair movement writes — with `x` counted east from the west edge
+and `y` south from the north edge.
+
+Three further rules complete the write, and each is a place an implementation
+can silently diverge:
+
+- **The floor byte is not written.** The rest happens on whatever floor the inn
+  menu was opened from. Do not reset the party to the entry floor as part of
+  the rest.
+- **The party does not wake in the bed.** On the completed-rest path the handler
+  steps the party **one tile east** of the bed cell before returning, which is
+  the "position on waking" column above. The bed cell is where the party sleeps;
+  the cell east of it is where the player finds the party afterwards.
+- **The eastward step is on the completed path only.** All three of the
+  handler's early exits — the pre-menu helper declining, an answer other than
+  `Y` at the confirmation prompt, and gold below the quoted charge — return
+  without moving the party at all. A refused or unaffordable stay never moves the
+  party into the bed cell at all, and leaves it exactly where it stood.
+
+One thing about the table is deliberately **not** claimed: whether each bed cell
+and the cell east of it are walkable floor tiles on the shipped location pages
+was not checked against the map data. The coordinates are the ones the rest
+handler writes, which is what an implementation needs; if a consumer wants to
+validate them against terrain it should do so itself rather than assume this
+section did.
 
 The inn registry is the inn's persistent state: a 16-slot, save-backed resident
 view with the same 32-byte stride as party records. It is a shifted legacy view
@@ -1840,6 +1885,15 @@ The behaviour described here was derived from the private function and format no
   pricing, rest recovery, inn registry, and persistent guest-lodging state.
 - `u5-decomp/notes/` — the inn
   menu's entry clear of the shared timed-effect slot.
+- Source provenance (issue #190): the per-inn bed-cell tables, their indexing by
+  the innkeeper-kind ordinal, the binding of that ordinal to the six inn rows of
+  Section 8.0, the fact that the floor byte is left alone, the one-tile eastward
+  step on the completed-rest path, and the three early exits that bypass it —
+  derived from private analysis in `u5-decomp/notes/`. The tables were located
+  in the shared data overlay rather than in `SHOPPE.DAT`, and their six-entry
+  length is fixed by the object that immediately follows them. Not covered by
+  that pass: whether the six bed cells and the cells east of them are walkable
+  tiles on the shipped location pages.
 - `u5-decomp/formats/` — `SHOPPE.DAT` record layout, substitution placeholders, shared bark renderer.
 - `u5-decomp/formats/` — 128-entry phrase-token dictionary; the
   published contents, biases, empty-slot census, and the shop renderer's own

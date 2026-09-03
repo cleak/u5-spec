@@ -292,7 +292,7 @@ The animation cycle uses byte 6's low nibble. It counts down each tick:
 | Phase value   | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
 | steady marker | Steady; do not animate this slot. The animator skips. (Encoded as the all-ones nibble.)                       |
-| any non-zero  | Mid-cycle. Decrement and write back. The renderer combines the phase with the tile class to pick a frame.     |
+| any non-zero  | Mid-cycle. Decrement and write back — **and nothing else for that slot on that pass**, so its frame byte is not touched (see the early-out list below). The renderer combines the phase with the tile class to pick a frame. |
 | zero          | Cycle ended. Eligible for a direction/frame decision: roll RNG, possibly change the stored facing, possibly reseed phase. It never changes the slot's coordinates. |
 
 Each animated class has its current-frame index in a separate animation-frame table; the renderer combines the tile class with that counter to pick the actual byte to paint. The classes this per-slot pass animates are actor classes — vehicles, monsters and the other sprite-only tiles that live in the table. (An earlier revision of this paragraph listed "water (a four-frame cycle), lava, torches, and a small handful of 'special' tiles" as the animated classes. That list is **withdrawn**: no water, lava, brazier or torch tile animates through any per-tick pass. The separate world-tick tile animator touches exactly five terrain families — waterfall, fountain, pendulum, the standard of Britannia, and the clock/bellows pair — and none of them is a water or fire terrain family. **Further correction:** that withdrawal was then over-generalised in this document and elsewhere into "water, lava and fire tiles do not animate". That is also withdrawn. They have no frame family and no selector, but they are animated by a third layer — a driver-side pass that rewrites the loaded tile artwork in place on every animation step — specified in `systems/animation.md` Section 12. See `systems/animation.md` Sections 6 and 12 and `catalogs/tile-catalog.md` Section 4.)
@@ -322,6 +322,91 @@ column or row.
 > renderer's mirror of the **party's own** coordinates into slot zero. The sweep
 > did not follow indirect or far calls, and outside the animator and the
 > renderer it did not chase writes made through a pointer held in a register.
+
+**The animator's two written bytes, and who else can see them.** The animator
+writes exactly two of a record's eight bytes — the **displayed-frame byte** and
+the **packed facing/phase byte** — and never any other, in any class, on any
+path. Issue #189 asked what a turn-based frontend must reproduce beyond drawing.
+The answer is in the three subsections below.
+
+**Per-pass early-outs, in the order the animator applies them.** A slot that
+fails any of these is abandoned for that pass, and the phase rule in the middle
+is not the "decrement every live slot" rule an earlier reading of this section
+implied:
+
+1. An empty slot (type byte zero) is skipped.
+2. A slot whose **phase nibble is the all-ones steady marker** is skipped
+   entirely, writing nothing at all. Only gameplay can release it.
+3. A slot whose **phase nibble is any other non-zero value** has that nibble
+   decremented and written back, and then the animator **goes straight to the
+   next slot** — such a slot never reaches the frame decision on that pass. Only
+   a slot whose phase nibble is already zero falls through to the rest.
+4. A slot whose displayed-frame byte is the hidden value, or either of the two
+   prone/sleeping values, is skipped. This is how gameplay parks an actor.
+5. A slot whose class lies **below the sprite-class floor**, or in either of two
+   excluded classes, is skipped. Everything the animator can write to the frame
+   byte therefore lies at or above that floor — which is exactly why the
+   water-creature facing movers, which act only on frame values below it, can
+   never see an animator-written value.
+6. Otherwise, unless the class is one of two exempt classes, the animator draws
+   one random value and skips the slot on the low half of the range.
+
+**Random-stream accounting.** This is the animator's main coupling into
+gameplay, because the generator it draws from is the one shared by the wander
+coin, the NPC replan gate, the encounter roll and every combat roll. Per pass it
+consumes:
+
+- **one advance for every slot that survives early-outs 1–5 and whose class is
+  neither of the two exempt classes** — spent whether or not the slot then goes on
+  to animate, because the draw is taken before the skip decision it feeds;
+- **no advance at all for the two exempt classes**, which enter the frame
+  decision without drawing (both are live classes in the shipped class table, so
+  the exemption is not vacuous);
+- **plus one advance for each execution of the two random script steps** — the
+  reseed step and the redirect step. A single slot can execute several script
+  steps in one pass, because some steps loop rather than ending the slot.
+
+An engine that models this as "one draw per animated slot" is wrong in both
+directions at once. Note also that no cadence choice reconciles this with the
+original, which fires the animator from a wall-clock idle pump: **full-session
+roll-sequence parity is unachievable**, and an engine should not distort its
+animation cadence chasing it (`systems/npc-schedules.md` Section 12).
+
+**Who reads the two bytes.**
+
+- The **frame byte** is read by two drawing consumers — the shared visibility
+  post-pass compositor and the full-map builder — and by a handful of gameplay
+  sites. All but one of those gameplay sites are excluded, but by three different
+  arguments: most by the early-outs above, one by a compositor re-stamp of the
+  party's own slot that runs after the animator on every pass (an ordering
+  argument, *probable*), and one that only saves and restores the byte around a
+  highlight rather than reading it for meaning. The exception is real: **one
+  sprite class's animation script drives the frame byte to exactly the value a
+  gameplay filter tests for**, and a slot of that class placed on one set of
+  starting facings converges on that value while a slot placed on the others
+  cycles through three neighbouring values and never matches. So whether the
+  animator has run on such a slot is observable in gameplay, not only on screen.
+  Publish this reader census as **probable**, on the same scope statement as the
+  facing/phase byte below: an earlier pass of it missed three readers and
+  answered one row backwards.
+- The **facing/phase byte** has no gameplay reader that consumes an
+  animator-written value. Gameplay writes it freely — as a one-way control
+  channel into presentation, setting the steady marker to freeze a slot, zero to
+  release it, or a facing with a zero phase — but the only routine that reads it
+  back outside the animator does so inside a scene that has saved the affected
+  records to its own frame first and restored them on exit, so it is reading its
+  own scratch.
+
+  *Scope of that negative, stated exactly.* It rests on a corpus-wide census over
+  the shipped executable, all overlays and all display drivers, covering direct,
+  indexed, and hand-checked pointer-derived references to the byte. It does
+  **not** cover writes or reads made through a pointer loaded from memory, block
+  fills, computed displacements, or accesses a display driver makes through its
+  own interface. That hole is not theoretical: an earlier, narrower census of the
+  same byte missed seven real accesses inside it, all of them writes. Publish and
+  implement this as **probable**, not established. Whether the animator runs
+  during dungeon or combat play at all is separately unresolved; Section 13 below
+  records what is and is not established there.
 
 The outdoor per-turn walker is separate from that resident frame animator. It
 walks overworld slots from high to low, skips slot zero, and applies only to the
@@ -864,6 +949,21 @@ outdoor hostile-slot movement are public.
 Remaining dynamic-object work, if a new non-projectile user is found, belongs
 to that caller's system contract. It should not change the shared table
 lifecycle or reclassify projectile and impact visuals as active-object records.
+
+**Open (issue #189): whether the animator runs during dungeon and combat play.**
+It certainly runs at least once on dungeon *entry* — the dungeon overlay calls
+the shared world tick directly from its entry path, and neither of the two flags
+that can suppress the animator is in a suppressing state at that moment. What was
+not established is whether it runs on any *later* dungeon turn, because the only
+other route in is the shared command wait's idle step, and the scene-value band
+the dungeon actually occupies during play was not pinned against that wait's
+suppression range (`systems/timing.md` Section 8.2). The combat case is likewise
+untraced. This matters because the dungeon overlay reuses two of this table's
+records as its own scratch, saving them on entry and restoring them on exit; the
+animator's phase decrement runs ahead of every class test, so a synthetic value
+in the reused facing/phase byte would be decremented under it. An engine that
+runs the animator only in the world modes is safe under either resolution; one
+that runs it everywhere should not also reuse table records as scene scratch.
 
 ## 14. Sources
 

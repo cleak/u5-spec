@@ -18,7 +18,8 @@ Once any arena trigger fires, the same combat-enter framing function runs - comb
 
 Every turn the overworld mode loop runs its per-turn block (see
 `overworld.md`), and that block contains an *encounter probe*. The probe runs
-when the overworld animator's pendulum gates allow the epilogue to continue:
+when the three effect gates of this section allow the per-turn block to
+continue:
 
 1. Roll a uniform integer in `[1, 30]` from the engine's RNG primitive (see `prng.md`).
 2. Compare the roll against a *threshold* derived from the tile under the
@@ -55,6 +56,55 @@ next, which would leave two vehicle facings ungated. The value window is
 *established*; the family mapping behind the second reading is only *probable*
 and the reading of the low bits as facing is *inferred*. A value test is correct
 under both readings, a family test only under one.
+
+**The probe itself is memoryless, and the alternation state belongs to the
+gates.** Issue #189 asked what happens on a gated turn to "the phase or countdown
+nibble that gates the next probe". **There is no such field.** The probe holds no
+state of any kind: it is a pure function of the party's Z plane, the tile under
+the party and the hour, re-evaluated from scratch every turn against a fresh
+`[1, 30]` roll, and it writes nothing anywhere. Nothing about the probe carries
+from one turn to the next except the shared generator's own state.
+
+The only state upstream of the probe is the **two independent one-bit parity
+toggles** named in gates 2 and 3 above — one for Quickness, one for the transport
+marker. Each is owned outright by the per-turn block that tests it, each has
+exactly one instruction in the whole shipped game that changes it, and that
+instruction is **inside the gate it controls**.
+
+*Scope of that negative.* It rests on a corpus-wide census over the shipped
+executable, every overlay and every driver, covering direct, indexed and
+pointer-forming references to the two toggle bytes; writes made through a
+pointer loaded from memory, block fills and computed addresses are outside it,
+and none was found there rather than excluded. Read the "exactly one
+instruction" claim as *probable within those forms*, not as a proof of absence.
+
+So:
+
+A toggle is flipped when its gate is *reached*, not when the turn survives, so
+what matters per turn is which gates the block got as far as testing:
+
+| Turn shape, outdoors | Quickness toggle | Transport toggle | Probe |
+|---|---|---|---|
+| Negate Time active | untouched | untouched | not run |
+| Negate Time inactive, Quickness active | **flipped**, and the turn is then suppressed on the half where it lands set | flipped only on the half where Quickness let the turn continue *and* the marker is in the transport window | runs only if both surviving halves coincide |
+| Neither effect, marker in the transport window | untouched | **flipped**, and the turn is then suppressed on the half where it lands set | runs on the surviving half |
+| Neither effect, marker outside the window | untouched | untouched | runs |
+
+Read that as: **a gated turn does not "skip" the alternation — advancing the
+alternation is what the gate does.** Two ordering consequences fall out of it: a
+Negate-Time turn advances **nothing**, so Negate Time freezes both parities where
+they stood; and a Quickness-suppressed turn returns before the transport marker
+is read, so it does **not** advance the transport parity. An engine that models a
+gated turn as skipping everything, parity included, freezes the toggle and either
+suppresses every subsequent turn or none of them. The animator has no part in any of it;
+the gates are not animator state, and the animator neither reads nor writes
+them. Its only reach into the same world is the shared generator
+(`systems/active-objects.md` Section 8).
+
+*Corrected (issue #189).* This section previously introduced the probe as running
+"when the overworld animator's pendulum gates allow the epilogue to continue".
+The gates are not the animator's, and the animator cannot observe or advance
+them; they belong to the outdoor per-turn block. See `RETRACTIONS.md` row R370.
 
 These gates therefore reduce the effective random-encounter cadence by skipping
 some probe opportunities; they do not change the threshold formula itself. `Q`

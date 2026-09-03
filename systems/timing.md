@@ -814,11 +814,58 @@ traced — the shared behaviour above follows from its being one routine.
 Two further idle pumps share the one-tick wait but not the world step: a
 Look-object print-and-wait loop that waits one tick per pass and performs no
 world step, and a Look redraw loop that performs a single world step on exit
-rather than one per pass. On the overworld the input helper performs one
-scripted step-and-wait — one world step followed by one one-tick wait — before
-either entering the command wait or, when sails are set, performing a bare
-cursor poll instead; so an **under-sail auto-advance pass costs two ticks and one
-world step and never enters the command wait at all**.
+rather than one per pass.
+
+**The overworld under-sail auto-advance pass.** On the overworld the input
+helper performs one world step when it is entered, and then, while a hoisted-sail
+heading is cached, repeats a *wait pass* instead of entering the command wait at
+all. Per wait pass the cost is:
+
+- **One world step, unconditionally,** from the paced world-step helper. It is
+  not subject to the scene-band suppression described below, because it does not
+  come from the shared command wait.
+- **Zero, one or two one-tick waits — not two flat.** The paced helper contributes
+  one and the cursor poll contributes one, but the cursor poll waits *only on its
+  no-key branch*, and both waits are subject to the Section 8.3 fast path. So a
+  pass a keypress entered pays at most one, and on a machine whose boot
+  calibration is at or below the Section 8.3 threshold a pass pays none.
+- **One fully consumed game turn:** the outdoor clock increment (two minutes, or
+  one under the HMS Cape rigging flag) and the whole outdoor per-turn epilogue —
+  encounter probe, spawn and creature movement. This is not an idle pass;
+  monsters close in and encounters spawn while the ship waits for wind
+  (`systems/weather.md` Section 5).
+- **One keyboard poll.** Every pass polls exactly one key. No key runs the
+  advance body. A key whose translated code **equals the cached sail heading is
+  swallowed** — discarded, with the advance body running anyway — which is why
+  pressing the arrow you are already sailing does nothing. Any other key ends the
+  loop and becomes that turn's command.
+
+*Corrected (issue #189).* This paragraph previously said an "under-sail
+auto-advance pass costs two ticks and one world step and never enters the command
+wait at all", and described the helper's entry as "one scripted step-and-wait —
+one world step followed by one one-tick wait". The world-step figure and the
+never-enters-the-command-wait clause stand. **The two-tick figure is withdrawn:**
+two is the maximum, reached only on a no-key pass above the Section 8.3
+calibration threshold, and a swallowed-key pass pays one. The entry step carries
+no wait of its own. See `RETRACTIONS.md` row R371.
+
+**Descriptive or prescriptive?** Issue #189 asked whether "never enters the
+command wait at all" merely describes the original's blocking key-read helper, or
+prescribes something an event-driven frontend must do differently. The answer is
+**descriptive of the mechanism, prescriptive of two consequences.** The blocking
+read is an implementation detail: an event-driven pump that pays the same cadence
+is observably equivalent, and nothing requires a frontend to block. What the
+clause does constrain:
+
+1. **The under-sail world step is unconditional and does not inherit the
+   scene-band suppression below.** An event-driven engine that "idles" by reusing
+   its ordinary command pump inherits that suppression and stops stepping the
+   world in every scene inside the band.
+2. **Each pass is a consumed turn,** as itemised above. A frontend whose idle pump
+   only advances presentation stalls the world while the ship waits for wind.
+
+Beyond those two — and the key swallow, which is observable behaviour rather than
+a timing detail — nothing in the clause constrains an event-driven implementation.
 
 **The world step is suppressed for a contiguous band of scene values.** The
 shared wait tests the current scene value and performs no world step for values

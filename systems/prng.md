@@ -162,7 +162,9 @@ the idle path, before any command is entered, and they draw in this order:
 
 1. **The active-object animator**, which draws from three separate points
    inside its per-record loop. Its per-pass count is record-dependent and is
-   not characterised here.
+   specified in `systems/active-objects.md` Section 8: one advance per slot that
+   survives the early-outs and is outside the two exempt classes, none for those
+   two classes, plus one per execution of each of the two random script steps.
 2. **The per-pass wind check**, which draws **once** and returns in the common
    case — sixty-three invocations in sixty-four. On the uncommon result it
    enters a retry loop taking **one further draw at a time**, so its count per

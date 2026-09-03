@@ -93,12 +93,17 @@ duration, the interruption checks, and any repeated cleanup/world-tick calls.
 **Hour tick triggers a side bundle.** At the moment the hour changes, three things happen in addition to the day check above:
 
 1. The cached twelve-hour value is rewritten from the new hour (Section 2). It is not displayed; Section 11 owns what reads it.
-2. If the active scene is in the surface/town-family range and the party is not
-   at dungeon depth, the engine refreshes the sky strip in the top viewport
-   border. This resolves the older hourly gameplay-hook note: the work is
-   display refresh for that strip, not a gameplay event dispatcher and not the
-   natural-moongate placer. The strip is not part of the stats panel; see
-   `systems/moons.md`.
+2. If the active scene is in the surface/town-family range **and** the party's Z
+   value has its high bit clear, the engine refreshes the sky strip in the top
+   viewport border. Those are two separate tests and both must pass: the second
+   excludes the Underworld plane and every below-entry floor inside a location,
+   so an hour crossing never repaints the strip below the surface. This is the
+   only one of the strip's callers that carries that second test —
+   `systems/moons.md` Section 3 lists the others, which do repaint below the
+   surface and drive the renderer's erase arm there. This item also resolves the
+   older hourly gameplay-hook note: the work is display refresh for that strip,
+   not a gameplay event dispatcher and not the natural-moongate placer. The
+   strip is not part of the stats panel; see `systems/moons.md`.
 3. The displayed hour and the current fixed hour marker, Trammel, and Felucca
    presentation are therefore brought up to date at the top of the hour. The
    sky-strip display contract is specified in `moons.md`. The same renderer,
@@ -404,9 +409,17 @@ Only `0x02CE`, `0x02D7`, `0x02D8`, `0x02D9`, and `0x02DB` are the canonical cale
 
 - **Write.** On a cleanup call whose snapshot at `0x02DA` disagrees with the hour at `0x02D9`, the byte takes the twelve-hour form of the hour (Section 2). That is the whole write rule; there is no second writer.
 - **Read.** The ambient-audio tick is its only consumer. It reads the byte as a count of remaining loud repeats — non-zero selects the loud envelope for one class of ambient effect — and decrements it toward zero on **two of every eight** of its own calls, using a small free-running sub-tick counter that is not part of the save image. It never writes any other value.
+- **Which two of the eight.** The sub-tick counter is a single byte that cycles `0, 1, 2, 3, 4, 5, 6, 7` and wraps back to `0`, and the decrement fires on the calls where it holds **`0` or `4`** on entry. So the two residues are zero and four of the eight-phase cycle — every fourth call, not two adjacent calls out of eight. Three further details fix the phase completely, and all three change what a save taken mid-decay replays as:
+  - The residue is tested **before** the counter advances, so the call on which the counter reads zero is itself a decrementing call.
+  - The counter advances on **every** call, including calls that decrement nothing because the countdown byte is already zero. It is free-running and is never resynchronised to the countdown, so the decrement pattern does not restart when a new countdown is written.
+  - The counter lives **outside the save image**, and its initial value in the shared data overlay is zero. Its phase origin is therefore **program start** — not save load, not scene entry, and not the hour crossing that wrote the countdown. Loading a save does not reset it. An implementation that restarts the counter on load, or that ties its phase to the countdown byte, decays the same save on a different schedule than the original.
+
+  The same two residues also pick the loud envelope in the tick's own lava/shrine effect branch, so one counter drives both behaviours and an implementation should not give them separate phases. Within a reference census over the shipped executable, all twenty-three code overlays, all four display drivers and the shared data overlay, the counter byte has exactly one writer pair — the advance and the wrap — and every other reference is a read inside the same routine. The byte also serves as the base of a small table of tone periods whose live entries begin past it, so the table-base uses never read or write the counter itself. That census does not cover an access built from a nearby pointer base held in a register; none of the references found has that form.
 - **Cadence.** The audio tick runs once per idle world tick, and only while the master redraw-enable byte at `0x02FE` is non-zero; when that byte is clear the world tick skips its whole body and no decrement happens. The world tick is *not* one call per keyboard poll — the idle key-wait loop reaches it on one iteration in four, and many other sites drive it besides (`systems/main-loop.md` Section 9).
 - **Consequence for a save.** A save taken any appreciable time after the last hour crossing reads zero here. An engine that stores a live twelve-hour value and never decays it diverges from the original on essentially every daylight save. The byte-compatible behaviour is: write on a snapshot mismatch, then decay on the audio cadence above.
-- **Confidence.** The write rule, the single-consumer finding, the two-in-eight decrement and the cadence gates are **established** for the scan scope in `formats/saved-gam.md` Section 15 — the shipped executable, all twenty-three code overlays and all four display drivers, searched for direct and indexed references to the byte, with the hit list enumerated in the private note. **How long the byte takes to reach zero in wall-clock terms is inferred, not measured**: no timing run was made and the world-tick rate itself is unmeasured. Do not publish a seconds figure.
+- **Confidence.** The write rule, the single-consumer finding, the two-in-eight decrement, the identification of the two residues as zero and four, the test-before-advance order, the free-running counter's location outside the save image and its program-start phase origin, and the cadence gates are all **established** for the scan scope in `formats/saved-gam.md` Section 15 — the shipped executable, all twenty-three code overlays and all four display drivers, searched for direct and indexed references to the byte, with the hit list enumerated in the private note. **How long the byte takes to reach zero in wall-clock terms is inferred, not measured**: no timing run was made and the world-tick rate itself is unmeasured. Do not publish a seconds figure.
+
+*Clarified (issue #190).* The "two of every eight" rate was already right; what the bullets above add for the first time is **which** two residues, the order of the test against the counter advance, and the counter's phase origin. Nothing published about this byte is withdrawn.
 
 *Corrected (issue #184).* This table's `0x02DE` row previously read "Twelve-hour display value recomputed on hour changes". The value rule survives; the word *display* is withdrawn, because no shipped consumer renders the byte, and "on hour changes" is replaced by the snapshot-mismatch gate above. See `RETRACTIONS.md` row R338.
 
@@ -533,6 +546,16 @@ The behaviour described here was derived from the private function notes listed 
 - The Hole-up command's repeated cleanup invocations and town-hours scheduler burst — derived from `u5-decomp/functions/CMDS_OVL/`.
 - The save-image layout for year/month/day/hour/minute, including adjacent persistent state in the same resident neighbourhood — derived from `u5-decomp/formats/saves.md`.
 - The runtime byte assignments for the clock fields and the surrounding per-turn variables — derived from `u5-decomp/formats/ds-bss-map.md`.
+- Source provenance (issue #190): the sub-tick counter's eight-phase cycle, the
+  identification of its two decrementing residues as zero and four, the
+  test-before-advance order, its unconditional advance, its exclusion from the
+  save image and its program-start phase origin, together with the reference
+  census that finds a single writer pair and separates the counter byte from the
+  tone-period table sharing its base — derived from private analysis in
+  `u5-decomp/notes/`. The single-writer-pair claim is scoped to a reference
+  census over the shipped executable, all twenty-three code overlays, all four
+  display drivers and the shared data overlay, and does not cover an access
+  built from a register-held pointer base.
 - Source provenance: the twelve-hour byte's snapshot-mismatch write gate, its
   single audio consumer, the two-in-eight decrement and the world-tick cadence
   gates behind it; the saved-hour snapshot's two writers and its non-refresh on
