@@ -209,9 +209,9 @@ scene that contains blockers; use an open outdoor scene instead.
 
 - **Overworld and underworld.** A one-kilobyte buffer holding the active 2×2 chunk window — four sixteen-by-sixteen chunks at adjacent offsets. The world is streamed: as the player approaches the edge of the loaded window, scene transitions reload chunks and shift the scroll origin.
 - **Town / dwelling / castle / keep / dungeon-explore.** The same one-kilobyte buffer, interpreted as a single 32×32 grid for the entire location. The scroll origin is zero.
-- **Combat.** A separate scratch grid (Section 11), pre-composited by the combat setup helper. The 2D-scene producer is not used in combat.
+- **Combat.** A separate scratch grid (Section 11), loaded whole from the arena record at combat setup. The 2D-scene producer is not used in combat. The word *pre-composited* appeared here in an earlier revision and is dropped: nothing is composited into that grid at setup, and combat composites actors through the shared post-pass exactly as every other mode does (Section 11).
 
-A leaf helper, the *world-tile getter*, encapsulates the three branches: given a tile column and row it returns a pointer to the byte that represents that tile in whichever buffer is currently active. Out-of-range queries to the location/dungeon-explore buffer return a sentinel byte address (a fixed location whose contents act as a "you walked off the map" tile).
+A leaf helper, the *world-tile getter*, encapsulates the three branches: given a tile column and row it returns a pointer to the byte that represents that tile in whichever buffer is currently active. Out-of-range queries to the location/dungeon-explore buffer are **substituted, not failed**: they resolve to the loaded floor's southeast-corner cell `(31,31)`, on both a below-zero and an above-thirty-one coordinate on either axis. *Corrected:* an earlier revision described this as "a sentinel byte address (a fixed location whose contents act as a 'you walked off the map' tile)". There is no dedicated sentinel storage and no fixed sentinel tile: the substituted cell is part of the live map buffer, and every location load overwrites it with that floor's own corner terrain, so the value differs per floor. `systems/commands.md`, `systems/shops.md` and `systems/town-mode.md` Section 15 have always described the `(31,31)` aliasing correctly; it was this document's wording that implied a constant. The overworld branch never substitutes, and the combat branch performs no range test at all (Section 8.5). See `RETRACTIONS.md`.
 
 **Local-light mask.** Non-combat scenes also maintain a separate thirty-two by
 thirty-two local-light mask. A light-source refresh pass scans the active map
@@ -430,7 +430,9 @@ The same post-pass that handles fog refinement also stamps active objects into t
 
 The compositor walks the table from slot thirty-one down to slot zero. Walking backwards means low-indexed slots paint *on top of* higher-indexed ones — and slot zero is the player, so the avatar always draws on top of any overlapping NPC or monster.
 
-For each non-empty slot the compositor:
+Before the walk begins, and only outside combat, the compositor performs the
+**slot-zero refresh** described at the end of this section. For each non-empty
+slot it then:
 
 1. Reads the slot's world coordinates and floor.
 2. In non-combat scenes, projects the world coordinates into the eleven-by-eleven viewport: subtract the player's position then add five (so the player sits at row five, column five). If the result is outside the eleven-by-eleven range, or the slot is on a different floor than the player, the slot is skipped.
@@ -461,6 +463,15 @@ For each non-empty slot the compositor:
      it a minstrel — and the party's own type byte is the party sprite marker,
      which is never `0x5C` outside combat, so no vehicle and no avatar ever
      reaches this branch in a world scene. See `RETRACTIONS.md`.
+     *Two things about this branch that the sentence above does not carry, and
+     that Section 8.5 states in full.* First, the test is against tile `0x92`
+     **exactly**, not against the tile's *name*: the shipped tile-name table
+     calls `0x90`, `0x91`, `0x92` and `0x93` all "a chair", and the compositor
+     gives all four different treatment, so an engine that phrases this branch
+     as "the actor is sitting on a chair" fires on three tiles the original
+     leaves alone. Second, this branch reads **the visibility grid**, while the
+     default helper below reads **the map** — a real asymmetry, not a wording
+     slip.
    - **Default helper.** All other slots are handed to the default tile
      compositor. Its ordinary successful output is the same companion-band
      shape: final tile in the terrain band and `0x00` in the visibility grid.
@@ -470,8 +481,11 @@ For each non-empty slot the compositor:
 The default helper treats effective tile bytes `0x1C`, `0x12..0x15`,
 `0x28..0x2B`, and `0x40..0xFF` as terrain-aware. Other effective tile bytes
 stamp unchanged through the companion band. Terrain-aware stamps use the live
-world/combat tile at the object's coordinate, plus one neighbouring row for a
-few edge shapes:
+world/combat tile at the object's coordinate — **the scene's map, read at the
+actor's absolute, un-projected coordinate, not the visibility grid and not the
+projected viewport cell** — plus one neighbouring row for a few edge shapes.
+Section 8.5 states why that source differs from the seated branch's, and what
+the neighbouring-row read does when it steps off the loaded map:
 
 | Terrain condition | Compositor result |
 |---|---|
@@ -586,7 +600,7 @@ this byte carrying this value was not excluded, and neither was a bulk restore
 of the surrounding saved-state band — though the latter would be a reload of a
 previously set effect rather than a new producer.
 
-Before the per-slot loop runs, and **only outside combat**, the compositor refreshes slot zero's bytes from the world-state globals: the avatar tile id, the player's world coordinates, the player's floor. This ensures the player slot reflects the current frame's truth before anything else is composited; the slot's data may otherwise be stale because the active-object animator runs only on certain ticks. Note that this refresh writes the party sprite marker into **both** the slot's type byte and its sprite byte, which is why the party can never satisfy the type-byte test of the single-sprite-family seated branch above. In combat the refresh does not run — nor does the fog refinement of Section 7 — and slot zero's type byte is then whatever the combat subsystem left there; that value was not established here, so the branch's behaviour for the party *in combat* is outside this contract.
+**The slot-zero refresh.** Before the per-slot loop runs, and **only outside combat**, the compositor refreshes slot zero's bytes from live state: the party sprite marker supplies the record's type and sprite bytes, and the party's map position and floor supply its column, row and floor. This ensures the player slot reflects the current frame's truth before anything else is composited; the slot's data may otherwise be stale because the active-object animator runs only on certain ticks. Because that marker lands in **both** the type byte and the sprite byte, the party can never satisfy the type-byte test of the single-sprite-family seated branch above. In combat the refresh does not run — nor does the fog refinement of Section 7 — so in an arena the party record's type, sprite, coordinates and floor are **not** refreshed from the transport marker and the party's map position; the arena setup owns those fields for the duration of the fight. Slot zero's type byte is then whatever the combat subsystem left there; that value was not established here, so the branch's behaviour for the party *in combat* is outside this contract. The walk itself treats slot zero like any other slot in both modes.
 
 The end state, after the compositor: the visibility grid contains either real tile bytes resolved by the carve, markers (`0xFF`, `0x1C`, `0xDD`, `0x00`, `0x87`), or direct marker writes from terrain-aware compositor cases. Active-object visual tiles that survive the cell guards normally live in the terrain band behind the `0x00` marker. Both grids are then handed to the renderer.
 
@@ -634,7 +648,18 @@ are the empty slot, the wrong floor, the off-viewport projection, the missing
 sprite byte, the fogged cell and the already-claimed cell — with the caveat
 that in combat mode the viewport projection, the floor test and the range tests
 are not performed at all, so the surviving-actor set is not the same in the two
-modes. The three direct-stamp branches (the two water/companion classes and the
+modes. **Those three are not the only combat differences inside the pass**, and
+they are not differences in the compositor: the same combat gate also skips the
+**slot-zero refresh** of Section 8 and the fog refinement of Section 7 - so in a
+combat scene the party record's type, sprite and coordinates are *not* refreshed
+from the transport marker and the party position, and the arena setup owns them
+for the duration of the fight. Together those five are the *complete* list of
+what a combat scene does differently inside the post-pass. The compositor itself, its whole
+terrain-substitution table, the empty-slot skip, the missing-sprite skip, both
+grid-cell guards, the three direct-stamp branches and the draw accounting above
+are shared between modes with no combat variation at all. Section 11's earlier
+statement that the post-pass skips combat scenes outright is withdrawn there.
+The three direct-stamp branches (the two water/companion classes and the
 single-sprite-family seated branch of Section 8) bypass the compositor
 entirely and therefore never draw, whatever terrain they are on.
 
@@ -828,8 +853,8 @@ section, the Return-to-View **command stream** (`formats/location-dat.md`
 Section 11), not inside either of its two map sections. Runtime writes of the
 value into the live map buffer through a computed pointer were not excluded; no
 literal-address store of it into that buffer exists anywhere in the shipped
-set.* Note that the compositor's **own** `0x9E` write, on the last row of the
-Section 8 table, targets the visibility grid one row above the actor and is the
+set.* Note that the compositor's **own** `0x9E` write, on the second-to-last row of
+the Section 8 table, targets the visibility grid one row above the actor and is the
 mirror's reflection sprite — it is not a terrain write and the compositor never
 reads the visibility grid back as terrain.
 
@@ -907,6 +932,192 @@ enclosing routine. Indirect calls and helpers without a standard prologue are
 not covered by that walk; the one such helper in this path, the variant
 selector itself, was added by hand.
 
+### 8.5 Where each terrain read comes from, and what happens at an edge
+
+*(Answering issue #188. Question 1 is the read sources, question 2's second
+half is the arena edge, question 3 is the town edge.)*
+
+**The grid-versus-map asymmetry is real, deliberate, and prescriptive.** The two
+adjoining descriptions in Section 8 are not two wordings of one access. The
+original genuinely performs two different reads, from two different buffers, in
+two different coordinate spaces, at two different points in the pass, to answer
+two different questions - and it performs both, for the same actor, in the same
+frame, whenever a `0x5C`-type actor stands on anything that is not tile `0x92`.
+This is **prescriptive**, not a descriptive accident of how the two paragraphs
+were written: an implementation must keep the two reads distinct. The engine's
+current behaviour - the map for the default helper, the grid byte for the `0x5C`
+branch - is correct and must not be harmonised.
+
+| | Default helper's terrain-aware rows | Single-sprite-family seated branch |
+|---|---|---|
+| **Source** | The scene's live map: the streamed overworld window, the loaded location floor, or the arena terrain array, whichever the scene uses. | The eleven-by-eleven visibility grid. |
+| **Coordinate** | The actor record's **absolute, un-projected** map column and row. | The actor's **projected viewport** cell, `0..10` on each axis. |
+| **Reached how** | Through the shared world-tile accessor, once for the actor's own cell and once more for each neighbouring-row probe. | Directly, with no accessor call. |
+| **Question it asks** | *What terrain is the actor standing on, and what is on the row beside it?* | *Has this viewport cell already been claimed by something else this pass?* |
+| **Out-of-range** | Scene-dependent; see the three cases below. | Outside combat it does not arise: the projection and the range tests have already rejected any actor outside `0..10`. In combat the projection and **both** bounds compares are skipped, so nothing rejects a slot carrying out-of-range coordinates; in practice an arena actor's coordinates *are* viewport coordinates, because the arena is exactly the eleven-by-eleven window. *Inferred* - the absence of the checks is established, the impossibility of an out-of-range arena slot is not, and an engine should not rely on it as a guarantee. |
+
+Four independent consequences follow, and each one breaks if the two reads are
+merged:
+
+1. **They disagree numerically.** Outside combat the projected and absolute
+   coordinates differ by the party's position, so the same actor indexes two
+   different cells in the two buffers on nearly every frame.
+2. **They hold different kinds of value.** The accessor always yields terrain.
+   The grid may hold terrain, but it may equally hold a fog marker, the
+   use-companion marker, a direct marker written by an earlier slot in this same
+   pass, or the hidden marker - none of which is terrain at all. The seated
+   branch's `0x92` test is meaningful precisely because it can fail on a
+   non-terrain value.
+3. **They fail differently.** The grid read has no bounds concept and needs
+   none. The accessor has an explicit range rule with a substitution, stated
+   below.
+4. **They sit at different points in the frame.** The grid read observes the
+   state left by the fog refinement and by every higher-numbered slot already
+   composited in this pass; the accessor read is order-independent. The seated
+   branch is therefore a *pre-stamp claim check on the very cell it is about to
+   overwrite*, not a terrain query. Reading it as a map access loses that
+   property entirely.
+
+**The one place the asymmetry collapses, and why that is not a licence to
+merge.** In a combat scene the frame begins by block-copying the arena terrain
+array over the whole visibility grid index-for-index, and combat also skips the
+viewport projection (Section 8.1), so for the remainder of that frame both reads
+address the same logical cell with the same arithmetic and return the same byte.
+That is a coincidence of combat's frame shape, not a shared definition: it holds
+only until the first slot of the pass stamps into the grid, and it holds in no
+other mode.
+
+**Reachability.** Both halves of the asymmetry are exercised by shipped content,
+not merely by construction. Three shipped NPC roster entries carry the `0x5C`
+type byte, spread across two of the four rosters, and all three are scheduled to
+sleep on a bed overnight, sit on a `0x92` chair through the working day, move to
+a `0x90` chair for two hours in the afternoon and return to the `0x92` chair for
+the evening. The `0x92` waypoints take the direct-stamp arm and its grid read;
+the `0x90` waypoints fall through to the default helper and its map read. An
+implementation that merges the two reads is observably wrong in ordinary play,
+with no modified map required. *Scope: a decode of the type array and the
+schedule of every slot in the four shipped rosters, with each waypoint resolved
+against the shipped floor page for its scene. It says nothing about rosters
+carried inside a save image.*
+
+#### The neighbouring-row read at an arena edge
+
+In a combat scene the neighbouring-row probes read **the arena terrain array at
+the actor's own column and the row one above or one below**, through the same
+accessor, in the arena's own eleven-row index space. There is **no bounds check
+on this path at all** - no clamp, no substitution, no rejection. At arena row 0
+the `0x90` chair row's upward probe and the mirror-reflection row's upward probe,
+and at arena row 10 the `0x92` chair row's downward probe, therefore read a byte lying outside the
+arena record altogether: ordinary adjacent scratch memory, whose contents depend
+on what this frame and the overlays before it happened to leave there. The
+original neither detects this nor defines a value for it.
+
+Three facts bound how much that matters:
+
+- **Shipped arena content never reaches it on a chair row.** Across every record
+  of both shipped arena files, rows 0 and 10 of the terrain columns carry
+  **none** of the dispatch terrains - no chair of either facing, no stocks,
+  manacles, mirror, bed or ladder. *Scope: exactly those two rows, exactly the
+  terrain columns, exactly that tile set, both arena files. The
+  placement-metadata columns are excluded and do contain some of those byte
+  values, which is why the two column ranges must be separated (Section 8.4).*
+- **The one row that can reach off-arena cannot act on it.** The
+  **mirror-reflection row** - the *second-to-last* row of the Section 8 table,
+  the catch-all row that fires on any terrain the dispatch does not name and
+  probes the row above for the mirror id `0x9D`, distinct from the plain
+  pass-through row directly below it - is the only probe an actor in arena row 0
+  can actually send off-record. Its sole effect is a marker write into the viewport
+  row above, and that write is independently suppressed whenever the actor's
+  projected viewport row is the top row - the same row the off-record read is
+  paired with. The read happens; nothing can come of it.
+- **Nothing observable depends on the residue.** Because the probe's result is
+  memory residue rather than a rule, an engine is unconstrained there **provided
+  its choice does not make a probe match.** The recommended implementation is to
+  treat any neighbouring-row probe that leaves the arena record as *no match* on
+  every neighbour-testing row. That reproduces every shipped case exactly and
+  cannot diverge on a custom arena in a direction the original could not have
+  intended. Do **not** clamp the row back into the arena, and do **not** apply
+  the location-floor substitution below: either can synthesise a match the
+  original would only ever produce by accident.
+
+*Confidence: **established** that the arena path performs no bounds check, that
+the probe addresses the adjacent-scratch byte rather than failing, that shipped
+arena rows 0 and 10 carry no dispatch terrain, and that the mirror row's write
+is suppressed on the top viewport row. **Not established**, and deliberately not
+published as a value: what the out-of-record byte holds at any given moment. It
+was not measured in a running game, and no engine should reproduce a particular
+value for it.*
+
+#### The neighbouring-row read at a location-floor edge
+
+In a town, dwelling, castle or keep the same accessor applies a **range rule
+with a substitution**: asked for any coordinate outside `0..31` on either axis
+while a location floor is loaded, it returns the loaded floor's southeast-corner
+cell `(31,31)` rather than failing, and it does so symmetrically - a coordinate
+below zero and a coordinate above thirty-one both take it.
+
+**The compositor's neighbour read therefore does take `systems/town-mode.md`
+Section 15's southeast-corner substitution, first-hand.** That answers issue
+#188 question 3 in the affirmative, and the engine's current behaviour is right.
+Its stated *reason* is not: the substitution is not taken "because the
+compositor shares the accessor with the transport-sensitive terrain sample".
+That sample does not use the accessor at all. The substitution has one origin -
+the accessor's range rule - and the two consumers this subsection contrasts
+reach it in two different ways; `systems/town-mode.md` Section 15 now states
+both. Those two are not a closed set: every caller that asks the accessor for an
+out-of-range coordinate on a loaded floor takes the same substitution by the
+same rule, and `systems/commands.md` Section 8.2 and `systems/shops.md`
+document two more of them.
+
+The substitution is **behaviourally inert in shipped location content**, which
+is why no test could have distinguished the engine's reasoning from the
+original's:
+
+- Rows 0 and 31 of all sixty-four shipped location floors carry none of the
+  dispatch terrains, so neither chair row's probe ever leaves the floor.
+- The `(31,31)` cell of those sixty-four floors holds one of six ordinary
+  terrains and is **never** the mirror id, so the only probe that can leave the
+  floor - the mirror-reflection row's - always fails its comparison; and even were it to
+  succeed, its write is suppressed on the top viewport row exactly as in an
+  arena.
+
+*Scope: exactly rows 0 and 31, all thirty-two columns, exactly that tile set,
+over the four shipped location files; and the `(31,31)` cell of each of their
+sixty-four floors. Nothing is claimed about rows 1 through 30, about the
+overworld or dungeon map files, or about a floor edited after shipping.*
+
+#### The neighbouring-row read in the overworld
+
+The overworld arm of the accessor **never substitutes**. It resolves a
+coordinate into the streamed chunk window in party-relative terms and both axes
+wrap within that window, so an off-window coordinate produces a wrapped in-window
+cell rather than a corner cell. Separately, the shipped overworld maps contain
+**none** of the furniture terrains the dispatch names - no chair of either
+facing, no stocks, manacles, mirror, bed or ladder - so no chair row and no
+`0x9D`/`0x9E` current-terrain row ever runs outdoors.
+
+One neighbouring-row probe *does* run there, and it is the
+**mirror-reflection row**'s. That row is the catch-all arm of the Section 8
+table: it is entered by any actor whose effective tile is terrain-aware and
+below `0x80` and whose current terrain the dispatch does not name - ordinary
+outdoor ground included - so outdoors the probe is issued in ordinary play
+rather than never taken. What it can never do is **match**: the shipped
+overworld maps carry no `0x9D` anywhere, so the comparison fails every time and
+the actor takes the plain stamp. The read is issued; only its outcome is fixed.
+That is also what the wrap above is for - it is what decides which cell the
+probe lands on, and an implementation that omits the read entirely agrees with
+the original on every shipped map while diverging on any map that is not
+shipped. *Scope: how often that row is entered outdoors is not quantified here;
+which effective-tile values shipped outdoor actors carry was not measured.*
+
+None of this is the same as "only the plain pass-through runs outdoors", and an
+implementation should not simplify to it: the shipped Britannia map carries
+several hundred cells of the terrain whose row **suppresses** the actor stamp
+outright, and a couple of dozen bridge cells whose row either suppresses or
+passes through depending on the effective tile. Both are ordinary outdoor
+occurrences and neither probes a neighbouring row. *Scope: whole-file counts of
+that tile set over the two shipped overworld map files.*
+
 ## 9. The renderer's contract
 
 The renderer (a separate system, described in its own spec) walks the visibility grid one cell at a time and paints the corresponding tile into the on-screen viewport. For each cell:
@@ -964,9 +1175,17 @@ The cost of the cheap path is roughly one tile-fetch per consumed cell — a sma
 
 **Dungeon-explore.** Uses a different visibility model entirely. There is no eleven-by-eleven viewport grid; the dungeon view is a first-person three-dimensional projection drawn by a dedicated renderer. The light gate is binary: if neither torch nor light-spell counter is active, the panel is black; otherwise the renderer walks the current eight-by-eight dungeon geometry until blocked. Live dungeon-cell bytes do not store persistent visibility memory, and V-View's visited map is temporary scratch state owned by the dungeon view overlay.
 
-**Combat.** Uses a fully materialised terrain grid in a separate buffer, pre-composited by the combat setup helper. The combat producer initialises this buffer to the hidden marker and fills it through the same visibility carve helper family the 2D-scene producer uses, but combat does not consult the global lighting threshold — combat scenes have their own lighting context, and the encoding does not include fog markers. The post-pass (fog refinement plus active-object compositing) skips combat scenes entirely; combat manages active-object compositing through its own round walker.
+**Combat.** Uses a fully materialised terrain grid in a separate buffer, loaded from the arena record at combat setup. The combat producer initialises this buffer to the hidden marker and fills it through the same visibility carve helper family the 2D-scene producer uses, but combat does not consult the global lighting threshold — combat scenes have their own lighting context, and the encoding does not include fog markers.
 
-The mode boundary is enforced by the redraw orchestrator: it inspects the scene byte before choosing a path. Combat-class scenes use the high-range reader branch, and the traced gameplay writer uses `0xFF` for that state. That branch takes a *blat-copy* path that copies the pre-composited combat terrain grid byte-for-byte into the visibility grid, then runs the renderer. The producer is not called.
+**The post-pass still runs, and combat uses the same compositor as every other mode.** *(Answering issue #188 question 2.)* There is exactly **one** active-object compositor in the shipped game, it has exactly one caller — the post-pass — and combat enters it through the same per-frame world tick every other mode uses. The combat round walker's role is to decide *when* a redraw happens, never *how* an actor is composited: it calls the world tick, and the world tick reaches the post-pass on every one of its paths, combat included. The combat overlay contains no compositor of its own and makes no compositing call at all. *Scope on those three negatives - one compositor, one caller, no compositing call from the combat overlay - they were established by enumerating direct calls to each of the routines involved across the executable and all twenty-three shipped overlays, and by confirming every hit against a disassembly of the routine containing it. Indirect and table-dispatched calls and the four display drivers are outside that form. Independently, the combat overlay's image contains **no** embedded reference to the scene byte the post-pass gates on, over a whole-file search that depends on no decoder; that is strong corroboration rather than proof, because an address arriving in a register from elsewhere would not appear in it.*
+
+What a combat scene does differently *inside* the post-pass is a fixed list of five skips, not a skipped scene: the slot-zero refresh and the fog refinement of Section 7 are skipped for the whole pass, and per slot the viewport projection, the floor test and the two range tests are skipped (Sections 8 and 8.1). Skipping the slot-zero refresh means the party record's type, sprite and coordinates are not refreshed from the transport marker and the party position while a fight is live; arena setup owns those fields. Everything else — the compositor, its whole terrain-substitution table, the empty-slot and missing-sprite skips, both grid-cell guards, the three direct-stamp branches, and the shared-stream draw accounting — is identical in the two modes. For what the terrain-aware rows read in an arena, and what happens at the arena's own top and bottom edge, see Section 8.5.
+
+*Retracted:* an earlier revision of this paragraph said the post-pass "skips combat scenes entirely" and that "combat manages active-object compositing through its own round walker". Both are withdrawn: the post-pass runs in combat, and no separate combat compositor exists. An engine built on the withdrawn text carries a second, divergent compositing path for arenas and will not reproduce the furniture merge, the companion-band encoding or the per-pass draw accounting there. See `RETRACTIONS.md`.
+
+Combat's redraw does carry one genuinely combat-only block, but it belongs to the **rasterizer**, not to compositing: the shared tile-painting pass has a scene-gated tail that toggles a blink flag and draws the turn cursor and the aim marker over the finished viewport. `systems/combat.md` Section 7 owns that contract; it composites nothing and it is not part of the post-pass.
+
+The mode boundary is enforced by the redraw orchestrator: it inspects the scene byte before choosing a path. Combat-class scenes use the high-range reader branch, and the traced gameplay writer uses `0xFF` for that state. That branch is better read as an **arena-buffer mode** than as “combat” specifically: combat is its main user, but several other paths write the same band value and render through the same buffer - the Blackthorn scene, the cast overlay's full-screen scenes and one world-command handler among them - and the endgame overlay stages a canned scene through that same buffer while writing no scene byte of its own, so which path puts the scene into the band for it was not established. *Scope: the writers of that band value were enumerated over the executable and all twenty-three shipped overlays by whole-file search for the state byte's address, which does not see an address that arrives in a register from elsewhere.* So an implementation that keys the branch on “am I in a fight?” rather than on the scene state will take the wrong path in those scenes. That branch takes a *blat-copy* path that copies the loaded arena terrain grid byte-for-byte into the visibility grid, then runs the post-pass and the renderer over it. The producer is not called; the post-pass is.
 
 ## 12. Local Light Sources
 
@@ -1209,6 +1428,22 @@ ordinary gameplay visibility behavior.
   not been reconciled. An engine that sees that one terrain behave oddly under
   fog should chase this first.
 
+- **Out-of-arena neighbour probes are residue, not contract.** The compositor's
+  neighbouring-row probe is unbounded in a combat scene, so at the arena's top
+  and bottom row it reads a byte outside the arena record (Section 8.5). What
+  that byte holds was not measured in a running game and is not published; no
+  shipped arena can act on it, and the recommended engine behaviour is to treat
+  such a probe as *no match*. This is a permanent boundary of the contract
+  rather than work to be done: an engine choosing any non-matching answer is
+  conformant, and only a hand-built arena could tell the difference.
+
+- **What combat does *not* have.** As of issue #188 the combat side of
+  compositing is closed rather than open: there is one compositor, combat enters
+  it, and the differences are the five skips listed in Section 11. The one part
+  of combat's frame this document does **not** characterise is the interior of
+  the rasterizer's scene-gated cursor/aim overlay tail, which belongs to
+  `systems/combat.md` Section 7 and composites nothing.
+
 - **The asynchronous-read race window.** External readers sampling the visibility grid mid-frame see partial state — static-analysis notes record eleven distinct hashes during a thirty-sample passive read of one settled scene. Implementations that expose the grid to external readers should provide a synchronisation point.
 
 ## 14. Sources
@@ -1262,6 +1497,26 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/notes/light_threshold_semantics_2026-08-22.md`. That note also
   withdraws the "light radius in tiles" and ray-walk descriptions carried by the
   older private lighting/visibility system trace.
+- Source provenance: Section 8.5 in full, the Section 11 rewrite of the combat
+  paragraph, the Section 8 preamble's read-source wording, the Section 8.1
+  completion of the combat skip list, and the corrected description of the
+  location branch's out-of-range substitution in Section 3 — the deliberate
+  grid-versus-map asymmetry and the four ways the two reads differ, the
+  single-compositor routing and combat's entry into it through the per-frame
+  world tick, the five combat skips, the unbounded arena neighbour probe and its
+  two edge cases, the shipped-content censuses behind every negative above
+  (arena rows 0 and 10, location rows 0 and 31, the sixty-four southeast-corner
+  cells, the two overworld map files, and the roster decode behind the seated
+  branch's reachability), and the identification of the rasterizer's
+  combat-gated tail as presentation rather than compositing — are a cleanroom
+  rewrite of private analysis under `u5-decomp/notes/`, itself repaired after
+  two independent adversarial verification passes over the same claims. Every
+  negative above carries the search scope it was established over, because the
+  scan forms behind them are each blind to something: a call-shape scan does not
+  see indirect or table dispatch, a fixed-address reference scan does not see a
+  pointer built once and then advanced, and a whole-file byte count over a map
+  format must separate the terrain columns from the metadata band or it
+  overstates every count.
 - The queue-based visibility carve, propagation-blocker set, and special-case
   adjacent-only propagation rule
   — `u5-decomp/functions/ULTIMA_EXE/`.
@@ -1299,14 +1554,14 @@ The behaviour described above was derived by reading the function and format not
 - The fog post-pass — squared-distance marker toggling, active-object compositing, and compositor-owned visibility-grid zeroing for cells that need terrain refetch — `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/visibility_grid_zeroing_2026-05-08.md`.
 - The 6×6 folded squared-distance helper used by the fog post-pass — `u5-decomp/functions/ULTIMA_EXE/`. Combat AI target scoring uses a separate computed range primitive covered in `systems/combat.md`.
 - The redraw orchestrator that calls the producer on dirty frames, takes the cheap path on clean frames, blat-copies the combat terrain on combat frames, and clears the dirty flag after the producer returns — `u5-decomp/functions/ULTIMA_EXE/`.
-- The world-tile getter that dispatches between combat, overworld 2×2 chunk window, and town/dungeon-explore single-grid buffers, including the out-of-bounds sentinel — `u5-decomp/functions/ULTIMA_EXE/`.
+- The world-tile getter that dispatches between combat, overworld 2×2 chunk window, and town/dungeon-explore single-grid buffers, including the location branch's southeast-corner substitution, the overworld branch's wrap, and the combat branch's absence of any range test — `u5-decomp/functions/ULTIMA_EXE/`.
 - The default active-object compositor helper and its 0..3 variant selector -
   `u5-decomp/functions/ULTIMA_EXE/`. Both filenames
   predate their naming corrections: neither routine spawns monsters and neither
   is combat-scoped or class-related; the second returns the variant index used
   by the first.
 - The cross-overlay alias and callsite census for the same world-tile getter -- `u5-decomp/functions/ULTIMA_EXE/`.
-- The overworld map family's chunk layout (BRIT.DAT sparse, UNDER.DAT dense), the four-class location-DAT format, and the combat arena format that combat pre-composites — `u5-decomp/formats/maps.md`.
+- The overworld map family's chunk layout (BRIT.DAT sparse, UNDER.DAT dense), the four-class location-DAT format, and the combat arena format combat loads into its scratch grid — `u5-decomp/formats/maps.md`.
 - The resident data segment's fixed locations for the visibility grid, the terrain band, and the per-cell scrap regions — `u5-decomp/formats/data-ovl.md`.
 - The visibility-system analysis notebook from the companion-app project, used as a starting reference for buffer addresses, scene-to-routine map, and the asynchronous-read race observations — `ninth-virtue/docs/visibility-re.md:11-352`.
 - The spell/potion visibility sweep's use of the negative sentinel, and with it

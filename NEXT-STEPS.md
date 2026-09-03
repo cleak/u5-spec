@@ -82,6 +82,121 @@ any scene whose waypoints differ by hour; the walkability of the four Iolo's Hut
 roster cells; and the animation-script bytes for the whirlpool marker class,
 whose reachability is traced but whose script is not.
 
+**Addendum - 2026-09-03, issue #188: the three compositor residuals.** All
+three are closed and `systems/visibility.md` has a new Section 8.5 that owns
+them. **Q1, the grid-versus-map asymmetry, is deliberate and prescriptive** -
+not a wording slip to be harmonised. The default helper reads the scene's map at
+the actor's absolute coordinate; the single-sprite-family seated branch reads
+the visibility grid at the actor's projected viewport cell; the two differ in
+buffer, index space, value domain, failure mode and position in the pass, and a
+single actor takes both in one frame. Three shipped roster entries carry the
+type byte and are scheduled across both a `0x92` chair (grid read, direct stamp)
+and a `0x90` chair (map read, default helper), so both halves run in ordinary
+play. One refinement the engine still needs: the test is tile `0x92`
+**exactly**, not "a chair" - the tile-name table gives that name to four ids and
+the compositor treats all four differently.
+
+**Q2 produced the one reversal, R365.** There is exactly one compositor, it has
+one caller, and **combat enters it** through the shared per-frame world tick;
+the round walker decides *when* to redraw, never *how* to composite, and the
+combat overlay contains no compositor at all. Section 11's "the post-pass skips
+combat scenes entirely" and "combat manages active-object compositing through
+its own round walker" are both withdrawn, and the same model was found published
+four further ways - in `systems/combat.md` Section 15, `formats/cbt.md` Section
+4, `systems/active-objects.md` and `systems/overworld.md` Section 4 - all
+corrected in the same pass. Section
+8.1's account was the right one and is now completed: the combat gate skips the
+**slot-zero refresh** as well as the fog refinement of `systems/visibility.md`
+Section 7, so five steps in total differ. Combat's
+one genuinely combat-only render block is a presentation tail on the shared
+tile-painting pass, downstream of compositing and already owned by
+`systems/combat.md` Section 7.
+
+**Q3: one origin; the two consumers the question contrasts.** The
+southeast-corner `(31,31)` substitution
+belongs to the shared world-tile accessor, not to the movement sample. The
+compositor takes it **first-hand** by calling that accessor, so the engine's
+behaviour is right and only its stated reason was wrong; the town movement
+predicate takes it **second-hand** through the grid, and only where no later
+writer overwrote the cell. `systems/town-mode.md` Section 15 now names both
+consumers and carries that qualifier - and says they are not the whole consumer
+set, since `systems/commands.md` Section 8.2 and `systems/shops.md` document two
+further callers that take the same substitution by the same rule. A sibling correction came out of the same
+paragraph and is filed as **R366**: `systems/visibility.md` Section 3's
+"out-of-bounds sentinel" framing is withdrawn - there is no dedicated sentinel
+storage and no fixed sentinel tile, the substituted cell is part of the live map
+buffer and every location load overwrites it.
+
+Left open, and flagged in place rather than only here. The compositor's
+neighbouring-row probe is **unbounded in an arena**: at arena row 0 and row 10
+it reads outside the arena record. Section 8.5 publishes that as residue rather
+than contract - what the byte holds was never measured in a running game, no
+shipped arena can act on it, and the recommended engine behaviour is to answer
+*no match*. Two things behind that were re-derived under stated scope rather
+than proved: that nothing rewrites the scratch behind the arena record while a
+fight is live is **probable**, not established, because two overlay paths were
+not traced through the overlay manager; and the residue's actual value at either
+edge was not measured. Neither can change a shipped-content outcome, which is
+why the contract is written to be insensitive to both. Method note worth
+carrying into the next pass of this kind: several of the citation defects the
+verification passes found came from inferring an instruction from a byte pattern
+rather than from a disassembly anchored at a known entry point, and the fix -
+anchor every citation, use the pattern only to *find* candidates - is why the
+scan-scope sentences in Section 8.5 are as specific as they are.
+
+**Addendum - 2026-09-03, issue #187: fourteen residual combat gaps closed.**
+All fourteen questions are answered in place - `systems/combat.md` Sections 4,
+5, 7, 8.1, 8.2, 9, 10, 11, 11.1 and 12, `catalogs/monster-bestiary.md`
+Section 3, `systems/dungeon-mode.md` Sections 13.1 and 14.1,
+`systems/display-driver.md` and `systems/timing.md` Section 4. Nine reversals
+landed with them, **R356-R364**, and four are the ones an implementer is most
+likely to have built against. **R356:** the turn banner's colon is followed by a
+newline, so `Attack-` starts a fresh row after the banner **and** after the
+multi-item item-name line - the engine's same-line behaviour is wrong for both.
+**R358:** the hazard tier's "leave-combat flag" is a **stats-panel refresh
+request** with four readers, one per mode loop; nothing leaves combat on it.
+**R359:** the Gazer/top-tier "petrify-style" and "stoning-style" effect is
+**sleep**, and it **replaces** ordinary damage instead of preceding it.
+**R360:** the class range/effect selector's value one is the **melee** sentinel,
+not a zero-damage sentinel routing into the cast branch - and the two consumers
+of that byte disagree above it, so they are now published as two contracts on
+two entry points rather than one merged rule. The other five: **R357** the aim
+marker's coordinates have three further readers (they are the targeting
+cursor's cell, and the cursor owns them); **R361** the "cast-like branch" is a
+Gremlin **food theft** and the catalog's "no Gremlin-specific resource theft"
+negative is withdrawn; **R362** the arena-centre special is **not** inert in
+stock play - it fires on the dungeon-room route and it **overwrites** the centre
+terrain cell; **R363** there is no "any spell cast this round" flag, the byte
+cleared is the auto-close door tracker's saved tile and the clear is per slot;
+**R364** the round loop's dispatch is a faction-polarity branch between two
+drivers, a residual of the framing R353 withdrew.
+
+First publications with nothing to withdraw: the teleport arm's flat
+three-in-four chance, its encirclement bypass, its two-draw cell probe and its
+whole draw budget; the eleven previously unpublished party/NPC rows of both
+class side tables; the display-driver operand set for the tile-restoration pair
+(the mode value and nothing else) and the pair's save half, which also
+substitutes; the arena-centre rule's draw-freeness, its destination byte and its
+`0xDC` precondition; the incoming-attacker map's field layout, writers, reader
+and lifetime; the instant-kill sentinel's reachability from the **monster** arm
+and its three producers; the fresh-per-attempt to-hit draw with its fixed slot
+order and per-attempt draw budget; and the single leading space the Attack
+command emits when two or three items qualify.
+
+*Open, and deliberately not published:* combat owns no pacing, so an engine that
+plays sounds asynchronously runs the automatic round walk faster than the
+original - the "visibly faster" consequence is **inferred** from the blocking
+audio mechanism, not measured. Exact draw-for-draw parity across an interactive
+Attack is **not obtainable from the combat rules alone**: the targeting cursor's
+input loop pumps the world tick, which spends a wind-check draw per pass, and
+the number of passes is a real-time property of host and player. The display
+driver's mode contract is scoped to **EGA**; CGA, Hercules and Tandy were not
+examined. Still unresolved: one register-indirect call in the movement/teleport
+helper is the only hole in the "no pacing" negative; whether the camp/Hole-up
+route can observe an arena grid left by an earlier dungeon room; and whether the
+incoming-attacker band actually round-trips through the save file, which stays
+**probable** because the save writer and loader were not read.
+
 **Addendum - 2026-09-03, issue #185: who prints what on an attack.**
 `systems/combat.md` has a new **Section 11.1**, the complete printed-and-audible
 census of one attack outcome in both directions - which outcomes print a line on
@@ -308,7 +423,8 @@ predicate at all. Two of the five tile sets are visually marginal
 effectively two images rather than four), so "a new value is painted" and "a
 player sees a change" must be kept apart in any test plan. Also flagged but not
 chased, and now recorded in place as a Section 13 open item rather than only
-here: the fog post-pass's phase A rewrites only cells already holding the two
+here: the fog post-pass's fog refinement (`systems/visibility.md` Section 7)
+rewrites only cells already holding the two
 marker bytes that the shipped tile-name table gives the *same* terrain name,
 which is hard to square with Section 2's reading of those bytes as general
 clear/dim markers. Section 2 is published contract and is not withdrawn; it was
@@ -1492,7 +1608,11 @@ baseline.
 `systems/combat.md`, `catalogs/monster-bestiary.md`, and extraction now publish
 the ranged/effect selector and payload side-table rows for hostile and special
 classes, plus the Mage party-row boundary, the scene-resistance rows, the
-Gremlin cast-like branch row, and the Mimic pre-gate bypass row. Later cleanup
+Gremlin cast-like branch row, and the Mimic pre-gate bypass row. *(Extended and
+partly superseded, issue #187 / R360-R361: all forty-eight rows are now
+published, including the eleven party/NPC rows; selector value one is the melee
+sentinel rather than a zero-damage sentinel; and the Gremlin column is renamed
+to the food-theft branch.)* Later cleanup
 records that compound-only or readerless class-flag component bits are opaque
 metadata, not a remaining combat behavior gap.
 
@@ -2957,6 +3077,9 @@ ordinary melee damage, Good party targets are poisoned with zero damage and no
 attacker XP credit, non-Good or non-party targets fall through to small raw
 damage, and Gazer/magic-effect attacks can enter stoning-style branches. Exact
 poison/status class-row assignments are now published in the monster bestiary.
+*(Superseded, issue #187 / R359: the "stoning-style" branch applies **sleep**
+and **replaces** ordinary damage rather than preceding it. See
+`systems/combat.md` Sections 7 and 12.)*
 
 **Current target-picker exception cleanup:** 2026-05-12 - combat, monster-bestiary, and extraction now label the target-picker phase/hidden suppression-filter exceptions as Doom combat and acting Shadow Lord. The ordinary invisibility filter still applies after that exception.
 
@@ -2980,6 +3103,9 @@ attack consumers: a class trait can route attacks into the cast-like
 ranged/effect branch, a separate magic-immune/boss-resistance gate can abort
 that helper in special combat contexts, and poison/status attacks are documented
 as a combined flag cluster rather than separately named component bits.
+*(Superseded, issue #187 / R361: the "cast-like ranged/effect branch" is the
+Gremlin **food theft** - no cast, no aim, no animation - and it replaces the
+whole damage chain. See `systems/combat.md` Section 11.)*
 
 **Current combat Mage turnable-boundary cleanup:** 2026-05-13 -
 `catalogs/monster-bestiary.md` and extraction now keep the Mage row's

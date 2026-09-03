@@ -141,6 +141,37 @@ The framing function bridges the world-mode loop and the combat round loop. It m
   redraw. The reached mode restores driver-saved tile graphics; combat owns
   only the sampling/clear/call ordering, while the setter provenance and
   tile-asset mutation details belong to the dungeon and driver specs.
+
+  **The operand set is the mode value and nothing else.** The framer's wrapper
+  writes the dispatch index into the driver call cell, places the mode value in
+  the driver's single argument register, and makes the call. It sets no other
+  register, and it passes no coordinate, no rectangle, no handle and no pointer
+  to a saved pair; unlike the sibling blit wrappers it does not run the
+  clamp-rectangle helper either. The saved graphics are not the caller's to hand
+  over: the driver keeps them in its own private scratch, so the pair is "the
+  dungeon room painter asked this driver to save, the framer asks the same
+  driver to put back". An implementation with no driver handle and no saved pair
+  to pass is not missing an operand - there is none to pass.
+
+  **The flag's only setter is the dungeon room painter's two-way-ladder cell**
+  (`systems/dungeon-mode.md` Section 14.1); no non-dungeon path raises it, and
+  that same cell issues the matching **save** in the same breath, through the
+  same driver entry with mode value `0`. *Scope of that negative:* a
+  displacement census of the flag byte across the shipped executable, all
+  twenty-four overlays and all four display drivers finds five instructions -
+  one raise, two clears, two reads - and nothing else. A write through a base
+  register already carrying a neighbouring constant, or a word-sized write
+  straddling the byte from below, would fall outside it.
+
+  **A second reader constrains the ordering.** The dungeon K-Klimb handler
+  consults the same flag to decide whether the ladder under the party goes both
+  ways, and offers the up-or-down prompt instead of assuming "Up!" when it is
+  set (`systems/dungeon-mode.md` Sections 13.1 and 14.1). The flag therefore
+  does double duty - "tile graphics are saved and owe a restore" and "this
+  ladder is two-way" - so the restore phase's clear must not be reordered ahead
+  of a Klimb that could still read it. *(First publication of the operand set,
+  the setter census and the second reader; nothing here withdraws earlier
+  text.)*
 - Restore the player's coordinates and the scene byte from the saved slots.
 - Mark visibility dirty so the next world frame redraws fully, and refresh the on-screen party-stats panel.
 - Restore the active-player slot — but only if the pre-combat active player has not died or fallen asleep during the fight; if their status is now `'D'` (dead) or `'S'` (asleep), keep the active-player slot cleared and let the player re-select.
@@ -482,11 +513,66 @@ roster slot index in its auxiliary byte, and the "no linked descriptor yet"
 sentinel in its last byte.
 
 **Arena-centre special.** If the loaded arena's centre cell (row five, column
-five) holds the magic-field marker tile `0xDC`, the setup pass converts that
-cell into a special active object with setup id one, using the same
-auxiliary-byte rule the dungeon-room loader applies to that id. No shipped
-outdoor arena carries that tile at that cell, so this is inert for stock
-`BRIT.CBT` data and is documented only so a custom arena behaves the same way.
+five) holds terrain byte `0xDC`, the setup pass converts that cell into a
+special active object with setup id one. Three properties of that step are
+settled here.
+
+- **The auxiliary-byte rule is setup id one's, and it is draw-free.** The value
+  written is three times the current level index plus seven, computed
+  arithmetically, with no random draw of any kind. That is the same rule, to the
+  operation, that the dungeon-room loader applies to its own setup id one; the
+  owning publication is the setup-id auxiliary-byte table in `formats/cbt.md`,
+  and the two agree byte for byte on both ids. Do not generalise it to the sibling
+  id: **setup id two draws** a uniform value in the inclusive range one to ten
+  times the level plus ten, so the two ids are not two variants of one formula.
+- **The destination is the stamped object's quantity/loot byte** in the
+  active-object record this step creates - not any combat-descriptor field. The
+  object is placed as an ordinary world-object stamp at arena `(5, 5)` on the
+  party's current Z plane, so it produces a world-object row with **no** combat
+  descriptor: nothing acts on that cell during the round.
+- **The terrain byte under the converted cell is not left as loaded.**
+  *(**Corrected**; see below.)* The step's last act overwrites that centre cell
+  with the room's floor-fill terrain byte, erasing the `0xDC` the room painter
+  had stamped there. An engine that leaves the grid untouched keeps a `0xDC`
+  under the converted object, and every later grid consumer - the round loop's
+  restraint test (Section 7.1), the step-validity predicate, the standing-cell
+  hazard pass - then reads the wrong byte for that cell.
+
+**When it can fire.** The arm is **gated on the centre cell already holding**
+`0xDC`; it is not an unconditional conversion of the centre cell. Three separate
+paths enter this setup pass - outdoor terrain combat, dungeon-room combat, and
+the camp/Hole-up ambush - and only the dungeon-room path can present a
+qualifying centre cell, because the byte arrives there from the dungeon room
+painter's underfoot-icon table, whose chest class stamps exactly this value at
+the arena centre (`systems/dungeon-mode.md` Section 14.1). The live trigger is
+therefore *dungeon-room combat entered while the party stands on a chest cell*,
+and the step is **not** inert in stock play. Confidence: **established** for the
+gate, the formula, the destination byte, the terrain overwrite, the
+three-caller census and the arena-file negative; **probable** for the
+identification of the icon class as the chest and for the runtime sequencing
+that puts a party on such a cell, which was not traced.
+
+*(**Corrected.** An earlier revision of this paragraph said "No shipped outdoor
+arena carries that tile at that cell, so this is inert for stock `BRIT.CBT` data
+and is documented only so a custom arena behaves the same way." **The inertness
+claim is withdrawn** - the arena-file half of it is true and is now stronger,
+but the conclusion drawn from it was wrong, because the qualifying byte is
+painted at run time rather than loaded from an arena record.)*
+
+**No shipped arena record carries `0xDC` anywhere in its grid** - established by
+reading every record of both shipped arena files cell by cell, not only their
+centre cells - so no arena *load* can supply it, and the outdoor and camp routes
+fall through this step. *Scope of that negative:* it covers the shipped arena
+files read directly plus a displacement census of the centre cell's own address
+across the executable, all overlays and all display drivers. It does not cover a
+write through a computed pointer, and whether the camp route can observe a grid
+left behind by an earlier dungeon room was not traced.
+
+The `0xDC` gloss in this paragraph is corrected too, with no behavioural
+consequence: the byte is domain-dependent, and it is the moon-gate value only in
+the overworld terrain domain (`catalogs/tile-catalog.md`). In the room painter's
+arena-grid domain, the domain that applies here, it is the chest icon. The
+comparison is against the same value either way.
 
 **Counting monsters.** The engine consults the default spawn-count byte in the
 combat-class stat row for the encounter's base class. That base class is the
@@ -1399,8 +1485,34 @@ combat placement probe agrees that the cell can hold the cloned actor.
 Each round is one walk over the thirty-two-slot actor table. The round loop has a one-time entry prologue, a per-actor body that runs zero or one times per slot, and end-of-round exit checks. When the body has visited all thirty-two slots, the round restarts (unless an exit fires).
 
 **Loop-entry prologue.** A small bundle of housekeeping work: screen redraw,
-combat-begin overlay refresh, screen flush, per-slot scratch state reset, and
-clearing the "any spell cast this round" flag.
+combat-begin overlay refresh, and screen flush.
+
+*(**Corrected.**)* This bundle was previously described as also performing a
+"per-slot scratch state reset" and "clearing the 'any spell cast this round'
+flag". **Both items are withdrawn from the prologue**, and the second is
+withdrawn outright:
+
+- **There is no "any spell cast this round" flag.** The byte the round loop
+  clears is not a combat flag at all: it is the **auto-close door tracker's
+  saved tile**, the first field of a four-field world record whose other three
+  are the door's X, its Y, and a countdown of four turns, and whose readers all
+  live in the world modes rather than in combat
+  (`systems/doors-and-z-transitions.md`). Nothing reads a spell-cast flag,
+  because none exists. The clear is also not a prologue step: it runs **once per
+  slot**, at the top of every one of the thirty-two per-actor iterations. The
+  observable consequence in the original is a defect worth reproducing
+  deliberately or not at all - **a door the party opened immediately before
+  combat never auto-closes**, because the tracker's tile field is zeroed on the
+  very first slot iteration and the countdown is never reached. An
+  implementation that models a boolean here should delete it.
+- **The per-action scratch reset is per acting slot, not a prologue step**, and
+  it is a handful of one-action presentation and effect tags: the aim-marker
+  gate used by the overlay tail below, the narration status byte, the
+  effect-class tag, the magic/effect damage tag and the action-item id, all
+  cleared together immediately before the actor is dispatched. It is **not** the
+  thirty-two-byte per-slot band that Section 10 calls the incoming-attacker map,
+  which the round loop never resets wholesale, and which combat entry and combat
+  exit do not touch either.
 
 **It runs once per encounter, not once per round, and its first action draws.**
 Two corrections belong here, and an engine that seeds its stream from this
@@ -1429,8 +1541,88 @@ nothing, directly or transitively.
    the full contract.)*
 4. **Decrement the actor's phase counter.** While non-zero, the slot does not act this round. When it reaches zero, the actor *does* act.
 5. **On zero, refresh the counter and act.** The counter is reset to `36 - base_step`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine fires a tile-render pass for animation.
-6. **Dispatch the actor's turn.** A single function asks "is this slot a player or a monster?" — for a player, control passes to the player command handler (Section 8); for a monster, to the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch (Section 9).
-7. **Mark the slot acted, run the standing-cell hazard pass, then the post-action render.** These are two separate steps and only the second one draws. The hazard pass reads the arena terrain under the actor that just acted, and — if that terrain is not itself damaging — scans the object table for any object other than the actor's own sitting on the same cell. Three damaging kinds are recognized, each with its own effect: a low tier that applies the party status/damage path with the no-attacker sentinel and plays the hit sound, but only while the actor's own object entry is an ordinary live entry; a middle tier that plays the hit sound, rolls a small random amount, feeds it to the damage-and-status resolver, runs the shared finalize hook and raises the leave-combat flag; and a top tier that routes the actor into the same petrify-style special effect a Gazer's gaze uses. A cell with none of these kinds costs the actor nothing. Only after the hazard pass does the separate render step redraw changed cells and run any post-action sound or particle effect. Death narration runs here when relevant.
+6. **Dispatch the actor's turn.** A single faction helper classifies the slot and returns a group id, and the branch on that result is the whole dispatch: a **non-zero** group sends the slot to the **autonomous driver** (Section 9), and a **zero** group sends it to the **player-command driver** (Section 8). *(**Corrected.** An earlier revision of this step described the second arm as "the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch". **That is withdrawn** - there is no synthesis and no shared per-letter dispatch (`RETRACTIONS.md` R353), and the two arms are two separate drivers selected by the polarity above.)* The classification is not simply "player or monster". A slot already marked dead classifies as group zero; an ordinary party member classifies as group zero and an ordinary monster as group one; a monster carrying the controlled/charmed bit classifies as group **zero** and is therefore driven from the player's prompt, while a party member carrying that bit classifies as group **one** and is driven autonomously (Section 6.1a). Independently of the helper, the player-command driver's own Sword-of-Chaos arm hands a party character to the autonomous driver for that one action.
+7. **Mark the slot acted, run the standing-cell hazard pass, then the post-action render.** These are two separate steps and only the second one draws. The hazard pass reads the arena terrain under the actor that just acted, and — if that terrain is not itself damaging — scans the object table for any object other than the actor's own sitting on the same cell. Three damaging kinds are recognized, each with its own effect: a low tier that applies the party status/damage path with the no-attacker sentinel and plays the hit sound, but only while the actor's own object entry is an ordinary live entry; a middle tier that plays the hit sound, rolls a small random amount, feeds it to the damage-and-status resolver, runs the shared finalize hook and **requests a party stats-panel refresh**; and a top tier that routes the actor into the same **sleep** effect a Gazer's gaze applies. *(**Corrected** twice. "Raises the leave-combat flag" is withdrawn: the byte is a display-refresh request and nothing leaves combat on it - see "The middle tier's flag" below. "Petrify-style special effect" is withdrawn: the effect is sleep, not petrification or stoning - see "The top tier's effect" below and Section 12.)* A cell with none of these kinds costs the actor nothing. Only after the hazard pass does the separate render step redraw changed cells and run any post-action sound or particle effect. Death narration runs here when relevant.
+
+**The middle tier's flag is a stats-panel refresh request, not a leave-combat
+flag.** Nothing anywhere in the game leaves combat, breaks a loop, returns from
+a handler, or writes a scene byte on the strength of it. It is a one-bit "the
+party stats panel is stale" request with a single consumer shape: each of the
+four world/combat mode loops - combat, dungeon, outdoor and town - reads it once
+at the top of its per-turn entry point and, if it is set, redraws the full party
+stats panel and clears it. That is the whole contract, and it is what Section 11
+already says for this same tier. The request is raised in twenty-three places
+across the game, every one of them a routine that has just changed a number the
+panel shows - spell mana, food, gold, HP from a hazard, or the active-player
+marker - so an engine should model it as a shared display latch owned by the
+stats panel, not as combat state and certainly not as a contact-record field.
+*(Scope: the reader census is every read of that byte in any absolute form
+across the executable, all twenty-four overlays and all four display drivers -
+four reads, one per mode loop, each followed by the same redraw-and-clear. A
+read through a computed pointer would fall outside it, and none was observed.
+The twenty-three-site raise count was verified in the same census; one of those
+sites, on the boarding/transport path, was spot-checked rather than read, so the
+generalisation "every raiser has just changed a displayed number" is
+**probable** while the census itself is established.)*
+
+**The top tier's effect is sleep, applied instead of damage.** The tier calls
+the same shared routine the Gazer's gaze calls, and that routine applies the
+asleep state: for a party defender it writes the asleep status letter into the
+character record, sets the descriptor's disabled bit, switches the presentation
+byte to the prone marker, clears the active-player sentinel if that member held
+it, sets the narration status to the sleep code so the shared narrator prints
+`<target> slept!`, redraws the stats panel, and renders one frame unless the
+rest/camp alternate-entry marker is set, in which case the frame is skipped. For a
+non-party defender it sets the descriptor's disabled bit, sets the same
+narration code, marks the record's spare byte and renders. **It writes no HP on
+either path, and it carries no sound of its own.** A party defender already
+marked dead is refused outright, with nothing written. One asymmetry is worth
+implementing deliberately: the status letter and the presentation byte are
+inside the saved-game window while the descriptor's disabled bit is not, so the
+asleep state is stored twice with two different lifetimes. Section 12 gives the
+same contract from the attack side, and Section 11.1's field table already had
+the behaviour right - only the naming in this step and in Section 12 was wrong.
+
+**The automatic round walk has no pacing of its own.** *(Answering issue #187
+question 3.)* There is no published wall-clock or frame interval between two
+automatic actions in the same round because there is none in the original. The
+combat overlay makes **no call to any of the four resident delay primitives**,
+and the round walker's per-actor body issues no wait and no frame of its own on
+the ordinary dispatch path: the one frame a player sees per action is emitted
+*inside* the action, by the attack, movement or effect helper that ran. So "one
+render per dispatched action, no further delay" is very nearly the whole
+contract - with two corrections and one caveat.
+
+- *The walker is not render-free in general.* Two of its exceptional arms render
+  directly: the sweep that retires a party member who died between rounds
+  (step 2) renders that slot, and the defeat arm of the end-of-table check
+  renders one frame before printing the defeat line. The victory arm renders
+  nothing.
+- *"Exactly one frame per action" is an approximation, not a rule.* An action
+  can render twice - a committed attack that kills an actor of the class whose
+  death leaves remains renders again as those remains are placed, and a damaging
+  hazard tier that both re-blits and narrates can too. Model the renders as
+  belonging to the helpers, and let the count fall out.
+- *The caveat: sound is the de-facto pacing.* Between two automatic actions the
+  elapsed wall-clock time is dominated by **blocking speaker playback**, not by
+  any timer: the per-action slot re-blit ends in a blocking rumble, the combat
+  overlay also reaches that rumble directly on two paths, and the attack, theft
+  and escape cues are blocking glissandi (`systems/audio.md`). An engine that
+  models "no delay" literally *and* plays its sounds asynchronously will run the
+  automatic round walk visibly faster than the original. The right contract is
+  "combat owns no pacing; the perceived cadence is the audio contract's blocking
+  envelopes", with the envelope numbers owned by `systems/audio.md` and
+  `systems/timing.md` Section 4.
+
+*Scope of the "no delay primitive" negative:* a byte-swept census of every
+direct near call in the combat overlay against all four resident delay
+primitives returns no hit; the shared combat/spell helper overlay has exactly
+two, one in a single narration arm and one in the projectile animation's
+per-step advance. Not covered: the one register-indirect call inside the
+movement/teleport helper, far calls, and the display drivers. Confidence:
+**established** for the negative within that scope and for the render census;
+**inferred** for the "visibly faster" consequence, which follows from the
+blocking-audio mechanism rather than from a measurement.
 
 **Post-dispatch and table-terminal checks.** The loop recounts live unmarked
 actors by side after a dispatched action. If no party-side actors remain while
@@ -1469,13 +1661,58 @@ a hazard, ticks an actor, or mutates HP, status or field markers; the
 not of the behaviour.
 
 The only combat-specific part of that pass is its tail, which runs when the
-scene byte is in the combat band. It toggles a blink flag each pass and, on the
+scene byte is in the combat band. That tail is the whole of combat's
+presentation difference in the render path, and it is downstream of
+compositing: the post-pass that ran immediately before it composited the arena's
+actors through the same single compositor the world modes use
+(`systems/visibility.md` Section 11). It toggles a blink flag each pass and, on the
 lit pass, draws the player cursor box around the eligible active player's arena
 cell, skipping the entire overlay tail when that cell is the invalid sentinel
 or belongs to the non-player group. A separate flag can then draw an additional
 marker at an explicit arena X/Y. That marker is not independently gated: a dark
 blink pass, invalid active cell, or non-player active group suppresses both
-overlays. These updates are presentation only: they do not advance combat time,
+overlays.
+
+**What owns that coordinate.** *(Answering issue #187 question 1: yes, exactly
+the hypothesis the question puts.)* The secondary marker's arena X/Y **is the
+Section 8.2 targeting cursor's current cell**, and the cursor owns it outright.
+The cursor is the only writer of either coordinate byte anywhere in the game,
+and it writes them in exactly two situations: it **seeds** them when it opens,
+and it **rewrites** them on every accepted move. A rejected move - out of the
+arena, or beyond the attempt's maximum range - leaves them exactly as they were,
+which is the same "no message, no beep, nothing moves" behaviour Section 8.2
+already publishes. The seed value is the attacker's remembered previous target's
+cell when that target passes the cursor's validity gate, and the attacker's own
+cell otherwise (Section 8.2).
+
+The **gate** is what turns the marker on and off, and it is a separate byte with
+three writers and one reader. The cursor raises it as its first act and lowers
+it as its last, so the marker is on screen **if and only if an arena targeting
+cursor is currently open**, subject to the shared blink and eligibility tests
+above. The round loop additionally clears it as part of the per-action scratch
+reset before each acting slot, which is belt and braces rather than a second
+mechanism. **The coordinate itself is never cleared** - after the cursor closes
+it still holds the last cell the cursor stood on, and only the lowered gate
+stops it being drawn.
+
+Two consequences for an implementation. First, this is a structural fix rather
+than a numeric one: an engine that leaves the coordinate unwritten draws no aim
+marker at all, and the repair is to give the cursor ownership of the pair - seed
+on open, rewrite on accept, leave alone on reject, never clear - rather than to
+find a value to poke. The raster contract above is already correct. Second, do
+not model the marker as a *cursor position separate from the cursor*: the
+turn-cursor box and the aim marker are two different things drawn from two
+different sources. The box is drawn at the acting slot's **own** arena cell and
+says whose turn it is; the marker is drawn at the coordinate above and says
+where the aim currently rests.
+
+*Scope:* the writer and gate censuses are absolute-displacement censuses of both
+coordinate bytes and the gate byte across the shipped executable, all
+twenty-four overlays and all four display drivers - four coordinate writes, all
+inside the cursor; three gate writes; one gate reader. A write through a
+computed pointer would fall outside them. Confidence: **established**.
+
+These updates are presentation only: they do not advance combat time,
 mutate actor HP or status, or consume placed field markers, and they are
 distinct both from actor dispatch and from the post-dispatch field-contact hook
 described later.
@@ -1536,9 +1773,19 @@ the round loop, **not** written by any combat routine, and nothing in combat
 reads it. An implementation that ties it to combat rounds, or that treats it as
 scratch that may be discarded between calls, is wrong in both directions.
 
-**Nothing else in this section owns shared state.** The blink flag and the
-marker coordinates named above are read only by that same painting pass, and
-neither is saved. If a future revision of this section introduces a counter or
+**The blink flag is the only byte in this section read by nothing else.**
+*(**Corrected.** An earlier revision said "Nothing else in this section owns
+shared state. The blink flag and the marker coordinates named above are read
+only by that same painting pass". **The half of that sentence about the marker
+coordinates is withdrawn.**)* The blink flag's claim survives intact: it has one
+reader, the painting pass itself, and two writers, that pass and the round loop's
+per-acting-slot seed. The **marker coordinates do not**: they are written by the
+targeting cursor and read by three further consumers - the ranged/cast effect arm
+and the adjacent-aim arm both read them back as the confirmed target cell, and
+the world-side Cast command reads the same pair for its own field placement. An
+implementation that treats them as write-only presentation state, or that
+recomputes them at draw time, breaks the confirm path that consumes them.
+Neither the coordinates nor the blink flag is saved. If a future revision of this section introduces a counter or
 a flag, it should state its lifetime and its readers in this same form — and
 where the honest answer is that nothing reads it, that is evidence the contract
 is not real.
@@ -1755,7 +2002,23 @@ The actor-and-weapons line is **not** Attack's announcement. It is the **turn
 banner**, emitted at the start of every keyboard-driven combatant's turn, *before
 any key is read*: a newline, the actor's name, and - for a party-side actor - the
 clause `, armed with ` followed by the names of that actor's readied items
-separated by `, `, or `bare hands` when none qualifies, terminated by a colon.
+separated by `, `, or `bare hands` when none qualifies, terminated by a colon
+**and then a newline**. The banner's line ends there; whatever the player types
+next is announced on a fresh row.
+
+*(**Corrected.** An earlier revision of this sentence ended "terminated by a
+colon" and said nothing about a line break, which read as "the next thing
+printed continues the banner's row". **That is withdrawn.** Section 11.1's
+per-actor narration table, which has always said "a colon, newline", is the
+correct one, and the two are now consistent. The mechanism is worth stating
+because it is easy to get wrong from the strings alone: the banner's colon is
+its own short literal and carries no line feed, but the turn handler emits the
+line feed itself, unconditionally, between printing the banner and reading the
+command byte - on the first pass and on every re-prompt that re-reads a command,
+and the prompt-window refresh that runs between them makes no cursor move that
+could undo it. Consequently `Attack-` does **not** continue the banner's row.
+An implementation that keeps `Attack-` on the banner line is wrong here, and -
+by the same question - wrong on the item-name line of Section 8.2 as well.)*
 
 - Only the helm, weapon-hand and shield-hand slots are scanned, and only items
   whose per-item weapon-capability entry is non-zero are named. Ordinary helms,
@@ -1815,6 +2078,24 @@ attempt additionally prints a newline, that item's name, and a colon on its own
 line before its `Attack-`; with exactly one qualifying item, or none, no
 item-name line is printed.
 
+**"On its own line" is literal: the colon carries its own trailing newline**, so
+each attempt's `Attack-` starts the row below its item-name line. This is a
+different mechanism from the turn banner's line break - there the colon literal
+carries no line feed and the turn handler supplies one (Section 8.1) - but the
+visible result is the same on both lines, and the two colons are two separate
+strings that cannot be served by one shared "print a colon" helper. Item names
+themselves carry no punctuation; the separators are all in these two literals.
+
+**One byte this document had not published: a single leading space.** When two
+or three items qualify, the Attack walker repositions the cursor and emits one
+space **before the first attempt's newline**. It sits outside the per-attempt
+loop, so it appears **once per Attack command**, not once per attempt, and not
+at all when fewer than two items qualify. *(First publication. Confidence:
+**established** for the emission and its placement; the text-window effect of
+the cursor reposition around it was not analysed. Scope of "not previously
+published": a search of `systems/`, `catalogs/` and `formats/` for `Attack-` and
+for space-related phrasings found no row describing it.)*
+
 Two notes on the reach values, because the split is easy to get wrong. A non-zero
 reach does **not** mean "missile weapon": the morning star and the halberd are
 in-hand melee weapons with reach 2 and open a two-cell cursor, and the dagger
@@ -1827,7 +2108,16 @@ Five items - **sling, flaming oil, bow, crossbow and magic bow** - run an
 interference test before the cursor. The engine keeps, per combatant, the
 identity of whichever actor most recently struck that combatant; the value is set
 when damage is resolved against them and cleared at the end of that combatant's
-own next turn. The attempt is aborted if **all** of the following hold:
+own next turn. **This is not the same field as the attacker's remembered
+previous target described further down**, and the two must not share storage.
+They point in opposite directions - this one records "who struck me", the other
+records "who I aimed at" - they live in different places, they are written by
+different events, and they have different lifetimes: the incoming-attacker map
+is one byte per combat slot, is never reset at combat entry or exit and
+probably round-trips through the saved game (Section 10), while the remembered target is
+one byte on the *attacker's own* actor record and does not survive the encounter
+at all. An engine that implements one and reuses it for the other gets both
+wrong. The attempt is aborted if **all** of the following hold:
 
 - that recorded actor exists, and its slot is not empty;
 - it is on the automatic-driver side - a monster, or a party member acting under
@@ -1850,7 +2140,99 @@ That universal claim is withdrawn.)*
 
 **The cursor.** It starts on the attacker's remembered previous target when that
 target is still a valid, live, visible actor within the maximum range, and on the
-attacker's own cell otherwise. Inside the loop:
+attacker's own cell otherwise. The seed is taken through a five-part validity
+gate, and **any** failure falls back to the attacker's own cell: the remembered
+value must name a real slot, that slot must be neither dead-marked nor
+blink-hidden, it must not be an empty slot, its linked presentation record must
+be displayed, and its distance from the attacker must not exceed this attempt's
+maximum range. Whichever cell survives that gate becomes both the cursor's
+starting cell and the arena overlay's aim marker (Section 7).
+
+**The remembered previous target: where it lives, when it is written, when it is
+cleared.** *(Answering issue #187 question 4, and settling all four of its
+sub-questions.)*
+
+- **Where, and keyed to whom.** It is one byte on the **attacker's own**
+  presentation/actor record, holding a combat slot index, with a sentinel
+  meaning "none". It is therefore keyed **per attacker**, one value per
+  combatant, not per party. A three-item Attack rewrites the same byte up to
+  three times and the last writer wins, so next turn's seed is the *last*
+  attempt's target, not the first.
+- **Written only on a confirm that found a live occupant.** Both arms behave the
+  same way here: a confirm that lands on an occupied cell stores that occupant's
+  slot index, and nothing else stores a real value.
+- **Cleared in exactly one case.** On the ranged/cast arm the byte is reset to
+  the sentinel *after* the cursor is confirmed and the interference gate has
+  passed, and *before* the occupancy lookup - so a **confirmed empty cell** on
+  that arm really does wipe the memory. A **cancelled** attempt (Escape, or
+  Space on the attacker's own cell) and an **interference-aborted** attempt both
+  leave before that point and leave the previous value standing. The
+  adjacent-aim arm has no clear at all, so an empty-cell confirm there also
+  leaves the previous value. An engine that clears on every confirmation, or on
+  cancel, diverges on the very next turn's cursor seed.
+- **Does it survive the target's death?** As a stored value, yes - retiring a
+  dead actor zeroes that actor's own records and never touches an attacker's
+  memory of it. In effect, no: the validity gate above sees the emptied slot and
+  seeds the attacker's own cell instead. It is invalidated for real when the
+  slot index is recycled: placing a new actor into a slot sweeps all
+  thirty-two combatants and resets to the sentinel every remembered target that
+  named it.
+- **It does not survive the encounter.** The whole thirty-two-record actor table
+  is snapshotted at combat entry and copied back at combat exit (Section 4), and
+  this byte is inside that window, so the world's pre-combat value is restored
+  verbatim. An engine that "clears the memory at arena boundaries" produces the
+  right effect for the wrong reason - it is not the field being cleared, it is
+  the whole table being rolled back.
+
+*Scope:* the writer census is the union of an absolute-displacement census of
+the byte's address and a pointer-form census over the seven overlays that carry
+combat or world-object logic; the reader census is absolute-displacement forms
+only, so a read through a runtime-computed pointer would fall outside it.
+Confidence: **established**.
+
+**The to-hit draw is taken fresh inside each attempt.** *(Answering issue #187
+question 14.)* Nothing is committed earlier and reused: the roll happens inside
+the shared to-hit helper, which is entered once per accepted attempt, and there
+is no call to it anywhere above the per-attempt dispatch. A three-item Attack
+therefore opens three cursors and takes three independent to-hit draws.
+The **slot walk order is fixed - helm, weapon hand, shield hand** - and body
+armour is never scanned; an engine that walks them in another order produces a
+different draw sequence even with the right count.
+
+The combat-side draw budget for **one** attempt, which is what stream parity
+needs:
+
+| Draw | Taken when |
+|---|---|
+| the to-hit roll | always - **except** for the three automatic-hit item ids (Glass Sword, Sword of Chaos, Jeweled Sword) outside the cast arm, which hit with **no draw at all** |
+| the attacker's damage roll | only when the readied item's `Attack max` is greater than one and is not the instant-kill sentinel (Section 12) |
+| the defender's defence roll | only when the merged attack value is not the instant-kill sentinel **and** the defender's defence rating is non-zero (Section 12) |
+
+So a bare-handed attempt against the shipped party defence spends two draws, an
+ordinary weapon attempt spends three, and a Glass Sword or Sword of Chaos swing
+spends **none**.
+
+**These are combat-side draws only, and draw-for-draw parity across an
+interactive Attack is not obtainable from the combat rules alone.** The
+targeting cursor each attempt opens is **not** free of randomness: its input
+loop runs the ordinary world tick once per pass, and the world tick spends a
+draw on the prevailing-wind check on every pass while its two gates are open -
+which they are for the whole of ordinary play, since nothing in the shipped game
+ever closes them and only Negate Time suppresses the check
+(`systems/prng.md`, `systems/animation.md` Section 13.2). The keystroke reader
+the cursor calls compounds it, because its no-key spin pumps the same tick again
+while the combat scene byte is set. The number of draws an attempt actually
+consumes therefore depends on **how long the player leaves the cursor open**,
+which is a real-time property of the host and the player rather than a property
+of the code. An engine that wants reproducibility must either drive its own idle
+pump from the same stream on the same cadence, or state plainly that it
+deliberately does not. *(**Corrected** relative to nothing published here - this
+is a first publication for `combat.md` - but it does withdraw a claim made in
+private analysis and repeated informally, that the arena cursor takes no random
+draw. Confidence: **established** for the mechanism and for both gate values as
+shipped; **not established** for the rate, which was deliberately not modelled.)*
+
+Inside the loop:
 
 Two different code spaces meet in this loop, and the numeral `1` occurs in both.
 The table below writes an **internal direction code** as a bare number and a key
@@ -2196,8 +2578,49 @@ cell; the candidate is accepted only if the same arena-cell occupancy/hazard
 test used by combat placement allows it. Negate Magic's tag and the Crown's
 permanent code suppress this teleport arm before its chance roll and random-cell
 probe, but do not suppress movement: control proceeds directly to ordinary
-stepping in the same dispatch. Ordinary stepping first tries the target
-vector on one axis, with randomized axis priority, then falls back to random
+stepping in the same dispatch.
+
+**The teleport arm's odds and draw budget.** *(Answering issue #187 question 8;
+first publication.)*
+
+- **The chance roll** is one uniform draw over the four values zero through
+  three, and the arm continues on the three lower values and is abandoned on the
+  maximum. That is a flat **three in four**, with no modulo skew - the draw's
+  span divides the generator's range exactly.
+- **An encirclement bypass the spec had not published.** Before the chance roll
+  the arm asks the shared surrounded predicate whether all four cardinal
+  neighbours of the actor are blocked. **If they are, the chance roll is not
+  taken at all** and the arm proceeds straight to the cell probe. A cornered
+  teleport-capable monster therefore always attempts to blink out.
+- **The cell probe** is **two** independent uniform draws over the sixteen
+  values zero through fifteen, taken **unconditionally and in X-then-Y order**
+  with no short-circuit between them and **no retry loop**. The candidate is
+  accepted only when both land inside the eleven-cell arena span, i.e. at ten or
+  below, so the probe succeeds with probability 121/256, about 47.3 %. A
+  rejected probe abandons the arm; it does not re-draw.
+- **The draw budget**, which is what a stream-parity engine needs and what a
+  probability alone does not give: **three** draws for a not-surrounded actor
+  whose chance roll accepts, **one** when that roll rejects, **two** when the
+  actor is surrounded, and **zero** when Negate Magic or the Crown suppresses
+  the arm. An engine that draws nothing here desynchronises the shared stream by
+  two or three draws for every dispatch of every teleport-capable monster not
+  under one of those two suppressions.
+- **The two classes refused outright.** Before any of the above - before the
+  party-side test, before the class flag, before the suppression tests - the arm
+  returns immediately for two classes, the **Reaper** and the **Mimic**, which
+  are immobile by design. They never step and never teleport.
+- **The narration** on a committed teleport is the acting creature's class name
+  followed by `teleports!` and a newline (Section 11.1). The five classes
+  carrying the capability flag are Wanderer, Blackthorn, Lord British, Wisp and
+  the Shadow Lord (`catalogs/monster-bestiary.md`); no other class in the
+  forty-eight-class space carries it.
+
+Confidence: **established** for the helper, the range, the acceptance, the
+bypass, the probe shape and the draw budget; **probable** for the flag's
+"teleport-capable" naming, which rests on this single read site, and for the
+class-index-to-name pairing behind the roster.
+
+Ordinary stepping first tries the target vector on one axis, with randomized axis priority, then falls back to random
 cardinal tries when the direct axes are blocked. An accepted move updates both
 the combat actor/effect record and the linked renderer-facing active-object
 record before the post-step terrain/effect check runs.
@@ -2291,6 +2714,29 @@ the attacker into the victim's entry before resolving whether the attack hits,
 so a miss records too; later qualifying attacks overwrite the source. Ranged,
 failed-range, no-target, and special controlled-actor attacks leave the entry
 unchanged.
+
+**Field layout, and what it is not.** *(Answering issue #187 question 12.)* The
+map is **thirty-two bytes, one per combat slot**. Entry *N* belongs to slot *N*
+**as a victim** and holds the combat slot index of its most recent ordinary
+adjacent attacker, with a dedicated sentinel meaning "nobody". It is **not** a
+status byte, **not** a cooldown, and **not** a per-actor scratch area the round
+loop resets - the round loop's own per-actor clears are a different, smaller
+bundle of one-action presentation tags (Section 7). Zero is a **valid slot
+index** here, not an empty marker, which matters because the factory saved-game
+template ships the whole band as zeroes.
+
+There are exactly two writers and one gameplay reader. The first writer is the
+ordinary adjacent attack, which records *attacker into victim's entry* **after**
+the class-range and exact-adjacency gates and **before** the to-hit roll. The
+second is the round loop, which writes the sentinel into the **acting** slot's
+own entry after that slot's dispatch returns and **before** the standing-cell
+hazard pass - so a slot skipped for being empty, dead-marked, standing on a
+restraint tile or not yet phase-ready never reaches the clear, and neither does
+a blocked-Cast re-prompt. The reader is the Cast interference gate below. Plus
+the saved-game writer and loader, which move the band wholesale. *(Confidence:
+**probable**. The band's address falls inside the serialised save window and the
+factory template carries thirty-two zero bytes there, but the save writer and
+loader themselves were not read.)*
 
 When a party actor presses `C`, combat blocks only if the recorded source is
 currently occupied, hostile, visible/revealed, awake, and in one of the eight
@@ -2768,12 +3214,52 @@ amulet; there is no U-Use activation, countdown, random disappearance, or
 non-combat periodic effect tied to Amulet/Turning in the traced baseline.
 
 The ranged/effect attack path is also data-driven by per-class metadata beyond
-the visible Amulet/Turning trait. One class trait can route an attack into a
-cast-like ranged/effect branch, rather than ordinary melee, when the combat
-effect prerequisite state is active. That branch prints the cast/effect
-narration, reuses the AI direction/effect dispatch, plays the ranged animation,
-resets the scene state, and consumes the action. A separate scene-resistant
-class trait is checked inside the ranged/effect helper against Negate Magic's
+the visible Amulet/Turning trait. One class trait can route an attack away from
+ordinary melee damage into a **resource-theft** branch when its prerequisite
+state holds.
+
+*(**Corrected.** An earlier revision of this paragraph called that branch a
+"cast-like ranged/effect branch" and said it "prints the cast/effect narration,
+reuses the AI direction/effect dispatch, plays the ranged animation, resets the
+scene state, and consumes the action". **Only "consumes the action" survives.**
+The branch is not a cast, casts nothing, aims nothing, animates no projectile
+and resets no scene state.)*
+
+**What the branch is, and what turns its prerequisite on.** *(Answering issue
+#187 question 7.)* Nothing has to turn it on: the prerequisite state is simply
+**the party's food supply being non-empty**, ordinary persistent world state
+that a party normally has. The class trait is carried by exactly one class in
+the shipped forty-eight-class table - **class 25, the Gremlin** - which is the
+class `catalogs/monster-bestiary.md` Section 3 already marks in its cast-like
+branch column. The branch is therefore reachable in ordinary play on any Gremlin
+attack against a party that still has food; it is **not** "reachable only from a
+caller that sets the state itself", and an engine that never reaches it is
+missing a live behaviour rather than an unreachable one.
+
+The sequence, in order, on a Gremlin attack that has already **landed**:
+
+1. Draw one uniform value over zero through three and accept on three of the
+   four - a flat three in four. **This draw is taken before the food test, so it
+   is spent even when the party has no food**, which matters for stream parity.
+2. If the party's food supply is non-empty, print a newline, `A `, the acting
+   creature's name, and ` stole some food!` with its own trailing newline -
+   i.e. `A <monster> stole some food!` on its own row.
+3. Subtract five from the party's food supply, saturating at zero.
+4. Play the rising theft cue and redraw the party stats panel immediately
+   (`systems/audio.md`) - this arm calls the redraw directly and does **not**
+   raise the Section 7 refresh latch.
+5. **Consume the attack action and return.** The branch replaces the entire
+   damage and narration chain: no damage roll, no defence roll, no HP change, no
+   result line, no experience credit.
+
+If either the draw or the food test fails, the attack falls through to ordinary
+melee resolution. And because the branch sits **after** the to-hit roll, **a
+Gremlin cannot steal food on a missed attack** - a miss returns before the trait
+is even examined. Confidence: **established** for the mechanism, the gate, the
+draw and its placement, and for "this class only" within the shipped
+forty-eight-class table.
+
+A separate scene-resistant class trait is checked inside the ranged/effect helper against Negate Magic's
 tag and the Crown's permanent code. When either code is active for a class with
 that trait, the helper returns before projectile presentation, hit testing,
 effect dispatch, damage, or status resolution. Its enclosing attack path still
@@ -2783,23 +3269,57 @@ on each qualifying ranged attempt, not once per actor turn or round. Mimic
 bypasses the ordinary resistance pre-gate while remaining
 eligible for the later ranged/effect path rather than becoming melee-only.
 
-Two neighboring one-byte side tables feed this family. The first is read by the
-AI attack path as the per-class maximum attack range; if the slot distance to
-the chosen target is greater than that byte, the actor consumes no attack. The
-COMSUBS spell/weapon dispatcher reuses that same class-indexed byte as the
-monster-side damage/effect selector, with value `1` treated as the zero-damage
-sentinel that routes into the cast/effect branch. The second table is read as
-the monster-side accuracy/effect payload: COMSUBS passes it into the
-spell/effect dispatcher, while the COMBAT ranged helper passes it onward to the
-cross-overlay ranged-effect resolver along with the hit-roll result and target
-coordinate. These side-table bytes are class metadata, not hard-coded by
-monster name, and not the eight-byte stat-record fields.
+Two neighboring one-byte side tables feed this family, and **both are dense
+forty-eight-entry arrays with a defined byte for every class**. There is no such
+thing as a class without a row (issue #187 question 9); what earlier rounds
+observed as "absent" was a publication gap in the catalog, now closed - see
+`catalogs/monster-bestiary.md` Section 3, which publishes all forty-eight rows.
+An engine that resolves "a class with no row" to "no attack" is answering a
+question the data never asks.
+
+The first table is the **range/effect selector**. The second is the
+**effect-class payload**, forwarded to the projectile animator on the ranged
+arm; its eight values are effect classes, and value `0` is the first of the
+eight effect classes and selects a distinct handler rather than meaning "no
+effect"; *what* it draws is **not established** (a trailing-streak visual is the
+working reading, confidence **probable**). The payload is only ever
+consumed on the ranged arm, so for a class whose selector keeps it on the melee
+arm the payload is inert.
+
+**The two consumers of the selector do not agree, and must be published as two
+contracts on two entry points.** *(**Corrected.** An earlier revision of this
+paragraph said the spell/weapon dispatcher "reuses that same class-indexed byte
+as the monster-side damage/effect selector, with value `1` treated as the
+zero-damage sentinel that routes into the cast/effect branch". **That polarity
+is inverted and is withdrawn.** Value `1` is normalised to zero and routes into
+the **melee** arm, exactly as Section 8.2's own sentence about a class reach of
+one already said; it is a *non*-zero selector that routes into the
+projectile/effect arm. The two sentences contradicted each other and 8.2 was the
+correct one.)*
+
+| Consumer | Selector `1` (most classes) | A selector above `1` |
+|---|---|---|
+| The **AI attack resolver**, on the autonomous driver's path | treated as **maximum range 1**: the attack is refused unless the target is at truncated-Euclidean distance one, and distance one routes to melee | treated as a **maximum range**: distance one still routes to melee, and any greater distance within the range takes the ranged/effect path with the payload |
+| The **spell/weapon dispatcher**, on its non-party-side arm - the arm a controlled monster acting at the player's prompt reaches, and the arm the no-readied-item attempt reaches | folded to zero, selecting the **melee / Aim-cursor arm** | selects the **cast/effect arm unconditionally, at every distance including one** - this routine contains no distance test at all |
+
+Both readings are keyed by the acting actor's class byte. They coincide for
+every class carrying selector `1`, which is an ordinary adjacent melee attempt
+either way, and that is the substantive correction. They **diverge** for any
+class with a higher selector, so a merged rule must not be published: name the
+entry point with the contract. (The dispatcher's *party-side* arm does not read
+this table at all - it keys the same two decisions off the readied item's own
+reach and payload rows, `catalogs/item-list.md`.)
+
+These side-table bytes are class metadata, not hard-coded by monster name, and
+not the eight-byte stat-record fields.
 
 The control-flow contract above is public independently of table storage
 details. `catalogs/monster-bestiary.md` publishes the clean per-class
-ranged/effect side rows for the hostile and special classes, including the
+ranged/effect side rows **for all forty-eight classes**, including the
 range/effect selector, payload byte, scene-resistance row assignments, the
-Gremlin cast-like branch row, and the Mimic pre-gate bypass row.
+Gremlin food-theft branch row, and the Mimic pre-gate bypass row. The eleven
+party/NPC rows one through eleven, previously unpublished, are now in that same
+table.
 
 ### 11.1 Attack outcome narration: what prints, on which side, in what order
 
@@ -2850,7 +3370,7 @@ continues on the same row.
 | Target dies | both | `<target> killed!` | no cue of its own; the party death arm runs a full stats redraw, the monster death arms write their tiles (Section 6.3) |
 | Monster dies, vanish class | party attacker | `<monster> vanishes!` - **no trailing newline** - printed inside the damage handler, which then suppresses the kill line | none |
 | Monster damaged, split class | party attacker | `<monster> divides!` inside the damage handler, and the ordinary result line **still** prints after it | none |
-| Target slept or stoned | both | `<target> slept!` | none |
+| Target slept | both | `<target> slept!` | none. *(**Corrected**: this row previously read "Target slept or stoned". There is no stoning or petrification effect in combat; the branch that reaches this line applies sleep, and it replaces ordinary damage - Sections 7 and 12.)* |
 | Party target poisoned | monster attacker | `<target> is poisoned!`, printed **inside** damage resolution - after the hit newline and before the result line - and the ordinary result line is then suppressed | none |
 | Ordinary landed hit, **party** target | monster attacker | `<target> hit!` - **flat and ungraded** | none |
 | Ordinary landed hit, **party** target, attacker is a **Corpser** (class 45) | monster attacker | `<target> dragged under!` in place of `hit!` | the rising action-snap cue; the target is additionally marked asleep and its sprite blanked |
@@ -3062,9 +3582,38 @@ publishes, which is unchanged.)*
 Two per-item overrides run before the roll on the party side. The **Glass
 Sword** id narrates `Thy sword hath shattered!` and substitutes the instant-kill
 sentinel `99`; the **Jeweled Sword** id forces the raw value to `0` whatever its table
-entry says. The sentinel short-circuits the whole roller and returns immediately
-- **before the defender's defence byte is read** - so an instant kill takes no
-defence draw. *(One residual on the Glass Sword arm: this document and
+entry says - a guaranteed zero-damage blow, the opposite of an instant kill.
+Because the id is also one of the three automatic-hit ids, it always connects
+and always narrates `<target> grazed!` (Section 11.1); it never produces a miss
+line. The sentinel
+short-circuits the whole roller and returns immediately - **before the
+defender's defence byte is read** - so an instant kill takes no defence draw.
+
+**The sentinel is a property of the merged attack value, not of the party arm.**
+*(Answering issue #187 question 13; first publication of the monster half.)* The
+test sits below the point where both arms converge, and the **monster arm jumps
+directly onto it**. So a monster class whose attack byte is `99` returns `99`
+from the roller with the defence roll skipped, and the damage-and-status
+endpoint - which kills on that value regardless of remaining hit points, on the
+party and monster arms alike - kills outright. It does **not** resolve as an
+ordinary very large blow that still takes the stage-two defence subtraction.
+Three producers can reach the sentinel:
+
+| Producer | Reaches it by |
+|---|---|
+| **Glass Sword** | the per-item override above, which substitutes `99` |
+| **Sword of Chaos** | no special branch at all - its shipped `Attack max` byte *is* `99`, and the roller's "flat, do not roll" early-out for that value routes it straight onto the test |
+| **A monster class whose attack byte is `99`** | the monster arm's own jump onto the test. Two shipped classes carry it: **Wanderer** and **Lord British** (`catalogs/monster-bestiary.md`). |
+
+Two consequences an engine must reproduce. Modelling a monster's `99` as an
+ordinary blow diverges *behaviourally* against a defender whose class flags
+halve or zero physical damage - the original's sentinel kills, the large-but-
+ordinary value is halved or erased - and it diverges *in the PRNG stream*,
+because the original takes no defender draw on a sentinel. Separately, the three
+sentinel-adjacent item ids - Glass Sword, Sword of Chaos and Jeweled Sword -
+also **short-circuit the to-hit roll to an automatic hit with zero draws** on the
+ordinary (non-cast) arm, so a Glass Sword or Sword of Chaos swing consumes no
+randomness at all: no to-hit draw, no attack draw, no defence draw. *(One residual on the Glass Sword arm: this document and
 `catalogs/item-list.md` publish, as a traced negative boundary, that the combat
 attack stack does not clear the readied weapon slot for glass-family attacks,
 while private analysis now reads that arm as also clearing the readied slot.
@@ -3117,14 +3666,46 @@ reader tests this as a combined cluster before the random gate; current
 evidence does not assign separate public meanings to the component bits.
 Against a living party member whose status is Good, that helper flips the
 character to Poisoned, narrates the poison result, marks the status-applied
-combat feedback, requests the combat exit cascade, returns zero damage, and
+combat feedback, requests a party stats-panel refresh (Section 7, "The middle
+tier's flag"), returns zero damage, and
 does not award attacker experience. If the same helper is reached for a
 non-Good party member or non-party target, it rolls a small raw damage value
-and then delegates to the normal damage-and-status endpoint. Gazer attacks
-have a separate stoning-style effect against awake defenders, and magic/effect
-attack tiles can also enter
-the same poison or stoning-style branches before falling back to ordinary
-damage.
+and then delegates to the normal damage-and-status endpoint.
+
+**The Gazer branch is a sleep application, and it replaces ordinary damage.**
+*(**Corrected.** An earlier revision of this paragraph read "Gazer attacks have a
+separate stoning-style effect against awake defenders, and magic/effect attack
+tiles can also enter the same poison or stoning-style branches before falling
+back to ordinary damage." **Two things are withdrawn**: the effect is **sleep**,
+not stoning or petrification - nothing in the shipped game petrifies anything -
+and the branch does **not** precede ordinary damage, it **replaces** it, exactly
+parallel to the poison branch above. Section 7 step 7 carried the same
+"petrify-style" mis-naming for the top hazard tier and is corrected to match;
+Section 11.1's field table always had the behaviour right.)*
+
+When the attacker is a monster of the Gazer class and the defender is not
+already asleep, the resolver applies the asleep state and returns straight to
+its own epilogue: **no damage roll, no defence roll, no HP change, no experience
+credit**. What the defender gets:
+
+| Defender | Effect |
+|---|---|
+| Party member | Refused outright, with nothing written, if that character's status byte is already `'D'`. Otherwise the status byte becomes `'S'`, the descriptor's disabled bit is set, the presentation record shows the prone marker, the active-player sentinel is cleared if that member held it, the shared narration status is set to the sleep code, the party stats panel is redrawn, and one frame renders unless the rest/camp alternate-entry marker is set, in which case the frame is skipped. |
+| Non-party actor | The descriptor's disabled bit is set, the shared narration status is set to the sleep code, the record's spare byte is marked, and one frame renders. |
+
+The message is not printed by the sleep routine itself: the narration code it
+sets is what makes the shared result narrator print `<target> slept!` on the
+caller's next narration step (Section 11.1). **There is no sound of its own** -
+the attack's own swing cue has already played. One asymmetry is worth
+implementing deliberately: the status letter and the presentation byte are
+inside the saved-game window, while the descriptor's disabled bit is not, so the
+asleep state is stored twice with two different lifetimes.
+
+Two other arms reach the identical routine and also replace damage rather than
+preceding it: the magic/effect attack tile whose effect id selects sleep, and
+the standing-hazard top tier of Section 7 step 7. An implementation that records
+"the sleep branch was reached" and then runs ordinary damage anyway is wrong
+twice over - the damage should not happen and the effect should.
 
 **Apply to HP.** For party members, damage is subtracted from the character record's HP word using the engine's saturating counter arithmetic; on death, the status byte is set to `'D'`, the active-player byte is cleared if this character was the active one, and a death-tile is written to the dynamic-objects table. For monsters, damage is subtracted from the slot's HP byte without wrapping through underflow; on death, control passes to the class-specific death paths.
 
@@ -3429,7 +4010,7 @@ Combat is built on top of several other systems and integrates cleanly with each
   summon-daemon before ordinary movement. These branches are separate from the
   player spell table, premixed charges, MP, reagents, and circle gates.
 
-- **Visibility.** The arena's visibility model is similar to the world model but uses the combat terrain grid rather than the world map. Each cell ends up with one of the standard visibility byte values, and the renderer composites actors over those values.
+- **Visibility.** The arena's visibility model is similar to the world model but uses the combat terrain grid rather than the world map. Each cell ends up with one of the standard visibility byte values, the **shared visibility post-pass** then composites actors over those values exactly as it does in the world modes, and the renderer paints the result. *Corrected:* an earlier revision of this bullet said "the renderer composites actors over those values". The renderer composites nothing; it is a read-only consumer of the two grids. Combat has no compositor and no compositing pass of its own - it enters the same one every other mode does, with a fixed list of five skips (`systems/visibility.md` Sections 8.1, 8.5 and 11). See `RETRACTIONS.md`.
 
 - **Save image.** Character HP, MP, and status bytes are part of the persistent save. Combat itself cannot be saved mid-fight, but a fight's after-effects are persisted. Combat's swap-and-restore mechanism ensures the saved dynamic-objects table is the world's, not the fight's.
 

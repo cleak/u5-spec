@@ -70,7 +70,7 @@ Terrain cells are one-byte tile indices drawn from the game's global tile vocabu
 
 Combat uses terrain in three ways:
 
-- **Rendering.** The combat renderer paints each visible terrain byte as a top-down tile, then composites actors over it.
+- **Rendering.** Each visible terrain byte is painted as a top-down tile. Actors are composited over it beforehand by the **shared** visibility post-pass, not by a combat-specific renderer: combat uses the same compositor and the same tile-painting pass as the world modes (`systems/visibility.md` Sections 8.5 and 11), differing only by a fixed list of skips inside the post-pass and a scene-gated cursor overlay in the painter's tail.
 - **Movement.** The movement step primitive rejects impassable cells and cells holding a live actor, and allows empty walkable cells. It never converts a blocked step into an attack; see `systems/combat.md` Section 11.
 - **Restraint.** The round loop reads the arena terrain under each actor and, before decrementing that actor's phase counter, tests it against exactly two tile ids - the stocks `0x84` and the manacles `0x85`. An actor standing on either never advances its counter and never acts, while remaining a live, targetable combatant. Every other terrain - water, swamp, mountains, walls, force fields - is outside the test, and an actor on it acts on schedule. **Retraction:** an earlier revision of this bullet called this a defensive skip of "any actor whose record says it is standing on a wall-class terrain cell"; that is withdrawn (`RETRACTIONS.md` R305). See `systems/combat.md` Section 7.1 for the full contract.
 

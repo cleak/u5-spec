@@ -307,6 +307,15 @@ Three observations:
 - The block holds *one* door's state at a time. Opening a second door before the first auto-closes overwrites the saved state; the first door stays open for the rest of the visit.
 - Doors closed by the auto-close pass do not re-lock — the snapshot is the unlocked closed form, not the locked form. A door the player Jimmied open and walked through stays unlocked across the visit.
 - The pass is suppressed in dungeon mode; dungeon doors are toggled by Open and stay in whatever state Open last left them in until the player leaves the dungeon.
+- **Entering combat cancels a pending auto-close.** The combat round loop
+  zeroes the tracker's previous-tile byte - the byte that gates the whole pass -
+  at the top of *every one* of its thirty-two per-actor iterations, so a door
+  opened immediately before a fight never re-closes. The saved X, Y and
+  countdown are left alone and go inert exactly as they do after a Journey
+  Onward. This is an original-game behaviour rather than a rule, and it is worth
+  reproducing deliberately or not at all. (`systems/combat.md` Section 7; the
+  same byte was previously mis-published there as an "any spell cast this round"
+  flag - `RETRACTIONS.md` R363.)
 
 The four tracker bytes fall inside the serialized save window, but an active
 tracker does **not** resume after Journey Onward. The load first restores all

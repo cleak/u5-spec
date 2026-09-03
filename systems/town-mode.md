@@ -1146,6 +1146,51 @@ The two tests deliberately use different samples:
   in-grid coordinates, so no actor can occupy this candidate. The coordinate is
   neither clamped nor replaced with `(31,31)` for this test.
 
+**Where the substitution comes from, and who else takes it.** *(Answering issue
+#188 question 3.)* The `(31,31)` substitution is not a property of the movement
+sample and the movement handler does not perform it. It belongs to the **shared
+world-tile accessor**, which every part of the engine that asks "what terrain is
+at this map coordinate?" goes through: asked for any coordinate outside `0..31`
+on either axis while a location floor is loaded, the accessor returns the loaded
+floor's `(31,31)` cell instead of failing, symmetrically for a coordinate below
+zero and one above thirty-one. **One origin, and the two consumers that matter
+here, reached two different ways:**
+
+- **The active-object compositor takes it first-hand.** Every terrain read the
+  compositor makes - the actor's own cell, and the neighbouring-row probes of
+  `systems/visibility.md` Section 8 - goes through that accessor at the actor's
+  absolute map coordinate, so a probe that steps off the loaded floor receives
+  the corner terrain directly, with no grid involved.
+  `systems/visibility.md` Section 8.5 states that side of the contract in full.
+- **The movement sample takes it second-hand.** The movement handler calls no
+  accessor. It reads the cell already sitting in the party-centred viewport, and
+  the substituted byte is there only because the *grid producer* fetched it
+  through the same accessor when it filled that viewport.
+
+Those two are the consumers this section contrasts, not a closed set. Every
+caller that asks the accessor for an out-of-range coordinate while a location
+floor is loaded takes the same substitution by the same rule: the P-Push
+out-of-range tile sample of `systems/commands.md` Section 8.2 and the tavern
+serving probe of `systems/shops.md` are two more of them.
+
+That indirection carries a qualification the terrain bullet above does not:
+**the movement sample sees the substituted byte verbatim only where nothing
+overwrote that grid cell after the producer filled it.** The fog refinement, the
+compositor's direct-stamp branches, the compositor's own tail and its mirror
+write, and the full-screen cinematic overlays all write into the same grid. In
+an ordinary town frame, with no actor and no fog on the boundary cell, nothing
+does overwrite it - which is why the sample and the accessor agree in practice.
+They agree by construction of that frame, not by definition, and an
+implementation that guarantees agreement unconditionally is asserting more than
+the original does.
+
+The practical consequence is structural rather than numeric: an implementation
+that models this as "movement's terrain sample calls the world-tile accessor,
+which substitutes" produces the right terrain for every shipped exit and the
+wrong shape. The substitution must live in the accessor; the compositor must be
+able to reach it without going anywhere near movement; and the movement sample
+must read the grid.
+
 The prompt is a yes/no question. Accepting prints the affirmative and the
 destination plane, clears the scene byte, computes the player's overworld
 coordinate from the fixed world-location coordinate tables, writes the
@@ -1333,6 +1378,19 @@ town-loop mechanism.
 The behaviour described above was derived by reading the function and format notes listed below. None of the assembly excerpts, byte offsets, or implementation-specific identifiers from those notes appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The town-mode entry handler that loads the location's map, runs the marker harvest, applies the dawn/dusk gate substitution, and calls the Shadowlord install — `u5-decomp/functions/TOWN_OVL/`.
+- Source provenance: Section 15's "Where the substitution comes from, and who
+  else takes it" - the identification of the shared world-tile accessor as the
+  single origin of the `(31,31)` substitution, its symmetric range rule, the
+  compositor as a first-hand consumer, the movement handler as a second-hand
+  one that calls no accessor at all, and the qualifier that the second-hand
+  reading holds only where nothing overwrote the grid cell - is a cleanroom
+  rewrite of private analysis under `u5-decomp/notes/`, repaired after two
+  independent adversarial verification passes. The negative behind "the
+  movement handler calls no accessor" was established over two scan forms with
+  stated limits - a call-shape scan that does not see indirect or table
+  dispatch, and a fixed-address reference scan that does not see a pointer
+  built once and then advanced arithmetically - and both forms agreed.
+  `systems/visibility.md` Section 8.5 carries the compositor half.
 - The top-level dispatcher and resident NPC-location warp helper that supply
   the traced fresh-versus-preserving town setup arguments -
   `u5-decomp/functions/ULTIMA_EXE/`.
