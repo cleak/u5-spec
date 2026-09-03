@@ -163,7 +163,7 @@ Every iteration walks the same sequence:
 
 2. **Pre-loop tile probe.** Read the tile under the party. If it is the special underfoot tile byte `0xFF` and the current state tag is not the `0x0E` exemption, raise a latched underfoot-state flag and force the current ambient light/radius value to zero. On the first frame entering that state, mark the view dirty. When the state clears, run a zero-minute cleanup call so daylight is recomputed without advancing time.
 
-3. **Block on input.** Call into the input system's keystroke fetch. Sub-printable codes are control keys (direction codes and the mode-local Control bindings), and printable bytes are commands like A-attack, E-enter, T-talk, K-klimb. Under sail on the wind-driven cadence, this step does not read the keyboard at all: the input helper returns the cached sail direction instead, which is how a ship keeps moving with no keypress.
+3. **Block on input.** Call into the input system's keystroke fetch. Sub-printable codes are control keys (direction codes and the mode-local Control bindings), and printable bytes are commands like A-attack, E-enter, T-talk, K-klimb. Under sail on the wind-driven cadence, this step does not enter the command wait: the input helper runs its own auto-advance loop and returns the cached sail direction, which is how a ship keeps moving with no keypress. *Corrected (issue #189):* this sentence previously said the step "does not read the keyboard at all". That is withdrawn — the auto-advance loop polls one key on **every** pass. A key matching the cached heading is swallowed and the ship sails on; any other key ends the loop and becomes that turn's command. See `systems/timing.md` Section 8.2 and `RETRACTIONS.md` row R372.
 
 4. **Mode-switch exit check.** If the *scene byte* has gone non-zero since last iteration — because a sub-handler dispatched into a town-family scene or a dungeon-class scene — break out and return to the resident main-game loop. Combat is handled through a framer that restores the pre-combat scene before the outer loop sees it.
 
@@ -256,15 +256,26 @@ Each turn that the per-turn block reaches the animator, the animator walks the a
 
 The animator does not consume the in-game hour; nothing in the overworld animator branches on time-of-day. NPC schedules — the structured "this character is at the bakery 8 AM to 5 PM" mechanic — are a *town-mode-only* concept. Overworld monsters wander but they do not have schedules.
 
-A small *pendulum gate* sits on top of the animator. The `T` timing/state tag
-returns before animation, while the `Q` timing/state tag lets the animator and
-encounter probe run only on alternate turns. A separate transport-marker
-pendulum covers the four traced marker values `0x12`–`0x15` (`vehicles.md`
-Section 2 lists them). Test the values, not vehicle identity:
-`systems/encounters.md` Section 2.1 gives the outdoor gate order and why the
-value reading is the safe one. This is the same mechanism town mode uses to slow NPCs to
-half-speed, but in overworld mode it gates active-object and encounter cadence
-rather than the clock directly.
+A small *pendulum gate* sits ahead of the animator in the per-turn block, and
+the gates belong to that block, not to the animator. The `T` timing/state tag
+returns before either toggle is reached and advances neither. The `Q` gate and
+the transport gate each own a one-bit parity toggle and flip it when the gate is
+*reached* — advancing the alternation is what the gate does, so a gated turn
+does not skip its own parity — and because `Q` returns before the transport
+marker is read, a `Q`-suppressed turn does not advance the transport parity. The
+transport pendulum covers the four traced marker values `0x12`–`0x15`
+(`vehicles.md` Section 2 lists them). Test the values, not vehicle identity:
+`systems/encounters.md` Section 2.1 owns the per-turn-shape table, the outdoor
+gate order, and why the value reading is the safe one. This is the same
+mechanism town mode uses to slow NPCs to half-speed, but in overworld mode it
+gates active-object and encounter cadence rather than the clock directly.
+
+*Corrected (issue #189).* This paragraph previously said the pendulum gate "sits
+on top of the animator" and that the `Q` tag "lets the animator and encounter
+probe run only on alternate turns". The gates are not the animator's — it can
+neither observe nor advance them — and a gated turn advances its own toggle
+rather than skipping the alternation. See `RETRACTIONS.md` row R374, which
+propagates R370 into this document.
 
 ### 6.1 How a creature chooses its step
 

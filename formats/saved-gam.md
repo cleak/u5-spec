@@ -203,7 +203,11 @@ The two bytes at `0x02DF` and `0x02E0` are the cached Trammel and Felucca moon-p
 | `0x02DF` | 1 byte | Cached Trammel phase digit | Phase index `0..7` stored as a printable digit character. |
 | `0x02E0` | 1 byte | Cached Felucca phase digit | Phase index `0..7` stored as a printable digit character. |
 
-Both bytes are rewritten by the moon-phase status-strip renderer, from the day-of-month alone, before the renderer decides whether either glyph is currently visible. That renderer runs on every overworld and town-family scene entry and again from the cleanup's hour-change block while the party is on the surface or in a town-family location, so the pair is refreshed deterministically at least once on any load into such a scene. `systems/moons.md` owns the phase tables the digits come from.
+Both bytes are rewritten by the moon-phase status-strip renderer, from the day-of-month alone, before the renderer decides whether either glyph is currently visible. That renderer runs on every overworld and town-family scene entry, on every in-place floor change inside a town-family location, and again from the cleanup's hour-change block while the party is on the surface or in a town-family location, so the pair is refreshed deterministically at least once on any load into such a scene. `systems/moons.md` owns the phase tables the digits come from, and its Section 3 owns the full caller census.
+
+**The complement matters for a resumed save, and is stated here for the first time.** The rewrite is inside the renderer, past its scene gate. On a load into a scene the strip does not serve — a dungeon, a combat scene, or any scene id at or above the location range — the renderer returns before either byte is touched, so the pair read out of the save file **stands unchanged** until the party next enters a surface or town-family scene. A reader must not assume the two bytes always match the day-of-month field in the same file: they match it as of the last refresh, and a save taken in a dungeon can carry a pair for an older day. Equally, an implementation must not "helpfully" recompute the pair on load, because the original does not, and the difference is visible the moment the party leaves the dungeon onto a moongate.
+
+**Out-of-range content.** The digit range in the table above is what these bytes hold after a refresh performed on a legal day-of-month, one through twenty-eight. The renderer's lookup is unchecked, so a file whose day-of-month field is zero or above twenty-eight caches a pair that is not a digit at all and has no moon meaning; `systems/moons.md` Section 2.2 publishes the exact pairs and the consequences for moongate transit. A validating save tool should flag the day-of-month field rather than these two bytes, which are faithfully reporting what the renderer read.
 
 **They are gameplay state, not scratch.** Natural-moongate transit selects its destination from these two cached bytes and from nothing else: before noon it reads the Trammel digit, from noon onward the Felucca digit, converts it to a number and uses it as the Moonstone slot index of Section 7.2, warping the party to that slot's saved destination scene, X, Y and Z. An engine that treats the pair as disposable, or that recomputes the phase by a different route on load, sends the party through the wrong gate. *Corrected (issue #184):* the region table previously folded these two bytes into an undifferentiated "food gauge / mode scratch" band. See `RETRACTIONS.md` row R339.
 
@@ -796,3 +800,13 @@ The byte-level layout described here was derived from the project's private save
   executable, all twenty-three code overlays and all four display drivers,
   searched for direct and indexed references to the byte. Accesses computed
   through a pointer base outside the scanned window are not covered.
+- Source provenance (issue #190): that the cached moon-phase pair at `0x02DF`
+  and `0x02E0` is rewritten only once the strip renderer is past its scene gate,
+  so a load into a dungeon, a combat scene or any scene id at or above the
+  location range leaves the loaded pair standing; and that the renderer's
+  day-of-month lookup is unchecked, so a file with a day-of-month field outside
+  one through twenty-eight caches a non-digit pair — derived from private
+  analysis in `u5-decomp/notes/`. Both are scoped to the caller census published
+  in `systems/moons.md` Section 3, which covers direct calls and jumps across
+  the shipped executable and all twenty-three code overlays and does not cover a
+  call target computed at run time.

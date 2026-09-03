@@ -94,7 +94,9 @@ Three parallel side tables, indexed by NPC slot, hold pathfinding-only state:
 
 - **Move queue** — thirty-two bytes per NPC, holding packed direction codes for replay one-cell-at-a-time. Filled by the pathfinder, drained by the walker.
 - **Move-queue read pointer** — a word per NPC; sentinel "all bits set" means "queue inactive".
-- **Stuck counter** — a word per NPC, incremented every tick the NPC fails to make progress. The ordinary replanning threshold is small: once the counter is greater than three, the move-queue read pointer is reset to the inactive sentinel and the counter is cleared, forcing a fresh route on a later tick. The same counter also has a high-range guard (Section 14) that prevents runaway stall accumulation.
+- **Stuck counter** — a word per NPC. It is incremented on exactly one kind of failure: a **queued route step refused by the per-step cell check** (Section 5 step 7). It is not a general "failed to make progress" tally, and a *successful* queued route step resets it to zero rather than merely leaving it alone. The ordinary replanning threshold is small: once the counter is greater than three, the move-queue read pointer is reset to the inactive sentinel and the counter is cleared, forcing a fresh route on a later tick. The counter also has a high band that it never *counts* into — a failed replan assigns the value two hundred outright — with its own aging and release rule (Section 9.1, Section 14).
+
+  *Corrected (issue #189).* This bullet previously said the counter is "incremented every tick the NPC fails to make progress". That is withdrawn; only the queued-route step refusal increments it, and the two cap-zero route-recovery steps of Section 9.1 never touch it however they end. See `RETRACTIONS.md` row R367.
 
 Two per-tick scratch booleans are shared by every NPC: an "any NPC moved" flag and an "any tile changed" flag. Both are cleared at the start of every tick; the town turn loop reads "any NPC moved" to decide whether the screen needs a repaint.
 
@@ -112,7 +114,9 @@ Per call, the processor:
 4. **Looks up the active waypoint** for the current hour.
 5. **Reads the current state byte.** If state is "idle" (state ≤ 1), the processor first calls a *boundary trigger* sub-step (Section 6) that detects whether the current hour exactly matches one of the NPC's four schedule boundaries; on a hit it reclassifies the state byte.
 6. **Dispatches on the (possibly updated) state byte** through the eight-state machine (Section 7) — cardinal-direction probes, optionally a pathfinder invocation, and zero or one position update via the world-mutation primitive (Section 11).
-7. **Maintains the move queue.** If the dispatch chose to replay a cached path, the next direction byte is dequeued and applied. If the dispatch produced a new path, the queue is filled. If the NPC fails to make progress, the stuck counter is bumped. A value greater than three resets the queue read pointer and clears the counter so the NPC can replan; high-range counter handling is bookkeeping/visual-exactness territory, not a separate pathfinding state.
+7. **Maintains the move queue.** If the dispatch chose to replay a cached path, the next direction byte is dequeued and applied. If the dispatch produced a new path, the queue is filled. **The stuck counter is reserved for one event: the queued route step being refused by the per-step cell check of Section 10.** On that refusal the counter is incremented, and it is incremented *before* the recovery step runs and without ever inspecting how the recovery step ends. A queued route step that commits resets the counter to zero. A value greater than three resets the queue read pointer and clears the counter so the NPC can replan; the high band is described in Section 9.1 and is entered by assignment after a failed replan, never by counting.
+
+   *Corrected (issue #189).* This step previously said "if the NPC fails to make progress, the stuck counter is bumped", and Section 14 treated the high band as presentation parity. Both are withdrawn. Neither cap-zero route-recovery step of Section 9.1 can increment the counter — not the queued-route replay's recovery step and not the exhausted-queue arm's — so an engine that bumps on any refused movement roughly doubles the rate at which NPCs reach the forced-replan threshold. See `RETRACTIONS.md` rows R367 and R369.
 
 The processor is a single sequential pass — no per-NPC concurrency, no priority queue, no skip-list. Every NPC gets one chance to act per tick, in slot order. An NPC moves at most one cell per turn the player takes.
 
@@ -607,22 +611,87 @@ queued-route replay when its next queued step is refused, and the state-2/3 arm
 whose queue is exhausted and whose replan either failed or was not attempted
 because a queue pointer was still live. Both are still behind the same
 one-in-two coin, so an NPC that is recovering from a blocked route also moves on
-about half its turns, but without the waypoint-radius limit. Separately, when
-the NPC's stuck counter is non-zero the walker only re-plans on a **one-in-three**
-draw and otherwise ages the counter for that turn.
+about half its turns, but without the waypoint-radius limit.
+
+#### The replan gate and the stuck counter's three bands
+
+The stuck counter of Section 4 does not gate movement; it gates **replanning**,
+and it does so differently in three disjoint bands. This subsection replaces the
+one-sentence summary earlier revisions carried.
+
+| Counter on entry to the walker's replan decision | What happens |
+|---|---|
+| `0` | The NPC re-plans **unconditionally**. No draw is taken, and no draw is spent. |
+| `1` .. `199` | The **one-in-three replan draw** below. On a pass the NPC re-plans; on a failure the NPC's turn simply ends. **The counter is not aged, incremented or otherwise touched on a failure.** |
+| `200` .. `204` | No draw and no replan. The counter is incremented, and once the increment carries it past `204` the same pass zeroes it. See the aging band below. |
+
+**The draw's exact form.** The one-in-three gate is a **uniform range draw over
+the three values `0`, `1`, `2`, accepted on exactly the middle value**. It is
+*not* a byte-and-mask draw, and it must not be modelled with the same primitive
+as the one-in-two wander coin of stage 1 above, which *is* a byte draw with a
+single bit tested. Both consume one advance of the shared generator, so a mask
+model would keep the advance count right and still select a different third of
+the stream, desynchronising every later roll.
+
+Because the shared range primitive folds a fifteen-bit magnitude onto three
+outcomes and 32768 is not divisible by three, the accepted value is very
+slightly over-represented: its exact theoretical rate is `10923/32768 =
+0.3333435`, and walking the generator's dominant state cycle end to end gives a
+realised rate of `0.3342`. Call it one in three for play and use the exact draw
+for parity. *Established.*
+
+**Where the gate sits.** Four conditions have to hold before the draw is taken
+at all, and an engine that takes it elsewhere spends advances the original does
+not: the NPC must not have taken the queued-route path this turn, the tick's
+heavy-work budget must still be unspent (a spent budget diverts the walker to
+the cached-waypoint escape hatch instead), the NPC's state must not be the value
+that ends its turn at the loop tail, and the counter must be in `1..199`.
+
+**The aging band, `200..204`.** The value `200` is never *counted* into: it is
+**assigned** outright when a replan is attempted and the pathfinder fails to
+reach the waypoint. Two consequences an engine will get wrong otherwise:
+
+- **The turn on which the counter is set to `200` is not a still turn.** That
+  turn falls straight through into the cap-zero recovery step described above,
+  which can and does commit a move, write the NPC's position and mark the
+  viewport dirty.
+- **The band that follows is five still turns, not six.** The pass that
+  increments the counter to `205` is the same pass that tests it and zeroes it,
+  so entry values `200, 201, 202, 203, 204` are five consecutive passes on which
+  the NPC does nothing at all, and the **sixth** turn sees a counter of `0` and
+  re-plans unconditionally with no draw.
+
+That five-turn count assumes the walker actually reaches the aging arm on each
+of those turns. The two upstream conditions named above — the heavy-work budget
+and the state value — divert the walker before it gets there, and an NPC so
+diverted stands still *without* aging, so the stall lasts longer in wall-clock
+turns than five. *Established*, within that stated condition.
+
+*Corrected (issue #189).* This section previously said that when the stuck
+counter is non-zero the walker "only re-plans on a **one-in-three** draw and
+otherwise ages the counter for that turn". The rate is right and the gate is
+right; **the aging half is withdrawn.** In the `1..199` band — the only band in
+which the draw is taken — a failed draw ages nothing. Aging happens only at
+`200` and above, where no draw is taken at all. See `RETRACTIONS.md` row R368.
 
 **Random-stream consumption.** A wander-eligible NPC consumes one draw from the
 shared generator on a turn where the gate fails and two on a turn where it
 passes, so the number of draws a turn consumes depends on how many NPCs were
-eligible. Any attempt at roll-sequence parity with the original has to reproduce
-that, not just the resulting positions.
+eligible. The replan gate above adds **one further advance, and only in the
+`1..199` band** — a counter of zero re-plans with no draw and the aging band
+takes none. Any attempt at roll-sequence parity with the original has to
+reproduce all of that, not just the resulting positions; see Section 12 for the
+reason full-session parity is not achievable at all.
 
-Source provenance: derived from private analysis note
-`u5-decomp/notes/2026-09-02_issue-180_per-turn-wander-gate.md`. The gate, the
-direction distribution, the constant cap, the rejection-is-a-lost-turn rule and
-the absence of a retry are established from the traced dispatch arms; mapping
-the castle's specific geometry onto an acceptance rate is inferred, and no
-emulator capture was taken.
+Source provenance: derived from private analysis in `u5-decomp/notes/`. The
+gate, the direction distribution, the constant cap, the rejection-is-a-lost-turn
+rule and the absence of a retry are established from the traced dispatch arms;
+mapping the castle's specific geometry onto an acceptance rate is inferred, and
+no emulator capture was taken. The replan gate's draw form, its exact rate, the
+three counter bands and the five-turn aging count come from a second, later
+analysis pass in the same directory, re-derived from the shipped images twice
+and enumerated over the generator's whole state space; no emulator capture was
+taken for those either.
 
 ## 10. Movement constraints
 
@@ -833,7 +902,49 @@ and re-places the roster for that hour before returning control
 mid-route is standing on its scheduled position rather than where it had walked
 to, and its queued route is gone.
 
-**Active objects (sprites).** Sprites are owned by the active-object subsystem; the schedule system only holds a slot index in the runtime block and only touches the slot table from the world-mutation helper. The active-object animator, run independently each render frame, draws the per-NPC sprites.
+**Active objects (sprites).** Sprites are owned by the active-object subsystem;
+the schedule system only holds a slot index in the runtime block and only
+touches the slot table from the world-mutation helper. The active-object
+animator runs independently of the scheduler, once per world tick rather than
+once per player turn, and selects each per-NPC sprite's animation frame; the
+drawing itself belongs to the shared visibility post-pass
+(`systems/visibility.md` Section 11), not to the animator.
+
+*Corrected (issue #189).* This paragraph previously said the animator is "run
+independently each render frame" and "draws the per-NPC sprites". The animator
+selects frames; the single compositor in the shared visibility post-pass does
+the drawing (`RETRACTIONS.md` rows R365 and R373). The cadence wording is
+retained below, narrowed to the world tick, as the subject of issue #189's third
+question.
+
+**Is the animator's cadence prescriptive?** Issue #189 asks whether "once per
+consumed turn" is the required cadence for a turn-based frontend, or whether the
+per-render-frame language is purely descriptive of the original's continuous
+draw loop. It is **descriptive** — but not with zero gameplay consequence, and
+the two residues below are what a frontend has to carry.
+
+1. **The animator draws from the shared random generator**, the same one the
+   wander coin, the replan gate, the encounter roll and every combat roll use.
+   Its per-pass advance count is specified in `systems/active-objects.md`
+   Section 8. Because the original fires the animator from its wall-clock idle
+   pump, the number of advances consumed between any two gameplay decisions
+   depends on how long the player sat and thought. **Roll-sequence parity with
+   the original across a play session is therefore not achievable by any cadence
+   choice**, and an engine should not distort its animation cadence chasing it.
+2. **One narrow byte coupling is real.** The frame byte the animator writes is
+   read by two drawing consumers and by a small number of gameplay sites. All
+   but one of those gameplay sites sit in slot classes or byte values the
+   animator's early-outs exclude; the exception is a single sprite class whose
+   animation script drives the frame byte to exactly the value one gameplay
+   filter tests for, so *whether* a slot of that class has been animated is
+   observable. `systems/active-objects.md` Section 8 owns the detail.
+
+Beyond those two, a turn-based frontend that runs the animator once per consumed
+turn is free to do so, and running it more or less often changes appearance
+only. Three things it must keep regardless of cadence: the early-outs, so it
+never animates a hidden, prone or frozen slot; the class floor, so it never
+writes a frame value the water-creature movers would misread as a facing; and
+the one class script named above.
 
 **World tiles.** The schedule system reads the live world-tile array for the tile-ID floor-link variant (Section 8.5). It does not modify the array directly; tile changes that happen as a side effect of NPC movement (e.g. a door tile being walked through) are owned by other code paths.
 
@@ -869,15 +980,24 @@ low-visibility presentation parity outside the scheduler contract.
   `catalogs/npc-roster.md`; there is no additional hidden-mask scheduler
   contract behind those labels.
 
-- **Long-stall visual parity.** The counter has confirmed short and high
-  guard bands. More than three failed-progress ticks invalidates the active
-  move queue and clears the counter so the NPC can replan. In the high range,
-  the analyzed walker also routes through a last-resort stalled-actor helper
-  around the two-hundred-tick band and resets values above that band rather
-  than allowing unbounded growth. Current evidence does not identify a
-  separate durable gameplay state, persistent schedule mutation, or alternate
-  pathfinding state for the high guard. Treat any remaining work as
-  presentation/helper parity only if later tracing shows a visible effect.
+- **Long-stall behaviour — now specified, and not presentation-only.** The
+  counter has a short band and a high band. More than three refused queued route
+  steps invalidates the active move queue and clears the counter so the NPC can
+  replan. The high band is entered by **assignment** after a failed replan, not
+  by counting, and it is **observable gameplay**, not visual parity: it costs
+  the NPC five consecutive turns of complete stillness before the sixth turn
+  re-plans. Section 9.1 gives the full three-band contract, the turn that enters
+  the band (which is *not* still), and the two upstream conditions the five-turn
+  count assumes. There is still no separate durable gameplay state, no
+  persistent schedule mutation and no alternate pathfinding state behind the
+  high band — that negative survives.
+
+  *Corrected (issue #189).* This bullet previously described the high band as
+  routing "through a last-resort stalled-actor helper" and told implementers to
+  "treat any remaining work as presentation/helper parity only if later tracing
+  shows a visible effect". The permission to omit is withdrawn: the band is five
+  still turns and an engine that skips it moves NPCs the original leaves
+  standing. See `RETRACTIONS.md` row R369.
 
 - **Out-of-town actors.** The scheduler is not a general actor system.
   Outdoor monsters, vehicles, whirlpools, and pre-placed world props live in

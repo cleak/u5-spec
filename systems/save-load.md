@@ -121,7 +121,7 @@ The subsequent save-read sequence is:
 | Save byte | Written by | On the first dispatch because |
 |---|---|---|
 | `0x02DE` | the clock's hour-change block | the restored saved-hour snapshot at `0x02DA` disagrees with the restored hour |
-| `0x02DF`, `0x02E0` | the moon-phase strip renderer | every scene entry refreshes the pair, and the hour-change block refreshes it again |
+| `0x02DF`, `0x02E0` | the moon-phase strip renderer | a scene entry into the overworld or a town-family location refreshes the pair, and the hour-change block refreshes it again; a load into a dungeon or a combat scene writes neither byte, and the pair restored from the file stands until the party next enters a scene the strip serves (`formats/saved-gam.md` Section 5.1) |
 | `0x02FF` | the clock's ambient recompute | every clock call recomputes it, mode-zero calls included |
 | `0x03B2` | town-family entry and the Shadowlord install | the latch is reset on every entry |
 | `0x06B4..0x06B8` | the per-frame slot-zero rebuild | it runs on every idle redraw |

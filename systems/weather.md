@@ -244,13 +244,28 @@ follows:
 | East wind | immediate | move after two wait ticks | immediate | move after one wait tick |
 | West wind | immediate | move after one wait tick | immediate | move after two wait ticks |
 
-A wait tick is a real overworld wait pass inside the input helper: the helper
-runs the shared cleanup/redraw path, optionally advances the active-object
-epilogue, pauses one world tick, increments the sailing counter, and then tests
-the cached sail direction again. After movement is released, the counter is
-cleared and the movement command returns to the normal overworld movement
-dispatcher. The next released movement uses the same cadence again unless the
-wind, heading, or cache changes.
+**Why crosswind is the fastest point of sail.** The wait threshold is not an
+ordering by how far the heading is from downwind. The engine counts the axes on
+which the requested heading disagrees with the wind's push vector, starting the
+count at one, and takes that count modulo three. Downwind disagrees on no axis
+and yields one; upwind disagrees on exactly one axis and yields two; crosswind
+disagrees on both and yields three, which folds to **zero**. A crosswind heading
+therefore releases on the very first pass, strictly faster than downwind. It
+reads like an off-by-one in the original, and an engine reproducing the cadence
+has to reproduce the fold. The table above already encodes it; the note is here
+so nobody "fixes" the table.
+
+A wait tick is a real overworld wait pass inside the input helper. Each pass
+runs the shared cleanup/redraw path, advances the outdoor clock, runs the whole
+outdoor per-turn epilogue (encounter probe and creature movement — so a wait
+pass is a **fully consumed game turn**, not an idle pass; monsters close in and
+encounters spawn while the ship waits for wind), performs one world step,
+increments the sailing counter, polls one key, and then tests the cached sail
+direction again. `systems/timing.md` Section 8.2 owns the per-pass tick and
+world-step accounting and the same-direction key swallow. After movement is
+released, the counter is cleared and the movement command returns to the normal
+overworld movement dispatcher. The next released movement uses the same cadence
+again unless the wind, heading, or cache changes.
 
 Calm wind never releases a cached hoisted-sail movement. The ship waits until
 the player enters a different command. A later Pass command reports the
@@ -259,13 +274,72 @@ stalled-sailing feedback and clears the cached sailing state.
 The ship-rigging flag set by using the Plans for the HMS Cape affects the
 wait-pass timing, not the direction table. Without the rigging flag, a sailing
 wait pass uses the ordinary two-minute outdoor cleanup increment. With the
-rigging flag active, sailing wait passes use a one-minute cleanup increment and
-alternate the active-object epilogue. The same movement-release table above
-still decides when the ship actually advances.
+rigging flag active, **every** sailing wait pass uses the one-minute increment,
+while the outdoor per-turn epilogue is run on **alternate** passes only — the two
+halves of the flag's own parity toggle differ in the epilogue, not in the clock
+step. The same movement-release table above still decides when the ship actually
+advances.
 
 A former candidate in the overworld loop has also been ruled out: the resident
 helper reached from the proximity and terrain-trigger paths is a short
 world-tick pause, not a ship-sail or wind-state consumer.
+
+### 5.1 The cached sail direction: one setter and four clears
+
+Earlier revisions of this section named the Pass command and left the rest of the
+cache's lifecycle unenumerated, and issue #189 asked which commands — collision,
+docking, furling, boarding, disembarking — clear it. The complete rule is not a
+command list at all. It is **marker-conditioned**, and it is smaller than any
+enumeration of commands. This is a first publication of the full set, not a
+reversal of the two events already published.
+
+**The one setter.** A movement command taken while the party's transport marker
+is a hoisted frigate (`0x20`–`0x23`) stores the requested heading into the cache.
+Two details an engine needs:
+
+- The stored value is always a real movement direction and is **never zero**, so
+  **a new heading replaces the cache rather than clearing it.** An engine that
+  clears first and then re-sets exposes a momentarily empty cache the original
+  never has.
+- The store runs only when the requested heading **differs** from the cached one,
+  and it is the same step that zeroes the sailing counter. Repeating the heading
+  already cached changes neither the cache nor the counter, and in particular
+  does not restart the wait.
+
+**The four clears.**
+
+| Event | What it is |
+|---|---|
+| Entering outdoor mode | The outdoor-mode entry pass clears the cache in its opening block, so no cached heading survives a scene change into the overworld. |
+| An under-sail step refusal | **One** decision point with three narration arms — `BREAKING UP!` on the shoal value, `Docked!` on exact pier terrain (which also furls the marker), `COLLISION!` otherwise — and all three clear the cache (`systems/overworld.md` Section 6.2.5, `systems/vehicles.md`). |
+| The Pass command | Only while the outdoor scene is current and the cache is non-zero; it prints the stalled-sailing line first, then clears. |
+| The post-command marker guard | After **every** outdoor command handler returns, and before the next input is read, the loop clears the cache unless the transport marker is still a hoisted frigate. |
+
+**The marker guard is the answer to the command question.** Furling, boarding,
+disembarking, mounting a horse or a carpet, and anything else that moves the
+transport marker out of the hoisted-frigate run are covered by that single guard,
+on the same turn. None of those command handlers references the sail cache at
+all; each one moves the marker, and the guard does the rest. The guard is equally
+the reason a Look, a Ztats, or any other marker-neutral command under sail does
+**not** interrupt sailing: the marker is unchanged, so the guard leaves the cache
+alone. An engine that implements per-command clears will agree with the original
+on the commands it thought of and disagree on the ones it did not.
+
+*Scope of the negative.* "One setter and four clears" is complete within a
+corpus-wide census over the shipped executable, all overlays and all display
+drivers, covering direct, indexed and pointer-forming references to the cache
+byte. Writes made through a pointer loaded from memory, block fills and computed
+addresses are outside that census; none was found and none is excluded.
+
+**A fourth reset of the sailing counter.** Besides the heading change and the
+release described above, and besides the per-pass increment, **a wind change
+zeroes the sailing counter.** The routine that stores a new wind state clears the
+counter immediately afterwards, and both are skipped when the same routine is
+called only to re-announce the wind already in force. So a ship one pass into a
+two-pass upwind wait restarts that wait when the wind shifts; Section 2's
+autonomous drift is the ordinary source of such a change. This reset was not
+previously published.
+
 
 ## 6. Player Ship Feedback
 
