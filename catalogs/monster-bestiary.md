@@ -402,10 +402,16 @@ payload bytes control range, effect routing, and forwarded effect parameters.
 
 ## 4. Shared AI And Reward Units
 
-Monster turns run through the same command-dispatch architecture as player
-turns: the AI path runs status and class-flag gates, picks a target, produces a
-movement direction, synthesizes the equivalent command byte, and uses the
-normal combat command parser. The target picker scans the 32 combat slots,
+Monster turns are driven by the automatic actor driver, not by the command
+path player turns use: the AI path runs status and class-flag gates, picks a
+target, chooses a movement direction, and then calls the shared attack,
+movement and special-ability primitives **directly**. It reads no key,
+synthesises none, and enters no combat command parser. *(**Corrected**, issue
+#185: this paragraph previously said monster turns "run through the same
+command-dispatch architecture as player turns" and that the AI path
+"synthesizes the equivalent command byte, and uses the normal combat command
+parser". **That framing is withdrawn** - `RETRACTIONS.md` R353 and
+`systems/combat.md` Section 11.1.)* The target picker scans the 32 combat slots,
 filters out empty, dead,
 same-faction, suppressed, and invisible actors, then chooses the closest
 surviving enemy by truncated Euclidean distance between arena cells. One
@@ -769,8 +775,10 @@ offsets, raw private addresses, binary dumps, or private note prose.
   nearest-target scoring, and flee-direction inversion.
 - COMBAT overlay monster movement note and SJOG auxiliary combat helpers -
   teleport-capable movement, surrounded checking, and in-arena step validity.
-- COMBAT overlay actor AI/command-dispatch note - synthesized monster command
-  dispatch and shared combat command parser.
+- COMBAT overlay actor AI/driver note - the automatic actor driver's direct
+  calls into the shared attack, movement and special-ability primitives
+  (**corrected, issue #185**: no command synthesis and no command parser -
+  R353).
 - COMSUBS overlay monster-special note - possess, blink/phase,
   summon-daemon, branch order, and baseline class-flag assignments.
 - ULTIMA executable combat-framer note - combat entry branches and

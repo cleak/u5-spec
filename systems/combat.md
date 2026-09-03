@@ -981,11 +981,21 @@ on a timer.
    succeeds, so a freshly summoned creature normally starts life in the same
    controlled state a charmed monster is in. Summon's rebound branch is the one
    exception: it leaves the Daemon on the arena with the bit clear. They are still placed through the ordinary monster
-   placement path, so their class byte is the monster-side one and monster AI
-   drives their turns — the bit never hands a creature to the player's prompt —
-   but because the bit is the group helper's team toggle, a stamped creature
-   groups with the party rather than with the monsters for the same-faction
-   filter (see the dispatch and grouping paragraphs below). See `systems/magic.md`, Summoning and conjuration. The
+   placement path, so their class byte is the monster-side one - but the bit
+   **does** hand the creature to the player's prompt: a monster-side slot
+   carrying it is dispatched to the keystroke/command path, not to the automatic
+   driver, and it takes its turns under player control with the reduced turn
+   banner of Section 8.1. Because the bit is also the group helper's team
+   toggle, a stamped creature groups with the party rather than with the
+   monsters for the same-faction filter (see the dispatch and grouping
+   paragraphs below). *(**Corrected.** This writer previously read "monster AI
+   drives their turns — the bit never hands a creature to the player's prompt".
+   **That is withdrawn**, and it contradicted this section's own dispatch
+   paragraph below, which already said a monster carrying the bit lands in the
+   party's group. The slot-to-group helper described below - one read of this
+   bit, also referred to in this document as the self-acting test - reports
+   "self-acting" for a monster-side slot exactly when this bit is **clear**, and
+   a not-self-acting result routes to the command handler. See `RETRACTIONS.md` R354 and Section 11.1.)* See `systems/magic.md`, Summoning and conjuration. The
    monster AI's own summon-daemon ability does *not* set this bit (Section 9).
 4. **The Sword of Chaos compulsion.** The command-path handler (Section 8)
    takes its player-driven branch for a slot when the active-player sentinel is
@@ -1918,7 +1928,19 @@ game fact; an engine should expose it as one.
 
 ## 9. Monster AI
 
-When the round walker dispatches a monster slot, the AI runs as a sequence of three passes that ultimately produce a *synthesised keystroke* — the AI generates the same bytes the player would press if they were controlling this monster, and the synthesised byte runs through the same per-letter dispatcher as a player turn. Monsters and players share the action infrastructure.
+When the round walker dispatches a self-acting slot, the AI runs as a sequence
+of three passes that end in a **direct call** to the attack, movement or
+special-ability helper it chose. Monsters and players share the *action*
+infrastructure - the to-hit roll, the impact presentation, the damage roller and
+the result narrator are one set of primitives used by both - but they do **not**
+share the command layer above it. The automatic driver reads no key, synthesises
+no key, enters no per-letter dispatcher, and prints no announcement.
+*(**Corrected.** This paragraph previously said the three passes "ultimately
+produce a *synthesised keystroke*", that "the AI generates the same bytes the
+player would press", and that "the synthesised byte runs through the same
+per-letter dispatcher as a player turn". **That is withdrawn** - see Pass 3
+below, `RETRACTIONS.md` R353, and Section 11.1 for what each side actually
+prints.)*
 
 **Pass 1 - Dispatch setup.** The per-actor dispatcher — the **automatic actor
 driver** — clears the actor's combat-status presentation area, prepares
@@ -1927,8 +1949,10 @@ turn, yield to a queued animation/effect, or continue into AI decision-making.
 Current evidence does not support a general per-class AI script runner. The
 ordinary monster path is table and helper driven: status/flee gates run first,
 then the class-flag special hook, target selection, movement-direction
-synthesis, optional step/teleport logic, and finally the same command parser
-used by player turns.
+choice, optional step/teleport logic, and finally a direct call into the shared
+attack or movement primitive. *(**Corrected.** The tail of this sentence
+previously read "and finally the same command parser used by player turns"; the
+command parser is not on this path - `RETRACTIONS.md` R353.)*
 
 **Active-effect gates at the head of the automatic driver.** Before any of
 that, this driver reads the single shared active-effect tag (Section 12) twice.
@@ -2223,9 +2247,38 @@ the third traced direct flee writer: it marks eligible monster-side slots with
 the flee flag while forcing their critical-HP marker. The
 possess/blink/summon-daemon hook does not write the fleeing flag.
 
-**Pass 3 — Synthesise.** A combat-specific input gate reads the synthesised byte from the actor's record. The AI's chosen direction is encoded as the byte the player would press if they wanted to walk the same way (`'N'`, `'S'`, `'E'`, `'W'` direction codes), or the byte for "Attack" if the chosen direction puts the target adjacent. The byte falls into the same per-letter dispatcher as the player command handler. Before the command runs, the AI assembles a one-line narration string — for example `<monster name> attacks <target name>, armed with <weapon>!` — by stitching together a short verb composer.
+**Pass 3 — Commit.** The automatic driver commits the chosen action by calling
+the attack, movement and special-ability helpers **directly**. It reads no key,
+synthesises no key, and never enters the per-letter command dispatcher. Its
+chosen direction is carried as an internal direction code, the same encoding the
+movement primitive of Section 11 takes from a player's direction key, but the
+code is handed to that primitive as an argument rather than routed through the
+command parser. **And no announcement is composed or printed at any point on
+this path.**
 
-The architectural consequence: **all damage and movement effects in combat go through the same primitive, regardless of whether the actor is a player or a monster.** Section 11 describes that primitive.
+*(**Corrected.** This paragraph previously said the AI "generates the same bytes
+the player would press", that "the byte falls into the same per-letter
+dispatcher as the player command handler", and - the load-bearing error - that
+"before the command runs, the AI assembles a one-line narration string — for
+example `<monster name> attacks <target name>, armed with <weapon>!` — by
+stitching together a short verb composer". **All of that is withdrawn.** No
+string of that shape, and no verb composer, exists anywhere in the shipped game:
+an exhaustive scan of every printable text run in the executable, all overlays
+and all four display drivers finds eleven strings containing "attack", every one
+of them a fixed prompt or a fixed event line, and none of the form
+`<attacker> attacks <target>`. The automatic driver's complete callee set was
+enumerated and contains neither the command handler nor any announcement
+routine. See `RETRACTIONS.md` R353 and Section 11.1.)*
+
+The architectural consequence, correctly stated: **the two sides share the
+to-hit roll, the impact presentation, the damage roller and the result narrator,
+and they join *below* the announcement layer.** All damage and movement effects
+in combat go through the same primitives regardless of whether the actor is
+player-driven or self-acting - but the banner, `Attack-`, `Aim! `, `Nothing!`
+and the miss line all live *above* the join, on the keyboard-driven side only.
+That is precisely why an ordinary hostile monster announces nothing and, on a
+melee miss, prints nothing at all. Section 11 describes the shared primitives
+and Section 11.1 gives the exact narration census for both sides.
 
 ## 10. Spells in combat (summary)
 
@@ -2263,9 +2316,11 @@ shared spell dispatcher consumes charge or MP.
 **Charge and MP debit.** The spell's MP cost is `(spell_id / 6) + 1` - eight circles of six spells each. The pre-mixed charge counter for that spell is decremented before MP and level validation. If MP is too low, the charge is not refunded; if the caster's level is too low, both charge and mana are spent. The spell-effect handler runs only after these gates pass.
 
 The full spell system is described in its own spec; only the combat-side gating
-and dispatch are covered here. Monster turns use AI command synthesis before
-they enter the shared combat parser. The class-flag special hook is now bounded
-to possess, blink/phase, and summon-daemon branches before movement synthesis.
+and dispatch are covered here. Monster turns choose their action in the
+automatic driver and call the shared primitives directly; they do **not** enter
+the command parser (Section 9, `RETRACTIONS.md` R353). The class-flag special
+hook is bounded to possess, blink/phase, and summon-daemon branches before the
+movement-direction choice.
 Those effects do not route through the party spell prompt, party reagents,
 premixed charges, MP, or player circle gates.
 
@@ -2640,7 +2695,18 @@ class attack value 6 and the Avatar's defence roll subtracts an inclusive
 
 | Defence roll | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| HP lost | 5 | 4 | 3 | 2 | 1 | 0 | 0 (negative; narrated as a miss) |
+| HP lost | 5 | 4 | 3 | 2 | 1 | 0 | 0 (negative; clamped) |
+| Line printed | `<name> hit!` | `<name> hit!` | `<name> hit!` | `<name> hit!` | `<name> hit!` | `<name> grazed!` | `<name> grazed!` |
+
+*(**Corrected.** The last cell of the HP row previously read "0 (negative;
+narrated as a miss)". **That is withdrawn.** A landed swing that comes out at
+zero or below prints `<name> grazed!` with the rising action-snap cue, not a
+miss line and not silence, and it suppresses the party stats-panel redraw the
+ordinary hit arm runs. Section 11.1 gives the whole outcome census and
+`RETRACTIONS.md` R352 indexes the withdrawal. The arithmetic in this table is
+unchanged: two of the seven equally likely defence draws still cost no HP. An
+engine that copied this row prints a miss line on roughly two sevenths of
+*landed* monster swings on top of the genuinely missed ones.)*
 
 Five sevenths of landed swings therefore cost HP, the mean cost of a landed
 swing is `15/7 = 2.14`, **a Bat can never take more than 5 HP in one swing and
@@ -2735,6 +2801,239 @@ ranged/effect side rows for the hostile and special classes, including the
 range/effect selector, payload byte, scene-resistance row assignments, the
 Gremlin cast-like branch row, and the Mimic pre-gate bypass row.
 
+### 11.1 Attack outcome narration: what prints, on which side, in what order
+
+This subsection is the complete printed-and-audible census of one attack
+outcome in the arena, in both directions. It is published in full because two
+things in this document were wrong in the same direction - Sections 11 and 12
+called the zero-or-negative-damage outcome a printed miss, and Section 9
+published an invented monster attack announcement - and an implementation built
+on either narrates outcomes the original leaves silent. Both are withdrawn in
+place; `RETRACTIONS.md` R352 and R353 index them.
+
+**Two rules cover most of the census.**
+
+1. **Every result line names the target, never the attacker.** No combat result
+   line anywhere in the game is attacker-named. `Bat missed!` is a real
+   original-game line, and it reads *the Bat was missed*: it is printed by a
+   party member's failed swing **at** a Bat, never by the Bat's failed swing at
+   the party. An engine that prints the attacker's name in the miss line
+   produces a transcript that is wrong on every line it emits.
+2. **The two sides join below the announcement layer.** A keyboard-driven actor
+   prints its turn banner (Section 8.1), then `Attack-` and `Aim! ` per attempt
+   (Section 8.2), before any roll. The automatic actor driver (Section 9) calls
+   the shared helpers directly and passes through none of that. Both sides then
+   share the to-hit roll, the impact presentation, the damage roller and the
+   result narrator. The single most consequential result: **an ordinary hostile
+   monster's melee miss prints nothing and sounds nothing** - no newline, no
+   name, no line, no tone - while a party member's melee miss prints one line.
+
+#### The census
+
+`<target>` stands for the target's name: a party member's roster name field, or
+the monster class's name. Lines are written the way the original emits them; a
+line that ends **without** a newline is marked, because the next thing printed
+continues on the same row.
+
+| Outcome | Side | Printed, in order | Sound and visual |
+|---|---|---|---|
+| Swing begins | monster, melee and ranged | *nothing* | the swing sweep, played **before** the roll, running **downwards** (roughly 750 Hz toward 400 Hz) |
+| Swing begins | party melee | **a newline, unconditionally, before the roll** | the same swing sweep in the opposite direction, roughly 400 Hz toward 750 Hz (`audio.md` section 7.4) |
+| Swing begins | party ranged or thrown | *no newline here* | a descending sweep, roughly 1300 Hz toward 300 Hz, after `Aim! ` and a confirmed cursor |
+| **To-hit fails** | **monster melee** | **nothing at all** | nothing beyond the swing sweep already heard |
+| **To-hit fails** | **monster ranged or thrown** | conditional - see "the ranged carve-out" below | as the hit chain, in the cases where it narrates |
+| **To-hit fails** | **party melee** | `<target> missed!`, following the newline already printed before the roll | **no sound at all** |
+| **To-hit fails** | party ranged or thrown | conditional; when it prints, a newline then `<target> missed!` naming the **originally aimed** actor | none |
+| To-hit fails on a cast issued from the combat command layer | party melee or ranged | `Failed!` - **with no name** - replacing the miss line entirely | none from this arm |
+| **Hit lands** | both | a newline (the party melee path already emitted it before the roll) | **impact presentation runs first**: the impact tile is drawn on the target's cell; for a **party** target that member's stats row is flashed around a noise burst; for a **monster** target a noise burst alone, with a different noise setting and no flash; then a visibility pass. All of this precedes the newline and the damage. |
+| Damage zero or negative | both | `<target> grazed!` **and nothing else** - the kill, sleep, hit and wound lines are all suppressed | the rising action-snap cue (`audio.md`, 1200 toward 2000 Hz) |
+| Target dies | both | `<target> killed!` | no cue of its own; the party death arm runs a full stats redraw, the monster death arms write their tiles (Section 6.3) |
+| Monster dies, vanish class | party attacker | `<monster> vanishes!` - **no trailing newline** - printed inside the damage handler, which then suppresses the kill line | none |
+| Monster damaged, split class | party attacker | `<monster> divides!` inside the damage handler, and the ordinary result line **still** prints after it | none |
+| Target slept or stoned | both | `<target> slept!` | none |
+| Party target poisoned | monster attacker | `<target> is poisoned!`, printed **inside** damage resolution - after the hit newline and before the result line - and the ordinary result line is then suppressed | none |
+| Ordinary landed hit, **party** target | monster attacker | `<target> hit!` - **flat and ungraded** | none |
+| Ordinary landed hit, **party** target, attacker is a **Corpser** (class 45) | monster attacker | `<target> dragged under!` in place of `hit!` | the rising action-snap cue; the target is additionally marked asleep and its sprite blanked |
+| Ordinary landed hit, **monster** target | party attacker | `<target>` plus one graded wound line - see below | none |
+| Glass Sword swing | party melee | `Thy sword hath shattered!`, printed **inside** the damage roll, so it lands between the hit newline and the result line | none |
+| Food-steal branch | monster attacker | a newline, then `A <monster> stole some food!` - this **replaces the entire damage and narration chain** | a rising cue roughly 800 Hz toward 2000 Hz, then a stats-panel redraw |
+| After any narrated hit on a **party** target | both | *no text* | full stats-panel redraw and a visibility pass - **skipped on the graze arm and on the vanish arm** |
+
+#### Order, stated once
+
+For a landed **monster melee** attack, the sequence an engine must reproduce:
+
+1. the swing sweep - already played, **before** the roll;
+2. the impact presentation: impact tile, stats-row flash for a party target or
+   noise burst for a monster target, visibility pass;
+3. a newline;
+4. damage application - which may itself print the poison line, the shatter
+   line, the vanish line or the divide line;
+5. the result line (`grazed!` / `killed!` / `slept!` / `dragged under!` / `hit!`
+   / a wound grade), with a cue only on the graze and dragged-under arms;
+6. for a party target only, the full stats-panel redraw and visibility pass.
+
+A landed **party melee** attack is identical except that step 3's newline was
+already emitted at step 0, before the roll. The **party ranged** and **monster
+ranged** arms emit the newline at step 3, as monster melee does.
+
+One tier narrates differently and is easy to get wrong: the per-turn standing
+hazard reuses the same result narrator with **no newline before it at all**, and
+with no attacker, so a party target on that tier always reads the flat
+`<target> hit!` and never `dragged under!`. An engine that moves the newline
+inside the result narrator - a natural simplification - emits one newline too
+many on the hazard tier.
+
+#### The ranged carve-out
+
+A monster's failed **ranged or thrown** to-hit is not unconditionally silent, and
+this is the one place where "a monster's miss prints nothing" must not be
+generalised. On a failed roll the shot scatters: the impact point is drawn from
+the three-by-three neighbourhood centred on the **aim cell**, redrawn only while
+the draw lands on the **attacker's own** cell. The aim cell is therefore itself a
+legal landing cell. The resolver then reports whoever occupies the landing cell,
+and the **full hit chain runs against that actor** - impact presentation,
+newline, damage, result line - whether that actor is a monster or a party member.
+
+The attack stays silent in exactly three cases, the cases where the resolver
+reports no occupant: the projectile pass fails, the landing cell is empty, or the
+landing cell holds the acting slot itself. The resolver does carry a second test
+that would turn a failed roll back into "no target", but it is guarded by the
+cast marker, and the round walker clears that marker before **every** actor
+dispatch, so an ordinary monster never reaches it.
+
+The party ranged and thrown arm has the same gap, plus one extra rule of its own:
+aiming at an **empty** cell forces the hit outcome, so no scatter happens and no
+miss line prints. When the roll fails and the scattered shot lands on somebody,
+the hit chain runs and the miss line is skipped entirely. The party miss line
+prints only when the resolver reports nobody **and** the originally aimed cell
+held a real actor - and it names that originally aimed actor, not the cell the
+shot reached.
+
+#### The graded wound lines are monster-target only
+
+When a party attacker lands an ordinary hit on a **monster**, the result line is
+graded by the target's remaining HP against its class maximum, using the same
+four-bucket wound score the flee classifier of Section 9 computes:
+
+| Wound score | Remaining HP against class maximum | Line |
+|---:|---|---|
+| 1 | below one quarter | `<target> critical!` |
+| 2 | one quarter to just under one half | `<target> heavily wounded!` |
+| 3 | one half to just under three quarters | `<target> lightly wounded!` |
+| 4 | three quarters or more | `<target> barely wounded!` |
+
+The quarter is the class maximum divided by four with truncation, and the three
+thresholds are one, two and three of those truncated quarters, so the boundaries
+sit slightly low for maxima that are not multiples of four. Because this is the
+same classifier, a score of 1 - and a score of 2 on the morale draw described in
+Section 9 - also raises the target's fleeing bit as a side effect of narrating
+the hit.
+
+The grading never applies to a **party** target: the classifier refuses a party
+record outright, returning without producing a score at all, and its denominator
+is a per-class maximum-HP row that a party record does not have. **A party member
+who takes a solid landed hit always reads the flat `<target> hit!`** - or
+`<target> dragged under!` when the attacker is a Corpser. Sections 11 and 12
+previously did not mention the grading in either direction; this is a first
+publication, not a correction.
+
+#### Announcements: what each side prints before the roll
+
+| Actor | Announcement |
+|---|---|
+| Party member at the command prompt | the full turn banner - newline, name, `, armed with ` and the readied item names or `bare hands`, a colon, newline (Section 8.1) - then `Attack-` and `Aim! ` per attempt, an item-name line when two or three items qualify, and `Nothing!` on a cancelled or empty melee confirm (Section 8.2) |
+| **Ordinary hostile monster** | **nothing whatsoever** - no banner, no `Attack-`, no `Aim! `, no `Nothing!`, and on a melee miss no line either |
+| Monster carrying the controlled/charmed bit (Section 6.1a) | the **reduced** banner - newline, name, colon, newline, with **no** `, armed with ` clause - then one fixed attempt: `Attack-`, `Aim! `, and on a failed roll `<target> missed!` |
+
+**There is no `<attacker> attacks <target>` line, in any wording, anywhere in the
+shipped game.** An exhaustive scan of every printable text run in the executable,
+in every shipped overlay and in all four display drivers, filtered for the
+word "attack" in either case, returns eleven strings; every one is a fixed prompt
+(`Attack-`), a fixed refusal (`Nothing to attack!`), a fixed event line
+(`Attacked!`, `Attacked at entrance!`) or a fixed command echo. None has an
+attacker-and-target shape, and there is no verb composer that could build one at
+run time from fragments.
+
+#### Strings this document had not previously published
+
+The following are exact original-game lines that the spec named only
+descriptively, or not at all, before this revision: `<target> grazed!`,
+`<target> hit!`, the four wound lines above, `<target> dragged under!`,
+`<target> is poisoned!`, `<target> possessed!`, `<monster> escapes!`,
+`<monster> teleports!`, `A <monster> stole some food!`, `<monster> reappears!`,
+`<monster> disappears!` and `<monster> gates in a daemon!`. The last six are
+printed on a self-acting monster's turn outside the attack chain: `escapes!`
+with a rising cue on the arena-exit arm, `teleports!`, printed straight after the class name with no
+newline before it, `possessed!` and the daemon-gate line each with their own
+software envelope, and `reappears!` / `disappears!` on the blink ability with
+**no trailing newline on either**. The already-published lines `missed!`,
+`Failed!`, `killed!`, `slept!`, `vanishes!`, `divides!`, `interferes!`,
+`Attack-`, `Aim! `, `Nothing!`, `Thy sword hath shattered!` and
+`<name> passes out!` are unchanged.
+
+Note that `Failed!` is not unique to combat: the shipped data image holds four
+separate copies of that literal, and three of them belong to spell and dungeon
+paths - two spell load sites and one dungeon load site. Only the combat copy is
+the one described here, and it carries no sound of its own - the cast-failure
+glissando `audio.md` documents belongs to one of the other three - established
+by elimination, because neither caller of the combat copy is followed by any
+sound call at all. Which of the three carries that glissando, and what the
+remaining two print alongside, was not read.
+
+#### Scope of the negatives in this subsection
+
+Every corpus scan behind a negative claim here covered the shipped executable's
+code image, every shipped overlay and all four display drivers; the GOG
+installer's uninstaller is not game code and was excluded.
+
+- **"An ordinary monster's melee miss prints and sounds nothing"** rests on a
+  full read of the executed miss path and of its caller, which ignores the
+  result either way. Established.
+- **"The routine that prints a miss line has exactly two call sites, both inside
+  party-side attack helpers"** rests on decoding every directly encoded near and
+  far call at every byte offset of the corpus, resolved against
+  descriptor-derived load bases and against every cross-overlay trampoline, plus
+  the observation that no trampoline exports it at all. A call target computed
+  at run time into a register would fall outside that scan. Note the scoping:
+  *party-side helper* describes the routine, not the actor - Section 6.1a's
+  controlled bit lets a monster reach it and lets a party member bypass it.
+- **"There is no miss flag"** rests on a displacement scan for the shared result
+  marker with both its writer and its reader sets closed: the bit in question has
+  two writers, both the zero-or-negative-damage condition, and two readers -
+  one prints the graze line with its cue, and the other is a wider test that
+  halts the narrator before the kill, sleep, hit and wound chain and skips the
+  party stats-panel redraw (the same test the vanish marker trips). Neither
+  reader is a miss. A write through a base register already holding that
+  address, or a word write straddling it, would not appear.
+- **"No `<attacker> attacks <target>` string exists"** rests on the printable-run
+  scan described above. A line assembled at run time from fragments none of which
+  contain the word "attack" would not appear; the item-name composer used by the
+  turn banner is not such a thing.
+- **"Each narration line has exactly one producer"** rests on an immediate-load
+  scan over all twenty-six combat narration strings, every hit re-decoded. It is
+  a claim per *storage location*, not per spelling - see the `Failed!` note
+  above. A string reached through a pointer table would fall outside it.
+- **Probable, not established:** the reading of the party stats-row flash as an
+  XOR flash rather than some other raster operation, and the identity of the
+  impact-tile draw. Both were inferred from call shape, not read to the bottom.
+  The absolute frequencies quoted for the swing sweeps and cues are inherited
+  from the existing `audio.md` census rather than re-derived here; only the sweep
+  **directions** were established in this pass, and the monster swing runs
+  opposite to the party's. The impact noise burst likewise carries a **different
+  setting** on the party-target and monster-target arms, but which perceptual
+  axis that setting moves - pitch band, duration or loudness - was not
+  established, so no engine should infer that one burst is louder or shorter
+  than the other.
+- **Not covered:** the spell overlays' own presentation around the shared result
+  narrator, the standing-hazard tier's trigger conditions, the projectile pass
+  that is one of the three ways a monster's ranged miss stays silent, and what a
+  player can usefully do with a controlled monster once the prompt hands them
+  one.
+
+Source provenance: derived from private analysis in `../u5-decomp/notes/`.
+
+
 ## 12. Damage and status
 
 The damage-and-status handler bundles "apply damage, update status, narrate the result, and handle special-class death effects" into one function. It takes a damage amount and a target slot.
@@ -2784,15 +3083,31 @@ every Bat swing land for `6 - 7`, i.e. exactly zero HP, forever), and skipping
 the draw on a zero rating is part of PRNG parity, not an optimisation - most
 low-tier classes, Bat included, have defense `0`.
 
-The result may be zero or negative, and both read as a miss. Against a **party**
-defender a negative result short-circuits with the miss narration; against a
-**monster** defender it falls through into the damage-and-status handler below,
-which clamps it and raises the same miss flag, and the party attacker's
-experience-credit step still runs on the clamped value. The two routes are
-therefore gameplay-identical - a printed miss and no HP change - and differ only
-in which code path reports it.
+The result may be zero or negative, and **both are narrated as a graze, not as a
+miss**. Against a **party** defender a negative result short-circuits early;
+against a **monster** defender, and for a zero result on either side, it falls
+through into the damage-and-status handler below, which clamps it to zero, and
+the party attacker's experience-credit step still runs on the clamped value.
+Both routes raise the same shared result marker, and two readers consume it:
+the first prints `<target> grazed!` followed by the rising action-snap cue, and
+the second - a wider test that the vanish marker also trips - stops the narrator
+there, so no kill, sleep, hit or wound line follows and the party stats-panel
+redraw that an ordinary landed hit runs is skipped. The two routes
+are therefore gameplay-identical - one printed graze line and no HP change - and
+differ only in whether the experience block runs.
 
-**Damage modifiers.** Negative damage is clamped to zero and an "attack missed" status flag is raised so the narration reads as a miss. A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill/Slay Living reaches its death result only after the separate shared resistance predicate permits it and does not use that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat". Body armour enters neither the to-hit score nor the damage roll, but the **readied item id is a real to-hit input**: exactly five ids - Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer - switch the attacker term from Dexterity to Strength, and that is the only equipment input the to-hit score has (Section 11). *(An earlier revision of this sentence left the point open, saying "the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced". Section 11 now enumerates every character-record field the score reads, so that hedge is resolved rather than withdrawn.)* The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
+*(**Corrected.** This paragraph previously said "the result may be zero or
+negative, and both read as a miss", that a negative result against a party
+defender "short-circuits with the miss narration", and that the two routes give
+"a printed miss and no HP change". **The miss wording is withdrawn**; the
+mechanical half - same marker, no HP change, experience the only difference - is
+unchanged and confirmed. There is no miss flag: the marker bit raised here has
+exactly two writers, both of them this zero-or-negative condition, and exactly
+two readers - the one that prints the graze line, and the wider test that
+suppresses the rest of the narration and the stats-panel redraw. See Section
+11.1 and `RETRACTIONS.md` R352.)*
+
+**Damage modifiers.** Negative damage is clamped to zero and the shared result marker's graze bit is raised, so the narration reads `<target> grazed!` and every later result line is suppressed (Section 11.1). *(**Corrected.** This sentence previously called that bit an "attack missed" status flag and said "the narration reads as a miss"; that is withdrawn - `RETRACTIONS.md` R352.)* A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill/Slay Living reaches its death result only after the separate shared resistance predicate permits it and does not use that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat". Body armour enters neither the to-hit score nor the damage roll, but the **readied item id is a real to-hit input**: exactly five ids - Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer - switch the attacker term from Dexterity to Strength, and that is the only equipment input the to-hit score has (Section 11). *(An earlier revision of this sentence left the point open, saying "the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced". Section 11 now enumerates every character-record field the score reads, so that hedge is resolved rather than withdrawn.)* The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
 
 **Monster status/effect attacks.** The attack resolver checks monster-only
 status branches before ordinary melee damage. Classes with the poison/status
@@ -3107,7 +3422,9 @@ Combat is built on top of several other systems and integrates cleanly with each
 - **Spell system.** Combat shares the single player/party spell dispatcher
   described in `magic.md`. Combat-specific gates wrap the dispatcher's call
   from within the combat C-handler. Monster turns first pass through AI intent,
-  target selection, direction synthesis, and the shared combat command parser.
+  target selection and a direction choice, then call the shared attack and
+  movement primitives directly; they do not enter the combat command parser
+  (Section 9, `RETRACTIONS.md` R353).
   The decoded class-flag special hook may possess, blink/phase, or
   summon-daemon before ordinary movement. These branches are separate from the
   player spell table, premixed charges, MP, reagents, and circle gates.
@@ -3212,9 +3529,11 @@ without independent behavioral consumers remain opaque metadata.
 
 - **Monster special-action variants.** The monster-turn path proves the
   class-flag special hook, shared target selection, phase/hidden/invisibility
-  filters, no-target fallback, movement-vector synthesis, synthesized command
-  dispatch, and parser reuse. The v1 baseline assigns possess, blink/phase, and
-  summon-daemon rows as listed in `monster-bestiary.md`. Keep branch ordering
+  filters, no-target fallback, movement-vector choice, and direct reuse of the
+  shared attack, movement and special-ability primitives - not command
+  synthesis and not parser reuse (Section 9, `RETRACTIONS.md` R353). The v1
+  baseline assigns possess, blink/phase, and summon-daemon rows as listed in
+  `monster-bestiary.md`. Keep branch ordering
   data-driven for variant assets that set more than one turn-special trait.
 
 - **Ordinary AI edge labels.** The old "class script runner" hypothesis has
@@ -3584,3 +3903,18 @@ The behaviour described here was derived from the private function and format no
   gameplay message window rests on the full-stats redraw's closing selection
   plus a captured frame, with the turn loops unstepped, so the window-local
   placement is established while the absolute columns inherit that caveat.
+- The attack-outcome narration census of Section 11.1 (issue #185) -- which
+  outcomes print a line on each side, the exact lines, their newline behaviour,
+  and their order relative to the impact presentation, damage application and
+  the stats-panel redraw; the ordinary hostile monster's silent melee miss and
+  its two carve-outs (the ranged scatter and the controlled bit); the
+  target-named rule; the graze line that Sections 11 and 12 used to call a miss;
+  the monster-target-only wound grading; and the negative that no
+  attacker-and-target announcement string exists -- derived from private
+  analysis in `../u5-decomp/notes/`. That analysis was re-derived adversarially
+  by two independent verifiers and repaired in a second pass; the corpus scans
+  behind each negative, and the two claims that remain *probable* rather than
+  established, are stated in Section 11.1's own scope list rather than left
+  implicit here. The same pass supplied the Section 9 correction to the monster
+  turn's dispatch shape and the Section 6.1a / `catalogs/spell-list.md`
+  correction to where a controlled monster's turn is driven from.

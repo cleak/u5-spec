@@ -204,7 +204,7 @@ combat-only and dungeon-only spells.
 | 40 | `HIN` | In Nox Hur | Poison Wind | 7 | Sulfur Ash + Blood Moss + Nightshade | C | damage |
 | 41 | `CIQ` | In Quas Corp | Cause Fear | 7 | Garlic + Nightshade + Mandrake | C | buff/debuff; drives every monster-side actor that fails the resistance check to combat HP 1 and sets its fleeing bit; protected classes 14/15/47 excluded; no undead condition |
 | 42 | `CIM` | In Mani Corp | Resurrect | 8 | Sulfur Ash + Ginseng + Garlic + Spider Silk + Blood Moss + Mandrake | D/I/O | healing |
-| 43 | `CKX` | Kal Xen Corp | Summon | 8 | Garlic + Spider Silk + Blood Moss + Mandrake | C | summon; places one Daemon (class 38) on the first of up to eight random arena probes whose cell passes the shared spawn-cell validator (Summon re-tests the impassable void terrain byte itself, duplicating a rejection the validator already makes, so it changes no outcome), through the ordinary monster placement path (hostile, AI-driven); then the caster self-check rolls `1..30` against the caster's Intelligence and, on roll at or above that value, prints `Oops...`, returns the silent-failure result and leaves the Daemon uncontrolled; on success it stamps the controlled bit `0x01` |
+| 43 | `CKX` | Kal Xen Corp | Summon | 8 | Garlic + Spider Silk + Blood Moss + Mandrake | C | summon; places one Daemon (class 38) on the first of up to eight random arena probes whose cell passes the shared spawn-cell validator (Summon re-tests the impassable void terrain byte itself, duplicating a rejection the validator already makes, so it changes no outcome), through the ordinary monster placement path, so the Daemon carries a monster-side class byte; then the caster self-check rolls `1..30` against the caster's Intelligence and, on roll at or above that value, prints `Oops...`, returns the silent-failure result and leaves the Daemon uncontrolled and hostile, AI-driven; on success it stamps the controlled bit `0x01`, which routes the Daemon to the **player's** command prompt rather than to monster AI (`systems/combat.md` sections 6.1a and 11.1). *Corrected: this row previously called the placed Daemon "hostile, AI-driven" unconditionally; that holds only on the rebound branch - `RETRACTIONS.md` R354.* |
 | 44 | `CGIV` | In Vas Grav Corp | Death Wind | 8 | Sulfur Ash + Nightshade + Mandrake | C | damage |
 | 45 | `FHI` | In Flam Hur | Flame Wind | 8 | Sulfur Ash + Blood Moss + Mandrake | C | damage |
 | 46 | `PRV` | Vas Rel Por | Gate Travel | 8 | Sulfur Ash + Black Pearl + Mandrake | D/I/O | marquee |
@@ -367,13 +367,20 @@ combat-only and dungeon-only spells.
   is no caster-centred ring and no jitter retry. Every actor placed by Conjure or
   Swarm is stamped with the controlled/charmed descriptor bit `0x01`, and Summon
   stamps it only when its caster self-check succeeds, but all three place through
-  the ordinary monster path, so the creature is a monster-side, AI-driven
-  actor. The bit does not hand the creature to the player, but it is the team
-  toggle the combat slot-to-group helper reads, so a stamped creature groups
-  with the party rather than with the monsters for the same-faction filter
-  (`systems/combat.md` Section 6.1a); it also redirects that actor's attack
-  action into the fixed magic-strike branch, which additionally requires an
-  adjacent target.
+  the ordinary monster path, so the creature carries a monster-side class
+  byte. **The bit does hand the creature to the player**: a monster-side slot
+  carrying it fails the self-acting test and is dispatched to the keystroke
+  command path, so a conjured, swarmed or successfully summoned creature takes
+  its turns at the player's prompt, printing the reduced turn banner and the
+  ordinary `Attack-` / `Aim! ` sequence (`systems/combat.md` Sections 6.1a and
+  11.1). *(**Corrected.** This passage previously read "so the creature is a
+  monster-side, AI-driven actor. The bit does not hand the creature to the
+  player"; that is withdrawn - `RETRACTIONS.md` R354. An unstamped creature,
+  which is what Summon's rebound branch leaves behind, **is** AI-driven.)* The
+  bit is also the team toggle the combat slot-to-group helper reads, so a
+  stamped creature groups with the party rather than with the monsters for the
+  same-faction filter; it likewise redirects that actor's attack action into the
+  fixed magic-strike branch, which additionally requires an adjacent target.
   Clone duplicates an accepted creature into
   paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor

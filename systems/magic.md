@@ -837,22 +837,35 @@ starts in the same controlled state a charmed monster occupies. Summon stamps
 the same bit only when its caster self-check succeeds; the rebound branch
 described below leaves the placed Daemon uncontrolled.
 
-That bit is **not** a transfer of control, and this is the single most
-important thing to get right about these spells. All three place their creature
-through the ordinary monster placement path, so the new actor keeps the
-monster-side class byte and monster AI drives its turns exactly as it drives any
-other monster. Nothing routes a summoned creature through the player command
-parser, and the player never gets to move it. What the controlled bit changes is
-the actor's *attack* — when its turn produces an attack it resolves through the
-fixed magic-strike branch, which also requires the chosen target to be adjacent
-(`systems/combat.md` Section 6.1a) — and the actor's *combat group*: the
-slot-to-group helper reads this bit as a team toggle and inverts it for
+That bit **is** a transfer of control, and this is the single most important
+thing to get right about these spells. All three place their creature through
+the ordinary monster placement path, so the new actor keeps the monster-side
+class byte — but a monster-side slot carrying the bit fails the self-acting
+test, so the round walker sends it to the keystroke/command path instead of to
+the automatic actor driver. It takes its turns at the player's prompt, printing
+the reduced turn banner (name and colon, with **no** armament clause), then
+`Attack-`, `Aim! `, `Nothing!` on a cancelled confirm, and `<target> missed!` on
+a failed roll (`systems/combat.md` Sections 6.1a, 8.1 and 11.1). What the player
+can usefully do with such a creature beyond that attack path is not established
+here. The bit's other two consequences are unchanged by this correction. It also
+changes the actor's *attack* — when its turn produces an attack it resolves
+through the fixed magic-strike branch, which also requires the chosen target to
+be adjacent (`systems/combat.md` Section 6.1a) — and the actor's *combat group*:
+the slot-to-group helper reads this bit as a team toggle and inverts it for
 monster-side slots, so a stamped creature lands in the party's group for the
 same-faction filter instead of the monsters' (`systems/combat.md` Sections 6.1a
-and 9). Two earlier readings are withdrawn: that summoned creatures take their
-turn through the player-command path so the player drives their actions, and
-that the friend/foe filter still treats a stamped creature as hostile to the
-party.
+and 9). Summon's rebound branch, which leaves the bit clear, is the only case
+here in which the placed Daemon really is hostile and AI-driven.
+
+*(**Corrected**, issue #185. This paragraph previously said the bit is "**not** a
+transfer of control", that "monster AI drives its turns exactly as it drives any
+other monster", and that "nothing routes a summoned creature through the player
+command parser, and the player never gets to move it". **All three are
+withdrawn** — `RETRACTIONS.md` R354, which also reverses the earlier R074
+withdrawal, since the reading R074 removed was correct for the dispatch half.)*
+
+One earlier reading of this paragraph does remain withdrawn: that the friend/foe
+filter still treats a stamped creature as hostile to the party.
 
 Repel Undead is not a summoning effect and does not create or repurpose
 anything. It sweeps the whole combat actor table and, for each monster-side
@@ -1025,8 +1038,13 @@ prompt origin and which grid the live-tile lookup addresses.
 **Monster spell-like effects.** The traced dispatcher contract above is the
 player/party C-Cast path. Monster turns use the combat AI path first: a
 class-flag special hook may possess a party member, blink/phase the actor, or
-summon a Daemon-class actor, then target selection, direction synthesis, and a
-synthesized command byte enter the combat command parser. These three monster
+summon a Daemon-class actor, then the automatic actor driver selects a target,
+chooses a movement direction and calls the shared attack, movement and
+special-ability primitives **directly**; it reads no key, synthesises none, and
+enters no combat command parser (`systems/combat.md` Section 9). *(**Corrected**,
+issue #185: this sentence previously read "target selection, direction synthesis,
+and a synthesized command byte enter the combat command parser"; that framing is
+withdrawn — `RETRACTIONS.md` R353.)* These three monster
 branches are outside the forty-eight player spell definitions. They do not
 route through the party C-Cast prompt or the forty-eight-entry player spell
 dispatcher, and they do not consume the party's reagents, premixed charges, MP,
