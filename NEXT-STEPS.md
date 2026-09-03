@@ -82,6 +82,43 @@ any scene whose waypoints differ by hour; the walkability of the four Iolo's Hut
 roster cells; and the animation-script bytes for the whirlpool marker class,
 whose reachability is traced but whose script is not.
 
+**Addendum - 2026-09-03, issue #191: the controlled monster's turn.** The
+three-way conflict is settled for `RETRACTIONS.md` R354 and R364 and against
+`systems/combat.md` Section 16.1: a monster carrying the controlled/charmed bit
+is **prompted**, gets the reduced banner and one real blocking key, and runs the
+whole Section 8 command cascade. Five reversals, R377-R381.
+
+- **Q1, prompt or synthesis.** Prompt. The handler has no synthesis path for any
+  slot; its only gate is the active-player sentinel, which while set skips every
+  group-0 slot but the selected party member (R377). Four handler-level
+  divergences for a monster actor: seven letters refuse with `Can't!` (the six
+  shape-A verbs plus `C`), `A` takes a single unlooped attempt with a fixed
+  pseudo-item, `Z` prompts `Player: `, and the arena exit skips the party-only
+  same-exit constraint. `systems/combat.md` 8, 8.1, 8.2, 16.1.
+- **Q2, who prints the banner and `Attack-` / `Aim! `.** Three layers, none of
+  them key-free: the command handler prints the banner before the key read; the
+  shared attack walker prints `Attack-` after `A` is accepted; the shared
+  spell/weapon dispatcher prints `Aim! ` on its melee arm only. The premise of a
+  "no action because the target is further than distance one" turn does not hold
+  on this path - that rule is the automatic driver's, and it is **party-side
+  only** (R378). `systems/combat.md` 8.1, 8.2, 11.1.
+- **Q3, the party-death cue.** Withdrawn (R379). No cue, before or after either
+  write; the write order was also backwards and the stats redraw was missing.
+  `systems/audio.md` 9 now carries it as a silence boundary with the world-tick
+  ambient caveat stated.
+
+Left open by this pass, and worth a future issue: what the roster picker `Z`
+opens for a monster actor accepts; what the cast/effect arm does for a controlled
+monster of a non-melee class (reachability is published, contents are not); the
+arena-exit helper's own rule set beyond the party-side gate; and the
+dragged-under turn arm (`ARGH!` and the regurgitation line), which appears
+nowhere in Section 8's command table or Section 11.1's census. One tension is
+recorded rather than settled: Section 11.1's Corpser row says a landed drag
+leaves the target "marked asleep" with its sprite blanked, but the sprite
+blanking and its restoration belong to the dragged-under state, so which of the
+two status bits that hit writes - asleep `0x08` or dragged-under `0x04` - is not
+established, and the two give the dragged combatant different next turns.
+
 **Addendum - 2026-09-03, issue #190: six residual save-state questions.** All
 six are answered in their owning documents. Two retractions land with them,
 R375 and R376.
@@ -385,8 +422,9 @@ later pass can pick them up:
   register already offset into the record, word-sized writes straddling the
   byte, and block copies were not enumerated — covers exactly the shape those
   writers would take. **The spec keeps Section 6.1a and the negative was not
-  published.** A second, independent question rides along with it: an actor
-  carrying the bit takes Section 6.1a's redirected fixed magic-strike branch
+  published.** A second, independent question rides along with it: a
+  **party-side** actor carrying the bit takes Section 6.1a's redirected fixed
+  magic-strike branch
   rather than the ordinary weapon cascade, so whether that branch's fixed action
   id reaches the rating selector as the neutral value — and therefore whether
   such an actor also collapses to the fixed score of 15 — was not traced.
@@ -687,7 +725,7 @@ clock call of its own. Overworld and town pay exactly one ordinary post-action
 charge (nominally two and one minutes respectively), dungeon pays its single
 one-minute loop-head charge, and repeated picker attempts add nothing. The
 shared Quickness and Negate Time modifiers still apply to those nominal
-increments. Combat Ready spends the live actor's action and adds no
+increments. Combat Ready spends the acting combatant's action and adds no
 command-specific clock advance; combat's independent one-minute modulo-ten
 wrap occurs before actor dispatch and is unaffected by the chosen command.
 
