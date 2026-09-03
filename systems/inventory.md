@@ -447,9 +447,13 @@ whole epilogue when no party member is able to act; that is an
 all-incapacitated edge case in which the command is never dispatched, not an
 `R` exemption.
 
-In combat, `R` runs through the labelled prompt with the live-actor gate, so it
+In combat, `R` runs through the labelled prompt with the party-side gate, so it
 ends the acting combatant's action. Only an actor that fails that gate escapes
-the cost, with a short refusal and a free re-prompt. The shared verb helper
+the cost, with a short refusal and a free re-prompt. *(**Corrected.** That gate
+was previously described here and in `systems/combat.md` as a **live-actor**
+test. It reads the acting descriptor's **party-side bit**; no dead actor ever
+reaches this handler, and the population it actually refuses is a monster acting
+under player control - `RETRACTIONS.md` R381.)* The shared verb helper
 discards whatever the ready cascade returned and reports success on every
 dispatched path, so an equipment refusal and a successful change end the action
 identically.
@@ -467,8 +471,10 @@ charge: cancelling the member prompt before an item is shown; the empty-handed
 refusal; the silent ammunition row; the strength refusal; the occupied-slot and
 hand-occupancy refusals; the ammunition-prerequisite refusal; a successful
 equip; a successful unequip; the ring vanish; and opening the picker and
-immediately pressing Escape. In combat every path reached for a live actor,
-including the combat-only body-armour lock, spends that actor's action instead.
+immediately pressing Escape. In combat every path reached for a **party-side** actor,
+including the combat-only body-armour lock, spends that actor's action instead;
+a monster acting under player control fails the gate and escapes the cost
+(`RETRACTIONS.md` R381).
 
 There is no double charge. A complete call-form audit of every function
 reachable from R-Ready found no far or computed call and no path to the shared
@@ -592,7 +598,9 @@ slot.
 U-Use is the item-activation command in every mode. Surface, town, keep, castle,
 and dungeon-exploration modes route `U` to the item-use handler, and so does
 combat: the combat parser prints the verb label, checks that the acting
-combatant is still alive, and then enters the same handler. An earlier revision
+combatant is a **party-side** descriptor - not, as this section previously said,
+that it is still alive (`RETRACTIONS.md` R381) - and then enters the same
+handler. An earlier revision
 of this section said combat `U` was label-only and aborted before reaching the
 handler; that is withdrawn. What differs in combat is not the routing but the
 per-family gates — several item families test the scene and refuse in an arena,
@@ -648,7 +656,7 @@ For a compatible recreation:
   picker and immediately backing out — and keep the picker open across repeated
   attempts within that turn, **except** after the magic-ring vanish, which
   closes it. In combat the same rule spends the acting combatant's action;
-  only an actor that fails the live-actor gate escapes the cost.
+  only an actor that fails the party-side gate escapes the cost.
 - Refuse ammunition rows silently, with no message.
 - Treat arrows and quarrels as carried ammunition stocks rather than readied
   slots, and apply the traced bow/crossbow ammunition prerequisites.
@@ -822,7 +830,7 @@ minutes byte to the coordinate formatter; that attribution is wrong and is not
 followed here.
 
 Combat U-Use correction provenance: combat routes `U` into the same item-use
-handler the world modes use, after the live-actor gate. Source provenance:
+handler the world modes use, after the party-side gate. Source provenance:
 derived from private analysis in
 `../u5-decomp/notes/` and
 `../u5-decomp/functions/COMBAT_OVL/`.

@@ -725,8 +725,10 @@ P-Push's family-matching rule, but it does not require a distinct public
 visual label.
 
 Combat is a supported caller of this same handler. The combat command parser
-prints the `Push-` label and enters P-Push directly, without the live-actor gate
-used by the combat Get/Jimmy/Open/Search prompt helper. Because combat runs with
+prints the `Push-` label and enters P-Push directly, without the party-side gate
+used by the combat Get/Jimmy/Open/Search prompt helper (`systems/combat.md`
+Section 8; that gate reads the party-side descriptor bit, not liveness).
+Because combat runs with
 an actor-anchor scene frame, a successful push/pull advances the currently
 acting combat actor in the arena and mutates only the temporary combat tile and
 object state that the combat framer later tears down.

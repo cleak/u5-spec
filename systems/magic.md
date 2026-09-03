@@ -844,13 +844,33 @@ class byte — but a monster-side slot carrying the bit fails the self-acting
 test, so the round walker sends it to the keystroke/command path instead of to
 the automatic actor driver. It takes its turns at the player's prompt, printing
 the reduced turn banner (name and colon, with **no** armament clause), then
-`Attack-`, `Aim! `, `Nothing!` on a cancelled confirm, and `<target> missed!` on
-a failed roll (`systems/combat.md` Sections 6.1a, 8.1 and 11.1). What the player
-can usefully do with such a creature beyond that attack path is not established
-here. The bit's other two consequences are unchanged by this correction. It also
-changes the actor's *attack* — when its turn produces an attack it resolves
-through the fixed magic-strike branch, which also requires the chosen target to
-be adjacent (`systems/combat.md` Section 6.1a) — and the actor's *combat group*:
+`Attack-` — and then `Aim! `, the melee cursor, `<target> missed!` on a failed
+roll, and `Nothing!` by any of three routes (Escape, Space on the creature's own
+cell, or a confirm on an in-range cell holding nobody the occupancy lookup
+accepts) **only for a creature whose class reach selector is one**. A creature
+whose reach selector is above one takes the cast/effect arm instead: it prints
+no `Aim! `, opens no cursor, and reaches none of the three `Nothing!` routes or
+the melee miss line. Swarm's Insect Swarm is a melee-reach creature; **Summon's
+Daemon is not**, so a successfully summoned Daemon's `A` stops after `Attack-`.
+Conjure's four animal classes are not individually resolved here, so an engine
+should read each creature's reach selector rather than assume the melee
+transcript (`systems/combat.md` Sections 6.1a, 8.1, 8.2, 11 and 11.1). *(**Corrected.**
+This sentence previously published `Aim! ` and the melee cursor for every
+creature these three spells place; that is **withdrawn** for non-melee-reach
+classes, Summon's Daemon among them - `RETRACTIONS.md` R382.)* The player gets the
+**whole** combat command cascade for such a creature, not just Attack: seven
+letters refuse with `Can't!`, `Z` prompts for a character to display, and
+movement and the arena exit work as they do for a party member except that the
+same-exit constraint does not apply (`systems/combat.md` Sections 3 and 8).
+It does **not** change the actor's *attack*: the fixed magic-strike branch lives
+on the automatic driver and a monster-side slot never reaches it. *(**Corrected.**
+This paragraph previously read "It also changes the actor's *attack* — when its
+turn produces an attack it resolves through the fixed magic-strike branch, which
+also requires the chosen target to be adjacent". **That is withdrawn** for these
+spells' creatures, which are monster-side: they attack through the prompted
+path, where the same adjacency number is the targeting cursor's range clamp
+rather than a refusal that can waste the turn. `RETRACTIONS.md` R378.)* The bit's
+other consequence is unchanged: the actor's *combat group*:
 the slot-to-group helper reads this bit as a team toggle and inverts it for
 monster-side slots, so a stamped creature lands in the party's group for the
 same-faction filter instead of the monsters' (`systems/combat.md` Sections 6.1a

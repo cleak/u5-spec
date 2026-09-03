@@ -1605,9 +1605,35 @@ baseline:
   that has already played (section 7.4) - a missed *ranged* attack is silent
   only when its scattered impact lands on nobody, since a scatter onto an
   occupied cell runs the ordinary hit chain and its sounds (`combat.md` section
-  11.1, `RETRACTIONS.md` R355); and
+  11.1, `RETRACTIONS.md` R355);
 - **whirlpool engagement while the party is on foot**, which plays no long
-  descent (section 8.9).
+  descent (section 8.9); and
+- **a party member's death inside combat.** The combat death arm for a party
+  descriptor writes HP, the marked-dead bit, the `'D'` roster letter, the corpse
+  tile and the active-player sentinel, then runs a full stats-panel redraw, and
+  it calls no sound primitive at any point; the redraw is itself silent. The
+  cues a player hears around such a death belong to the blow that caused it —
+  the attacker's swing sweep and the impact burst with its stats-row flash — and
+  both have already played before the first of those writes (`combat.md`
+  sections 6.3 and 11.1). There is no death cue before or after the corpse tile
+  and the `'D'` write, and no cue keyed on the death at all.
+
+One caveat belongs with that last entry, because it is audible. The shared
+per-turn world tick carries an **ambient tile-audio pass** with an in-arena
+branch, and routines adjacent to the death arm on the attack path run that tick.
+A scenery tone can therefore sound while a combatant is dying. It is not a death
+cue: it is periodic, keyed on nearby tiles rather than on the death, and just as
+likely on a turn nobody dies. An engine reproducing the silence boundary above
+should not add a sound to the death, and should not conclude from a recorded
+session that one exists.
+
+*Scope of the death-silence negative.* It rests on a corpus census of every
+directly encoded call to every resident speaker primitive across the shipped
+executable, every overlay and all four display drivers, plus a direct scan for
+raw speaker port access; the death arm and the stats-panel redraw were
+additionally closed transitively rather than by direct calls alone. Outside it:
+anything dispatched through the display drivers' own jump-table calling
+convention, and music playback.
 
 Specific handlers can still produce a listed effect after one of these actions.
 For example, blocked top-down movement beeps, a dungeon redraw can land a wall

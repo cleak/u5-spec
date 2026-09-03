@@ -112,6 +112,32 @@ clamp-at-load advice. `systems/shops.md` Section 8.4 publishes the six per-inn
 bed cells as a table, with the one-tile eastward step the party takes on waking
 and the three early exits that skip it.
 
+## Issue #191 - the controlled monster's turn (2026-09-03)
+
+The three-way conflict between `systems/combat.md` Section 16.1, `RETRACTIONS.md`
+R354 and R364 is resolved **in R354 and R364's favour**: a monster carrying the
+controlled/charmed bit is **prompted**, not synthesized. Section 16.1's
+"still synthesizes an automatic action" clause was the last surviving instance of
+the framing R353 and R364 withdrew elsewhere, and it is withdrawn (R377). Six
+reversals land with the answer. The one an engine should re-audit first is R378:
+the **fixed magic-strike branch is party-slot-only** - it sits on the automatic
+driver, a monster-side slot never reaches it, and on the prompted path the same
+distance-one number is the targeting cursor's silent range clamp rather than a
+refusal that can waste a turn. Section 8's shape-A gate reads the **party-side
+bit, not liveness** (R381), which is what makes seven letters refuse for a
+controlled monster and what makes `Z` prompt one for a character; Section 8.1's
+banner paragraph had the status early-outs on the wrong side of the banner and
+described one re-prompt shape where there are two (R380). And Section 6.3's
+party-death row loses "death audio played" and gains the right write order plus
+the stats redraw (R379): there is **no combat party-death cue**, which is now a
+listed silence boundary in `systems/audio.md` Section 9, with the world tick's
+in-arena ambient tone named as the thing a recorded session might mistake for
+one. The sixth reversal is the smallest and the easiest to miss: `Aim! ` prints
+on the melee arm only, so `systems/magic.md` Section 8 and
+`catalogs/spell-list.md`'s Conjure/Swarm/Summon note were wrong to publish the `Attack-` / `Aim! ` pair for
+every creature those spells place - Summon's own Daemon is a non-melee-reach
+class (R382).
+
 ## Status Of The Engine Issue Queue
 
 As of 2026-08-22 the `cleak/u5-spec` issue queue is **empty**: all eighty-three

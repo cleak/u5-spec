@@ -372,15 +372,30 @@ combat-only and dungeon-only spells.
   carrying it fails the self-acting test and is dispatched to the keystroke
   command path, so a conjured, swarmed or successfully summoned creature takes
   its turns at the player's prompt, printing the reduced turn banner and the
-  ordinary `Attack-` / `Aim! ` sequence (`systems/combat.md` Sections 6.1a and
-  11.1). *(**Corrected.** This passage previously read "so the creature is a
-  monster-side, AI-driven actor. The bit does not hand the creature to the
-  player"; that is withdrawn - `RETRACTIONS.md` R354. An unstamped creature,
-  which is what Summon's rebound branch leaves behind, **is** AI-driven.)* The
+  ordinary `Attack-` sequence, followed by `Aim! ` and the melee cursor **only
+  when that creature's class reach selector is one**. Summon's Daemon is not
+  such a class and takes the cast/effect arm instead, printing no `Aim! `
+  (`systems/combat.md` Sections 6.1a, 11 and 11.1); Conjure's animal classes are
+  not individually resolved, so read the reach selector rather than assume the
+  melee transcript. *(**Corrected, twice.** This passage previously read "so the
+  creature is a monster-side, AI-driven actor. The bit does not hand the creature
+  to the player"; that is withdrawn - `RETRACTIONS.md` R354. An unstamped
+  creature, which is what Summon's rebound branch leaves behind, **is**
+  AI-driven. Separately, the transcript above previously published the
+  `Attack-` / `Aim! ` pair for every creature the three spells place; the
+  `Aim! ` half is **withdrawn** for non-melee-reach classes, Summon's Daemon
+  among them - `RETRACTIONS.md` R382.)* The
   bit is also the team toggle the combat slot-to-group helper reads, so a
   stamped creature groups with the party rather than with the monsters for the
-  same-faction filter; it likewise redirects that actor's attack action into the
-  fixed magic-strike branch, which additionally requires an adjacent target.
+  same-faction filter. It does **not** redirect that creature's attack: the
+  fixed magic-strike branch is reached only from the automatic driver, so a
+  monster-side slot carrying the bit attacks through the ordinary prompted
+  Attack path instead, with the targeting cursor clamped to adjacent cells.
+  *(**Corrected.** This sentence previously continued "it likewise redirects
+  that actor's attack action into the fixed magic-strike branch, which
+  additionally requires an adjacent target"; **that is withdrawn** for these
+  monster-side creatures - `RETRACTIONS.md` R378 and `systems/combat.md`
+  Section 6.1a.)*
   Clone duplicates an accepted creature into
   paired free combat actor and dynamic-object slots, and Summon uses the
   self-checking per-tile placement helper to create a Daemon-class combat actor

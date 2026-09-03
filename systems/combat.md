@@ -1010,7 +1010,7 @@ Each slot is a compact combat descriptor. At semantic level it carries:
   Higher base-step values produce shorter refreshed countdowns, so they act
   sooner after randomization and clamping.
 - **Phase counter**, decremented each round; the actor acts when it reaches zero.
-- **Flags/faction byte** describing party, hostile, or passive/neutral faction and per-turn state such as alive, marked dead, controlled/charmed, fleeing, hidden/not-yet-revealed, and asleep/magically disabled. Section 6.1 gives the exact bit layout; the low bit is the controlled/charmed state, not a "casting" state.
+- **Flags/faction byte** describing party, hostile, or passive/neutral faction and per-turn state such as alive, marked dead, controlled/charmed, fleeing, dragged-under, and asleep/magically disabled. Section 6.1 gives the exact bit layout; the low bit is the controlled/charmed state, not a "casting" state.
 - **Owner/target/class byte.** Overloaded by caller: party slots use it to link
   to a character record, while monster and object slots use it for placement,
   target selection, and class-table lookup.
@@ -1034,9 +1034,9 @@ per-slot per-round state used by every consumer:
 | `0x80` | **Party-side slot.** Placement stamps this bit only when it writes a party member's descriptor. Monster and object descriptors never carry it. It is the discriminator the damage/death resolver uses to choose the party-death branch over the monster-death branch, so an engine that also sets it for live monsters routes every monster death through the party path. |
 | `0x40` | **Monster-side slot** (self-acting AI actor). Placement stamps this bit when it writes an ordinary monster descriptor, except for the two passive/neutral classes 8 (Pirate) and 9 (the adjacent reserved row), which are stamped `0x20` instead. Bits `0x80` and `0x40` are mutually exclusive as written by placement. |
 | `0x20` | Marked dead or otherwise non-acting. Monster death overwrites the whole flags byte with this value; party death ORs it in. |
-| `0x10` | Phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). |
+| `0x10` | **Invisible / phase-hidden.** The phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). This is the invisibility bit on the paths traced for the combat command handler: it is what the melee cursor's seed gate rejects alongside the marked-dead bit (Section 8.2). Prose elsewhere in this document that separates a "phased/blinked" state from a "hidden/not-yet-revealed" one - the possession-eligibility list in Section 9 among it - predates this correction and has not been re-derived against the bit layout. |
 | `0x08` | **Asleep / magically disabled.** Not charm: charm and every other externally-controlled state live in bit `0x01` alone, and no traced path writes `0x08` for a charm or possession effect. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). The stats panel's combat status letter does not consult this bit, so an asleep party member still shows the roster status letter. |
-| `0x04` | Hidden / not-yet-revealed (invisible).                                            |
+| `0x04` | **Dragged-under (Corpser-held).** Its own turn arm prints `ARGH!` and rolls for release in place of a command (Section 8.1), and the melee occupancy lookup excludes a slot carrying it (Section 8.2). *(**Corrected.** This row previously read "Hidden / not-yet-revealed (invisible)". That name is **withdrawn**: invisibility rides on bit `0x10` above, and no traced path tests `0x04` for it - `RETRACTIONS.md` R380.)* |
 | `0x02` | Fleeing. Set by the wound-morale writer, by the no-target centre fallback, and directly by the Cause Fear and Repel Undead sweeps (Section 9); consumed by the step-vector synthesizer. |
 | `0x01` | **Charmed / under external control.** Set by monster possession, by the Charm spell, by summon/conjure placement, and by the Sword of Chaos compulsion path; see Section 6.1a for the full writer/reader contract. It is *not* a dispatch gate for the round walker. |
 
@@ -1056,7 +1056,11 @@ on a timer.
    bit on the accepted *target*.
 2. **The Charm spell** toggles the bit on its accepted target: casting Charm on
    an actor that already carries it clears it. This is the only traced clear
-   short of the actor leaving the table. When the accepted target is a
+   short of the actor leaving the table. Its eligibility gate is the same
+   slot-to-group helper the round walker uses, and it accepts any non-zero
+   result — so a **party-side** target is accepted only when it is the shipped
+   traitor identity or already carries the bit, and in that second case the
+   toggle clears rather than sets. When the accepted target is a
    party-side slot, Charm also writes the Good status letter into that
    character's roster status byte and refreshes the stats panel — in both
    toggle directions, so Charm on a Sleeping or Poisoned party member restores
@@ -1101,8 +1105,9 @@ slot-to-group helper — reads it as the combat team toggle, which is what puts 
 in the round walker's dispatch decision and in the friendly-fire filter (see the
 dispatch paragraph below and Section 9). The three direct consumers are:
 
-- **The attack driver.** When an actor whose bit `0x01` is set takes an attack
-  action, the attack resolves as a fixed magic strike instead of running the
+- **The attack driver — party-side slots only.** When a **party-side** actor
+  carrying bit `0x01` takes its turn on the automatic driver, the attack
+  resolves as a fixed magic strike instead of running the
   ordinary weapon cascade. The driver still picks a target the normal way, and
   then applies one extra requirement that has no counterpart on the ordinary
   path: the chosen target must be at straight-line distance exactly one — that
@@ -1118,6 +1123,27 @@ dispatch paragraph below and Section 9). The three direct consumers are:
   the class-specific attack overrides and the monster ranged-spell branch are
   all skipped. This is the bit's only gameplay consumption inside attack
   resolution.
+
+  **The scope is load-bearing.** This branch lives inside the automatic
+  driver's attack path and is reached from nowhere else, so only the slots the
+  round walker sends to that driver can take it: party-side descriptors
+  carrying the bit — Sword-of-Chaos compulsion, monster possession, and a Charm
+  accepted on a party-side slot, which the spell's eligibility gate admits only
+  for the shipped traitor identity or for a party slot that already carries the
+  bit (that second case being a clear rather than a set, since Charm toggles).
+  A **monster-side** slot carrying the bit is dispatched to the player-command
+  handler instead and never enters this branch at all: it attacks through the
+  prompted path of Sections 8.1, 8.2 and 11.1, where the same distance-one
+  number appears as a **cursor clamp rather than a refusal** — the cursor
+  cannot be moved to a cell out of range, so there is no "target too far, no
+  action" outcome and nothing is printed when the player tries. *(**Corrected.**
+  This reader previously read "When an actor whose bit `0x01` is set takes an
+  attack action, the attack resolves as a fixed magic strike instead of running
+  the ordinary weapon cascade", with no side restriction. **That universal form
+  is withdrawn**; it is true only of party-side slots on the automatic driver.
+  An engine that applies it to a controlled monster refuses that monster's
+  keystroke and gives it one distance-gated automatic strike, which is not what
+  the original does. See `RETRACTIONS.md` R378.)*
 - **The possession eligibility filter,** which rejects a target that already
   carries the bit, so a controlled actor cannot be possessed a second time.
 - **The stats panel.** A party member whose combat descriptor is party-side,
@@ -1240,7 +1266,7 @@ general terrain/drop path.
 
 | Death branch | Selected when | Tile byte written into active-object bytes 0 and 1 | Other writes | Slot released? |
 |---|---|---|---|---|
-| Party member | Descriptor carries the party-side bit and the damage meets or exceeds current HP, or the damage is the instant-kill sentinel `99` | `0x1E` (corpse) | Character HP forced to zero, roster status byte set to `'D'`, marked-dead bit ORed in, death audio played, active-player sentinel set to `0xFF` if the dead character was active | No |
+| Party member | Descriptor carries the party-side bit and the damage meets or exceeds current HP, or the damage is the instant-kill sentinel `99` | `0x1E` (corpse) | In this exact order: character HP forced to zero; marked-dead bit ORed into the descriptor flags byte; roster status byte set to `'D'`; the corpse tile written into both tile bytes; active-player sentinel set to `0xFF` if the dead character was active; **a full stats-panel redraw**. **No sound at any point** | No |
 | Vanish-on-death class | Monster whose class-flag word has the vanish bit set — Wanderer, Blackthorn, Lord British, Shadow Lord | `0x16` (temporary vanish marker) | Prints `<name> vanishes!`, sets shared action-result bit `0x02`, restores the underlying terrain through the single-cell pixel reveal, releases the slot, then runs the party control/faint scan described below | **Yes** |
 | Incorporeal class | Monster whose class-flag word has the low bit set but **not** the vanish bit — Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon | **none** | none | **Yes** |
 | Gazer | Monster of the Gazer class | `0x1F` (eye-burst special) | **Places a live Insect Swarm combatant (class 31) at the death coordinate** through the ordinary monster-placement primitive, then redraws the arena. See "The Gazer death spawns a real combatant" below | No |
@@ -1248,6 +1274,34 @@ general terrain/drop path.
 | Ordinary monster, terrain rejects | Any other monster whose underlying arena terrain byte is `0x87`, or is numerically below `4` | **none** | none | **Yes** |
 | Ordinary monster, drop roll rejected | Terrain accepted, and the first roll exceeds the class drop-cap byte | `0x1F` | none — byte 5 keeps whatever the per-encounter reset left there | No |
 | Ordinary monster, drop roll accepted | Terrain accepted, and the first roll is less than or equal to the class drop-cap byte | `0x01` (dead-monster / drop marker) | Byte 5 of the active-object record receives **the class drop-cap byte itself**. A second independent roll strictly below the same drop cap ORs bit `0x80` into byte 5 as the special-drop marker | No |
+
+*(**Corrected.** The party row's "Other writes" cell previously read "Character
+HP forced to zero, roster status byte set to `'D'`, marked-dead bit ORed in,
+**death audio played**, active-player sentinel set to `0xFF` if the dead
+character was active". Two things in it are **withdrawn**. There is **no
+party-death cue**: the arm makes exactly one call, the full stats-panel redraw,
+and no sound primitive is reachable from it — `systems/audio.md` Section 9 now
+lists a combat party member's death among its silence boundaries, and Section
+11.1's Target-dies row ("no cue of its own") was the correct one. And the two
+status writes were published in the wrong order: the **marked-dead bit precedes
+the `'D'` roster letter**, not the other way round. The full stats-panel redraw,
+the last write on the arm, was missing from the cell entirely. See
+`RETRACTIONS.md` R379.)*
+
+**What can still be heard around a party death, and why it is not a cue.** The
+sounds an ordinary fatal blow produces belong to the **swing and the impact**,
+and both have already played before any of the writes above: the attacker's
+swing sweep at the head of attack application, and the impact burst — with the
+party stats-row flash around it — once the to-hit roll succeeds (Section 11.1).
+Separately, routines *beside* the death arm on the attack path run the shared
+world tick, whose ambient tile-audio pass has an in-arena branch and can sound a
+scenery tone while a combatant is dying. That tone is periodic and keyed on
+nearby tiles, not on the death, and it can occur just as readily on a turn
+nobody dies. Scope of the negative: the census covered every directly encoded
+call to every resident speaker primitive across the shipped executable, every
+overlay and all four display drivers, and the death arm and the stats redraw
+were additionally closed transitively; entries dispatched through the display
+drivers' jump-table calling convention, and music playback, are outside it.
 
 #### Vanish ordering and the shared result field
 
@@ -1875,7 +1929,9 @@ suppress self-acting actors' turns, not the player's keystroke prompt.
 
 The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Ctrl-B, Space, digits, direction codes). Every letter and every special input is now pinned, and recognition is not the same as world-mode success. The parser routes its letters through two shared shapes plus a handful of direct calls.
 
-**Shape A — the labelled prompt with a live-actor gate.** The helper prints the verb label, then requires that the acting combatant is still alive. A dead actor gets the short "Can't!" refusal and the prompt is re-issued at no cost. A live actor's command is handed to one shared world-mode delegate chosen by the letter, and the combatant's action ends. Six letters use this shape: `G` Get, `J` Jimmy, `O` Open, `R` Ready, `S` Search and `U` Use. Their delegates are the same handlers the world modes use — the shared tile-interaction overlay for Get/Jimmy/Open/Search, the status/equipment overlay for Ready, and the item-use handler for Use.
+**Shape A — the labelled prompt with a party-side gate.** The helper prints the verb label, then requires that the acting combatant is a **party-side** descriptor. An actor that is not gets the short `Can't!` refusal, the banner is reprinted (Section 8.1) and the prompt is re-issued at no cost. In practice the refusal has exactly one live population: a **monster acting under player control** (Section 6.1a), because the round walker filters marked-dead slots before dispatch and never sends one to this handler at all. A party-side actor's command is handed to one shared world-mode delegate chosen by the letter, and the combatant's action ends. Six letters use this shape: `G` Get, `J` Jimmy, `O` Open, `R` Ready, `S` Search and `U` Use. Their delegates are the same handlers the world modes use — the shared tile-interaction overlay for Get/Jimmy/Open/Search, the status/equipment overlay for Ready, and the item-use handler for Use. `C`-Cast carries its own copy of the same party-side test and refuses the same way, after printing `Cast...`; so **seven** letters in total are unusable by a controlled monster.
+
+*(**Corrected.** This paragraph previously read "the labelled prompt with a **live-actor gate** ... then requires that the acting combatant is still **alive**. A **dead** actor gets the short "Can't!" refusal". **That test is withdrawn**: the gate reads the party-side bit, not liveness, and the dead-actor case it describes is unreachable. The transcript is unchanged for party members, which is why the error was invisible there — but it inverts the outcome for a controlled monster, which the old text would have let Get, Jimmy, Open, Ready, Search and Use freely. The `Z` row of the table below is corrected in the same pass and for the same reason. See `RETRACTIONS.md` R381.)*
 
 **Shape B — the shared "that verb means nothing here" responder.** The
 responder prints a bare verb label, appends one of three exact tails, then emits
@@ -1893,32 +1949,32 @@ The remaining letters call their targets directly, as the table below records.
 
 | Key   | Combat behaviour |
 |-------|------------------|
-| **A** | Attack. Routes into the shared arena attack helper with the acting combatant and a flag saying whether that combatant is armed. It produces **one attempt per readied item that can be swung**, each opening its own targeting cursor; Section 8.2 has the full contract. Resolution is Section 11. Ends the actor's action. *(**Corrected.** Earlier revisions said this helper "announces the actor and the weapons it is wielding (or bare hands) before the attack resolves". That is withdrawn: the actor-and-armament line is the **turn banner**, printed before the keystroke is read and therefore printed identically whatever the player then presses. See Section 8.1.)* |
+| **A** | Attack. Routes into the shared arena attack helper with the acting combatant and a flag saying whether that combatant is armed. It produces **one attempt per readied item that can be swung**, each opening its own targeting cursor - and for a monster-side actor under player control, which has no readied items, exactly **one** attempt with a fixed pseudo-item; Section 8.2 has the full contract. Resolution is Section 11. Ends the actor's action. *(**Corrected.** Earlier revisions said this helper "announces the actor and the weapons it is wielding (or bare hands) before the attack resolves". That is withdrawn: the actor-and-armament line is the **turn banner**, printed before the keystroke is read and therefore printed identically whatever the player then presses. See Section 8.1.)* |
 | **B** | Board — shared refusal responder, first tail. No cost. |
-| **C** | Cast a spell: the combat prerequisite check, then either the in-arena prompt loop or the shared spell dispatcher (Section 10). Ends the actor's action unless the caster is dead, which re-prompts. |
+| **C** | Cast a spell. The branch first prints `Cast...` and then applies its own copy of the shape-A **party-side** test: a monster acting under player control gets `Can't!`, the banner is reprinted and the prompt is re-issued at no cost. A party-side actor goes on to the combat prerequisite check and then either the in-arena prompt loop or the shared spell dispatcher (Section 10), and its action ends. *(**Corrected.** This row previously read "Ends the actor's action unless **the caster is dead**, which re-prompts"; that refusal is the party-side test, not a liveness test, and no dead actor reaches this handler - `RETRACTIONS.md` R381.)* |
 | **D** | Prints the combat-specific `D-What?` refusal and re-prompts at no cost. |
 | **E** | Enter — shared refusal responder, second tail. No cost. |
 | **F** | Fire — shared refusal responder, second tail. No cost. |
-| **G** | Get. Labelled prompt with the live-actor gate, then the shared Get handler. |
+| **G** | Get. Labelled prompt with the party-side gate, then the shared Get handler. |
 | **H** | Hole up — shared refusal responder, second tail. World-mode rest is not available inside an arena. No cost. |
 | **I** | Ignite — shared refusal responder, second tail. No torch counter is touched on this branch. No cost. |
-| **J** | Jimmy. Labelled prompt with the live-actor gate, then the shared Jimmy handler. The combat scene takes Jimmy's high-range restraint tail: a successful Dexterity pick on stocks `0x84` or manacles `0x85` clears that arena tile to cobble `0x44` and reports "Unlocked" without resolving or persisting an NPC release. Other Jimmy target families retain their shared behavior. |
-| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
+| **J** | Jimmy. Labelled prompt with the party-side gate, then the shared Jimmy handler. The combat scene takes Jimmy's high-range restraint tail: a successful Dexterity pick on stocks `0x84` or manacles `0x85` clears that arena tile to cobble `0x44` and reports "Unlocked" without resolving or persisting an NPC release. Other Jimmy target families retain their shared behavior. |
+| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
 | **L** | Look — shared refusal responder, second tail. This dispatcher does not run the world/town look flow. No cost. |
 | **M** | Mix — shared refusal responder, second tail. It does not open the reagent mixer. No cost. |
 | **N** | New order — shared refusal responder, second tail. No cost. |
-| **O** | Open. Labelled prompt with the live-actor gate, then the shared Open handler. That handler carries no combat-specific branch of its own, so in an arena it behaves as it does on the surface. |
-| **P** | Push. Prints the `Push-` label and calls the shared movable-static-tile handler directly, without the live-actor gate used by Shape A. It never moves an active-object record. In combat the handler uses the acting combatant as the coordinate anchor; a successful push or pull mutates the temporary arena tile state, advances that actor's arena position, dirties the redraw, and returns to the round loop. Space cancellation, either refusal, and either success all end the actor's action; Escape inside the direction prompt is ignored and leaves the prompt waiting. Exact transcripts, the out-of-grid backing-state edge, and the ambush/camp reveal preemption are in `systems/commands.md` Sections 8.1–8.2. |
+| **O** | Open. Labelled prompt with the party-side gate, then the shared Open handler. That handler carries no combat-specific branch of its own, so in an arena it behaves as it does on the surface. |
+| **P** | Push. Prints the `Push-` label and calls the shared movable-static-tile handler directly, without the party-side gate used by Shape A. It never moves an active-object record. In combat the handler uses the acting combatant as the coordinate anchor; a successful push or pull mutates the temporary arena tile state, advances that actor's arena position, dirties the redraw, and returns to the round loop. Space cancellation, either refusal, and either success all end the actor's action; Escape inside the direction prompt is ignored and leaves the prompt waiting. Exact transcripts, the out-of-grid backing-state edge, and the ambush/camp reveal preemption are in `systems/commands.md` Sections 8.1–8.2. |
 | **Q** | Quit — shared refusal responder, second tail. An earlier revision of this section described combat `Q` as an "abandon party" command that forced the defeat exit; that is withdrawn. Combat `Q` prints its label and re-prompts, and there is no resident save route in combat either. |
-| **R** | Ready. Labelled prompt with the live-actor gate, then the same status/equipment handler non-combat `R` uses, with the selection bound to the acting combatant instead of prompting for an arbitrary party member. Equipment mutation semantics, including the body-armour lock, are in `inventory.md`. |
-| **S** | Search. Labelled prompt with the live-actor gate, then the shared Search handler. |
+| **R** | Ready. Labelled prompt with the party-side gate, then the same status/equipment handler non-combat `R` uses, with the selection bound to the acting combatant instead of prompting for an arbitrary party member. Equipment mutation semantics, including the body-armour lock, are in `inventory.md`. |
+| **S** | Search. Labelled prompt with the party-side gate, then the shared Search handler. |
 | **T** | Talk — shared refusal responder, third tail. No cost. |
-| **U** | Use item. Labelled prompt with the live-actor gate, then the same item-use handler the world modes use, which opens the special-item picker and has its own combat branches. An earlier revision of this section said combat `U` was label-only and aborted without entering the item-use flow; that is withdrawn. Which individual item families accept a combat scene is owned by `inventory.md` and `catalogs/item-list.md`. |
+| **U** | Use item. Labelled prompt with the party-side gate, then the same item-use handler the world modes use, which opens the special-item picker and has its own combat branches. An earlier revision of this section said combat `U` was label-only and aborted without entering the item-use flow; that is withdrawn. Which individual item families accept a combat scene is owned by `inventory.md` and `catalogs/item-list.md`. |
 | **V** | View — shared refusal responder, second tail. It is not the resident gem-view map path and consumes no gem. No cost. |
 | **W** | Prints the combat-specific `W-What?` refusal and re-prompts at no cost. |
 | **X** | X-it — shared refusal responder, first tail. Combat cannot be left with `X`: the command prints its label with the "what?" tail and re-prompts. An earlier revision of this section routed combat `X` to the escape handler; that is withdrawn. Leaving a fight is done by Escape, by stepping out of arena bounds, or by winning. |
 | **Y** | Yell. Prints the combat Yell label and dispatches to the shared Yell handler, but combat's scene frame is not accepted by the ship-sail, Word-of-Power, or Shadowlord-name success branches. In combat, nonempty Yell input reaches the handler's no-effect path; empty input still uses the normal nothing-said result. Ends the actor's action. |
-| **Z** | Z-stats. Dispatches to the same status display handler the world modes use, with no live-actor gate, selecting the acting combatant's party slot instead of prompting. Ends the actor's action. |
+| **Z** | Z-stats. Dispatches to the same status display handler the world modes use, with no refusal of its own. Inside an arena that handler tests the acting slot's party side: for a **party-side** actor it opens that character's own sheet silently, with no prompt; for a **monster-side** actor under player control it prints `Player: ` and runs the ordinary roster picker, so the player must choose a character. Ends the actor's action either way. *(**Corrected.** This row previously read "with no live-actor gate, **selecting the acting combatant's party slot instead of prompting**" without qualification. **That is withdrawn for a monster-side actor**, which is prompted; a monster descriptor has no roster slot to open. `RETRACTIONS.md` R381. The picker's own accepted inputs are not published here.)* |
 
 Other inputs:
 
@@ -1939,7 +1995,11 @@ Other inputs:
   states the rule and the remap table.
 - **Cardinal direction codes** - move one cell in the requested cardinal
   direction. If the destination leaves the arena, run the out-of-arena helper
-  described in Section 3. A blocked step re-prompts at no cost. **A direction key
+  described in Section 3, whose direction-sharing constraint
+  (`All must use the same exit!`) applies to **party-side actors only** - a
+  monster acting under player control neither seeds nor tests the shared
+  direction and simply leaves. Movement *inside* the arena is identical for
+  both. A blocked step re-prompts at no cost. **A direction key
   is purely a step: there is no bump attack.** *(**Corrected.** Earlier revisions
   said "movement uses the step-or-attack primitive: if the cell is occupied by a
   hostile, attack instead". That is withdrawn - see Section 8.3 and Section 11.)*
@@ -1947,11 +2007,20 @@ Other inputs:
   with the stock `What?` refusal and cost no turn.
 - **Anything else** — the stock `What?` refusal and a free re-prompt.
 
-**The turn rule.** The parser keeps a single re-prompt flag, cleared at the head
-of every parse. It is raised only by the dead-actor refusal, the shared
-"not meaningful here" responder, the `D` / `W` / `What?` stubs, the escape
-handler's own result, a failed party-member select, and the dead-caster Cast
-path; a blocked step and a blocked climb raise it too. When the flag is raised
+**The turn rule.** The parser keeps **two** re-prompt flags, not one, and they
+produce two visibly different re-prompts (Section 8.1). The turn-spent flag is
+cleared by the unrecognised-key stub, the two toggles, and a refused step or
+climb, and those re-prompt **without reprinting the turn banner**. The abort
+flag is raised by the shared "not meaningful here" responder, the `D` / `W`
+stubs, every shape-A and Cast `Can't!` refusal, a failed party-member select,
+and the escape handler's own declined result, and those re-prompt **with the
+whole banner reprinted**. *(**Corrected.** This paragraph previously described
+"a **single** re-prompt flag ... raised only by the **dead-actor refusal**, the
+shared "not meaningful here" responder, the `D` / `W` / `What?` stubs, the
+escape handler's own result, a failed party-member select, and the dead-caster
+Cast path". **That is withdrawn** on both counts — there are two flags with two
+transcripts, and the two "dead actor" entries are really the party-side test of
+Shape A and of Cast. `RETRACTIONS.md` R380 and R381.)* When either flag is raised
 the player is returned to the prompt and the combatant has spent nothing. When
 it is clear, that combatant's action is over. Every accepted verb therefore
 costs the acting combatant its action, and every refusal is free — including a
@@ -2026,17 +2095,50 @@ by the same question - wrong on the item-name line of Section 8.2 as well.)*
   while the **spiked helm and spiked shield do**, because they carry a non-zero
   capability entry.
 - A charmed monster acting under player control gets only its name and the colon,
-  with no armament clause.
+  with no armament clause. **The same handler prints it, at the same point, for
+  the same reason**: a controlled monster is keyboard-driven, so it is inside
+  this section's scope rather than an exception to it. The banner is the
+  command handler's own output and precedes the key read; `Attack-` and `Aim! `
+  come later and from elsewhere — the shared per-character attack walker and the
+  shared spell/weapon dispatcher respectively, both reached only after the key
+  `A` has actually been read and accepted (Section 8.2). Nothing prints them on
+  a turn the player did not spend a keystroke on.
 - Because the banner precedes the keystroke, it appears identically whether the
   player then presses `A`, a direction key, `Space`, or anything else.
 
 What `A` adds on top of the banner is `Attack-` and `Aim! ` per attempt, plus a
 per-item name line when two or three items qualify (Section 8.2).
 
-The banner is unconditional once the actor passes the active-player gate, the
-Sword-of-Chaos gate and the invisible-reveal / asleep early-outs. Note that a
-free re-prompt after a refusal uses the short form and does **not** reprint the
-banner.
+**Where the banner sits, and the two shapes of re-prompt.** Only two things
+precede the banner: the active-player gate and the Sword-of-Chaos gate. The
+turn's two status early-outs — the dragged-under (Corpser-held) arm that prints
+`ARGH!` and the asleep arm that prints `Zzzzz...` — come **after** it, so a
+dragged-under or sleeping combatant does get its full banner and then that line
+in place of a command. A free re-prompt then takes one of **two** shapes, not
+one:
+
+- **Short re-prompt, banner not reprinted:** an unrecognised key (`What?`), the
+  two toggles Ctrl-S and Ctrl-B, and a refused step or refused climb. The
+  handler emits one newline, refreshes the prompt window, re-runs the two status
+  early-outs and reads another key.
+- **Full re-prompt, the whole banner reprinted from its leading newline:** every
+  shape-B "means nothing here" letter, `D` and `W`, every `Can't!` refusal
+  (`C`-Cast's and the six shape-A letters'), a failed `1`-`6` selection, and a
+  declined Escape.
+
+Neither shape spends the turn and neither runs the committed-action tail.
+
+*(**Corrected.** This paragraph previously read "The banner is unconditional
+once the actor passes the active-player gate, the Sword-of-Chaos gate and the
+**invisible-reveal / asleep early-outs**. Note that a free re-prompt after a
+refusal uses the short form and does **not** reprint the banner." Both halves
+are **withdrawn**. The status early-outs follow the banner rather than gating
+it, and the `0x04` arm is the **dragged-under** state, not an invisible-reveal —
+invisibility is a different descriptor bit and is not tested on this path at
+all. The re-prompt half is wrong for the larger of the two families: the
+refusals listed above reprint the banner every time. Section 8's "The turn rule"
+paragraph, which described a single re-prompt flag, is corrected with it. See
+`RETRACTIONS.md` R380.)*
 
 **A bare direction key does not attack.** It is purely a step. The engine prints
 the direction word (`West`, `East`, `North`, `South`), checks that the
@@ -2064,7 +2166,13 @@ bare-handed arms and for both the party-side and charmed-monster-side entries.
 Not verified for the automatic driver, which never reads the keyboard, nor for
 spell targeting beyond the shared cursor.)*
 
-**What Attack runs.** The engine walks the acting character's three readied
+**What Attack runs.** For a **monster-side** actor under player control there is
+no equipment to walk and the walker is skipped outright: `A` makes **exactly one
+attempt**, unconditionally and without a loop, carrying a fixed pseudo-item that
+sends the dispatcher to the monster-side reach and effect rows of that actor's
+class (Section 11) instead of to any item row. The attempt count the party path
+computes is not consulted on that arm. For a party-side actor the engine walks
+that character's three readied
 equipment slots in order - helm, weapon hand, shield hand. Each slot holding an
 item with a non-zero weapon-capability entry produces **one attack attempt**;
 body armour is never scanned, and ordinary helms and shields have a zero entry
@@ -2257,12 +2365,31 @@ Euclidean distance, all eight neighbours are within range one, so **a melee
 attack can target diagonals**.
 
 On cancel the engine prints `Nothing!` (melee arm) or returns silently (ranged
-arm). On confirm it looks for an actor occupying the cursor cell; if there is
-none, or the occupant is dead-marked, invisible, or an empty/decoration slot, it
-prints `Nothing!`. **The occupancy lookup does not filter by side**, so confirming
-on a party member's cell attacks that party member. The acting character's turn
-is consumed either way: cancelling with Escape or Space does not return to the
-command prompt and does not give the turn back.
+arm). On confirm it looks for an actor occupying the cursor cell and prints
+`Nothing!` when the lookup yields nobody eligible. The lookup rejects, in
+addition to an empty cell: a slot carrying neither the party-side nor the
+monster-side class bit (an empty or decoration record), a dead-marked slot, a
+**dragged-under (Corpser-held)** slot, and a slot whose linked presentation
+record carries the hidden-frame marker. **The occupancy lookup does not filter by
+side**, so confirming on a party member's cell attacks that party member. The
+acting character's turn is consumed either way: cancelling with Escape or Space
+does not return to the command prompt and does not give the turn back.
+
+**`Nothing!` therefore has three routes on the melee arm, not one.** Escape;
+Space while the cursor sits on the attacker's own cell; and a **confirm** on a
+cell that is in range but holds nobody the lookup accepts. The third is not a
+cancellation — the cursor was committed and the range was recomputed for the
+committed cell — but it reaches the same line and ends the turn the same way.
+Enter and `A` on the attacker's own cell are the one input pair that does
+nothing at all: the loop simply reads another key. *(**Added detail, plus one
+withdrawal.** The sentence above already named the empty-confirm case, and this
+paragraph names all three routes in one place because `RETRACTIONS.md` R354 and
+`systems/magic.md` Section 8 published only the cancellation route. The
+withdrawal is in the rejection list just above: it previously read "dead-marked,
+**invisible**, or an empty/decoration slot", and this lookup tests **no
+invisibility flag at all** - what it rejects in that flag's place is the
+dragged-under bit and the linked record's hidden-frame marker.
+See `RETRACTIONS.md` R380.)*
 
 ### 8.3 Direction keys, digits, and the numpad flag
 
@@ -2825,7 +2952,7 @@ field-kind switch places the matching active-object marker in the temporary
 combat table without creating a paired combat-effect descriptor. The helper also
 scans slots in ascending order and returns the first descriptor at the selected
 coordinate with either live/selectable bit (`0x80` or `0x40`) set, without
-marked-dead bit `0x20`, without hidden/not-yet-revealed bit `0x04`, and without
+marked-dead bit `0x20`, without the dragged-under bit `0x04`, and without
 linked active-object tile byte `0xF4`; that lookup controls the hit/contact
 target returned by the helper, not whether the marker is placed.
 
@@ -3074,8 +3201,9 @@ actors Section 6.1a routes through that driver - Sword of Chaos compulsion,
 monster possession, and Charm cast on a party member - are *not* published as
 members of this set, for two separate reasons:
 
-- **They do not take the ordinary attack path.** An actor carrying the
-  controlled/charmed bit takes Section 6.1a's redirected fixed magic-strike
+- **They do not take the ordinary attack path.** A **party-side** actor carrying
+  the controlled/charmed bit - which is what all three of these are - takes
+  Section 6.1a's redirected fixed magic-strike
   branch instead of the ordinary weapon cascade, and that branch hands the
   shared attack primitive a fixed action id as the attack flavour. Whether that
   fixed id reaches the rating selector as the neutral value - and so whether
@@ -3373,7 +3501,7 @@ continues on the same row.
 | Target slept | both | `<target> slept!` | none. *(**Corrected**: this row previously read "Target slept or stoned". There is no stoning or petrification effect in combat; the branch that reaches this line applies sleep, and it replaces ordinary damage - Sections 7 and 12.)* |
 | Party target poisoned | monster attacker | `<target> is poisoned!`, printed **inside** damage resolution - after the hit newline and before the result line - and the ordinary result line is then suppressed | none |
 | Ordinary landed hit, **party** target | monster attacker | `<target> hit!` - **flat and ungraded** | none |
-| Ordinary landed hit, **party** target, attacker is a **Corpser** (class 45) | monster attacker | `<target> dragged under!` in place of `hit!` | the rising action-snap cue; the target is additionally marked asleep and its sprite blanked |
+| Ordinary landed hit, **party** target, attacker is a **Corpser** (class 45) | monster attacker | `<target> dragged under!` in place of `hit!` | the rising action-snap cue; the target is additionally marked with a status bit and its sprite blanked. **Which bit the drag sets is not established here**: either the asleep bit `0x08` or the dragged-under bit `0x04`, whose own turn arm prints `ARGH!` and a release roll rather than `Zzzzz...` and whose release restores exactly this blanked sprite (Sections 6.1 and 8.1). The two readings give the dragged combatant visibly different next turns, so an engine must not treat the earlier "marked asleep" wording as settled. |
 | Ordinary landed hit, **monster** target | party attacker | `<target>` plus one graded wound line - see below | none |
 | Glass Sword swing | party melee | `Thy sword hath shattered!`, printed **inside** the damage roll, so it lands between the hit newline and the result line | none |
 | Food-steal branch | monster attacker | a newline, then `A <monster> stole some food!` - this **replaces the entire damage and narration chain** | a rising cue roughly 800 Hz toward 2000 Hz, then a stats-panel redraw |
@@ -3464,7 +3592,22 @@ publication, not a correction.
 |---|---|
 | Party member at the command prompt | the full turn banner - newline, name, `, armed with ` and the readied item names or `bare hands`, a colon, newline (Section 8.1) - then `Attack-` and `Aim! ` per attempt, an item-name line when two or three items qualify, and `Nothing!` on a cancelled or empty melee confirm (Section 8.2) |
 | **Ordinary hostile monster** | **nothing whatsoever** - no banner, no `Attack-`, no `Aim! `, no `Nothing!`, and on a melee miss no line either |
-| Monster carrying the controlled/charmed bit (Section 6.1a) | the **reduced** banner - newline, name, colon, newline, with **no** `, armed with ` clause - then one fixed attempt: `Attack-`, `Aim! `, and on a failed roll `<target> missed!` |
+| Monster carrying the controlled/charmed bit (Section 6.1a) | the **reduced** banner - newline, name, colon, newline, with **no** `, armed with ` clause - then, **only if the player presses `A`**, one fixed attempt: `Attack-`, then `Aim! ` for a class whose reach selector is one, and on a failed roll `<target> missed!`. `Nothing!` is reachable on this path by all three of Section 8.2's routes. A class whose reach selector is above one takes the cast/effect arm instead and prints no `Aim! ` (Section 11) |
+
+**Which layer prints which of those, and when.** Three different layers
+contribute, and none of them fires without a keystroke. The **reduced banner**
+is the player-command handler's own output, printed once per prompt before the
+key is read — so it appears whatever the player then presses, and it is
+reprinted in full whenever a refusal takes the banner-reprinting re-prompt shape
+(Section 8.1). **`Attack-`** comes from the shared per-character attack walker,
+downstream of an accepted `A`. **`Aim! `** comes from the shared spell/weapon
+dispatcher, on its melee arm only. There is consequently no "the target was too
+far, so nothing happened" turn on this path to ask about: the distance-one limit
+is enforced by the cursor, which refuses to *move* out of range and says nothing
+when it does (Section 8.2), so the player either confirms a cell within range or
+cancels. The distance-one-or-no-action rule of Section 6.1a belongs to the
+**automatic** driver's party-side controlled actors, and that path prints no
+banner, no `Attack-` and no `Aim! ` at all.
 
 **There is no `<attacker> attacks <target>` line, in any wording, anywhere in the
 shipped game.** An exhaustive scan of every printable text run in the executable,
@@ -3546,10 +3689,16 @@ installer's uninstaller is not game code and was excluded.
   established, so no engine should infer that one burst is louder or shorter
   than the other.
 - **Not covered:** the spell overlays' own presentation around the shared result
-  narrator, the standing-hazard tier's trigger conditions, the projectile pass
-  that is one of the three ways a monster's ranged miss stays silent, and what a
-  player can usefully do with a controlled monster once the prompt hands them
-  one.
+  narrator, the standing-hazard tier's trigger conditions, and the projectile
+  pass that is one of the three ways a monster's ranged miss stays silent. The
+  residue "what a player can usefully do with a controlled monster once the
+  prompt hands them one" is now largely closed by Section 8: the whole command
+  cascade runs for such an actor, seven letters refuse, `A` takes the
+  single-attempt arm, `Z` prompts for a character, and movement and the arena
+  exit behave as Section 3 describes. What is still unread is the roster picker
+  `Z` opens for a monster actor, and what the cast/effect arm does for a
+  controlled monster of a non-melee class - its reachability is established
+  (Section 11), its contents are not.
 
 Source provenance: derived from private analysis in `../u5-decomp/notes/`.
 
@@ -4165,9 +4314,24 @@ is known, its downstream effects are exact:
 - Target selection first removes empty, dead, passive, suppressed, or invisible
   candidates as applicable, then rejects candidates in the acting slot's group.
 - The round walker sends group-1 actors to the automatic action driver. Group-0
-  actors enter the combined command handler; it prompts only for an eligible
+  actors enter the player-command handler, which **prompts, and never
+  synthesizes**. Its one gate is the active-player sentinel: while the sentinel
+  is unset — its state on combat entry, and the state it returns to whenever `0`
+  is pressed — every group-0 slot is prompted; while a character is selected
+  with `1`-`6`, only the party-side slot that sentinel names is prompted and
+  every other group-0 slot, party or monster, is skipped without a banner, a
+  keystroke or an action. A monster descriptor that control moved to group 0 is
+  therefore prompted on exactly the same terms as a party member: the reduced
+  turn banner of Section 8.1, then one real blocking key read, then the whole
+  Section 8 command cascade, which carries no monster branch of its own.
+  *(**Corrected.** This bullet previously ended "it prompts only for an eligible
   selected party member, while a monster descriptor that control moved to group
-  0 still synthesizes an automatic action.
+  0 **still synthesizes an automatic action**". **That is withdrawn**: the
+  handler contains no synthesis path for any slot, and the clause contradicted
+  Section 6.1a's dispatch paragraph, Section 7 step 6, and `RETRACTIONS.md` R354
+  and R364 — all of which say this slot is driven from the player's prompt.
+  R354 and R364 stand as published; this bullet was the outlier.
+  See `RETRACTIONS.md` R377.)*
 - Side counting skips empty, dead, and passive descriptors, then uses the same
   group resolver. Group 1 counts as foes and group 0 as friends. Control and the
   traitor identity therefore affect victory detection. Mass Charm's local
@@ -4499,3 +4663,19 @@ The behaviour described here was derived from the private function and format no
   implicit here. The same pass supplied the Section 9 correction to the monster
   turn's dispatch shape and the Section 6.1a / `catalogs/spell-list.md`
   correction to where a controlled monster's turn is driven from.
+- The controlled monster's turn, end to end (issue #191) -- that the
+  player-command handler prompts rather than synthesizing for a group-0 monster
+  descriptor and runs the whole shared command cascade for it; the four
+  handler-level divergences a monster-side actor meets (the seven `Can't!`
+  letters, the single-attempt Attack arm, the `Player: ` prompt behind `Z`, and
+  the party-only same-exit constraint); the party-side-only scope of the fixed
+  magic-strike branch and the cursor-clamp form the same distance rule takes on
+  the prompted path; the two re-prompt shapes and the banner's position ahead of
+  the dragged-under and asleep arms; and the party-death arm's write order and
+  its silence -- derived from private analysis in `../u5-decomp/notes/`. That
+  analysis was verified by two independent re-derivations and then repaired, and
+  the repair itself was re-derived; the corpus scans behind each negative are
+  restated in the sections that carry them. Two residues are recorded in
+  `NEXT-STEPS.md` rather than published here: what the roster picker behind `Z`
+  accepts, and what the class effect arm does for a controlled monster of a
+  non-melee class.
