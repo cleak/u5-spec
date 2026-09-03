@@ -520,9 +520,18 @@ clearest instance. Arena 15 - selected whenever the hostile is standing on water
 shoals or deep water while the party is on land - is authored with **all
 sixteen** monster placement cells on water tiles and all six party seats on grass
 and brush. A land-class monster fought over water is therefore placed on water by
-design; arena 14, for a party aboard ship, likewise puts all sixteen monster
-cells on deep water or water. A port should reproduce this rather than "fixing"
-it.
+design. The aboard-ship counterpart is **arena 11** - selected when the party is
+aboard ship and the hostile stands on water - which likewise puts all sixteen
+monster cells on deep water or water. Arena 14 is a different arena: it is the
+ship-versus-ship boarding arena selected when the hostile is itself a ship, and
+its sixteen monster cells all lie on the enemy vessel's deck. A port should
+reproduce this rather than "fixing" it.
+
+> **Corrected 2026-09-03 (R351).** This sentence previously named arena 14 as the
+> aboard-ship arena whose monster cells are all on water. That is withdrawn:
+> the all-water aboard-ship arena is 11, as the selector table above already
+> said, and arena 14's monster cells are deck tiles. Confirmed against the
+> shipped outdoor arena file by the clean side (issue #186) and re-decoded here.
 
 Such an actor is **not** frozen: it takes its turn every round, selects a target
 and attacks anything in reach, and remains live, targetable and killable. Only
