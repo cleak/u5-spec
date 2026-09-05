@@ -275,11 +275,15 @@ dexterity delta is zero or positive, so the committed dexterity byte is 15 or
 better and no ceiling "well below twenty" describes it; Section 7 deliberately
 publishes **no** upper bound for questionnaire dexterity, and an engine must not
 assume one. Whether the **strength** and **intelligence** tallies likewise start
-from their seed values was **not re-derived**, so this specification does not
-currently know where those two start: read the fourteen above as the
-questionnaire's contribution only, and treat any starting-point or ceiling claim
-for STR and INT as unverified pending that check. Section 7's "Scope caveat on
-the neighbouring STR and INT statements" carries the same scope.
+from their seed values has now been re-derived (2026-09-04): **all three tallies
+are seeded from the record-0 bytes of the shipped seed image, and all three
+seeds are 15** - strength, dexterity and intelligence alike. The questionnaire
+adds only its winners' non-negative deltas on top, so a questionnaire character
+enters play with dexterity and intelligence of at least 15 and, after the
+commit-time floor, strength of at least 20; the upper bounds follow from the
+delta table and the seven-winner tournament shape (at most ten added to any
+one tally). Section 7 publishes the commit rules. Source provenance: private
+analysis in `u5-decomp/functions/FONT_OVL/` and the shipped seed image.
 
 The questionnaire is structured as a single-elimination tournament across the eight virtues, paced in three rounds:
 
@@ -349,14 +353,16 @@ which concludes that "every newly-created questionnaire avatar emerges with
 exactly STR twenty", and Section 6's "hard ceiling well below twenty" sentence,
 rest on the same zero-start reading that the dexterity correction has now
 falsified for DEX. Section 6's sentence has since been withdrawn in place, with
-the same scope this caveat gives it: withdrawn outright for dexterity, and no
-longer usable as a ceiling for strength or intelligence either, because the
-premise it rests on is unverified for those two. Whether the strength and intelligence tallies likewise start
-from their seed values was **not re-derived** in the pass that established the
-dexterity floor. Treat the STR-always-twenty and low-double-digit-INT statements
-as unverified pending that check. The strength floor of twenty applied at commit
-time is itself established, as is the fact that dexterity and intelligence
-receive no such floor.
+the same scope this caveat gives it: withdrawn outright for dexterity, and
+withdrawn for strength and intelligence too now that their seeding is
+established (2026-09-04): the strength and intelligence tallies **do** start
+from their seed values, 15 each, exactly as dexterity does (Section 6). At
+commit, intelligence is written as tallied and the same value is copied into
+the magic-point byte; dexterity is written as tallied; strength is floored to
+twenty. The old "STR always twenty" reading is therefore wrong in general -
+strength is 20 only when the winners added fewer than six points to it, and
+can reach the mid-twenties otherwise - and "low-double-digit INT" is right only
+as a lower bound of 15.
 
 The floor always fires for the questionnaire path. The maximum STR contribution from any virtue is two, and seven questions of two-per-question contribute at most fourteen, well below twenty. So every newly-created questionnaire avatar emerges with exactly STR twenty, and STR is the one stat the questionnaire does not influence. INT and DEX, by contrast, do reflect the player's choices — the spread is small (low double-digits at the high end) but real.
 
