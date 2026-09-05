@@ -3695,8 +3695,8 @@ where the two disagree.
 
 `OPEN-QUESTIONS.md` is the queue. In priority order:
 
-1. **The owner decision on shipped text** (`EXTRACTION.md`, "Shipped-Text
-   Policy"), now that the repository is public.
+1. ~~The owner decision on shipped text~~ **Decided 2026-09-04: keep as
+   published** (`EXTRACTION.md`, "Shipped-Text Policy").
 2. **The tile-catalogue range re-derivation** against the shipped description
    table — the one private-ledger correction still open against the public
    tree, and the item most likely to mislabel actors in an engine that resolves

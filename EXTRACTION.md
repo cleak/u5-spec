@@ -189,7 +189,15 @@ wording usually survives in two or three sibling docs that were never opened.
 Grep the whole spec for the retracted phrasing before treating a correction as
 propagated.
 
-## Shipped-Text Policy — Open Question For The Repository Owner
+## Shipped-Text Policy — Decided 2026-09-04
+
+**Decision (repository owner, 2026-09-04): keep the four items as published.**
+Each has a functional argument - parser input the seal predicate cannot be
+specified without, a decode table a renderer cannot work without, and layout
+and test vectors for the two prose items - and the total is small. The
+question below is kept as the record of what was weighed; it is no longer
+open, and the `owner` row in `OPEN-QUESTIONS.md` is closed.
+
 
 A semantic cleanroom audit on 2026-08-22 read all eighty-four documents against
 the boundary rules and found the spec substantially clean: one clear violation
