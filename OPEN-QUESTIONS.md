@@ -53,15 +53,11 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 
 | Item | Where | Notes |
 |---|---|---|
-| Whether the caller's light value also reaches the visibility producer's carve as the squared-distance threshold, or only selects the branch. | `systems/visibility.md` Section 3 (the note under the light-value table) | Trace the producer's threshold source. |
 | For a controlled monster actor: what the roster picker accepts, what the cast/effect arm does for a non-melee class (reachability is published, contents are not), and the arena-exit helper's own rules beyond the party-side gate. | `systems/combat.md` Sections 8, 8.1, 16.1 | Trace the three arms with a monster-side slot. |
-| The meaning of the guard on the arrest handler's already-in-the-castle arm. | `systems/blackthorn.md`; `systems/town-mode.md` | Trace the guard's operand. |
-| The bodies of the two consumers of the resident-Shadowlord selector behind the Falsehood price and the conversation gates. | `systems/shops.md`; `systems/conversation.md` | Trace both consumers. |
 | The animation-script bytes for the whirlpool marker class (reachability traced, script not). | `systems/active-objects.md` | Read the script. |
 | Whether anything rewrites the scratch behind the arena record while a fight is live; two overlay paths were not traced through the overlay manager. | `systems/visibility.md` Section 8.5 | Trace the two paths. |
 | How the Shadowlord location readout lays out its eight rows on screen (town list, coarse map, or other). | `catalogs/quest-graph.md`, Section "Open" bullets | Trace the readout renderer's row placement. |
 | Whether any later gameplay path adds underworld object records beyond the five seeded ones. | `formats/ool.md` Section 11 | Census of underworld-plane record writers. |
-| The 39-byte record stride and eight-record count of the imported Ultima IV party file, carried on the authority of the published Ultima IV format. | `systems/u4-transfer.md` Section 5.4 | Trace the importer past the first record. |
 | Attribution of the two three-unit blips in the Return-to-View strip census. | `systems/audio.md` Sections 7.4 and 8.6 | Trace the strip-3 sound calls. |
 | The exact labels of the resident display, sound and wait helpers the endgame sequence uses (order and blocking boundaries are published; helper taxonomy is inferred). | `systems/endgame.md` Section 12 | Trace the helper identities. |
 
@@ -86,3 +82,8 @@ each records a closure. Listed so nobody re-audits them.
   over both shipped paths and is closed.
 - `systems/audio.md` Section 9: the 220/150 Hz pair is identified (the
   inapplicable-combat-command refusal) and is no longer open.
+- `systems/u4-transfer.md` Section 5.4: the imported party file's 39-byte
+  record stride and eight-record count cannot be settled from Ultima V at all -
+  the transfer reads record 0 and then seeks straight to the party-wide block,
+  so the program fixes only the product of the two, never either factor. They
+  are Ultima IV format facts and are carried on that authority by design.
