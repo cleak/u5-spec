@@ -338,6 +338,16 @@ The on-disk layout is thus simple enough that no decoder is needed — only the 
 
 Most locations enter on the lowest page they own, so their floor byte only ever climbs. Four do not, and they are the reason the base page has to be published rather than derived.
 
+Whether the floor byte can be driven *below* a location's run is a question the
+handlers do not answer - they apply no bound - but the shipped pages do: no
+location places a descend link, a metal grate or a trapdoor on the lowest page
+it owns, with one exception, Stonegate's trapdoor ring on its single page, which
+runs the scripted party-death sequence rather than a floor change
+(`systems/doors-and-z-transitions.md`). Shipped content therefore never
+exercises the unbounded arithmetic, and an engine that clamps at the run's
+bottom diverges from nothing observable (established 2026-09-04 from a scan of
+all sixty-four pages; private analysis in `u5-decomp/notes/`).
+
 The mechanism is the signed floor-page rule of Section 4: the resident table names the page for logical floor zero, and the signed floor byte is added to it. Floor `0` is the base page, floor `+1` the page after it, floor `0xFF` the page before it. When the base page is not the lowest page of the run, the pages below it are addressed with negative floor values.
 
 | Location | Base page | Pages below the base | Pages above the base | What the lower page is |

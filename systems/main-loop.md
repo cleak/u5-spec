@@ -218,7 +218,7 @@ gaps in the playable scene router.
 
 - **The "exit pending" flag's exact role.** The flag prevents the overworld branch from re-entering itself when the scene byte is still zero after a return. In practice the only path that produces this is a rare cancel-during-overworld case; a modern engine can collapse the flag and the cleanup branch into the natural loop structure without observable difference.
 
-- **Unused high scene values.** Readers often split "combat-class" work with a high-range comparison, but the only confirmed high-range writer uses `0xFF`. From the outer loop's perspective, `0xFF` is transient: the source mode's framer restores the home scene byte before returning.
+- **Unused high scene values.** Readers often split "combat-class" work with a high-range comparison, and a complete census of every writer of the scene byte across the resident program and all overlays (2026-09-04) finds `0xFF`, written at combat entry and restored on exit, to be the only value at or above `0x80` ever stored - so "combat" is the exact meaning of that comparison in shipped code, not a gloss. From the outer loop's perspective, `0xFF` is transient: the source mode's framer restores the home scene byte before returning.
 
 - **Overlay buffer assignment.** The link-time partition of overlays to four shared buffers is now specified in `overlay-abi.md`. A modern engine that loads everything once into a flat memory model has no need for buffer sharing, but should preserve the same entry ownership and call order.
 
