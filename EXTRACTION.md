@@ -4,7 +4,7 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-09-04.
+Last updated: 2026-09-05.
 
 ## Status Legend
 
@@ -180,6 +180,36 @@ range sentences of Sections 8-11. Three combat-class bands turn out not to be
 creatures (the regalia, the fields, the whirlpool), which the bestiary already
 half-recorded as gaps. Labels in the new tables are paraphrased; the shipped
 strings themselves stay in the private decode.
+
+## 2026-09-05 - Every static-trace residual closed against the shipped files
+
+With the shipped files available again, the twenty-four `trace` items that
+`OPEN-QUESTIONS.md` listed on 2026-09-04 were worked through in two days and
+that section is now empty. The behavioural results, in the documents that own
+them: the Glass Sword **does** consume its readied slot (`systems/combat.md`
+12, R390 - the one reversal of the sweep); a controlled party actor's fixed
+strike hands the primitive a real weapon id, so its to-hit never collapses
+(`combat.md` 11); a landed Corpser hit sets the dragged-under bit and the
+victim's turns roll `1..30` against its base step to surface with the
+regurgitated line (`combat.md` 8.1, 11.1); a controlled monster's `Z` opens the
+shared party picker and its non-melee `A` fires its class's own ranged attack
+with the player aiming (`combat.md` 8, 16.1); strength, dexterity and
+intelligence are all seeded at 15 (`chargen.md` 6, 7); the visibility carve's
+threshold is the caller's light value (`visibility.md` 3, 14) and the scratch
+behind an arena record is never rewritten mid-fight (`visibility.md` 8.5); the
+inn bed cells are two-cell beds with Jhelom's upstairs, no location can descend
+below its lowest page except through Stonegate's scripted ring, and Iolo's Hut's
+cells are walkable (`shops.md` 8.4, `location-dat.md`, `active-objects.md` 10);
+the Shadowlord readout is the telescope's night sky (`quest-graph.md`,
+`view.md` 4.2); the whirlpool marker's animation script and the general script
+opcodes are published (`active-objects.md` 8); both three-unit blip sites emit
+both pitches (`audio.md` 8.6); every endgame helper resolves to a documented
+primitive (`endgame.md` 12); and underworld object records are added by the
+same plane-selected writers as surface ones (`ool.md` 11). The Tandy driver's
+subtitle-ignition transition was also documented for the first time
+(`timing.md` 7.6, `display-driver-mode.md` 6). What remains open is listed in
+`OPEN-QUESTIONS.md` sections 2 and 4 only - live-capture items and scope
+deferrals.
 
 ## Status Of The Engine Issue Queue
 
