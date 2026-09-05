@@ -25,9 +25,10 @@ pass that built this index; the shipped binary set was not available to it.
 
 ## 1. Owner decisions
 
-| Item | Where | What would settle it |
-|---|---|---|
-| **How much shipped text this specification reproduces.** Interface strings (prompts, refusals, labels, names) are published throughout; four items sit outside that justification: the Avatarhood certificate prose, two inline intro doorway narration lines, the eight Words of Power, and the common-word token vocabulary. This repository is now public, so the question is live. | `EXTRACTION.md`, "Shipped-Text Policy" | `owner`: keep, replace with structural descriptions plus placeholders, or describe layout and read the strings from the player's own copy at run time. |
+None open. The shipped-text policy (how much of the game's own text this
+specification reproduces) was decided on 2026-09-04: the four items outside
+the interface-string justification stay as published, for the functional
+reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 
 ## 2. Needs a live capture
 
