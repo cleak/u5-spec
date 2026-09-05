@@ -1034,6 +1034,13 @@ Three facts bound how much that matters:
   row above, and that write is independently suppressed whenever the actor's
   projected viewport row is the top row - the same row the off-record read is
   paired with. The read happens; nothing can come of it.
+- **The scratch is not rewritten while a fight is live (established
+  2026-09-05).** Every writer of the bytes behind the arena record is either
+  scene-gated or reachable only from exploration-mode command paths that
+  cannot run while the combat loop is on the stack, and the dungeon-room
+  loader writes only the record itself - so whatever the probe reads at an
+  edge is what those bytes held when the fight began. Their *value* is still
+  unmeasured (`OPEN-QUESTIONS.md`).
 - **Nothing observable depends on the residue.** Because the probe's result is
   memory residue rather than a rule, an engine is unconstrained there **provided
   its choice does not make a probe match.** The recommended implementation is to

@@ -1974,7 +1974,7 @@ The remaining letters call their targets directly, as the table below records.
 | **W** | Prints the combat-specific `W-What?` refusal and re-prompts at no cost. |
 | **X** | X-it — shared refusal responder, first tail. Combat cannot be left with `X`: the command prints its label with the "what?" tail and re-prompts. An earlier revision of this section routed combat `X` to the escape handler; that is withdrawn. Leaving a fight is done by Escape, by stepping out of arena bounds, or by winning. |
 | **Y** | Yell. Prints the combat Yell label and dispatches to the shared Yell handler, but combat's scene frame is not accepted by the ship-sail, Word-of-Power, or Shadowlord-name success branches. In combat, nonempty Yell input reaches the handler's no-effect path; empty input still uses the normal nothing-said result. Ends the actor's action. |
-| **Z** | Z-stats. Dispatches to the same status display handler the world modes use, with no refusal of its own. Inside an arena that handler tests the acting slot's party side: for a **party-side** actor it opens that character's own sheet silently, with no prompt; for a **monster-side** actor under player control it prints `Player: ` and runs the ordinary roster picker, so the player must choose a character. Ends the actor's action either way. *(**Corrected.** This row previously read "with no live-actor gate, **selecting the acting combatant's party slot instead of prompting**" without qualification. **That is withdrawn for a monster-side actor**, which is prompted; a monster descriptor has no roster slot to open. `RETRACTIONS.md` R381. The picker's own accepted inputs are not published here.)* |
+| **Z** | Z-stats. Dispatches to the same status display handler the world modes use, with no refusal of its own. Inside an arena that handler tests the acting slot's party side: for a **party-side** actor it opens that character's own sheet silently, with no prompt; for a **monster-side** actor under player control it prints `Player: ` and runs the ordinary roster picker, so the player must choose a character. Ends the actor's action either way. *(**Corrected.** This row previously read "with no live-actor gate, **selecting the acting combatant's party slot instead of prompting**" without qualification. **That is withdrawn for a monster-side actor**, which is prompted; a monster descriptor has no roster slot to open. `RETRACTIONS.md` R381.)* The picker is the shared party-selector prompt (established 2026-09-05): digits `1`-`6` choose a slot, clamped to the live members; the arrow keys cycle the selection; Space, Return or `0` confirm; Escape cancels; a confirm without a chosen digit is treated by the stats caller as the sixth roster position. |
 
 Other inputs:
 
@@ -3713,10 +3713,17 @@ installer's uninstaller is not game code and was excluded.
   prompt hands them one" is now largely closed by Section 8: the whole command
   cascade runs for such an actor, seven letters refuse, `A` takes the
   single-attempt arm, `Z` prompts for a character, and movement and the arena
-  exit behave as Section 3 describes. What is still unread is the roster picker
-  `Z` opens for a monster actor, and what the cast/effect arm does for a
-  controlled monster of a non-melee class - its reachability is established
-  (Section 11), its contents are not.
+  exit behave as Section 3 describes. Both remaining gaps are closed
+  (2026-09-05): the roster picker `Z` opens is the shared party-selector prompt
+  (its inputs are in Section 8's `Z` row), and the cast/effect arm a controlled
+  monster of a non-melee class takes is its class's own ranged or effect attack
+  with the player at the cursor - `Attack-`, then the readying line, then a
+  targeting cursor capped by the class's ranged range; on a confirmed cell the
+  class's after-effect and the ordinary to-hit and damage feeder run with the
+  class selector standing in for a weapon, a combatant there is narrated as
+  hit or missed, an empty cell draws the miss narration, and the projectile
+  classes additionally animate their shot. Five selectors that carry
+  adjacency-only specials run that special instead of the cursor.
 
 Source provenance: derived from private analysis in `../u5-decomp/notes/`.
 

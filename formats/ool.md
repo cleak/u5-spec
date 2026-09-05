@@ -255,8 +255,15 @@ population sources.
   gameplay sources that write surface records - vehicle parking, dropped items,
   corpse creation, and any scripted placement - requires played saves or
   targeted runtime probes. The clean underworld seed's five records are fixed
-  and enumerated in section 7; whether any later gameplay path adds more
-  underworld records is the same open question on that plane.
+  and enumerated in section 7. Later play **does** add underworld records, by
+  the same mechanism as on the surface (established 2026-09-05): the live
+  table is written to the current plane's file by the dungeon-entrance
+  handoff, by the outdoor mode-switch exit and by the moonstone warp, all of
+  which select the file by plane and none of which tests the plane otherwise,
+  so any creature, parked vehicle or dropped object live when the party enters
+  a dungeon mouth from below (or warps out) persists in the underworld file.
+  Which play events can create such records is the same enumeration question
+  as for the surface; only town entry is absent below, there being no towns.
 
 ## 12. Sources
 
