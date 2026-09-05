@@ -67,6 +67,27 @@ A few observations on the field encoding:
 2. Low nibble in `1..14` — decrement it and write the recombined byte back. **This write is unconditional and has no tile-class precondition**, and it applies to every slot the walk reaches, slot zero included.
 3. Low nibble zero — fall through to the eligibility gates (a frame-byte test, then a tile-class threshold), which may advance the script step and rewrite the byte.
 
+**The scripts themselves (established 2026-09-05).** Each animated class owns a
+short script of up to sixteen bytes, selected through a per-class script id, and
+the high nibble of byte 6 is the current position in it. On an eligible tick
+the animator reads the byte at that position and acts on it: values one to four
+select that frame of the class's four-frame run and advance the position; zero
+restarts the script; a value of five snaps the sprite back to its base frame on
+a one-in-four draw (holding the position and, for every class but one, pausing
+six ticks) and otherwise just advances; six restarts the script three times in
+four and otherwise advances; seven jumps to position two; and any value of
+eight or more sets the frame-delay nibble to that value less eight and
+advances. Before the script runs, the eligibility gates require a non-zero
+frame byte that is not the reserved transparent value, a tile class at or above
+the animator's threshold, a class that is neither the field family nor the
+regalia band, and - for every class except the two that animate unconditionally
+- a one-in-two draw from the shared generator. The **whirlpool marker** uses
+the same script as the party-sprite family: it steps through frames two, three
+and four on successive eligible ticks and then, at the fifth position, either
+snaps to frame one with a six-tick pause (one in four) or restarts the two-
+three-four cycle. Source provenance: private analysis in
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
+
 The tile-class gate is therefore *downstream* of the decrement, not upstream of it: a low nibble in `1..14` is decremented on any slot regardless of what class the record holds. An earlier reading of this section had the two gates the other way round and concluded that the player's tile class protects slot zero's byte 6 from the animator. It does not — what protects it in a shipped save is the stored **value** zero, which routes past the decrement into a class gate the player's class fails.
 
 *Corrected (issue #184).* This paragraph previously said the high nibble "holds a direction-step counter that AI movement uses". That reading is withdrawn: the high nibble is an animation-script step, byte 6 carries no facing anywhere, and a producer that writes a facing into it is not byte-compatible. In particular the freeze sentinel is **not** the player's stored value: the shipped player record carries zero in byte 6. See `RETRACTIONS.md` row R340.
@@ -187,7 +208,7 @@ The player occupies slot zero. Every world frame, the compositor refreshes bytes
 - A stored low nibble in `1..14` in byte 6 **is** decremented in place by the animator, on slot zero as on any other (Section 3).
 - The NPC purge path zeroes bytes 0..4, 6 and 7 of whichever record an NPC's linked-slot field names, and that is slot zero when the field is zero. In the shipped data the predicate guarding it does not fire, but it is not structurally impossible.
 - Every return to the overworld replaces all eight bytes of all thirty-two slots from the per-plane object list (Section 11).
-- The trace covers the party **on foot**. A transport/action marker that raises slot zero's tile class to or above the animator's class threshold — the whirlpool marker is the traced case — lets the walk reach its *second* byte-6 write even from a zero low nibble. That path is traced as reachable but its animation-script bytes were not read, so treat it as **probable** rather than established.
+- The trace covers the party **on foot**. A transport/action marker that raises slot zero's tile class to or above the animator's class threshold — the whirlpool marker is the traced case — lets the walk reach its *second* byte-6 write even from a zero low nibble. That path is traced as reachable and its script has now been read (Section 8, "The scripts themselves"): the marker cycles its second, third and fourth frames with an occasional snap back to the first.
 
 The world-state globals are the *authoritative* source for player position; slot zero is a *derived* view that other systems read — NPCs computing distance to the player, the visibility producer determining what the player blocks. Slot zero is never freed, compacted, or reallocated; mode entries preserve it; the combat backup-and-restore preserves it.
 
