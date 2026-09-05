@@ -3205,11 +3205,15 @@ members of this set, for two separate reasons:
   the controlled/charmed bit - which is what all three of these are - takes
   Section 6.1a's redirected fixed magic-strike
   branch instead of the ordinary weapon cascade, and that branch hands the
-  shared attack primitive a fixed action id as the attack flavour. Whether that
-  fixed id reaches the rating selector as the neutral value - and so whether
-  such an actor's to-hit also collapses to 15 - is an **open question**, not a
-  traced route. Published otherwise, Sections 6.1a and 11 would assert
-  incompatible things about the same three actors.
+  shared attack primitive a fixed action id as the attack flavour. *Answered
+  2026-09-04:* that fixed id is item id **33**, the two-handed sword's id, and
+  it reaches the rating selector as a real weapon id, not as the neutral
+  value. It is not one of the five strength-arm ids and not an always-hit id,
+  so the selector returns the attacker's own **combat weight** (the raw
+  Dexterity copied at seating), exactly the "any other readied item, or
+  bare-handed" row of the rating table above; the to-hit does **not** collapse
+  to 15, and the damage draw is the per-weapon byte for id 33, a uniform
+  `1..20`. Sections 6.1a and 11 are therefore consistent for these actors.
 - **The reachability of the bit is settled in Section 6.1a's favour
   (2026-09-04).** An earlier encoding-level write scan found no reachable writer
   of the controlled/charmed bit and concluded these routes dead; this document
@@ -3321,9 +3325,12 @@ The item catalog now publishes the traced weapon-dispatch range/effect
 rows; attack-time ammunition and breakage/consumption remain a negative
 boundary shared with the item catalog. The traced combat attack stack does not
 decrement arrows/quarrels, decrement a readied weapon's carried stock, or clear
-the readied weapon slot for thrown/glass-family attacks. The separate traced
-equipment-stock and readied-slot consumers do not add an attack-time ammunition,
-thrown-stock, or glass-breakage path for the analyzed baseline.
+the readied weapon slot for thrown attacks. *(Corrected 2026-09-04, R390: for the
+**Glass Sword** it does clear the readied slot - the shatter arm calls the
+shared readied-item remover before substituting the instant-kill sentinel,
+Section 12.)* The separate traced equipment-stock and readied-slot consumers do
+not add an attack-time ammunition or thrown-stock path for the analyzed
+baseline; the one attack-time breakage path is the Glass Sword's.
 
 **Ranged/effect attacks and Amulet/Turning.** Some monster and special-actor
 classes carry a high per-class flag that marks their ranged or special attack
@@ -3764,13 +3771,17 @@ because the original takes no defender draw on a sentinel. Separately, the three
 sentinel-adjacent item ids - Glass Sword, Sword of Chaos and Jeweled Sword -
 also **short-circuit the to-hit roll to an automatic hit with zero draws** on the
 ordinary (non-cast) arm, so a Glass Sword or Sword of Chaos swing consumes no
-randomness at all: no to-hit draw, no attack draw, no defence draw. *(One residual on the Glass Sword arm: this document and
-`catalogs/item-list.md` publish, as a traced negative boundary, that the combat
-attack stack does not clear the readied weapon slot for glass-family attacks,
-while private analysis now reads that arm as also clearing the readied slot.
-That conflict is **not resolved here** and the published negative stands until
-it is; it is recorded in `NEXT-STEPS.md`. An engine should treat readied-slot
-consumption on shatter as an open question, not as settled either way.)*
+randomness at all: no to-hit draw, no attack draw, no defence draw. *(Resolved 2026-09-04, and the published negative is withdrawn - `RETRACTIONS.md`
+R390. The Glass Sword arm, before it substitutes the instant-kill sentinel,
+calls the shared readied-item remover with the attacker's character index and
+the Glass Sword's item id; that routine walks the character's six equipment
+bytes and writes the not-equipped sentinel into the first one holding that id.
+A Glass Sword swing therefore **consumes the readied sword** - its equipment
+slot clears in the same attack - while no inventory count changes in that
+routine. Earlier text here, in Section 11 and in `catalogs/item-list.md` said
+the attack stack does not clear the readied slot for glass-family attacks; that
+is retracted for the Glass Sword. The thrown-item half of the same sentence was
+not re-examined and stands as published.)*
 
 *Stage two, the defence subtraction.* The defender's defence rating is the class
 defense byte for a monster and the cached character combat-defense byte for a

@@ -54,8 +54,6 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 | Item | Where | Notes |
 |---|---|---|
 | Whether the caller's light value also reaches the visibility producer's carve as the squared-distance threshold, or only selects the branch. | `systems/visibility.md` Section 3 (the note under the light-value table) | Trace the producer's threshold source. |
-| Whether a controlled actor's fixed attack-flavour id reaches the rating selector as the neutral value, so that its to-hit also collapses to 15. | `systems/combat.md` Section 11 | Trace the flavour id through the rating selector. |
-| Whether a readied item is consumed on shatter; two analyses conflict. | `systems/combat.md` Section 12 | Trace the shatter arm's inventory write. |
 | For a controlled monster actor: what the roster picker accepts, what the cast/effect arm does for a non-melee class (reachability is published, contents are not), and the arena-exit helper's own rules beyond the party-side gate. | `systems/combat.md` Sections 8, 8.1, 16.1 | Trace the three arms with a monster-side slot. |
 | The dragged-under turn arm (the `ARGH!` line and the regurgitation line) appears in neither the command table nor the special-attack census; and which status bit a landed Corpser drag writes - asleep or dragged-under - which gives the victim different next turns. | `systems/combat.md` Sections 8 and 11.1 | Trace the Corpser hit arm and the dragged victim's next-turn path. |
 | The meaning of the guard on the arrest handler's already-in-the-castle arm. | `systems/blackthorn.md`; `systems/town-mode.md` | Trace the guard's operand. |
