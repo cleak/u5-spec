@@ -36,6 +36,23 @@ row plus a one-line inline note in the affected section whenever an edit
 withdraws or inverts published text, including text published only in an issue
 answer.
 
+**Addendum — 2026-09-04, reconciliation pass.** No new tracing; the handoff
+documents were reconciled against the tree and the private ledger. Four things
+land: `OPEN-QUESTIONS.md`, an index of every statement this repository publishes
+as open, unverified, inferred or disputed, each with what would settle it;
+`scripts/check_crossrefs.py`, which must print `clean` alongside the
+contamination checker before a push (its first run caught the inventory counts
+two behind the tree and three historical references to specs that were never
+created); the "Repository status" section below rewritten to the current state
+(the repository is **public**; earlier "private, to be flipped" wording here and
+in `EXTRACTION.md` was stale, which also makes the shipped-text policy question
+in `EXTRACTION.md` a live owner decision rather than a hypothetical one); and
+the four "long-running open questions" at the end of this file marked settled.
+Every 2026-08-22 and 2026-08-26 entry in the private correction ledger whose
+target is a public document was checked against that document and found
+present; only the tile-catalogue range re-derivation remains open, and it heads
+`OPEN-QUESTIONS.md`. No `RETRACTIONS.md` row: nothing behavioural changed.
+
 **Addendum — 2026-09-02, issue #184: the unexplained `SAVED.GAM` bytes, and
 the town cast on Journey Onward.** Seven bytes the engine could not account for
 after a load-and-save round trip are now published, with six reversals
@@ -3329,7 +3346,7 @@ state belongs to `formats/saved-gam.md`.
 
 **Current ULTIMA active-object checklist cleanup:** 2026-05-12 - `systems/active-objects.md` now explicitly covers the resident active-object acquisition cascade and initialiser alongside the existing lookup, animation tick, and outdoor movement contracts. The allocator wording was corrected from a simple first-empty scan to the traced ordinary-slot, off-screen-priority, and protected-class eviction behavior.
 
-**Current ULTIMA visibility/render checklist cleanup:** 2026-05-12 - `systems/visibility.md` is the current clean owner for the resident world-tile getter, its cross-overlay alias, the visibility producer, and the fog/active-object post-pass. The stale private checklist target `systems/rendering.md` was treated as an older name for this visibility/render pipeline.
+**Current ULTIMA visibility/render checklist cleanup:** 2026-05-12 - `systems/visibility.md` is the current clean owner for the resident world-tile getter, its cross-overlay alias, the visibility producer, and the fog/active-object post-pass. The stale private checklist target (a never-created "rendering" spec) was treated as an older name for this visibility/render pipeline.
 
 **Current visibility marker/local-light cleanup:** 2026-05-13 - visibility now specifies that the viewport renderer/effect walker is read-only on the eleven-by-eleven grid, that cheap-path zero cells are left by the active-object compositor rather than by post-render clearing, that `0x1C` and `0xDD` have no traced non-render gameplay reader, and that the local-light mask order is refresh first, transient moongate frame stamps second, visibility carve third. Remaining 2D visibility exactness is visual palette/art parity for marker bytes if required and external-reader synchronization policy.
 
@@ -3635,7 +3652,7 @@ work is
 the broader non-shrine action census, any separate per-virtue standing layout
 or seed, combat branches, and non-shrine clamp policy.
 
-**Current ULTIMA timing/overlay/moongate checklist cleanup:** 2026-05-12 - the resident redraw tick, overlay loader, natural-moongate animator, and per-turn cleanup notes now point to their current clean public owners. The older private targets `systems/render-loop.md` and `systems/moongates.md` map to the existing `systems/visibility.md`/`systems/input.md`/`systems/overworld.md` coverage and the overworld moongate section.
+**Current ULTIMA timing/overlay/moongate checklist cleanup:** 2026-05-12 - the resident redraw tick, overlay loader, natural-moongate animator, and per-turn cleanup notes now point to their current clean public owners. The older private targets (never-created "render-loop" and "moongates" specs) map to the existing `systems/visibility.md`/`systems/input.md`/`systems/overworld.md` coverage and the overworld moongate section.
 
 **Current ULTIMA combat checklist cleanup:** 2026-05-12 - the resident combat framer, terrain setup, monster placement, round helper, slot-to-group classifier, target-distance helper, and folded fog/range helper now point to current clean coverage. `systems/combat.md` owns the framer/setup/AI and combat-distance behavior; `systems/visibility.md` owns the folded fog/refinement distance helper, while combat target scoring uses its separate computed range helper.
 
@@ -3647,92 +3664,57 @@ or seed, combat branches, and non-shrine clamp policy.
 
 ## Repository status
 
-- **Branch:** `master` (private — to be flipped public once content is ready)
-- **Latest spec commit:** `bdf28bc Correct Lord British castle binding`
-- **Uncommitted local update:** current `EXTRACTION.md` inventory rewrite, Blackthorn capture/rescue spec, shop random-surcharge correction, stale cross-reference cleanup, raw byte-example removal, `.PCS`/compressed-`.BIT` LZW format recovery, single-image `.BIT` marker-word verification, sprite-mask polarity verification, title bitmap/path placement recovery, intro title/menu idle contract, intro title tick destination/source ownership, intro story-step transition/draw mapping, intro story rectangle-transition contract, intro story rectangle helper boundary, input idle-redraw timing cleanup, active-object idle animator placement, input blink/key mapping cleanup, text-output control/gate cleanup, visibility viewport-buffer cleanup, public display/rendering contract, engine-aligned spell token/incantation/recipe/scene-mask table cleanup, exact compact spell parser acceptance rules, magic field-placement byte mapping, spell handler-family mapping, active-target attack-wrapper damage math, directed spell wind-cone duplicate/prefilter cleanup, Tremor exact damage/reward formula and actor-scan behavior, Polymorph Giant Rat replacement, shared active-effect tag/counter values, high-circle spell handler details, shrine meditation state-machine cleanup, torch/light-spell duration mapping, time/light-scale endpoint cleanup, dawn/dusk gradient and personal-light floor correction, exact town-location marker/daytime rewrite rules, signed floor-page selection for named locations, default town-entry Y table semantics, DATA.OVL world-location scene/name binding, overworld E-Enter handoff semantics, dungeon scene/name/`DUNGEON.DAT` record binding, exact dungeon fall/bomb trap subtype behaviour, vehicle/ship-fire command extraction, MISCMAPS record/trailer cleanup, MISCMAPS Return-to-View stream binding, MISCMAPS Return-to-View command table, MISCMAPS Return-to-View helper schedule, NPC floor-link marker IDs, combat default drop-marker byte cleanup, monster death-flag asset verification cleanup, OOL save-staging/mirror correction, OOL lifecycle cross-reference cleanup, U4 transfer `PARTY.SAV` source filename cleanup, directed spell wind-cone friendly-fire boundary cleanup, combat active-object restore/loot-reconciliation boundary cleanup, combat reward-unit caller-propagation cleanup, combat descriptor-vs-active-object byte cleanup, dungeon active-object boundary cleanup, PTH open-question cleanup, save active-object persistence boundary cleanup, NPC schedule-Z unsigned cleanup, vehicle timing state-tag cleanup, save transport/status byte cleanup, saved wind-byte preservation, Rel Hur wind-transition boundary cleanup, natural-moongate placement-boundary cleanup, overlay dispatch and low-level call wording cleanup, save-file runtime-address cleanup, saved-scene scratch byte layout cleanup, source-provenance boilerplate cleanup, shared runtime countdown cleanup, karma non-shrine action hypothesis cleanup, KARMA.DAT standing terminology cleanup, X-it escape-helper routing cleanup, magic-lock spell-name cleanup, NPC cached-waypoint/stuck-threshold cleanup, conversation keyword-match/table-scan cleanup, chargen duplicate-pair/STR-floor/loser-delta cleanup, questionnaire pair-to-record mapping cleanup, save/chargen seed-field cleanup, and fresh seed inventory/location cleanup.
-- **Previous priority commits:** `015430e Add endgame and world data specs`; `8665799 Add intro and priority catalog specs`
-- **Push target:** `https://github.com/cleak/u5-spec`
+- **Branch:** `master`, **public** at `https://github.com/cleak/u5-spec` under
+  CC-BY-4.0 for the prose. Older entries in this log that call the repository
+  private or "to be flipped public" predate publication and are superseded.
+- **Inventory:** 86 cleanroom documents — 51 system specs, 26 format specs and
+  9 catalogs. `EXTRACTION.md` sections 1-4 carry the row-by-row status;
+  `scripts/check_crossrefs.py` fails if the counts stated there drift from the
+  tree.
+- **Checks before any push:** `python scripts/check_contamination.py` and
+  `python scripts/check_crossrefs.py`, both printing `clean`.
+- **Issue queue:** empty. One hundred and ninety-one engine issues filed, all
+  closed; the last eleven were answered on 2026-09-02/03 and are summarised in
+  the addenda above and in `EXTRACTION.md`.
+- **Withdrawn claims:** `RETRACTIONS.md`, rows R001-R382 as of this update.
+- **Soft edges:** `OPEN-QUESTIONS.md`.
 
 ### What is done
 
-- README documenting purpose, structure, and specification style guidelines.
-- [`EXTRACTION.md`](EXTRACTION.md) — master inventory derived from the actual GOG release file listing. Catalogs every code module, data file, algorithm, and cross-cutting reference table the engine will need to reproduce.
-- 81 cleanroom spec docs: 48 system specs, 26 format specs, and 7 catalogs.
-- `EXTRACTION.md` now reflects the current v1 status in ASCII status terms rather than the stale first-pass emoji checklist.
-- Major game-mode and first-playable systems are covered: launcher/startup, main loop, commands, input, text, save/load, overworld, town mode, dungeon mode, combat, visibility, time, magic, karma, doors/Z transitions, vehicles/ship fire, containers/pickups, active objects, animation, shops, NPC schedules, encounters, Blackthorn capture/rescue, conversation, intro, endgame, lighting, weather, and U4 transfer.
-- Recent additions: `systems/inventory.md`, `systems/display-driver-abi.md`,
-  `systems/vehicles.md`, `systems/containers.md`, `systems/commands.md`,
-  `systems/launcher.md`, `systems/animation.md`, `systems/display-driver.md`,
-  `systems/prng.md`, `systems/timing.md`, `systems/moons.md`,
-  `systems/runtime.md`, `systems/stat-arithmetic.md`,
-  `systems/disk-prompt.md`, `systems/stats-panel.md`,
-  `systems/quest-flags.md`, `systems/boot.md`, `systems/overlay-abi.md`,
-  `systems/movement.md`, `systems/rest-and-camp.md`,
-  `systems/blackthorn.md`,
-  `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md`,
-  `formats/bit.md`, `formats/lzw.md`, `formats/look2-dat.md`, `formats/signs-dat.md`,
-  `formats/question-dat.md`, `formats/karma-dat.md`, `formats/story-dat.md`,
-  `formats/endmsg-dat.md`, `formats/miscmsg-dat.md`,
-  `formats/shoppe-dat.md`, `formats/end-dat.md`, `catalogs/gazetteer.md`,
-  and `catalogs/quest-graph.md`.
-- Local verification separates paired LZW graphics archives from the
-  driver-compressed sparse-strip resources. The `.16`/`.4` family remains the
-  LZW archive family; `PROPORT.PCS`, `TITLE.BIT`, `BRITISH.BIT`, and `WD.BIT`
-  are not LZW resources in the current display-driver model.
+Every non-deferred row of the `EXTRACTION.md` inventory has a cleanroom
+document: startup, intro, character creation, save/load, overworld, town
+interiors, dungeon mode, combat, conversation, NPC schedules and pathfinding,
+shops, time, visibility, lighting, weather, karma, magic, vehicles, active
+objects, animation, audio, timing, the display-driver ABI, the endgame, the
+Ultima IV transfer, and the primary asset and data formats those systems read.
+The long per-commit list this section used to carry is preserved in the dated
+entries further down this file; the documents themselves are authoritative
+where the two disagree.
 
 ### Remaining high-value gaps
 
-- Non-optional Priority A prose docs are now covered for the analyzed DOS baseline.
-- The EGA display-driver ABI and driver-compressed sparse strip resource family
-  for `PROPORT.PCS`, `TITLE.BIT`, `BRITISH.BIT`, and `WD.BIT` are now
-  specified, replacing the older shared-LZW hypothesis for those files. The
-  EGA baseline now covers the back-buffer plane layout, front-buffer-only
-  tile/glyph entries, compressed-bitmap pointer-table over-allocation, title
-  tick strip, tile-shimmer source mutation, and dissolve final-pixel contract.
-  Text output now documents the `0xFB`/`0xFC` centre-output controls,
-  `0xFD`/`0xFE` inverse/underline controls, and the `0xFF`
-  clear-active-window path. Fixed
-  title/menu idle ticking, `BRITISH.PTH` pen origins, intro story-step
-  transition/draw mapping, intro story rectangle-transition region/order and
-  helper handoff, Return-to-View `MISCMAPS.DAT` stream ownership, command
-  table, helper-effect schedule, and the public display/rendering contract are
-  now specified. The Return-to-View EGA/Tandy cell-effect rasters, single-cell
-  convergence permutation, exact preview-tick/input cadence, and abort state
-  are also public. Remaining exact visual parity gaps are alternate-driver
-  conversion details and the already-called-out per-table semantic
-  enumerations. `.XMI` music is not
-  present in the analyzed clean DOS baseline; add it only for a different
-  audio-enabled distribution.
-- The spell table is now aligned to the resident incantation order (`In Lor`,
-  `Grav Por`, ...), with all 48 parser tokens, parser acceptance rules, recipe
-  masks, scene masks, light-spell durations, the 99-charge mix cap, major CAST
-  handler families, and exact active-target and multi-target damage semantics.
-  Combat field placement and contact are also closed: placement-time target
-  lookup is separate from the common post-dispatch contact hook; that hook
-  targets the current actor descriptor while skipping only its linked renderer
-  record. Poison's status arm consumes no randomness and its damage fallback
-  rolls raw 0..20 with no defense draw; Fire rolls raw 0..10 with no defense
-  draw; Sleep applies its status result; and Energy blocks movement and has no
-  contact-result arm. Contact is shared by player and AI dispatch, does not
-  consume the marker, and field markers persist until combat exit. The spell
-  contract also covers active-effect tags and expiry, combat C-Cast
-  interference, Protection, Quickness, Mass Charm, Negate Magic and Negate
-  Time, high-circle targeters and placement, Dispel Field, directed wind-cone
-  geometry and friendly fire, and the separate monster
-  possess/blink/summon-daemon hook.
-- An earlier external verification slice against local game data logged clean
-  corrections. The first run bound Lord British's castle evidence to `CASTLE:0`
-  and corrected the older "fifth castle slot" wording. Do not create or update
-  `u5-engine` directories from this dirty workspace; fold only clean public
-  correction summaries back into `u5-spec`.
+`OPEN-QUESTIONS.md` is the queue. In priority order:
+
+1. **The owner decision on shipped text** (`EXTRACTION.md`, "Shipped-Text
+   Policy"), now that the repository is public.
+2. **The tile-catalogue range re-derivation** against the shipped description
+   table — the one private-ledger correction still open against the public
+   tree, and the item most likely to mislabel actors in an engine that resolves
+   tiles by range.
+3. **Live-capture items** — chiefly the wall clock of every PC-speaker effect,
+   the world-tick rate, and the three suspected NPC pursuit-stepper defects
+   that are deliberately unpublished until reproduced in an emulator.
+4. **Further static traces** — the combat, save-state and turn-loop residuals
+   the last eleven issues left explicitly open.
+
+The black-box observations filed by the clean engine remain the most
+productive source of spec defects; keep answering them first when they arrive.
 
 ### V1 deferrals
 
-The long-running open questions below are explicitly deferred to follow-up
-implementation/parity work. They are useful next investigations, but they no
-longer block the first cleanroom spec release: the non-optional prose inventory
-exists, the first verification slice runs, and the remaining exactness gaps are
-called out where they matter.
+Exact CGA, Hercules and Tandy parity (EGA is the sole pixel-exact target) and
+XMIDI music (absent from the analysed baseline). Both are recorded in
+`EXTRACTION.md` "Known V1 Deferrals" and in `OPEN-QUESTIONS.md` section 4.
 
 ## Locations
 
@@ -3741,7 +3723,7 @@ called out where they matter.
 | Repo | Path | Role |
 |------|------|------|
 | u5-decomp | `..\u5-decomp` (`C:\Projects\Rust\u5-dirty\u5-decomp`) | Private analysis workspace. Specs may cite note paths as provenance, but must not copy source, assembly, decompiler output, raw dumps, or private implementation text. |
-| ninth-virtue | `..\ninth-virtue` (`C:\Projects\Rust\ninth-virtue`) | Private companion-app analysis reference for `ULTIMA.EXE`. Treated as a starting reference; material there must be re-derived in this repo's own words. |
+| ninth-virtue | not present in the nested dirty workspace | Historical companion-app analysis reference for `ULTIMA.EXE`. Anything once taken from it has been re-derived from the shipped program; it is no longer consulted. |
 
 ### External resources
 
@@ -3754,6 +3736,9 @@ u5-spec/
 |-- README.md
 |-- NEXT-STEPS.md       # this file
 |-- EXTRACTION.md       # master inventory of everything to be specified
+|-- RETRACTIONS.md      # append-only index of withdrawn/inverted claims
+|-- OPEN-QUESTIONS.md   # published open/unverified items and what settles each
+|-- scripts/            # check_contamination.py, check_crossrefs.py
 |-- systems/            # coherent gameplay systems
 |-- formats/            # data file formats
 `-- catalogs/           # cross-cutting reference tables
@@ -3784,7 +3769,17 @@ Continue with one of these narrow batches:
 
 Tracked so they don't get lost:
 
-1. **Hybrid prose-and-tables** vs. pure prose. Probably hybrid: prose for behavior, tables for layouts. Decide once the first format spec is written.
-2. **Versioning baseline.** Ultima V had multiple releases (Apple II, C64, Amiga, IBM PC, with patches). Default baseline tag: "IBM PC EGA / Origin v1.x". Note version-specific behavior even if we never plan to support other versions.
-3. **In-game vs. generic naming.** Use Ultima V's in-game names ("Britannia", "Lord British", "the Codex"). This is documentation of a specific game, not a generic CRPG engine.
-4. **License flip timing.** Repo is private until content is ready. README declares CC-BY-4.0 license intent for spec prose. Decide when to publish — probably after the first system + format spec are complete and the style settles.
+All four were settled by practice and are recorded here as closed
+(2026-09-04):
+
+1. ~~**Hybrid prose-and-tables** vs. pure prose.~~ **Settled: hybrid.** Prose
+   for behaviour, tables for layouts, enumerations and acceptance vectors; every
+   document in the tree follows it.
+2. ~~**Versioning baseline.**~~ **Settled: the IBM PC DOS release as shipped by
+   GOG, EGA presentation.** `EXTRACTION.md` "V1 Baseline" states it; other
+   platforms' behaviour is out of scope and is not annotated.
+3. ~~**In-game vs. generic naming.**~~ **Settled: in-game names throughout.**
+4. ~~**License flip timing.**~~ **Settled: the repository is public under
+   CC-BY-4.0 for the prose.** The live successor question is how much shipped
+   text to reproduce — `EXTRACTION.md` "Shipped-Text Policy" and
+   `OPEN-QUESTIONS.md` section 1.
