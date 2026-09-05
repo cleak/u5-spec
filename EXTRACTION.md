@@ -165,6 +165,22 @@ added. What did change:
   range re-derivation, which needs the shipped description table and is
   queued as the first `trace` item in `OPEN-QUESTIONS.md`.
 
+## 2026-09-04 - The tile catalogue's partition re-derived from the description table
+
+The one private-ledger item still open against the public tree is closed.
+`LOOK2.DAT` was decoded end to end (512 offsets, 216 distinct string offsets,
+197 distinct texts, two placeholders) and `catalogs/tile-catalog.md` Sections 2
+and 3 now publish per-run class tables for both halves in place of the
+fourteen-contiguous-class hypothesis, which was wrong almost everywhere above
+index 15: the terrain half's "NPC", "vehicle", "path", "wall" and "furniture"
+bands were scenery, markers, castle pieces and interleaved props, and the actor
+half runs items, vehicles, occupied furniture and people before the combat-class
+bands. Seven reversals, R383-R389, including the NPC, item, vehicle and effect
+range sentences of Sections 8-11. Three combat-class bands turn out not to be
+creatures (the regalia, the fields, the whirlpool), which the bestiary already
+half-recorded as gaps. Labels in the new tables are paraphrased; the shipped
+strings themselves stay in the private decode.
+
 ## Status Of The Engine Issue Queue
 
 As of 2026-09-04 the `cleak/u5-spec` issue queue is **empty**: one hundred and

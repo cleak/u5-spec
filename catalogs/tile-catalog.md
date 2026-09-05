@@ -60,102 +60,325 @@ The complete index-range layout is in Section 3. Class-by-class breakdowns follo
 
 ## 2. Tile classes
 
-Five hundred and twelve tiles split cleanly into fourteen classes, each occupying a contiguous (or near-contiguous) index range. The partition is determined empirically from the look-at strings, the special-trigger checks, the active-object animator's class-range tests, and the manual's iconography.
+The five hundred and twelve indices fall into two halves that are addressed by
+different renderer paths (Section 3.1): the **terrain half**, indices `0..255`,
+which is what map grids, arena grids and scene records store; and the **actor
+half**, indices `256..511`, which a live or cinematic actor's stored byte
+resolves to after the renderer adds `256`. Within each half the classes below
+are assigned run by run from the shipped description table (`formats/look2-dat.md`),
+cross-checked against the in-engine special-trigger comparisons, the
+active-object animator's class-range tests and, for the actor half's upper
+band, the combat-class arithmetic of Section 7.
 
-| Class       | Approx. index range | Cardinality | Role                                                              |
-|-------------|---------------------|------------:|-------------------------------------------------------------------|
-| Water       | 0..3                | 4           | Deep water, shoals, swamp                                         |
-| Terrain     | 4..15               | 12          | Grass, brush, desert, forest, hills, mountain                     |
-| Path        | 16..23              | 8           | Cobblestone path, brick path, packed-earth tracks                 |
-| Wall        | 24..63              | 40          | Stone, brick, wattle, decorative wall variants                    |
-| Furniture   | 64..95              | 32          | Tables, chairs, beds, fountains, signs, chests, ladders           |
-| River       | 96..103             | 8           | River terrain frames; not a door range                            |
-| Decoration  | 104..127            | 24          | Floor mosaics, banners, statues, runic glyphs, shrine altars      |
-| Special     | 128..159            | 32          | Fixtures, shrines, fountains, wells, fields, fire effects         |
-| Vehicle     | 160..191            | 32          | Live horse/ship/skiff/magic-carpet frames plus balloon art        |
-| NPC         | 192..255            | 64          | Townspeople, guards, jesters, beggars, named NPCs, hostile humans |
-| Monster     | 256..383            | 128         | Animals, undead, demons, dragons, swarm sprites                   |
-| Item        | 384..447            | 64          | Weapons, armor, reagents, food, gems, torches, scrolls, keys      |
-| Effect      | 448..495            | 48          | Projectile sprites, splash, explosion and impact frames           |
-| Avatar      | 496..511            | 16          | Player and party-member sprites with directional / vehicle frames |
+*Retraction (2026-09-04).* Earlier revisions of this section said the tiles
+"split cleanly into fourteen classes, each occupying a contiguous index range",
+and Section 3 published that partition as a table. Decoding the whole description
+table shows the classes **interleave**: furniture, fixtures, doors, lights and
+dungeon-room props alternate from `0x80` to `0xBF`, the terrain half above
+`0xC0` mixes stencils, stairs, fences, waterfalls, fountains, the moon gate,
+flames, signs and the clock, and the actor half runs items, vehicles, occupied
+furniture, people and only then the combat-class bands. The fourteen-class
+partition and every range it implied outside indices `0..15`, `74..79`,
+`96..103` and `128..135` are withdrawn; `RETRACTIONS.md` rows R383-R389.
 
-The boundaries above are nominal and rounded to byte-boundary chunks for description; an implementation should treat the class boundaries as deltas from the in-engine special-trigger comparisons and the active-object class-range tests, not as fixed power-of-two splits. Section 3 gives a finer breakdown. For the actor half, Sections 3.1 and 7 take precedence over the rows above: the `256..383` "Monster" row is superseded, and the bestiary's monster runs resolve at `384..511`.
+Terrain-half classes, with the number of indices each covers:
 
-The fourteen classes split into three super-categories:
+| Class | Indices | Notes |
+|---|---:|---|
+| furniture | 32 | chairs, tables, laden tables, mirrors, well, post, logs, desk, barrels, vanity, pitcher, carpet, beds, drawers, end table, footlocker |
+| land terrain | 26 | grass, brush, desert, forests, hills, mountains, peaks; the eight grass variants `0x30..0x37`; the desert variants above `0xDC` |
+| placeholder | 18 | rows whose description record holds only the placeholder; see Section 3.1 for why each is silent |
+| barrier wall | 16 | the "strange walls" `0x70..0x7F` that the Sceptre dissolves; also the display driver's river composite masks |
+| dungeon-room prop | 16 | pendulum, stocks, manacles, metal grate, archway, cannonballs, torture rack, loose brick, harpsichord, guillotine, lava |
+| castle exterior | 15 | the castle wall pieces `0x39..0x3F` and the crenellations `0x50..0x57` |
+| river | 14 | |
+| location marker | 12 | the overworld entrance markers `0x10..0x1B`: hut, Codex shrine, keep, village, town, castle, cave, mine, dungeon, shrine, ruined shrine, lighthouse |
+| structure piece | 10 | planking, the Codex, mast, rail, cobbles, pillar, pier, bridge pair |
+| shop sign | 9 | eight at `0xF0..0xF7` plus the shipwright at `0xF9` |
+| water | 8 | `0x01..0x04` and the animated frames `0xE4..0xE7` |
+| interior fixture | 8 | anvil, telescope (placeholder), window shelf, potted plant, bookshelf pair, Guardian pair |
+| light and heat | 8 | wall torch pair, brazier, spit, fireplace, street lamp, candelabrum, stove |
+| road | 7 | |
+| outdoor feature | 7 | crystal sphere, bright light, hollow stump, plowed field, crops, fruit tree, cactus |
+| wall and opening | 7 | arrow slit, window, rock pile, stone wall, nicked wall, wall, and the lone wall `0xFE` |
+| cannon | 4 | |
+| door | 4 | plain, locked, windowed, locked windowed |
+| stairs | 4 | |
+| waterfall, hourglass, standard | 4 each | four-frame families |
+| bridge | 3 | `0x1D`, `0x6A..0x6B` |
+| roof, floor link, fence, clock, bellows | 2 each | |
+| statue, moon gate, shrine flame, dungeon entrance, flagpole, darkness | 1 each | |
 
-- **World/town/combat terrain classes** (water, terrain, path, wall,
-  furniture, door, decoration, special, indices roughly `0..159`) live in the
-  top-down map and arena terrain grids. They do not describe packed
-  `DUNGEON.DAT` cells.
-- **Actor-and-item classes** — the dynamic sprite layer drawn over terrain, living in *active-object records*. An active-object record does **not** carry the drawn tile id: it carries an actor byte in `0..255`, and the renderer adds `256` before indexing this catalogue, so every actor drawn through the world compositor resolves into the `256..511` half. See Section 3.1 for the rule and its one reserved value, and `systems/active-objects.md` section 12 for the compositor path.
-- **Transient effects** are written into the rendered tile buffer by the projectile animator and certain spell handlers, but are not stored in any persistent map. Moongates are *not* in this group: a natural gate is live terrain written into the map buffer by the once-per-turn refresh, not a transient render effect.
+Actor-half classes:
 
-Storage discipline is rigorous: a chair in a town map is a furniture-class index in the tile grid; a horse the player can mount is a vehicle-class index in the active-object table; a fireball mid-flight is an effect-class index temporarily in a slot; a dungeon wall or fountain cell is instead a packed dungeon class/variant byte interpreted by dungeon-mode systems. The same five-hundred-and-twelve-entry sprite sheet serves top-down terrain, actors, items, and effects, while dungeon cell geometry is specified by `formats/dungeon-dat.md` and `systems/dungeon-mode.md`.
+| Class | Indices | Notes |
+|---|---:|---|
+| combat class band | 116 | four indices per combat class from `0x80` (Section 7); 29 of the 32 bands are creatures |
+| townsperson | 36 | villager, merchant, jester, minstrel, eight prisoner frames, child, beggar, guard |
+| vehicle | 19 | horse pair, two ship runs, skiff run, the magic carpet as an object |
+| item | 16 | the fifteen inventory items `0x01..0x0F` and the moonstone `0x19` |
+| placeholder | 16 | including the reserved "draw nothing" byte `0x16` and the four indices the art shows to be Lord British |
+| party sprite | 16 | mage, bard, fighter, avatar - four frames each |
+| occupied furniture | 13 | the occupied bed and the twelve occupied-chair variants |
+| trapped soul, named person (Blackthorn), item in a class band (the regalia), field in a class band, whirlpool in a class band | 4 each | |
+| object ladder, corpse | 2 each | |
 
 ## 3. Index ranges
 
-The full breakdown by contiguous index range. The ranges below correspond to runs the engine treats as a unit — the look-at table groups them, the active-object animator switches on them, the special-trigger checks compare against them. Ranges are inclusive on both ends.
+Every index, run by run, with the class assigned above and a label paraphrased
+from the shipped description record. Where consecutive ids share one record
+they are one row. Behavioural predicates elsewhere in this spec set name ids
+directly, never ranges, so a label here is orientation, not a contract; the
+contract for what a tile *does* is in Sections 4-11 and the owning system docs.
 
-| Range       | Class           | Description                                                              |
-|-------------|-----------------|--------------------------------------------------------------------------|
-| 0           | (sentinel)      | "Cannot look" sentinel                                                   |
-| 1           | water           | Deep water (open ocean)                                                  |
-| 2           | water           | Coastal water                                                            |
-| 3           | water           | Shoals                                                                   |
-| 4           | water           | Swamp                                                                    |
-| 5           | terrain         | Grass                                                                    |
-| 6           | terrain         | Brush                                                                    |
-| 7           | terrain         | Parched / desert                                                         |
-| 8           | terrain         | Brush (variant)                                                          |
-| 9           | terrain         | Trees (forest)                                                           |
-| 10..15      | terrain         | Hills, mountain peaks, lava-rock variants                                |
-| 16..19      | path            | Stone-paved path                                                         |
-| 20..23      | path            | Brick-paved path                                                         |
-| 24..47      | wall            | Castle stone, town wattle, dungeon brick walls                           |
-| 48..63      | wall            | Decorative walls (cracked, mossy, runed)                                 |
-| 64..71      | furniture       | Tables                                                                   |
-| 72..73      | furniture       | Bed (head and foot pair)                                                 |
-| 74..79      | wall / opening  | Arrow slit `0x4A`, window `0x4B`, pile of rocks `0x4C`, wall variants `0x4D..0x4F` — confirmed from the shipped description table. The earlier nominal "Bookshelves, dressers, vanities, trunks" naming for this row is **withdrawn**; see Section 3.1 and `systems/visibility.md` Section 6. |
-| 80..87      | furniture       | Stairs / ladders (up and down pairs)                                     |
-| 88..91      | furniture       | Sign posts                                                               |
-| 92..95      | furniture       | Wells, brazier, fireplace                                                |
-| 96..103     | terrain         | River terrain frames. The obsolete door classification for this range is withdrawn. |
-| 104..111    | decoration      | Floor mosaics, banners, statues, glyphs                                  |
-| 112..127    | barrier/field   | Magic barrier or shadow-field family; Sceptre U-Use treats this range as dissolvable top-down cells |
-| 128..135    | special         | Pendulum/restraint/grate/archway fixtures; not the traced natural-moongate terrain byte |
-| 136..143    | special         | Shrine altars (eight, one per virtue)                                    |
-| 144..151    | special         | Fountains, wishing-wells, energy fields                                  |
-| 152..159    | special         | Fire effects, poison fields, sleep fields                                |
-| 160..167    | vehicle         | Horse (mounted)                                                          |
-| 168..175    | vehicle         | Ship (four facings, possibly damaged variants)                           |
-| 176..183    | vehicle         | Skiff (four facings)                                                     |
-| 184..187    | vehicle         | Magic carpet                                                             |
-| 188..191    | vehicle art     | Balloon art family; no traced live balloon transport path in the analyzed baseline |
-| 192..223    | NPC             | Townspeople, merchants, jesters, beggars, children                       |
-| 224..239    | NPC             | Guards, fighters, paladins, hostile humans                               |
-| 240..255    | NPC             | Lord British, Blackthorn, named NPCs, shadowlords                        |
-| 256..271    | monster         | Sea horse, squid, sea serpent, shark (aquatic)                           |
-| 272..287    | monster         | Giant rat, bat, giant spider, ghost, slime, gremlin (lesser)             |
-| 288..303    | monster         | Mimic, reaper, gazer, crawler, gargoyle, insect swarm                    |
-| 304..319    | monster         | *Superseded — see Sections 3.1 and 7.* The Orc, skeleton, python, ettin, headless and wisp runs are at 448..471. |
-| 320..335    | monster         | Daemon, dragon (greater)                                                 |
-| 336..351    | monster         | Sand trap, troll, mongbat, corpser, rot worm                             |
-| 352..367    | monster         | Shadow lord (named, three variants)                                      |
-| 368..383    | monster         | Reserved / boss-monster slots                                            |
-| 384..391    | item            | Weapons (small)                                                          |
-| 392..399    | item            | Weapons (large)                                                          |
-| 400..407    | item            | Armor and shields                                                        |
-| 408..415    | item            | Reagents (eight slots, one per reagent)                                  |
-| 416..423    | item            | Food, torches, gems, keys                                                |
-| 424..431    | item            | Scrolls, potions                                                         |
-| 432..439    | item            | Special items (sandalwood box, plans, crowns)                            |
-| 440..447    | item            | Spell-runes, codex, miscellaneous                                        |
-| 448..463    | effect          | Projectiles (arrow, axe, fireball-in-flight, etc.)                       |
-| 464..479    | effect          | Splash / explosion / impact frames                                       |
-| 480..495    | effect          | Wind, smoke, sparkle, shimmer                                            |
-| 496..511    | avatar          | Player and party-member sprites; per-vehicle and per-mode frames         |
+### Terrain half (map-cell ids `0..255`)
 
-The ranges above are the working partition. Gameplay systems should rely on the class, storage, passability, animator, and special-trigger contracts here and in the cross-referenced system specs. Some precise visual names within the upper actor/item/effect ranges remain presentation/catalog QA rather than unresolved gameplay behavior.
+| Index | Id | Class | Label (paraphrased from the description table) |
+|---|---|---|---|
+| 0 | `0x00` | placeholder | placeholder |
+| 1 | `0x01` | water | deep water |
+| 2 | `0x02` | water | water |
+| 3 | `0x03` | water | shoals |
+| 4 | `0x04` | water | swamp |
+| 5 | `0x05` | land terrain | grass |
+| 6 | `0x06` | land terrain | brush |
+| 7 | `0x07` | land terrain | desert |
+| 8 | `0x08` | land terrain | brush |
+| 9 | `0x09` | land terrain | forest |
+| 10 | `0x0A` | land terrain | dense forest |
+| 11 | `0x0B` | land terrain | hills |
+| 12 | `0x0C` | land terrain | mountains |
+| 13 | `0x0D` | land terrain | peaks |
+| 14..15 | `0x0E..0x0F` | land terrain | hills |
+| 16 | `0x10` | location marker | hut marker |
+| 17 | `0x11` | location marker | Codex shrine marker |
+| 18 | `0x12` | location marker | keep marker |
+| 19 | `0x13` | location marker | village marker |
+| 20 | `0x14` | location marker | town marker |
+| 21 | `0x15` | location marker | castle |
+| 22 | `0x16` | location marker | cave marker |
+| 23 | `0x17` | location marker | mine marker |
+| 24 | `0x18` | location marker | dungeon marker |
+| 25 | `0x19` | location marker | shrine marker |
+| 26 | `0x1A` | location marker | ruined-shrine marker |
+| 27 | `0x1B` | location marker | lighthouse marker |
+| 28 | `0x1C` | land terrain | desert |
+| 29 | `0x1D` | bridge | bridge |
+| 30..31 | `0x1E..0x1F` | land terrain | desert |
+| 32..38 | `0x20..0x26` | road | road |
+| 39..40 | `0x27..0x28` | roof | roof |
+| 41 | `0x29` | outdoor feature | crystal sphere (shipped spelling differs) |
+| 42 | `0x2A` | outdoor feature | bright light |
+| 43 | `0x2B` | outdoor feature | hollow stump |
+| 44 | `0x2C` | outdoor feature | plowed field |
+| 45 | `0x2D` | outdoor feature | crops |
+| 46 | `0x2E` | outdoor feature | fruit tree |
+| 47 | `0x2F` | outdoor feature | cactus |
+| 48..55 | `0x30..0x37` | land terrain | grass |
+| 56 | `0x38` | statue | gargoyle statue |
+| 57..63 | `0x39..0x3F` | castle exterior | castle |
+| 64 | `0x40` | structure piece | planking |
+| 65 | `0x41` | structure piece | the Codex |
+| 66 | `0x42` | structure piece | mast |
+| 67 | `0x43` | structure piece | rail |
+| 68..69 | `0x44..0x45` | structure piece | cobbles |
+| 70 | `0x46` | structure piece | pillar |
+| 71 | `0x47` | structure piece | pier |
+| 72..73 | `0x48..0x49` | structure piece | bridge |
+| 74 | `0x4A` | wall and opening | arrow slit |
+| 75 | `0x4B` | wall and opening | window |
+| 76 | `0x4C` | wall and opening | rock pile |
+| 77 | `0x4D` | wall and opening | stone wall |
+| 78 | `0x4E` | wall and opening | nicked wall |
+| 79 | `0x4F` | wall and opening | wall |
+| 80..87 | `0x50..0x57` | castle exterior | crenellations |
+| 88 | `0x58` | interior fixture | anvil |
+| 89 | `0x59` | interior fixture | placeholder |
+| 90 | `0x5A` | interior fixture | window shelf |
+| 91 | `0x5B` | interior fixture | potted plant |
+| 92..93 | `0x5C..0x5D` | interior fixture | bookshelf |
+| 94..95 | `0x5E..0x5F` | interior fixture | Guardian |
+| 96..105 | `0x60..0x69` | river | river |
+| 106..107 | `0x6A..0x6B` | bridge | bridge |
+| 108..111 | `0x6C..0x6F` | river | river |
+| 112..127 | `0x70..0x7F` | barrier wall | strange walls (the barrier the Sceptre dissolves) |
+| 128..131 | `0x80..0x83` | dungeon-room prop | pendulum |
+| 132 | `0x84` | dungeon-room prop | stocks |
+| 133 | `0x85` | dungeon-room prop | manacles |
+| 134 | `0x86` | dungeon-room prop | metal grate |
+| 135 | `0x87` | dungeon-room prop | archway |
+| 136 | `0x88` | dungeon-room prop | cannonballs |
+| 137..138 | `0x89..0x8A` | dungeon-room prop | placeholder |
+| 139 | `0x8B` | dungeon-room prop | rack |
+| 140 | `0x8C` | dungeon-room prop | loose brick |
+| 141 | `0x8D` | dungeon-room prop | harpsichord (ten numbered keys) |
+| 142 | `0x8E` | dungeon-room prop | guillotine |
+| 143 | `0x8F` | dungeon-room prop | lava |
+| 144..147 | `0x90..0x93` | furniture | chair |
+| 148..150 | `0x94..0x96` | furniture | table |
+| 151..152 | `0x97..0x98` | furniture | odd door |
+| 153 | `0x99` | furniture | portcullis |
+| 154..156 | `0x9A..0x9C` | furniture | laden table |
+| 157 | `0x9D` | furniture | mirror |
+| 158 | `0x9E` | furniture | mirror with reflection |
+| 159 | `0x9F` | furniture | broken mirror |
+| 160 | `0xA0` | furniture | placeholder |
+| 161 | `0xA1` | furniture | well |
+| 162 | `0xA2` | furniture | hitching post |
+| 163 | `0xA3` | furniture | log pile |
+| 164 | `0xA4` | furniture | placeholder |
+| 165 | `0xA5` | furniture | desk |
+| 166 | `0xA6` | furniture | barrel |
+| 167 | `0xA7` | furniture | cask |
+| 168 | `0xA8` | furniture | vanity |
+| 169 | `0xA9` | furniture | pitcher |
+| 170 | `0xAA` | furniture | carpet |
+| 171..172 | `0xAB..0xAC` | furniture | bed |
+| 173 | `0xAD` | furniture | drawers |
+| 174 | `0xAE` | furniture | end table |
+| 175 | `0xAF` | furniture | footlocker |
+| 176..177 | `0xB0..0xB1` | light and heat | wall torch |
+| 178 | `0xB2` | light and heat | brazier |
+| 179 | `0xB3` | light and heat | spit |
+| 180..183 | `0xB4..0xB7` | cannon | cannon |
+| 184 | `0xB8` | door | door |
+| 185 | `0xB9` | door | locked door |
+| 186 | `0xBA` | door | windowed door |
+| 187 | `0xBB` | door | locked windowed door |
+| 188 | `0xBC` | light and heat | fireplace |
+| 189 | `0xBD` | light and heat | street lamp |
+| 190 | `0xBE` | light and heat | candelabrum |
+| 191 | `0xBF` | light and heat | stove |
+| 192..195 | `0xC0..0xC3` | placeholder | placeholder |
+| 196..199 | `0xC4..0xC7` | stairs | stairs |
+| 200..201 | `0xC8..0xC9` | floor link | ladder |
+| 202..203 | `0xCA..0xCB` | fence | fence |
+| 204..211 | `0xCC..0xD3` | placeholder | placeholder |
+| 212..215 | `0xD4..0xD7` | waterfall | waterfall |
+| 216..219 | `0xD8..0xDB` | placeholder | placeholder |
+| 220 | `0xDC` | moon gate | moon gate |
+| 221 | `0xDD` | land terrain | desert |
+| 222 | `0xDE` | shrine flame | shrine flame (name appended) |
+| 223 | `0xDF` | dungeon entrance | collapsed dungeon entrance (name appended) |
+| 224..226 | `0xE0..0xE2` | land terrain | desert |
+| 227 | `0xE3` | flagpole | flagpole |
+| 228..231 | `0xE4..0xE7` | water | water |
+| 232..235 | `0xE8..0xEB` | hourglass | hourglass |
+| 236..239 | `0xEC..0xEF` | standard | standard of Britannia |
+| 240 | `0xF0` | shop sign | provisioner sign |
+| 241 | `0xF1` | shop sign | government sign |
+| 242 | `0xF2` | shop sign | armoury sign |
+| 243 | `0xF3` | shop sign | healer sign |
+| 244 | `0xF4` | shop sign | stable sign |
+| 245 | `0xF5` | shop sign | guild sign |
+| 246 | `0xF6` | shop sign | inn sign |
+| 247 | `0xF7` | shop sign | apothecary sign |
+| 248 | `0xF8` | placeholder | placeholder |
+| 249 | `0xF9` | shop sign | shipwright sign |
+| 250..251 | `0xFA..0xFB` | clock | grandfather clock (time appended) |
+| 252..253 | `0xFC..0xFD` | bellows | bellows |
+| 254 | `0xFE` | wall and opening | wall |
+| 255 | `0xFF` | darkness | darkness |
+
+Twenty-three terrain rows carry only the placeholder; Section 3.1 explains
+which of those are silent because a command handler produces the output and
+which are engine-private art.
+
+### Actor half (indices `256..511`; actor byte = index minus 256)
+
+| Index | Id | Class | Label (paraphrased from the description table) |
+|---|---|---|---|
+| 256 | `0x00` | placeholder | placeholder |
+| 257 | `0x01` | item | chest |
+| 258 | `0x02` | item | gold |
+| 259 | `0x03` | item | potion |
+| 260 | `0x04` | item | scroll |
+| 261 | `0x05` | item | weapon |
+| 262 | `0x06` | item | shield |
+| 263 | `0x07` | item | key |
+| 264 | `0x08` | item | gem |
+| 265 | `0x09` | item | helm |
+| 266 | `0x0A` | item | ring |
+| 267 | `0x0B` | item | armour |
+| 268 | `0x0C` | item | amulet |
+| 269 | `0x0D` | item | torch |
+| 270 | `0x0E` | item | sandalwood box |
+| 271 | `0x0F` | item | food |
+| 272..273 | `0x10..0x11` | vehicle | horse |
+| 274..278 | `0x12..0x16` | placeholder | placeholder |
+| 279..280 | `0x17..0x18` | object ladder | ladder |
+| 281 | `0x19` | item | moonstone |
+| 282 | `0x1A` | occupied furniture | occupied bed |
+| 283 | `0x1B` | vehicle | magic carpet (as an object) |
+| 284..285 | `0x1C..0x1D` | placeholder | placeholder |
+| 286..287 | `0x1E..0x1F` | corpse | corpse |
+| 288..295 | `0x20..0x27` | vehicle | ship |
+| 296..299 | `0x28..0x2B` | vehicle | skiff |
+| 300..303 | `0x2C..0x2F` | vehicle | ship |
+| 304..315 | `0x30..0x3B` | occupied furniture | occupied chair |
+| 316..319 | `0x3C..0x3F` | trapped soul | trapped soul |
+| 320..323 | `0x40..0x43` | party sprite | mage |
+| 324..327 | `0x44..0x47` | party sprite | bard |
+| 328..331 | `0x48..0x4B` | party sprite | fighter |
+| 332..335 | `0x4C..0x4F` | party sprite | avatar |
+| 336..339 | `0x50..0x53` | townsperson | villager |
+| 340..343 | `0x54..0x57` | townsperson | merchant |
+| 344..347 | `0x58..0x5B` | townsperson | jester |
+| 348..351 | `0x5C..0x5F` | townsperson | bard |
+| 352..359 | `0x60..0x67` | townsperson | prisoner |
+| 360..363 | `0x68..0x6B` | townsperson | child |
+| 364..367 | `0x6C..0x6F` | townsperson | beggar |
+| 368..371 | `0x70..0x73` | townsperson | guard |
+| 372..375 | `0x74..0x77` | placeholder | placeholder |
+| 376..379 | `0x78..0x7B` | named person | Blackthorn |
+| 380..383 | `0x7C..0x7F` | placeholder | placeholder |
+| 384..387 | `0x80..0x83` | combat class band | sea horse |
+| 388..391 | `0x84..0x87` | combat class band | squid |
+| 392..395 | `0x88..0x8B` | combat class band | sea serpent |
+| 396..399 | `0x8C..0x8F` | combat class band | shark |
+| 400..403 | `0x90..0x93` | combat class band | giant rat |
+| 404..407 | `0x94..0x97` | combat class band | bat |
+| 408..411 | `0x98..0x9B` | combat class band | giant spider |
+| 412..415 | `0x9C..0x9F` | combat class band | ghost |
+| 416..419 | `0xA0..0xA3` | combat class band | slime |
+| 420..423 | `0xA4..0xA7` | combat class band | gremlin |
+| 424..427 | `0xA8..0xAB` | combat class band | mimic (a chest that is not) |
+| 428..431 | `0xAC..0xAF` | combat class band | reaper |
+| 432..435 | `0xB0..0xB3` | combat class band | gazer |
+| 436 | `0xB4` | item (in a class band) | shard |
+| 437 | `0xB5` | item (in a class band) | crown |
+| 438 | `0xB6` | item (in a class band) | sceptre |
+| 439 | `0xB7` | item (in a class band) | amulet (regalia) |
+| 440..443 | `0xB8..0xBB` | combat class band | gargoyle |
+| 444..447 | `0xBC..0xBF` | combat class band | insect swarm |
+| 448..451 | `0xC0..0xC3` | combat class band | orc |
+| 452..455 | `0xC4..0xC7` | combat class band | skeleton |
+| 456..459 | `0xC8..0xCB` | combat class band | python |
+| 460..463 | `0xCC..0xCF` | combat class band | ettin |
+| 464..467 | `0xD0..0xD3` | combat class band | headless |
+| 468..471 | `0xD4..0xD7` | combat class band | wisp |
+| 472..475 | `0xD8..0xDB` | combat class band | daemon |
+| 476..479 | `0xDC..0xDF` | combat class band | dragon |
+| 480..483 | `0xE0..0xE3` | combat class band | sand trap |
+| 484..487 | `0xE4..0xE7` | combat class band | troll |
+| 488 | `0xE8` | field (in a class band) | poison field |
+| 489 | `0xE9` | field (in a class band) | sleep field |
+| 490 | `0xEA` | field (in a class band) | energy field (shipped text is garbled) |
+| 491 | `0xEB` | field (in a class band) | force field |
+| 492..495 | `0xEC..0xEF` | whirlpool (in a class band) | whirlpool |
+| 496..499 | `0xF0..0xF3` | combat class band | mongbat |
+| 500..503 | `0xF4..0xF7` | combat class band | corpser |
+| 504..507 | `0xF8..0xFB` | combat class band | rot worm |
+| 508..511 | `0xFC..0xFF` | combat class band | shadow lord |
+
+Three of the thirty-two combat-class bands are not creatures: class 29's band
+`0xB4..0xB7` holds the four regalia items (shard, crown, sceptre, amulet),
+class 42's band `0xE8..0xEB` the four fields, and class 43's band `0xEC..0xEF`
+the whirlpool frames. `catalogs/monster-bestiary.md` carries class 29 under its
+resident singular name and marks classes 42 and 43 as gaps; a class-29
+combatant, if the game ever spawned one, would be drawn with regalia art. The
+sixteen placeholder rows of this half include `0x7C..0x7F`, which the shipped
+art shows to be Lord British on his throne (Section 3.1).
 
 ### 3.1 The upper half is the actor bank, and its nominal names are provisional
 
@@ -184,12 +407,12 @@ statements are true at once because they index different halves, and the shipped
 description table confirms both: the terrain rows carry the placeholder while
 tiles 448, 460 and 464 read "an orc", "an ettin" and "a headless".
 
-**The nominal names given above for the actor half are provisional and at least
-two of them are wrong.** Decoding the shipped tile atlas directly shows the
-upper half is laid out coarsely as objects and vehicles, then people, then
-monsters — not as one long monster run followed by items. Individual ids
-confirmed from the shipped art, which take precedence over the range names
-above:
+**The actor-half tables above are derived from the description table (2026-09-04);
+before that this section carried provisional range names, at least two of them
+wrong.** Decoding the shipped tile atlas directly agrees with the table: the
+upper half is laid out as items, vehicles and occupied furniture, then people,
+then the combat-class bands. Individual ids confirmed from the shipped art,
+which the table now reproduces:
 
 | Tile index | Confirmed from the shipped atlas |
 |---:|---|
@@ -201,28 +424,19 @@ above:
 | 332..335 | A green-tunic figure with sword, four frames — the Avatar class sprite, also used by every class outside the three above |
 | 380..383 | A crowned, bearded figure in a red-and-purple robe seated between two banners — Lord British on his throne |
 
-The nominal rows "320..335 Daemon, dragon (greater)" and
-"368..383 Reserved / boss-monster slots" are therefore **withdrawn**: both of
-those bands are person sprites. Decoding the atlas shows the actor half runs
-roughly as objects and vehicles, then people, then monsters, rather than as one
-long monster run followed by items — but most of the exact seams have not been
-fixed, so no replacement range table is published here. One seam is fixed from
-the combat side: Section 7 places the bestiary's monster runs at `384..511`.
+The earlier nominal rows "320..335 Daemon, dragon (greater)" and "368..383
+Reserved / boss-monster slots" were withdrawn on this evidence (both bands are
+person sprites), and the earlier nominal "192..255 NPC" band of the terrain half
+was withdrawn because the description table names it as scenery and fixtures -
+stairs, fences, waterfalls, the moon gate, shop signs, the clock. Section 3 now
+publishes the derived tables in their place.
 
-The same caveat applies to the terrain half above index 128, and this document
-already contradicts itself there: the nominal row "192..255 NPC — Townspeople,
-guards, ... named NPCs" is inconsistent with the shipped-description list later
-in this section, which names `0xC4..0xC7` as the stairway family, `0xCA..0xCB`
-as wooden fence, `0xD4..0xD7` as the waterfall family, `0xDC` as the moon gate,
-`0xF0..0xF7` as shop signs and `0xFA..0xFB` as the grandfather clock — all of
-them inside that band, and none of them a person. Decoding the atlas agrees
-with the confirmed list: `192..255` is scenery and fixtures.
-
-**Precedence rule.** Where an index has been confirmed from the shipped
-description table or from the shipped art, that confirmation wins. The Section 2
-class table and the Section 3 range table are working hypotheses for the bands
-nobody has confirmed yet; re-cataloguing both halves index by index is open
-catalogue work and is tracked in Section 16.
+**Precedence rule.** The Section 3 tables are read off the shipped description
+table run by run and are authoritative for both halves; the combat-class bands
+additionally follow Section 7's arithmetic. Where a behavioural spec names an id
+as a predicate, that id's meaning comes from the tracing that established the
+predicate, and the label here must agree with it - the list below records the
+ids established that way.
 
 Where an individual id has been confirmed directly against the shipped
 description table (`formats/look2-dat.md`), that confirmation takes precedence
@@ -270,9 +484,9 @@ groups are not complements: the wishing well `0xA1` is a Look predicate
 handled entirely by a command handler, yet it appears in the *named* list
 above because it does carry a real description record — one the Look path
 never reaches. Sentinel status corroborates handler ownership where it
-applies, but it does not define the predicate set. Reconciling
-the remaining nominal ranges against the description table is open catalogue
-work.
+applies, but it does not define the predicate set. The
+description table has been decoded end to end (2026-09-04), so no nominal range
+remains to reconcile.
 
 ## 4. Animation phases
 
@@ -712,7 +926,7 @@ Hostile humans (brigands, pirates, hostile guards) sit in the *NPC* range, not t
 
 ## 8. NPC tiles
 
-NPC sprites occupy indices `192..255`. Each NPC type — villager, merchant, jester, child, beggar, guard, wanderer, named NPCs (Lord British, Blackthorn, named ship captains), shadow lords — owns one or more indices, typically two frames per facing for an idle / walk cycle.
+NPC sprites occupy indices `320..383` - actor bytes `0x40..0x7F`: the four party classes at `320..335`, townspeople at `336..371`, Blackthorn at `376..379` and Lord British at `380..383`. *Retraction (2026-09-04): this section previously said `192..255`, a terrain-half band that holds scenery and fixtures; see `RETRACTIONS.md` R385.* Each NPC type — villager, merchant, jester, child, beggar, guard, wanderer, named NPCs (Lord British, Blackthorn, named ship captains), shadow lords — owns one or more indices, typically two frames per facing for an idle / walk cycle.
 
 Cross-reference: `catalogs/npc-roster.md` for per-NPC names, dialogue file links, default schedules, and which location each NPC lives in. The role-name strings ("Avatar", "Villager", "Merchant", "Jester", "Bard", "Child", "Beggar", "Guard", "Wanderer", "Blackthorn", "Lord British") in the resident data anchor the partition.
 
@@ -735,7 +949,7 @@ dispatch, is in `systems/conversation.md` Section 2.
 
 ## 9. Item tiles
 
-Item sprites occupy indices `384..447`. Items are weapons, armor, reagents, food, gems, torches, scrolls, potions, keys, and special story items. Cross-reference `catalogs/item-list.md`.
+Item sprites occupy indices `257..271` - actor bytes `0x01..0x0F`: chest, gold, potion, scroll, weapon, shield, key, gem, helm, ring, armour, amulet, torch, sandalwood box, food - plus the moonstone at `281` and the four regalia (shard, crown, sceptre, amulet) at `436..439`, inside combat class 29's band. *Retraction (2026-09-04): this section previously said `384..447`, which is the sea-horse-to-insect-swarm band of Section 7; see `RETRACTIONS.md` R386.* The description table has no reagent sprite in either half; the reagent iconography claim below is not attested by it. Items are weapons, armor, reagents, food, gems, torches, scrolls, potions, keys, and special story items. Cross-reference `catalogs/item-list.md`.
 
 Items appear in two contexts:
 
@@ -748,13 +962,13 @@ Three items — the **sandalwood box**, the **plans for the HMS Cape**, and the 
 
 ## 10. Vehicle tiles
 
-Vehicle sprites occupy indices `160..191`. Four live vehicle families —
+Vehicle sprites live in the actor half: the horse at `272..273` (actor bytes `0x10..0x11`), ships at `288..295` and `300..303`, the skiff at `296..299`, and the magic carpet as a placed object at `283`. *Retraction (2026-09-04): this section previously said `160..191`, a terrain-half band of furnishings and lights; see `RETRACTIONS.md` R387.* Four live vehicle families —
 **horse** (mounted), **ship**, **skiff**, and **magic carpet** — carry frame
-runs used by the traced command and movement systems. The adjacent **balloon**
-run is preserved as art/catalog data; it is not a traced live transport family
-in the analyzed baseline.
+runs used by the traced command and movement systems. No balloon entry exists in the description table for either half; the earlier
+"adjacent balloon run preserved as art/catalog data" is not attested by it and
+should be treated as absent (R387).
 
-Vehicles appear as active-object entries. Mounting a vehicle moves the avatar's sprite from the avatar range (`496..511`) to the vehicle range; the original vehicle slot (a dropped horse, a moored ship) clears or remains as a ridable sprite.
+Vehicles appear as active-object entries. Mounting a vehicle moves the avatar's sprite from the party-sprite run (`320..335`; *the earlier "avatar range `496..511`" was the mongbat-to-shadow-lord band and is withdrawn, R387*) to the vehicle run; the original vehicle slot (a dropped horse, a moored ship) clears or remains as a ridable sprite.
 
 For B-Board, `systems/vehicles.md` publishes the clean boardable object-byte
 families and transport-state transitions: horse objects `0x10..0x11` become
@@ -783,7 +997,7 @@ The resident transport marker tracks the current boarded vehicle for movement, e
 
 ## 11. Effect tiles
 
-Effect sprites occupy indices `448..495`. Effects are short-lived sprites composited over the rendered buffer by per-effect handlers; they do not live in the persistent map and (mostly) do not occupy active-object slots.
+Effect sprites that the description table names live in the actor half: the four fields (poison, sleep, energy, force) at `488..491`, the whirlpool frames at `492..495` and the trapped soul at `316..319`. The transient projectile, impact and spark frames the effect renderers draw carry no description record; their atlas ids are owned by the renderers in `systems/combat.md` and `systems/magic.md`, not fixed here. *Retraction (2026-09-04): this section previously said `448..495`, which is the orc-to-troll band of Section 7; see `RETRACTIONS.md` R388.* Effects are short-lived sprites composited over the rendered buffer by per-effect handlers; they do not live in the persistent map and (mostly) do not occupy active-object slots.
 
 The principal effect families:
 
@@ -864,8 +1078,9 @@ The data here is drawn from four sources. Each tile's position in the partition 
 
 - The five-hundred-and-twelve-tile count and the EGA / CGA file-size invariants.
 - The `LOOK2.DAT` layout (five hundred and twelve sixteen-bit offsets split
-  into terrain and object domains, two hundred and sixteen unique strings, one
-  sentinel).
+  into terrain and object domains; two hundred and sixteen distinct string
+  offsets, of which one hundred and ninety-seven are distinct texts because a
+  few short texts are stored more than once; two placeholders, one per half).
 - The thirty-two-byte base terrain bitset in the resident data segment,
   including MSB-first tile-bit ordering within each byte, plus the
   caller-query tile-class dispatcher and the corrected `0x90..0x93`
@@ -905,41 +1120,31 @@ The data here is drawn from four sources. Each tile's position in the partition 
 - Tile id one is "deep water"; ids two through nine walk through "water", "shoals", "swamp", "grass", "brush", "parched desert", "brush", "trees".
 - The dawn/dusk gate pair is named by the same table: `0x87` is an archway, `0x44` is cobble, and `0x99` is a portcullis. P-Push also uses `0x45` as a family-specific occupancy stamp; LOOK2 resolves `0x45` to the same cobble description as `0x44`.
 - The last unique string is "a shadow lord".
-- Two hundred and sixteen of the five hundred and twelve ids carry unique strings; the rest share a string with a prior id.
+- Two hundred and sixteen distinct string offsets serve the five hundred and twelve ids; the Section 3 tables were generated from the full decode on 2026-09-04.
 
-**Completion summary.** The catalog assigns all five hundred and twelve indices to one of fourteen classes. Per-tile detail varies:
+**Completion summary.** Every one of the five hundred and twelve indices has a
+class and a label derived from the shipped description table (Section 3), and
+the classes are the interleaved ones of Section 2 rather than fourteen contiguous
+bands (R383, R384). Per-tile detail varies:
 
-- **Static gameplay tiles (~160 tiles, indices `0..159`).** The world-tile
-  classes are attested by their `LOOK2.DAT` strings, resident terrain-query
-  families, visibility ownership, and special-trigger comparisons. The grass /
-  brush / desert subdivisions, door variants, barrier family, `0xDC`
-  terrain-domain moongate boundary, shrine ids, and town marker ownership boundaries are specified at
-  gameplay depth.
-- **Actor and vehicle tiles (~220 tiles, indices `160..383`).** Vehicle and NPC
-  ranges are established by the animator's class-range tests and by their owning
-  movement and roster catalogs, and the person sprites confirmed from the
-  shipped art sit at the top of this span (Section 3.1). The bestiary's monster
-  runs are *not* in this span; they resolve above it (Section 7). Exact
-  sprite-frame labels inside a run are renderer/catalog attribution unless a
-  system spec names a tile id as a gameplay gate.
-- **Upper actor-half tiles (~130 tiles, indices `384..511`).** This is the band
-  the bestiary's combat classes resolve into once the renderer's actor-byte rule
-  is applied (Section 7). The "item, effect, and avatar" labels Sections 2 and 3
-  give these indices are nominal and provisional (Section 3.1); the item,
-  inventory, magic, combat, command, and presentation specs cover the gameplay
-  consumers of that art wherever its indices finally land. Remaining per-frame
-  art labels, pixel ordering checks, and render-only sentinel names are
-  presentation/catalog QA, not unresolved command ownership.
+- **Terrain half.** Every id is named or accounted for as a placeholder; the
+  gameplay contracts for passability, animation, special triggers and marker
+  bytes are in Sections 4-6 and the owning system docs.
+- **Actor half below the class bands (indices `256..383`).** Items, vehicles,
+  occupied furniture, the party sprites, townspeople and the two named rulers,
+  all now positioned by the description table and, where it is silent, by the
+  shipped art (Section 3.1).
+- **Combat-class bands (indices `384..511`).** Section 7's arithmetic, with the
+  three non-creature bands called out in Section 3.
 
 All five hundred and twelve indices have a class assignment and storage-domain
 contract. The tile catalog is complete for passability, LOOK2 ownership,
 special-trigger routing, active-object classing, and file-format boundaries.
 
-**Qualification.** The three bullets above describe the *class assignment*, not
-the per-range visual names. Section 3.1 withdraws several of those names and
-publishes the actor-half indexing rule that governs how an actor's stored byte
-reaches this catalogue; read it before using any range label above index 128 as
-a predicate.
+**Qualification.** Labels are orientation; predicates are ids named by the
+system docs. Section 3.1 publishes the actor-half indexing rule that governs how
+an actor's stored byte reaches this catalogue; read it before using any index
+above 255.
 
 ## 15. Cross-references
 
@@ -969,13 +1174,10 @@ optional presentation/catalog QA or source-free reauthored-data aids; they
 should not be treated as blockers for implementing the runtime behavior already
 specified by this catalog and the linked system specs.
 
-0. **Re-catalogue the nominal index ranges of Sections 2 and 3 against the
-   shipped atlas.** Section 3.1 shows both halves' nominal names are wrong in
-   places — the actor half's `320..335` and `368..383` bands are person sprites
-   rather than monsters, and the terrain half's `192..255` band is scenery and
-   fixtures rather than NPCs. This is the highest-value item in this queue,
-   because engine code that resolves a tile id by range rather than by
-   confirmed id will mislabel actors.
+0. ~~Re-catalogue the nominal index ranges of Sections 2 and 3 against the
+   shipped atlas.~~ **Done 2026-09-04:** both halves are now derived from the
+   full description-table decode (Section 3), with the withdrawn ranges recorded
+   in `RETRACTIONS.md` R383-R389.
 1. Refine the per-tile id within each monster's frame run by walking `MON0.16` through `MON7.16` against the manual's monster list and the resident data monster-name pool.
 2. Refine the per-NPC tile-id labels against the role-name string pool ("Avatar", "Villager", ..., "Lord British") and the named-NPC list.
 3. Refine the per-item tile-id labels against the item-name pool and the Z-stats inventory panel.
