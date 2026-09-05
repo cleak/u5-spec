@@ -20,8 +20,9 @@ Two rules govern what belongs here:
   file when the owning document is updated, with a `RETRACTIONS.md` row if the
   answer reverses published text.
 
-Last reconciled: 2026-09-04. The `trace` items were **not** re-traced in the
-pass that built this index; the shipped binary set was not available to it.
+Last reconciled: 2026-09-04. The tile-catalogue re-derivation that headed section 3
+was completed the same day once the shipped files became available; the other
+`trace` items were not re-traced.
 
 ## 1. Owner decisions
 
@@ -52,7 +53,6 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 
 | Item | Where | Notes |
 |---|---|---|
-| **Re-catalogue the nominal index ranges of the tile catalogue against the shipped description table.** Both halves carry provisional range names that are wrong in places (the "NPC" band of the terrain half is scenery; two "monster" bands of the actor half are person sprites). Individually confirmed ids take precedence today; a full per-id table is the highest-value item in this file. | `catalogs/tile-catalog.md` Sections 2, 3, 3.1, 16 (item 0); `formats/look2-dat.md` | Decode the whole description table and the atlas once; publish a per-id class table and retire the nominal ranges. |
 | Whether the caller's light value also reaches the visibility producer's carve as the squared-distance threshold, or only selects the branch. | `systems/visibility.md` Section 3 (the note under the light-value table) | Trace the producer's threshold source. |
 | Whether a controlled actor's fixed attack-flavour id reaches the rating selector as the neutral value, so that its to-hit also collapses to 15. | `systems/combat.md` Section 11 | Trace the flavour id through the rating selector. |
 | Whether the controlled/charmed bit has any reachable writer at all; the encoding-level scan found none. | `systems/combat.md` Sections 6.1 and 11 | Widen the writer census to pointer-through-memory writes. |
