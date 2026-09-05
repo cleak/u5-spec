@@ -11,8 +11,13 @@ Each document explains one system or one file format clearly enough that an impl
 ## Structure
 
 - [EXTRACTION.md](EXTRACTION.md) — Master inventory of code, data, and algorithms to be documented. Tracks progress.
+- [RETRACTIONS.md](RETRACTIONS.md) — Append-only, commit-ordered index of every published statement later withdrawn or inverted. Consumers record an "audited through" row id.
+- [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) — Index of every statement published as open, unverified or disputed, with what would settle each.
+- [NEXT-STEPS.md](NEXT-STEPS.md) — Durable handoff log and current priorities.
 - `systems/` — One spec per coherent gameplay system (e.g., NPC schedules, combat, conversation engine).
-- `formats/` — One spec per data file format (e.g., TILES.16, SCHEDULE.DAT, *.TLK).
+- `formats/` — One spec per data file format (e.g., `TILES.16`, the `.NPC` schedule files, `*.TLK`).
+- `catalogs/` — Cross-cutting reference tables (tile catalog, bestiary, item list, spell list, gazetteer, quest graph, NPC roster).
+- `scripts/` — Mechanical checks: `check_contamination.py` (no source, assembly, dumps or private address tables) and `check_crossrefs.py` (every document and section reference resolves; retraction ids contiguous; inventory counts match the tree). Both must print `clean` before a change is pushed.
 
 Cross-cutting presentation contracts include
 [`systems/audio.md`](systems/audio.md) for the DOS PC-speaker effects and

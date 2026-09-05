@@ -61,6 +61,8 @@ u5-spec/
 |-- NEXT-STEPS.md       # durable handoff and current priorities
 |-- EXTRACTION.md       # master inventory and status table
 |-- RETRACTIONS.md     # append-only index of withdrawn/inverted claims
+|-- OPEN-QUESTIONS.md   # index of published open/unverified items and what settles each
+|-- scripts/            # mechanical checks (contamination, cross-references)
 |-- systems/            # behavior specs for gameplay systems
 |-- formats/            # file-format specs
 `-- catalogs/           # cross-cutting reference catalogs
@@ -100,6 +102,19 @@ u5-spec/
 
    It must print `clean`. Exit 1 means contamination; exit 2 means the checker
    itself is broken and the result means nothing.
+
+7. Check the references the same way - every `systems/`, `formats/` or
+   `catalogs/` path and every "Section N" pointer must resolve, `RETRACTIONS.md`
+   ids must be contiguous, and `EXTRACTION.md`'s document counts must match the
+   tree:
+
+   ```text
+   python scripts/check_crossrefs.py
+   ```
+
+   Same exit convention. If an edit leaves a claim open, unverified or
+   disputed, add it to `OPEN-QUESTIONS.md` with what would settle it; remove
+   the row when the owning document is updated.
 
 ## Citing private analysis
 

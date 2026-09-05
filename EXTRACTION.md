@@ -4,7 +4,7 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-04.
 
 ## Status Legend
 
@@ -26,7 +26,7 @@ and the primary asset/data formats needed by those systems.
 
 The public spec set currently contains:
 
-- 49 system specs in `systems/`.
+- 51 system specs in `systems/`.
 - 26 file-format specs in `formats/`.
 - 9 cross-cutting catalogs in `catalogs/`.
 
@@ -138,10 +138,40 @@ on the melee arm only, so `systems/magic.md` Section 8 and
 every creature those spells place - Summon's own Daemon is a non-melee-reach
 class (R382).
 
+## 2026-09-04 - Reconciliation pass and the open-verification index
+
+A pass with no new tracing reconciled the handoff documents against the tree
+and the ledger. Nothing behavioural changed, so no `RETRACTIONS.md` row was
+added. What did change:
+
+- **`OPEN-QUESTIONS.md`** now indexes every statement this repository publishes
+  as open, unverified, inferred or disputed, each with what would settle it
+  (an owner decision, a live capture, a further static trace, or scope). It is
+  the forward-looking complement of `RETRACTIONS.md`.
+- **`scripts/check_crossrefs.py`** joins the contamination checker: every
+  document path and every "Section N" reference in the tree must resolve,
+  `RETRACTIONS.md` ids must be contiguous, and the document counts stated in
+  this file must match the tree. Its first run found the counts here two
+  behind the tree and three references in the historical log to specs that
+  were never created; all fixed.
+- The statements that this repository is private, made here and in
+  `NEXT-STEPS.md`, were stale and are corrected: the specification is public
+  and the shipped-text decision above is live.
+- The private correction ledger was walked entry by entry against the spec
+  tree. Every correction dated 2026-08-22 and 2026-08-26 whose target is a
+  public document is present in that document; the ledger's own propagation
+  markers lagged and were brought up to date on the private side. The one
+  ledger item still open against the public tree is the tile-catalogue
+  range re-derivation, which needs the shipped description table and is
+  queued as the first `trace` item in `OPEN-QUESTIONS.md`.
+
 ## Status Of The Engine Issue Queue
 
-As of 2026-08-22 the `cleak/u5-spec` issue queue is **empty**: all eighty-three
-issues filed by the clean engine are closed. Seventy-two of them were re-audited
+As of 2026-09-04 the `cleak/u5-spec` issue queue is **empty**: one hundred and
+ninety-one issues have been filed by the clean engine and all are closed, the
+last eleven (#181-#191) between 2026-09-02 and 2026-09-03 with their answers
+summarised in the dated sections above. The earlier milestone stands as
+recorded: as of 2026-08-22 all eighty-three issues then filed were closed. Seventy-two of them were re-audited
 in a single pass that verified each thread's answer against the spec working
 tree and against the shipped binaries; twenty-four were confirmed already
 resolved and forty-eight were corrected, with the earlier wrong answers
@@ -184,9 +214,10 @@ the whole spec. Four items sit outside that justification:
 
 None of these is large, and each has a defensible functional argument. But the
 certificate and the doorway lines are the game's authored prose rather than its
-interface, and both repositories are currently private, so nothing is exposed
-today. If this specification is ever published, that decision should be taken
-deliberately: the options are to keep them, to replace them with structural
+interface. The private analysis workspace stays private, but **this
+specification repository is now public**, so the decision is live rather than
+hypothetical (it is the one `owner` item in `OPEN-QUESTIONS.md`): the options
+are to keep them, to replace them with structural
 descriptions plus placeholder text, or to describe their layout and let the
 implementer read the strings from the user's own copy of the game data at
 runtime — which is the approach several other specs here already take for
@@ -322,8 +353,9 @@ baseline, but they remain important for exact parity:
 
 - Alternate-driver exact rendering and non-load-bearing EGA helper slots. The
   EGA dispatch ABI, back-buffer plane layout, visible page-zero policy,
-  front-buffer tile/glyph paths, bitmap sparse-strip resources, and major
-  effect entries are now covered in `systems/display-driver-abi.md`; exact CGA,
+  front-buffer tile/glyph paths, the packed-to-planar preparation entry, and
+  major effect entries are now covered in `systems/display-driver-abi.md` (the
+  standalone bitmaps are one-bit sub-image lists, `formats/bit.md`); exact CGA,
   Hercules, and Tandy conversion details remain parity follow-up work.
 - Music/audio playback for distributions that ship external music resources.
   The analyzed clean DOS baseline at `C:\Games\U5-Clean` contains no `.XMI`
