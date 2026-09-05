@@ -383,8 +383,9 @@ Once the range/effect route has selected an impact target, ordinary hits still
 use the shared combat to-hit helper described above unless the effect family
 forces a special result. The traced combat attack stack does not decrement
 arrows or quarrels, does not decrement the readied weapon's carried equipment
-counter, and does not clear the readied weapon slot for thrown or glass-family
-attacks. The separate traced equipment-stock and readied-slot consumers are
+counter, and does not clear the readied weapon slot for thrown attacks.
+*(Corrected 2026-09-04, R390: the **Glass Sword** is the exception - its shatter
+arm clears the readied slot in the same attack, `systems/combat.md` Section 12.)* The separate traced equipment-stock and readied-slot consumers are
 R-Ready/equip-time stock movement, carried-equipment grants, display/search
 helpers, and magic-ring combat removal; none adds an attack-time ammunition,
 thrown-stock, or glass-breakage path for the analyzed baseline.
