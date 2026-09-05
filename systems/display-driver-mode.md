@@ -339,6 +339,15 @@ Likewise, Hercules selecting `.4` establishes neither a required 2-bit-to-1-bit
 threshold nor a normative scale/aspect transform. Those details remain optional
 historical-hardware research, not completion criteria for the EGA baseline.
 
+**Subtitle ignition on Tandy (added 2026-09-04).** The Tandy driver implements
+the start/menu subtitle-ignition transition with the same position generator,
+band geometry, batch pacing, click gate and abort rule as the EGA driver; only
+the per-pixel plotter differs (it writes packed nibbles across the four frame
+bands instead of four planes), and its tone helper and wall clock were not
+derived. A Tandy backend may therefore reuse the EGA contract for that
+transition's sequencing; see `systems/timing.md` Section 7.6, item 8. Source
+provenance: private analysis in `u5-decomp/functions/T1K_DRV/`.
+
 ## 7. Known Uncertainties
 
 - **Exact CGA palette policy.** *Closed.* An earlier revision of this bullet

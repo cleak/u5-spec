@@ -707,10 +707,16 @@ pending answers and treats them as known gaps:
    of those overrides beyond the three documented in section 5.2 was not traced.
    An implementation that models calibration-dependent behaviour must not assume
    one value holds for a whole run.
-8. **Only one display driver's ignition constants were derived.** The 45-unit and
-   50-unit publication waits and the 25-pitch burst are established for the EGA
-   driver. The same wait shape exists in the other three drivers, but whether
-   they use the same pitch count, subdivision, and thresholds is unverified.
+8. **Only one display driver's ignition constants were fully derived.** The
+   45-unit and 50-unit publication waits and the 25-pitch burst are established
+   for the EGA driver. *Narrowed 2026-09-04:* the Tandy driver's ignition pass
+   has now been read in full and uses the identical sequencing - the same
+   position generator, 49-row band, publish-interval rule, click threshold and
+   decay, and the same 45-unit and 50-unit publication waits; only its tone
+   helper was not re-read, so the burst's pitch count and subdivision remain
+   unverified there. For the CGA and Hercules drivers the same wait shape is
+   visible but none of the constants has been verified. Source provenance:
+   private analysis in `u5-decomp/functions/T1K_DRV/`.
 9. **The per-tone install cost of section 7.4.1 disagrees with the value the
    implementation side is using**, 17.4 inner units against a fitted 12, and
    nothing in this repository can settle the disagreement: only one published
