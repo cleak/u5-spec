@@ -974,7 +974,7 @@ The original uses the active-object renderer for cinematic movement. A modern en
   hidden page and does publish itself with a full-page copy; neither is visible
   as a transition, and neither is the rectangle dissolve of section 7.1, which
   still happens exactly once, before the first window.
-- **Display helper taxonomy.** The visual sequence uses resident display, sound, and wait helpers whose exact labels are inferred. The player-visible order and blocking boundaries are specified; the unresolved part is helper taxonomy, not state progression.
+- **Display helper taxonomy.** Closed (2026-09-05). Every resident helper the sequence calls resolves to a documented primitive: cursor positioning and text-window selection, the control-byte character printer (clear window, inverse on and off), the string printer and the runic-font selector, the compressed-bitmap loader and asset release, the clipped filled rectangle and its inverting variant, the sixteen-by-sixteen viewport blit, the LFSR rectangle dissolve, the world-tick pause, the PC-speaker envelope and the two-tone sting, the keyboard poll, the file-read wrapper, and one overlay trampoline into the font overlay's entry. The player-visible order and blocking boundaries were already specified; nothing about them changes.
 - **Asset variant mapping.** Closed for the endgame. The panel archive, slot,
   size and origin for every window, the title strips, and the certificate
   backdrop are published in section 8. The equivalent alternate-depth archives

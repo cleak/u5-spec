@@ -868,8 +868,8 @@ frequency and a hold in outer calibrated units. Every user in the shipped game:
 | Combat blocked step refused | 165 Hz, 200 units |
 | Combat exit refused, `All must use the same exit!` | 165 Hz, 200 units |
 | Combat command refused as inapplicable, two-tone pair (section 8.8) | 220 Hz for 150 units, then 150 Hz for 150 units |
-| A Return-to-View presentation strip | 2000 Hz, 3 units |
-| The ambient shrine/flame tick | 3000 Hz, 3 units |
+| A Return-to-View presentation strip (strip 3) | 3000 Hz for 3 units at its local phase 0, 2000 Hz for 3 units at phase 4 |
+| The ambient shrine/flame tick | 3000 Hz for 3 units on residue 0 of its eight-phase counter, 2000 Hz for 3 units on residue 4 |
 
 The narration census corroborates the mode scope independently: the game
 contains exactly five copies of the `Blocked!` string and exactly five pieces of
@@ -956,10 +956,12 @@ matters:
   an open question here: it is the combat command refused as inapplicable,
   section 8.8. It is still **not** the blocked-step recipe, and must not be
   conflated with it.
-- **The two three-unit blips in the census.** Section 8.6 attributes both a
-  3000 Hz and a 2000 Hz three-unit blip to Return-to-View strip 3, while the
-  census above labels one of them an ambient shrine/flame tick. Whether these
-  are two sites or one was **not settled**.
+- **The two three-unit blips in the census** are settled (2026-09-05): there
+  are **two sites, and each emits both pitches** on its own eight-phase counter
+  - Return-to-View strip 3 at local phases 0 and 4, and the ambient
+  shrine/flame tick at residues 0 and 4 of the free-running ambient counter
+  (`systems/time.md` Section 11). The census rows above now say so; the earlier
+  rows had split the two pitches between the two sites.
 
 ## 8. Confirmed trigger inventory
 

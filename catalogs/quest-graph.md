@@ -554,15 +554,14 @@ prompts all have public behavioral owners in `systems/conversation.md` and
 - Decoded trailing or embedded records are non-required unless a public
   conversation, roster, or quest edge names them. They should not become
   mandatory graph nodes without a clean reachability proof.
-- **Open: the Shadowlord location readout.** The three hideout slots are
-  consumed by a view-side renderer that walks eight rows and overlays a marker
-  on the row whose index matches a living slot's value. That much is settled.
-  What the eight rows are laid out as on screen, and therefore whether the
-  readout presents as a town list, a coarse world map, or something else, is not
-  established, and no text line is emitted from that loop. Implementations
-  should treat the readout's presentation as unspecified and drive it from the
-  slot values rather than inventing a wording for it. The hideout semantics
-  themselves are not affected: the slot value is a town scene byte.
+- **The Shadowlord location readout (settled 2026-09-05).** The three hideout
+  slots are consumed by the telescope's night-sky renderer, `systems/view.md`
+  Sections 4.2.3 and 4.2.5: eight celestial bodies, one per row at fixed
+  heights, each placed in a calendar-dependent column, and a streak drawn over
+  the body whose row corresponds to a living Shadowlord's hideout - row `k`
+  standing for town scene `k + 1`. No text line names the town; the marker is
+  the whole readout. The hideout semantics are unchanged: the slot value is a
+  town scene byte.
 
 ## Sources
 

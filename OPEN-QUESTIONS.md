@@ -54,12 +54,8 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 | Item | Where | Notes |
 |---|---|---|
 | For a controlled monster actor: what the roster picker accepts, what the cast/effect arm does for a non-melee class (reachability is published, contents are not), and the arena-exit helper's own rules beyond the party-side gate. | `systems/combat.md` Sections 8, 8.1, 16.1 | Trace the three arms with a monster-side slot. |
-| The animation-script bytes for the whirlpool marker class (reachability traced, script not). | `systems/active-objects.md` | Read the script. |
 | Whether anything rewrites the scratch behind the arena record while a fight is live; two overlay paths were not traced through the overlay manager. | `systems/visibility.md` Section 8.5 | Trace the two paths. |
-| How the Shadowlord location readout lays out its eight rows on screen (town list, coarse map, or other). | `catalogs/quest-graph.md`, Section "Open" bullets | Trace the readout renderer's row placement. |
 | Whether any later gameplay path adds underworld object records beyond the five seeded ones. | `formats/ool.md` Section 11 | Census of underworld-plane record writers. |
-| Attribution of the two three-unit blips in the Return-to-View strip census. | `systems/audio.md` Sections 7.4 and 8.6 | Trace the strip-3 sound calls. |
-| The exact labels of the resident display, sound and wait helpers the endgame sequence uses (order and blocking boundaries are published; helper taxonomy is inferred). | `systems/endgame.md` Section 12 | Trace the helper identities. |
 
 ## 4. Deferred by scope
 
