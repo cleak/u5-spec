@@ -119,14 +119,18 @@ Producer behaviour by value:
 | Zero            | Total blackout — the carve is skipped outright and the grid is left fully obscured, including the player's own cell. Reachable only through the void-tile override in `systems/lighting.md` Section 7; it is *not* the ordinary night-time state. |
 | Negative        | Full-fill path — populate every cell from the world map with no carve, no threshold and no line-of-sight test. The **redraw orchestrator** can never present this value, because it zero-extends the unsigned lighting byte before the call. It is nevertheless reachable, and shipped content drives it: the spell/potion visibility sweep — the White potion and the X-Ray spell — calls the producer directly with a negative sentinel in the light argument, which is exactly how those two effects reveal the whole window through walls (`catalogs/item-list.md` Section 7.2). **Corrected (R327):** this row previously said the branch was "structurally unreachable in the shipped 2D pipeline" and that "no shipped scene drives it". |
 
-*Open question on the positive row.* The work that produced R318 and R327
-established that the caller's light value selects the branch above, and that the
-literal the producer passes to its carve helper is hard-coded inside the producer
-and the same for every caller. Whether the caller's value *also* reaches the
-carve as the squared-distance threshold was not re-derived, and the routine that
-would carry such a test was not read. The positive row and the cell counts below
-are therefore un-rechecked by that work — unchanged and uncontradicted, but not
-independently reconfirmed. See the last bullet of Section 14.
+*The positive row is now re-derived (2026-09-04).* The caller's light value
+does two things: it selects the branch above, and it is passed down to the
+carve helper as its own argument, where the helper adds one to it on entry and
+then, for every candidate cell, compares the squared distance from the centre
+against that value, keeping the cell only when the distance is strictly below
+it — which is exactly "squared distance at most the light value", the
+inclusive threshold this table has always stated. The hard-coded literal the
+producer also hands the helper, which R318/R327 noted, is the grid's row
+stride, not a distance; a second literal selects the helper's ordinary
+line-of-sight mode. The positive row and Section 4's per-threshold cell counts
+are therefore reconfirmed. Source provenance: private analysis in
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
 
 **The threshold's cell set.** Before line of sight is applied, the set of cells
 that clear the distance gate is fixed by `L` alone. These are the values the
@@ -1569,15 +1573,12 @@ The behaviour described above was derived by reading the function and format not
   threshold-32 reading of the White potion (R318, R327). Source provenance:
   derived from private analysis note
   `u5-decomp/notes/2026-09-02_issue-180_blocking-presentation-world-step-census.md`.
-  **What that pass leaves open for this document.** It established two things
-  about the producer's argument handling: the light value a caller supplies is
-  what *selects* which of the three branches runs, and the literal the producer
-  hands down to its carve helper is hard-coded **inside the producer** and is
-  identical for every caller. It did **not** re-derive whether the caller's light
-  value *also* reaches the carve as a distance threshold; the routine that would
-  carry a genuine distance or line-of-sight rule was not read. Section 3's
-  positive-value row and Section 4's per-threshold cell counts therefore stand
-  **un-rechecked** by this work rather than re-confirmed by it. They are not
-  withdrawn and no evidence against them was found, but an implementation that
-  depends on the exact per-threshold cell sets should treat them as awaiting
-  their own derivation rather than as corroborated by issue #180.
+  **What that pass left open has since been closed (2026-09-04).** It had
+  established that the light value a caller supplies *selects* which of the
+  three branches runs, and that a literal the producer hands its carve helper
+  is hard-coded inside the producer. A later read of the helper itself shows
+  the caller's light value is *also* passed down and is the inclusive
+  squared-distance threshold the helper tests every candidate cell against
+  (Section 3's note has the details); the hard-coded literal is the grid's
+  row stride. Section 3's positive-value row and Section 4's per-threshold
+  cell counts are reconfirmed.

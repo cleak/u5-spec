@@ -554,7 +554,9 @@ the end of a conversation — is specified in `systems/conversation.md`.
 The extra charge is independent of the quoted headline price and never scales
 with it: the player sees and confirms the table/stat-derived price, the
 ordinary affordability gate and main debit run, and only then is the extra
-amount subtracted from the same party gold word.
+amount subtracted from the same party gold word - with saturation at zero, so
+a party holding less than the drawn amount is left with no gold rather than a
+negative balance (established 2026-09-04).
 
 Compatibility code should not model the gate as karma, shop kind, healer
 identity, or a shop-local transaction flag. The Minoc no-price Cure/Heal branch
