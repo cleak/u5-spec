@@ -3210,14 +3210,16 @@ members of this set, for two separate reasons:
   such an actor's to-hit also collapses to 15 - is an **open question**, not a
   traced route. Published otherwise, Sections 6.1a and 11 would assert
   incompatible things about the same three actors.
-- **The reachability of the bit itself is disputed.** Private analysis's
-  encoding-level write scan found no reachable writer of the controlled/charmed
-  bit and concluded these routes dead. This repository keeps Section 6.1a's four
-  traced writers over that negative, because the scan's own stated residual -
-  writes through a base register already offset into the descriptor, word-sized
-  writes straddling the byte, and block copies - covers exactly the shape those
-  writers take. The disagreement is recorded in `NEXT-STEPS.md` and is not
-  resolved here.
+- **The reachability of the bit is settled in Section 6.1a's favour
+  (2026-09-04).** An earlier encoding-level write scan found no reachable writer
+  of the controlled/charmed bit and concluded these routes dead; this document
+  kept Section 6.1a's traced writers over that negative because the scan's own
+  residual covered exactly the shape those writers take. A widened scan that
+  includes the addressing form the first one omitted finds five set sites, and
+  they are Section 6.1a's routes: two in the Conjure/Swarm placement path, one
+  in Summon's placement, the Sword-of-Chaos compulsion on the acting party slot,
+  and monster possession on a random party slot. The negative is withdrawn as a
+  scan artefact, not as a behavioural claim; nothing 6.1a publishes changes.
 
 Treat the controlled-bit routes as an unresolved second population rather than
 as published members of the fixed-score set.

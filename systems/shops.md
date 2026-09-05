@@ -1342,6 +1342,19 @@ the shop cell; they are authored data and must be carried as data.
 | 4 | The Smugglers' Inn | `22` | Paws | `(27, 6)` | `(28, 6)` |
 | 5 | The King's Ransom Inn | `24` | Buccaneer's Den | `(7, 26)` | `(8, 26)` |
 
+**What those cells hold (established 2026-09-04 from the shipped pages).** Every
+bed cell in the table is the **west half of a two-cell bed**, and the waking
+position is that bed's east half - the party wakes on the same bed, not on the
+floor beside it. Five of the six lie on the inn's ground floor; the Warrior's
+Stead's bed is on Jhelom's **upper floor** (the same coordinates on the ground
+floor are cobbles), and because the rest handler leaves the floor byte
+untouched, the rest lands on a bed only because the Jhelom innkeeper's own posts
+are upstairs in every hour the inn is open, so the party is on that floor when
+it rents. Neither placement runs a passability test - the position is written,
+not walked - and the NPC pathing predicate treats both halves of a bed as
+blocked, so no NPC can be routed onto the sleeping party. Source provenance:
+private analysis in `u5-decomp/notes/` (shipped page and roster decode).
+
 Coordinates are ordinary party map coordinates on the location's 32-by-32 floor
 grid — the same pair movement writes — with `x` counted east from the west edge
 and `y` south from the north edge.

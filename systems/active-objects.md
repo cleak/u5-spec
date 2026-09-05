@@ -855,6 +855,12 @@ Each mode's entry handler initialises the table according to its needs.
 
 *Corrected (issue #184).* This entry previously described the town-family entry as unconditionally clearing every slot except slot zero and running the roster load and reseat, and `systems/town-mode.md` Section 5 described the preserving form as differing only in that "the active-object table tail is not zero-cleared". Both are withdrawn. See `RETRACTIONS.md` row R341.
 
+The roster that issue used as its worked example - Iolo's Hut's three
+rodent-class actors and Smith the horse - stands on forest and grass cells that
+both the party's terrain test and the NPC pathing predicate accept, so the four
+reseated records are placed on cells terrain cannot refuse (established
+2026-09-04 from the shipped page; private analysis in `u5-decomp/notes/`).
+
 **Overworld entry.** The selected plane's current `.OOL` replaces the entire
 live table byte-for-byte; records are not compacted or copied into newly chosen
 slots. Slot zero is included. Outdoor setup then synchronizes slot zero's X/Y
