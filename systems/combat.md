@@ -2114,7 +2114,16 @@ precede the banner: the active-player gate and the Sword-of-Chaos gate. The
 turn's two status early-outs — the dragged-under (Corpser-held) arm that prints
 `ARGH!` and the asleep arm that prints `Zzzzz...` — come **after** it, so a
 dragged-under or sleeping combatant does get its full banner and then that line
-in place of a command. A free re-prompt then takes one of **two** shapes, not
+in place of a command. *The dragged-under arm in full (established 2026-09-04):*
+after `ARGH!` and a short rumble it draws one uniform `1..30` and compares it
+with the actor's **base step** (for a party member, the raw Dexterity copied at
+seating); if the draw is **below** the base step the actor surfaces - its name
+is printed followed by ` regurgitated!`, a longer rumble plays, the
+dragged-under bit clears and the blanked sprite byte is restored from the
+record's primary tile byte - otherwise it stays held. Either way the turn ends
+there with no command read, so a party victim is released on any given turn
+with probability `(Dexterity - 1) / 30`. The asleep arm is independent: a
+`1`-in-`256` draw below sixteen wakes the sleeper before `Zzzzz...` prints. A free re-prompt then takes one of **two** shapes, not
 one:
 
 - **Short re-prompt, banner not reprinted:** an unrecognised key (`What?`), the
@@ -3510,7 +3519,7 @@ continues on the same row.
 | Target slept | both | `<target> slept!` | none. *(**Corrected**: this row previously read "Target slept or stoned". There is no stoning or petrification effect in combat; the branch that reaches this line applies sleep, and it replaces ordinary damage - Sections 7 and 12.)* |
 | Party target poisoned | monster attacker | `<target> is poisoned!`, printed **inside** damage resolution - after the hit newline and before the result line - and the ordinary result line is then suppressed | none |
 | Ordinary landed hit, **party** target | monster attacker | `<target> hit!` - **flat and ungraded** | none |
-| Ordinary landed hit, **party** target, attacker is a **Corpser** (class 45) | monster attacker | `<target> dragged under!` in place of `hit!` | the rising action-snap cue; the target is additionally marked with a status bit and its sprite blanked. **Which bit the drag sets is not established here**: either the asleep bit `0x08` or the dragged-under bit `0x04`, whose own turn arm prints `ARGH!` and a release roll rather than `Zzzzz...` and whose release restores exactly this blanked sprite (Sections 6.1 and 8.1). The two readings give the dragged combatant visibly different next turns, so an engine must not treat the earlier "marked asleep" wording as settled. |
+| Ordinary landed hit, **party** target, attacker is a **Corpser** (class 45) | monster attacker | `<target> dragged under!` in place of `hit!` | the rising action-snap cue; the target is additionally marked with a status bit and its sprite blanked. **Which bit the drag sets is not established here** - *settled 2026-09-04:* the **dragged-under bit `0x04`**, never the asleep bit. The hit arm sets that bit on the target and zeroes the sprite byte of the target's linked active-object record; the victim's own turns then take the `ARGH!` arm of Section 8.1 with its release roll, and the release restores exactly this blanked sprite (Sections 6.1 and 8.1). The earlier "marked asleep" wording is withdrawn; it was published only as unsettled. |
 | Ordinary landed hit, **monster** target | party attacker | `<target>` plus one graded wound line - see below | none |
 | Glass Sword swing | party melee | `Thy sword hath shattered!`, printed **inside** the damage roll, so it lands between the hit newline and the result line | none |
 | Food-steal branch | monster attacker | a newline, then `A <monster> stole some food!` - this **replaces the entire damage and narration chain** | a rising cue roughly 800 Hz toward 2000 Hz, then a stats-panel redraw |
