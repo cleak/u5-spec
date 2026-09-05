@@ -20,9 +20,9 @@ Two rules govern what belongs here:
   file when the owning document is updated, with a `RETRACTIONS.md` row if the
   answer reverses published text.
 
-Last reconciled: 2026-09-04. The tile-catalogue re-derivation that headed section 3
-was completed the same day once the shipped files became available; the other
-`trace` items were not re-traced.
+Last reconciled: 2026-09-05. Every `trace` item has been closed against the
+shipped files; what remains needs an owner decision (none at present), a live
+capture (section 2), or a change of scope (section 4).
 
 ## 1. Owner decisions
 
@@ -51,8 +51,17 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 
 ## 3. Needs a further static trace
 
-| Item | Where | Notes |
-|---|---|---|
+None open. The twenty-four items this section listed on 2026-09-04 were all
+closed on 2026-09-04 and 2026-09-05 once the shipped files became available:
+the tile-catalogue re-derivation (R383-R389), the Glass Sword slot consumption
+(R390), the visibility threshold, the controlled actor's fixed strike and the
+charmed-bit writers, the Corpser drag bit and release roll, the chargen stat
+seeds, the NPC initialiser and waypoint rule, the inn bed cells, the Iolo's Hut
+cells, the lowest-page descend tiles, the arrest guard, the Falsehood consumers,
+the sky readout, the whirlpool script, the two blips, the endgame helpers, the
+controlled monster's `Z` and cast arm, the arena-record scratch and the
+underworld object writers. Each closure is recorded in its owning document with
+the date, and in `EXTRACTION.md` and `NEXT-STEPS.md` under 2026-09-05.
 
 ## 4. Deferred by scope
 

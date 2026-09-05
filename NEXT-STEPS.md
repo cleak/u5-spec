@@ -36,6 +36,14 @@ row plus a one-line inline note in the affected section whenever an edit
 withdraws or inverts published text, including text published only in an issue
 answer.
 
+**Addendum — 2026-09-05, the static-trace sweep.** Once the shipped files were
+available, every `trace` row of `OPEN-QUESTIONS.md` was worked to a close
+across 2026-09-04 and 2026-09-05 - the tile catalogue re-derived from the
+description table (R383-R389), the Glass Sword slot consumption reversed (R390)
+and twenty-two clarifications, summarised in `EXTRACTION.md` under 2026-09-05.
+`OPEN-QUESTIONS.md` now holds only live-capture and scope items. Section 3 of
+that file records the closure list.
+
 **Addendum — 2026-09-04, reconciliation pass.** No new tracing; the handoff
 documents were reconciled against the tree and the private ledger. Four things
 land: `OPEN-QUESTIONS.md`, an index of every statement this repository publishes
@@ -3693,19 +3701,21 @@ where the two disagree.
 
 ### Remaining high-value gaps
 
-`OPEN-QUESTIONS.md` is the queue. In priority order:
+`OPEN-QUESTIONS.md` is the queue, and as of 2026-09-05 it holds only two
+kinds of item:
 
-1. ~~The owner decision on shipped text~~ **Decided 2026-09-04: keep as
-   published** (`EXTRACTION.md`, "Shipped-Text Policy").
-2. **The tile-catalogue range re-derivation** against the shipped description
-   table — the one private-ledger correction still open against the public
-   tree, and the item most likely to mislabel actors in an engine that resolves
-   tiles by range.
-3. **Live-capture items** — chiefly the wall clock of every PC-speaker effect,
-   the world-tick rate, and the three suspected NPC pursuit-stepper defects
-   that are deliberately unpublished until reproduced in an emulator.
-4. **Further static traces** — the combat, save-state and turn-loop residuals
-   the last eleven issues left explicitly open.
+1. **Live-capture items** (section 2) — chiefly the wall clock of every
+   PC-speaker effect, the world-tick rate, the three suspected NPC
+   pursuit-stepper defects that are deliberately unpublished until reproduced,
+   and the arena-edge residue values. A DOS emulator can be installed on the
+   analysis host, but no capture harness (scripted input, frame and audio
+   capture) exists yet; building one is the next real investment.
+2. **Scope deferrals** (section 4) — exact CGA/Hercules/Tandy parity and
+   XMIDI.
+
+The owner decision on shipped text was taken on 2026-09-04 (keep as
+published), the tile-catalogue re-derivation landed the same day, and every
+further static trace closed on 2026-09-04/05.
 
 The black-box observations filed by the clean engine remain the most
 productive source of spec defects; keep answering them first when they arrive.
