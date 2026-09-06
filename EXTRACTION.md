@@ -181,6 +181,27 @@ creatures (the regalia, the fields, the whirlpool), which the bestiary already
 half-recorded as gaps. Labels in the new tables are paraphrased; the shipped
 strings themselves stay in the private decode.
 
+## 2026-09-05 - First live captures (DOSBox harness)
+
+A headless DOSBox harness now exists on the private side, and the first
+captures landed the same day. What changed publicly: the blocked-step tone and
+the combat refusal pair were measured (`systems/audio.md` 7.4, 8.8, 10.1;
+pitches exact, durations inside the published bands, the refusal pair at the
+low edge); the calibrated unit was checked against a replica of the boot loop
+and the emulator's 16-bit wrap located, with what each DOSBox speed setting
+does to the 240 threshold (`systems/timing.md` 7.6, 8.7); the NPC engagement
+step got its observed contract - gate below four, east/north/west/south first
+fit, no move when nothing improves, event one tick after adjacency, and the
+creature-class outcome of the guard event (`systems/npc-schedules.md` 9,
+`systems/town-mode.md`); and the save writer's requirement that the target
+file already exist (`systems/save-load.md` 7.2, `systems/chargen.md`). The
+three suspected pursuit-stepper defects were shown to have no observable
+behaviour and left `OPEN-QUESTIONS.md`. Nothing was retracted: every measured
+figure fell inside its band and every added contract is a clarification. Still
+open on the capture side: period-hardware wall clocks, the glissando install
+cost, the Stonegate sweep, the whirlpool descent, the world-tick rate. Source
+provenance: private analysis in `u5-decomp/notes/` and `u5-decomp/scripts/`.
+
 ## 2026-09-05 - Every static-trace residual closed against the shipped files
 
 With the shipped files available again, the twenty-four `trace` items that
