@@ -245,7 +245,7 @@ A long band of bytes after the inn-guest registry holds the party's shared inven
 | `0x024A..0x0279` | 48 bytes | Spell-charge stock | One byte per pre-mixed spell charge. See Section 7.1.                                                         |
 | `0x027A..0x0281` | 8 bytes | Scroll counters | One byte per usable scroll row, in the same order as the U-Use scroll dispatch: `LV`, `HR`, `IS`, `AI`, `IQW`, `CKX`, `CIM`, `AT`. |
 | `0x0282..0x0289` | 8 bytes | Potion counters | One byte per potion row, in display order: Blue, Yellow, Red, Green, Orange, Purple, Black, White. |
-| `0x02AA` | 8 bytes | Reagents           | Black pearl, blood moss, garlic, ginseng, mandrake, nightshade, spider silk, sulfurous ash. One byte each.    |
+| `0x02AA` | 8 bytes | Reagents           | Sulfurous ash, ginseng, garlic, spider silk, blood moss, black pearl, nightshade, mandrake. One byte each - the mixing display order of `catalogs/item-list.md` Section 6. *Corrected 2026-09-06 (R391): this row previously listed the eight alphabetically, black pearl first.* |
 
 The inventory region holds two-byte words for the two counters that need them (food and gold) and single bytes for everything else. Carry caps are enforced by the gameplay code; the save format places no upper bound, and an editor that sets values past the in-game maximum will produce a save the engine will read but that may behave oddly on display or arithmetic. The arms-shop equipment block is item-id keyed: item id `N` reads or writes byte `0x021A + N`. Ordinary equipment grants increment that byte and cap it at ninety-nine.
 
@@ -257,7 +257,7 @@ implementation that gives them private storage will diverge:
   the gate for fixed hidden-treasure record 15. It is the same byte, not a
   parallel cookie. See Section 10.
 
-The reagent block is small enough to enumerate as a fixed eight-byte record at `0x02AA`. The order matches the in-world spell-mixing UI, with black pearl in the first byte and sulfurous ash in the last. The block is exactly eight bytes: the three bytes immediately after it are the rare-reagent harvest cooldown cookies described in Section 10, not a ninth through eleventh reagent.
+The reagent block is small enough to enumerate as a fixed eight-byte record at `0x02AA`. The order matches the in-world spell-mixing UI, with sulfurous ash in the first byte and mandrake in the last: it is the same order the Z-stats reagent page and the M-Mix list walk, the same order the spell recipe masks are bit-numbered in, and the same order the reagent name table is stored in. *Corrected 2026-09-06 (R391): the previous sentence had black pearl first and sulfurous ash last, which is alphabetical order and not what the shipped game reads; an implementation that followed it wrote every counter into the wrong slot.* The block is exactly eight bytes: the three bytes immediately after it are the rare-reagent harvest cooldown cookies described in Section 10, not a ninth through eleventh reagent.
 
 ### 7.1 Spell-charge stock
 
@@ -575,8 +575,9 @@ In the factory seed used for a questionnaire-created game, the untouched
 `INIT.GAM` and clean-install `SAVED.GAM` images are byte-identical. The starting
 counters are food 63, gold 150, keys 2, gems 0, torches 4, and the
 Grapple/legacy-magic-powder byte 0.
-The reagent record starts as black pearl 4, blood moss 6, garlic 7, ginseng 6,
-mandrake 0, nightshade 3, spider silk 0, and sulfurous ash 0. The party-size
+The reagent record starts as sulfurous ash 4, ginseng 6, garlic 7, spider
+silk 6, blood moss 0, black pearl 3, nightshade 0, and mandrake 0 - the same
+bytes as before, read in the corrected Section 7 order (R391). The party-size
 byte is 3, matching Avatar, Shamino, and Iolo in the travelling party.
 
 The same seed places the save clock at year 139, month 4, day 5, 08:35. The

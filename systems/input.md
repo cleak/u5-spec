@@ -211,7 +211,10 @@ choices are presented to the player as party positions.
 
 The standard party-target wrapper prints a short "on whom" prompt, invokes the
 resident slot selector, then echoes either the selected character's displayed
-name or the none/cancel result. If a selected name did not already wrap output
+name or the none/cancel result. In the selector itself a digit repositions the
+highlighted slot without committing; Return or Space commit the highlighted
+slot, Escape cancels, and `0` is the explicit "none" answer only where the
+caller enables it. *(Clarified 2026-09-06, issue #192.)* If a selected name did not already wrap output
 to the next line, the wrapper appends a newline so the following prompt starts
 cleanly.
 

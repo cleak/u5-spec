@@ -33,6 +33,13 @@ scene dispatch. The public prerequisite chain is:
    save-backed box flag used by the ending.
 4. The party reaches Doom's deepest final room trigger. In stock data this is
    Doom level seven, local coordinate `(X=5, Y=7)`, with room id fifteen.
+   **That cell has no walkable neighbour** - its three in-map neighbours are
+   walls and it sits on the bottom row - so it is never *walked* onto: the
+   only way in is the fall trap directly above it on level six, and the
+   fall-landing path of `systems/dungeon-mode.md` Section 8.1 is what runs the
+   room-entry helper. An implementation whose fall handler lands the party
+   without consulting the trigger has an unreachable ending. *(Added
+   2026-09-06, issue #204.)*
 5. That room selects the final Doom `DUNGEON.CBT` arena slot. The room setup
    scan consumes the arena metadata cell that carries the `0x3C` absorbable-field
    family marker, placing it as a special active-object marker for combat.
@@ -82,7 +89,7 @@ On entry, the endgame takes over the screen and scene state:
 1. Mark the resident state as being in the endgame, so normal world redraw behaviour no longer applies, and mark the scene as having no active combatant so the arena renderer suppresses its target cursor.
 2. Run a full status-panel redraw. Its side effect is that the message window of section 3.1 becomes the active text window for the whole dialogue phase.
 3. Load endgame-specific data resources for the throne-room/cinematic scene and Lord British message records.
-4. Load and draw the endgame bitmap assets through the same resident image-loading path used elsewhere.
+4. Load and draw the endgame bitmap assets through the same resident image-loading path used elsewhere. Before that, at the moment the absorption line prints and the room is still on screen, the endgame issues the display driver's **whole-tileset colour remap** (`systems/display-driver-abi.md` Section 10): every pixel of a fixed set of twenty-two tiles is passed through a sixteen-entry colour map that turns red and brown into green, green into red, blue into magenta and leaves grey, dark grey, yellow and white alone, so the final room's floor, chairs and tables go green while its stone border and the party keep their colours. It is one-shot and is never undone in the terminal state. *(Added 2026-09-06, issue #200.)*
 5. Clear the active-object table and rebuild it as a cinematic tableau rather than as a gameplay object list.
 
 The initial entry path loads `MISCMAPS.DAT` for the tableau and `ENDMSG.DAT`
@@ -890,7 +897,11 @@ negative. Each of the three components is then formatted as a decimal number
 followed by ` year`, ` month` or ` day`, with a trailing `s` when the value is
 greater than one. **A zero component is skipped entirely**, and the `, `
 separator is emitted only when a later component will also be printed, so
-"years, months, days" collapses naturally.
+"years, months, days" collapses naturally. When all three are zero - a quest
+completed on the campaign's first day, reachable only by jumping straight to
+the ending - nothing at all is printed on that row: the line feed still lands,
+so the middle row is **blank**. There is no `0 days` fallback and no special
+case. *(Confirmed from the shipped routine 2026-09-06, issue #205.)*
 
 ### 9.5 The terminal state
 

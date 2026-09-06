@@ -430,6 +430,39 @@ cancelled.
 Source provenance: derived from private analysis note
 `../u5-decomp/notes/`.
 
+### 5.8 Result literals of the common commands
+
+*Added 2026-09-06 (issue #194).* The verb echoes of Section 5.2 are followed
+by result text that earlier revisions described only in prose. Every string
+below is a stored literal of the shipped game; the row structure is what the
+message window shows, checked in play. `⏎` marks a row break, `[blank]` an
+empty row.
+
+| Keys | Rows |
+|---|---|
+| `L` + direction, ordinary terrain | `Look-North` ⏎ `[blank]` ⏎ `Thou dost see` ⏎ the description (`cobble`, `grass`, `trees`, `a table`, ...) |
+| `G` + direction, nothing there | `Get-North` ⏎ `[blank]` ⏎ `Nothing to get!` |
+| `S` + direction (town or overworld) | `Search-North` ⏎ `Player: ` with the shared member selector (`inventory.md` Section 4.3) ⏎ the chosen name completes the row; Escape answers `Player: None!` ⏎ `[blank]` ⏎ `Thou dost find` ⏎ `nothing of note.` |
+| `K` + direction, no feature | `Klimb-North` ⏎ `What?` |
+| `X` on foot | `X-it what?` on one row (the verb echo and the refusal are two literals) |
+| `E` off an entrance | `Enter what?` |
+| `H` in town, not on an inn bed | `Hole up- Only in bed!` on one row |
+| `I` with torches | `Ignite torch!` and nothing else |
+| `M` then Escape | `Mix Reagents` ⏎ `[blank]` ⏎ `For what spell?` ⏎ `:` (free-text row) ⏎ `None!` |
+| `C` | `Cast...` ⏎ `Player: ` with the selector |
+| `R`, Return | `Ready...` ⏎ `[blank]` ⏎ `Player: Avatar` ⏎ `Item: ` with the equipment picker |
+| `Y`, a word, Return (no effect) | `Yell what?` ⏎ `:WORD` (the typed word, upper-cased, after the colon) ⏎ `[blank]` ⏎ `No effect!` |
+| `Y`, Return with nothing typed | `Yell what?` ⏎ `:` ⏎ `Nothing` |
+| `N`, two members | `New Order` ⏎ `[blank]` ⏎ `Swap ` + selector → `Swap Shamino` ⏎ `with ` + selector → `with Iolo!` |
+| `N`, the leader | `Swap Avatar` ⏎ `[blank]` ⏎ `Avatar must lead!` |
+| `N`, cancelled | `Swap nobody!` |
+| `Space` | `Pass` |
+
+Two facts behind the table. The direction form of Search always runs the
+acting-member selector before it searches, in every scene that has the
+command. And the on-foot X-it refusal is the shared `what?` tail, not an "on
+foot" line: `vehicles.md`'s "On foot" refusal belongs to Board.
+
 ## 6. N-New Order Party Command
 
 N-New Order is a party-roster command for changing the travelling order. It is

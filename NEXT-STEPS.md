@@ -36,6 +36,13 @@ row plus a one-line inline note in the affected section whenever an edit
 withdraws or inverts published text, including text published only in an issue
 answer.
 
+**Addendum — 2026-09-06, the issue batch.** Fifteen clean-side issues
+(#192-#206) answered in one pass against the shipped files, two of them with
+live checks on the private DOSBox harness; four retractions (R391-R394) and
+the clarifications listed in `EXTRACTION.md` under 2026-09-06. The one item
+that reopened `OPEN-QUESTIONS.md` Section 3 is the derivation behind the
+corridor mirror rule, whose behaviour is now published from a capture.
+
 **Addendum — 2026-09-05, the static-trace sweep.** Once the shipped files were
 available, every `trace` row of `OPEN-QUESTIONS.md` was worked to a close
 across 2026-09-04 and 2026-09-05 - the tile catalogue re-derived from the

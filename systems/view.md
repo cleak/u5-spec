@@ -162,9 +162,15 @@ Special LOOKOBJ look cases include:
   time using the normal twelve-hour AM/PM presentation.
 - **Shrine and dungeon-entrance tiles** (live tile `0xDE` and `0xDF`). Prints the generic tile description
   and appends the virtue or dungeon name selected as tabulated above.
-- **Fountains** (live tile `0xD8..0xDB`). Prompt for the drinking party member; cancelling prints the
-  no-one result. Dead or asleep members refuse as incapacitated. Any other
-  selected member receives the refresh message. The overworld/town fountain
+- **Fountains** (live tile `0xD8..0xDB`). Print the ordinary `Thou dost see`
+  preamble and the description `a gurgling fountain!` followed by a blank row;
+  then print `Who will drink?` and open the shared party-member selector
+  (`inventory.md` Section 4.3, with its `Select:` label and inverted row; no
+  name is echoed). Cancelling prints `None!`. A Dead or Asleep member prints
+  `Incapacitated!` and a blank row; any other member prints `Refreshing...`.
+  The handler runs **once**: whichever line it prints, it returns to the
+  command loop without re-prompting. *(Literals and the single-pass rule added
+  2026-09-06, issue #197.)* The overworld/town fountain
   result is presentation-only: this LOOKOBJ path does not restore HP, cure
   status, wake sleepers, or otherwise write party state. Dungeon fountains are
   the state-changing fountain family and are specified in `dungeon-mode.md`.

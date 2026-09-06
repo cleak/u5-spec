@@ -178,7 +178,20 @@ The world-mode `M` (Mix Reagents) command is the player's tool for converting ra
 **Step 2 — pick a spell.** The handler prints `For what spell?` and uses the same compact letter-coded prompt as the C-Cast command. The spell name is parsed against the forty-eight-entry token table, returning the spell index 0..47. Blank input or Escape prints `None!` and aborts before reagent selection. A nonblank selector with no table match returns the shared parser's no-match value, which is distinct from the blank/cancel value; M-Mix does not print C-Cast's `No effect!` at this point, so the player can still enter reagent selection. That no-match value then takes the same path as a wrong recipe in Step 7: if the player chooses a nonzero mix and quantity, the selected reagents are consumed, no charges are added, **and the trap fires**. A mistyped incantation is therefore as expensive as a wrong recipe, not a free cancel.
 
 **Step 3 — select reagents.** The handler shows only the reagent rows whose
-inventory counters are nonzero and lets the player toggle a selected set. The
+inventory counters are nonzero and lets the player toggle a selected set. *The
+surface (added 2026-09-06, issue #203):* the list is drawn on the stats panel
+under the border label `Reagents:` (with the colon - a different literal from
+the Z-stats page's `Reagents`), one row per owned reagent as a two-digit
+zero-padded count, the selector cell, and the display name (`04 Sulfur Ash`),
+in the reagent order of `catalogs/item-list.md` Section 6; the cursor row is
+inverted across the panel's fifteen cells, and a reagent that is in the mix
+shows the small solid diamond (text-font `0x0F`) in its selector cell, so a
+row can be highlighted, marked, both or neither. The message window prints the
+key help as real text: the four arrow glyphs and ` to move,` on one row, then
+`RETURN selects.`, then `Type M to mix:`. The spell prompt above it is the
+same single edited line as C-Cast's, echoing the rune words in capitals
+(`IN LOR`), and its `:` row continues the exchange the prompt opened, so it
+carries no command end-cap (`text-output.md` Section 10.2). The
 selection cursor moves with the same four directional keys used by compact
 menus, Return or Space toggles the highlighted reagent, `M` accepts the current
 mask, and Escape cancels before any inventory change. The returned value is an

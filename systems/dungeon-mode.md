@@ -510,20 +510,28 @@ nor the object bank is used by the map view (Section 12).
 Every corridor image is drawn **twice**: once at its left position and once
 horizontally mirrored. The rule is one sentence:
 
-> `x_right = 192 - x_left - width`
+> `x_right = 191 - x_left - width`
 
 which is the reflection of the left rectangle about the vertical centre line at
-x = 95.5. For both families the left position is `96 - hw[b]`:
+x = 95. For both families the left position is `96 - hw[b]`:
 
 | Band | Left x | Side image right x | Forward image right x |
 |---:|---:|---:|---:|
-| 0 | 16 | 152 | 96 |
-| 1 | 40 | 120 | 96 |
-| 2 | 72 | 104 | 96 |
-| 3 | 88 | 96 | 96 |
+| 0 | 16 | 151 | 95 |
+| 1 | 40 | 119 | 95 |
+| 2 | 72 | 103 | 95 |
+| 3 | 88 | 95 | 95 |
 
-The forward family's mirrored copy therefore always begins exactly at the
-centre line, and the two halves meet seamlessly. Every destination rectangle in
+The forward family's mirrored copy therefore always begins at column 95, one
+column inside the centre, so the two halves **overlap in that column** rather
+than abutting; the overlap is invisible because the mirrored copy's first
+column carries the same pixels as the left copy's last. *Corrected 2026-09-06
+(R394, issue #199): the rule was published as `192 - x_left - width`, a
+reflection about 95.5 with every right-hand x one pixel too far right. A
+pixel-exact capture of the shipped corridor shows every left copy at the
+published x and every mirrored copy exactly one pixel left of it; the shipped
+corridor is not left-right symmetric (about a quarter of its pixels break
+symmetry), which the 95.5 rule cannot produce.* Every destination rectangle in
 the corridor reproduces exactly from the half-aperture sequence and these two
 rules; no further tables are needed.
 
@@ -694,7 +702,7 @@ Placement follows three rules, all of which reproduce exactly from the
 half-aperture sequence:
 
 - Like corridor images, every sprite is drawn as a **left half at x 56, 72, 80
-  or 88** for bands 0 to 3 and a **mirrored right half beginning at the centre
+  or 88** for bands 0 to 3 and a **mirrored right half beginning at column 95, one inside the centre (R394)
   line**, so the two halves meet at x = 96.
 - **Floor-standing objects** - pit, chest, open chest - are positioned so their
   **bottom edge sits on the floor line of their band**: y = 176, 152, 120, 104.
@@ -1122,7 +1130,9 @@ room triggers, then reinitialises the first-person view.
 
 A stock `DUNGEON.DAT` reachability scan found fall-trap cells, but no level
 seven fall trap and no same-column vertical fall-trap run that reaches level
-seven. The off-bottom mutation is therefore a defensive compatibility path for
+seven - single drops onto level seven do exist, and one of them, Doom's level
+six trap at `(5, 7)`, is the only way into the final room
+(`systems/endgame.md` Section 2). The off-bottom mutation is therefore a defensive compatibility path for
 custom or mutated dungeon data in the analyzed baseline, not a route produced
 by the shipped static dungeon records.
 Exact bytes `0x62` and `0x6A` are bomb traps: they print the two bomb lines of

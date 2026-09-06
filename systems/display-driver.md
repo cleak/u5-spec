@@ -599,7 +599,11 @@ of the whole pair: for each of the two affected tile regions the driver first
 copies the eight live asset bytes into its scratch, and then overwrites those
 same eight bytes with the eight bytes lying one tile-stride-minus-sixteen
 earlier in the same asset segment - so the block is replaced by material taken
-from earlier in the same tile. Mode `1` is a **pure restore**: it copies the two
+from earlier in the same tile. *Identified 2026-09-06 (issue #200): with the
+prepared asset's 128-byte tile stride, the two blocks are the fifteenth pixel
+row of tile `200` (the chair-marker tile that doubles as the NPC start marker)
+and of tile `279` (the object-domain ladder), each replaced by that tile's own
+first row.* Mode `1` is a **pure restore**: it copies the two
 scratch blocks back and does nothing else. It is therefore *not* mode zero's
 inverse in the sense of performing a mirrored mutation - it simply undoes the
 substitution.

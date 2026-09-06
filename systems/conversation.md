@@ -35,6 +35,16 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
 5. **Dialog-index dispatch.** Each live NPC carries a one-byte *dialog index* loaded into RAM from the location's `.NPC` file when the scene was entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
 
+   **The guard gate, and where the two refusal lines come from** *(added 2026-09-06, issues #198 and #206; read from the dispatcher and checked live)*. Before the index is used, the dispatcher looks at the behaviour value of the NPC's **current** waypoint - the waypoint it last reached, not the one the hour selects - and at the NPC's sprite:
+
+   - If that waypoint's behaviour is the approach-and-attack mode (`npc-schedules.md` Section 9, value `4`), the dispatcher first **rewrites that waypoint's behaviour to the bounded-wander mode** (value `1`, a persisted schedule edit: the guard stands down for the rest of the period and the edit travels with the save) and then dispatches on the dialog index. An index of zero prints the bare `No response!` line; anything else proceeds.
+   - Otherwise, if the NPC's live sprite is the guard sprite, the NPC answers `The guard offers no response!` unless *both* its current waypoint is waypoint 1 *and* its dialog index is non-zero, in which case it dispatches normally. This line is one stored literal; it is not composed from the NPC's Look description, and nothing else prints it.
+   - Any other NPC dispatches on its dialog index; index zero prints the bare `No response!`.
+
+   So the bare line has exactly two producers - the mirror tile of step 4 and a zero dialog index reached through this gate - and the guard line has one. The regime demands of `systems/blackthorn.md` Section 7a are reached from here through the reserved index, which is why a regime guard answers only while its approach-and-attack waypoint is current: at other hours the same guard says `The guard offers no response!`. Observed live at Minoc's gate at 16:00: the demand fires.
+
+   **What loading a save does to this.** The runtime NPC table, including each NPC's dialog index and current waypoint, sits inside `SAVED.GAM` (`formats/saved-gam.md`), and a save the shipped game writes inside a location restores it, so Talk works after Journey Onward exactly as it did before the save (checked live in Skara Brae). A save written by another program that leaves that region zero makes every NPC in the location answer `No response!` until the location is re-entered from outside - that is a property of the save, not of the game.
+
 The dialog index is a 1-based identifier shared between the `.NPC` and `.TLK` files of the same location class. Index 0 means "no dialogue at all" (the NPC is a non-speaker — a guard, a child too young to talk to, an animal). Index 1 is an ordinary dialogue id like any other: each class file's blob 1 is a fully authored NPC, and one occupied roster slot per class file points at it. Earlier revisions of this spec called index 1 a universal sentinel that no live NPC uses; that is withdrawn (`formats/tlk.md` Section 6).
 
 ### 2.1 The reserved "not a real NPC" index
@@ -366,7 +376,7 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 | 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes, mask each to seven bits, interpret them as ASCII decimal digits, and run the gold-payment routine against that three-digit amount. Used for tolls, bribes, and donations. |
 | 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
 | 0x87  | KEYWORD-ALIAS   | none                    | Save the current stream position; skip forward past the remainder of the current record, past any run of terminators, and past the whole record that follows; run the record after that as a nested stream. If the nested stream signals stop, the outer stream stops too; otherwise the saved position is restored and the outer stream continues where it left off. No keyword matching, no player input, no flag write. |
-| 0x88  | ASK-WHO         | none                    | Prompt the player for a name and read a typed line. On a match against a live party member, **set the active scene's branch-flag bit for the NPC currently speaking** and print the affirmative acknowledgement; on empty input or no match, print the dismissive one. This is the in-stream setter for the bank that `0x8C` tests. |
+| 0x88  | ASK-WHO         | none                    | Prompt the player for a name and read a typed line. The prompt is the engine's own four-row literal - a quoted `"What is thy name?"` line, a blank row, `You respond-`, and a `:` input row - the code consumes no text from the stream, and the stream around it carries only the closing and opening quotes (*added 2026-09-06, issue #198*). On a match against a live party member, **set the active scene's branch-flag bit for the NPC currently speaking** and print the affirmative acknowledgement; on empty input or no match, print the dismissive one. This is the in-stream setter for the bank that `0x8C` tests. |
 | 0x8C  | IF-ELSE         | one                     | Collect one argument byte, which is the **branch target label**, then test the active scene's branch-flag bit for the NPC currently speaking. If the bit is clear, fall through in-stream with the byte after the argument. If it is set, transfer to the labelled record named by the argument — or, for the reserved argument `0xFF`, end the response and return to the keyword prompt. The tested bit is chosen by the engine, never by the script. |
 | 0xFE  | IF-ELSE-ALT     | two                     | Multi-byte alternative branch form. Collects a moral-standing threshold byte and a target-label byte; if the shared moral-standing selector is at or above the threshold, the runner branches to the target label. |
 
@@ -720,9 +730,11 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
 1. **Entry.** The Talk command resolves an NPC and a dialog index. The conversation overlay loads the matching `.TLK` file's header, finds the right entry, and reads the blob.
 
-2. **Opening preamble.** The entry preamble prints the fixed "Thou seest"
-   lead-in, runs the Description entry (entry 2 of the five mandatory leading
-   entries), and emits the blank-line spacing before the NPC greeting.
+2. **Opening preamble.** The entry preamble prints the fixed `You see ` lead-in
+   (with its trailing space), runs the Description entry (entry 2 of the five
+   mandatory leading entries), and emits the blank-line spacing before the NPC
+   greeting. *Corrected 2026-09-06 (R393): this step previously named the
+   lead-in "Thou seest"; the stored literal is `You see `.*
 
 3. **Opening: acquaintance test, then greeting or introduction.** After the
    description, the engine consults the same per-scene "this NPC has been told

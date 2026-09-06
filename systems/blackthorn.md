@@ -573,7 +573,16 @@ reserved "not a real NPC" dialog index, described in
 loading a `.TLK` blob.
 
 That handler has exactly three branches, chosen by the current scene, and its
-only durable effect is on the party's gold. It writes no character status, no
+only durable effect is on the party's gold. **Reaching the handler at all has
+a gate that is not in this section's scene test**: the conversation dispatcher
+hands a guard to it only while the guard's current waypoint carries the
+approach-and-attack behaviour, and it stands the guard down as it does so
+(`systems/conversation.md` Section 2, step 5). Outside that period the same
+guard answers `The guard offers no response!`. The shipped regime guards
+carry that behaviour on their middle waypoint only - Minoc's gate guard, for
+example, from 05:00 to 11:00 and again from 13:00 to 21:00, and not at noon,
+when it is upstairs. *(Added 2026-09-06, issue #206; the Minoc demand was
+observed live at 16:00 with the wording below.)* It writes no character status, no
 hit points, and no karma, and it returns one of two results — "paid or passed",
 or "refused/failed" — which becomes the conversation's result. At the Talk
 layer, paid/passed is the ordinary outcome. Refusal or failure is the only
@@ -583,7 +592,9 @@ positive outcome and requests the town loop's arrest cleanup.
 while the Black Badge aura's exact effect code `0x1D` is the party's active
 timed magic effect (see `systems/magic.md`), the guard asks the party to give
 the password as a bearer
-of the Badge and prompts for a response. The player may type up to fourteen
+of the Badge - `"Give now the` / `password, bearer` / `of the Badge!"`, then
+a blank row and `Your response?` above the `:` input row - and prompts for a
+response; a match answers `"Pass, friend!"`. The player may type up to fourteen
 characters, but only the **first four** are compared, and the comparison folds
 letter case. The expected answer is the Oppression-side password that
 `catalogs/quest-graph.md` Section 3 names, and that word is longer than four
@@ -597,11 +608,18 @@ Badge a second time to take it off, or donning the Amulet or Crown instead.
 
 **Branch 2 — the Minoc charity demand.** In Minoc, the guard announces that the
 party will give half its gold to charity. On a yes, the party's gold word is
-halved. On a no, nothing is taken and the refusal proceeds to arrest.
+halved. On a no, nothing is taken and the refusal proceeds to arrest. The
+demand is printed in quotes over three rows, `"Thou wilt give` / `half thy gold
+to` / `charity!"`, then a blank row, the shared yes/no question `Dost thou
+pay?`, and a `:` answer row that echoes `Yes` or `No!`. A refusal is followed
+by the arrest exchange of `systems/town-mode.md`: `"Thou art under arrest!"`,
+a blank row, `"Wilt thou come quietly?"` and another `:` row. *(Literals added
+2026-09-06; observed live.)*
 
 **Branch 3 — the default tribute.** In every other scene the handler reaches,
 the guard demands a tribute to Blackthorn of ten gold per **living** party
-member; members marked Dead are not counted, so the amount is a head tax on the
+member; the line is `A guard demands` / `a ` amount ` gp tribute` / `to
+Blackthorn!` followed by the same `Dost thou pay?` question; members marked Dead are not counted, so the amount is a head tax on the
 survivors. The demanded amount is printed in the line. On a yes, and only if the
 party can afford the full amount, that amount is subtracted; if the party cannot
 pay, the handler refuses, takes nothing, and proceeds to arrest.
