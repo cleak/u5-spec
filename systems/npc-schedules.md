@@ -529,13 +529,33 @@ waypoint.
 | `3` | **Flee.** The NPC acts only while the player is within about four tiles, and then chooses the neighbouring square that **maximises** distance to the player. It is the only value in this table that moves away; every other acting mode minimises distance. **Correction:** earlier revisions of this row said "follow or shadow the player at distance" and described it as falling into the chase family when the player closes. That was exactly inverted. Values `3` and `6` share a dispatch handler, so they have the same *trigger* — act within four tiles — but the step chooser tests the mode again and gives them opposite directions. |
 | `4` | Approach-and-attack family. While the player is four or more tiles from the *waypoint*, the NPC takes the ordinary bounded wander step with the **same constant cap of three** that value `1` uses; when the player is closer than that, it enters the engagement path and can raise the town-mode attack event - but only for an NPC whose dialogue-index field is non-zero; an NPC with no dialogue entry pursues without ever raising it (the same field J-Jimmy clears for value `5` below; private analysis in `u5-decomp/functions/NPC_OVL/`). **Corrected (R317):** earlier revisions said this arm "uses the wander step with a shrinking range around the waypoint". That is withdrawn. The distance this mode measures is used only to choose between wandering and engaging and is then discarded; the wander radius is a constant, identical to value `1`, and never narrows as the player closes. |
 | `5` | Randomized chase with the attack event. No shipped `.NPC` schedule authors this value, but J-Jimmy writes it into all three periods when a prisoner is first released. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test normally raises the same town-mode attack event as value `4` rather than the guard event. Jimmy first clears the released NPC's dialogue/awareness field, which suppresses that adjacent event for the current visit while preserving chase movement; `systems/doors-and-z-transitions.md` owns the full release lifecycle. It is not a reserved hole or a no-op. |
-| `6` | Guard/blocking event family. It **approaches** the player, acting only while the player is within about four tiles, and raises the non-attack guard event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. |
+| `6` | Guard/blocking event family. It **approaches** the player, acting only while the player is within about four tiles, and raises the non-attack guard event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. *Clarified 2026-09-05: "non-attack" names the event code, not the outcome. What town mode does with it depends on the NPC: for a guard it is the guard interaction of `systems/town-mode.md`; for a creature-class NPC without dialogue (the giant rats outside the starting hut are shipped examples) the same event enters the NPC-conflict chain and an arena fight begins with `Attacked!`, one turn after the creature reaches the party. Observed live.* |
 | `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation. |
 
 Values greater than `7` fall through to the no-action/default case. The AI byte
 does not affect the *target* the schedule resolves to -- that is purely the
 (x, y, z) for the active waypoint. It only affects what the NPC does once that
 waypoint is active.
+
+**The engagement step, as observed.** *(Added 2026-09-05; every sentence here
+was watched live in the shipped game and matches the static reading.)* The
+"within about four tiles" gate of values `3`, `4` and `6` is a Manhattan
+distance strictly below four: an NPC three tiles away acts, one four tiles away
+does nothing at all. An engaging NPC scores its four orthogonal neighbours by
+the Manhattan distance each would leave to the party, treating cells it may not
+enter (blocked terrain, occupied cells, off-map) as unusable, and takes the
+**first** neighbour in the fixed order **east, north, west, south** that
+strictly reduces the distance. It never breaks ties any other way, never takes
+a step that leaves the distance unchanged, and never plans a route: when no
+neighbour strictly improves, the NPC **stays where it is that turn**, and it
+keeps staying there for as long as the geometry holds, even when an opening
+two cells away would let it round the obstacle. Offered a westward and a
+southward step of equal merit, a shipped NPC steps west. On the tick after it
+becomes orthogonally adjacent it takes no step and raises its adjacency event
+instead, so there is always one full turn between "the pursuer is next to the
+party" and whatever that event produces. An earlier private reading suspected
+three defects in this chooser; none of them has an observable effect, and an
+implementation that follows this paragraph is exact.
 
 ### 9.1 The per-turn wander gate
 

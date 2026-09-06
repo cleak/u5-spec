@@ -806,7 +806,11 @@ blocked-step recipe - a blocking 165 Hz tone held for 200 calibrated units:
 | Dungeon | 0 | **Silent.** No sound call on either refusal arm. |
 
 Ctrl-S suppresses the tone but not the 200-unit hold. Two hundred outer units
-is about **176 ms**, a little over three BIOS ticks. This is the reference cue
+is about **176 ms**, a little over three BIOS ticks. *Measured 2026-09-05 under
+DOSBox at its default real-mode speed: 165.0 Hz for 175.7 ms, and 172.7 ms at
+half that speed - inside the published band, and the first live check of the
+anchor. DOSBox is not period hardware; see `timing.md` section 8.7 for what
+the emulator's speed setting does to this figure.* This is the reference cue
 for the whole anchor: if the blocked-step beep reads as a roughly
 two-tenths-of-a-second bump in play, every other duration in section 10 scales
 correctly from it.
@@ -1500,7 +1504,14 @@ Three details a frontend will otherwise get wrong:
   `What?` with no sound. That silence is real behaviour, not an omission here.
 - **The interval is 6.63 semitones descending**, realised 220.0 Hz then
   150.0 Hz. Each tone is about 132 ms, so the whole effect is about **263 ms**,
-  band 237 to 289 ms (section 10.1).
+  band 237 to 289 ms (section 10.1). *Measured 2026-09-05 under DOSBox: 220.1 Hz
+  for about 108 ms, then 151 Hz for about 126 ms, 237 ms from first edge to
+  last - the pitches and the order exactly, the total at the low edge of the
+  band. The first tone was audibly about 23 ms shorter than its hold, the
+  second about one 220 Hz period shorter, and the break between them was a
+  single half-cycle. The holds are program constants and stand; what this
+  suggests, unverified, is that a blocking tone's audible length can fall short
+  of its hold by up to one period of the divisor that was programmed before it.*
 
 **Confidence.** High on the trigger, the mode scope, the twelve-key set, the
 message text, the text-before-sound ordering, the single call site, the absence
@@ -1664,7 +1675,10 @@ not vary the counts.
 
 ### 10.1 Blocking tones and direct calibrated waits
 
-One outer unit is about 0.88 ms.
+One outer unit is about 0.88 ms. *An emulator check (2026-09-05, DOSBox at
+its default speed) put the blocked-step tone at 175.7 ms, i.e. an outer unit of
+0.878 ms; it is not a period-hardware measurement, but it is the first live
+figure and it sits on the anchor.*
 
 | Effect | Outer units | Duration | Band |
 |---|---:|---:|---|
@@ -1931,7 +1945,9 @@ pointer table, self-modified code, a tail-jump into a primitive, or entry
 through the module loader by a computed index. No evidence of any of those was
 found; their absence is **not** proved. **Nothing in this pass was verified at
 run time either.** Two of its claims are cheap to settle in play: start any
-combat and press `L`, and sail into a whirlpool.
+combat and press `L`, and sail into a whirlpool. *The first of those was done
+on 2026-09-05 under DOSBox (section 8.8): pitches and order confirmed, total
+at the low edge of the band. The whirlpool has not been sailed into.*
 
 The wall-clock material added in sections 4, 5.4.3, and 10, and the delay-context
 material it depends on in `timing.md` sections 6 and 7, is a **static timing

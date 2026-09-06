@@ -685,7 +685,13 @@ pending answers and treats them as known gaps:
 1. **Nothing in this section was verified at run time.** A single cycle-accurate
    run that read the boot calibration value after startup would collapse most of
    the band in section 7.2 and much of the band in section 7.1. This is the
-   largest single gap in the whole timing contract.
+   largest single gap in the whole timing contract. *Narrowed 2026-09-05, not
+   closed: under DOSBox (not cycle-accurate) a replica of the boot loop and the
+   game's own blocked-step tone agree that one outer unit is the calibration
+   count times two emulated instruction cycles, 0.878 ms at the emulator's
+   default speed and 0.864 ms at half that speed - on the anchor, and confirming
+   that the unit is a fixed fraction of a timer tick wherever the counter does
+   not wrap (section 8.7). The period-hardware value is still unmeasured.*
 2. **The purpose of the dead shift ramp** (section 6.1) is unrecoverable. Do not
    model it.
 3. **The reason the one live selector has its particular value** (section 6.1) is
@@ -1043,8 +1049,20 @@ it should be committed to.
    calibration is measured at boot from the host's real speed and no attempt was
    made to convert an emulator cycles setting into a calibration value. The
    cursor signature in Section 8.3 settles it observationally in seconds.
+   *Measured 2026-09-05 for DOSBox 0.74 with a replica of the boot loop: the
+   emulator's normal core spends three cycles per loop trip, so the value is
+   about `cycles-per-ms x 0.439` until the counter wraps - 658 at 1,500, 1,317
+   at the real-mode default of 3,000, 1,537 at 3,500. Every one of those is
+   above 240, so the one-tick wait runs there.*
 3. Whether the calibration counter's 16-bit wrap is reachable on any host the
-   implementation will actually be tested against.
+   implementation will actually be tested against. *It is. Under DOSBox 0.74
+   the counter wraps at about 3,580 cycles per millisecond, barely above the
+   default: 3,600 cycles gave a calibration of 8, 4,000 gave 184 (below the 240
+   threshold, so the idle wait is elided there), 10,000 gave 1,247 and 30,000
+   gave 598. In the wrapped regime every calibrated wait shrinks with the
+   setting - the blocked-step tone ran 49 ms at 10,000 cycles and was inaudible
+   at 30,000 - so a comparison capture must be taken at or below the default
+   speed. Measured 2026-09-05.*
 4. Whether the intro, menu, conversation and message-wait pumps share the
    no-catch-up property. Only the shared command wait and the dungeon loop were
    audited.
