@@ -181,6 +181,39 @@ creatures (the regalia, the fields, the whirlpool), which the bestiary already
 half-recorded as gaps. Labels in the new tables are paraphrased; the shipped
 strings themselves stay in the private decode.
 
+## 2026-09-06 - Issue batch #192 to #206 answered from the shipped files and live checks
+
+Fifteen clean-side reports, all filed from paired black-box captures, closed
+in one pass. Four retractions (R391-R394): the save file's reagent block is in
+mixing order, not alphabetical (`formats/saved-gam.md` 7, 9); the Z-stats
+cycle is seven screens in the order attributes, Arms, Equipment, reagents,
+spells, items, armaments, with two more border labels (`systems/inventory.md`
+4.6, 4.7); the conversation lead-in is `You see ` (`systems/conversation.md`
+9); the dungeon corridor's mirrored copies reflect about column 95, not 95.5
+(`systems/dungeon-mode.md` 6.3, 6.6). Clarifications: the party-member
+selector's digit keys move the highlight and only Return or Space commit
+(`inventory.md` 4.3, `text-output.md` 10.6, `input.md` 9); the attribute
+page's level line ends in the class name and the nine-entry class table is
+named (`inventory.md` 4.7); the U-Use picker's row order and its decoration
+glyphs (`inventory.md` 4.5, 7); the common commands' result literals
+(`systems/commands.md` 5.8); the fountain's literals and single pass
+(`systems/view.md` 3); the M-Mix panel surface, its `Reagents:` label, row
+format and marker glyph, and the no-end-cap rule for continuation rows
+(`systems/magic.md` 6, `text-output.md` 10.2); the Talk dispatcher's guard
+gate - the stand-down rewrite, the two refusal lines and their producers, and
+the fact that the regime demands are reachable only while the guard's
+approach-and-attack waypoint is current, observed live at Minoc
+(`conversation.md` 2, `blackthorn.md` 7a, `town-mode.md`); the ASK-WHO
+prompt literal (`conversation.md` 7); Doom's final room being enterable only
+by the fall trap above it (`endgame.md` 2, `dungeon-mode.md` 8.1); the blank
+elapsed-time row on a first-day finish (`endgame.md` 9.4); and the endgame's
+twenty-two-tile colour remap with its full sixteen-entry map, plus the two
+tiles the save-and-substitute mode touches (`display-driver-abi.md` 10,
+`display-driver.md`, `endgame.md` 3). Two live checks with the harness
+settled claims the captures had got wrong on the clean side: the stock game
+converses normally after loading a save it wrote inside a location, and the
+Minoc charity demand does fire at 16:00.
+
 ## 2026-09-05 - First live captures (DOSBox harness)
 
 A headless DOSBox harness now exists on the private side, and the first

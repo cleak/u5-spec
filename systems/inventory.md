@@ -218,6 +218,14 @@ rest - shares one selection surface. Its contract is:
   the full fifteen content cells of that row** - an exact-width video inversion
   of screen columns 24 through 38 across the whole of that text row. It is not
   a cursor character and it does not extend to column 39.
+- **A digit moves the indicator; it does not commit.** `1` through `6`, bounded
+  by the party size, reposition the inverted row exactly as the direction keys
+  do and leave the prompt open. Only Return or Space commits the indicated row,
+  Escape cancels, and `0` commits the explicit "no one" answer only in the
+  callers that allow it (the active-player prompt); elsewhere `0` is ignored.
+  This is one shared routine, so the rule is the same for Z-stats, R-Ready, New
+  Order, the fountain, Search and every other caller. *(Clarified 2026-09-06,
+  issue #192; the earlier "select directly" wording was read as a commit.)*
 - Moving the indicator inverts the old row back and inverts the new one, so the
   inversion is its own undo.
 - Number keys `1` through `6` select directly, bounded by the current party
@@ -289,6 +297,18 @@ Name strings may carry a leading sentinel that requests a decorated row:
 | moonstone marker | The word `Moonstone_`, then a single runic letter naming the stone |
 | none | The name verbatim |
 
+*Added 2026-09-06 (issues #195, #196).* The two symbol glyphs are text-font
+codes `0x1C` (quest-item marker) and `0x1D` (counted-special marker); the
+zero-quantity literal is `--`; the moonstone letter is the moon-phase code the
+sky strip uses, `RUNES.CH` `0x30` plus the phase. The "plus sign" is the
+text-font `+` glyph. A row's decoration is decided by its name string alone,
+so a family that carries no sentinel (potions, ordinary equipment) prints its
+name verbatim after the selector cell; potion rows print the short colour name.
+The selector cell holds whatever character the caller passes for that row -
+a space for an unreadied carried item in R-Ready, a runic glyph for a readied
+one, and the small solid diamond (text-font `0x0F`) when a row is marked in
+the M-Mix list (`magic.md` Section 6).
+
 The sentinel is a display convention in the name table; it does not change the
 counter band or the item id.
 
@@ -304,9 +324,15 @@ shared label routine whose contract is:
   left-pointing end-cap glyph on the right.
 
 The stored literals are the bare words with their punctuation - `Select:`,
-`Items:`, `Reagents`, `Spells`, `Armaments` - and the two triangles are chrome,
-not characters. When neither a picker nor a member selection is active, the
-panel's top border carries no label.
+`Items:`, `Reagents`, `Spells`, `Items`, `Armaments`, `Equipment`, and the
+M-Mix list's `Reagents:` - and the two triangles are chrome, not characters.
+When neither a picker nor a member selection is active, the panel's top border
+carries no label. *Corrected 2026-09-06 (R392): this roster previously stopped
+at five. `Items:` with the colon is the U-Use picker's label; the Z-stats items
+page uses the bare `Items`; `Equipment` is the counters screen's label; and
+the M-Mix reagent list uses `Reagents:` with a colon where the Z-stats reagent
+page uses the bare `Reagents`. They are distinct stored literals, and sharing
+one constant between a pair gets one of the pair wrong.*
 
 Note that this writer is a **different** slot from the two border bands around
 the dungeon viewport: it centres on a different column and blanks a different
@@ -314,17 +340,30 @@ pixel span. See `dungeon-mode.md` section 4.1 and `text-output.md` section 10.7.
 
 ### 4.7 Pages, field labels and placeholders
 
-There are **six** pages in all: the attribute page, the equipment page, and four
-inventory pages.
+There are **seven** screens in the cycle, walked in this order by the
+direction keys and wrapping from the last back to the first:
 
-| Page | Border label | Slots |
+| Screen | Border label | Slots |
 |---|---|---:|
-| Attributes | none | - |
-| Equipment | none | 6 |
-| Armaments | `Armaments` | 48 |
-| Spells | `Spells` | 48 |
+| Attributes | the member's name | - |
+| Arms (readied equipment) | the member's name | 6 |
+| Equipment (the counters: food, gold, keys, gems, torches, grapple) | `Equipment` | - |
 | Reagents | `Reagents` | 8 |
+| Spells | `Spells` | 48 |
 | Items | `Items` | 38 |
+| Armaments | `Armaments` | 48 |
+
+*Corrected 2026-09-06 (R392, issue #202).* This table previously said six
+pages in the order attributes, equipment, armaments, spells, reagents, items,
+with the Arms and counters halves on one page. The shipped navigator keeps two
+per-member screens - the readied-equipment half headed `Arms` and the counters
+half headed `Equipment` - and then walks the four shared inventory pages in
+the order reagents, spells, items, armaments; the literals below were already
+right, only the page count and order were wrong. The four inventory screens
+are drawn inside the Section 4.4 frame with the same page badge. The items
+page catalogues **all eight** moonstones by phase glyph whether or not any is
+carried, whereas the U-Use picker lists only carried stones; the two surfaces
+use different predicates.
 
 Leaving the pages prints `Done\n` in the message window. Long pages **do not
 paginate**: the navigator scans forward or backward for the next slot with a
@@ -339,7 +378,7 @@ at whatever cursor column the label left behind.
 
 | Literal | Field |
 |---|---|
-| `_Lv-` | Level |
+| `_Lv-` | Level, followed by one space and then the member's **class name** on the same line (see below) |
 | `Str=` | Strength |
 | `__HP:` | Hit points |
 | `\nInt=` | Intelligence |
@@ -356,6 +395,17 @@ at whatever cursor column the label left behind.
 | `\n_Torches....` | Torches, dotted leader |
 | `\n_Grapple` | Grapple |
 | `\nStatus:_` | Status |
+
+*Added 2026-09-06 (issue #193).* The second line of the attribute page is the
+record's gender glyph, the `_Lv-` literal, the level value, a single space,
+and the member's class name looked up from the record's class letter through
+the nine-entry class table - `Avatar`, `Mage`, `Bard`, `Fighter`, `Druid`,
+`Tinker`, `Paladin`, `Ranger`, `Shepherd` for letters `A`, `M`, `B`, `F`,
+`D`, `T`, `P`, `R`, `S` in that order (`catalogs/npc-roster.md`, the roster
+class letters). A fresh Shamino therefore reads `Lv-2 Fighter` after his glyph
+and the Avatar `Lv-2 Avatar`; the name is not repeated on that line. The
+status name follows on the next line after the `\nStatus:_` literal, from the
+five-entry status table keyed by the status letter.
 
 `Str=`, `Int=` and `Dex=` form the left column, and `__HP:`, `__HM:` and
 `__Ex:` sit on the same three rows to their right. The dotted leaders are
@@ -619,6 +669,14 @@ successfully, receiving a refusal, cancelling the picker, or having no usable
 item to select. The mode still owns the contents of that processing -- outdoor,
 town, and dungeon turns advance and update their usual mode-specific systems.
 The item handler does not decide the turn cost by writing the clock itself.
+
+**The picker's row order is the use-item enumeration order** *(added
+2026-09-06, issues #195, #196)*: the eight spell scrolls, the eight potions in
+their display order, the Magic Carpet, the Skull Key, the Amulet, the Crown,
+the Sceptre, the eight moonstones by phase, the three shards, the Spyglass,
+the HMS Cape plans, the Sextant, the Pocket Watch, the Black Badge and the
+Sandalwood Box - thirty-eight rows in all, of which the picker shows only
+those the party carries. The family table below is in that same order.
 
 Confirmed U-Use families:
 

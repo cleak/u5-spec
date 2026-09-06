@@ -52,7 +52,11 @@ Closed 2026-09-05 by live observation under DOSBox: the three suspected NPC purs
 
 ## 3. Needs a further static trace
 
-None open. The twenty-four items this section listed on 2026-09-04 were all
+| Item | Where | What settles it |
+|---|---|---|
+| The mirrored corridor placement is published from a pixel-exact capture (reflection about column 95, R394); the driver's mirrored-blit path has not been re-read to show where the one-column offset arises. | `systems/dungeon-mode.md` Section 6.3 | Read the EGA driver's general tile blit with its mirror flag set and derive the destination column. Behaviour is settled; only the derivation is owed. |
+
+Otherwise none open. The twenty-four items this section listed on 2026-09-04 were all
 closed on 2026-09-04 and 2026-09-05 once the shipped files became available:
 the tile-catalogue re-derivation (R383-R389), the Glass Sword slot consumption
 (R390), the visibility threshold, the controlled actor's fixed strike and the

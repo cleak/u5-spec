@@ -464,7 +464,11 @@ steps in the same order before it reads a command key:
 The marker therefore occupies column 24 and leaves the cursor at column 25,
 which is where the echoed verb begins. Because the marker is emitted before the
 read, echoed command lines carry it and pure output lines do not: a line such as
-`Player: None!` starts unprefixed at column 24.
+`Player: None!` starts unprefixed at column 24. The same holds for the
+**continuation rows of a multi-line prompt**: the `:` input row under `For what
+spell?` or under an ASK-WHO question is part of the exchange the prompt opened,
+not a new command cycle, so it gets neither the line feed nor the end-cap.
+*(Clarified 2026-09-06, issue #203.)*
 
 The overworld loop gates the newline-and-marker pair on a one-byte flag, and
 sets that flag again immediately after emitting the pair. The flag is cleared
@@ -551,7 +555,11 @@ See `display-driver-abi.md` section 9.5.
 
 Typed input happens on the message window's own last row, so the visible layout
 is a log whose final line is being edited — for example `Player: ` followed by
-the input cursor, or `Look-` while a direction is awaited.
+the input cursor, or `Look-` while a direction is awaited. *(Clarified
+2026-09-06, issue #192: in the highlight picker a digit `1` through `6` moves
+the inverted row and leaves the prompt open; only Return or Space commit, `0`
+commits "no active player" where that answer is allowed, and Escape cancels.
+`inventory.md` Section 4.3 states the same rule.)*
 
 The input cursor is an animation, not a single glyph: it cycles through four
 consecutive fixed-cell glyph codes, `0x05` through `0x08`, drawn in place with

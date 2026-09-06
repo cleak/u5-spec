@@ -749,6 +749,25 @@ The EGA driver owns several visual effects that are not gameplay systems:
   through a fixed sixteen-entry nibble map; it is one-shot at the endgame and is
   not an animation.
 
+  **The remap, in full** *(added 2026-09-06, issue #200)*. The mode first
+  packs the whole prepared tileset from planar rows to packed four-bit
+  pixels, then rewrites twenty-two tiles pixel by pixel through one
+  sixteen-entry map, then unpacks. The map, by colour index: `0`, `7`, `8`,
+  `14` and `15` (black, grey, dark grey, yellow, white) stay; `1` blue becomes
+  `5` magenta and `5` becomes `1`; `2` green becomes `4` red and `4` becomes
+  `2`; `3` cyan becomes `4`; `6` brown becomes `2` green; `9`, `10`, `11`
+  (light blue, light green, light cyan) become `12` light red; `12` becomes
+  `10` light green; `13` light magenta becomes `9`. The twenty-two tiles are
+  the terrain ids `0x44`, `0x5C`, `0x5D`, `0x90`, `0x92`, `0x94`, `0x96`,
+  `0x9B`, `0xAB`, `0xAC`, `0xAF`, `0xB0`, `0xB1`, `0xBF` and `0xDC`, and the
+  object ids `0x08`, `0x0E`, `0x1A` and `0x38..0x3B` - floor, chairs, tables,
+  beds, the fire fixtures, the sandalwood box and the occupied-chair frames.
+  Walls, ground outside that set, and actor sprites are untouched, which is
+  why a captured final room shows green floor and furniture inside an
+  unchanged stone border. The dungeon-room arena's red grass is the other
+  mode: the batch plane swap the dungeon view's teardown applies on the way
+  into a room fight, which the list above already covers.
+
   **One interaction worth knowing.** The plane-swap mode covers tiles `0x05`,
   `0x1E`, `0x1F`, `0x4C`, `0xCA`, `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`.
   It touches no water tile and no fire fixture directly, but `0x34..0x37` and
