@@ -376,7 +376,11 @@ ordinary four-family effect contract above.
 
 **Dungeon floor traps.** Dungeon pit and bomb traps are direct cell effects,
 not the shared resolver. Fall traps move the party down the dungeon stack;
-bomb traps fire their own dungeon post-action branch. Their byte-level cell
+bomb traps fire their own dungeon post-action branch. Both independently roll
+inclusive `1..8` HP damage for each non-Dead active member in the first six
+party slots: once per descent step for falls, once per activation for bombs.
+`systems/dungeon-mode.md` Sections 8 and 8.1 own the target, death, timing and
+presentation rules. Their byte-level cell
 families are specified in `systems/dungeon-mode.md` and
 `systems/doors-and-z-transitions.md`.
 

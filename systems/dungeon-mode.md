@@ -1111,6 +1111,26 @@ carries `0x60` at `(7, 3)` and `(1, 7)` and Deceit level zero at `(1, 3)`, and
 klimbing there descends to level one rather than ejecting the party to
 Britannia.
 
+Both automatic fall traps and floor bomb traps apply an independent inclusive
+`1..8` HP-damage roll to each non-Dead member among the active party's first
+six slots, in party order. Sleeping, Poisoned and Ashes members are included;
+only Dead members and slots outside the active party are skipped, without a
+damage draw. The ordinary party-damage rule flashes the affected roster row
+and rumbles, subtracts the rolled amount, floors HP at zero, marks a member
+Dead at zero HP, clears the active-member selection if it named that newly
+dead member, and redraws stats. A fall applies one complete sweep **per descent
+step**, after the landing repaint and `...splat!`, before testing whether to
+fall again or enter a room. Members killed on an earlier descent are skipped
+on later sweeps. A bomb applies one sweep after its two lines and its cell
+rewrite; it causes no descent and the consumed cell cannot fire again as a
+bomb. These are direct floor effects, separate from the shared trap-family
+resolver in `systems/traps.md`.
+
+Source provenance: the two floor-trap callers, their repetition boundaries,
+the target filters and damage bounds, and the shared HP/death application were
+traced from the shipped program in private analysis under `u5-decomp/notes/`,
+`u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
+
 Exact bytes `0x61` and `0x69` are automatic fall traps. Stepping on either
 prints the three-line pit/fall group of Section 8.1, clears the fired marker bits on the departure
 cell in the loaded dungeon image, increments dungeon level by one, and lands
@@ -1245,8 +1265,8 @@ one per message will double the spacing.
 | Sleep field `0x80` / `0x88` | `Sleep spell!\n` | one short rumble per member whose status actually changes |
 | Poison field `0x81` / `0x89` | `Poison!\n` | one short rumble per member whose status actually changes |
 | Fire field `0x82` / `0x8A` | `Fire!!\n` - two exclamation marks | only the damage helper's flash and rumble, per damaged member |
-| Fall trap `0x61` / `0x69`, **once per descent step** | `Pit Trap!\n`, then `Falling...\n`, then the level change and view repaint, then `      ...splat!\n` - **six leading spaces** | the damage helper's flash and rumble, after `...splat!` |
-| Bomb trap `0x62` / `0x6A` | `Bomb Trap!\n`, then `KABOOM!!\n` | the damage helper's flash and rumble |
+| Fall trap `0x61` / `0x69`, **once per descent step** | `Pit Trap!\n`, then `Falling...\n`, then the level change and view repaint, then `      ...splat!\n` - **six leading spaces** | after `...splat!`, a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots; repeats per descent (Section 8) |
+| Bomb trap `0x62` / `0x6A` | `Bomb Trap!\n`, then `KABOOM!!\n` | one sweep: a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots (Section 8) |
 | Any other underfoot byte | nothing | none |
 
 Both field lines print **before** their per-member rolls, so the line appears

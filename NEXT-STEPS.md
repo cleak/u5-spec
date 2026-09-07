@@ -18,6 +18,15 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-06, issue #226.** The missing dungeon floor-trap damage contract is
+now in `systems/dungeon-mode.md` Sections 8 and 8.1, linked from
+`systems/traps.md` Section 4. Both traps independently roll inclusive `1..8`
+damage per non-Dead active party member in the first six slots. Falls sweep
+after every descent; bombs sweep once. This is a clarification, with no
+withdrawn claim. Continue serving the open GitHub issue queue; the damage
+range and frequency are established by a fresh binary trace, not inferred
+from the issue's one-member capture.
+
 **Retraction convention — 2026-08-26.** Reversals are now tracked in
 `RETRACTIONS.md` at the repository root: an append-only, commit-ordered table of
 every published statement this repository has withdrawn or inverted, naming the
