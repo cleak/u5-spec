@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, EGA mirror derivation complete.** Fourteen original-driver
+pixel probes and the dungeon caller anchors explain R394's one-pixel-left
+reflection. R421 corrects orientation flags versus resource masking; R422
+adds the omitted dungeon back-surface composition use. OPEN-QUESTIONS has
+no remaining static derivation item. Monitor #210/#216/#220/#231 for capture
+evidence and new issues, using the requested idle polling backoff.
+
 **2026-09-07, #238 complete / #231 reconciliation.** Combat Section 8.4
 publishes the remaining command fragments; rest-and-camp distinguishes four
 sleep strings. Isolated original routines confirm Get-/Search-, X-it what?,

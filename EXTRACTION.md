@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## EGA mirrored corridor derivation (2026-09-07)
+
+Fourteen isolated original-driver configurations establish the reflected
+pixel placement, including its one-pixel-left phase. Combined with the
+dungeon caller anchors, they independently reproduce R394's measured right
+columns. Display-driver-abi corrects orientation flags versus masking (R421)
+and the omitted ordinary dungeon back-buffer use (R422). The remaining
+static derivation item is removed from OPEN-QUESTIONS.
+
 ## Issues #238/#231 - remaining combat text (2026-09-07)
 
 Combat command fragments and caller-specific sleep strings complete #238's
