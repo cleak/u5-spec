@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #222 - spell versus scroll narration (2026-09-07)
+
+Fresh forty-eight-entry dispatch alignment and helper-result traces establish
+which spells append `Success!`, use their own narration or complete without a
+generic line. `systems/magic.md` Sections 5/5.1 now separate those outcomes
+from the eight scroll banners and confirm silent light spells plus submitted
+name-row retention. R402 withdraws the former banner list and fallback rule.
+
 ## Issue #216 - guard gate correction and capture discrepancy (2026-09-07)
 
 Fresh caller and canonical-roster traces preserve the explicit-T reserved-index

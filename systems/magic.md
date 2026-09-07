@@ -165,9 +165,66 @@ Both cases print `Absorbed!` and abort before charge or mana consumption.
 
 **Step 7 — dispatch to the effect handler.** The dispatcher computes the spell's index (0..47) into a forty-eight-entry dispatch table and calls the matching handler. Handlers fall into a small set of families described in Section 8.
 
-**Step 8 — narrate the result.** Most handlers print a short success message: `Light!`, `Wind change!`, `Protection!`, `View!`, `Resurrection!`, `Negate magic!`, `Summon Daemon!`. A handful print nothing on success (the projectile spells, the field placements), and Negate Time has a special absorption message when it is blocked by a magic-absorber in the scene. A failure path prints `Failed!`; a success without a spell-specific message prints `Success!`.
+**Step 8 — narrate the result.** Completion has three distinct outcomes:
+ordinary success appends `Success!` and a newline; ordinary failure appends
+`Failed!` and a newline with the failure sound; a handled completion appends
+neither. The last includes many successful spells as well as some cancelled
+or already-narrated results. It must not be inferred from whether the handler
+has printed text. Section 5.1 gives every spell's successful completion case.
+The earlier claim that the spell handlers print the scroll banners, and that
+a success without its own message necessarily prints `Success!`, is withdrawn
+(R402).
+
 
 The command then returns to the calling mode loop. Time advances by the standard per-mode increment. A spell cast costs one turn regardless of the spell's power.
+
+### 5.1 Spell completion text versus scroll banners
+
+**In Lor and Vas Lor print no success line.** Their accepted effects set the
+light counter and play their presentation, then finish without `Light!` or
+`Success!`. Day versus night does not select a different narration path.
+The spell-name row remains visible; submitting the name advances to the next
+row before any result/refusal is printed. Thus a following `Not here!` is below
+the entered incantation, not painted over it.
+
+`Light!`, `Wind change!`, `Protection!`, `Negate magic!`, `View!`,
+`Summon Daemon!`, `Resurrection!`, and `Negate time!` are **scroll-dispatch
+banners**. They are not a list of spell success messages, even when a scroll
+and spell share an effect helper. For example, the Light scroll has its own
+`Light!` banner and light duration; neither light spell borrows that banner.
+`catalogs/item-list.md` and `systems/audio.md` specify the scroll cases.
+
+The following census covers all forty-eight spells in Section 4. It describes
+completion **after an accepted effect**. Earlier context, resource and level
+gates still apply. Target prompts, input echoes, map/position displays, and
+combat impact or resistance narration belong to the individual effect and
+remain visible even where no generic completion line is appended.
+
+| Spell or spell family | Completion text |
+|---|---|
+| In Lor; Vas Lor; An Zu; An Xen Corp; Rel Hur; In Sanct; Uus Por; Des Por; Wis Quas; Rel Tym; In Vas Por Ylem; Quas An Wis; In An; Wis An Ylem; In Quas Wis; In Quas Corp; Vas Rel Por; An Tym | No generic completion line. In particular Protection, Negate Magic, Peer and Negate Time do not acquire their scroll counterparts' banners. |
+| In Flam Grav; In Nox Grav; In Zu Grav; In Sanct Grav | Successful field placement adds no generic completion line. |
+| Grav Por; Vas Flam; In Zu; Xen Corp; In Nox Hur; In Vas Grav Corp; In Flam Hur | No generic completion line after the directed combat effect; its own targeting and combat narration still apply. |
+| In Wis | Its location readout, with no appended generic completion line. |
+| An Ylem; An Xen Ex | Their own effect narration (`POOF!` for Vanish; the target's charmed result for Charm), with no appended `Success!`. |
+| An Nox; Mani; Kal Xen; In Xen Mani; In Bet Xen; An Ex Por; In Ex Por; Vas Mani; Rel Xen Bet; Sanct Lor; In Quas Xen; In Mani Corp | `Success!` after the successful effect. Clone's previously specified undefined capacity-failure result is outside this successful-placement row. |
+| An Sanct | Dungeon chest handling prints its own chest-opened line, preceded by its disarmed line when applicable, and adds no generic completion line. A successful non-dungeon door/chest operation prints `Success!`. |
+| In Por | A successful combat relocation prints `Success!`; a successful non-combat landing adds no completion line. |
+| An Grav | A successful dungeon-cell removal prints `Field destroyed!` with no generic completion line; successful combat field removal prints `Success!`. |
+| Kal Xen Corp | A controlled Daemon placement prints `Success!`. The rebound prints `Oops...` with neither generic success nor failure; it still leaves the uncontrolled Daemon. No placement reports ordinary failure. |
+
+This is not a blanket suppression of failure text. Helpers that report ordinary
+failure still receive `Failed!`; some also print their own diagnostic first.
+For example, An Tym's absorbed case prints `Magic absorbed!` and then
+`Failed!`, while its successful stopped-time effect has no completion line.
+A handled or cancelled case can finish without either generic word, as already
+specified for the utility spells in Section 8.
+
+Source provenance: fresh spell-table alignment, all forty-eight dispatch arms,
+shared completion epilogue and relevant helper return paths in
+`u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/CAST2_OVL/`.
+Issue #222's repeated live In Lor captures and submitted-name row observation
+independently agree with these traces; no new live capture was taken here.
 
 ## 6. The M-Mix command
 
