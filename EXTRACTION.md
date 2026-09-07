@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #211 - item row markers and Glass Sword propagation (2026-09-07)
+
+A fresh name-table/renderer census classifies all 38 U-Use rows, plus the
+undecorated equipment, reagent and spell families, in `systems/inventory.md`
+Section 4.5. R403 corrects the potion-none and font/suffix claims. The catalog
+links that mapping and repairs the Glass Sword row missed by the existing
+R390 propagation; this is not a new change to the shatter contract.
+
 ## Issue #222 - spell versus scroll narration (2026-09-07)
 
 Fresh forty-eight-entry dispatch alignment and helper-result traces establish

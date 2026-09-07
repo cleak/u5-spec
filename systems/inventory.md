@@ -122,8 +122,7 @@ equipment block. R-Ready uses that form so the picker can show both carried
 items that can be equipped and currently readied items that can be unequipped.
 
 Inventory rows render from a caller-selected name table. Some name strings use
-a leading marker to request a special row layout, such as a one-shot quest-item
-indicator or an alternate numeric prefix. These are display conventions only;
+a leading marker to request a scroll, potion or moonstone row layout. These are display conventions only;
 the counter band remains the source of ownership.
 
 The command starts by choosing a character. In combat scenes, Z-stats and
@@ -288,29 +287,55 @@ Selector characters below the printable range are drawn from the **runic** font
 rather than the text font; the renderer switches fonts for that one cell and
 switches back.
 
-Name strings may carry a leading sentinel that requests a decorated row:
+Name strings may carry a leading sentinel that requests a decorated row.
+The markers describe presentation families, not quest status or ownership:
 
-| Sentinel | Rendered |
+| Marker | Rendered name portion, after the independent quantity/selector cells |
 |---|---|
-| quest-item marker | A runic symbol glyph, a space, a plus sign and a space, then the rest of the name in the text font |
-| counted-special marker | A second runic symbol glyph with the same spaced plus sign, then a count word |
-| moonstone marker | The word `Moonstone_`, then a single runic letter naming the stone |
-| none | The name verbatim |
+| Scroll (formerly called quest-item) | Runic-font glyph `0x1C`, space, plus, space, then the scroll's compact rune label in the **runic font**; restore the text font afterward. |
+| Potion (formerly called counted-special) | Runic-font glyph `0x1D`, space, plus, space; restore the text font, then print the potion's short colour name. |
+| Moonstone | `Moonstone` followed by a space in the text font, then one runic phase glyph. |
+| None | The name verbatim in the text font. |
 
-*Added 2026-09-06 (issues #195, #196).* The two symbol glyphs are text-font
-codes `0x1C` (quest-item marker) and `0x1D` (counted-special marker); the
-zero-quantity literal is `--`; the moonstone letter is the moon-phase code the
-sky strip uses, `RUNES.CH` `0x30` plus the phase. The "plus sign" is the
-text-font `+` glyph. A row's decoration is decided by its name string alone,
-so a family that carries no sentinel (potions, ordinary equipment) prints its
-name verbatim after the selector cell; potion rows print the short colour name.
-The selector cell holds whatever character the caller passes for that row -
-a space for an unreadied carried item in R-Ready, a runic glyph for a readied
-one, and the small solid diamond (text-font `0x0F`) when a row is marked in
-the M-Mix list (`magic.md` Section 6).
+The plus uses glyph code `0x2B` in the selected runic font; neither scroll nor
+potion prefix switches to the text font for it. The moonstone phase glyph is
+`RUNES.CH` code `0x30` plus the zero-based phase, as on the sky strip.
+The earlier potion-without-decoration rule, count-word interpretation of the
+potion suffix, and text-font claims for the prefix/scroll label are withdrawn
+(R403).
 
-The sentinel is a display convention in the name table; it does not change the
-counter band or the item id.
+**Which names carry each marker.** This is the complete classification of the
+38-entry U-Use/Items name family; ownership and usability still determine which
+entries a particular picker shows:
+
+| Items | Marker |
+|---|---|
+| All eight scrolls: Light, Wind Change, Protection, Negate Magic, View, Summon Daemon, Resurrection, Negate Time | Scroll |
+| All eight potions: Blue, Yellow, Red, Green, Orange, Purple, Black, White | Potion |
+| All eight Moonstones, phases 0 through 7 | Moonstone |
+| Magic Carpet; Skull Keys; Amulet of Lord British; Crown of Lord British; Sceptre of Lord British | None |
+| Shard of Falsehood; Shard of Hatred; Shard of Cowardice | None |
+| Spyglass; HMS Cape Plans; Sextant; Pocket Watch; Black Badge; Wooden Box | None |
+
+All 48 equipment names, eight reagent names and 48 spell-charge names also
+have **no decoration marker**. Thus a spell-charge row and a scroll of a
+related spell are different presentation cases. The Sceptre and Skull Keys
+are plain-name rows, despite being special items in gameplay. Grapple and the
+food/gold/ordinary-key/gem/torch counters do not add entries to this 38-name
+U-Use family.
+
+Decoration is decided by the name table independently of the numeric count
+and selector. Zero quantity still prints `--`; a marked potion row has its
+quantity on the left and its colour after the potion symbol. The selector
+cell holds whatever character the caller passes: a space for an unreadied
+carried item in R-Ready, a runic glyph for a readied one, and the small solid
+diamond (selector code `0x0F`) when marked in M-Mix (`magic.md` Section 6).
+The marker changes no item id or counter band.
+
+Source provenance: fresh name-table census, R-Ready/U-Use table selection and
+row-renderer font changes in `u5-decomp/functions/ZSTATS_OVL/`, with font-slot
+loading checked in `u5-decomp/functions/INTRO_OVL/` and font selection in
+`u5-decomp/functions/ULTIMA_EXE/`. Issue #211; no new emulator capture.
 
 ### 4.6 Border labels
 
