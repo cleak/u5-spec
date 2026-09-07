@@ -353,6 +353,15 @@ returned by the coordinate lookup.
 | `0xDC` | Generic find prefix; skip the Moonstone scan, then continue with rare-reagent and fixed hidden-treasure scans. |
 | Other tiles | Generic find prefix, then continue through Moonstone, rare-reagent, and fixed hidden-treasure scans. |
 
+The top-down hidden-door success prints exactly
+`\nThou dost find\na hidden door!\n` after the direction/acting-member
+exchange. It uses the generic find prefix, not the wall-location prefix
+of tile `0x4F`, and adds no `Success!` or other secret-door sentence.
+Dungeon Search is distinct: its `You find:\n` preamble is followed by
+`A hidden door!\n` for the packed hidden-door family, with capital A.
+Source provenance: freshly traced top-down and dungeon Search output under
+`u5-decomp/functions/SJOG_OVL/` and `u5-decomp/notes/`, issue #225.
+
 Search also has a small fixed reagent-harvest table for rare reagents. It
 contains three fixed overworld locations:
 
