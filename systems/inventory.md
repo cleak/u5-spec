@@ -680,6 +680,14 @@ Source provenance: freshly traced refusal wrapper, cascade, selection path
 and functional message literals under `u5-decomp/functions/ZSTATS_OVL/`
 and `u5-decomp/notes/`, issue #225.
 
+Issue #231 reports a silent arena armour refusal. The traced body-armour
+gate above is explicitly voiced while combat remains undecided. An arena
+that starts empty already has its announcement guard set (combat Section 7),
+so that gate is lifted and ordinary equip/unequip rules apply. The reported
+unchanged equipment still needs the selected item, equipped-slot before/after
+state and initial foe census to distinguish it from another outcome. The
+published voiced refusal is retained pending that reconciliation.
+
 ## 6. R-Ready Eligibility And Writes
 
 After an item is selected, R-Ready classifies it by the item's equipment-class
@@ -786,7 +794,7 @@ Confirmed U-Use families:
 | Spell scrolls | Eight scroll counters dispatch to spell-like effects: light, wind change, Protection, Negate Magic, View, Summon Daemon, Resurrection, and Negate Time. A scroll counter is decremented before its branch-specific scene gate, target prompt, or helper return. Scrolls share the spell-code labels but have item-specific constants: `LV` sets the magic-light counter to 240 minutes, while `IS`, `AI`, and `AT` write the single shared timed-effect slot in `systems/magic.md` with `P`/100, `N`/20, and `T`/20 turns respectively — replacing whatever effect was already there. `AT` reports no effect in Stonegate and Doom. |
 | Potions | Eight colour-coded potion counters dispatch through a party-member target path. Display order is Blue, Yellow, Red, Green, Orange, Purple, Black, White, with normal effects wake, heal, cure poison, poison, sleep, combat-only "Poof" presentation, combat invisibility, and a surface/town visibility repaint sequence. A consumed potion normally applies the selected colour's effect, but a variation roll gives one chance in sixteen to force the Orange sleep effect and one chance in sixteen to replace the effect with a random potion row. Before that roll, the selected colour drives a blocking EGA/Tandy full-playfield invert/sound/restore presentation, so a substituted effect retains the selected bottle's presentation. All eight selected-colour timing rows use the same rumble and paired-sweep structure; the complete numeric table is in `catalogs/item-list.md` Section 7.2. Orange uses an ordinary persistent sleep tile with a one-in-seventeen scheduled wake check; Purple rewrites the combat record to ordinary tile `0x90` without a timer; White reveals the whole eleven-by-eleven viewport window straight from the map, with no distance or line-of-sight test, and repaints that unchanged grid twenty times (**corrected, R318**: the earlier "inclusive squared-distance-threshold-32 visibility grid" wording is withdrawn). Exact rasters, timing, restoration, and no-extra-turn rules are normative in that catalog section. |
 | Magic Carpet | Usable outside dungeon/combat scenes when the party is on foot and the current tile accepts carpet boarding. On success it changes the party transport marker to a carpet state and decrements the carried carpet counter. If the party is aboard a ship or otherwise not on foot, it prints the matching refusal instead. |
-| Skull Key | Decrements the skull-key/special-key counter, then runs the adjacent-lock helper in non-combat scenes that support it. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. |
+| Skull Key | Decrements the skull-key/special-key counter, then asks for a cardinal target and runs the lock helper in town/overworld or combat. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. The earlier non-combat-only scope is withdrawn (R415). |
 | Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
 | Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only outside dungeon/combat scenes and only on accepted terrain; Search/Get recovery later invalidates the slot. |
@@ -832,7 +840,7 @@ Utility results follow those completions:
 | Carpet while aboard a ship | `X-it ship first!\n` |
 | Carpet while on another non-foot transport | `Only on foot!\n` |
 | Carpet scene or terrain refusal | `Not here!\n` |
-| Skull Key in dungeon exploration | `Not here!\n`; other accepted scenes enter the lock helper's normal interaction |
+| Skull Key in dungeon exploration | `Not here!\n`; other accepted scenes ask `Direction-` as described below |
 | Amulet donned | `Wearing the Amulet of Lord British...\n` |
 | Crown donned | `Thou dost don the Crown of Lord British...\n` |
 | Badge donned | `Badge worn!\n` |
@@ -875,6 +883,21 @@ Accepted directions append `North\n`, `East\n`, `South\n` or `West\n`;
 Space appends `Pass\n`. Other unrecognized keys wait for another input.
 This prompt occurs before the scroll's scene gate. Scroll banners and their
 effects remain in `catalogs/item-list.md`.
+
+**Skull Key targeting.** After `Item: Skull Key\n`, the shared `Direction-`
+prompt accepts a cardinal direction with its ordinary word and newline;
+Space completes `Direction-Pass\n`. It does not use the party's facing
+without asking. A selected target of tile `0x97` becomes `0xB8`, and `0x98`
+becomes `0xBA`; either success dirties the map and adds no result sentence.
+Other target tiles print `Failed!\n` with the ordinary Use failure sound,
+not Jimmy's `No lock!`. Cancellation adds no generic `Failed!`. One skull
+key is already spent before the prompt or the dungeon refusal. Combat runs
+this same directed unlock helper; only its later noncombat target aftermath
+is omitted. The catalog's combat refusal is withdrawn (R415).
+
+Source provenance: fresh Skull Key caller, shared target helper and Use
+completion traces under `u5-decomp/functions/CAST_OVL/` and
+`u5-decomp/functions/CAST2_OVL/`, issue #234.
 
 ### 7.2 Potion result text
 

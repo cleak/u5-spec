@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issues #229/#232/#234 - vision, targeting and sailing (2026-09-07)
+
+The successful crystal-sphere view consumes a dismissal key. Skull Keys use
+the shared cardinal target prompt, print Failed for an unmatched tile, and
+also work in combat (R415); the dungeon refusal still spends a key. Vehicle
+and weather prose now publishes the delayed stalled-sailing line. The arena
+armour-silence report remains indexed for reconciliation with the voiced
+unresolved-combat gate and the initially empty arena exception.
+
 ## Issues #227/#228/#236/#237/#239 - dispatch and presentation (2026-09-07)
 
 The combat announcement is armed only when the initial census contains a foe;

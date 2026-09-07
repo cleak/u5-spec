@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issues #229/#232/#234 and #231 follow-up.** Vision dismissal
+is explicitly modal, with conditional member selection retained. Skull Keys
+have a cardinal prompt and a no-lock Failed result; R415 corrects their combat
+scope in the catalog and inventory contract. Sailing feedback now quotes the
+delayed Sheets-in-irons line and its cache-clear boundary. #231's reported
+silent armour refusal remains a capture reconciliation, not a withdrawn line.
+
 **2026-09-07, issues #227/#228/#236/#237/#239.** Fresh traces correct the
 initial-foe victory gate (R410), E-Enter shrine activation (R411), town secret
 doors as map tile 0x4E (R412), runic coordinate formatting and the absent In Wis
