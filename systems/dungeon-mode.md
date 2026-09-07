@@ -418,6 +418,12 @@ differ. That is the whole of the "different dungeons look different" mechanism:
 a clean implementation needs one geometry and three texture sets. Both banks are
 released and the world tile atlas reloaded when dungeon mode ends.
 
+Room arenas temporarily use ordinary tiles with a red/green colour swap.
+Returning to corridor rendering discards that atlas; consecutive rooms can
+reuse it. Exiting dungeon mode with the arena atlas still loaded reverses
+the swap instead of reloading it. `systems/display-driver-abi.md` Section 10
+owns the complete resource lifetime and its freshly traced provenance.
+
 The directory holds **twenty-eight entries**, of which **two are deliberately
 absent** (Section 6.4 explains why). Every image is **164 rows tall** and is
 drawn at a **fixed vertical origin of y = 14**, so the only per-image variable

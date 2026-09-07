@@ -811,11 +811,40 @@ The EGA driver owns several visual effects that are not gameplay systems:
   `0x60..0x6F` are two of the three destination groups of the per-step water
   composite (`systems/animation.md` Section 12.3), so the swap and the water
   animation write to the same bitmaps and interact. This entry is not irrelevant
-  to water. *Scope: the mode-to-caller mapping rests on the pushed argument at
+  to water.
+
+  **Dungeon swap lifetime** *(issue #212)*. Preparing ordinary tiles for a
+  dungeon arena applies the swap once. While those tiles remain loaded,
+  another room entry reuses them without swapping again; consecutive rooms
+  can therefore share the transformed atlas. The small post-combat
+  restore-eight-bytes operation does not undo this batch transformation.
+
+  There are two ways back to normal colours:
+
+  - Returning to the first-person corridor releases the transformed ordinary
+    atlas and loads the corridor/object artwork. A later arena entry loads
+    ordinary tiles afresh and swaps them; leaving from the corridor instead
+    loads ordinary tiles afresh without swapping.
+  - If dungeon mode ends while the ordinary arena atlas is still loaded,
+    dungeon teardown applies the same red/green swap a second time. The
+    operation is self-inverse, so this reverses the colour transformation
+    before ordinary world rendering. It is not a saved pixel snapshot and
+    does not rewind intervening tile animation.
+
+  Dungeon defeat also completes this resource restoration before rescue.
+  The transform is therefore bounded by the dungeon resource lifecycle,
+  rather than a restore call at each individual combat return.
+
+  Source provenance: fresh traces of dungeon entry, room chaining, encounter
+  returns and the mode-exit epilogue in `u5-decomp/functions/DUNGEON_OVL/`,
+  paired resource setup/teardown in `u5-decomp/functions/DNGLOOK_OVL/`, and
+  the resident load/release wrappers in `u5-decomp/functions/ULTIMA_EXE/`.
+  No new live capture was taken for the restoration paths.
+
+  *Scope: the mode-to-caller mapping rests on the pushed argument at
   each of the five call sites, each disassembled; the caller enumeration is a
   rebased near-call and near-jump census across the resident image and all code
-  overlays and would miss a far or indirect call. What resident state causes the
-  dungeon path to run at all was not traced.*
+  overlays and would miss a far or indirect call.*
 - Animation-script playback: dispatch offset `0x6F` takes the boot CPU
   calibration value in its primary register, holds the plane write mask at the
   blue-plus-intensity pair for the whole call, and walks a driver-resident byte
