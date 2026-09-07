@@ -531,8 +531,12 @@ asks for an offering, updates the appropriate karma and quest flags, and
 returns to overworld mode.
 
 There is **one** resident shrine coordinate table, not two. It serves both
-roles at once: the "is the party standing at a shrine" test and the
-"the shrine of *virtue*" name the Enter command prints. Any earlier wording
+virtue-identification roles: selecting the meditation's virtue and the
+"the shrine of *virtue*" name the Enter command prints. The ordinary entry
+gate is the live map tile `0x19`, not the coordinate list alone, and the key
+is `E`; `M` mixes reagents even at these coordinates. The earlier description
+of the coordinate match as the shrine-entry test is withdrawn
+(`RETRACTIONS.md` R411). Any earlier wording
 implying a separate render-position table and a separate position-test table is
 withdrawn. The table is in the standard virtue order:
 
@@ -548,12 +552,22 @@ withdrawn. The table is in the standard virtue order:
 | Humility | 231 | 216 |
 
 The seven non-zero rows are Britannia surface coordinates, and each one holds
-the shrine tile; the whole surface map holds exactly those seven shrine tiles
+the mystic-shrine tile `0x19`; the whole surface map holds exactly those seven shrine tiles
 and the Underworld map holds none.
+
+A fresh canonical asset decode for issue #239 confirms every row above,
+including Honesty and Humility, against the sparse Britannia chunk mapping
+in `formats/brit-dat.md`. No coordinate correction is supported. The issue's
+reported ordinary terrain at those positions remains an unresolved save/asset
+reconciliation; an M-Mix response alone does not test shrine entry. The
+`0x88..0x8F` band does not encode the eight surface shrines.
+
+Source provenance: independently checked resident coordinate consumers and
+all surface shrine cells, documented under `u5-decomp/notes/`.
 
 Spirituality's `(0, 0)` row is a **deliberate sentinel** meaning "not on the
 surface map", and it encodes a behavioural rule rather than a position:
-`(0, 0)` is open ocean, so no party can ever stand there, and a meditation
+`(0, 0)` is open ocean and has no ordinary shrine-entry tile, and a meditation
 attempt whose position matches none of the seven mapped shrines resolves to
 **Spirituality**. That is how the Shrine of Spirituality - which is not placed
 on the Britannia surface - is reached. An implementation must therefore treat

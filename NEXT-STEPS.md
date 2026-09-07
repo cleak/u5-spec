@@ -18,6 +18,15 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issues #227/#228/#236/#237/#239.** Fresh traces correct the
+initial-foe victory gate (R410), E-Enter shrine activation (R411), town secret
+doors as map tile 0x4E (R412), runic coordinate formatting and the absent In Wis
+label (R413), and dungeon Search's relative prompt (R414). All seven shrine
+coordinates are confirmed by canonical terrain reads; #239's terrain report
+still needs save/asset reconciliation. Other new issues remain in the GitHub
+queue, including #238's shop outcome mapping. The EGA reflection derivation
+remains a trace follow-up; no public driver correction has landed yet.
+
 **2026-09-07, issue #225 completion.** Remaining spell, guard, well, vision,
 gas and hidden-door messages are specified. R408 corrects Death vision to
 one HP of damage, including lethal consequences; R409 corrects Awaken to

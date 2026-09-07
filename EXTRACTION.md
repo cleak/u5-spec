@@ -6,6 +6,17 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issues #227/#228/#236/#237/#239 - dispatch and presentation (2026-09-07)
+
+The combat announcement is armed only when the initial census contains a foe;
+both sides' actions reach the same recount. Shrine entry uses E on terrain
+0x19, while M always mixes reagents; the coordinate values are independently
+confirmed against all seven surface shrine cells. Town hidden doors require
+terrain 0x4E, not an object flag. Coordinate output uses the runic font and
+In Wis has no separate label. Dungeon Look/Search share the published five-key
+relative chooser. Corrections R410-R414 signal the withdrawn contracts.
+No new live capture was taken; the reported shrine terrain mismatch stays open.
+
 ## Issue #225 - remaining messages and behavior corrections (2026-09-07)
 
 Fresh traces finish the spell, guard-demand, well/death-vision, town-poisoning

@@ -1684,12 +1684,24 @@ foes do, it first gives the party control/faint helper a chance to restore one
 actor; if none can be restored, it prints the one-shot defeat line when that
 line has not already been guarded and returns word `1`. If neither side
 remains, it returns word `0` without another announcement. If party actors
-remain and foes do not, it prints `VICTORY!` once and continues; cleanup still
+remain and foes do not, it prints `VICTORY!` once only if the initial arena
+census contained a foe, and continues; cleanup still
 requires accepted actor departures or the Escape-key sweep described in
 Section 14. Reaching slot 32 with actors still present starts another table
 walk. The framer discards this return word, so it is not a caller-visible
 victory boolean. Earlier revisions labelled `1` as victory/escape and `0` as
 defeat; that polarity is withdrawn.
+
+The announcement guard is initialized once on combat entry, with victory
+already suppressed when the initial foe count is zero. It is not reset each
+round or armed by a later spawn. Both party and foe actions reach the same
+recount: killing the final foe before any foe acts still announces, provided
+the encounter began with a foe. Re-entering an already empty room stays silent.
+The earlier unconditional party-present/foes-absent announcement is withdrawn
+(`RETRACTIONS.md` R410).
+
+Source provenance: fresh entry, action-join and side-census traces under
+`u5-decomp/functions/COMBAT_OVL/` and `u5-decomp/functions/SJOG_OVL/`.
 
 The renderer blink/redraw byte set by an accepted edge is not a leave-combat
 flag. Edge departure ends that actor's action and the recount observes the
@@ -4071,9 +4083,11 @@ Combat ends when the post-action side recount reaches a terminal table state.
 Victory narration, individual edge departure, and Escape-key cleanup are
 distinct transitions rather than three interchangeable exit flags.
 
-**Victory.** When every hostile actor has been killed (no non-party slot has the
-"alive and active" flag bits set), the round loop prints the resident combat
-string `VICTORY!` through the ordinary string printer. The census that decides
+**Victory.** With party-side actors remaining, an encounter that began with
+at least one foe announces `VICTORY!` once when a post-action census first
+finds no foes. An initially empty arena never arms that announcement; this
+corrects the previously unconditional zero-foe rule (`RETRACTIONS.md` R410).
+The round loop uses the ordinary string printer. The census that decides
 this counts every descriptor that is non-empty and not dead-marked, with **no
 terrain filter**, so a hostile standing on a restraint tile - which never takes a
 turn (Section 7.1) - still holds the hostile count above zero and suppresses the
