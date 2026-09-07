@@ -6,6 +6,13 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #239 - independent reconciliation (2026-09-07)
+
+The issue author independently confirms the seven surface shrine cells and
+E-Enter at Honesty. The obsolete terrain-mismatch question is removed.
+Entry narration and typed virtue before mantra are the new follow-up request,
+along with the observed exact-width word-wrap boundary.
+
 ## Issues #229/#232/#234 - vision, targeting and sailing (2026-09-07)
 
 The successful crystal-sphere view consumes a dismissal key. Skull Keys use

@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, #239 capture reconciliation closed.** The implementation-side
+follow-up confirms all seven shrine cells and successful E-Enter at Honesty;
+its terrain/table mismatch claim is withdrawn. The new requested follow-up
+is the shrine's entry narration and typed-virtue prompt before the mantra,
+plus its reported exact-width word wrap. Trace and publish that sequence;
+the issue's closure does not finish these newly reported interface gaps.
+
 **2026-09-07, issues #229/#232/#234 and #231 follow-up.** Vision dismissal
 is explicitly modal, with conditional member selection retained. Skull Keys
 have a cardinal prompt and a no-lock Failed result; R415 corrects their combat

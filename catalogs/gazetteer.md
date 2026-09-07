@@ -557,9 +557,10 @@ and the Underworld map holds none.
 
 A fresh canonical asset decode for issue #239 confirms every row above,
 including Honesty and Humility, against the sparse Britannia chunk mapping
-in `formats/brit-dat.md`. No coordinate correction is supported. The issue's
-reported ordinary terrain at those positions remains an unresolved save/asset
-reconciliation; an M-Mix response alone does not test shrine entry. The
+in `formats/brit-dat.md`. Issue #239's follow-up independently confirms the
+same seven cells and successful E-Enter at Honesty, withdrawing its terrain
+mismatch report. No coordinate correction is needed. An M-Mix response alone
+does not test shrine entry. The
 `0x88..0x8F` band does not encode the eight surface shrines.
 
 Source provenance: independently checked resident coordinate consumers and
