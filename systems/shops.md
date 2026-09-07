@@ -275,9 +275,9 @@ The `%` substitution prints decimal digits with no thousands separator. The `@` 
 
 Shop headline prices come from resident asset tables and small deterministic
 adjustments. They are *not* karma-modulated, *not* time-of-day-modulated, and
-not haggled. Five paths are stat-sensitive: arms buy and sell quotes, the
-horse-trader sale, inn room rates, both shipwright vessel classes, and the
-tavern/meal-counter provision unit price. In each of those the speaking party
+not haggled. Stat-sensitive paths include arms buy and sell quotes, guild
+and reagent bundles, the horse-trader sale, inn room rates, both shipwright
+vessel classes, and the tavern/meal-counter provision unit price. The speaking party
 member's Intelligence changes the quoted price, so the same purchase costs
 different amounts depending on who is doing the talking. Every other decoded
 shop headline price is fixed by the relevant shop, commodity, or treatment
@@ -297,8 +297,9 @@ Several read-only pricing tables live in the resident data segment:
   `floor(base * 3 * speaker_intelligence / 100) + 1`, then add gold and
   decrement the equipment counter.
 - **Guild stock and price records** (guildmaster). Guild shops use fixed
-  per-shop records for keys, gems, and torches. The selected item's unit price
-  is multiplied by the requested quantity before the affordability check.
+  per-shop base prices for bundles of three keys, four gems, or five torches.
+  Each offer costs `base + trunc(base * (100 - 3 * speaker_intelligence) / 100)`.
+  Confirmation buys one bundle; there is no typed quantity.
 - **Per-treatment cost tables** (healer). Cure, heal, and resurrection prices
   are keyed by the current healer or sanctum instance and treatment kind.
   Cure and heal use ordinary per-instance price entries on the normal paid
@@ -314,7 +315,7 @@ Several read-only pricing tables live in the resident data segment:
   answer that inns apply no Intelligence adjustment at all. The adjustment is a
   surcharge above the raw figure, not a reduction below it.
   The division truncates toward zero. Rest uses
-  `raw = base_rate * travelling_party_size`. Leave deposits use
+  `raw = base_rate * travelling_party_size`. Leave monthly-rate quotes use
   `raw = base_rate * 10`. Pickup first computes that same adjusted ten-unit
   lodging charge, then multiplies it by the selected guest's stored stay
   counter, with a stored zero billed as one unit. The time system increments
@@ -331,12 +332,11 @@ confirmation, affordability, and payment flow. The tables below list base
 headline values before any stat-sensitive quote adjustment and before the
 random post-transaction surcharge.
 
-Reagent vendors use a fixed price/availability matrix keyed by the current
-herbalist and the underlying reagent id. A nonzero entry means the herbalist
-stocks that reagent and gives its per-ounce price; a zero entry means the
-reagent is not sold there. The same reagent can therefore cost different
-amounts at different herbalists, but the value is still fixed per-shop and not
-karma-driven.
+Reagent vendors use a base-price/availability matrix keyed by herbalist and
+reagent. Nonzero entries identify stocked bundles; zero means unavailable.
+The quoted bundle price uses the same Intelligence adjustment as guild offers.
+The earlier fixed per-ounce prices and typed-quantity purchases for both
+families are retracted (R418).
 
 The stock reagent price matrix is:
 
@@ -347,6 +347,19 @@ The stock reagent price matrix is:
 | The Alchemist | 14 | 16 | — | — | 30 | 18 | — | — |
 | Mysticism | — | — | — | 6 | 8 | 8 | 10 | 15 |
 | The Sharper Mage | — | — | — | — | 50 | — | 30 | 40 |
+
+These are base prices for the following fixed quantities, before adjustment:
+
+| Herbalist | Sulfur Ash | Ginseng | Garlic | Spider Silk | Blood Moss | Black Pearl | Nightshade | Mandrake |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| The Herbalist | — | 10 | 6 | 4 | — | — | 1 | 1 |
+| Healers Herbs | 12 | 8 | 8 | 2 | 4 | — | — | — |
+| The Alchemist | 14 | 8 | — | — | 6 | 6 | — | — |
+| Mysticism | — | — | — | 2 | 2 | 2 | 1 | 1 |
+| The Sharper Mage | — | — | — | — | 4 | — | 1 | 1 |
+
+Source provenance: fresh purchase-input, price arithmetic and bundle-table
+traces in `u5-decomp/functions/SHOPPES_OVL/` and `u5-decomp/notes/` (#238).
 
 The stock tavern/meal-counter provision base prices are listed below. One
 provision *unit* is a twenty-five-serving pack: a purchased unit raises the
@@ -707,7 +720,7 @@ day.
 | Arms `S` branch | Resident/menu literals plus an eight-record sell-back quote pool | Initial, continuation, and ordinary local-goodbye lines each draw uniformly from separate four-line pools; an ordinary sellable selection draws uniformly from `SHOPPE.DAT` records `49..56` | Empty inventory is refused before the panel opens. Zero-price and ammunition rows remain visible but are refused when selected; accepted `N` responses leave the selected item unchanged | Successful sale adds gold and decrements the carried counter |
 | Guildmaster entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the guild stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted stock purchase |
 | Reagent-vendor entry | Shared non-arms preamble, then resident affirmation or refusal | Preamble draws once on entry; no fresh random bark is drawn for invalid keys | `Y` enters the reagent stock menu. `N` or Space prints the resident refusal and exits. Other keys re-poll the same entry prompt | No mutation before an accepted reagent purchase |
-| Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys re-prompt. Invalid or untreatable member choices return to the menu without a charge | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
+| Healer entry and service menu | Shared non-arms preamble, resident entry response, resident service prompts, treatment records/literals | Preamble draws once on entry. Service text is branch-deterministic by `C`, `H`, or `R` | Entry accepts `Y`/`N`; other keys re-poll. The service menu accepts Cure, Heal, Resurrect, Space, or Enter; other keys silently wait without redraw. Untreatable or cancelled member choices lead to continuation Y/N (R419) | Treatment effects and gold debit occur only after member validation, quoted cost, confirmation, and affordability |
 | Horse-trader sale | Shared non-arms entry greeting, deterministic horse quote record, resident confirmation/refusal text | Entry greeting draws once on entry; the quote record is selected from the current horse-shop row and adjusted price | `N` or Space exits through the nothing-bought closing bark. `Y` renders the quote and enters an inner `Y`/`N` confirmation loop. Inner `N` declines without selecting a new quote and also exits through the nothing-bought bark. Short funds prints resident refusal text and takes the silent exit, rendering no closing bark at all | Successful payment deducts gold, runs the Section 6.2 surcharge gate, and places a horse active object adjacent to the player |
 | Tavern drink flow | Shared tavern arrival records `57..60`, then a list record selected by the active tavern state | Arrival draws uniformly from `57..60`; list records `69..72` and follow-up records `73..76` are deterministic from the state. Sage-style success records draw only in the sage subflow described below | The arrival greeting appends in the inherited conversation window. After a branch returns to continuation, the tavern clears the window before `Anything else for thee?`. `N` or Space at entry prints the resident refusal and exits. After a list is rendered, Space, Escape, or Enter exits the post-list menu; other accepted letters follow the current tavern-state table | Gold changes only after an accepted quantity/action passes affordability |
 | Tavern provision branch | Six-record quote pool, `SHOPPE.DAT` ordinals `77..82`, plus resident quantity prompt, refusal, and partial-purchase literals; the table-scraps outcome renders ordinal `90` | Uniform `0..5` draw when the quote is rendered, once per entry into the branch. The quantity prompt, the pay loop, and every outcome line are deterministic | The quote and quantity prompt append to the tavern text already on screen. The typed-quantity prompt waits for the number; the outcome line does not wait for a key before the branch returns | Gold and food move one unit at a time inside the pay loop. The surcharge runs only on the completed-purchase exit. The two nothing-served outcomes end the visit |
@@ -725,7 +738,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Arms sell browser | Resident sell-side literals plus `SHOPPE.DAT` sell-back records `49..56` | Installs its own framed side panel in text window `1`; each row redraw restores window `2`, leaving the panel pixels visible while quote text appends in the conversation window | Fixed panel cursor origins while the panel is up; one command-key wait per browser attempt, and a Y/N-only wait for an ordinary quote | Invalid browser keys do nothing. Declines and zero-price refusals redraw the page and continue; ammunition refusal terminates the browser |
 | Guild entry | Shared non-arms preamble row, resident acceptance/refusal literals, then guild stock menu | Appends; no shop-local clear | Natural text advance only | `Y`, `N`, and Space are accepted. Other keys leave the prompt visible and keep polling |
 | Reagent entry | Shared non-arms preamble row, resident acceptance/refusal literals, then reagent stock menu | Appends; no shop-local clear | Natural text advance only | Same as guild entry; ignored keys do not redraw or consume a random draw |
-| Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service choices re-prompt from the service menu rather than selecting a new shared preamble |
+| Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service keys silently wait without reprinting (R419) |
 | Tavern / meal entry | One shared tavern greeting record selected uniformly from `57..60`; the later menu record is selected by tavern state | Appends in the inherited conversation text window; there is no entry clear | No shop-local cursor origin | Entry accepts `Y`, `N`, or Space. Other keys leave the greeting visible and keep polling |
 | Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
 | Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input returns; unknown topics print the no-help line and re-prompt. `N` exits before a success draw; short funds exits without a success draw |
@@ -849,10 +862,10 @@ Resident literals are not in that asset, so the ones an engine must reproduce
 to match a frame are published verbatim in this document — the shared `Yes`/`No`
 echoes, the four arms confirmation prompts, the four arms stock-call lines, the
 arms carry-cap refusal, the four arms no-credit barks, `Sold!`, and the arms
-"anything else" tail with its gendered suffixes. Any other resident literal is described behaviourally
-because its exact wording does not change engine behaviour or menu geometry.
-Where the same wording is needed in a future flow, publish it here rather than
-inventing an ordinal for it.
+"anything else" tail with its gendered suffixes. Sections 8.B and 8.C extend
+that functional interface contract to entry and outcome text for every shop
+family. Resource-owned replies retain ordinal references; ignored keys and
+silent exits have no substitute dialogue.
 
 One shipped-data detail is worth calling out so it is not "fixed": the
 healer/sanctum row names the same four records in both exit columns of the
@@ -942,6 +955,207 @@ shared renderer/caller resolution in `u5-decomp/functions/SHOPPES_OVL/`,
 `u5-decomp/functions/SHOPPES3_OVL/` (issue #213). The two arms variants also
 agree with the paired captures reported in that issue; no new live capture
 was taken for the other kinds.
+
+### 8.C Outcome text and input boundaries
+
+This section completes the shop outcomes requested in #238. Notation and
+token expansion follow Section 8.B. Each row describes a particular result,
+not a generic replacement for every refusal or cancellation. `SHOPPE.DAT`
+record numbers below are zero-based, counting empty records.
+
+**Shared closing envelope.** Both ordinary farewell pools in Section 8.A
+use the same sequence: `\n\n"`, the selected record, a line feed only when
+the resulting local cursor column is nonzero, then token-expanded
+`says $.\n`. The record owns its closing quote. A silent outcome omits this
+entire sequence and its random draw. There is no universal `Farewell.` or
+`As you wish.` line. For example, arms no-sale choices use records `0..3`
+inside this envelope, rather than unquoted stand-alone barks.
+
+**Arms sell refusals.** Empty Sell inherits the opening quote from
+`Sell\n\n"`, then prints token-expanded
+`Thou hast nothing to sell!"\ngrowls $.\n`. The used-ammunition refusal is
+`\n\n"We don't deal in used \nammunition!"\ngrowls $.\n`.
+Other arms outcome and browser text remains in Section 8.1.
+
+**Guild stock and confirmation.** Print `a.........Keys\n`,
+`b.........Gems\n`, `c......Torches\n\n`, then `Thy concern?" `.
+A/B/C echo the corresponding lowercase letter. D renders record `164`, then
+redraws the stock menu. Space or Escape exits; other keys, including Return,
+silently wait at the existing menu.
+
+| Guild result | Output after the selected letter |
+|---|---|
+| Offer | `\n\n"`, then record `160` for Keys, `161` for Gems, or `162` for Torches, then `\n\nInterested?" ` |
+| Decline | `No\n\n"What else, then?\n\n`, then stock menu |
+| Accept | `Yes\n`, then affordability and purchase |
+| Short funds | Record `163`; visit ends without ordinary farewell |
+| Paid | Token-expanded `\n"Sold!"\nsays $.\n\n"What else, \n`, then `m'lady` for a female speaking member or `m'lord` otherwise, then `?\n\n`, then stock menu |
+
+Offer input accepts Y/N only; unrecognized keys produce no line or redraw.
+
+**Reagents.** Each stock row is its uppercase compact letter, `...`, the
+short reagent name, and `\n`. After the list print `\nThy interest?" `.
+Invalid or unavailable letters silently wait. Space, Escape, and Return exit.
+
+| Reagent result | Output and wait |
+|---|---|
+| Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`; consume one command key, then redraw stock |
+| Offer | `\n\n"`, then record `139..146` in the canonical eight-reagent order, then ` Is this thy need?" `. If the resulting local column exceeds 12, append `\n:`. |
+| Decline | `No\n\n"What else?\n\n`, then stock |
+| Accept | `Yes\n`, then affordability and purchase |
+| Short funds | Record `147`; visit ends without ordinary farewell |
+| Paid | Token-expanded `\n"I thank thee!"\nsays $.\n`, then `"Anything else?\n\n`, then stock |
+
+Reagent offers accept Y/N only. Section 6 supplies quantities and prices.
+
+**Horse traders.** No free active-object slot and no suitable adjacent
+placement cell both print `The stables are closed.\n` before any greeting,
+then exit. The offer wrapper is in Section 8.B. Its Y/N-only confirmation
+echoes `No` on decline or `Yes!` on acceptance, without a trailing line feed.
+Short funds then print `\n\n"Thou couldst not afford to ` followed by
+token-expanded `feed it!"\nyells $.\n`, and suppress the ordinary farewell.
+Successful placement uses the sale farewell; entry/offer decline uses no-sale.
+
+**Healers.** The service question is the prose in Section 8.B, not a slash
+menu. C/H/R echo `Curing`, `Healing`, or `Resurrect`; Space/Return echo
+`Nothing` and leave through the ordinary farewell. Other keys silently wait
+without reprinting. Earlier invalid-key menu-redraw claims are retracted
+(R419). A sole party member is selected automatically; otherwise print
+`\n\n"Who needs my aid?" ` and use the party selector. Cancellation adds
+`No one`, with no trailing line feed.
+
+| Healer result | Output |
+|---|---|
+| Selected member is untreatable | Token-expanded `\n\n"Thou hast no need of this art!"\nsays $.` |
+| Paid Cure introduction | `\n\n"I can cure thy poisoned body ` |
+| Paid Heal introduction | `\n\n"I can heal thee ` |
+| Paid Resurrect introduction | `\n\n"I can raise this unfortunate person from `, then `the dead ` |
+| Fee and confirmation, after an introduction | Token-expanded `for % gold.\n\nWilt thou\npay?" `; accept Y/N only and echo bare `Yes` or `No` |
+| Ordinary short funds | Record `173`; the existing low-fee charity exception in Section 6.1 still applies |
+| Minoc free Cure/Heal | `\n\n"Receive now the Light!"`, followed by treatment effects |
+| Continuation after treatment, refusal, or member cancellation | `\n\n"Is there any other way in which I may\n`, then `aid thee?" ` |
+
+The continuation accepts Y/N, with the same entry echoes as Section 8.B.
+Yes repeats the service question; No ends the visit. It is not an immediate
+return to service-letter input after an untreatable member (R419).
+
+**Inn actions.** Section 8.B gives the actual Pick up/Leave/Rest question.
+L and R echo those uppercase letters; P has no separate echo. Space exits
+the service menu, while other keys outside L/P/R, including Escape and Return,
+silently wait. After a continuing action, print
+`"Is there\nanything more\nI can do for\nthee?" `; Y echoes `Yes` and repeats
+the service question, N or Space echoes `No` and exits. Other keys wait.
+The inn honorific below is `milady` for a female speaking member, `sir`
+otherwise.
+
+| Inn result | Output and next input |
+|---|---|
+| Capacity check before Rest or Leave | First `\n\n`. If full: `"I am sorry,\n`, honorific, then `, but we\nhave no room\navailable."\n\n`. |
+| Rest offer | Opening quote, room record, then `\nWilt thou take\nit?" `. Records by inn row are `186, 187, 188, 188, 189, 190`. Y/N only, echo bare `Yes`/`No`, then `\n\n`. |
+| Accepted Rest, short funds | `"Highwaymen!\nCheap, at that!\nOUT!" `, then token-expanded `screams\n$.\n` |
+| Paid Rest | `"Have a pleasant\nnight, `, honorific, token-expanded `!"\nsays $.\n\n`, then the rest sequence |
+| Sleep / morning | `Zzzzzz....\n\n` — four dots — followed at morning by `Morning!\n`. A poisoned member's recovery death adds `\n`, the member name, and ` has\npassed away.\n`. |
+| Leave with only Avatar travelling | Record `191`; visit ends without ordinary farewell |
+| Leave target question | Token-expanded `$ asks,\n"Who will\nstay?" `; cancellation adds `Nobody\n\n` |
+| Leave selects Avatar | `\n\nThy friend`, plural `s` only when more than two members travel, then ` will not leave thee!\n\n`; repeat the target question |
+| Leave selects a dead companion | After the selection's `\n\n`, record `192`; visit ends without ordinary farewell |
+| Leave rate | After `\n\n`, `"The rate for\nour most comfortable room will be `, token-expanded `% gold per month, due at check-out.`, then `\nWilt thou take\nit?" `. Y/N only, bare echo, then `\n\n`. |
+| Leave accepted | Token-expanded `"I thank thee."\nsays $.\n\n` |
+| Pickup with six travelling members | `\n\nOne must first be left behind!\n\n`; this check precedes the no-guests check |
+| Pickup with no guest at this inn | Token-expanded `\n\n"No one here is from thy party!"\nsays $.\n\n` |
+| Multiple-guest selection | `\n\n"Who will\ncheck out?" `; the framed list headings are `    GUEST` and `  REGISTER:\n\n` |
+| Cancel guest selection | Escape prints `No one\n\n`; Space/Return instead select the highlighted guest |
+| Pickup bill | Token-expanded `\n\n"That will be % gold, please."\n\n"` |
+| Pickup short funds | Record `193`, following the bill's opening quote; visit ends without ordinary farewell |
+| Paid healthy pickup | `I hope thou hast found thy stay enjoyable,"\n`, then token-expanded `says $.\n\n` |
+| Paid poisoned pickup | `Thy friend has died, by the way."\n`, then the same attribution |
+
+Single-guest Pickup selects automatically. The register only offers guests
+at this inn, so it has no separate arbitrary-member/not-in-party refusal.
+Ordinary visit endings still use the shared farewell envelope.
+
+**Tavern and sage continuation.** State-dependent initial records `69..72`
+and follow-up records `73..76` supply the actual menu choices. Unknown menu
+letters silently wait; there is no I-do-not-understand line. An unavailable
+lore action also waits silently. After a branch returns to continuation,
+clear the message window and print `"Anything else\nfor thee?" `. N prints
+`No` and runs the ordinary farewell. Y prints `Yes\n\n"`, the applicable
+follow-up record, a closing quote and a space. Invalid confirmation keys wait.
+Space is a No at entry, but is ignored at this continuation Y/N prompt.
+
+Tavern and sage honorifics address Avatar: `sir` for male, otherwise `milady`.
+The original honorific helper also clears the active-member override.
+
+| Tavern result | Output |
+|---|---|
+| Ordinary meal/round bill | After the action-letter echo and `\n\n`: `"That will be `, decimal price, ` gold for the `, the count word, ` of ye,\n`, honorific, `.`. Count words exist only for two through six; the original emits no count word for zero or one. |
+| Cannot afford that bill | `"\n\n"CAN'T PAY?\nBeat it!"\nyells `, vendor name, `.\n`; ends visit without shared farewell |
+| Paid meal/round | `\nEnjoy!"\n\n` |
+| Fourth secondary drink attempt, when prior count is exactly three | `\n\n"I beg thy\npardon, `, honorific, `,"\nsays `, vendor name, `.\n"But haven't\nye had enough\nto drink?" ` |
+| Enough-drink answer | Y prints `Yes\n\n` and returns to continuation. N prints `No!` and proceeds with the purchase and existing drinking effects. Other keys wait. |
+| Blue Boar wine selection accepted | Uppercase selected letter, then `\n\n"Ah, a fine\nchoice, `, honorific and `.`; short funds uses the same CAN'T PAY envelope; paid purchase adds `\nEnjoy!"`, then `\n\n` |
+| Blue Boar wine list cancelled | Space prints `\n\n`, then record `89`, then returns to continuation without establishing a purchase; other non-A..F keys silently wait |
+| Provision offer | Opening quote, one uniform record from `77..82`, then `\n\nHow many wouldst\nthou like?" `; typed number allows two digits |
+| Zero provisions requested | `\n\n"Hrumph."`, then ordinary continuation |
+| No packs affordable, fewer than three food servings | `\n\n`, then record `90`; the small food gift and visit end follow Section 8.5 |
+| No packs affordable, at least three food servings | `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `, vendor name, `.\n`; ends visit |
+| Some requested packs afforded | `\n\n"Thou canst\nafford only `, actual number of packs served, `!"\n\n` |
+| Requested packs completed / food cap reached | `\n\n`; no extra success sentence |
+
+There is no separate no-one-can-drink refusal in the round billing path;
+it counts nondead members and proceeds through its ordinary bill. There is
+also no universal need-no-provisions message before a provision offer.
+
+The Blue Boar list begins `"Our wine list,\n`, honorific, `.\n\n`, then:
+
+| Choice | Exact displayed row |
+|---|---|
+| A | `a) Rose.......18\n` |
+| B | `b) Claret....192\n` |
+| C | `c) Sauterne...79\n` |
+| D | `d) Muscatel...30\n` |
+| E | `e) Moselle...275\n` |
+| F | `f) Chablis....98\n\n` |
+
+The final prompt is `Thy choice?" `, not a separate Choose-A-F instruction.
+
+| Sage result | Output |
+|---|---|
+| Topic prompt | Echo the state's lore letter, then `\n\n"Of what wouldst\nthou hear my\nlore, `, honorific, `?"\n\nYou respond:\n` |
+| After typed topic | `\n\n`; empty input returns to tavern continuation without an extra farewell |
+| Unknown topic | `"That, I cannot help thee with.\n\n`, then repeat the topic question beginning with `Of what wouldst` |
+| Matched topic | Record `84`, then `\n\nFair 'nuff?" `; Y/N only |
+| Decline / accept fee | `No\n\n` or `Yes\n\n`; decline returns to tavern continuation |
+| Short funds | `"Sorry, `, honorific, record `91`; ends visit |
+| Paid advice | One uniform record from `85..88`, then `\nsays `, vendor name, `.\n\n`, then tavern continuation |
+
+**Shipwrights.** Record `119` is the F/S menu. F and S echo with `\n\n`;
+Space or Escape exits. Invalid service keys redraw record `119`, unlike
+invalid initial Y/N keys, which wait silently.
+
+| Shipwright result | Resource and resident envelope |
+|---|---|
+| Ordinary offer | Record `117` for Frigate or `118` for Skiff, then record `126`; confirmation Y/N only |
+| Decline / accept | `No` or `Yes\n\n` |
+| Affordability failure | Record `122`, then token-expanded `yells $.\n`; suppress ordinary farewell |
+| Pending delivery, another Frigate requested | Record `125`; Y/N only, bare `Yes` or `No` echo. Yes tests the fixed unaffordable special-delivery amount; No reopens the F/S menu. |
+| Standalone delivery newly queued | Record `123`, before payment/refresh and continuation |
+| Skiff added to pending Frigate | Record `120`, before payment/refresh and continuation |
+| Another standalone Skiff already pending | Record `121`; no debit or new delivery, then continuation |
+| Purchase continuation | Record `124`, honorific, then `?" `. Y/N only; bare `Yes` reopens F/S, bare `No` exits. |
+
+The ship continuation has a shipped honorific mismatch: it recognizes a
+literal `F` sex value for `milady`, so ordinary glyph-encoded party records
+receive `sir`, including female members. Preserve that text behavior.
+The duplicate-Frigate record owns the dock-space discussion; there is no
+additional resident no-dockspace refusal. Ordinary ship endings use the
+shared farewell, except the explicit affordability-failure exit above.
+
+Source provenance: fresh complete purchase and outcome traces in
+`u5-decomp/functions/SHOPPES_OVL/`, `u5-decomp/functions/SHOPPES2_OVL/`,
+`u5-decomp/functions/SHOPPES3_OVL/` and `u5-decomp/notes/` (#238). Resource
+selectors were independently resolved to record boundaries. These are static
+traces; no new full-game capture was taken for this table.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -1335,9 +1549,15 @@ ordinary sellable selection, the Y/N-only quote read.
 
 ### 8.2 Guildmaster (magic shop)
 
-After the greeting, the player chooses from a three-item letter menu — typically `a` Keys (skeleton keys), `b` Gems (gem-of-vision), `c` Torches. The player picks a letter and a quantity, the affordability check runs, gold is deducted, and the item is added to inventory. The guildmaster does not buy back; commerce is one-way. There is no class restriction. Spells are *not* sold here; they are mixed by the player from reagents (see `magic.md`).
+After the greeting, `a` selects Keys, `b` Gems, and `c` Torches. Each Y/N
+offer is for one fixed bundle: three keys, four gems, or five torches. The
+Intelligence-adjusted bundle price is charged on acceptance; the inventory
+addition caps at 99, without reducing the price for overflow. There is no
+carry-cap refusal before a guild offer. The earlier quantity picker is
+retracted (R418). Guildmasters do not buy back, impose no class restriction,
+and sell no spells; spells are mixed from reagents (`systems/magic.md`).
 
-The stock guild prices are:
+The stock guild base bundle prices are:
 
 | Guild shop | Keys | Gems | Torches |
 |---|---:|---:|---:|
@@ -1348,7 +1568,7 @@ The stock guild prices are:
 ### 8.3 Healer / sanctum
 
 The healer entry first asks whether the party wants treatment. `Y` enters the
-service menu, `N` exits to the farewell path, and other keys repeat the prompt.
+service menu, `N` exits to the farewell path, and other keys silently wait.
 The service menu accepts three treatment letters plus the normal exit keys:
 
 - `C` (Cure) — removes the Poisoned status from a chosen party member.
@@ -1367,13 +1587,14 @@ Dead status; Ashes and other non-Dead statuses are refused rather than treated
 as dead. That is a corollary of a single equality test against Dead, not a
 separate Ashes check - see `systems/magic.md`, which owns the shared
 resurrection gate. An untreatable selection prints the shared healer refusal and
-returns to the service menu without quoting a price or changing gold, status,
-or HP.
+asks the continuation Y/N question without quoting a price or changing gold,
+status, or HP. Yes repeats the service menu; No exits. Earlier direct-menu
+return and invalid-key prompt-redraw claims are retracted (R419).
 
 On the ordinary paid branch, the healer quotes the selected treatment's local
 price, runs the standard affordability check against the party gold word,
 deducts gold, applies the treatment, refreshes the visible character status,
-and returns to the service menu. Paid resurrection uses the shared resurrection
+and asks the continuation Y/N question. Paid resurrection uses the shared resurrection
 side effects from `systems/magic.md` -- status restoration, mana rebuild, any
 experience/level adjustment, and maximum-HP recomputation -- but the healer
 then restores current HP to maximum instead of leaving the member at the spell
@@ -1453,7 +1674,7 @@ The main menu accepts three actions:
   as the clock advances. The quote is
   `adjusted(base_rate * travelling_party_size, speaker_intelligence)`. This is
   a paid, safe town rest rather than a wilderness ambush-risk camp.
-- `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. A quoted deposit of `adjusted(base_rate * 10, speaker_intelligence)` is debited before the transfer completes.
+- `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. The quoted monthly rate is `adjusted(base_rate * 10, speaker_intelligence)`, due at Pickup; Leave performs no affordability check or gold debit. The earlier prepaid-deposit claim is retracted (R420).
 - `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill first computes `adjusted(base_rate * 10, speaker_intelligence)`, then multiplies that adjusted local lodging charge by the selected guest's stored stay counter, treating zero as one billable unit. The guest's record is copied into the next active roster slot, the party-size byte is incremented, the registry view is compacted as needed, and the returned slot's former guest marker is cleared to zero.
 
 **Per-inn bed cells.** The bed the party is moved to is a **per-inn lookup, not
@@ -1527,7 +1748,7 @@ Because the registry is part of the save image, a player can leave a companion a
 
 The stock inn rate rows are:
 
-| Inn | Base room rate | Minimum-gold gate |
+| Inn | Base room rate | Maximum guests lodged here |
 |---|---:|---:|
 | The Wayfarer Inn | 2 | 3 |
 | The Warrior's Stead | 3 | 4 |
@@ -1536,9 +1757,18 @@ The stock inn rate rows are:
 | The Smugglers' Inn | 2 | 2 |
 | The King's Ransom Inn | 3 | 2 |
 
+The third column limits existing guests at this inn before Rest or Leave;
+it is not a minimum-gold gate (R420). Source provenance: complete capacity,
+Leave and Pickup traces in `u5-decomp/functions/SHOPPES3_OVL/` and
+`u5-decomp/notes/` (#238). Section 8.C gives the outcome text.
+
 A morbid pickup path applies: lodged guests can be returned dead. If the stored guest status is Poisoned when the guest is picked up, the pickup path converts the returned record to Dead, clears current hit points, and prints "Thy friend has died, by the way." No separate lodging-death clock is visible in the pickup path; a companion left while Poisoned is enough to trigger the death conversion on pickup.
 
-The inn refuses service in several cases: no guests from the party are registered at the current inn when picking up, the travelling party is already at the six-member cap ("one must first be left behind"), the party is down to one member when trying to leave someone, the selected record cannot be moved, or gold is below the minimum or quoted room charge.
+Inn refusals depend on the action: Pickup checks the six-member party cap,
+local guests, then its bill; Rest and Leave first check lodged-guest capacity.
+Leave rejects a sole traveller, Avatar, or a dead selected companion. Only
+Rest and Pickup test affordability; there is no separate minimum-gold gate
+(R420). Section 8.C gives their exact responses and retry boundaries.
 
 ### 8.5 Tavernkeeper
 
@@ -1830,11 +2060,12 @@ sold by that herbalist. In the analyzed DOS asset set, each herbalist stocks at
 most five reagent types, so the visible choices fit in `A..E` even though there
 are eight possible reagents globally.
 
-The player picks one of the displayed letters and then a quantity. The
-affordability check runs against quantity times per-ounce price; on success,
-gold is deducted and the corresponding reagent counter is incremented. Invalid
-letters do not purchase anything; exit keys leave the reagent loop and return to
-the shop farewell path.
+The player picks a displayed letter, then accepts or declines a fixed-bundle
+offer. Section 6 gives bundle quantities and Intelligence-adjusted pricing.
+Acceptance charges the full bundle price and adds its quantity, capped at 99;
+a counter already at 99 refuses before the offer. The earlier quantity picker
+and per-ounce multiplication are retracted (R418). Invalid letters silently
+wait. Space, Escape, or Return leaves the list for the shop farewell path.
 
 ### 8.10 Horse-trader sale placement
 
@@ -1890,12 +2121,11 @@ a carried item into a party member record.
 ## 9. Karma effects
 
 The karma system does not directly modulate shop headline pricing or inventory.
-The five stat-sensitive paths of Section 6 — arms buy and sell quotes, the
-horse-trader sale, inn room and lodging charges, both shipwright vessel classes,
-and the tavern/meal-counter provision unit price — vary with the speaking party
-member's Intelligence, but not with virtue standing. Reagent, treatment,
-guild, and other decoded headline prices come from their resident tables rather
-than from karma. The random post-transaction surcharge is also not a karma price
+The stat-sensitive paths in Section 6 include guild and reagent bundles as
+well as arms, horses, inns, ships and provision packs. They vary with the
+speaking member's Intelligence, not virtue standing. Excluding guild and
+reagent quotes from this adjustment was incorrect (R418). Treatment and
+sage fees retain their own tables. The random post-transaction surcharge is also not a karma price
 modifier; it is gated by the presence of the Shadowlord of Falsehood in the
 settlement rather than by virtue standing. This is a deliberate departure from Ultima IV, where shopkeepers
 cheated the dishonourable on prices and item availability.

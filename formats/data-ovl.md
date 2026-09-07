@@ -308,13 +308,16 @@ known or likely roles include:
   published in `systems/shops.md`; `0xFF` terminates a row, while `0x00` is the
   valid Leather Helm item id. The arms `S` sell menu instead scans the party's
   nonzero equipment counters and applies the sell-back offer path. Guild shops
-  consume fixed per-shop stock and unit-price records.
+  consume per-shop base bundle prices and fixed purchase quantities.
   Healers use per-instance cure, heal, and resurrection price tables; the
   Minoc healer instance, `The Healers Mission`, bypasses the ordinary price
   path for Cure and Heal.
-  Herbalists use a reagent price/availability matrix: nonzero cells are the
-  per-ounce prices shown in the compact reagent menu, and zero cells mean that
-  herbalist does not sell that reagent. Tavern and meal-counter flows use
+  Herbalists use a reagent base-price/availability matrix and a separate
+  bundle-quantity matrix; zero price means unavailable. Both guild and
+  reagent offers apply the speaking member's Intelligence adjustment to
+  the bundle base price. The earlier unit/per-ounce interpretation is
+  retracted (R418); `systems/shops.md` Section 6 owns the corrected tables.
+  Tavern and meal-counter flows use
   resident drink-list, menu-record, and price selectors before `SHOPPE.DAT`
   renders the visible menu prose. `SHOPPE.DAT` supplies the prose, but these
   resident tables supply the stock identity, availability, selectors, and

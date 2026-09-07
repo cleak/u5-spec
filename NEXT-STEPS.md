@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, #238 shop outcomes.** Shops Section 8.C now maps the requested
+resident outcome text, resource selectors, farewell envelopes and silent key
+handling. R418 corrects guild/reagent bundles and Intelligence-adjusted prices;
+R419 corrects healer continuation; R420 corrects inn capacity and payment on
+Pickup rather than Leave. The combat entries in #238 and the remaining #231
+combat questions are next; the shop text work does not close those gaps.
+
 **2026-09-07, #239 shrine follow-up complete.** Karma Section 7 now gives
 the approach/kneeling/virtue resource ordinals, typed-virtue validation,
 three mantra entries, blank-input exits and inter-prompt waits (R416).
