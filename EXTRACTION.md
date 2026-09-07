@@ -4,7 +4,17 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-09-05.
+Last updated: 2026-09-06.
+
+## Issue #226 - dungeon floor-trap damage (2026-09-06)
+
+`systems/dungeon-mode.md` Sections 8 and 8.1 now publish the missing damage
+rules for floor pits and bombs, with a cross-reference in `systems/traps.md`
+Section 4. Each non-Dead active member among the first six party slots takes
+an independently rolled inclusive `1..8` damage through the ordinary HP/death
+rule. Falls repeat the sweep per descent; bombs apply it once. A fresh trace
+of both callers and the shared damage sweep establishes the rule. No existing
+claim is withdrawn.
 
 ## Status Legend
 
