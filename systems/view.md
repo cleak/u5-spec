@@ -166,7 +166,8 @@ Special LOOKOBJ look cases include:
   preamble and the description `a gurgling fountain!` followed by a blank row;
   then print `Who will drink?` and open the shared party-member selector
   (`inventory.md` Section 4.3, with its `Select:` label and inverted row; no
-  name is echoed). Cancelling prints `None!`. A Dead or Asleep member prints
+  name is echoed). This is the roster picker, not the acting-member scan:
+  `Who will drink?` still appears for a one-member party. Cancelling prints `None!`. A Dead or Asleep member prints
   `Incapacitated!` and a blank row; any other member prints `Refreshing...`.
   The handler runs **once**: whichever line it prints, it returns to the
   command loop without re-prompting. *(Literals and the single-pass rule added

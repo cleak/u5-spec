@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #223.** `systems/commands.md` Section 5.8 now qualifies
+Search and Cast's optional acting-member prompt, including zero/one/multiple
+eligible members and the existing overrides. Ready still prompts a one-member
+party; the town/overworld fountain's `Who will drink?` is also a direct roster
+picker, confirmed in `systems/view.md` Section 3. No behavior is withdrawn:
+this aligns the transcript examples with the existing shared-selection rule.
+
 **2026-09-07, issue #217.** `formats/saved-gam.md` Section 12 now maps every
 byte of the saved NPC tail, including eight-word runtime records with dialogue
 at offset 10, count/direction route runs and their byte-offset cursors. One
