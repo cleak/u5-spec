@@ -286,26 +286,40 @@ actors from their class byte.
 
 ## 5. Lord British dialogue and confirmation
 
-After setup, Lord British greets the party leader by name and presents a two-step box-delivery confirmation. The text itself is data-driven; this spec intentionally describes the content rather than reproducing the original wording.
+After setup, Lord British greets the party leader and asks whether the player
+brought his box. The explicit sandalwood-box clarification is conditional.
 
-The dialogue flow is:
+1. Print the greeting and first box question; accept and echo Yes or No.
+2. **Only a first No** asks the second question, explicitly naming the
+   sandalwood box. Accept and echo its answer, which replaces the first one
+   for the final decision. A first Yes skips this question whether the party
+   owns the box or not.
+3. Enter the victory rite only when the effective answer is Yes **and** the
+   saved sandalwood-box ownership flag is nonzero. Otherwise enter Section 6's
+   terminal waiting branch.
 
-1. Lord British greets the Avatar and asks whether the player brought his box.
-2. The player answers yes or no.
-3. The game echoes the answer into the dialogue stream.
-4. Lord British asks again, explicitly identifying the sandalwood box.
-5. The player answers yes or no.
-6. The game echoes the second answer.
-7. The branch decision is made from the second answer and the saved sandalwood-box completion flag.
+| First answer | Second question | Saved box present | Result |
+|---|---|---|---|
+| Yes | Skipped | Yes | Victory rite |
+| Yes | Skipped | No | Waiting branch |
+| No | Asked; answer Yes | Yes | Victory rite |
+| No | Asked; answer Yes | No | Waiting branch |
+| No | Asked; answer No | Either | Waiting branch |
 
-Compatibility note: the observed control flow stores both answers, but the branch into the victory rite is controlled by the final confirmation together with the saved completion flag. The first answer is still visible and should still be accepted and echoed, but strict compatibility does not treat it as an independent final gate after the second answer is collected.
+The earlier mandatory two-question flow is withdrawn (R404). The box flag is
+tested for the final outcome, not to decide whether the second question is
+shown. An initial No therefore does not prevent victory if the clarification
+is answered Yes and the box is owned.
 
 The confirmation is a blocking prompt. While it waits, normal gameplay turns, world ticks, NPC schedules, and time advancement do not run.
 
 ### 5.1 Message source and pacing
 
-All of this dialogue, and all seven rite messages of section 7, come from the
-endgame message file `ENDMSG.DAT`. The whole file is read once, at entry, into
+The greeting, box-question records, waiting exchange and all seven rite
+messages of Section 7 come from `ENDMSG.DAT`. Short program-owned additions
+include the answer echoes and the waiting lead-in below; the earlier claim
+that all of this dialogue comes from the file is withdrawn (R404).
+The file is read once, at entry, into
 the shared text scratch buffer; the endgame then addresses records inside it by
 ordinal. The file holds **eleven NUL-terminated records** with these roles:
 
@@ -323,6 +337,20 @@ Each yes/no prompt is a **blocking single-key read** that accepts only `Y` or
 message window as the literal `Yes` or `No` followed by a blank line, and only
 then does the next record print. There is no on-screen cursor prompt beyond the
 record's own `You reply: ` tail.
+
+Every waiting-branch outcome first prints the fixed program literal
+`"I see...` followed by **one newline**: it starts with a double quote,
+contains three periods, and has no closing quote. It then pauses for forty
+shared world-animation ticks before printing record 10. Record 10 begins with
+a newline, which supplies the blank row between that lead-in and its exchange.
+The literal is common to both a final No and a Yes without the box; it is not
+printed on a victory outcome. The pause has the same animation-gate behavior
+as the forty-tick rite pause below.
+
+Source provenance: fresh question branches, saved-box test, fixed print site
+and record-boundary checks in `u5-decomp/functions/ENDGAME_OVL/`; the issue
+#208 captures independently confirm the first-Yes/missing-box route and the
+lead-in's layout.
 
 The seven rite messages are printed as **seven discrete pages**. After the
 first of them the sequence pauses for **forty shared world-animation ticks**
@@ -401,7 +429,7 @@ actor identities of section 4, is:
    actor byte in the slot of the same index at cell (5, 9), then step it to its
    fixed target. The targets are (5,5), (4,6), (6,6), (3,7), (5,7) and (7,7) —
    a wedge fanning out below the throne.
-3. Print the greeting and run the two box-delivery prompts of section 5.
+3. Print the greeting and run the conditional box-delivery exchange of Section 5.
 4. Step slot 0 from its settled position to (5, 4), then back to (5, 5) — the
    player's actor walks up to hand the box over and steps back.
 5. Create the **sandalwood box** in slot 6 with actor byte `0x0E` at (5, 4).
@@ -952,13 +980,13 @@ Recommended implementation structure:
    retrying file helper as plain data; this path is not the paired-graphics LZW
    envelope.
 4. A cinematic scene object owns party/Lord British sprites instead of mutating the live active-object table directly.
-5. The two confirmation prompts run as blocking UI prompts.
+5. The initial confirmation and conditional clarification run as blocking UI prompts (Section 5).
 6. The refusal branch transitions to a terminal wait/tableau state.
 7. The success branch runs the ceremony, final narrative presentation, certificate, and terminal final screen.
 
 For compatibility, keep these details:
 
-- accept the two visible confirmations in order;
+- ask the clarification only after a first No, preserving both accepted-answer echoes;
 - gate success on the final confirmation and the saved sandalwood-box state;
 - do not consume turns, advance time, or run NPC schedules during the sequence;
 - do not write a save as part of the ending;
