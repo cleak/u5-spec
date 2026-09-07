@@ -57,6 +57,16 @@ room/trap effects remain owned by `systems/dungeon-mode.md` and
 
 ## 4. Hours Prompt And Time Advance
 
+**Sleep text is caller-specific.** Dangerous camp setup prints
+`Zzzzzz...\n\n` (six z characters, including the capital, and three dots).
+Town-bed rest prints `Zzzzzzz...\n` (seven z characters, three dots).
+These differ from paid inn Rest's `Zzzzzz....\n\n` (six z, four dots) and
+the sleeping combatant's `Zzzzz...\n` (five z, three dots). Do not apply
+one generic sleep sentence to all four surfaces. Source provenance: fresh
+output-call traces in `u5-decomp/functions/CMDS_OVL/`,
+`u5-decomp/functions/SHOPPES3_OVL/`, `u5-decomp/functions/COMBAT_OVL/`
+and `u5-decomp/notes/` (#238).
+
 After the entry gate accepts, the rest handler prompts for a duration in hours.
 Cancelling or entering no usable duration returns without applying rest
 recovery. Accepted durations advance time through a caller-owned simulation

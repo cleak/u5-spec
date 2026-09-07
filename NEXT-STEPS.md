@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, #238 complete / #231 reconciliation.** Combat Section 8.4
+publishes the remaining command fragments; rest-and-camp distinguishes four
+sleep strings. Isolated original routines confirm Get-/Search-, X-it what?,
+and invisibility's shared Success output. #231's contrary capture reports now
+remain explicitly indexed with the armour report; K and C prompt behavior
+is confirmed. The outstanding EGA mirror derivation is the next static task.
+
 **2026-09-07, #238 shop outcomes.** Shops Section 8.C now maps the requested
 resident outcome text, resource selectors, farewell envelopes and silent key
 handling. R418 corrects guild/reagent bundles and Intelligence-adjusted prices;
