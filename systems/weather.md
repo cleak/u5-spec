@@ -269,7 +269,10 @@ again unless the wind, heading, or cache changes.
 
 Calm wind never releases a cached hoisted-sail movement. The ship waits until
 the player enters a different command. A later Pass command reports the
-stalled-sailing feedback and clears the cached sailing state.
+stalled-sailing feedback `Sheets in irons!\n` and clears the cached sailing
+state. That Pass adds no ordinary `Pass` echo. The unsuccessful unchanged-
+heading attempt itself adds no stalled-sailing sentence; turning, collision
+and docking messages are separate outcomes (`systems/vehicles.md` Section 6).
 
 The ship-rigging flag set by using the Plans for the HMS Cape affects the
 wait-pass timing, not the direction table. Without the rigging flag, a sailing

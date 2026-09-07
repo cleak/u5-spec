@@ -190,13 +190,24 @@ Special LOOKOBJ look cases include:
   conditional acting-member selection of `commands.md` Section 5.8, then
   rolls `1..30` against that member's Intelligence. If Intelligence is greater
   than the roll, print `Strange vision!\n` and paint the local
-  thirty-two-by-thirty-two view overlay. Otherwise print `Death vision!\n`
+  thirty-two-by-thirty-two view overlay. This view is modal: the next accepted
+  key dismisses it, is consumed by the view, and triggers the ordinary viewport
+  redraw rather than another command. Otherwise print `Death vision!\n`
   and apply **one HP of damage** to that member with the ordinary hit feedback
   and stats redraw. HP reaching zero sets the member Dead and clears an
   active-member override naming that member. No member number or name is
   appended, and this damage branch does not paint the view overlay.
   The earlier member-number/no-state-change description and blanket silent
   cancellation claim are withdrawn (R408).
+
+  An active-member override selects that member without a prompt even in a
+  multi-member party. Without an override, one eligible member is selected
+  silently, but two or more eligible members do produce `Player: `; the
+  crystal sphere does not bypass that shared selection rule. The no-prompt
+  capture in issue #229 is consistent with the override case, not evidence
+  of an unconditional no-prompt rule. Source provenance: fresh selector and
+  local-view dismissal traces under `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/functions/LOOKOBJ_OVL/`.
 
 **Wishing-well text.** After the ordinary Look preamble, the handler prints
 `a well.\n\nDrop a coin?`. Its Y/N answer is appended immediately as

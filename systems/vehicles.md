@@ -369,6 +369,22 @@ hoisted/wind-control range `0x20..0x23`. The furled/manual ship range is
 `0x24..0x27`. In both ranges, the low two bits carry heading as north, east,
 south, west.
 
+**Sailing feedback.** Under-sail X-it prints `X-it_\nUnder sail!\n`
+(`_` is a space). A diagonal command receives the ordinary `What?\n`
+refusal, without a separate sailing message. Waiting on an unchanged heading
+that the wind cannot yet release adds no stalled-sailing line on that attempt;
+in particular an unchanged hoisted heading in calm wind consumes the attempt
+silently. Actual turns, collisions and docking retain their own feedback.
+If the cached sailing state remains set, the later outdoor Pass command prints
+`Sheets in irons!\n`, clears that state and does not also print `Pass`.
+The cache and cadence rules are specified in `systems/weather.md`.
+
+Using the HMS Cape plans prints `Only usable on shipboard!\n` off a ship,
+or `Ship rigged for double speed!\n` aboard, as in inventory Section 7.1.
+Source provenance: fresh ship-facing and Pass traces under
+`u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`,
+the Use trace under `u5-decomp/functions/CAST_OVL/`, and issue #232's captures.
+
 **Docking furls automatically.** On the overworld, exact static tile `0x47` is
 the pier selector. A step that takes a ship onto that tile while the ship is
 under sail prints the exact line `Docked!` followed by a line break and applies
