@@ -183,13 +183,13 @@ Every iteration walks the same sequence:
       pendulum gates, roll for a random encounter, then animate/move and prune
       eligible non-player active objects as specified in Section 6.
 
+7. **Loop.** Back to step 1 unless the exit flag is set.
+
 An accepted difficult-terrain movement performs additional object-update
 calls and adds two or four game minutes inside the movement action, before
 this ordinary per-turn block. The destination table, feedback and inherited
 cadence gates are specified in `systems/movement.md` Section 8.1; the ordinary
 two-minute tail is the baseline rather than the total cost of every step.
-
-7. **Loop.** Back to step 1 unless the exit flag is set.
 
 Ahead of the input block of step three, each iteration runs the shared
 party-capability check that all three exploration modes use, described in
