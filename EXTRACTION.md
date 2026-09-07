@@ -6,6 +6,16 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #240 - shrine result and offering presentation (2026-09-07)
+
+Karma Section 7 completes the typed-input and quest-result presentation:
+Escape clears the field, blank input aborts without ordination, and three
+accepted mantras precede narration or offering. Asset selectors, continuation
+waits, offering amount echo/refusal/payment and turn-in stat lines are traced
+and checked with thirteen isolated original-code executions. R423 corrects
+MISCMSG record36 to shrine turn-in. The former shared-effect call uncertainty
+is resolved for ordination, offerings and turn-in.
+
 ## EGA mirrored corridor derivation (2026-09-07)
 
 Fourteen isolated original-driver configurations establish the reflected

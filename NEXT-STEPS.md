@@ -18,6 +18,15 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, #240 shrine completion and offerings.** Karma Section 7 now
+publishes input editing, the result after three mantras, both ordination
+continuation waits, the completed-quest offering chooser and turn-in output.
+Thirteen original-code probes confirm that blank cancellation never ordains
+and silent intermediate entries are not silent completion. R423 moves
+MISCMSG record36 from the Codex family to shrine turn-in. Shared flash/rumble
+usage is resolved per shrine outcome. Continue monitoring capture issues and
+new work with the requested backoff.
+
 **2026-09-07, EGA mirror derivation complete.** Fourteen original-driver
 pixel probes and the dungeon caller anchors explain R394's one-pixel-left
 reflection. R421 corrects orientation flags versus resource masking; R422
