@@ -197,8 +197,9 @@ menus, Return or Space toggles the highlighted reagent, `M` accepts the current
 mask, and Escape cancels before any inventory change. The returned value is an
 eight-bit mask in the reagent order documented in `catalogs/spell-list.md`.
 
-**Step 4 — pick a quantity.** The handler prints `How much?` and reads a
-two-digit unsigned quantity. Zero cancels through the cleanup path before any
+**Step 4 — pick a quantity.** The handler prints `How much? `, including the
+trailing space, and reads a two-digit unsigned quantity. Accepted digits echo
+immediately on that same row, giving e.g. `How much? 1`. Zero cancels through the cleanup path before any
 inventory change. Nonzero quantities are validated against every selected
 reagent counter. If any selected reagent has less than the requested quantity,
 it prints `Insufficient reagents!` and repeats the quantity prompt before any
@@ -217,6 +218,14 @@ world action advances the clock, and a port that charges a turn for M-Mix will
 drift on NPC schedules, light counters, and timed magic effects.
 
 **Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, then clamps that counter to a maximum of 99. The order is add-then-clamp, so an over-large mix is capped rather than refused; the player still loses the full reagent quantity for charges the cap discards. If the masks do not match, the selected reagents are already spent and no spell charges are added. The wrong-mix branch then emits a line break, scans the travelling party for the first member whose status is Good or Poisoned, and invokes the shared trap-effect resolver described in `systems/traps.md` with that slot. Note that the mixer supplies this slot itself; it does **not** use the shared acting-member selection the container callers use (`systems/traps.md` § 2.1).
+
+The successful completion text in step 7 is exactly `\nDone!\n`: a leading
+line feed, `Done!` on its own row, and a trailing line feed, after the earlier
+`Mixing...\n` output. There is no success line reporting the quantity mixed or
+the resulting charge stock. Source provenance: the quantity prompt and its
+digit-echo reader, the recipe-success print site and the stored interface
+strings were traced in private analysis under `u5-decomp/notes/`,
+`u5-decomp/functions/CMDS_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
 
 Every exploration mode performs the same capability scan before accepting a
 command. A sleepers-only party receives its sleep pass, while a party with no
