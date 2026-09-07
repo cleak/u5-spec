@@ -370,6 +370,14 @@ A blank virtue answer or any blank mantra ends the interaction immediately
 without the unfocused-result record. No shrine-handler standing penalty is
 confirmed for a mismatch.
 
+The answer is edited in place. Backspace or Left erases the last character;
+Escape erases the whole current answer and keeps the same prompt open. At an
+empty answer, Escape changes nothing visible. Return submits without echoing
+a newline. A blank submission therefore ends meditation on the current
+prompt row, without a result message or a quest-state change. The first two
+nonblank mantra submissions likewise have no success/refusal message of
+their own: their silence does not indicate that ordination has occurred.
+
 The earlier one-mantra account and the claim that a blank mantra prints the
 no-effect result are withdrawn (`RETRACTIONS.md` R416). Only an accepted
 virtue answer plus all three accepted mantras reaches the shrine quest state
@@ -386,6 +394,37 @@ Source provenance for the entry sequence: fresh shrine-wrapper resource
 selection, virtue/mantra input loops and shared comparison trace under
 `u5-decomp/functions/CAST2_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`;
 issue #239 independently captured the approach and typed-virtue prompt.
+
+**Presentation after all three accepted mantras.** Keep the selected asset
+records intact, including their spaces and line breaks. Record ordinals below
+are zero-based `MISCMSG.DAT` ordinals, not replacement narration:
+
+| Quest state on arrival | Result presentation |
+|---|---|
+| Codex not yet read, whether already ordained or not | Set/retain ordination before record `31`, the altar's quest announcement. Restore the standing Avatar pose and wait for a command key. Print record `32`, then the virtue's record `12` through `19` in the virtue order above, then a closing double quote and one newline. Wait for another command key, then print record `33`, the instruction to return after the quest. Finish with the shrine's sound sequence and ten world ticks. |
+| Ordained and Codex read | Clear ordination before record `36`, the congratulatory response. Play the viewport/sound presentation, including the shared flash/rumble described below, then award standing and the applicable Avatar attributes. Each applicable attribute prints `Strength +1\n`, `Dexterity +1\n`, or `Intelligence +1\n`, in that order; the line still prints when the attribute is already at its cap. Finish with ten world ticks. |
+| Codex read and no longer ordained | Use the offering interaction below. There is no new ordination announcement. |
+
+**Completed-quest offering.** Record `34` asks for a number of hundreds of
+gold pieces. Its authored leading blank row and trailing space belong to the
+prompt. This is a single-digit chooser, not a typed amount: accept and echo
+one digit `0` through `9`. Other keys, including Escape and Return, silently
+keep the chooser open without repeating its question.
+
+| Accepted digit/outcome | Text and continuation |
+|---|---|
+| `0` | After echoing the digit, append ` gp\n` and end the interaction without payment or the ten-tick result pause. |
+| `1` through `9` | After echoing the digit, append `00 gp\n\n`, so the displayed amount is in gold pieces. Check affordability after this echo. |
+| Insufficient gold | Print record `35`, the insufficient-gold response, then repeat record `34` and the single-digit chooser. No payment or standing increase occurs. |
+| Affordable nonzero offering | Deduct the displayed gold amount, refresh the stats display and award the digit's standing increase. Print `ALAKAZAM` using the runic font, restore the normal font and append `!\n`. Play the local viewport/sound effect and finish with ten world ticks. |
+
+Source provenance for editing, completion and offerings: fresh original
+shrine-handler, shared editor and resource-selection traces under
+`u5-decomp/notes/`. Thirteen isolated original-code executions checked prompt
+events and state changes, including blank/Escape input, failed third mantra,
+repeated ordination, offering retry/zero/payment and Codex turn-in. These are
+control/state probes, not new full-game image or audio captures. Issue #240
+independently captured the intermediate mantra prompts and blank-input exit.
 
 The Codex-read turn-in rewards always write to the Avatar record, not to whichever companion is currently active. Each touched stat increments by one and clamps at thirty.
 
@@ -413,10 +452,9 @@ shrine-restoration branch that path can hand off to. That hand-off is
 reachable: yelling any Word of Power while standing beside a ruined shrine
 enters the CMDS-side mantra prompt for that word's index, as specified in
 `systems/commands.md` Section 11.1. Earlier wording calling it unreachable is
-retracted. The live CAST2 shrine meditation handler
-owns the actual shrine quest-state changes above; whether every successful
-live shrine branch also calls this exact resident presentation helper remains a
-presentation-parity verification item, not a different shrine-state machine.
+retracted. In ordinary shrine meditation, the Codex-read turn-in uses this
+shared flash/rumble helper. Ordination and completed-quest offerings use
+their own sound/presentation sequences without calling that shared helper.
 
 ### 7.1 Ruined-shrine restoration through Yell
 
@@ -669,7 +707,7 @@ The behaviour described here was derived from the private function and format no
   British audience, and outdoor-loop paths, so an implementation should model
   it as one reusable presentation routine that several systems call rather
   than duplicating it per occasion.
-- The M-command shrine/urn dispatcher and urn reader's Codex-read bit stamping,
+- The shrine/urn dispatcher and urn reader's Codex-read bit stamping,
   prophecy display, completed branch, active-object suspension, and restore/redraw
   wrapper -- derived from
   `u5-decomp/functions/CAST2_OVL/`.
