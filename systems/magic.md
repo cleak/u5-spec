@@ -1197,13 +1197,15 @@ or circle gates.
 
 The eight virtue shrines (Honesty, Compassion, Valor, Justice, Honor, Sacrifice, Spirituality, Humility) are not part of the spell system proper. Their only magic-facing consequence is that some shrine quest turn-ins permanently increase the Avatar's intelligence, which in turn raises the mana cap used by the cast dispatcher.
 
-Meditation and Codex urn reading are driven by the `M` command while standing
-on shrine-family special tiles, but they are distinct from reagent mixing. On a
-virtue shrine, the engine prompts for the shrine mantra (`Ahm`, `Mu`, `Ra`,
-`Beh`, `Cah`, `Summ`, `Om`, or `Lum`) and then branches on the shrine quest
-masks described in `systems/karma.md`. On the urn/Codex special tile, the same
-command family loads the Codex message cluster and sets the Codex-read bit for
-an ordained virtue, also described in `systems/karma.md`.
+Ordinary shrine and Codex entry use `E` on their respective terrain markers;
+`M` always mixes reagents. The midnight moongate has a separate handoff into
+the same presentation wrapper. On a virtue shrine, the engine asks for the
+typed virtue and then three mantra entries before testing the shrine quest
+masks. `systems/karma.md` Section 7 owns the answer matching, empty-input
+exits and narration records. The remaining M-command/one-mantra description
+in this section is withdrawn (`RETRACTIONS.md` R416; entry-key correction R411).
+The Codex branch loads its message cluster and stamps the Codex-read bit for
+the ordained virtue according to its separate quest flow.
 
 Gold offerings are not the stat-up path. After a virtue's shrine quest is complete, a valid offering consumes party gold and raises the active shrine standing. The permanent stat rewards happen on the Codex-read turn-in state, when the ordained bit is cleared and the Codex bit remains set. Those rewards write to the Avatar record: Honesty raises intelligence; Justice, Honor, and Spirituality include intelligence among their rewards; the other shrines affect strength and/or dexterity or, for Humility, standing only.
 

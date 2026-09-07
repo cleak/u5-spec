@@ -37,7 +37,13 @@ The known record clusters are:
 | 12-19 | Shrine and virtue presentation | Virtue-failing or weakness phrases keyed by the eight virtues |
 | 20-27 | Shrine and virtue presentation | Virtue aphorism paragraphs keyed by the eight virtues |
 | 28-35 | Shrine meditation | Meditation prompts, altar text, offering text, and ordained/quest presentation |
-| 36-46 | Urn/Codex prophecy | Codex revelation or prophecy pages, including tile-glyph text |
+| 36-44 | Urn/Codex prophecy | Codex revelation or prophecy pages, including tile-glyph text |
+| 45 | Shrine entry | Approach narration before the kneeling and virtue-input records |
+| 46 | Codex entry | Approach narration for the Codex presentation |
+
+The earlier classification of the entire final group as Codex revelation or
+prophecy text is withdrawn for record 45 (`RETRACTIONS.md` R417). Its shrine
+entry use was freshly verified under `u5-decomp/functions/CAST2_OVL/`.
 
 The record-family boundaries are consumer contracts, not in-file structure. The
 Blackthorn audience loads the front cluster as its temporary message source.

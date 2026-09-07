@@ -526,7 +526,8 @@ by the karma system:
 | `SHRINE:humility` | Humility | `Lum` | Meditation and Humility karma/ordainment. |
 
 Shrines are fixed overworld landmarks, not scene-byte interiors. The shrine
-handler resolves the active shrine from the shrine table, asks for the mantra,
+handler resolves the active shrine from the shrine table, asks for a typed
+virtue and then three mantra entries as specified in `systems/karma.md` Section 7,
 asks for an offering, updates the appropriate karma and quest flags, and
 returns to overworld mode.
 

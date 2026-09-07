@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #239 - shrine prompt sequence (2026-09-07)
+
+Fresh tracing identifies the approach and kneeling records, typed-virtue test
+and three separate mantra prompts. Blank input exits without the failure
+record; a nonblank mismatch is reported only after the third mantra (R416).
+The last resource cluster is refined to distinguish shrine approach (R417).
+An isolated original string-printer probe confirms that the shipped three-dot
+ending explains the observed wrapping without reducing the window capacity.
+
 ## Issue #239 - independent reconciliation (2026-09-07)
 
 The issue author independently confirms the seven surface shrine cells and

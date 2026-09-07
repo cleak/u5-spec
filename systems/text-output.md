@@ -138,6 +138,16 @@ The buffer is sized to hold any window's worth of text (at least 64 characters i
 
 **Line feeds and full rows.** When a chunk exactly fills the row, the per-cell emitter has already wrapped by the time the chunk ends, so an explicit line feed would leave a blank row. The printer suppresses that line feed — but **only** on the arm where the collected chunk overflowed the row, and only for a break byte carried in the *same* source string, which is consumed rather than emitted. A line feed arriving from any **later** call is unconditional and always costs a row, because the per-cell emitter keeps no wrap-state memory. So a row-filling string that carries its own trailing line feed leaves no blank row, while the same text printed and then followed by a separate line-feed emit does leave one. Section 10.4 depends on the second half of this rule.
 
+The shrine approach in issue #239 does not require a narrower message window.
+Its authored record ends in `tranquil Shrine...`, an eighteen-character phrase,
+so those words cannot share a sixteen-cell row. An isolated execution of the
+original wrap-aware printer produces `Thou dost`, `approach the`, `tranquil`,
+and `Shrine...` on successive rows. The hypothetical one-dot `tranquil Shrine.`
+does fit all sixteen cells. The probe stubbed character output to the existing
+sixteen-cell emitter contract; it was not a new live display capture. Source
+provenance: original string-printer probe and shrine resource read under
+`u5-decomp/notes/`. The inclusive-capacity contract of Section 4 is unchanged.
+
 ## 7. Driver-Side Glyph Dispatch
 
 When the per-cell emitter decides to render a glyph, it does so in three conceptual steps. The text system itself is responsible for the first two; the third is delegated to the loaded display driver.
