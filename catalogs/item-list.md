@@ -407,7 +407,7 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 | Morning Star | Weapon | Heavy melee weapon with an ordinary attack max value; non-adjacent range cap 2. | None for ordinary damage. |
 | Sword of Chaos | Magical weapon | Named high-tier sword using the combat special attack value. Its drawback is now traced: while item id 35 sits in the wielder's weapon-hand or shield-hand readied slot, that character's combat turns are taken away from the player. The combat turn dispatcher stamps the controlled/charmed descriptor bit on the character, clears the active-player sentinel, and runs the turn through the automatic actor driver instead of reading a command, so the character shows the `C` status letter and acts on its own. See `systems/combat.md` Section 6.1a. | Whether any narration accompanies the compulsion. |
 | Silver Sword | Weapon | Special sword, likely effective against specific enemies. | Exact enemy interactions. |
-| Glass Sword | Weapon | Named weapon using the combat special attack value: the damage roller narrates `Thy sword hath shattered!` and substitutes the instant-kill sentinel 99 (`systems/combat.md` Section 12). | No attack-time breakage in the analyzed baseline. *Residual:* private analysis reads that shatter arm as also clearing the readied slot. The published negative stands pending resolution; the conflict is recorded in `NEXT-STEPS.md`. |
+| Glass Sword | Weapon | Named weapon using the combat special attack value: the damage roller narrates `Thy sword hath shattered!` and substitutes the instant-kill sentinel 99 (`systems/combat.md` Section 12). | The shatter clears the first matching readied Glass Sword slot before the instant-kill result is applied; no carried-inventory count changes. The earlier no-breakage sentence in this row is withdrawn (R390); its removal was missed when that correction first landed. |
 | Jeweled Sword | Weapon | Always-hit id whose table `Attack max` of 1 is never reached: the combat damage roller overrides this id's raw value to 0 before any roll, so it delivers no ordinary attack damage (`systems/combat.md` Section 12). | Exact special-purpose use, if any. |
 | Mystic Sword | Weapon | Top-tier or magical sword with an ordinary attack max value. | Exact special effect, if any. |
 | 2H Hammer | Two-handed weapon | Requires both hands free and has an ordinary attack max value. | Display weight. |
@@ -475,6 +475,12 @@ The inventory narration and item-name pools identify scroll and potion families.
 The CAST-owned U-Use handler dispatches both families directly; scroll branches
 are now named at the effect-family level, and potions have a verified
 display-order-to-effect mapping.
+
+The picker-decoration classification is complete in `systems/inventory.md`
+Section 4.5: all eight scrolls have the scroll symbol and runic label; all
+eight potions have the potion symbol and text colour; all eight moonstones
+have the phase decoration. Other named U-Use items, including the Sceptre and
+Skull Keys, have none. This classification concerns inventory rows only.
 
 ### 7.1 Spell scrolls
 

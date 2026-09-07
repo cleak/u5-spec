@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #211.** The missed Glass Sword catalog row now reflects
+R390: shatter clears its first matching readied slot and leaves carried stock
+alone. `systems/inventory.md` Section 4.5 now maps every U-Use name to its
+row decoration and corrects the old labels/fonts (R403): scrolls and potions
+are decorated; the Sceptre, Skull Keys and other ordinary artifact names are
+not. Scroll labels remain runic; potion colours are text.
+
 **2026-09-07, issue #222.** `systems/magic.md` Section 5.1 now separates
 scroll banners from spell completion and covers all forty-eight spell entries.
 In Lor/Vas Lor print no success line; the shared completion step distinguishes
