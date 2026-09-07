@@ -316,12 +316,18 @@ The live shrine meditation handler does not load `KARMA.DAT` in the traced CAST2
 
 ## 7. Shrine meditation
 
-Meditation runs when the player presses `M` while the party is standing on one of the shrine coordinates. The handler matches the party position against the single eight-row shrine coordinate table published in `catalogs/gazetteer.md` Section 7, renders the kneeling avatar tile, prompts for a mantra, and reads up to twelve characters.
+Ordinary shrine meditation begins with `E`-Enter while standing on the live
+mystic-shrine terrain tile `0x19`. Enter identifies the virtue from the
+coordinate table in `catalogs/gazetteer.md` Section 7 and begins the shrine
+presentation; the meditation handler renders the kneeling avatar, prompts
+for a mantra, and reads up to twelve characters. `M` always selects Mix
+Reagents, including at a shrine. The earlier M-Meditate entry rule is
+withdrawn (`RETRACTIONS.md` R411).
 
 The match has one deliberate fall-through that an implementation must reproduce.
 Spirituality's row is a `(0, 0)` sentinel rather than a real position - the
 Shrine of Spirituality is not placed on the Britannia surface - and `(0, 0)` is
-open ocean, so no party can ever match it by position. When the scan of all
+open ocean and supplies no ordinary shrine-entry tile. When the scan of all
 eight rows finds no match, the handler resolves the meditation to
 **Spirituality**. Meditating at a shrine that is not one of the seven mapped
 ones *is* the test for Spirituality, and "no row matched" must not be treated as
@@ -386,7 +392,7 @@ presentation-parity verification item, not a different shrine-state machine.
 
 ### 7.1 Ruined-shrine restoration through Yell
 
-This is separate from the ordinary M-Meditate shrine quest flow above. The
+This is separate from the ordinary E-Enter shrine quest flow above. The
 outdoor Yell handler first recognizes a Word of Power, prints the uttered-word
 line, and runs the shared viewport flash/low-rumble effect. If the first
 qualifying adjacent cell in its west, south, east, north scan is a ruined

@@ -234,7 +234,7 @@ plain block of text rather than as a table addressed by the key code.
 | `P` | `Push-` | Dungeon refusal replaces the echo entirely: `Push\nNot_here!\n`. Ordinary source/path refusals continue the direction echo; see Section 8.1. |
 | `Q` | `Quit:` | |
 | `R` | `Ready...\n\n` | |
-| `S` | `Search-` (direction form) or `Search...\n` (in-place form) | |
+| `S` | `Search-` in town/overworld; `Search...\n` in a dungeon | Dungeon Search then asks `Dir-` for a relative target; it is not restricted to the current cell. The earlier "in-place form" label is withdrawn (`RETRACTIONS.md` R414). |
 | `T` | `Talk-` | Refusal tail `Funny,_no_response!\n`; one arm uses the combined literal `Talk-Funny,_no_response!\n` |
 | `U` | `Use_item\n\n` | |
 | `V` | `View_a_gem!\n` | Refusal on the **next** line: `You_have_none!\n` |
@@ -262,7 +262,7 @@ Two ordering details are easy to get wrong and are part of the contract:
 | Suffix | Meaning | Verbs |
 |---|---|---|
 | `-` | A **direction** is awaited. The chosen direction's name is appended on the same line. | Attack (outside dungeons), Fire, Get, Jimmy, Klimb, Open, Push, Search (direction form), Talk, Look (surface and town) |
-| `...` | A **sub-selection** is awaited on another surface - a party member, an item, a spell, a page. | Cast, Ready, Z-stats, Search (in-place form), Look (dungeon) |
+| `...` | A follow-up selection is awaited: a party member, item, spell, page, or dungeon-relative direction. | Cast, Ready, Z-stats, Search (dungeon), Look (dungeon) |
 | trailing space | A further keystroke or a typed argument continues the **same** line. | Board, X-it, Yell, Hole up (hyphen then space) |
 | newline, or nothing | The command completes immediately. | Pass, Ignite torch, Mix Reagents (two newlines), New Order (no newline at all), Use item (two newlines) |
 

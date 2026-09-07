@@ -392,7 +392,18 @@ Secret doors are walls that look like walls until the player searches the cell.
   `A hidden door!\n` and convert to `0xE0` or `0xE8`. These rewrites preserve
   only the visit marker bit and affect the loaded dungeon image for the current
   dungeon entry.
-- **In towns and dwellings**, secret doors are wall tiles flagged in the location's per-map object table. Search matches the target cell's coordinates to the table and replaces the wall tile with a normal door tile.
+- **In towns and dwellings**, the authored hidden-door terrain is tile `0x4E`
+  in the location map itself. The normal direction and acting-member selection
+  lead to a direct terrain test; no per-map object flag is required. On reveal,
+  Search prints `\nThou dost find\na hidden door!\n` and changes the target
+  tile to the ordinary unlocked door `0xB9` on ground/above-ground floors
+  (floor byte below `128`), or `0xB8` on below-ground floors (floor byte at
+  least `128`). The map becomes dirty for repaint. The earlier object-table
+  flag and coordinate-match rule is withdrawn (`RETRACTIONS.md` R412).
+
+Source provenance: the ordinary Search terrain read, hidden-door comparison
+and floor-dependent tile replacement were freshly traced under
+`u5-decomp/functions/SJOG_OVL/`.
 
 Search is the only way to find these authored hidden passages. Once revealed,
 town/dwelling secret doors respond like ordinary unlocked doors. Dungeon reveal

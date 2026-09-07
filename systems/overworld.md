@@ -1241,7 +1241,8 @@ changing observable behaviour.
 After the tile is cleared, the hook has two outcomes. If the clock is in hour
 `0` and the minute is below `10`, it reports success to the outer loop; the
 outer loop then dispatches the same shrine/urn kneel overlay used by
-M-Meditate. Otherwise, the hook chooses a destination from the cached moon-glyph
+E-Enter at a shrine. The earlier M-Meditate attribution is withdrawn
+(`RETRACTIONS.md` R411). Otherwise, the hook chooses a destination from the cached moon-glyph
 digits: before noon it uses the first cached glyph, and from noon onward it
 uses the second. The glyph digit selects one of the saved Moonstone slots, and
 the hook calls the same saved-slot warp helper used by Gate Travel. If that

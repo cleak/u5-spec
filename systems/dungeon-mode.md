@@ -1598,8 +1598,31 @@ Two letter commands give the player visibility into the dungeon beyond the first
    read. Space/Pass returns no focus, so L-Look aborts before printing "You
    see:".
 4. Reads the dungeon tile byte at `(Z, focus_y, focus_x)` from the loaded dungeon image. For description only, byte `0x61` is treated as `0x00`.
-5. Prints "You see:" followed by a class-specific message. Energy-field bytes `0x80..0x83` have distinct sleep, poison-gas, fire, and electric descriptions, while other `0x8?` values share a generic energy-field description. Class `0xC?` is a flavour-presentation class whose text depends on the active dungeon flavour. The remaining high nibbles collapse to passage, ladder, chest, fountain, pit, open chest, nothing-of-note, wall, or heavy-door descriptions.
+5. Prints `You see:\n` followed by a class-specific message. The sighted form also breaks after the colon. Energy-field bytes `0x80..0x83` have distinct sleep, poison-gas, fire, and electric descriptions, while other `0x8?` values share a generic energy-field description. Class `0xC?` is a flavour-presentation class whose text depends on the active dungeon flavour. The remaining high nibbles collapse to passage, ladder, chest, fountain, pit, open chest, nothing-of-note, wall, or heavy-door descriptions.
 6. For the fountain class, runs the drink Y/N flow described in Section 8.
+
+The shared relative chooser used by dungeon Look and Search prints `Dir-`
+and accepts the following keys, independently of the current facing:
+
+| Key | Completion appended to `Dir-` | Relative target |
+|---|---|---|
+| Up | `Ahead\n` | One cell forward |
+| Left | `Left\n` | One cell to the left |
+| Right | `Right\n` | One cell to the right |
+| Down | `Here\n` | The party's cell |
+| Space | `Pass\n` | Cancel before reading a target cell |
+
+Letter alternatives such as A/R/L/H and Escape are ignored without echo;
+the chooser remains open. Facing changes the selected coordinates, never the
+completion word. Search echoes `Search...\n` before this chooser. A revealed
+dungeon door subsequently searched prints
+`You find:\nNothing hidden\non the door.\n`.
+The found hidden-door case is `You find:\nA hidden door!\n`.
+
+Source provenance: fresh relative-key, completion-string and sighted Look
+traces under `u5-decomp/functions/SJOG_OVL/` and
+`u5-decomp/functions/DNGLOOK_OVL/`; issue #228 supplies matching paired
+captures, including the repeated Search result.
 
 The fountain prompt is the only state-mutating L-Look class currently identified: it can change the selected party member's status, HP, or both. Other L-Look classes narrate the inspected feature only. L-Look does *not* repaint the first-person view; the message appears in the message panel and the view stays as it was. L-Look does *not* advance time; it is a free action.
 

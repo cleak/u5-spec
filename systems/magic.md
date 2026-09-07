@@ -464,14 +464,24 @@ coordinates carry their own closing quote.
 The printer emits a **newline before** the coordinate pair as well as after it.
 *Corrected:* an earlier revision of this paragraph said only that "a newline ends
 the line", which leaves an implementer free to append the coordinates to whatever
-label preceded them. That is wrong for both callers: the label a caller prints
-first carries no newline of its own, so the observable output is the label on one
-line and the coordinate pair on the line below, followed by a further line break.
-An engine that concatenates label and coordinates onto a single line matches the
-old wording and still does not match the original. The printer also brackets the
-coordinate line with two calls into a presentation helper — one before, one after
-— whose exact screen-placement effect has **not** been established; vertical
-placement of the pair is therefore an open point rather than a settled one.
+preceded them. The Sextant prints `Position:` in the normal text font, with no
+line break in that label; the formatter supplies the break before the pair.
+In Wis prints no separate `Locate:` label: after its ordinary casting
+presentation and effect, it invokes the same formatter directly.
+
+The entire coordinate pair, including its punctuation and separating space,
+uses the runic font (`RUNES.CH`). The formatter selects that font before the
+leading newline and restores the normal text font before the trailing newline.
+Those two presentation calls are font selection, not an unresolved screen
+positioning operation. The earlier claim that both callers print a label and
+the unresolved-positioning interpretation are withdrawn (`RETRACTIONS.md` R413).
+For example, position `(x=66, y=233)` prints the runic equivalent of
+`O'J", E'C"`; the nibble rule and latitude-first order are unchanged.
+
+Source provenance: fresh coordinate-formatter, font-selector and In Wis caller
+traces under `u5-decomp/functions/CAST2_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/functions/CAST_OVL/`;
+issue #237 independently matched the displayed row against the runic font.
 
 This is presentation only: it does not move the party, consume gems, reveal map
 cells, or alter the saved position.
@@ -1460,7 +1470,8 @@ The behaviour described here was derived by reading the private function and for
   recomputation -- derived from
   `u5-decomp/functions/CAST2_OVL/` and the clean
   CAST/SHOPPES caller traces.
-- The shrine meditation and Codex urn handlers -- their M-command dispatch,
+- The shrine meditation and Codex urn handlers -- their entry dispatch
+  (the earlier M-command attribution is withdrawn; `RETRACTIONS.md` R411),
   mantra prompt, quest-mask state machine, Codex-read bit stamping,
   post-completion offering path, Codex-turn-in reward table, and
   ordained/Codex bitmap updates -- derived from
