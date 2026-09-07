@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, #241 difficult terrain.** Movement Section 8.1 publishes the
+full terrain-cost table, extra object-update calls, horse/carpet behavior,
+message suppression and line endings. Time Section 10 withdraws the fixed
+two-minute total for all outdoor steps (R424). Commands Section 4 propagates
+the previously established M-mixes/E-enters-shrines correction (R425).
+All 256 tile costs and fifteen transport movement cases were checked through
+isolated original-code execution. Continue the issue monitor after answering.
+
 **2026-09-07, #240 shrine completion and offerings.** Karma Section 7 now
 publishes input editing, the result after three mantras, both ordination
 continuation waits, the completed-quest offering chooser and turn-in output.

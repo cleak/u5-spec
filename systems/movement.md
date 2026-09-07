@@ -277,6 +277,63 @@ turn is owned by the caller; ordinary rejected movement is generally a consumed
 movement attempt only when the mode explicitly treats the bump or attack as a
 turn-taking action.
 
+### 8.1 Outdoor difficult-terrain cost and feedback
+
+An accepted ordinary outdoor step changes the party's position by one cell
+before assessing the destination terrain. Difficult terrain adds time and
+outdoor object-update work to that step; it does not randomly reject the
+step or require another direction key to complete it. This applies to the
+outdoor world mode, including its Underworld plane, rather than to town or
+combat movement merely because the same tile art appears there.
+
+| Destination terrain id | Extra outdoor object-update calls | Extra game minutes before the ordinary turn cost | Feedback when not suppressed |
+|---|---:|---:|---|
+| `0x04`, `0x06`, `0x07`, `0x08`, `0x1E`, `0x1F` — swamp, brush and desert variants | 1 | 2 | `Slow progress!\n` |
+| `0x09..0x0F` — forest, dense forest, hills and mountain range | 2 | 4 | `Very slow!\n` |
+| All other ids | 0 | 0 | None |
+
+This cost table never grants passability: the mountain entries, for example,
+matter only if the current transport can legally enter them. Tile `0x0A`
+dense forest has the higher cost. Both brush ids have the lower cost; the
+plain grass tile `0x05` is free of this additional charge.
+
+The ordinary outdoor turn still adds its two-minute baseline afterward, so
+an ordinary foot step costs two, four or six game minutes in total. Quickness
+and Negate Time modify each clock advance as specified in `systems/time.md`
+Section 4. Terrain's extra work does not repeat the whole party-upkeep tail
+or displace the party a second time.
+
+Horse and magic-carpet travel use the same terrain-cost table, without an
+exemption or a reduced minute charge. Each extra outdoor object-update call
+uses the normal timed-effect and transport cadence gates from
+`systems/overworld.md` Section 6: horse/carpet alternation still applies,
+and a gated call advances the reached parity toggle. Thus one extra call is
+not a promise that every creature moves once. Reached calls can run the
+ordinary encounter and hostile-object work. Each extra call is followed by
+the usual proximity pause: one world tick when active-object slot 1 is live,
+on the same floor and within five cells of the party on both axes.
+
+There is no separate chance roll for choosing the slow-terrain message.
+However, the message is suppressed if any of the additional object-update
+calls reports a hostile interaction: the adjacent-engagement path or a
+reached near-range/aligned creature-attack path. Ordinary creature movement
+alone does not suppress it, and a cadence-skipped call reports no such
+interaction. Suppression does not remove the terrain's time charge.
+
+When printed, the feedback starts directly after the compass echo's newline
+and has one trailing newline, with no leading blank row. The ordinary next
+command boundary supplies the subsequent separation described in
+`systems/text-output.md` Section 10.2. Mounted and carpet direction echoes
+can include their normal `Ride ` or `Fly ` prefix before the compass word.
+
+Source provenance: fresh destination-cost, committed-movement, outdoor
+object-update and clock traces under `u5-decomp/notes/`. Isolated execution
+checked all 256 tile ids with and without a reported interaction (512 cases),
+plus fifteen accepted movement cases across foot, horse and carpet states.
+Those probes intercepted passability and actor/clock boundaries; the existing
+passability tables remain authoritative. Issue #241 independently captured
+the brush/forest/hill messages and one-cell movement on its outdoor route.
+
 ## 9. Mode Notes
 
 **Overworld.** Movement is party-centric and uses world coordinates, the live

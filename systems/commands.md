@@ -136,7 +136,7 @@ handoffs.
 | `J` | Jimmy. | Routes to the lockpick handler for doors, restraint tiles, and locked containers. |
 | `K` | Klimb. | Mode-aware: overworld, town-family locations, and dungeons each have their own climb/Z-transition handler; the gear gate, on-foot check, ladder cases, and dungeon level rules are specified in `doors-and-z-transitions.md`. |
 | `L` | Look. | Dungeon scenes route to DNGLOOK. Overworld and town-family scenes route to LOOKOBJ and `LOOK2.DAT`; see `view.md`. |
-| `M` | Mix / shrine-command family. | Ordinary field use routes to CMDS reagent mixing. Shrine-family special tiles route through CAST2's shrine/urn entry handler, which then dispatches internally to virtue meditation or Codex urn reading. |
+| `M` | Mix Reagents. | Routes to reagent mixing, including while standing on a shrine. Ordinary shrine meditation begins through E-Enter; see `systems/karma.md` Section 7. |
 | `N` | New order. | Routes to the party-order swap handler described in Section 6. |
 | `O` | Open. | Routes to the Open handler for doors, chests, and dungeon underfoot cases. |
 | `P` | Push. | Refuses in dungeons; otherwise routes to the push/movable-tile handler described in Section 8. |
@@ -150,6 +150,9 @@ handoffs.
 | `X` | X-it. | Routes to the vehicle-exit/dismount handler outside combat. Ordinary dungeon `X` is a refusal/no-op. Combat `X` is refused outright by the combat parser and does not leave a fight; the combat-only escape handler is bound to Escape instead, as specified in `combat.md`. |
 | `Y` | Yell. | Routes to the Yell handler described in Section 11. Shipboard Y toggles sails as specified in `vehicles.md` and `weather.md`; non-ship branches handle words of power and Shadowlord-name effects. |
 | `Z` | Z-stats. | Routes to the character/status display overlay. Character stat pages, equipment display, and shared-inventory browsing are specified in `inventory.md` and `text-output.md`. |
+
+The earlier M-row shrine dispatch is withdrawn (`RETRACTIONS.md` R425),
+propagating the E-entry correction already recorded by R411.
 
 `R` Ready and `Z` Z-stats are worth calling out against the return contract of
 Section 3: the status/equipment overlay produces no status word of its own, and
@@ -208,6 +211,12 @@ specified in `text-output.md` section 10.2, and the end-cap composite itself in
 `display-driver.md` section 7.
 
 ### 5.2 Verb echo literals
+
+Outdoor movement prints its compass word followed by a newline. An accepted
+step onto difficult terrain can then print `Slow progress!\n` or
+`Very slow!\n` directly beneath it, without a leading blank row. The complete
+tile sets, extra time/object updates, transport behavior and hostile-interaction
+suppression are specified in `systems/movement.md` Section 8.1.
 
 The resident dispatcher owns one literal per letter. Each arm loads its own
 literal; there is no key-indexed pointer array, and the literals are stored as a

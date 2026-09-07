@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #241 - difficult terrain (2026-09-07)
+
+Movement Section 8.1 supplies destination-cost and feedback tables, extra
+actor-update cadence, hostile-interaction message suppression and foot/horse/
+carpet behavior. Fresh traces and 527 isolated assertions support the contract.
+Time Section 10 corrects the previously fixed outdoor-step total (R424);
+Commands Section 4 also removes its stale M-shrine routing row (R425,
+propagating R411).
+
 ## Issue #240 - shrine result and offering presentation (2026-09-07)
 
 Karma Section 7 completes the typed-input and quest-result presentation:
