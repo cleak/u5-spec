@@ -269,6 +269,31 @@ Second, skiff and ship exits use nearby support as a yes/no gate; when the gate
 passes, the abandoned vehicle is still parked at the current party coordinate,
 not in the accepted neighbouring cell.
 
+### 5.1 X-it transcript
+
+The dispatcher first prints `X-it_`, where `_` marks its trailing space.
+The following completions use `\n` for a literal line feed:
+
+| Outcome | Text after the dispatcher prefix |
+|---|---|
+| Already on foot | `what?\n` |
+| Ship under sail | `\nUnder sail!\n` |
+| Horse dismounted | `horse!\n` |
+| Carpet dismounted | `carpet!\n` |
+| Skiff dismounted | `skiff!\n` |
+| Carpet or skiff has no landing support | `\nNo land nearby!\n` |
+| Skiff refused over the bridge pair | `\nNot here!\n` |
+| Furled ship, any exit attempt | `ship!\n`, before checking land/skiff/carpet availability |
+
+A furled-ship exit onto land, into its carried skiff, or onto a stowed carpet
+adds **no further success text**. They all show `X-it ship!`; there is no
+launch-skiff or redeploy-carpet sentence. If all three options fail, append
+`\nNo skiffs on board!\n` after `ship!\n`, leaving a blank row before the
+refusal. These text boundaries do not change the state gates in Section 5.
+
+Source provenance: fresh vehicle handler and functional-message trace under
+`u5-decomp/functions/CMDS_OVL/` and `u5-decomp/notes/`, issue #225.
+
 ## 6. Movement And Time Hooks
 
 Vehicle movement is still mode-owned. The overworld and town movement handlers

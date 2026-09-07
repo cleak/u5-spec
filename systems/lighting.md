@@ -336,6 +336,12 @@ coincidence.
 
 The I-Ignite command is the player-facing torch entry point. It consumes one torch from inventory; with no torches available it refuses and leaves the light state unchanged.
 
+The empty-stock refusal is exactly `None owned!\n`, without parentheses.
+It follows the dispatcher echo `Ignite torch!\n` on the next line. Successful
+Ignite adds no result text after that echo. Source provenance: fresh command
+and functional-literal trace under `u5-decomp/functions/CMDS_OVL/` and
+`u5-decomp/notes/`, corroborating the capture reported in issue #225.
+
 Ignite has two duration rules:
 
 - Outside dungeon scenes, it sets the torch counter to 240 counter units.

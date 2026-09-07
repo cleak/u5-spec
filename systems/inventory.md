@@ -333,6 +333,46 @@ carried item in R-Ready, a runic glyph for a readied one, and the small solid
 diamond (selector code `0x0F`) when marked in M-Mix (`magic.md` Section 6).
 The marker changes no item id or counter band.
 
+**R-Ready's readied selector is item-specific.** If the selected character
+has the row's item in any equipment slot, use the following `RUNES.CH` glyph;
+otherwise use a space. The glyph does not depend on which hand or slot holds
+the item, and is not calculated from its equipment-class tag.
+
+| Item or group | Selector glyph |
+|---|---:|
+| All four helms | `0x01` |
+| All five shields | `0x02` |
+| All seven body armours | `0x03` |
+| Dagger; Main Gauche | `0x04` |
+| Sling | `0x05` |
+| Club | `0x06` |
+| Flaming Oil | `0x07` |
+| Spear | `0x08` |
+| Throwing Axe | `0x09` |
+| Short Sword; Long Sword | `0x0B` |
+| Mace | `0x0C` |
+| Morning Star | `0x1E` |
+| Bow | `0x0F` |
+| Crossbow | `0x10` |
+| Two-handed Hammer | `0x11` |
+| Two-handed Axe | `0x12` |
+| Two-handed Sword | `0x13` |
+| Halberd | `0x14` |
+| Sword of Chaos; Silver Sword; Glass Sword; Jeweled Sword; Mystic Sword | `0x15` |
+| Magic Bow | `0x16` |
+| Magic Axe | `0x17` |
+| All three magic rings | `0x18` |
+| Amulet of Turning | `0x19` |
+| Spiked Collar | `0x1A` |
+| Ankh | `0x1B` |
+
+The two ammunition entries also have assigned glyph `0x17`, but ordinary
+R-Ready cannot put ammunition into a readied slot; their normal selector is
+therefore a space. The reported Chain Coif, Chain, Long Sword and Ankh
+selectors are examples of this item mapping, not evidence for a slot table.
+Source provenance: fresh item-selector and ownership trace under
+`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`, issue #225.
+
 Source provenance: fresh name-table census, R-Ready/U-Use table selection and
 row-renderer font changes in `u5-decomp/functions/ZSTATS_OVL/`, with font-slot
 loading checked in `u5-decomp/functions/INTRO_OVL/` and font selection in
@@ -605,6 +645,41 @@ Closing the picker restores the message-window frame and then triggers a full
 roster redraw, which is what puts the six member rows, the food-and-gold line
 and the date line back on the panel.
 
+### 5.2 R-Ready result and refusal text
+
+Each ordinary voiced refusal below prints **two line feeds, the listed
+message, then two line feeds and `Item:_`**. Here and in Section 7.1,
+`\n` denotes a line feed and `_` makes a space explicit. The listed refusal
+text contains no additional line feed of its own.
+
+| Cause | Message |
+|---|---|
+| Body-armour change during undecided combat | `Thou canst not change armour in heated battle!` |
+| Required arrows or quarrels absent | `Thou hast no ammunition for that weapon!` |
+| Different helm already readied | `Remove first thy present helm!` |
+| Different body armour already readied | `Thou must first remove thine other armour!` |
+| No hand available for a one-handed item, including a two-handed weapon already held | `Thou must free one of thy hands first!` |
+| Two-handed item selected while either hand is occupied | `Both hands must be free before thou canst wield that!` |
+| Different amulet already readied | `Thou must remove thine other amulet!` |
+| Different ring already readied | `Only one magic ring may be worn at a time!` |
+| Resulting burden exceeds Strength | `Thou art not strong enough!` |
+
+The combat armour lock applies before the already-readied unequip test.
+An applicable ammunition prerequisite precedes slot occupancy, and an
+occupied-slot or hand-conflict message precedes the strength refusal when
+both would apply. Selecting an ammunition row itself is silent.
+
+Ordinary successful equip and unequip print **no result message**, no item
+name echo and no fresh `Item:_` prompt. The picker remains active. The ring
+vanish instead prints `\n\nRing vanishes!\n` and closes without `Done`.
+There is no `No carried <item> to ready.` or general `<item> cannot be readied.`
+message: the picker omits absent items except those already readied by the
+selected member, and the ammunition rejection is silent.
+
+Source provenance: freshly traced refusal wrapper, cascade, selection path
+and functional message literals under `u5-decomp/functions/ZSTATS_OVL/`
+and `u5-decomp/notes/`, issue #225.
+
 ## 6. R-Ready Eligibility And Writes
 
 After an item is selected, R-Ready classifies it by the item's equipment-class
@@ -720,6 +795,115 @@ Confirmed U-Use families:
 | Sextant | Outdoor night-only utility, surface plane only. It permits a reading only when all three of these hold: the party is on the **surface** world plane, the scene is the outdoor world scene, and the hour is in the night window `19..23` or `0..5`. **The Underworld does not qualify**: it is the outdoor world scene on the other world plane, so it fails the plane condition and produces the same "only outdoors" refusal an indoor scene produces — there is no Underworld-specific message and no coordinate readout. The item label prints before any of the three tests, so it is emitted even on a refusal. The branch consumes nothing and writes nothing on any of its paths, but every outcome still commits one normal U-Use action and runs the current mode's ordinary per-turn processing. Coordinate formatting is in `catalogs/item-list.md`. |
 | Pocket Watch | Prints the current time as a twelve-hour reading with **hour, minutes and AM/PM suffix**. See `catalogs/item-list.md`; an earlier revision of both documents said no minute display was present, and that is withdrawn. |
 | Sandalwood Box | The direct U-Use path asks how to use the box and does not perform the endgame handoff. The successful quest handoff is owned by the terminal endgame overlay path, which reads the saved box flag during its Lord British confirmation sequence. |
+
+### 7.1 U-Use family echoes, prompts and utility results
+
+The picker shows usable carried items only. There are **no separate
+item-specific ownership refusals** such as `No Sceptre!`, `No Potion!` or
+`No Skull Keys!` in the ordinary U-Use flow. An absent item is not selectable;
+if every usable item is absent, the command prints `No usable items!\n`.
+Cancelling the picker prints `None!\n` after the open `Item:_` prompt.
+
+On acceptance the item's handler completes that same prompt with its family
+word, not the decorated picker-row name. The following table gives the exact
+completion, including its following line breaks:
+
+| Family | Completion after `Item:_` |
+|---|---|
+| Any scroll | `Scroll\n\n` |
+| Any potion | `Potion\n` |
+| Magic Carpet | `Carpet\n\n` |
+| Skull Keys | `Skull Key\n` |
+| Amulet; Crown; Sceptre of Lord British | `Amulet\n\n`; `Crown\n\n`; `Sceptre\n\n` respectively |
+| Any Moonstone | `Moonstone_`, followed immediately by its outcome below; no phase glyph |
+| Any shard | `Gem Shard\n\n`, followed by the shard text below |
+| Spyglass | `Spyglass\n\n` |
+| HMS Cape Plans | `Plans\n\n` |
+| Sextant | `Sextant\n\n` |
+| Pocket Watch | `Watch\n\n` |
+| Black Badge | `Badge\n\n` |
+| Wooden/Sandalwood Box | `Box\n\n` |
+
+Utility results follow those completions:
+
+| Item and outcome | Result text |
+|---|---|
+| Carpet boarded | `Boarded!\n` |
+| Carpet while aboard a ship | `X-it ship first!\n` |
+| Carpet while on another non-foot transport | `Only on foot!\n` |
+| Carpet scene or terrain refusal | `Not here!\n` |
+| Skull Key in dungeon exploration | `Not here!\n`; other accepted scenes enter the lock helper's normal interaction |
+| Amulet donned | `Wearing the Amulet of Lord British...\n` |
+| Crown donned | `Thou dost don the Crown of Lord British...\n` |
+| Badge donned | `Badge worn!\n` |
+| Amulet, Crown or Badge removed | `Removed!\n` |
+| Sceptre, every accepted selection | `Wielding the Sceptre of Lord British...\n`, before its sound and field checks |
+| Sceptre clears one or more nearby top-down fields | No additional result; no count is printed |
+| Sceptre fallback reports a dissolved field | `Field dissolved!\n` |
+| Sceptre fallback reports no effect | `No effect!\n` |
+| Sceptre fallback returns its other result | No additional result |
+| Moonstone buried | `buried!\n`, completing `Moonstone_` |
+| Moonstone refusal | `cannot be buried here!\n`, completing `Moonstone_` |
+| Spyglass accepted | `Looking...\n`, then the sky view |
+| Spyglass daytime refusal | `No stars!\n` |
+| Spyglass scene or plane refusal | `Not here!\n` |
+| Plans used aboard ship | `Ship rigged for double speed!\n` |
+| Plans used elsewhere | `Only usable on shipboard!\n` |
+| Sextant scene or plane refusal | `Only outdoors!\n` |
+| Sextant daytime refusal | `Only at night!\n` |
+| Sextant accepted | `Position:`, then the existing coordinate formatter in `catalogs/item-list.md` |
+| Pocket Watch | `The pocket watch reads_`, hour, colon, two-digit minute, then `_AM.\n` or `_PM.\n`; hours are 1 through 12 without a leading zero |
+| Box | `How?\n` |
+
+The shard continuation is `Thou dost hold above thee the evil Shard of_`
+followed by `Falsehood...`, `Hatred...` or `Cowardice...`. A wrong destruction
+position adds `\n\nNo effect!\n`. At the matching position, the next text is
+`\n\n...and cast it into the Flame of_` followed by `Truth!\n`, `Love!\n`
+or `Courage!\n` respectively. The later actual Shadowlord destruction adds
+`\nThe doom of the Shadowlord_`, the matching name Faulinei, Astaroth or
+Nosfentor, then `_is wrought!\n`. The flame sentence precedes the
+Shadowlord-presence test; it alone does not establish successful destruction.
+
+The Resurrection scroll and non-combat potion share **`On who:_`**. The
+selected member's name completes that line; cancellation completes it with
+`None!`. A line feed follows only if the cursor is not already at column
+zero, so automatic wrapping does not create an extra empty row. Combat
+potion use binds the current party combatant without this prompt.
+
+The Wind Change scroll prints its existing banner and then **`Direction-`**.
+Accepted directions append `North\n`, `East\n`, `South\n` or `West\n`;
+Space appends `Pass\n`. Other unrecognized keys wait for another input.
+This prompt occurs before the scroll's scene gate. Scroll banners and their
+effects remain in `catalogs/item-list.md`.
+
+### 7.2 Potion result text
+
+Results belong to the effective colour after the existing variation roll.
+They do not repeat the bottle name or the recipient's name/party number.
+
+| Effective potion and outcome | Text after target selection/presentation |
+|---|---|
+| Blue, accepted wake | No result message |
+| Yellow, accepted healing | `Healed!\n` |
+| Red, accepted poison cure | `Poison cured!\n` |
+| Green, accepted poisoning | `POISONED!\n` |
+| Orange, accepted sleep | `Slept!\n` |
+| Purple in combat | `Poof!\n` |
+| Black in combat | `Invisible!\n` |
+| Purple or Black outside combat | `\nNo noticeable effect now!\n` |
+| White in an outdoor or town-class scene | No result message; the visibility presentation runs |
+| White in dungeon/combat-class scenes | `\nNo noticeable effect now!\n` |
+| Blue/Yellow/Red/Green/Orange effect rejects its recipient or status | `Failed!\n`, with the ordinary Use failure sound |
+
+Cancelling the potion target prints the shared `On who: None!` completion
+and adds no `Failed!`. The generic U-Use failure tail is also available to
+scroll/lock helpers that report failure; it is not an extra suffix on every
+item-specific refusal or every effectless outcome.
+
+Source provenance for Sections 7.1 and 7.2: fresh item-picker, handler,
+shared-target/direction-prompt and functional-literal traces under
+`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/CAST2_OVL/`,
+`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`, issue #225.
 
 ## 8. Implementation Contract
 
@@ -870,11 +1054,12 @@ double-charge. Re-derived directly from the shipped binaries; private analysis i
 private note describes the R-Ready item prompt with the wrong literal; the
 published Section 5.1 wording matches the binary and that note does not.
 
-### Refusal and label strings are shipped data, not spec content
+### Message text and shipped assets
 
-This document refers to messages **descriptively** - "the only-outdoors
-refusal", "the only-at-night refusal" - and deliberately does not quote them.
-That is not an omission to be filled by inventing literals.
+Sections 5.2, 7.1 and 7.2 supply the short functional interface messages
+previously described only by their meanings. These are parity contracts;
+descriptive names such as "the only-outdoors refusal" do not authorize
+inventing substitute wording.
 
 **Every one of these strings ships inside `DATA.OVL`, which any user running
 this engine already owns.** An implementation should **read them from the
