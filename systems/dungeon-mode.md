@@ -1281,6 +1281,24 @@ group twice, with the view repaint and the damage between; the arrival on the
 lower level narrates nothing of its own beyond `      ...splat!`, unless the
 landing cell is a room cell, in which case `Entering room...` follows.
 
+**Fall-to-room spacing, issue #210.** The table gives the strings supplied
+to the wrap-aware printer. At the message window's left edge, each pit,
+fall and splat line advances one row. `Entering room...` fills all sixteen
+columns: its glyphs wrap once, and the printer consumes the trailing line
+feed carried in that same string (`systems/text-output.md` Section 6).
+There are no additional standalone line feeds between those four messages.
+Combat supplies a separate line feed before its actor/equipment banner and
+another before reading the command. These separate emissions still cost a
+row when the preceding text has exactly filled a row; banner wrapping also
+depends on the actor name and equipment.
+
+The two-row excess scrolling reported in issue #210 remains unreconciled;
+the exact banner, command sequence and intermediate captures are needed to
+attribute it. Source provenance: fresh fall/room and combat prompt traces in
+`u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/functions/COMBAT_OVL/`, plus
+isolated execution of the resident string printer with modeled glyph/cursor
+output in `u5-decomp/functions/ULTIMA_EXE/`. This was not a live game capture.
+
 **Electric contact** is a movement-time consequence, not a post-action one. It
 prints `Ouch!\n` then `Electric field!\n` **before** the destination-class test,
 so those two lines precede any `Blocked!` the same step later produces. The

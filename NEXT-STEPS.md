@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #210 still open.** The normal Journey path explicitly
+sets the message cursor to local `(0,12)`, screen `(24,23)`. The reported
+row-14 echo and two-row scrolling difference need intermediate captures and
+the exact command/banner sequence. `systems/save-load.md` Section 4 and
+`systems/dungeon-mode.md` Section 8.1 publish the traced setup and spacing;
+`OPEN-QUESTIONS.md` indexes the unresolved capture reconciliation.
+
 **2026-09-07, issue #212.** Dungeon arena colour restoration now has an
 explicit lifetime in `systems/display-driver-abi.md` Section 10. Corridor
 return discards the transformed atlas; exiting with it still loaded reapplies
