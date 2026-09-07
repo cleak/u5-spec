@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-06.
 
+## Issues #221 and #224 - interface output (2026-09-06)
+
+The mixer's completion literal and quantity echo are published in
+`systems/magic.md` Section 6. The control-key literals, unlabelled standing
+readout, fixed build-version text and same-row Exit refusal are published in
+`systems/commands.md` Section 9. Fresh traces of the print sites and input
+readers confirm the reported captures; these additions withdraw no contract.
+
 ## Issue #226 - dungeon floor-trap damage (2026-09-06)
 
 `systems/dungeon-mode.md` Sections 8 and 8.1 now publish the missing damage

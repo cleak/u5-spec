@@ -18,6 +18,12 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-06, issues #221 and #224.** `systems/magic.md` Section 6 now gives
+the mixer's exact completion line and same-row quantity echo.
+`systems/commands.md` Section 9 gives the control-key output, including the
+fixed `1.16` banner and the Exit prompt's trailing space and same-row `N`
+for every non-Y answer. Both are binary-traced clarifications; no retractions.
+
 **2026-09-06, issue #226.** The missing dungeon floor-trap damage contract is
 now in `systems/dungeon-mode.md` Sections 8 and 8.1, linked from
 `systems/traps.md` Section 4. Both traps independently roll inclusive `1..8`

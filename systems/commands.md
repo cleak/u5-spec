@@ -770,8 +770,8 @@ object state that the combat framer later tears down.
 
 The dispatcher accepts exactly one non-letter code: the typeahead-buffer toggle,
 produced by typing Control with the second letter of the alphabet. The
-dispatcher flips the typeahead setting, prints the corresponding Buffer On /
-Buffer Off message, and reports "no action", so the toggle never consumes a
+dispatcher flips the typeahead setting, prints exactly `Buffer On\n` or
+`Buffer Off\n` (no terminating full stop), and reports "no action", so the toggle never consumes a
 game turn. Combat owns a second, independent copy of the same toggle that writes
 the same setting (`combat.md`).
 
@@ -789,10 +789,19 @@ four shared bindings, all of them typed Control characters, are:
 
 | Binding | Behaviour |
 |---|---|
-| Control + `E` | Prompts "Exit to DOS?"; a yes answer leaves the game, anything else prints the refusal and continues. |
-| Control + `K` | Prints the party's scalar moral-standing value as a number. |
-| Control + `S` | Toggles sound, printing the new on/off state. |
-| Control + `V` | Prints the version banner. |
+| Control + `E` | Prints `Exit to DOS? `, with a trailing space and no line feed before reading the answer. `Y` leaves the game; every other returned key prints `N\n` on the prompt's own row and continues. The rejected key itself is not echoed and no separate refusal sentence is printed. |
+| Control + `K` | Prints only the party's scalar moral-standing value in decimal, followed by a line feed: no label, leading padding or other text on the row. |
+| Control + `S` | Toggles sound, printing `Sound On\n` or `Sound Off\n` for the new state. |
+| Control + `V` | Prints `1.16\n` in the analyzed DOS build. The banner is a fixed stored string, not a number formatted from a version constant. Other builds were not examined. |
+
+These use the ordinary command output framing, including the command marker
+and the between-turn blank row described in `systems/text-output.md`
+Section 10.4. Source provenance: the exploration control handlers, both
+buffer-toggle copies, and their stored interface text were checked against
+the shipped program in private analysis under `u5-decomp/notes/`,
+`u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/MAINOUT_OVL/`,
+`u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/`.
 
 None of the four consumes a turn in any mode. Beyond them the tables agree on
 the four cardinal direction codes, which route to that mode's movement handler,
