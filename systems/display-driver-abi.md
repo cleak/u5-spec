@@ -752,21 +752,58 @@ The EGA driver owns several visual effects that are not gameplay systems:
   **The remap, in full** *(added 2026-09-06, issue #200)*. The mode first
   packs the whole prepared tileset from planar rows to packed four-bit
   pixels, then rewrites twenty-two tiles pixel by pixel through one
-  sixteen-entry map, then unpacks. The map, by colour index: `0`, `7`, `8`,
-  `14` and `15` (black, grey, dark grey, yellow, white) stay; `1` blue becomes
-  `5` magenta and `5` becomes `1`; `2` green becomes `4` red and `4` becomes
-  `2`; `3` cyan becomes `4`; `6` brown becomes `2` green; `9`, `10`, `11`
-  (light blue, light green, light cyan) become `12` light red; `12` becomes
-  `10` light green; `13` light magenta becomes `9`. The twenty-two tiles are
-  the terrain ids `0x44`, `0x5C`, `0x5D`, `0x90`, `0x92`, `0x94`, `0x96`,
+  sixteen-entry map, then unpacks. The exact map is fixed for every pixel
+  in every selected tile:
+
+  | Original EGA index | Result index |
+  |---:|---:|
+  | 0 | 0 |
+  | 1 | 5 |
+  | 2 | 4 |
+  | 3 | 4 |
+  | 4 | 2 |
+  | 5 | 1 |
+  | 6 | 2 |
+  | 7 | 7 |
+  | 8 | 8 |
+  | 9 | 12 |
+  | 10 | 12 |
+  | 11 | 12 |
+  | 12 | 10 |
+  | 13 | 9 |
+  | 14 | 14 |
+  | 15 | 15 |
+
+  Both magenta entries change: **5 becomes 1; 13 becomes 9**. There is no
+  animation-phase input to this map. The less-than-perfect matches reported
+  for animated fixtures in issue #209 are consistent with differing source
+  frames, but those captures alone do not establish the cause of every
+  differing pixel.
+
+  The twenty-two tiles are the terrain ids `0x44`, `0x5C`, `0x5D`, `0x90`, `0x92`, `0x94`, `0x96`,
   `0x9B`, `0xAB`, `0xAC`, `0xAF`, `0xB0`, `0xB1`, `0xBF` and `0xDC`, and the
   object ids `0x08`, `0x0E`, `0x1A` and `0x38..0x3B` - floor, chairs, tables,
   beds, the fire fixtures, the sandalwood box and the occupied-chair frames.
-  Walls, ground outside that set, and actor sprites are untouched, which is
-  why a captured final room shows green floor and furniture inside an
+  Walls, ground outside that set, and party/Lord British sprites are untouched.
+  Thus a captured final room shows green floor and furniture inside an
   unchanged stone border. The dungeon-room arena's red grass is the other
   mode: the batch plane swap the dungeon view's teardown applies on the way
   into a room fight, which the list above already covers.
+
+  **Scope.** The operation changes the selected **tile assets**, before
+  subsequent drawing. It is not a colour transform over the composed tableau:
+  actor pixels are affected only when their tile is one of the listed object
+  tiles. Fonts and message-window pixels are not recoloured. The later six
+  `END.DAT` presentation windows use separately loaded `END1`/`END2` bitmap
+  panels and proportional text (`systems/endgame.md` Section 8); those assets
+  do not inherit this remap. The phrase "whole-tileset" describes the
+  pack/unpack pass, not a change to every tile or every later screen.
+
+  Source provenance: the two pixel-half maps, all twenty-two target tiles and
+  the mutation helper were freshly checked in `u5-decomp/functions/EGA_DRV/`,
+  with call order and later resource loading in
+  `u5-decomp/functions/ENDGAME_OVL/` (issue #209). Both pixel halves use the
+  same sixteen mappings; no new live capture was taken.
 
   **One interaction worth knowing.** The plane-swap mode covers tiles `0x05`,
   `0x1E`, `0x1F`, `0x4C`, `0xCA`, `0x20..0x26`, `0x30..0x37` and `0x60..0x6F`.

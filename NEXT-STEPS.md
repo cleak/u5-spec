@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issues #208/#209.** The endgame asks its second box question
+only after a first No; either effective Yes still requires the saved box.
+Section 5 now includes the branch matrix and the fixed waiting lead-in plus
+record-boundary pacing (R404). The refusal actor layout was already complete
+in Section 6. `systems/display-driver-abi.md` Section 10 now tabulates all
+sixteen remap values, clarifies its 22-tile asset scope and excludes fonts
+and later illustration panels; this is clarification of the existing map.
+
 **2026-09-07, issue #211.** The missed Glass Sword catalog row now reflects
 R390: shatter clears its first matching readied slot and leaves carried stock
 alone. `systems/inventory.md` Section 4.5 now maps every U-Use name to its

@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issues #208/#209 - endgame dialogue and remap scope (2026-09-07)
+
+Fresh endgame branch/print traces correct the mandatory second-question and
+all-dialogue-file claims (R404); `systems/endgame.md` Sections 5/5.1 give the
+conditional question, saved-box matrix and fixed waiting lead-in/pacing.
+`systems/display-driver-abi.md` Section 10 presents the full sixteen-value
+remap as a table and bounds its asset scope. The two previously unmeasured
+magenta entries become blue/light blue; there is no phase-dependent map.
+
 ## Issue #211 - item row markers and Glass Sword propagation (2026-09-07)
 
 A fresh name-table/renderer census classifies all 38 U-Use rows, plus the
