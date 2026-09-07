@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #216 - guard gate correction and capture discrepancy (2026-09-07)
+
+Fresh caller and canonical-roster traces preserve the explicit-T reserved-index
+route and correct the exclusive behavior-4 gate (R401) in
+`systems/blackthorn.md` Section 7a and `systems/conversation.md` Section 2.
+Minoc slot 14's authored behavior and schedule agree with the earlier time
+window, but some palace guards also approach at waypoint 2. The conflicting
+bare-refusal capture is explicitly open pending stock runtime evidence.
+
 ## Issues #214/#215 - automatic shops and contact routing (2026-09-07)
 
 Fresh producer-to-consumer traces establish the two contact families, last-event

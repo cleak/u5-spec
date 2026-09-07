@@ -41,7 +41,16 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
    - Otherwise, if the NPC's live sprite is the guard sprite, the NPC answers `The guard offers no response!` unless *both* its current waypoint is waypoint 1 *and* its dialog index is non-zero, in which case it dispatches normally. This line is one stored literal; it is not composed from the NPC's Look description, and nothing else prints it.
    - Any other NPC dispatches on its dialog index; index zero prints the bare `No response!`.
 
-   So the bare line has exactly two producers - the mirror tile of step 4 and a zero dialog index reached through this gate - and the guard line has one. The regime demands of `systems/blackthorn.md` Section 7a are reached from here through the reserved index, which is why a regime guard answers only while its approach-and-attack waypoint is current: at other hours the same guard says `The guard offers no response!`. Observed live at Minoc's gate at 16:00: the demand fires.
+   The bare line comes from the mirror check or a zero live dialogue index
+   reached through the dispatcher. A valid reserved index `0xFF` is not treated
+   as zero: it enters the regime handler of `systems/blackthorn.md` Section 7a
+   from both explicit Talk and automatic conversation contact, subject to the
+   gates above. In particular, a guard at reached waypoint 1 with nonzero
+   dialogue can pass even when its behavior is no longer 4. The earlier
+   assertion that its approach period was the only route is withdrawn (R401).
+   The conflicting bare-refusal capture in issue #216 remains unresolved;
+   Section 7a records the earlier reproduction method and the stock runtime
+   evidence needed to compare the two observations.
 
    **Shop and automatic-contact entry.** The dispatcher in step 5 is also
    called by the NPC's automatic conversation-contact event, without steps

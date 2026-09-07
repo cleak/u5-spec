@@ -572,21 +572,50 @@ reserved "not a real NPC" dialog index, described in
 `systems/conversation.md`, which hands off to one scene-keyed handler instead of
 loading a `.TLK` blob.
 
-That handler has exactly three branches, chosen by the current scene, and its
-only durable effect is on the party's gold. **Reaching the handler at all has
-a gate that is not in this section's scene test**: the conversation dispatcher
-hands a guard to it only while the guard's current waypoint carries the
-approach-and-attack behaviour, and it stands the guard down as it does so
-(`systems/conversation.md` Section 2, step 5). Outside that period the same
-guard answers `The guard offers no response!`. The shipped regime guards
-carry that behaviour on their middle waypoint only - Minoc's gate guard, for
-example, from 05:00 to 11:00 and again from 13:00 to 21:00, and not at noon,
-when it is upstairs. *(Added 2026-09-06, issue #206; the Minoc demand was
-observed live at 16:00 with the wording below.)* It writes no character status, no
-hit points, and no karma, and it returns one of two results — "paid or passed",
-or "refused/failed" — which becomes the conversation's result. At the Talk
-layer, paid/passed is the ordinary outcome. Refusal or failure is the only
-positive outcome and requests the town loop's arrest cleanup.
+That handler has exactly three branches, chosen by the current scene. The
+shared conversation dispatcher first applies the following gates after any
+explicit Talk target/terrain checks:
+
+- If the **cached reached waypoint** has behavior 4, that behavior changes
+  to 1 and the nonzero reserved dialogue is dispatched. This bypasses the
+  guard's waypoint-1 restriction.
+- Otherwise, an NPC whose linked live sprite byte is exactly `0x70` proceeds
+  only with **reached waypoint 1 and nonzero live dialogue**. Behavior 4 is
+  not required in this case: even behavior 1 after a previous stand-down, or
+  behavior 7 after an alarm, can pass explicit Talk here.
+- A different linked live sprite does not have that guard-specific restriction.
+  The reserved dialogue value still chooses the regime handler.
+
+The earlier exclusive-behavior-4 gate and claim that every regime guard has
+that behavior only on its middle waypoint are withdrawn (R401).
+
+The canonical Minoc gate guard is roster slot 14. Its authored behaviors are
+`[0, 4, 0]`, with middle waypoint at `(15, 24, 0)`, selected from 05:00–10:59
+and 13:00–20:59; its other two destinations are upstairs. Some palace guards
+also author behavior 4 at waypoint 2, so Minoc's schedule is not a universal
+regime-guard timetable. The runtime schedule can differ from the asset after
+an alarm or contact; an all-7 runtime triple is not evidence of all-7 authoring.
+
+**Capture discrepancy, issue #216.** The earlier live report in issue #206
+used entry from the overworld at 16:00, a stock Quit-and-Save, relocation of
+the party south of the guard, Journey Onward, then explicit Talk north; it
+reports the charity question and gold changing from 150 to 75 on Yes. Exact
+coordinates and that save were not retained in the report. The later walk-in
+capture reports a bare `No response!` and an all-7 engine schedule. Fresh
+canonical-file and dispatcher traces establish the routes above but do not
+identify the state difference in that capture. A stock-written save immediately
+before the failing Talk, with the resolved NPC/object linkage and live dialogue,
+is needed to reconcile it. The bare line is not an alternate meaning of the
+reserved index established by this evidence.
+
+Source provenance: canonical roster, byte-to-runtime-word loading, and both
+Talk callers freshly checked in `u5-decomp/functions/NPC_OVL/`,
+`u5-decomp/functions/TALK_OVL/` and `u5-decomp/functions/TOWN_OVL/`;
+the earlier live sequence is the closing observation on issue #206.
+
+The demand handler's only durable effect is on party gold. It writes no
+character status, hit points or karma, and returns either paid/passed or
+refused/failed. The latter requests the town loop's arrest cleanup.
 
 **Branch 1 — the palace gate password.** In Lord Blackthorn's Castle, and only
 while the Black Badge aura's exact effect code `0x1D` is the party's active
