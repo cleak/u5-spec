@@ -442,14 +442,14 @@ empty row.
 |---|---|
 | `L` + direction, ordinary terrain | `Look-North` ⏎ `[blank]` ⏎ `Thou dost see` ⏎ the description (`cobble`, `grass`, `trees`, `a table`, ...) |
 | `G` + direction, nothing there | `Get-North` ⏎ `[blank]` ⏎ `Nothing to get!` |
-| `S` + direction (town or overworld) | `Search-North` ⏎ `Player: ` with the shared member selector (`inventory.md` Section 4.3) ⏎ the chosen name completes the row; Escape answers `Player: None!` ⏎ `[blank]` ⏎ `Thou dost find` ⏎ `nothing of note.` |
+| `S` + direction (town or overworld) | `Search-North`, then the conditional acting-member exchange below; after a successful selection, an empty search prints `[blank]` ⏎ `Thou dost find` ⏎ `nothing of note.`. Cancellation aborts before the search. |
 | `K` + direction, no feature | `Klimb-North` ⏎ `What?` |
 | `X` on foot | `X-it what?` on one row (the verb echo and the refusal are two literals) |
 | `E` off an entrance | `Enter what?` |
 | `H` in town, not on an inn bed | `Hole up- Only in bed!` on one row |
 | `I` with torches | `Ignite torch!` and nothing else |
 | `M` then Escape | `Mix Reagents` ⏎ `[blank]` ⏎ `For what spell?` ⏎ `:` (free-text row) ⏎ `None!` |
-| `C` | `Cast...` ⏎ `Player: ` with the selector |
+| `C` | `Cast...`, then the conditional acting-member exchange below, then the spell-name prompt if a member was selected. |
 | `R`, Return | `Ready...` ⏎ `[blank]` ⏎ `Player: Avatar` ⏎ `Item: ` with the equipment picker |
 | `Y`, a word, Return (no effect) | `Yell what?` ⏎ `:WORD` (the typed word, upper-cased, after the colon) ⏎ `[blank]` ⏎ `No effect!` |
 | `Y`, Return with nothing typed | `Yell what?` ⏎ `:` ⏎ `Nothing` |
@@ -458,10 +458,37 @@ empty row.
 | `N`, cancelled | `Swap nobody!` |
 | `Space` | `Pass` |
 
-Two facts behind the table. The direction form of Search always runs the
-acting-member selector before it searches, in every scene that has the
-command. And the on-foot X-it refusal is the shared `what?` tail, not an "on
-foot" line: `vehicles.md`'s "On foot" refusal belongs to Board.
+**Conditional acting-member exchange.** Running this selector does not always
+print `Player: `. In exploration with no active-member override, it counts
+Good or Poisoned members of the active party. Exactly one is chosen silently:
+no prompt and no name echo. With none, it prints `None!\n` without a preceding
+`Player: ` and the command aborts. With two or more, it prints `Player: ` and
+opens the roster picker; a confirmed eligible pick completes that row with
+the member's name. An ineligible pick prints `Disabled!\n\n` and repeats the
+prompt; Escape prints `None!\n` on the prompt row and aborts. Combat and an
+explicit active-member selection supply their own silent overrides, with the
+exact priority and status rules in `systems/traps.md` Section 2.1.
+
+The direction form of Search always invokes this acting-member selection
+before searching. Cast does too, and the same conditional exchange applies
+whenever Get, Jimmy, Open or dungeon Look reaches the shared selector. Their
+earlier command-specific refusals still occur before any later selection.
+
+R-Ready uses the roster picker through its own prompt wrapper: in exploration
+it prints `Player: ` even for a one-member party. The town/overworld fountain's
+`Who will drink?` also opens the roster picker directly and is not suppressed
+for one member (`systems/view.md` Section 3). Neither performs the acting-member
+scan described above. The picker UI itself is shared (`inventory.md`
+Section 4.3); its callers decide whether to open it.
+
+Source provenance: the acting-member scan and overrides, world and dungeon
+Search/Cast call sites, Ready wrapper and fountain picker were traced in
+private analysis under `u5-decomp/notes/`, `u5-decomp/functions/ULTIMA_EXE/`,
+`u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CAST_OVL/`,
+`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/functions/LOOKOBJ_OVL/`.
+
+The on-foot X-it refusal is the shared `what?` tail, not an "on foot" line:
+`vehicles.md`'s "On foot" refusal belongs to Board.
 
 ## 6. N-New Order Party Command
 

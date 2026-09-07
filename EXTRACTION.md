@@ -6,6 +6,16 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #223 - conditional member prompts (2026-09-07)
+
+`systems/commands.md` Section 5.8 distinguishes invocation of the acting-member
+selector from a visible `Player: ` prompt. One eligible member is selected
+silently; zero reports `None!`; multiple eligible members open the picker,
+subject to the existing combat/active-member overrides. Ready and the
+town/overworld fountain use the roster picker without this count suppression.
+The fountain distinction is also in `systems/view.md` Section 3. Confirmed
+from caller and selector traces; no retraction required.
+
 ## Issue #217 - saved NPC layout (2026-09-07)
 
 `formats/saved-gam.md` Section 12 now gives the complete 2,220-byte tail map,
