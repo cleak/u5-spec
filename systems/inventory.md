@@ -122,7 +122,8 @@ equipment block. R-Ready uses that form so the picker can show both carried
 items that can be equipped and currently readied items that can be unequipped.
 
 Inventory rows render from a caller-selected name table. Some name strings use
-a leading marker to request a scroll, potion or moonstone row layout. These are display conventions only;
+a leading marker to request a scroll, potion or moonstone row layout.
+These are display conventions only;
 the counter band remains the source of ownership.
 
 The command starts by choosing a character. In combat scenes, Z-stats and
