@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, #239 shrine follow-up complete.** Karma Section 7 now gives
+the approach/kneeling/virtue resource ordinals, typed-virtue validation,
+three mantra entries, blank-input exits and inter-prompt waits (R416).
+Record 45 is shrine approach, not Codex prophecy (R417). The shipped approach
+ends in three dots; original-printer emulation reproduces the reported wraps
+with the established sixteen-cell capacity. Shop outcome mapping remains next.
+
 **2026-09-07, #239 capture reconciliation closed.** The implementation-side
 follow-up confirms all seven shrine cells and successful E-Enter at Honesty;
 its terrain/table mismatch claim is withdrawn. The new requested follow-up

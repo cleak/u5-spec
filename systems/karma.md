@@ -319,8 +319,9 @@ The live shrine meditation handler does not load `KARMA.DAT` in the traced CAST2
 Ordinary shrine meditation begins with `E`-Enter while standing on the live
 mystic-shrine terrain tile `0x19`. Enter identifies the virtue from the
 coordinate table in `catalogs/gazetteer.md` Section 7 and begins the shrine
-presentation; the meditation handler renders the kneeling avatar, prompts
-for a mantra, and reads up to twelve characters. `M` always selects Mix
+presentation; the meditation handler renders the kneeling avatar, asks for
+the virtue, then asks for its mantra three times as specified below.
+Each input permits up to twelve characters. `M` always selects Mix
 Reagents, including at a shrine. The earlier M-Meditate entry rule is
 withdrawn (`RETRACTIONS.md` R411).
 
@@ -348,9 +349,31 @@ The eight expected mantras are fixed:
 | Spirituality | `Om` |
 | Humility | `Lum` |
 
-A wrong or blank mantra prints the no-effect meditation branch and returns to field mode. No shrine-handler standing penalty is confirmed for a mantra mismatch.
+**Entry text and input order.** The authored narration comes from
+`MISCMSG.DAT`, using the zero-based record ordinals in its format spec:
 
-A correct mantra enters the shrine quest state machine for that virtue:
+| Step | Text source and behavior |
+|---|---|
+| Approach | Record `45`, including its leading newline and trailing blank row; the final word is `Shrine...` with three dots |
+| Kneel | Record `28`, the kneeling-at-the-altar narration, followed by its blank row |
+| Virtue question | After ten world ticks, record `29`: the question asking which virtue, then a blank row and `:`; read up to twelve characters |
+| Mantra questions | After a nonblank virtue answer, wait six world ticks and emit a newline. Ask `\nMantra:` three times, reading up to twelve characters each time and waiting twelve world ticks after each nonblank answer |
+| Unfocused result | If the virtue answer or any of the three mantra answers was wrong, render record `30` after the third nonblank mantra, then return without quest progress |
+
+The location has already selected the shrine's virtue; typing another virtue
+does not redirect the meditation. The virtue answer is tested with the shared
+case-insensitive substring matcher against the shrine's four-letter key:
+`hone`, `comp`, `valo`, `just`, `sacr`, `hono`, `spir`, or `humi` in the table's
+virtue order. Each mantra answer uses that same matcher against the shrine's
+expected mantra. A wrong nonblank answer does not end the prompts early.
+A blank virtue answer or any blank mantra ends the interaction immediately
+without the unfocused-result record. No shrine-handler standing penalty is
+confirmed for a mismatch.
+
+The earlier one-mantra account and the claim that a blank mantra prints the
+no-effect result are withdrawn (`RETRACTIONS.md` R416). Only an accepted
+virtue answer plus all three accepted mantras reaches the shrine quest state
+machine for that virtue:
 
 | Ordained bit | Codex bit | Meaning | Shrine result |
 |---:|---:|---|---|
@@ -358,6 +381,11 @@ A correct mantra enters the shrine quest state machine for that virtue:
 | 1 | 0 | Ordained, Codex not yet read | Leaves the ordained bit set. No gold prompt, stat increase, or standing increase is applied. |
 | 1 | 1 | Codex-read turn-in | Clears the ordained bit, adds three to the shared moral-standing selector, clamps at ninety-nine, and applies the stat rewards below. Humility adds another three standing after the stat step. |
 | 0 | 1 | Complete | Runs the ordinary offering path. A digit one through nine costs `digit * 100` gold and adds that digit to the shared moral-standing selector, clamped at ninety-nine. Digit zero is a no-effect exit. If the party lacks enough gold, the prompt repeats. |
+
+Source provenance for the entry sequence: fresh shrine-wrapper resource
+selection, virtue/mantra input loops and shared comparison trace under
+`u5-decomp/functions/CAST2_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`;
+issue #239 independently captured the approach and typed-virtue prompt.
 
 The Codex-read turn-in rewards always write to the Avatar record, not to whichever companion is currently active. Each touched stat increments by one and clamps at thirty.
 
