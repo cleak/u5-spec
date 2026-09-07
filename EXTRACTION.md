@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #210 - load cursor and fall transcript (2026-09-07)
+
+The normal Journey cursor is now explicit in `systems/save-load.md` Section
+4. Fresh fall/room traces and isolated string-printer execution confirm the
+existing consequence strings and their row advance; dungeon Section 8.1
+distinguishes these from combat's separate banner/input line feeds. The
+reported row-14 start and excess scrolling remain capture discrepancies,
+indexed in `OPEN-QUESTIONS.md`; this is not a closure or a measured fix.
+
 ## Issue #212 - dungeon tile colour restoration (2026-09-07)
 
 Fresh setup/teardown and caller traces establish both restoration mechanisms:

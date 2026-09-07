@@ -93,10 +93,32 @@ Before the load begins, the intro overlay performs several display-setup steps t
 
 - Draw the standard game-screen border frame (viewport, stats panel, command prompt area). This is the same screen layout shared by all gameplay modes; it is painted before the save is read so the player sees the gameplay viewport appear while the file loads.
 - Prime the scene-transition display state. At this point the intro scene state is still active, so this is effectively a no-op.
-- Switch the display mode to the gameplay configuration and position the text cursor.
+- Select the gameplay message window and explicitly position its cursor at
+  local column 0, row 12: absolute screen column 24, row 23, the bottom row
+  of the message window. This replaces that window's earlier cursor position;
+  it does not inherit the full-screen intro window's cursor.
 - Show a wait indicator.
 
 These steps are documented in the intro spec because they belong to the intro's display-ownership contract. They do not read or write save data.
+
+On a successful load directly into a dungeon with no storage-error prompt,
+the load tail leaves that message cursor in place. Stats and dungeon-border
+painting use other windows and preserve its position. The first dungeon
+command poll emits its ordinary leading line feed, which scrolls the empty
+message area once and leaves the prompt on screen row 23. Subsequent output
+can scroll an earlier command echo upwards; its later visible row is not
+the load cursor's initial row.
+
+**Capture discrepancy, issue #210.** The reported first echo on screen row
+14 does not match this traced normal-load path. Its cause remains open; a
+stock save and frames at the first prompt, immediately after the first
+command, and after room entry, with the exact command sequence, would
+distinguish initial placement from subsequent scrolling or another load path.
+
+Source provenance: fresh Journey cursor and load-tail traces in
+`u5-decomp/functions/INTRO_OVL/`, descriptor selection/cursor and stats calls
+in `u5-decomp/functions/ULTIMA_EXE/`, and dungeon chrome/input setup in
+`u5-decomp/functions/DUNGEON_OVL/`. No new live capture was taken.
 
 The subsequent save-read sequence is:
 
