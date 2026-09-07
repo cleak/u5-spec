@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #222.** `systems/magic.md` Section 5.1 now separates
+scroll banners from spell completion and covers all forty-eight spell entries.
+In Lor/Vas Lor print no success line; the shared completion step distinguishes
+generic success, failure and handled-without-a-line outcomes. R402 withdraws
+the scroll-as-spell banner list and universal Success fallback. Spell-name
+submission preserves the entered row before subsequent output.
+
 **2026-09-07, issue #216 still open.** R401 corrects the regime guard's
 exclusive-behavior-4 claim: otherwise reached waypoint 1 plus nonzero dialogue
 also passes the exact guard-sprite gate. Both explicit and automatic Talk reach
