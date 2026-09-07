@@ -46,7 +46,7 @@ after the roster.
 | Active map / dungeon tile buffer    | `0x03B4` – `0x05B3`   | 512 bytes   | 8.2     |
 | Per-location NPC bitmasks (removed, then name-known) | `0x05B4` – `0x06B3` | 256 bytes | 9.2 |
 | Active-object table (32 × 8 bytes)  | `0x06B4` – `0x07B3`   | 256 bytes   | 8.1     |
-| Reserved / NPC and tile scratch     | `0x07B4` – `0x105F`   | 2,220 bytes | 12      |
+| NPC persistence and final mode state | `0x07B4` – `0x105F`  | 2,220 bytes | 12      |
 
 The two leading bytes precede the roster in the resident save image. They are
 zero in the factory seed and should be preserved by byte-compatible tools.
@@ -589,29 +589,120 @@ still preserve out-of-range wind values they do not understand.
 
 In a chargen-only save with no active map yet, the active-object table at `0x06B4` is zero; the engine populates it on first overworld entry from the surface object overlay, and reloads it from that overlay on every subsequent return to the overworld, not only the first (Section 13). The example is shown only as a guide to reading the layout; the exact bytes a fresh chargen produces depend on the entered name, chosen gender, and questionnaire stat rolls.
 
-## 12. Reserved and zero-padded regions
+## 12. Saved NPC family and final mode state
 
-Two spans are zero in the factory seed and in clean-state saves:
+The final 2,220 bytes, `0x07B4..0x105F`, contain the current location's live
+NPC family and several other fields. Preserve this band together with the
+active-object table. Journey Onward restores it as part of the single
+4,192-byte image; it does not reload the location's `.NPC` source records or
+reconstruct the saved route state. An active-object-only writer cannot restore
+a working town cast.
 
-- `0x07B4..0x105F` — two thousand two hundred twenty bytes between the
-  active-object table and the file end. In memory this region holds the NPC
-  schedule blob, NPC runtime state, NPC path queues, the NPC type array, the
-  per-NPC stuck counters, and the world-tile render buffer. **This band is
-  durable gameplay state, not scratch.** A save taken inside a town-family
-  location carries that location's entire live cast here, and the load path's
-  town-family entry deliberately does *not* reload it: on a Journey Onward the
-  restored image **is** the cast, and re-running the roster loader would discard
-  every NPC's live position, path queue and pursuit state. An implementation
-  that persists only the active-object table of Section 8.1 will resume a
-  town-family save with an empty location where the original restores a live
-  one. Preserve every byte, and read `systems/active-objects.md` Section 10 for
-  the entry-mode rule that decides when the band is rebuilt.
+The earlier permission to rebuild the NPC family on load remains withdrawn
+(issue #184, `RETRACTIONS.md` R341). The later claim that the world-tile render
+buffer occupies the tail of this band is also withdrawn (issue #217): that
+1,024-byte buffer is outside the save image and is loaded separately.
 
-  *Corrected (issue #184).* This bullet previously said the region's contents
-  "are transient for gameplay" and that "a clean implementation may rebuild them
-  on load". Both are withdrawn; see `RETRACTIONS.md` row R341. The world-tile
-  render buffer at the tail of the band remains genuinely rebuildable — it is
-  the NPC family that is not.
+### 12.1 Complete band map
+
+Offsets in the second column are relative to `0x07B4`. All multi-byte fields
+below are little-endian. Parallel NPC tables use the same slot index `0..31`;
+slot zero is reserved, and ordinary scheduling walks slots `1..31` whose type
+byte is nonzero. Preserve slot zero and inactive slots when round-tripping.
+
+| File offset | Band offset | Length | Content and shape |
+|---|---:|---:|---|
+| `0x07B4..0x07B7` | `0x000` | 4 bytes | Opaque pass-through bytes; no field meaning is assigned here. |
+| `0x07B8..0x09B7` | `0x004` | 512 bytes | Live schedules: 32 records of 16 bytes. |
+| `0x09B8..0x0BB7` | `0x204` | 512 bytes | NPC runtime: 32 records of 16 bytes, described below. |
+| `0x0BB8..0x0FB7` | `0x404` | 1,024 bytes | Routes: 32 buffers of 32 bytes, one per NPC. |
+| `0x0FB8..0x0FF7` | `0x804` | 64 bytes | Route cursors: 32 words, one per NPC. |
+| `0x0FF8..0x1017` | `0x844` | 32 bytes | NPC types: one byte per slot, using `formats/npc.md` Section 6. |
+| `0x1018` | `0x864` | 1 byte | Pending NPC engagement event kind: zero after the schedule-pass reset, `0x74` or `0x61` when an engagement is raised. |
+| `0x1019` | `0x865` | 1 byte | NPC roster index associated with that event; zero means no pending NPC index. |
+| `0x101A..0x101B` | `0x866` | 2 bytes | Opaque pass-through bytes; no field meaning is assigned here. |
+| `0x101C..0x105B` | `0x868` | 64 bytes | Stuck counters: 32 words, one per NPC; lifecycle in `systems/npc-schedules.md` Sections 4 and 9.1. |
+| `0x105C` | `0x8A8` | 1 byte | Dungeon arrival/movement selector; dungeon-mode state, not an NPC field. |
+| `0x105D` | `0x8A9` | 1 byte | Dungeon facing; dungeon-mode state, not an NPC field. |
+| `0x105E` | `0x8AA` | 1 byte | Dungeon view/flavour state; preserve outside dungeon play. |
+| `0x105F` | `0x8AB` | 1 byte | Pending shipwright delivery class/payload, specified in Section 9.3. |
+
+The schedule record has exactly the source `.NPC` shape: record offsets
+`0..2` are the three behaviour bytes, `3..5` the X coordinates, `6..8` the Y
+coordinates, `9..11` the floor bytes, and `12..15` the four time boundaries.
+`formats/npc.md` Section 5 supplies the value rules. The saved copy is the
+**live** schedule: pursuit and other interactions can alter it during a visit.
+Substituting the original asset record would discard those changes.
+
+Each runtime record contains eight words:
+
+| Record offset | Field | Meaning |
+|---:|---|---|
+| `0` | State | Full 16-bit state, with ordinary values `0..8` from `systems/npc-schedules.md` Section 7; the high byte is not padding. |
+| `2` | Logical X | NPC's current map column, including while following a route. |
+| `4` | Logical Y | NPC's current map row. |
+| `6` | Logical floor | Current floor. Initialization zero-extends the source byte: a basement floor byte `0xFF` is stored as word `0x00FF`. Floor ordering uses the signed low-byte convention of `formats/npc.md` Section 5.2. |
+| `8` | Type mirror | Word copy of the NPC type byte. |
+| `10` | Dialogue index | Word initialized by zero-extending the source dialogue byte. Preserve live changes, including the special conversation indices in `systems/conversation.md`. There is no separate saved 32-byte dialogue array. |
+| `12` | Linked object | Index into the saved active-object table, or zero when no object is linked. It is an object-table index, not the NPC's roster index. |
+| `14` | Cached waypoint | Last reached waypoint index, normally `0..2`; retain it independently of the waypoint selected by the current hour. |
+
+### 12.2 Routes and cursors
+
+A route buffer holds up to sixteen two-byte runs. The first byte of a run is
+its remaining step count; the second is a direction: `1` east, `2` north,
+`3` west, `4` south. The cursor is a **byte offset within that NPC's buffer**,
+normally even and in `0..30`; `0xFFFF` means inactive. A zero count at the
+cursor also means there is no queued step to execute.
+
+An accepted queued step decrements the run's count. On exhaustion, the
+direction byte of that run is cleared and the cursor advances by two. Reaching
+the end of the buffer or a zero next count makes the cursor inactive. A refused
+step retains the route and feeds the stuck-counter rules. Preserve partially
+consumed counts, the cursor, and the whole buffer; bytes after the active route
+need not be zero. Fresh occupied-NPC initialization clears only the first
+route byte, sets the cursor to `0xFFFF` and the stuck counter to zero.
+
+### 12.3 Load order, floor scope, and companion state
+
+There is no six-structure restore sequence. The save loader first restores the
+whole image, then uses its scene to choose the gameplay mode. A town-family
+scene (`1..32` at file `0x02ED`) reaches the **preserving** entry mode. That
+mode skips the roster load, runtime initialization, active-object-tail clear
+and NPC reseat. It still loads the displayed floor's map from the location
+asset, and performs the entry cleanup, Shadowlord handling and removed-NPC
+filtering specified in `systems/active-objects.md` Section 10. A restored
+route is resumed by subsequent scheduling; it is not replayed during disk load.
+
+The band is **per location, not per floor**. A save taken on floor one carries
+the location's same 32-slot schedules and runtime records, including NPCs
+whose logical floor is zero or a basement. Those off-floor NPCs normally have
+no linked active object. The saved active-object table describes the displayed
+floor's cast. A later floor transition has its own reseating rules; do not
+apply them to Journey Onward.
+
+Keep these outside-band joins consistent:
+
+- Scene `0x02ED`, displayed floor `0x02EF` and hour `0x02D9` select the
+  location, map and schedule context.
+- The linked-object words refer to `0x06B4..0x07B3`, whose records must agree
+  with the saved NPC positions and links.
+- The removed-NPC and name-known masks at `0x05B4..0x06B3` retain their
+  per-location meanings from Section 9.2. Quest and Shadowlord state still
+  participate in the ordinary entry rules.
+
+The preserving load route does not consult a separate band-valid flag or
+reload the roster when these bytes are zero. An all-zero tail with nonzero
+active objects therefore does not stand for an automatically rebuildable town.
+The two event bytes are saved with the slab but are cleared at the next NPC
+schedule pass; they are an event kind/index pair, not movement/redraw booleans.
+
+Source provenance: the full-image reader and writer bounds, the three roster
+reads, runtime initializer, route producer and consumer, placement helper and
+preserving town-entry route were traced against the shipped program in private
+analysis under `u5-decomp/notes/`, `u5-decomp/functions/INTRO_OVL/`,
+`u5-decomp/functions/CAST2_OVL/`, `u5-decomp/functions/NPC_OVL/`,
+`u5-decomp/functions/TOWN_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
 
 ## 13. The object-overlay companions
 

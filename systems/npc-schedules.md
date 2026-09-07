@@ -78,31 +78,47 @@ The wraparound segment — the night band that crosses midnight from `time[3]` b
 
 ## 4. Per-NPC runtime state
 
-The on-disk schedule is read-only at runtime. Mutable state lives in a separate per-NPC runtime block of sixteen bytes per NPC, in a flat thirty-two-slot table. Each slot holds:
+The source `.NPC` file is not rewritten during play, but its loaded schedule
+copy can be changed by pursuit and other interactions. That live copy and the
+separate runtime records both persist in `SAVED.GAM`; the complete save layout
+is in `formats/saved-gam.md` Section 12. Each of the thirty-two runtime records
+is sixteen bytes, containing eight little-endian words:
 
 | Offset | Width | Field         | Purpose                                                                                          |
 |-------:|-------|---------------|--------------------------------------------------------------------------------------------------|
-|   0    | byte  | `state`       | The state machine's current state. Section 7 enumerates values.                                  |
-|   2    | word  | `target_x`    | The NPC's currently-pursued X. After arrival, this is also "the NPC's current X".                |
-|   4    | word  | `target_y`    | Currently-pursued Y.                                                                              |
+|   0    | word  | `state`       | The state machine's current state. Section 7 enumerates values.                                  |
+|   2    | word  | `current_x`   | The NPC's current logical X, updated on each accepted route step. |
+|   4    | word  | `current_y`   | The NPC's current logical Y, updated on each accepted route step. |
 |   6    | word  | `current_z`   | The NPC's current floor. Drives the Z-mismatch states.                                            |
 |   8    | word  | `type_mirror` | A copy of the NPC's type byte for quick local lookup.                                             |
+|  10    | word  | `dialogue`    | Live dialogue index, initially zero-extended from the source dialogue byte. |
 |  12    | word  | `linked_obj`  | Index into the active-object table (Section 11). Zero = not currently rendered.                   |
 |  14    | word  | `cached_wp`   | The waypoint the NPC was last actually *sent to and reached*. Drives transition detection; refreshed only on arrival (Section 6), never when a period merely begins. |
 
+The earlier byte-width state field and descriptions of X/Y as pursuit targets
+are withdrawn (issue #217); the shipped consumers read a state word and update
+X/Y as the NPC moves, before reaching its destination.
+
 Three parallel side tables, indexed by NPC slot, hold pathfinding-only state:
 
-- **Move queue** — thirty-two bytes per NPC, holding packed direction codes for replay one-cell-at-a-time. Filled by the pathfinder, drained by the walker.
+- **Move queue** — thirty-two bytes per NPC, holding two-byte remaining-count/direction runs for replay one cell at a time. `formats/saved-gam.md` Section 12.2 gives the run and cursor encoding.
 - **Move-queue read pointer** — a word per NPC; sentinel "all bits set" means "queue inactive".
 - **Stuck counter** — a word per NPC. It is incremented on exactly one kind of failure: a **queued route step refused by the per-step cell check** (Section 5 step 7). It is not a general "failed to make progress" tally, and a *successful* queued route step resets it to zero rather than merely leaving it alone. The ordinary replanning threshold is small: once the counter is greater than three, the move-queue read pointer is reset to the inactive sentinel and the counter is cleared, forcing a fresh route on a later tick. The counter also has a high band that it never *counts* into — a failed replan assigns the value two hundred outright — with its own aging and release rule (Section 9.1, Section 14).
 
   *Corrected (issue #189).* This bullet previously said the counter is "incremented every tick the NPC fails to make progress". That is withdrawn; only the queued-route step refusal increments it, and the two cap-zero route-recovery steps of Section 9.1 never touch it however they end. See `RETRACTIONS.md` row R367.
 
-Two per-tick scratch booleans are shared by every NPC: an "any NPC moved" flag and an "any tile changed" flag. Both are cleared at the start of every tick; the town turn loop reads "any NPC moved" to decide whether the screen needs a repaint.
+Two shared event bytes hold an engagement kind and its NPC roster index. The
+schedule pass clears both at its start; an engagement can set kind `0x74` or
+`0x61` and the responsible NPC index, which the town loop consumes through its
+event dispatcher. Their saved positions and reset lifetime are in
+`formats/saved-gam.md` Section 12. The earlier description as "any NPC moved"
+and "any tile changed" redraw booleans is withdrawn (issue #217).
 
-**Initialisation.** *(Re-verified against the shipped bytes 2026-09-04, together with the Section 3 selection rule, which holds for schedules whose waypoints differ by hour and not only for all-equal ones.)* When the engine enters a location, a single pass walks the runtime table. For every occupied slot, the active waypoint for the current hour is computed (Section 3 selection rule); its `(x, y, z)` is copied into the runtime's `(target_x, target_y, current_z)` (the NPC is placed *at* its current waypoint on entry — no walk-from-yesterday sequence); the state byte is set to "idle"; the cached waypoint index is set to the freshly-computed waypoint so the next tick will not falsely fire a transition; the type field is mirrored; the move queue, queue pointer, and stuck counter are reset. For empty slots (on-disk type byte zero), only the state byte is cleared; the per-tick walker skips empty slots before reading any other field.
+**Initialisation.** *(Re-verified against the shipped bytes 2026-09-04, together with the Section 3 selection rule, which holds for schedules whose waypoints differ by hour and not only for all-equal ones.)* When the engine enters a location, a single pass walks the runtime table. For every occupied slot, the active waypoint for the current hour is computed (Section 3 selection rule); its `(x, y, z)` is copied into the runtime's `(current_x, current_y, current_z)` (the NPC is placed *at* its current waypoint on entry — no walk-from-yesterday sequence); the state word is set to "idle"; the cached waypoint index is set to the freshly-computed waypoint so the next tick will not falsely fire a transition; the type field is mirrored; the move queue, queue pointer, and stuck counter are reset. For empty slots (on-disk type byte zero), only the state word is cleared; the per-tick walker skips empty slots before reading any other field.
 
 ## 5. The schedule processor
+
+The earlier byte-width wording for runtime state in this section is withdrawn; state is a word (Section 4, R396).
 
 The schedule processor — the per-tick walker — runs once per player-turn from the town turn loop, with the current hour byte as its only input. It also runs from the H-Hole-Up hours path while rest time is being simulated outside the normal mode loop. The overworld and dungeon mode loops do not invoke this scheduler.
 
@@ -112,8 +128,8 @@ Per call, the processor:
 2. **Iterates NPC slots `1..31`.** Slot 0 is the unused sentinel.
 3. **Skips empty slots.**
 4. **Looks up the active waypoint** for the current hour.
-5. **Reads the current state byte.** If state is "idle" (state ≤ 1), the processor first calls a *boundary trigger* sub-step (Section 6) that detects whether the current hour exactly matches one of the NPC's four schedule boundaries; on a hit it reclassifies the state byte.
-6. **Dispatches on the (possibly updated) state byte** through the eight-state machine (Section 7) — cardinal-direction probes, optionally a pathfinder invocation, and zero or one position update via the world-mutation primitive (Section 11).
+5. **Reads the current state word.** If state is "idle" (state ≤ 1), the processor first calls a *boundary trigger* sub-step (Section 6) that detects whether the current hour exactly matches one of the NPC's four schedule boundaries; on a hit it reclassifies the state word.
+6. **Dispatches on the (possibly updated) state word** through the eight-state machine (Section 7) — cardinal-direction probes, optionally a pathfinder invocation, and zero or one position update via the world-mutation primitive (Section 11).
 7. **Maintains the move queue.** If the dispatch chose to replay a cached path, the next direction byte is dequeued and applied. If the dispatch produced a new path, the queue is filled. **The stuck counter is reserved for one event: the queued route step being refused by the per-step cell check of Section 10.** On that refusal the counter is incremented, and it is incremented *before* the recovery step runs and without ever inspecting how the recovery step ends. A queued route step that commits resets the counter to zero. A value greater than three resets the queue read pointer and clears the counter so the NPC can replan; the high band is described in Section 9.1 and is entered by assignment after a failed replan, never by counting.
 
    *Corrected (issue #189).* This step previously said "if the NPC fails to make progress, the stuck counter is bumped", and Section 14 treated the high band as presentation parity. Both are withdrawn. Neither cap-zero route-recovery step of Section 9.1 can increment the counter — not the queued-route replay's recovery step and not the exhausted-queue arm's — so an engine that bumps on any refused movement roughly doubles the rate at which NPCs reach the forced-replan threshold. See `RETRACTIONS.md` rows R367 and R369.
@@ -174,13 +190,15 @@ Source provenance for this block: derived from private analysis note
 
 ## 6. The schedule-boundary trigger
 
+The earlier byte-width state and target-coordinate terminology in this section is withdrawn; the runtime holds a state word and current coordinates (Section 4, R396).
+
 The boundary trigger is the sub-step the processor calls on idle NPCs. It detects whether the current hour has crossed one of the NPC's four schedule boundaries.
 
 **Boundary equality.** The trigger compares the current hour byte against each of the NPC's four `time` bytes. If none match exactly, the trigger returns "no action" — the NPC stays idle. An NPC *between* boundaries (already at a waypoint, no transition pending) never advances; schedules are sample-once, not interpolated.
 
 **Cached-versus-current waypoint.** When the hour matches one of the four boundaries, the trigger asks for the new active waypoint. If it equals the cached waypoint, no real transition has occurred and state is set to "idle". If they differ, the NPC needs to move.
 
-**Floor classification.** When a real transition is detected, the new state byte is chosen by comparing three quantities: the NPC's current floor (`current_z`), the new waypoint's floor (`z[new_wp]`), and the location's current floor:
+**Floor classification.** When a real transition is detected, the new state word is chosen by comparing three quantities: the NPC's current floor (`current_z`), the new waypoint's floor (`z[new_wp]`), and the location's current floor:
 
 | NPC floor vs map | Target floor vs map | New state | Meaning                                              |
 |------------------|---------------------|-----------|------------------------------------------------------|
@@ -195,7 +213,7 @@ The floor index grows upward, and the two tests are not the same width. The **eq
 
 This is the same orientation the player-facing climb commands use, where climbing an ascend link raises the floor byte and a descend link lowers it. `formats/location-dat.md` Section 4 owns the convention; `formats/npc.md` Section 5.2 lists the shipped floor values per location.
 
-After classifying, the trigger does one extra check: if the NPC's runtime `(target_x, target_y, current_z)` already equals the new waypoint's `(x, y, z)`, the NPC is already on the waypoint and state is reset to "idle".
+After classifying, the trigger does one extra check: if the NPC's runtime `(current_x, current_y, current_z)` already equals the new waypoint's `(x, y, z)`, the NPC is already on the waypoint and state is reset to "idle".
 
 **When the cached waypoint is refreshed.** This is the load-bearing detail of
 the whole state machine, and it is easy to guess wrong. The trigger does *not*
@@ -258,11 +276,13 @@ that abandon their destinations and drift.
 
 ## 7. The state machine
 
-The state byte takes values in `0..8`:
+The state word takes values in `0..8`:
+
+The earlier description as a state byte is withdrawn (Section 4, R396).
 
 | State | Name                           | What the tick does                                                                                                |
 |------:|--------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| 0     | empty / unused                 | Slot is empty; the walker skips it before reading the state byte.                                                |
+| 0     | empty / unused                 | Slot is empty; the walker skips it before reading the state word.                                                |
 | 1     | idle / settled                 | NPC is at its currently-active waypoint with nothing to do. The boundary trigger may upgrade it.                 |
 | 2     | in-plane move                  | Both NPC and target are on the player's floor; probe cardinal directions, run the pathfinder, commit a step.     |
 | 3     | replaying cached path          | A pathfinder run earlier produced a queued route; pop the next direction byte and apply it.                      |
@@ -303,7 +323,7 @@ visible; the NPC simply teleports off-screen to where its schedule says it
 should be. The same ungated placement is what happens if any unexpected state
 value reaches the floor-transition arm.
 
-The state byte is written by initialisation (1 for occupied, 0 for empty), by
+The state word is written by initialisation (1 for occupied, 0 for empty), by
 the boundary trigger (1, 2, 4, 5, 6, 7, or 8), by the pathfinder-success path
 (3), by the off-floor arrival path (2, once the NPC has surfaced on the
 displayed floor), by the floor hand-off and ungated placement paths (1), and by
@@ -853,6 +873,8 @@ carrying cell is nearest and reachable. Section 8.5 has the full contract.
 
 ## 11. The world-mutation primitive
 
+The earlier byte-width state and target-coordinate terminology in this section is withdrawn; these writes update the state word and current coordinates (Section 4, R396).
+
 Every successful NPC step ends with a single call to a world-mutation helper that maintains the link between the *logical* NPC (with a schedule and runtime block) and the *visual* NPC (with an on-screen sprite). The helper is the only place in the schedule system that touches the on-screen sprite layer.
 
 The helper takes the NPC index and the new `(x, y, z)`, and dispatches on the relationship between the new floor and the location's current floor:
@@ -862,7 +884,7 @@ The helper takes the NPC index and the new `(x, y, z)`, and dispatches on the re
 - **Leaving the player's floor, currently linked.** Free the slot (clear its type byte) and zero `linked_obj`. The NPC is now invisible.
 - **Neither arriving nor leaving.** No sprite-layer action.
 
-After the sprite dispatch, the helper *unconditionally* writes `(x, y, z)` into the runtime's `(target_x, target_y, current_z)` and resets the state byte to "idle" (state 1). Every step ends in state 1; the next tick's boundary trigger and dispatch decide whether to re-enter movement.
+After the sprite dispatch, the helper *unconditionally* writes `(x, y, z)` into the runtime's `(current_x, current_y, current_z)` and resets the state word to "idle" (state 1). Every step ends in state 1; the next tick's boundary trigger and dispatch decide whether to re-enter movement.
 
 The helper also consults a per-scene "hidden NPC" bitmask when allocating a
 sprite. This mask is separate from the town-entry activation/death mask
