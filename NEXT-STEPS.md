@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #218.** Fresh tracing identifies the absorption pair as
+the ordinary combat-step sting followed by the action snap. The tableau's
+target-step helper runs two ticks, the same sting, then three ticks; it is
+live despite lying beyond the certificate loop (R406). A solo party produces
+nine introductory step cues. R407 removes top-down walking from the silence
+list: town/overworld foot and horse attempts call that sting too. Audio
+Sections 7.5/8.7 and the combat/endgame contracts now specify the boundaries.
+
 **2026-09-07, issue #213.** `systems/shops.md` Section 8.B now publishes
 the arms welcome, both question variants, prompt tail and echoes, plus the
 shared entry continuation and post-Yes service text for all seven other kinds.

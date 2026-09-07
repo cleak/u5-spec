@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #218 - absorption, tableau and walking audio (2026-09-07)
+
+Fresh caller and wrapper traces identify the missing live two-part stings
+and the absorption action snap. `systems/audio.md` Sections 7.5/8.7 publish
+movement boundaries, five-tick tableau step pacing and party-size cue counts.
+R406 corrects the dead-code and single-tick claims; R407 withdraws walking
+silence. The issue's recordings corroborate the recipes; no new capture or
+replacement timing calibration is claimed.
+
 ## Issue #213 - shop entry literals (2026-09-07)
 
 Fresh eight-kind entry traces and resident literal checks supply the missing
