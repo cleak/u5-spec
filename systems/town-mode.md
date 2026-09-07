@@ -1065,7 +1065,7 @@ Some named locations contain hostile NPCs. A guard in Blackthorn's keep, for exa
 
 A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). A-Attack directed at a town NPC plays the attack presentation, can smash a small prop, can mark or clear the targeted NPC through the town death flow, and can trigger the town-wide alarm sweep. An earlier revision of this section also said the town overlay "does not call the combat framer or swap to a `.CBT` arena"; that is withdrawn. The town overlay has a live NPC-conflict chain, entered both from A-Attack and from post-action cleanup, that hands the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses, so a town fight is an ordinary arena fight: ordinary town ground resolves to the cobble arena, and the scene-keyed town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). On exit the town chain clears the NPC slot, reloads the town map, and re-runs the Shadowlord install pass of Section 13 (which, in a hideout town whose Shadowlord is still standing in the active-object table, is rejected by the one-at-a-time check and does nothing). The full contract is in `systems/encounters.md` Section 7.
 
-NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an attack/catch event, town post-action cleanup routes it through the alarm, arrest, frighten, death, or slot-clear paths described below, or into the NPC-conflict chain above; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
+NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an engagement event, town post-action cleanup can open ordinary conversation or a shop, handle a regime demand, or take the arrest, frighten, conflict or slot-clear paths described below; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
 
 Town alarms are one-shot sweeps over the NPC roster. They examine all 32 slots
 and skip only a slot whose runtime occupancy word is zero. Occupied actors use
@@ -1116,7 +1116,30 @@ rewrites on later ticks.
 > entirely. Neither writes an NPC "state" field; both overwrite persisted
 > schedule data, and the flight rewrite also destroys the NPC's conversation.
 
-After each schedule tick, town mode interprets the walker's event bytes. When an NPC in one of the two approach modes reaches the party, it raises the guard/non-attack event; if that NPC's dialogue index is already the sentinel written by an earlier sweep, town mode prints a shouted brush-off ("Begone, vermin!") and then applies the **flight** rewrite to that NPC — one warning, then it runs. (Earlier revisions described this as printing a message and "pacifying" the NPC; both halves are withdrawn.) *Observed 2026-09-05: when the NPC raising that event is a creature-class actor with no dialogue at all - the giant rats around the starting hut, whose schedule uses the approach mode with the guard event - the routing is the NPC-conflict chain: `Attacked!`, the creature's plural name, `*** CONFLICT ***`, and an arena fight, on the turn after the creature became adjacent. The event byte is the same; the outcome is chosen by what the NPC is.*
+After each schedule tick, town mode handles the last engagement event the
+walker produced. AI values 4/5 produce **conversation contact** when adjacent
+with nonzero dialogue. This enters the same NPC dispatcher as explicit Talk:
+ordinary dialogue, shop opening or refusal, canned responses, and the reserved
+regime demand all retain their usual gates. Shopkeepers' behavior-4-to-1
+stand-down is part of this dispatch, and normal contact raises no town alarm.
+`systems/npc-schedules.md` Section 9.2 gives the producer gates, event priority
+and complete routing; `systems/shops.md` Section 2 gives shop hours and refusals.
+The earlier attack/non-attack interpretation of these event families is
+withdrawn (R399).
+
+AI values 6/7 produce **arrest/conflict contact**. Dialogue `0xFE` takes
+precedence and prints the shouted brush-off before applying flight to that
+NPC. Otherwise the exact linked live guard sprite byte `0x70` enters arrest;
+other sprites take the conflict outcome. At that outcome, an actor byte at
+least `0x40` prints `Attacked!` and enters the NPC-conflict chain; a lower byte
+clears the NPC slot. The giant rats around the starting hut were observed
+entering an arena through this contact, on the turn after their own move made
+them adjacent. Earlier descriptions of the brush-off as pacification remain
+withdrawn: it frightens the NPC into flight.
+
+Source provenance: fresh event-consumer and linked-object tests in
+`u5-decomp/functions/TOWN_OVL/`, together with the producer and dialogue
+traces in `u5-decomp/functions/NPC_OVL/` and `u5-decomp/functions/TALK_OVL/`.
 
 Three routings reach the arrest sequence, and all are now bounded. First, an approaching guard reaches the party with the ordinary guard sprite and without the cowering-dialogue sentinel. Second, a different flagged-NPC event automatically dispatches that NPC's reserved Blackthorn guard demand; refusal, insufficient gold, a missing Badge aura, or a wrong password produces its sole positive outcome and enters arrest. Third, the player explicitly uses `T` on the same reserved guard-demand figure and receives the same failed outcome. The resident command dispatcher converts only that explicit-T failure into town result `2`; result `2` has no other command producer, skips a fresh schedule walk, and passes the arrest discriminator to cleanup. Because the schedule walker is also the only ordinary clearer of its event bytes, the original examines a retained approach-event code before the result-derived discriminator; that rare prior-event state can take precedence. In the normal no-event state, result `2` enters arrest directly. Ordinary NPC conversations, shops, canned replies, successful payment, and the accepted password all use the normal action result and do not take this route.
 

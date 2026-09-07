@@ -33,15 +33,25 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
    - **The cell tested is the resolved cell**, which may be the faced cell or, when the faced cell is a talk-through tile, the cell one step further along the same direction.
    - **Both branches abort before dispatch.** Neither branch enters the conversation engine, uses the NPC's dialogue index, or reaches shop-trigger dispatch, and both return the ordinary zero Talk outcome. This holds in every town, dwelling, castle and keep scene; the gate has no scene-specific behaviour. The resident `T` arm maps that outcome to the normal acted status, so the town loop advances the clock and runs its scheduler pass; an aborted Talk is not a free action. `systems/town-mode.md` and `systems/time.md` own the exact clock accounting.
 
-5. **Dialog-index dispatch.** Each live NPC carries a one-byte *dialog index* loaded into RAM from the location's `.NPC` file when the scene was entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
+5. **Dialog-index dispatch.** Each live NPC carries a *dialog index*, expanded from the location's `.NPC` byte into a runtime word when the scene is entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
 
    **The guard gate, and where the two refusal lines come from** *(added 2026-09-06, issues #198 and #206; read from the dispatcher and checked live)*. Before the index is used, the dispatcher looks at the behaviour value of the NPC's **current** waypoint - the waypoint it last reached, not the one the hour selects - and at the NPC's sprite:
 
-   - If that waypoint's behaviour is the approach-and-attack mode (`npc-schedules.md` Section 9, value `4`), the dispatcher first **rewrites that waypoint's behaviour to the bounded-wander mode** (value `1`, a persisted schedule edit: the guard stands down for the rest of the period and the edit travels with the save) and then dispatches on the dialog index. An index of zero prints the bare `No response!` line; anything else proceeds.
+   - If that waypoint's behaviour is the approach-and-converse mode (`npc-schedules.md` Section 9, value `4`), the dispatcher first **rewrites that waypoint's behaviour to the bounded-wander mode** (value `1`, a persisted schedule edit: the guard stands down for the rest of the period and the edit travels with the save) and then dispatches on the dialog index. An index of zero prints the bare `No response!` line; anything else proceeds.
    - Otherwise, if the NPC's live sprite is the guard sprite, the NPC answers `The guard offers no response!` unless *both* its current waypoint is waypoint 1 *and* its dialog index is non-zero, in which case it dispatches normally. This line is one stored literal; it is not composed from the NPC's Look description, and nothing else prints it.
    - Any other NPC dispatches on its dialog index; index zero prints the bare `No response!`.
 
    So the bare line has exactly two producers - the mirror tile of step 4 and a zero dialog index reached through this gate - and the guard line has one. The regime demands of `systems/blackthorn.md` Section 7a are reached from here through the reserved index, which is why a regime guard answers only while its approach-and-attack waypoint is current: at other hours the same guard says `The guard offers no response!`. Observed live at Minoc's gate at 16:00: the demand fires.
+
+   **Shop and automatic-contact entry.** The dispatcher in step 5 is also
+   called by the NPC's automatic conversation-contact event, without steps
+   1–4. Its behavior-4-to-1 rewrite applies to shopkeepers as well as guards,
+   before a shop can open or refuse. Both entry routes require the shopkeeper's
+   reached waypoint and current hour-selected waypoint to be 1, followed by
+   the horse restriction; `systems/shops.md` Section 2 gives the complete
+   predicate, fixed refusal and turn accounting. `systems/npc-schedules.md`
+   Section 9.2 gives event production and routing. These facts were established
+   by shared-caller and gate traces in `u5-decomp/functions/TALK_OVL/`.
 
    **What loading a save does to this.** The runtime NPC table, including each NPC's dialog index and current waypoint, sits inside `SAVED.GAM` (`formats/saved-gam.md`), and a save the shipped game writes inside a location restores it, so Talk works after Journey Onward exactly as it did before the save (checked live in Skara Brae). A save written by another program that leaves that region zero makes every NPC in the location answer `No response!` until the location is re-entered from outside - that is a property of the save, not of the game.
 

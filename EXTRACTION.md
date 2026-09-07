@@ -6,6 +6,17 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issues #214/#215 - automatic shops and contact routing (2026-09-07)
+
+Fresh producer-to-consumer traces establish the two contact families, last-event
+priority, shared automatic/explicit Talk dispatcher, universal reached-waypoint
+behavior-4-to-1 rewrite, and shop opening only when reached and hour-selected
+waypoints are both 1. `systems/shops.md` Section 2 publishes the fixed closure
+line, horse-only exemption and acted-turn behavior; `systems/npc-schedules.md`
+Section 9.2 owns event routing, linked from conversation and town mode.
+R398-R400 signal the three withdrawn contracts. Guard capture issue #216
+remains separate and open.
+
 ## Issue #223 - conditional member prompts (2026-09-07)
 
 `systems/commands.md` Section 5.8 distinguishes invocation of the acting-member

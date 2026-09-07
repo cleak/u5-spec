@@ -547,35 +547,45 @@ waypoint.
 | `1` | Bounded random wander. One wander attempt per player turn, gated by a fair coin; an accepted step must leave the NPC within Manhattan distance **three** of the active waypoint. Section 9.1 gives the complete gate. |
 | `2` | Unbounded random wander. The same one-attempt-per-turn coin and the same single direction draw, with the waypoint-radius test switched off entirely (cap zero). |
 | `3` | **Flee.** The NPC acts only while the player is within about four tiles, and then chooses the neighbouring square that **maximises** distance to the player. It is the only value in this table that moves away; every other acting mode minimises distance. **Correction:** earlier revisions of this row said "follow or shadow the player at distance" and described it as falling into the chase family when the player closes. That was exactly inverted. Values `3` and `6` share a dispatch handler, so they have the same *trigger* — act within four tiles — but the step chooser tests the mode again and gives them opposite directions. |
-| `4` | Approach-and-attack family. While the player is four or more tiles from the *waypoint*, the NPC takes the ordinary bounded wander step with the **same constant cap of three** that value `1` uses; when the player is closer than that, it enters the engagement path and can raise the town-mode attack event - but only for an NPC whose dialogue-index field is non-zero; an NPC with no dialogue entry pursues without ever raising it (the same field J-Jimmy clears for value `5` below; private analysis in `u5-decomp/functions/NPC_OVL/`). **Corrected (R317):** earlier revisions said this arm "uses the wander step with a shrinking range around the waypoint". That is withdrawn. The distance this mode measures is used only to choose between wandering and engaging and is then discarded; the wander radius is a constant, identical to value `1`, and never narrows as the player closes. |
-| `5` | Randomized chase with the attack event. No shipped `.NPC` schedule authors this value, but J-Jimmy writes it into all three periods when a prisoner is first released. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test normally raises the same town-mode attack event as value `4` rather than the guard event. Jimmy first clears the released NPC's dialogue/awareness field, which suppresses that adjacent event for the current visit while preserving chase movement; `systems/doors-and-z-transitions.md` owns the full release lifecycle. It is not a reserved hole or a no-op. |
-| `6` | Guard/blocking event family. It **approaches** the player, acting only while the player is within about four tiles, and raises the non-attack guard event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. *Clarified 2026-09-05: "non-attack" names the event code, not the outcome. What town mode does with it depends on the NPC: for a guard it is the guard interaction of `systems/town-mode.md`; for a creature-class NPC without dialogue (the giant rats outside the starting hut are shipped examples) the same event enters the NPC-conflict chain and an arena fight begins with `Attacked!`, one turn after the creature reaches the party. Observed live.* |
-| `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation. |
+| `4` | Approach-and-converse family. While the player is four or more tiles from the *waypoint*, the NPC takes the ordinary bounded wander step with the **same constant cap of three** that value `1` uses; when the player is closer than that, it enters the engagement path and can raise the conversation-contact event - but only for an NPC whose dialogue-index field is non-zero; an NPC with no dialogue entry pursues without ever raising it (the same field J-Jimmy clears for value `5` below; private analysis in `u5-decomp/functions/NPC_OVL/`). **Corrected (R317):** earlier revisions said this arm "uses the wander step with a shrinking range around the waypoint". That is withdrawn. The distance this mode measures is used only to choose between wandering and engaging and is then discarded; the wander radius is a constant, identical to value `1`, and never narrows as the player closes. |
+| `5` | Randomized chase with conversation contact. No shipped `.NPC` schedule authors this value, but J-Jimmy writes it into all three periods when a prisoner is first released. The dispatcher routes it to the *same* movement handler as value `7` — unconditional approach with the occasional random redirection — while the adjacency test normally raises the same conversation-contact event as value `4` rather than the arrest/conflict event. Jimmy first clears the released NPC's dialogue/awareness field, which suppresses that adjacent event for the current visit while preserving chase movement; `systems/doors-and-z-transitions.md` owns the full release lifecycle. It is not a reserved hole or a no-op. |
+| `6` | Arrest/conflict contact family. It **approaches** the player, acting only while the player is within about four tiles, and raises the arrest/conflict event when adjacent. It shares a dispatch handler with value `3` but takes the opposite arm of the step chooser — see the correction on that row. For a guard this ordinarily enters arrest; for a creature-class NPC it ordinarily enters conflict. The full routing is in Section 9.2. Giant rats outside the starting hut were observed entering an arena with `Attacked!` on the turn after reaching the party. |
+| `7` | Randomized chase/engage family. It uses the engagement path with occasional direction variation and raises the same arrest/conflict contact as value `6`. |
 
 Values greater than `7` fall through to the no-action/default case. The AI byte
 does not affect the *target* the schedule resolves to -- that is purely the
 (x, y, z) for the active waypoint. It only affects what the NPC does once that
 waypoint is active.
 
-**The engagement step, as observed.** *(Added 2026-09-05; every sentence here
-was watched live in the shipped game and matches the static reading.)* The
-"within about four tiles" gate of values `3`, `4` and `6` is a Manhattan
-distance strictly below four: an NPC three tiles away acts, one four tiles away
-does nothing at all. An engaging NPC scores its four orthogonal neighbours by
-the Manhattan distance each would leave to the party, treating cells it may not
-enter (blocked terrain, occupied cells, off-map) as unusable, and takes the
-**first** neighbour in the fixed order **east, north, west, south** that
-strictly reduces the distance. It never breaks ties any other way, never takes
-a step that leaves the distance unchanged, and never plans a route: when no
-neighbour strictly improves, the NPC **stays where it is that turn**, and it
-keeps staying there for as long as the geometry holds, even when an opening
-two cells away would let it round the obstacle. Offered a westward and a
-southward step of equal merit, a shipped NPC steps west. On the tick after it
-becomes orthogonally adjacent it takes no step and raises its adjacency event
-instead, so there is always one full turn between "the pursuer is next to the
-party" and whatever that event produces. An earlier private reading suspected
-three defects in this chooser; none of them has an observable effect, and an
-implementation that follows this paragraph is exact.
+The earlier names "attack event" for values 4/5 and "non-attack guard event"
+for values 6/7 are withdrawn: conversation contact and arrest/conflict contact
+have the distinct routing in Section 9.2 (R399).
+
+**The engagement step.** Values 3/6 use a Manhattan distance strictly below
+four from the NPC's current position to the party. Value 4 instead measures
+from its selected waypoint to the party, and at distance four or greater it
+wanders with cap three. Values 5/7 engage without that distance gate. The
+ordinary state, floor and scheduling gates still determine whether this AI
+step is invoked at all; adjacency alone is not a global trigger.
+
+For an approaching NPC, the chooser tests legal orthogonal neighbours in
+**east, north, west, south** order and takes the first that strictly reduces
+Manhattan distance to the party. No equally distant detour is planned. Modes
+5/7 additionally have their random direction variation; mode 3 retreats.
+At the **start** of an engagement invocation, orthogonal adjacency produces
+the appropriate event and no movement: values 4/5 require nonzero dialogue,
+whereas 6/7 do not. A zero-dialogue NPC in 4/5 continues to step selection.
+
+When the NPC's own move first creates adjacency, contact waits until a later
+engagement invocation. When the **party** steps beside an already eligible
+NPC, contact can occur in that command's post-action schedule pass. The earlier
+blanket guarantee of one full turn between adjacency and an event, and the
+claim that mode 4 does nothing at distance four, are withdrawn (R400).
+
+Source provenance: fresh dispatch and event-producer traces in
+`u5-decomp/functions/NPC_OVL/`. Existing live pursuit observations support
+first-fit approach and the delay after an NPC's own move; the shop observations
+in issue #215 demonstrate automatic conversation during ordinary town actions.
 
 ### 9.1 The per-turn wander gate
 
@@ -732,6 +742,45 @@ three counter bands and the five-turn aging count come from a second, later
 analysis pass in the same directory, re-derived from the shipped images twice
 and enumerated over the generator's whole state space; no emulator capture was
 taken for those either.
+
+### 9.2 Contact events and town routing
+
+The schedule pass clears the shared event kind and NPC index, then visits
+roster slots 1 through 31. An engagement event records its producer's roster
+index. Events do not stop the pass or form a queue: if more than one NPC
+produces one during the pass, the last producer visited supplies the event
+that town mode handles. Other state-machine early exits remain as specified
+in Section 7.
+
+| Producer | Dialogue requirement at adjacency | Town outcome on an ordinary acted turn |
+|---|---|---|
+| AI 4 or 5 | Nonzero live dialogue | Enter the shared conversation dispatcher for that NPC. Ordinary dialogue starts its conversation; shop triggers enter their shop gate; reserved/canned dialogue follows its own dispatcher case. |
+| AI 4 or 5 | Zero live dialogue | No contact event; continue movement selection. This is not a fallback to combat. |
+| AI 6 or 7 | Dialogue `0xFE` | Shouted brush-off followed by that NPC's flight rewrite. |
+| AI 6 or 7 | Any other dialogue, linked live sprite byte exactly `0x70` | Arrest interaction. This route does not first ask the reserved regime demand. |
+| AI 6 or 7 | Dialogue other than `0xFE`, linked live sprite other than `0x70` | Conflict outcome: linked actor byte at least `0x40` gives `Attacked!` and the NPC-conflict chain; a lower actor byte clears the NPC slot. |
+
+Conversation contact uses the **same dispatcher as explicit Talk**, but does
+not perform Talk's direction, target lookup or mirror/bed terrain checks.
+The dispatcher's reached-waypoint behavior-4-to-1 rewrite applies to every
+NPC, including shopkeepers, before dialogue handling. It changes only that
+waypoint's behavior; other periods and the live dialogue remain unchanged.
+It is saved with the schedule. There is no shop-only contact exemption;
+ordinary conversation contact itself does not trigger a town-wide alarm.
+
+The shared guard gate still applies before dialogue dispatch. Shop opening
+then requires reached waypoint 1 and hour-selected waypoint 1, with the later
+horse check specified in `systems/shops.md` Section 2. A shop refusal returns
+the same peaceful outcome as a normal conversation. A reserved regime demand
+that returns failure enters arrest; arrest refusal raises the town alarm and
+can proceed to conflict. `systems/town-mode.md` Section 14 specifies arrest
+and the exceptional explicit-T failure result, including retained-event
+precedence. A successful shop contact does not enter any of those alarm paths.
+
+Source provenance: event producer and pass order in
+`u5-decomp/functions/NPC_OVL/`, consumer in `u5-decomp/functions/TOWN_OVL/`,
+and shared explicit/automatic dialogue dispatch in
+`u5-decomp/functions/TALK_OVL/`, freshly traced for issues #214/#215.
 
 ## 10. Movement constraints
 
