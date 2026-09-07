@@ -541,6 +541,19 @@ symmetry), which the 95.5 rule cannot produce.* Every destination rectangle in
 the corridor reproduces exactly from the half-aperture sequence and these two
 rules; no further tables are needed.
 
+**Driver derivation verified 2026-09-07.** The right-side draw is submitted
+at nominal columns `152, 120, 104, 96`; right forward images use nominal
+column `96`. The EGA horizontal blitter places each reflected image one
+pixel before that nominal rectangle, producing the columns above. Its
+reversed pixel stream has a one-pixel-left phase, so corresponding left and
+right pixels sum to `190`, the reflection about `95`. This independently
+supports R394's captured placement without changing the aperture tables.
+Original-driver synthetic pixel probes cover the applicable byte-aligned
+widths and both masked and unmasked hidden-surface paths; the bounded driver
+contract is in `systems/display-driver-abi.md` Section 5.1. Source provenance:
+fresh caller and blitter traces in `u5-decomp/functions/DUNGEON_OVL/`,
+`u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`.
+
 ### 6.4 Cell class to image
 
 **Side cells.** For each band the renderer paints the cell to the left and the

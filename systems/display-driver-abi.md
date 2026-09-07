@@ -87,9 +87,12 @@ The original driver renders ordinary viewport tiles and fixed-cell text to the
 front buffer, by leaving the render-target selector on the visible page rather
 than by any inability of those entries to reach the hidden one: the tile, glyph,
 pixel-plot and rectangle-fill entries all have working back-buffer bodies
-(sections 6, 8 and 9.2). Back-buffer use in the shipped game is limited to
-whole-screen or effect-oriented paths such as compressed bitmap staging,
-silhouette stamping, screen dissolves, and title/menu animation.
+(sections 6, 8 and 9.2). The shipped game also composes the first-person
+dungeon view on the back surface before presenting it. Other uses include
+compressed bitmap staging, silhouette stamping, screen dissolves and
+title/menu animation. The earlier restriction to whole-screen/effect paths
+omitted dungeon composition and is retracted (R422). Source provenance:
+explicit target selection in `u5-decomp/functions/DUNGEON_OVL/`.
 
 ## 4. Screen Descriptor State
 
@@ -142,7 +145,7 @@ without visible effect.
 | `0x42` | 22 | Prepare a decompressed paired graphics archive for blitting: an in-place, size-preserving conversion of every image in the segment from packed four-bits-per-pixel storage into the per-row planar layout the EGA blitters expect. Not a codec, not a decompressor, and not a draw call; see section 7. The CGA, Hercules and Tandy drivers implement this entry as a no-op because their blitters read the archive in its packed form. |
 | `0x45` | 23 | No-op. |
 | `0x48` | 24 | Register a loaded asset segment as the active tile/sprite asset and prepare it for blitting by converting its embedded pixel payload from packed to planar layout in place. Despite the historical working name "pack to back buffer", this entry does not touch the back buffer; it operates on the asset segment. |
-| `0x4B` | 25 | General tile or sprite blit. Accepts a render-flags word whose low bits choose between an opaque blit and a transparency-mask blit. |
+| `0x4B` | 25 | General tile or sprite blit. Low flags select orientation; the resource's optional mask separately selects masking. See Section 5.1. |
 | `0x4E` | 26 | Stamp one record of a one-bit-per-pixel record archive into the back buffer. Takes the archive segment, the record index, and a destination pixel `(x, y)`. The index is bounds-checked against the archive's record count and an out-of-range index returns without drawing. Set source bits are written into all four planes, so the stamped shape reads as the brightest palette index in the back buffer; clear source bits leave the destination untouched, so the stamp is an overlay rather than a rectangle overwrite. This is the entry the intro uses for every `TITLE.BIT` and `BRITISH.BIT` draw. |
 | `0x51` | 27 | Draw one 16-by-16 tile on whichever surface the descriptor's render-target selector currently names. The entry has a separate, complete back-buffer body; see section 8. Ordinary viewport painting leaves the selector on the front buffer. |
 | `0x54` | 28 | No-op. |
@@ -150,7 +153,7 @@ without visible effect.
 | `0x5A` | 30 | Release the current asset segment back to DOS. |
 | `0x5D` | 31 | Draw one 8-by-8 fixed-cell glyph on whichever surface the descriptor's render-target selector currently names. The entry has a separate, complete back-buffer body; see section 8. Ordinary text painting leaves the selector on the front buffer. |
 | `0x60` | 32 | Carry clear mutates loaded tile graphics for animated shimmer effects. Carry set temporarily constructs and paints one row-spliced 16-by-16 cell, then restores the shared tile bytes; see section 10. |
-| `0x63` | 33 | Tile blit with the transparency-mask flag forced on. Equivalent to dispatch offset `0x4B` with the caller-supplied flag word bitwise-ORed with the transparency bit. |
+| `0x63` | 33 | General tile blit with horizontal-reflection bit 1 forced on; other supplied flag bits are retained. See Section 5.1. |
 | `0x66` | 34 | Carry clear copies a back-buffer rectangle to the front buffer in pseudo-random dissolve order. Carry set writes one source-tile pixel into one viewport cell per call; see section 9.6 for both visit-order contracts. |
 | `0x69` | 35 | Two entries selected by the carry flag on entry. Carry clear: advance and draw the title/menu idle animation strip. Carry set: play the subtitle ignition transition using the one-bit resource segment passed in the primary register. |
 | `0x6C` | 36 | Loaded-tile graphics palette-plane mutation, save, restore, byte-parameterized substitution, and an extended mode reached only by alternate paths. The combat framer reaches this entry with mode value `1` when the resident tile-restoration flag is set. |
@@ -163,6 +166,53 @@ withdrawn in full, and section 7 gives what the entry really does. No driver
 entry decodes the one-bit-per-pixel `.BIT` and `.PCS` resources at all: those
 are parsed by the caller and drawn through the ordinary point, span, stamp and
 blit entries, on every driver family.
+
+### 5.1 General tile orientation and the dungeon reflection phase
+
+The EGA general blitter's orientation flags and resource masking are separate:
+
+| Input | Meaning |
+|---|---|
+| Low flag bit 0 | Reverse the destination row progression |
+| Low flag bit 1 | Reflect horizontally on the hidden-surface path |
+| Optional mask in the selected image's resource directory | Use the resource mask to preserve destination pixels; independent of orientation flags |
+| Dispatch `0x63` | Force bit 1, then use the general entry |
+
+The earlier opaque/transparency flag descriptions for dispatches `0x4B`
+and `0x63` are retracted (R421). In particular, the forced entry is the
+dungeon renderer's mirrored draw. The unmasked front-surface branch bypasses
+the horizontal-reflection choice; do not infer support there from the hidden
+surface result.
+
+For an unclipped, byte-aligned hidden-surface image of width `W` and height
+`H`, at nominal position `(X,Y)`, a source pixel `(sx,sy)` is placed as follows:
+
+| Orientation | Destination coordinate |
+|---|---|
+| Ordinary | `(X + sx, Y + sy)` |
+| Horizontal only | `(X + W - 2 - sx, Y + sy)` |
+| Vertical only | `(X + sx, Y + H - sy)` |
+| Both | `(X + W - 2 - sx, Y + H - sy)` |
+
+Horizontal reflection therefore begins at `X - 1`, one pixel before the
+nominal rectangle. Vertical reversal ends at `Y + H`, one row below a
+conventional flip of the ordinary rectangle. These shifts are original
+placement behavior, not changes to the view's centre or clipping bounds.
+The horizontal transformation reverses pixel order and advances the reversed
+stream by one pixel toward the left, carrying the displaced edge pixel into
+the preceding destination group.
+
+Fourteen isolated original-driver configurations verified these coordinates
+with synthetic image pixels, both absent and supplied masks, both entry
+points, all four flag combinations, and byte-aligned widths from 8 to 80.
+The probes executed the original initialization of its pixel lookup as well
+as the original blitter. They verify this bounded hidden-surface contract;
+they are not new full-game or hardware captures, and do not generalize the
+formula to clipped or partial-byte-width images.
+
+Source provenance: fresh original driver/caller traces and synthetic pixel
+probes in `u5-decomp/functions/EGA_DRV/`,
+`u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/notes/` (2026-09-07).
 
 ## 6. Rectangle Fill
 
