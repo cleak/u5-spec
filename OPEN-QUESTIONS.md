@@ -35,6 +35,7 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 
 | Item | Where | Notes |
 |---|---|---|
+| Minoc/palace reserved-guard bare refusal reported in issue #216, despite the shared explicit-T route and a prior successful Minoc report. | `systems/blackthorn.md` Section 7a; `systems/conversation.md` Section 2 | A stock-written save immediately before the failing Talk, exact position/floor/time/direction and matched asset version; inspect the target's live dialogue word, reached waypoint and linked active-object ownership. Canonical Minoc slot 14 authors `[0, 4, 0]`, unlike the reported all-7 engine state. |
 | Wall-clock durations of every PC-speaker effect. The loop structures are exact; the per-iteration cycle model that converts them to seconds is a static estimate with a stated error band. *Narrowed 2026-09-05: two blocking tones (the blocked step and the combat refusal pair) and the calibrated unit itself were measured under DOSBox and sit inside the published bands (`systems/audio.md` 7.4, 8.8, 10.1; `systems/timing.md` 7.6, 8.7). DOSBox is not cycle-accurate, so the period-hardware figure stays open.* | `systems/audio.md` Sections 5.4, 10; `systems/timing.md` | One cycle-accurate emulator run with an audio capture settles all of them at once. The two figures most worth checking first are the Stonegate trapdoor sweep (about 26.5 s derived) and the long Blackthorn envelope. |
 | The audible waveform and timbre of the envelope generator. | `systems/audio.md` Section 5.4 | Same run as above. |
 | Whether the mode loop or an interrupt handler drains the keyboard buffer after the whirlpool sequence. Established only by absence inside the two traced paths. | `systems/audio.md` Section 8.9 | Sail into a whirlpool once. |
@@ -48,7 +49,7 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 | That Lord British has no throne-room conversation. Every static search supports it (no roster entry, no dialogue strings); a live check would close it definitively. | `systems/conversation.md`; `catalogs/npc-roster.md` | Talk to him in the throne room. |
 | Tile-id partition boundaries for water, mountain, lava and door classes against runtime behaviour, if independent re-authored data is ever the goal. | `catalogs/tile-catalog.md` Section 16, item 8 | Optional; movement contracts already own passability. |
 
-Closed 2026-09-05 by live observation under DOSBox: the three suspected NPC pursuit-stepper defects. None has an observable effect; the stepper's real contract (gate below four, east/north/west/south first fit, no move when nothing improves, event one tick after adjacency) is now published in `systems/npc-schedules.md` Section 9.
+Closed 2026-09-05 by live observation under DOSBox: the three suspected NPC pursuit-stepper defects. None has an observable effect; the stepper's real contract (gate below four, east/north/west/south first fit, no move when nothing improves, event on a later invocation after an NPC's own move creates adjacency) is now published in `systems/npc-schedules.md` Section 9.
 
 ## 3. Needs a further static trace
 

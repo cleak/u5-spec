@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #216 still open.** R401 corrects the regime guard's
+exclusive-behavior-4 claim: otherwise reached waypoint 1 plus nonzero dialogue
+also passes the exact guard-sprite gate. Both explicit and automatic Talk reach
+the reserved handler. Canonical Minoc slot 14 is `[0, 4, 0]`; the reported
+all-7 state is not its authored triple. The earlier #206 live method is now
+recorded in `systems/blackthorn.md` Section 7a; the failing capture needs a
+stock save and target/runtime comparison, indexed in `OPEN-QUESTIONS.md`.
+
 **2026-09-07, issues #214/#215.** Automatic shop contact and the shared
 shop-hours gate are now specified in `systems/shops.md` Section 2 and
 `systems/npc-schedules.md` Section 9.2, aligned with conversation and town mode.
