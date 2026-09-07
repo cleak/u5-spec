@@ -18,6 +18,18 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #217.** `formats/saved-gam.md` Section 12 now maps every
+byte of the saved NPC tail, including eight-word runtime records with dialogue
+at offset 10, count/direction route runs and their byte-offset cursors. One
+location-wide roster covers all floors; Journey Onward restores it together
+with the active objects and skips reseating. Three corrections (R395-R397):
+the 1,024-byte tile buffer is outside the save, runtime state is a word and X/Y
+are current positions, and the two shared bytes are an engagement kind/index
+pair. `systems/npc-schedules.md` is aligned. Six opaque pass-through bytes
+remain intentionally uninterpreted; preserving them requires no guessed field.
+The remaining GitHub queue, especially the separate engagement-routing issue
+#215, still needs investigation.
+
 **2026-09-06, issues #221 and #224.** `systems/magic.md` Section 6 now gives
 the mixer's exact completion line and same-row quantity echo.
 `systems/commands.md` Section 9 gives the control-key output, including the

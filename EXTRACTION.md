@@ -4,7 +4,18 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-09-06.
+Last updated: 2026-09-07.
+
+## Issue #217 - saved NPC layout (2026-09-07)
+
+`formats/saved-gam.md` Section 12 now gives the complete 2,220-byte tail map,
+schedule and runtime record shapes, route encoding, preserving-load order,
+location-wide floor scope and joins to other save fields. Runtime records
+include the live dialogue word; routes preserve remaining run counts and
+their cursors. Fresh traces of loader, initializer, placement and route
+consumers established the layout. R395-R397 correct the tile-buffer inclusion,
+runtime state width/coordinate interpretation, and shared event-byte meanings;
+`systems/npc-schedules.md` carries the matching corrections.
 
 ## Issues #221 and #224 - interface output (2026-09-06)
 
