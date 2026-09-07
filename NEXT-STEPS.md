@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #213.** `systems/shops.md` Section 8.B now publishes
+the arms welcome, both question variants, prompt tail and echoes, plus the
+shared entry continuation and post-Yes service text for all seven other kinds.
+Ship and inn use their existing shared greeting rows. R405 corrects the
+shipwright entry clear/immediate letter menu and the table's extra arms exit
+key; the ship service menu is asset record `119`.
+
 **2026-09-07, issue #210 still open.** The normal Journey path explicitly
 sets the message cursor to local `(0,12)`, screen `(24,23)`. The reported
 row-14 echo and two-row scrolling difference need intermediate captures and

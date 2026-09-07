@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #213 - shop entry literals (2026-09-07)
+
+Fresh eight-kind entry traces and resident literal checks supply the missing
+arms questions and all post-greeting prompt ownership in `systems/shops.md`
+Section 8.B. Seven non-arms kinds use the shared record rows, followed only
+by cursor-dependent spacing/colon placement before their initial Yes/No
+choice. R405 repairs shipwright clear/menu timing and the arms exit-key table.
+
 ## Issue #210 - load cursor and fall transcript (2026-09-07)
 
 The normal Journey cursor is now explicit in `systems/save-load.md` Section

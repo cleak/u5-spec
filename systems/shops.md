@@ -696,7 +696,7 @@ day.
 
 | Flow point | Text source | Selection timing | Wait, clear, and retry behavior | State effects |
 |---|---|---|---|---|
-| Shared non-arms entry greeting | One of four `SHOPPE.DAT` records from the current shop-kind entry-greeting row, followed by resident tail text | Uniform `0..3` draw when the entry greeting is rendered | Printed once on entry for guild, reagent, healer, and horse-trader flows; arms does not use this shared entry greeting | No inventory, gold, or object mutation |
+| Shared non-arms entry greeting | One of four `SHOPPE.DAT` records from the current shop-kind entry-greeting row, followed by spacing/colon placement | Uniform `0..3` draw when the entry greeting is rendered | Used by all seven non-arms kinds: tavern, horse trader, shipwright, reagent vendor, guildmaster, healer and innkeeper | No inventory, gold, or object mutation |
 | Shared closing bark, nothing bought | One of four `SHOPPE.DAT` records from the current shop-kind nothing-bought exit row | Uniform `0..3` draw when the closing-bark step runs with the nothing-bought outcome | Rendered at the tail of a visit that completed no purchase, including a refused entry prompt or a declined quote | No inventory, gold, or object mutation |
 | Shared closing bark, purchase completed | One of four `SHOPPE.DAT` records from the current shop-kind purchase-completed exit row | Uniform `0..3` draw when the closing-bark step runs with the purchase-completed outcome | Rendered at the tail of a visit that completed a purchase. A third, silent outcome code renders no bark and no attribution tail | No inventory, gold, or object mutation |
 | Shared `Y`/`N` prompt primitive | Resident literals for the accepted echo | No `SHOPPE.DAT` selection | Loops until uppercase `Y` or `N`; `Y` echoes the resident `Yes` literal and `N` echoes the resident `No` literal; other keys are ignored and do not redraw or advance | Returns only the accepted key |
@@ -719,7 +719,7 @@ For frame-oriented rendering, the live transcript contract is:
 
 | Flow state | Text source | Clear or append | Cursor movement | Wait / ignored input |
 |---|---|---|---|---|
-| Arms entry | Resident/tokenized shop greeting, resident shopkeeper-intro literal, two-entry resident long-greeting pool, then a resident closing quote/space | Appends to the inherited conversation window; no shop-local clear | No explicit shop cursor setter; output advances from the inherited cursor | Waits once after the first greeting, then waits for `B`, `S`, Space, or another exit key |
+| Arms entry | Resident/tokenized shop greeting, resident shopkeeper-intro literal, two-entry resident long-greeting pool, then a resident closing quote/space | Appends to the inherited conversation window; no shop-local clear | No explicit shop cursor setter; output advances from the inherited cursor | Waits once after the first greeting, then accepts `B`, `S`, or Space; other keys silently re-poll |
 | Arms buy stock list | Resident `Buy` echo, four-entry resident affirmation pool, four-entry resident stock-call pool, current stock item names | Appends after the entry transcript | Natural text advance only | Invalid stock letters leave the stock list visible and keep waiting; they do not redraw the list or consume a random draw |
 | Arms item quote and confirmation | Deterministic `SHOPPE.DAT` quote by equipment id, then one of four resident confirmation prompts | Appends after the stock list | Natural text advance only | Only `Y` and `N` advance. Other keys leave the quote/prompt visible and do not redraw or consume a random draw |
 | Arms sell browser | Resident sell-side literals plus `SHOPPE.DAT` sell-back records `49..56` | Installs its own framed side panel in text window `1`; each row redraw restores window `2`, leaving the panel pixels visible while quote text appends in the conversation window | Fixed panel cursor origins while the panel is up; one command-key wait per browser attempt, and a Y/N-only wait for an ordinary quote | Invalid browser keys do nothing. Declines and zero-price refusals redraw the page and continue; ammunition refusal terminates the browser |
@@ -730,9 +730,11 @@ For frame-oriented rendering, the live transcript contract is:
 | Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
 | Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input returns; unknown topics print the no-help line and re-prompt. `N` exits before a success draw; short funds exits without a success draw |
 | Horse-trader entry and quote | Shared non-arms entry-greeting row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space echoes the resident `No` literal and exits through the nothing-bought closing bark, not silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
-| Shipwright entry and branch | Shared shipwright bark rows, resident Frigate/Skiff menu text, deterministic local quote text | The shipwright body clears the inherited conversation text window before its prompt body, then appends branch text | No shop-local cursor origin after the clear | Invalid outer choices re-poll the menu. Delivery-pending and short-funds refusals print branch text and return without queueing a vehicle |
+| Shipwright entry and branch | Shared entry records, resident Yes/No echo, then menu record `119` and deterministic quote records | Appends throughout entry and the initial menu; no shop-local clear | Natural text advance only | Entry accepts `Y`, `N`, or Space; ignored entry keys do not redraw. After Yes, the Frigate/Skiff menu follows Section 8.7 |
 | Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Branch-local prompts wait according to the selected room, leave, or pickup path; failed eligibility checks print their refusal and return to the inn prompt path |
 | Inn multi-guest pickup register | Resident register frame/list text and guest names copied from the inn registry | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
+
+The earlier table's shipwright-entry clear/resident-menu claim and its additional arms exit key are withdrawn; entry appends, the ship menu comes from record `119`, and only Space exits the arms prompt (R405).
 
 The short resident literal pools that affect prompt parity are:
 
@@ -858,6 +860,88 @@ table above. That is what the shipped selector tables hold, and under the
 corrected reading it is not even anomalous - both columns are exits, so a
 sanctum blesses the party on the way out either way, whether or not it was paid
 for a treatment.
+
+### 8.B Exact entry text and prompt placement
+
+The fragments below are functional interface text from resident literals.
+`\n` denotes a line feed supplied to the wrap-aware printer, not a promise
+of a separate visible blank row after automatic wrapping. Spaces shown at
+fragment ends are significant. Token meanings and substitutions remain those
+of Section 4.1: `@` is time of day, `#` the shop name, and `$` the vendor.
+Asset-owned text is identified by record ordinal rather than transcribed.
+
+**Arms entry, in order:**
+
+| Stage | Exact resident fragment or action |
+|---|---|
+| Welcome | `"Good @, and welcome to #!"\n`, with token expansion |
+| Pause | Wait for one key before the next text |
+| Attribution | `\n$ says,\n"`, with token expansion |
+| Greeting, equal-probability variant 1 | `Hail, friend! Wouldst thou Buy or Sell?` |
+| Greeting, equal-probability variant 2 | `Greetings, traveller! Wish ye to Buy, or hast thou wares to Sell?` |
+| Tail after the selected variant | `" ` — a closing quote and one space |
+| Input | Wait for `B`, `S`, or Space; ignore other keys without reprinting |
+
+The question inside the selected greeting is the Buy/Sell prompt. There is
+no additional instruction line listing keys. Buy echoes `Buy\n\n"`, Sell
+echoes `Sell\n\n"`, and Space echoes `No` without a line feed before the
+ordinary nothing-bought closing bark. The exit bark itself remains selected
+from `SHOPPE.DAT` records `0..3`; it is not another resident entry literal.
+
+On Buy, the echo is followed by one uniformly selected affirmation from
+`Very good!\n`, `Excellent!\n`, `Fine, fine!\n`, `But of course!\n`, then
+one independently selected stock introduction from `We have:`, `We stock:`,
+`Thou canst buy:`, `We've got:`. The existing stock-list flow then follows.
+
+**All seven non-arms entries** first emit an opening double quote, render
+one record from their shared entry row, then place the input continuation
+according to the resulting window-local cursor column:
+
+| Cursor column after the record | Additional output |
+|---:|---|
+| 0 | `\n:` |
+| 1 through 11 | One space; no colon |
+| 12 through 15 | `\n\n:` |
+
+The record supplies the greeting/question and its closing quote. This tail
+adds no words and no second question. The initial choice and following
+service surface are:
+
+| Kind | Initial greeting records | Initial input | What follows Yes |
+|---|---|---|---|
+| `0x82` Tavern | `57..60` | `Y`, `N`, Space | State-selected menu record `69..72` |
+| `0x83` Horse trader | `92..95` | `Y`, `N`, Space | Horse quote record `104` and its confirmation |
+| `0x84` Shipwright | `105..108` | `Y`, `N`, Space | Frigate/Skiff menu record `119` |
+| `0x85` Reagent vendor | `127..130` | `Y`, `N`, Space | Reagent stock list |
+| `0x86` Guildmaster | `148..151` | `Y`, `N`, Space | Guild stock list |
+| `0x87` Healer | `165..168` | `Y`, `N` only | Cure/Heal/Resurrect question |
+| `0x88` Innkeeper | `174..177` | `Y`, `N`, Space | Pick up/Leave/Rest question |
+
+Space means No where accepted. Every No response echoes `No` without a
+line feed, then exits through the appropriate closing-bark flow. Other
+initial keys leave the existing greeting visible and re-poll. In particular,
+inn and ship entry do have shared greeting records; neither starts directly
+at its service-letter menu.
+
+The additional resident text after Yes is exact as follows; each row lists
+fragments in print order, preserving separately printed fragments:
+
+| Kind | Resident text around the service surface |
+|---|---|
+| Tavern | `Yes\n\n"`, then the state menu record, then a separately emitted closing quote and space. If the resulting local column exceeds 14, emit one separate line feed before input. |
+| Horse trader | `Yes\n\n"`, then record `104`, then `\n\nDeal?" ` |
+| Shipwright | `Yes`, then record `119` with no added resident menu question; the record carries its own leading spacing and prompt |
+| Reagent vendor | `Yes\n\n"Fine! We sell:\n\n`, then the stock list |
+| Guildmaster | `Yes\n\n"We sell:\n\n`, then the stock list |
+| Healer | `Yes\n\n`, then `"We have powers to Cure, Heal, or Resurrect."\n`, then token-expanded `says $.\n\n"What is the nature of thy need?" ` |
+| Innkeeper | `Yes`, then token-expanded `\n\n$ asks,\n"Art thou here\nto Pick up or\n`, then `Leave a\ncompanion, or\nto Rest for the\nnight?" ` |
+
+Source provenance: fresh entry-to-input traces, literal/pool checks, and
+shared renderer/caller resolution in `u5-decomp/functions/SHOPPES_OVL/`,
+`u5-decomp/functions/SHOPPES2_OVL/` and
+`u5-decomp/functions/SHOPPES3_OVL/` (issue #213). The two arms variants also
+agree with the paired captures reported in that issue; no new live capture
+was taken for the other kinds.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -1593,9 +1677,12 @@ shop model. Tavern/meal-counter service is the shop-owned food-purchase route.
 
 ### 8.7 Ship broker / shipwright
 
-The shipwright entry is a Talk-triggered vehicle sale flow. It opens with a
-small letter menu: `F` offers Frigates and `S` offers Skiffs, while *space* or
-Escape exits. Each current shipwright has local prices for both sale classes.
+The shipwright entry is a Talk-triggered vehicle sale flow. It opens with the
+shared greeting and a `Y`/`N` choice; Space means No. Yes echoes `Yes` and
+renders menu record `119`: `F` offers Frigates and `S` offers Skiffs, while
+Space or Escape exits that menu. Entry and this menu append to the inherited
+message window. The former immediate-letter-menu and entry-clear descriptions
+are withdrawn (R405). Each shipwright has local prices for both sale classes.
 The flow quotes the selected price, asks for confirmation, runs the ordinary
 affordability check, and debits gold on success.
 

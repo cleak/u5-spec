@@ -131,7 +131,7 @@ behavior, with these traced shared rules:
 | Shared shop entry greeting | Pick one of four records from the current shop-kind row of the entry-greeting table. | One uniform `0..3` draw when the entry greeting is rendered. |
 | Shared closing bark, nothing bought | Pick one of four records from the current shop-kind row of the nothing-bought exit table. | One uniform `0..3` draw when the closing-bark step runs with the nothing-bought outcome. |
 | Shared closing bark, purchase completed | Pick one of four records from the current shop-kind row of the purchase-completed exit table. | One uniform `0..3` draw when the closing-bark step runs with the purchase-completed outcome. A third, silent outcome renders nothing. |
-| Arms long greeting | Pick one of two resident literal greeting variants, then print the fixed arms prompt literals. | One uniform `0..1` draw during arms entry. |
+| Arms long greeting | Pick one of two resident literal greeting variants, each containing its Buy/Sell question, then print a closing quote and space. Exact fragments are in `systems/shops.md` Section 8.B. | One uniform `0..1` draw during arms entry. |
 | Arms buy affirmation | Pick one of four resident literal affirmation variants before entering the buy menu. | One uniform `0..3` draw only after the player selects Buy. |
 | Arms buy item quote | Select the item-description record from the chosen equipment id; the public mapping is in `systems/shops.md`. | No random draw. |
 | Tavern list | Select the tavern/menu record from the current tavern state, not from the tavern instance: states `0..3` map to records `69, 70, 71, 72`. The visible letter table for each state is in `systems/shops.md`. | No random draw for list selection. |
@@ -153,7 +153,10 @@ literals before or after a `SHOPPE.DAT` record, so a clean implementation
 should not assume every visible shop line comes from this file.
 
 The shared entry-greeting and closing-bark rows have public record-id tables
-in `systems/shops.md`. **Correction, 2026-08-22:** this section previously
+in `systems/shops.md`. All seven non-arms kinds use the shared entry greeting,
+including shipwrights and innkeepers. Section 8.B of that document gives the
+spacing/colon tail and distinguishes the initial question from each service
+menu reached after Yes. **Correction, 2026-08-22:** this section previously
 called the middle row an "initial greeting". It is not entry text. Of the three
 shared rows, only the first is rendered on arrival; the other two are both
 rendered on the way out of a shop by one closing-bark step, chosen by whether
