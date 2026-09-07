@@ -6,6 +6,17 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issues #219/#220 - flash measurement and rescue pacing (2026-09-07)
+
+`systems/audio.md` Section 8.4 publishes the reported DOSBox EGA flash
+measurement, distinguished from period-hardware timing and other drivers.
+Fresh rescue tracing confirms the six envelope recipes and both later
+thunder flashes, and supplies the missing BIOS pauses in
+`systems/blackthorn.md` Section 7.1. The 8.491-second burst remains a capture
+reconciliation question; complete recording boundaries are needed before
+changing any family-wide timing estimate. These additions fill timing and
+evidence gaps without withdrawing the existing static model.
+
 ## Issue #218 - absorption, tableau and walking audio (2026-09-07)
 
 Fresh caller and wrapper traces identify the missing live two-part stings

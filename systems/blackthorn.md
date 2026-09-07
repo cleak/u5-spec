@@ -449,7 +449,7 @@ the way.
 The rescue contract:
 
 1. Enter cutscene mode and suppress ordinary map play.
-2. Print the unending-darkness beat, then dissolve the map viewport out to
+2. Wait ten BIOS ticks, print the unending-darkness beat, then dissolve the map viewport out to
    black. This happens before clearing terrain or temporary-object scratch
    state and before building the refuge tableau.
 3. Clear terrain and temporary-object scratch state for the cinematic.
@@ -476,11 +476,21 @@ The rescue contract:
 
 The exact visible tableau between the two rectangle dissolves is:
 
+Before the first envelope, the refuge narration has three fragments: print
+the first, wait fourteen BIOS ticks, print the second, wait twenty-eight
+ticks, then print the third. Together with the ten-tick wait before the
+darkness beat, this requests **52 BIOS ticks** before the audio sequence,
+nominally about 2.86 seconds plus viewport-dissolve, text and redraw work.
+Timer phase affects the actual duration of each separate wait. None of
+these multi-tick requests is removed by the shared wait's one-tick
+slow-machine shortcut. There is no fixed 4.8-second tableau delay.
+
 1. After the first dissolve-to-black and the refuge narration, install the
    party-on-foot actor at cell `(5,5)` and redraw. Run the six software
    envelopes in the table below. They are PC-speaker audio only and change no
    pixels.
-2. Temporarily suppress an actor at `(2,7)`, clear that underlying cell, and
+2. Print the next narrative fragment and wait six BIOS ticks. Temporarily
+   suppress an actor at `(2,7)`, clear that underlying cell, and
    reveal Guardian image `0x5E` there with the blocking 256-pixel cell reveal.
    Commit `0x5E` as terrain, suppress the temporary actor again, redraw, then
    wait four BIOS ticks without changing text or pixels.
@@ -531,6 +541,16 @@ phase/comparison recurrence and iteration count. The muted arm omits the gate
 comparison and speaker-control traffic, so it remains blocking but is about
 23 percent faster. The full six-row sequence is approximately 11.18 seconds
 audible or 8.66 seconds muted on the reference machine.
+
+Those are static model estimates. The shorter audible burst reported in
+issue #220 remains unreconciled with the recording boundary and pitch
+samples; see `audio.md` Section 8.6.2. The full scene has two Guardian
+reveals and fourteen requested BIOS ticks between the last envelope and
+the thunder flashes, in addition to text/redraw work. A recording must
+continue through that interval to test whether the flashes are audible.
+The timing boundaries and unchanged six-row recipe were rechecked in
+private analysis under `u5-decomp/notes/` and
+`u5-decomp/functions/BLCKTHRN_OVL/`.
 
 **Retraction.** Earlier revisions called the six-entry software-envelope loop
 a timed scene animation. It is audio only; the visible rescue animation is the

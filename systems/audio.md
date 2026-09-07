@@ -1195,6 +1195,29 @@ so a known Word spoken at the wrong place is still audible and visible. A
 successful ruined-shrine restoration invokes the shared effect again at its
 own success boundary.
 
+**Reported EGA measurement (2026-09-07, issue #219).** Two DOSBox Staging
+0.82.2 recordings of a recognized Word spoken away from its seal measured
+**0.859 and 0.860 seconds**, with a silent four-second control in the same
+overworld scene. Approximately **0.86 seconds per invocation** is therefore
+an observed target for that emulator setup. Dividing by 1856 gives about
+**463 microseconds per band on average**; it does not establish uniform
+spacing of individual bands. The report does not specify CPU/core/cycle
+settings, and this is not a measurement on period reference hardware.
+
+Every caller uses the same fixed sweep geometry and band count, without a
+caller-selected delay. Under the same display driver and execution settings,
+the measurement is applicable to the shared effect at shrine restoration,
+Shadowlord destruction and the other callers too; their surrounding narration,
+redraws and waits are additional. Equal duration across EGA, CGA, Hercules and
+Tandy is **not established**: drawing work controls the timing and uses the
+selected driver. The calibrated audio-wait unit does not determine this
+effect's per-band time.
+
+Source provenance: the measurement is reported in
+[issue #219](https://github.com/cleak/u5-spec/issues/219); shared workload and
+caller scope were rechecked in private analysis under `u5-decomp/notes/`
+and `u5-decomp/functions/ULTIMA_EXE/`.
+
 #### 8.4.1 The sceptre-reclaimed sting
 
 Reclaiming the Sceptre of Lord British by entering the Shadow Lord fight while
@@ -1492,6 +1515,28 @@ remains blocking but contracts from approximately 11.18 seconds audible to
 8.66 seconds muted on the reference machine. `blackthorn.md` Section 7 owns
 the surrounding visual, narration, restoration, and scene-handoff order.
 
+These totals are static timing estimates, not measured rescue durations.
+**Capture reconciliation remains open (#220):** a DOSBox report gives an
+8.491-second audible burst beginning at 32.82 seconds in an approximately
+forty-second recording. The exact file length and completion of the final
+rows are not supplied. The last reported pitch sample is near the fourth
+row's pitch, so the samples alone do not establish completion of all six.
+An interpretation assigning 8.491 seconds to all 260,000 iterations would
+also predict a first-row gate pitch near 2.06 kHz, whereas the report gives
+about 1.50 kHz. A uniform shortening of this or every software-envelope
+recipe is therefore not established. A full recording through thunder and
+the castle handoff, with CPU/core/cycle settings and row boundaries, is
+needed to reconcile the observation with the model.
+
+The surrounding silent work is separate: three BIOS waits totaling 52 ticks
+precede the sequence, alongside the first viewport dissolve and tableau
+work. After the sequence, narration and a six-tick wait precede the two
+Guardian reveals; each reveal has a redraw and four-tick wait. Only then
+does the thunder line introduce two consecutive major flashes. There is no
+special rescue-origin gate suppressing those two calls. `blackthorn.md`
+Section 7.1 specifies these boundaries; the reported 4.8-second prelude is
+not a fixed envelope delay.
+
 ### 8.7 Endgame
 
 The absorption-to-tableau sequence has audible steps before any box dialogue:
@@ -1741,6 +1786,9 @@ cycle-accurate emulator. What is exact and what is approximate splits cleanly:
 
 An implementation may vary any duration below within its stated band. It must
 not vary the counts.
+
+The raster-paced major flash has a separately reported EGA measurement of
+approximately 0.86 seconds in Section 8.4; it is not derived from this anchor.
 
 ### 10.1 Blocking tones and direct calibrated waits
 
