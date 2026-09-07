@@ -159,11 +159,14 @@ combat-only and dungeon-only spells.
 
 ## 5. Spell Table
 
+Awaken's former automatic first-Sleeping-member description is withdrawn:
+it uses the selected-member prompt and Sleeping-status gate (R409).
+
 | ID | Code | Rune-Name | Common Name | C | Recipe | Allowed | Category |
 |---:|:---:|---|---|:-:|---|:---:|---|
 | 0 | `IL` | In Lor | Light | 1 | Sulfur Ash | D/I/O | utility |
 | 1 | `GP` | Grav Por | Magic Missile | 1 | Sulfur Ash + Black Pearl | C | damage; single target, raw roll 1..16 before target defense |
-| 2 | `AZ` | An Zu | Awaken | 1 | Ginseng + Garlic | C/D/I/O | healing; wakes the first Sleeping party member found in roster order |
+| 2 | `AZ` | An Zu | Awaken | 1 | Ginseng + Garlic | C/D/I/O | healing; prompts for one member and changes that member from Sleeping to Good; no appended success line |
 | 3 | `AN` | An Nox | Cure | 1 | Ginseng + Garlic | C/D/I/O | healing; selected-member Poisoned-to-Good status gate |
 | 4 | `M` | Mani | Heal | 1 | Ginseng + Spider Silk | C/D/I/O | healing; selected-member HP add from halved 0..60 roll with minimum 1, skips only Dead targets, clamps at maximum HP |
 | 5 | `AY` | An Ylem | Vanish | 1 | Garlic + Blood Moss | C/I | utility; directed tile helper, clears a removable-object tile to the shared cleared-cell tile `0x44` and prints `POOF!`; works on combat-arena terrain too |

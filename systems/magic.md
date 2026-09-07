@@ -81,11 +81,14 @@ The forty-eight spells are organised into eight circles of six spells each. The 
 
 The full table:
 
+Awaken's earlier first-Sleeping-member summary is withdrawn; the player
+selects its target through `On who: ` (R409).
+
 | Circle | Spell name (runes)        | Common name        | Effect summary                                            |
 |:------:|---------------------------|--------------------|-----------------------------------------------------------|
 | 1      | In Lor                    | Light               | Set the light-spell counter to 100 units.                   |
 | 1      | Grav Por                  | Magic Missile       | Single-target combat attack: roll 1..16, then target defense. |
-| 1      | An Zu                     | Awaken              | Wake the first Sleeping party member found in roster order. |
+| 1      | An Zu                     | Awaken              | Prompt for one party member; wake that member only if Sleeping (R409). |
 | 1      | An Nox                    | Cure                | Cure Poisoned status on a selected party member.            |
 | 1      | Mani                      | Heal                | Restore moderate HP to a party member.                     |
 | 1      | An Ylem                   | Vanish              | Remove or vanish an object/effect.                         |
@@ -499,7 +502,37 @@ ordinary failure message. No random displacement, retry budget, active-object
 occupancy check, vehicle-specific refusal, or generic movement passability
 query is part of the non-combat Blink path.
 
-**Healing effects.** Heal, Great Heal, Cure, Awaken, and Resurrect. These read party-member character records, modify HP / status / mana fields, and update the displayed stats. Most healing endpoints accept a target party-member slot, asked separately or supplied by the caller. Awaken is the exception: it scans the party roster in order, changes the first Sleeping member it finds back to Good status, plays the common success effect, marks the stats display dirty, and stops. If no Sleeping member is found, it leaves the roster unchanged and returns failure to the dispatcher. Cure prompts for a party member and succeeds only when that member is Poisoned; on success it changes the member back to Good, plays the same success effect, and marks stats dirty. A non-Poisoned Cure target is left unchanged and fails the effect gate. Resurrection only succeeds on a target whose status is Dead and writes back Good on success.
+**Healing effects.** Heal, Great Heal, Cure, Awaken, and Resurrect read
+party-member records, modify HP/status fields and update the displayed stats.
+Awaken and Cure both ask **`On who: `**, echo the chosen member's name and
+complete the row through the shared target prompt. Awaken changes that member
+from Sleeping to Good; a target with any other status fails. In combat it
+also wakes the matching combat descriptor for that selected member. Cure
+changes only a Poisoned target to Good; any other status fails. Both accepted
+effects play their presentation and mark stats dirty. Cancelling either
+target prompt adds no effect or generic result after `On who: None!`.
+Resurrection succeeds only on a Dead target and writes Good on success.
+The former claim that Awaken automatically chooses the first Sleeping roster
+member, without a target prompt, is withdrawn (R409).
+
+**Result text for the cases raised in issue #225.** These are the explicit
+applications of Section 5.1, after the usual cast/name/target exchanges:
+
+| Effect | Accepted result |
+|---|---|
+| Awaken, An Zu | No result message; no member-number sentence |
+| Cure, An Nox | `Success!\n`; no `Cured` or `Poison cured!` line |
+| Create Food, In Xen Mani | `Success!\n`; no created-food or remaining-stock count |
+| Invisibility, Sanct Lor | `Success!\n`; no `Invisibility!` banner |
+| In Bet Xen, the insect-swarm spell | Its combat effect followed by `Success!\n`; this is not the Invisibility spell |
+
+An ordinary effect failure still prints `Failed!\n`. If the initial caster
+selection finds nobody able to act, its existing feedback is `None!\n`,
+with no `Player: ` prefix in that zero-candidate case and no additional
+`Nobody can cast!` sentence; see `commands.md` Section 5.8. This precedes
+the spell-name and target prompts. The short spell result words include
+their trailing line feeds; potion-specific messages are a different table
+in `inventory.md` Section 7.2.
 
 The ordinary Heal endpoint is a small, selected-member HP recovery helper. It
 skips only Dead targets; every other status remains eligible for the HP add, and
@@ -1037,7 +1070,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 |---|---|---|
 | Light counter | In Lor, Vas Lor | Set the shared light-spell counter to 100 or 255, then return through the common cast-success path. |
 | Active-target attack wrapper | Grav Por, Vas Flam | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage and Vas Flam rolls 1..30; both subtract target defense before the shared damage/status path. |
-| Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu scans the roster and wakes the first Sleeping member to Good status; it has no selected-member prompt. An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires exactly Dead status - every other status, Ashes included, is refused by that one equality test, and no Ashes-specific check exists - changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
+| Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu prompts for one member and wakes that member only if Sleeping; the former no-prompt/first-sleeper claim is withdrawn (R409). An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires exactly Dead status - every other status, Ashes included, is refused by that one equality test, and no Ashes-specific check exists - changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
 | Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates to the arena-field helper. Player combat C-Cast uses the arena cursor followed by the ordinary projectile/impact resolver. Combat marker placement requires a confirmed impact cell but no Fire/Sleep/Energy random acceptance gate. The helper separately reports the first eligible descriptor at the impact coordinate; that placement-time result is not the later contact target. Contact runs after a current actor's dispatch returns, targets that same actor, and skips only its linked renderer record while looking for another colocated marker. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Sleep applies its status result without a hook-local draw. Energy blocks movement and has no contact-result arm. Contact does not consume markers, which persist until combat exit restores the pre-combat active-object table. |
 | Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock/trap bit on a co-located kind-1 chest object — which in combat includes the chest a dying monster drops, making Open's success case reachable in every arena — and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
 | Field removal helper | An Grav | Uses a separate Dispel Field path. Dungeon scenes inspect the faced adjacent live cell and turn recognized field cells back into open/visited-live-cell state while preserving only the visit marker. Combat/non-dungeon spell scenes use the shared direction prompt and remove a matching active-object field marker at the cached target coordinate. Failure leaves the map image or active-object table unchanged. |
@@ -1371,8 +1404,8 @@ The behaviour described here was derived by reading the private function and for
   mixing pause is presentation only and advances no clock, and that the charge
   cap is an add-then-clamp rather than a refusal — derived from
   private analysis in `u5-decomp/notes/`.
-- The low-circle status/HP restore helpers -- Awaken's first-Sleeping roster
-  scan, Cure's selected-member Poisoned gate, selected-member Heal's Dead-only
+- The low-circle status/HP restore helpers -- Awaken's selected-member Sleeping
+  gate (corrected in issue #225, R409), Cure's selected-member Poisoned gate, selected-member Heal's Dead-only
   skip, small random HP recovery, maximum-HP clamp, status preservation,
   Great Heal's dungeon combat-active refusal, and stats-redraw dirty marking --
   are derived from

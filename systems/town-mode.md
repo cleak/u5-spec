@@ -666,6 +666,12 @@ fails this save, and the failure chance is `(29 - Dexterity) / 30` otherwise.
 Each eligible slot rolls independently, so several members can be poisoned in
 the same turn, and the messages appear in slot order.
 
+Each failed save prints exactly `Poisoned!\n`, once for that member, with
+no name, number or gas-specific lead-in. Thus several failures repeat the
+same line. Skipped members and successful saves add no text. Source
+provenance: fresh terrain-response and functional-literal trace under
+`u5-decomp/functions/TOWN_OVL/` and `u5-decomp/notes/`, issue #225.
+
 The predicate has no further conditions, and the list of ways it can fail to
 fire is short and complete: the tile under the party is not `0x04`; the party's
 transport marker is anything other than on-foot `0x1C`, which is how every

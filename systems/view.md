@@ -70,7 +70,7 @@ per-map object case wins over the sign case when both would match.
 | Order | Predicate | Result |
 |---:|---|---|
 | 1 | Preflight visibility/reach gate refuses | Abort silently. No prompt output, no description, no state change. |
-| 2 | Live tile `0x29` (the crystal-sphere tile) | Death-vision case. Prompts for a party member; cancelling returns with nothing printed. Otherwise rolls `1..30` against that member's Intelligence as described below. Nothing else in this table is consulted. |
+| 2 | Live tile `0x29` (the crystal-sphere tile) | Death-vision case. Uses the shared conditional acting-member selector; an abort retains that selector's feedback but adds no vision result. Otherwise rolls `1..30` against the selected member's Intelligence as described below. Nothing else in this table is consulted. |
 | 3 | *(the shared "thou dost see" preamble is printed here)* | Applies to rows 4, 5 and 6 alike. |
 | 4 | A per-map object entry matches the target coordinate and active floor | Object description from the upper `LOOK2.DAT` object-description domain. |
 | 5 | Live tile `0x89`, `0x8A`, `0xA0`, `0xA4` or `0xF8` | Sign/poster path: emit a line break, then render the sign or poster (including the fixed Yew wanted-poster exception described below). |
@@ -186,12 +186,36 @@ Special LOOKOBJ look cases include:
   placed one cell east of the well caller's X coordinate at the caller's Y and
   floor, with the first auxiliary field cleared. There is no per-word vehicle
   mapping.
-- **Death-vision tile** (live tile `0x29`, the crystal-sphere tile). Prompts for a party member and rolls `1..30` against
-  that member's Intelligence. If Intelligence is greater than the roll, the
-  command reports a strange vision and paints the local thirty-two-by-thirty-
-  two view overlay. If the roll is greater than or equal to Intelligence, it
-  reports the death-vision line and prints the selected member number; it does
-  not paint the overlay or change party state.
+- **Death-vision tile** (live tile `0x29`, the crystal-sphere tile). Uses the
+  conditional acting-member selection of `commands.md` Section 5.8, then
+  rolls `1..30` against that member's Intelligence. If Intelligence is greater
+  than the roll, print `Strange vision!\n` and paint the local
+  thirty-two-by-thirty-two view overlay. Otherwise print `Death vision!\n`
+  and apply **one HP of damage** to that member with the ordinary hit feedback
+  and stats redraw. HP reaching zero sets the member Dead and clears an
+  active-member override naming that member. No member number or name is
+  appended, and this damage branch does not paint the view overlay.
+  The earlier member-number/no-state-change description and blanket silent
+  cancellation claim are withdrawn (R408).
+
+**Wishing-well text.** After the ordinary Look preamble, the handler prints
+`a well.\n\nDrop a coin?`. Its Y/N answer is appended immediately as
+`Yes\n` or `No\n`, with no inserted space after the question mark. Choosing
+No returns immediately. Yes with no gold also returns immediately, adding no
+no-money or no-effect line. With gold, print `\nThy wish?\n`, spend one
+coin and open the shared twelve-character text input.
+
+| Wish outcome | Completion after the input |
+|---|---|
+| Empty wish | `Nothing\n` |
+| Nonempty unmatched wish, or matching wish in an ineligible scene | `\nNo effect...\n` |
+| Matching wish in a granting scene | `\nPoof!\n`, then the sound/object creation |
+
+These completions do not name the horse. The coin prompt accepts Y or N;
+other keys continue waiting. `\n` above denotes a literal line feed.
+Source provenance: fresh well, vision, acting-member and damage-helper
+traces under `u5-decomp/functions/LOOKOBJ_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, issue #225.
 
 Looking at an NPC or transient active object can resolve through the active
 object table to the terrain underneath. Creature-specific conversation and

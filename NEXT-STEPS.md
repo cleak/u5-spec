@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #225 completion.** Remaining spell, guard, well, vision,
+gas and hidden-door messages are specified. R408 corrects Death vision to
+one HP of damage, including lethal consequences; R409 corrects Awaken to
+an explicit selected-member prompt. The spell-completion table from #222
+already settled the requested generic success words; the new text maps each
+reported case and distinguishes potion messages. No new capture was taken.
+
 **2026-09-07, issue #225 first tranche.** Inventory Sections 4.5/5.2/7.1/7.2
 now give the item-specific readied glyphs, Ready refusals, Use family echoes,
 utility results and potion messages, including silent outcomes and omitted

@@ -673,6 +673,24 @@ survivors. The demanded amount is printed in the line. On a yes, and only if the
 party can afford the full amount, that amount is subtracted; if the party cannot
 pay, the handler refuses, takes nothing, and proceeds to arrest.
 
+**Exact demand endings.** The two payment branches append
+`\n\nDost thou pay?\n\n:`; the accepted answer completes that colon row
+with `Yes\n` or `No!\n`. There is a blank row between the question and
+the answer row. The ordinary tribute demand has no surrounding quotation
+marks and formats the amount in a space-padded field of at least two digits.
+The Minoc and palace-password demands retain their quotation marks as
+described above.
+
+A No answer, insufficient gold after Yes, and a wrong palace password add
+**no separate guard-refusal sentence**. Palace contact without the worn
+Badge returns failure before printing a demand at all. The caller then
+owns arrest or capture under `town-mode.md` Section 14; the handler does
+not print either `The guard refuses thee. Surrender? (Y/N).` or a second
+refused-demand version of it. The existing arrest question is the quoted
+`Wilt thou come quietly?`, not a new `Surrender?` prompt. Source provenance:
+fresh demand/question traces under `u5-decomp/functions/TALK_OVL/` and
+`u5-decomp/notes/`, issue #225.
+
 None of the three branches touches karma, party status, quest flags, or the
 inventory. Gold is the entire direct state change inside the demand handler;
 arrest is the caller-owned consequence of any failed outcome. The demand can be

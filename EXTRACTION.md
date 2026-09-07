@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #225 - remaining messages and behavior corrections (2026-09-07)
+
+Fresh traces finish the spell, guard-demand, well/death-vision, town-poisoning
+and hidden-door message groups. The death-vision helper was misidentified:
+it applies one HP of damage rather than printing the member number (R408).
+Awaken's combat scan was also misread as target selection; it actually asks
+for one member and tests that member for Sleeping (R409). Owning systems
+and the spell catalog now agree. All requested groups are documented.
+
 ## Issue #225 - interface text, first tranche (2026-09-07)
 
 Fresh Ready/Use and command traces supply the readied-item selector mapping,
