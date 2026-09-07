@@ -448,6 +448,7 @@ empty row.
 | `E` off an entrance | `Enter what?` |
 | `H` in town, not on an inn bed | `Hole up- Only in bed!` on one row |
 | `I` with torches | `Ignite torch!` and nothing else |
+| `I` without torches | `Ignite torch!` ⏎ `None owned!` |
 | `M` then Escape | `Mix Reagents` ⏎ `[blank]` ⏎ `For what spell?` ⏎ `:` (free-text row) ⏎ `None!` |
 | `C` | `Cast...`, then the conditional acting-member exchange below, then the spell-name prompt if a member was selected. |
 | `R`, Return | `Ready...` ⏎ `[blank]` ⏎ `Player: Avatar` ⏎ `Item: ` with the equipment picker |
@@ -515,6 +516,21 @@ trusts the non-cancel slot indices it receives except for its explicit slot-zero
 leader check. Compatible implementations should therefore model New Order as a
 swap of the current active party records, not as a rewrite of a separate
 canonical companion-order table.
+
+**Exact text, including the no-op case.** After the `New Order` echo, print
+`\n\nSwap_`, then the first selected member's name. If it is a non-leader,
+print `\nwith_` and the second selected member's name. An accepted second
+selection appends `!\n` even when it names the same nonzero slot twice; there
+is no additional unchanged-slot message. Cancelling either selection appends
+`nobody!\n` to that prompt.
+
+Selecting the leader at either prompt first echoes that name normally, then
+prints `\n\n`, the leader's actual name again, and `_must lead!\n`.
+The `Avatar must lead!` row in Section 5.8 is the example for a leader named
+Avatar. Both leader-selection arms use this same wording; neither prints
+`The leader must remain first.`. Here `_` marks a literal space and `\n`
+a line feed. Source provenance: fresh New Order trace under
+`u5-decomp/functions/CMDS_OVL/` and `u5-decomp/notes/`, issue #225.
 
 ## 7. Search/Jimmy/Open/Get Tile Commands
 

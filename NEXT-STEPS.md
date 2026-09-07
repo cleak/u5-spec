@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #225 first tranche.** Inventory Sections 4.5/5.2/7.1/7.2
+now give the item-specific readied glyphs, Ready refusals, Use family echoes,
+utility results and potion messages, including silent outcomes and omitted
+unowned rows. Lighting, vehicles and commands publish Ignite/X-it/New Order
+text. Remaining issue groups are spell results, guard demand, wells/death
+vision, gas and secret-door Search. These are newly filled interface gaps.
+
 **2026-09-07, issues #219/#220.** Audio Section 8.4 now records the reported
 0.859/0.860-second EGA flash measurement with emulator/driver limits.
 Blackthorn Section 7.1 adds the rescue's explicit BIOS pauses: 10/14/28

@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #225 - interface text, first tranche (2026-09-07)
+
+Fresh Ready/Use and command traces supply the readied-item selector mapping,
+functional message literals, exact family/prompt boundaries and explicit
+silence cases in `systems/inventory.md`. The Use picker excludes unowned
+items; no per-item absence message is invented. Ignite, X-it and New Order
+text is added to their owning systems. Spell results, guard demand, wells,
+death vision, gas and secret-door Search remain in the issue queue.
+
 ## Issues #219/#220 - flash measurement and rescue pacing (2026-09-07)
 
 `systems/audio.md` Section 8.4 publishes the reported DOSBox EGA flash
