@@ -175,7 +175,6 @@ The earlier claim that the spell handlers print the scroll banners, and that
 a success without its own message necessarily prints `Success!`, is withdrawn
 (R402).
 
-
 The command then returns to the calling mode loop. Time advances by the standard per-mode increment. A spell cast costs one turn regardless of the spell's power.
 
 ### 5.1 Spell completion text versus scroll banners
@@ -211,7 +210,7 @@ remain visible even where no generic completion line is appended.
 | An Sanct | Dungeon chest handling prints its own chest-opened line, preceded by its disarmed line when applicable, and adds no generic completion line. A successful non-dungeon door/chest operation prints `Success!`. |
 | In Por | A successful combat relocation prints `Success!`; a successful non-combat landing adds no completion line. |
 | An Grav | A successful dungeon-cell removal prints `Field destroyed!` with no generic completion line; successful combat field removal prints `Success!`. |
-| Kal Xen Corp | A controlled Daemon placement prints `Success!`. The rebound prints `Oops...` with neither generic success nor failure; it still leaves the uncontrolled Daemon. No placement reports ordinary failure. |
+| Kal Xen Corp | A controlled Daemon placement prints `Success!`. The rebound prints `Oops...` with neither generic success nor failure; it still leaves the uncontrolled Daemon. Failure to place a Daemon reports `Failed!`. |
 
 This is not a blanket suppression of failure text. Helpers that report ordinary
 failure still receive `Failed!`; some also print their own diagnostic first.
