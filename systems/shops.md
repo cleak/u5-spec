@@ -5,9 +5,9 @@
 Ultima V's settled locations are populated by shopkeepers — weaponsmiths,
 armourers, magic-shop guildmasters, healers, herbalists, tavernkeepers,
 meal-counter operators, sages, innkeepers, horse traders, and ship merchants.
-Ordinary shop commerce is opened through Talk rather than through a dedicated shop command:
-when the player talks to a shop-capable resident, the Talk entry path invokes a
-*shop overlay* directly instead of loading a normal `.TLK` keyword
+Ordinary shop commerce is opened by explicit Talk or by a shopkeeper
+automatically engaging the adjacent party. Both use a shared dialogue
+dispatcher, which invokes a *shop overlay* directly instead of loading a normal `.TLK` keyword
 conversation. The overlay runs a small kind-specific menu loop until the player
 exits, then returns to the surrounding game mode. Horse-trader sales use the
 same Talk-entry shop dispatch family, but their handler is vehicle-oriented: it
@@ -41,12 +41,13 @@ This spec describes how a shop is entered from a Talk session, how the conversat
 
 ## 2. Triggering a shop
 
-Conversation is the entry path, but shopkeepers do not use the ordinary `.TLK`
-keyword-response byte runner. The player walks up to a shopkeeper NPC and
-presses `T` to Talk. The Talk entry gate sees resident shop metadata for that
-NPC, validates that the resident is currently a shop-capable target, and routes
-directly to the matching shop overlay. Ordinary named residents continue down
-the normal `.TLK` blob path described in `conversation.md`.
+The shared conversation dispatcher is the entry path; shopkeepers do not use
+the ordinary `.TLK` keyword-response runner. Explicit `T` reaches it after the
+direction, target and status-tile checks in `conversation.md` Section 2.
+A shopkeeper's conversation-contact event also reaches it automatically during
+a town schedule pass (`npc-schedules.md` Section 9), even if the player has
+issued no Talk command. Both routes use the same shop gates and overlay.
+Ordinary named residents use their normal `.TLK` dialogue instead.
 
 The shop-kind selector is resident conversation/shop state set by the
 shopkeeper's high-range `.NPC` dialog-index byte. For Talk-driven shops, that
@@ -64,19 +65,63 @@ A shopkeeper NPC carries one shop kind at a time — weaponsmith *or* tavernkeep
 multiple commerce types; players who want a weapon and a drink must talk to two
 different NPCs.
 
-Shop entry includes a transport gate, and it is the only precondition between
-the Talk dispatch and the shop arm. If the party's transport marker is either of
-the two horse values, the dispatcher prints a fixed two-line refusal and returns
-without entering any shop:
+**Open-for-business gate.** Both the NPC's cached reached waypoint and the
+waypoint selected by the current world hour must be **waypoint 1**. Waypoint
+numbers are zero-based (`0`, `1`, `2`); `npc-schedules.md` Section 3 defines
+the hour selection. The cache records arrival, not merely the latest hour's
+destination. Thus a keeper who has not reached the working period's waypoint
+can refuse even after opening time, and one still there after closing time
+also refuses. This applies to all eight shop triggers, including horse traders.
+There is no direct chair, counter, coordinate, or seated-sprite test and no
+separate fixed timetable for each shop kind.
+
+On failure the dispatcher emits one fixed refusal, with these line breaks:
+
+```text
+A merchant says:
+"Come see me at
+my shoppe, when
+it's open!"
+```
+
+There is a newline before the preamble and after the closing quote. The
+message is assembled from two fixed pieces joined after the space following
+`shoppe,`; no random variant or `SHOPPE.DAT` record is selected. For example,
+Britain's arms keeper's hour-selected waypoint is 1 during 06:00–10:59 and
+13:00–16:59, but 2 during 11:00–12:59. That explains the reported 10:00
+opening and 12:39 refusal when the reached waypoint is otherwise suitable.
+A chair at the latter destination is incidental to this gate.
+
+The earlier claim that transport was the only precondition between Talk
+dispatch and the shop arm is withdrawn (R398).
+
+**Transport gate.** After the schedule test passes, either horse transport
+marker causes the following fixed refusal, except for the horse-trader trigger:
 
 ```text
 A merchant says:
 "GET THAT HORSE OUT OF HERE!"
 ```
 
-The horse-trader trigger is exempt, so a mounted party can still buy another
-horse. No other transport state is blocked: on foot and magic carpet both pass,
-and the watercraft markers cannot occur in a scene that has shopkeepers.
+The horse-trader exemption applies only to this transport check. The dispatcher
+does not reject other transport markers here; on foot and magic carpet pass.
+Schedule refusal takes precedence over horse refusal, and both occur before
+shop-specific setup, greeting selection or commerce input.
+
+**Contact and turn accounting.** On either entry route, the shared dispatcher
+first changes behavior 4 at the cached reached waypoint to behavior 1. This
+also applies to shopkeepers and happens before either shop refusal; it is a
+persisted schedule edit, not an alarm or a blanket exemption for shop dialogue.
+Explicit Talk, including either refusal, has the ordinary acted outcome and
+receives normal town clock/scheduler processing. Automatic entry is part of
+the triggering command's existing post-action pass and does not create an
+additional Talk command or schedule tick. Shop activities that explicitly
+advance time retain their own rules.
+
+Source provenance: fresh producer, shared-dispatcher and shop-gate traces in
+`u5-decomp/functions/NPC_OVL/`, `u5-decomp/functions/TALK_OVL/` and
+`u5-decomp/functions/TOWN_OVL/`; the reported Britain arms and inn captures
+in issues #214/#215 independently demonstrate automatic shop entry.
 
 Every Talk shop arm receives the same one-word caller context. Decoded
 member-sensitive price paths use it as the speaking party member's roster slot;

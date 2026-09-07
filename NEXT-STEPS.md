@@ -18,6 +18,16 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issues #214/#215.** Automatic shop contact and the shared
+shop-hours gate are now specified in `systems/shops.md` Section 2 and
+`systems/npc-schedules.md` Section 9.2, aligned with conversation and town mode.
+AI 4/5 request conversation, not an alarm; AI 6/7 route to arrest/conflict.
+Both reached and hour-selected waypoint must be 1 for any shop. R398-R400
+withdraw the missing-hours predicate, inverted event names and unconditional
+one-turn adjacency delay. Issue #216's conflicting Minoc guard observation
+still needs its exact target/runtime state reconciled; it is not settled by
+assuming explicit Talk ignores the reserved dialogue index.
+
 **2026-09-07, issue #223.** `systems/commands.md` Section 5.8 now qualifies
 Search and Cast's optional acting-member prompt, including zero/one/multiple
 eligible members and the existing overrides. Ready still prompts a one-member
