@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issues #219/#220.** Audio Section 8.4 now records the reported
+0.859/0.860-second EGA flash measurement with emulator/driver limits.
+Blackthorn Section 7.1 adds the rescue's explicit BIOS pauses: 10/14/28
+before the six envelopes and 6/4/4 before thunder. The shorter rescue burst
+and missing flashes still need a complete recording through the castle
+handoff; no shared envelope timing rescale is established. Both capture
+limitations are indexed in `OPEN-QUESTIONS.md`.
+
 **2026-09-07, issue #218.** Fresh tracing identifies the absorption pair as
 the ordinary combat-step sting followed by the action snap. The tableau's
 target-step helper runs two ticks, the same sting, then three ticks; it is
