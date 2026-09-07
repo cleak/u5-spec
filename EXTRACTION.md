@@ -6,6 +6,13 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #212 - dungeon tile colour restoration (2026-09-07)
+
+Fresh setup/teardown and caller traces establish both restoration mechanisms:
+discard/reload around corridor graphics, or an inverse swap when leaving with
+the ordinary atlas retained. `systems/display-driver-abi.md` Section 10 gives
+the lifetime, room-chain reuse and separation from combat's small restore.
+
 ## Issues #208/#209 - endgame dialogue and remap scope (2026-09-07)
 
 Fresh endgame branch/print traces correct the mandatory second-question and

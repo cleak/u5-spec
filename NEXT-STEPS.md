@@ -18,6 +18,12 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-07, issue #212.** Dungeon arena colour restoration now has an
+explicit lifetime in `systems/display-driver-abi.md` Section 10. Corridor
+return discards the transformed atlas; exiting with it still loaded reapplies
+the self-inverse swap. Consecutive rooms can share it. This fills the previous
+untraced lifecycle gap without withdrawing a published restoration contract.
+
 **2026-09-07, issues #208/#209.** The endgame asks its second box question
 only after a first No; either effective Yes still requires the saved box.
 Section 5 now includes the branch matrix and the fixed waiting lead-in plus
