@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issue #238 - shop outcome contracts (2026-09-07)
+
+All shop families now have functional resident outcome fragments and explicit
+asset-record selection/envelopes in shops Section 8.C, including silent
+input cases. Fresh traces also correct fixed guild/reagent bundles and pricing
+(R418), healer continuation (R419), and inn capacity/payment timing (R420).
+The issue's combat placeholder subset remains a separate command trace.
+
 ## Issue #239 - shrine prompt sequence (2026-09-07)
 
 Fresh tracing identifies the approach and kneeling records, typed-virtue test
