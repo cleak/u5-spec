@@ -278,7 +278,7 @@ Common recipes are:
 | Trap or failed reagent mix | 40 | 3000 | 100..500 Hz | 75 |
 | Ordinary damage presentation | 10 | 1600 | 100..2000 Hz | 160 |
 | Shared potion/wind lead, variant `v` | 800 | `8000 + 1600v` | 100..700 Hz | 10 through 26 for variants 0 through 8 |
-| Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; this is the live Blackthorn cinematic movement stinger specified in Section 8.6 |
+| Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; movement uses are in Section 7.5, Blackthorn in Section 8.6, and endgame in Section 8.7 |
 
 ### 5.4 Software envelope
 
@@ -967,6 +967,33 @@ matters:
   (`systems/time.md` Section 11). The census rows above now say so; the earlier
   rows had split the two pitches between the two sites.
 
+### 7.5 Movement stings
+
+The short two-part sting of Section 5.3 also belongs to ordinary movement.
+It is two random rumbles, each with step 1 and target 25: first within
+100..1000 Hz, then within 100..1500 Hz, separated by a 20-unit calibrated
+silent hold. Each part stops the speaker. The sound-state updates, frequency
+writes and holds still occur when muted; this recipe uses no gameplay PRNG.
+
+| Movement path | Sting boundary |
+|---|---|
+| Town-family directional command, exact on-foot marker `0x1C` or mounted horse `0x12..0x13` | One sting at movement-dispatch entry, before direction processing and destination acceptance. A blocked attempt still plays it before the separate refusal beep. |
+| Town-family mounted horse, normal successful in-map step | A second sting after the position changes; ordinary foot movement has no second sting. Exit and special transition paths do not imply this normal-commit call. |
+| Overworld directional command, the same foot/horse markers | The same initial sting before the attempt. A normal accepted horse step adds the second sting when the pre-loop special-underfoot latch permits the ordinary post-step effects. |
+| Combat directional step accepted inside the arena | One sting after both actor-position representations change, before the room-specific follow-up and subsequent committed-action absorption check. A rejected step skips this success sting and uses the refusal cue. |
+
+The top-down foot predicate is exact `0x1C`; the defensive on-foot marker
+`0x1D` does not select this call. Ships, skiffs and carpets do not select
+these top-down movement stings. First-person dungeon walking/turning remains
+outside this family. No periodic idle timer owns the town walking cue: a
+sequence of movement commands determines its cadence.
+
+The earlier successful-top-down-walking silence claim is withdrawn (R407).
+Source provenance: fresh movement dispatch and accepted-position traces in
+`u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/MAINOUT_OVL/` and
+`u5-decomp/functions/SJOG_OVL/`, with the shared rumble wrapper checked in
+`u5-decomp/functions/ULTIMA_EXE/` (issue #218).
+
 ## 8. Confirmed trigger inventory
 
 ### 8.1 Commands, inventory, and conversation
@@ -1467,19 +1494,60 @@ the surrounding visual, narration, restoration, and scene-handoff order.
 
 ### 8.7 Endgame
 
+The absorption-to-tableau sequence has audible steps before any box dialogue:
+
+1. A successful directional step onto the qualifying position first plays
+   the ordinary combat movement sting from Section 7.5.
+2. The accepted absorption effect prints its actor/narration, then plays the
+   action snap: forty frequency updates from 1200 through 1980 Hz in 20 Hz
+   increments, one calibrated unit per update, followed by a speaker stop.
+   Absorption can also follow another committed action, in which case the
+   preceding successful-step sting is absent.
+3. Each actual one-cell movement toward an endgame tableau target runs two
+   shared world-animation ticks, the short two-part sting from Section 5.3,
+   then three more shared world-animation ticks. An empty slot or an actor
+   already at its target emits no movement sting and requests none of these
+   five ticks. The animation-enable gate suppresses those tick pauses, not
+   the intervening sound call. Sound mute retains the sting's holds.
+
+Lord British's initial walk has five steps. The active party members then
+walk 4, 4, 4, 4, 2 and 4 steps respectively, in party order, for as many
+members as are present. Thus the introductory train contains **9, 13, 17,
+21, 23 or 27 stings for party sizes 1 through 6**. These cues do not depend
+on anyone being Dead. Each member also has a separate one-tick placement
+pause before walking. Later target-directed walks use the same cue; the
+refusal branch additionally runs this two-tick/sting/three-tick beat once
+after its initial leader-coordinate adjustment. The final random-jitter loop
+does not use the movement sting.
+
+The reported nine-burst train is consistent with a one-member tableau. Its
+roughly 275 ms spacing and occasional roughly 55 ms extension are consistent
+with five tick pauses per step and the extra member-placement tick. These
+are comparisons with the issue's capture, not a new wall-clock measurement
+or a universal fixed interval. The approximately 24 ms movement burst and
+39 ms absorption burst likewise fit the existing short-sting/action-snap
+models; neither requires a new software-envelope recipe.
+
 When a Dead party member is restored for the endgame tableau, the sequence
 announces the restoration, fills the gameplay rectangle once, runs software
 envelope `(1, 5000, 40000, 1, 8800)`, and redraws the full stats panel. It is a
 single blocking flourish per restored member.
 
 The later box/tableau presentation uses envelope
-`(1, 10000, 50000, 1, 5200)`. A two-part rumble call physically present after
-the certificate is unreachable behind the shipped terminal infinite loop and
-is not a live endgame trigger.
+`(1, 10000, 50000, 1, 5200)`. The two-part-sting helper located after the
+certificate's infinite loop cannot be reached by falling through that loop,
+but the movement and refusal paths call it directly. The earlier claim that
+it is not a live endgame trigger is withdrawn (R406).
 
 These are ending presentation effects. They do not create a reusable
 resurrection-service sound contract and do not make the cinematic roster
 changes durable.
+
+Source provenance: fresh absorption and movement traces in
+`u5-decomp/functions/SJOG_OVL/`, target-step and direct-tail callers in
+`u5-decomp/functions/ENDGAME_OVL/`, and pause/sting/sweep wrappers in
+`u5-decomp/functions/ULTIMA_EXE/`. No new live capture was taken; issue #218
+provides the independent burst observations and silence controls.
 
 ### 8.8 Combat command refused as inapplicable
 
@@ -1602,7 +1670,6 @@ baseline:
 
 - start/menu navigation and menu acceptance;
 - character-name entry and ordinary line editing;
-- successful top-down walking;
 - ordinary dungeon walking and turning;
 - generic successful commands;
 - generic active-object and crop pickup;
@@ -1649,6 +1716,8 @@ anything dispatched through the display drivers' own jump-table calling
 convention, and music playback.
 
 Specific handlers can still produce a listed effect after one of these actions.
+The earlier inclusion of successful top-down walking in this silence list is
+withdrawn; Section 7.5 specifies its movement stings (R407).
 For example, blocked top-down movement beeps, a dungeon redraw can land a wall
 droplet, and a command can commit a spell or trap. Those event-specific calls
 do not imply menu clicks, footsteps, key clicks, or a global success chime.
@@ -1858,7 +1927,7 @@ listed in `RETRACTIONS.md`.
 | Envelope cue before a summon | Monster summon on successful placement; player Summon on accepted placement. | Failed chance, coordinate, legality, or allocation gates - all silent. |
 | Wind-change sequence | The Wind Change spell (variant 2) and the Wind Change scroll (variant 1). See section 7.3. | The autonomous wind drift, which is silent on every path. The wind setter itself, which contains no sound call. |
 | Nothing at all, on a passed direction prompt | Blink and Vanish both return the shared cancelled sentinel, which matches neither epilogue branch. See section 8.3.2. | There is no Blink pass in combat: the scene gate takes an arm that never prompts. |
-| Blackthorn cinematic stinger | Every Blackthorn VM stinger-pause repetition and every animated movement step while per-step pauses are enabled. See Section 8.6 and `blackthorn.md` Section 6. | The unreachable post-certificate endgame call is a separate dormant site; its dormancy does not make the Blackthorn trigger dormant. |
+| Short two-part movement stinger | Top-down foot/horse movement and accepted combat steps under Section 7.5; Blackthorn VM stinger-pause repetitions and animated steps with per-step pauses enabled; endgame target steps and refusal staging under Section 8.7. | First-person dungeon walking. The final endgame random-jitter loop. Falling through the certificate's infinite loop never reaches the helper, but direct endgame movement calls do. |
 | Blackthorn rescue envelopes | One fixed six-row sequence after the refuge tableau first redraws the party actor. See Section 8.6.2 and `blackthorn.md` Section 7. | The Blackthorn VM movement scripts, which use the random-rumble stinger instead. No visual operation occurs inside the six-row loop. |
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |

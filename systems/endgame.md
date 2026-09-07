@@ -372,6 +372,8 @@ The refusal/missing-box branch uses the same initial party tableau setup, then
 changes the scene as follows:
 
 1. Slot 0's Y coordinate is decremented once.
+   Then run two world-animation ticks, the short two-part movement sting,
+   and three world-animation ticks (`systems/audio.md` Section 8.7).
 2. The script repeatedly steps slot 2 toward (8,6), slot 31 — Lord British —
    toward (4,1), and slot 0 toward (8,4) until all three have arrived.
 3. The terminal loop then jitters only slots 1, 3, 4, and 5. Slot 0, slot 2 and
@@ -491,8 +493,14 @@ endgame ramps drive it. Second, because the counter is the shared save-backed
 byte, these ramps write world state; an engine that keeps the endgame's copy
 separate will diverge from the original's save image.
 
-The step helper moves one cell per call and runs one display tick after each
-movement. It prefers the axis with greater remaining distance; equal remaining
+The step helper moves one cell per call, then runs two world-animation ticks,
+the short two-part rumble sting, and three more world-animation ticks.
+An empty actor or one already at its target returns without this beat.
+The animation gate suppresses the tick pauses but does not skip the sting;
+sound mute preserves the sting's holds. The earlier one-display-tick account
+is withdrawn (R406); `systems/audio.md` Section 8.7 owns the exact recipe,
+introductory step counts and freshly traced provenance.
+It prefers the axis with greater remaining distance; equal remaining
 distance chooses X movement. The caller loops until the current actor reaches
 its target before advancing to the next scripted actor or message beat.
 

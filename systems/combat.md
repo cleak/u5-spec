@@ -3033,10 +3033,17 @@ by the dead/removed bit, and at arena row `2`. It then reads the renderer's
 sixteen-byte-stride companion band at row `1` and the actor's arena X—the cell
 directly north of that actor—and accepts a byte whose family masks to
 `0x3C..0x3F`. It does not read the combat arena terrain grid. This predicate and
-the absorption effect consume no PRNG draw. On success it narrates the
-absorption, plays the effect, invalidates the current active-player selector,
+the absorption effect consume no gameplay-PRNG draw. On success it narrates the
+absorption and plays the forty-update rising action snap from 1200 through
+1980 Hz, with one calibrated unit per update. A successful directional step
+has already played its separate short two-part movement sting; absorption
+after another committed action need not have that preceding cue. The path
+then invalidates the current active-player selector,
 updates the affected slot through the shared combat effect helpers, and writes
 the shared combat-result marker consumed by dungeon room cleanup.
+
+`systems/audio.md` Sections 7.5 and 8.7 give the movement/absorption sound
+boundaries and fresh source provenance for issue #218.
 
 The distinction between origin and immediate input matters. In stock data,
 Doom's deepest room-id-fifteen arena supplies a special `0x3C` setup source in
