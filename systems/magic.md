@@ -536,6 +536,15 @@ applications of Section 5.1, after the usual cast/name/target exchanges:
 | Invisibility, Sanct Lor | `Success!\n`; no `Invisibility!` banner |
 | In Bet Xen, the insect-swarm spell | Its combat effect followed by `Success!\n`; this is not the Invisibility spell |
 
+Issue #231 reports no completion line for the invisibility spell. A fresh
+trace and isolated execution of the original spell effect through its shared
+completion produce effect 7 followed by `Success!\n`. The effect helper has
+no separate invisibility banner; that does not suppress the shared success
+line. The full-game capture mismatch remains open pending the original save,
+asset identity, typed spell and frames through the next input wait. Source
+provenance: `u5-decomp/functions/CAST_OVL/` and `u5-decomp/notes/`; the probe
+stubs presentation calls and is not a live DOSBox capture.
+
 An ordinary effect failure still prints `Failed!\n`. If the initial caster
 selection finds nobody able to act, its existing feedback is `None!\n`,
 with no `Player: ` prefix in that zero-candidate case and no additional

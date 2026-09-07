@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-07.
 
+## Issues #238/#231 - remaining combat text (2026-09-07)
+
+Combat command fragments and caller-specific sleep strings complete #238's
+text inventory. Get/Search/X-it and invisibility were checked with isolated
+original-routine emulation; their output remains contrary to #231's reported
+silences and is tracked as a capture reconciliation. Existing behavior is
+clarified without a new retraction.
+
 ## Issue #238 - shop outcome contracts (2026-09-07)
 
 All shop families now have functional resident outcome fragments and explicit

@@ -2456,6 +2456,62 @@ Whether NumLock is on in a given player's session is an environment fact, not a
 game fact; an engine should expose it as one.
 
 
+### 8.4 Exact command output and capture reconciliation
+
+These functional fragments complete the combat entries in issue #238.
+`\n` means a supplied line feed; normal wrapping still applies. Turn banners
+and the full/short retry distinction remain as specified in Section 8.1.
+
+| Input or result | Output |
+|---|---|
+| Space | `Pass\n` |
+| Unrecognized input | `What?\n` |
+| Ctrl-S | `Sound Off\n` when disabling sound, `Sound On\n` when enabling it |
+| Ctrl-B | `Buffer Off\n` or `Buffer On\n`, reflecting the new typeahead setting |
+| Digit 0 | `Set active plr:\nNone!\n` |
+| Valid digit 1–6 selection | `Set active plr:\n`, selected actor name, `\n` |
+| Invalid digit selection | `Set active plr:\nInvalid!\n` |
+| Escape refused by context | `Escape-Not here!\n` |
+| Escape refused while fight remains undecided | `Escape-Not yet!\n` |
+| Escape accepted | `Escape!`, with no trailing line feed from this handler |
+| Party Get / Search | `Get-` or `Search-`, then the shared cardinal-direction input |
+| X-it | `X-it what?\n`, followed by the refusal tones and a full retry |
+| Party Cast | `Cast...\n`, then the spell-name exchange if prerequisite gates pass |
+
+Digit selection remains subject to the input remapping in Section 8.3.
+There is no `Active player selected.` sentence, `Music toggled.` sentence,
+or `Quickness!` command result. Q is the Quit refusal, while the Quickness
+effect's automatic-action gate operates without such a message. Individual
+edge departure's `Escape!\n` is separate from the newline-free Escape-key
+cleanup result (Section 14).
+
+K prints `Klimb-` and resolves its current-cell ladder cases first. Up/Down
+ladder results are `Up!\n` / `Down!\n`; a dual ladder adds `U/D-` before
+its choice. The ordinary adjacent-climb branch waits for the cardinal input
+described in `systems/commands.md` Section 5.4: direction name and newline,
+or Space's `Pass\n`; Escape is ignored. A rejected adjacent target then
+adds `What?\n`. It does not immediately complete every K as `Klimb-What?`.
+
+For ordinary arena scene ids above `0x80`, C-Cast's acting-member lookup
+takes the current actor's party owner without printing `Player: `. The
+spell-name prompt follows directly after the cast echo and prerequisite gates.
+The lookup's exact-`0x80` boundary still uses the shared non-arena selection
+path; this statement does not widen its comparison.
+
+**Issue #231 capture mismatch remains open.** The reported absence of all
+G/S/X text conflicts with their original output calls. Isolated original-code
+probes emit Get-/Search- before their delegated input, and X-it plus its
+refusal tail before the sound. These probes establish emitted text, not its
+duration in a full-game frame sequence. Reconciliation needs the original
+save, canonical asset identity, exact input sequence and frames from command
+dispatch through the next input wait. Neither a new silent contract nor an
+unverified text-erasure explanation follows from the current evidence.
+
+Source provenance: fresh dispatch, input and output traces plus isolated
+original-routine emulation in `u5-decomp/functions/COMBAT_OVL/`,
+`u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/` (#231/#238).
+
 ## 9. Monster AI
 
 When the round walker dispatches a self-acting slot, the AI runs as a sequence
