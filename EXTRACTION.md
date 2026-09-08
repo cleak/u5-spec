@@ -6,6 +6,16 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #247 - spell narration and message boundaries (2026-09-08 UTC)
+
+Combat Section 11.1 adds explicit attack-spell and directed-effect caller
+contracts, Poison Wind's poison-helper narration and newline boundaries for
+blink, vanish and teleport. Magic Section 8 and the spell catalog carry
+R446's corrected Kill attack-wrapper binding; the previously attributed
+protected creature helper belongs to Polymorph. R447 corrects the remaining
+magic graze/miss wording. Thirty-one isolated original cases pass, with
+documented aiming, collision, eligibility and mutation boundaries.
+
 ## Issue #245 - Badge password input row (2026-09-08 UTC)
 
 Blackthorn Section 7a now specifies the colon-free input row after the

@@ -2671,10 +2671,12 @@ result `2..29` corresponds to two underlying values, and `R = 30` corresponds
 only to `U = 60`; the roll is intentionally not uniform.
 
 The shipped effects using this predicate are monster possession, Repel Undead,
-Charm, Kill/Slay Living, Cause Fear, directed Sleep, and Death Wind. Possession
+Charm, Polymorph, Cause Fear, directed Sleep, and Death Wind. Possession
 therefore compares the party target's Intelligence against the monster
 caster's endurance; a party-cast effect against a monster reverses those role
 sources. Every listed path treats a blocked result as effect failure.
+The earlier inclusion of Kill in this creature/effect predicate list is
+withdrawn (R446); Kill uses the attack hit check of Section 11.
 
 Tremor and Poison Wind use a different target-only gate. Each draws the same
 skewed `1..30` combat roll and accepts the target when the roll is greater than
@@ -3569,6 +3571,45 @@ place; `RETRACTIONS.md` R352 and R353 index them.
    monster's melee miss prints nothing and sounds nothing** - no newline, no
    name, no line, no tone - while a party member's melee miss prints one line.
 
+#### Spell callers of the result narrator
+
+Magic Missile, Fireball and Kill all use the shared aiming/attack family.
+On a resolved actor collision they run impact presentation, a newline, shared
+damage resolution and this result narrator. A surviving ordinary monster
+therefore gets its wound grade, a normal killed target gets `killed!`, and
+nonpositive damage gets `grazed!`; class-specific vanish and split outcomes
+retain the exceptions below. No spell-name announcement is inserted.
+
+Kill's spell binding is corrected in `systems/magic.md` Section 8 (R446): it
+uses an attack hit check and the instant-kill damage value, rather than the
+previously attributed protected creature-target helper. Magic Missile and
+Fireball force the attack hit check to succeed. Collision and geometry still
+matter: no resolved actor and no original aimed actor means no result text.
+A resolved miss at an aimed actor uses the cast-mode `Failed!` result.
+
+Accepted Sleep, Poison Wind, Death Wind and Flame Wind targets also reach
+this narrator after their effect. Sleep uses `slept!`; the damage winds use
+the ordinary damage/death results. On Poison Wind's **Good party target** arm,
+the poison helper itself prints `<target> is poisoned!` with a trailing
+newline and changes the status to Poisoned. The result narrator then stays
+silent, preventing a duplicate line. A non-Good party target or non-party
+target takes the poison helper's damage fallback and its corresponding
+result instead. The directed-effect application layer adds no separate
+spell-name announcement or leading newline before each target result.
+
+These are bounded caller claims. The general cast prompts, scene refusals,
+other spells' own text and scroll banners retain their separate contracts;
+the narration census is not an all-spells prohibition on announcements.
+
+Source provenance: fresh original caller, effect and name/dispatch traces in
+`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/COMSUBS_OVL/`,
+`u5-decomp/functions/COMBAT_OVL/` and `u5-decomp/notes/`, issue #247.
+Thirty-one isolated cases cover wrapper/narrator outcomes, attack hit checks,
+poison status, directed-effect branches, blink and Kill class admission.
+Aiming, geometry, eligibility and some effect mutations are controlled
+boundaries; this does not claim a fresh full-game capture or new final boss
+outcomes.
+
 #### The census
 
 `<target>` stands for the target's name: a party member's roster name field, or
@@ -3728,6 +3769,27 @@ software envelope, and `reappears!` / `disappears!` on the blink ability with
 `Attack-`, `Aim! `, `Nothing!`, `Thy sword hath shattered!` and
 `<name> passes out!` are unchanged.
 
+**Messages that leave a row open.** Each producer owns its explicit line
+feeds; returning from an ability or advancing to another actor does not
+itself append a message-window newline.
+
+| Producer | Exact text boundary |
+|---|---|
+| Blink disappearance | `\n<monster> disappears!`, no trailing newline |
+| Blink reappearance | `\n<monster> reappears!`, no trailing newline |
+| Vanish-on-death | `<monster> vanishes!`, no leading or trailing newline of its own; the ordinary landed-attack caller has already printed its hit newline |
+| Monster teleport | `<monster> teleports!\n`, no leading newline of its own and **with** a trailing newline |
+
+Blink consumes the automatic action and returns without a separator. The
+open message cursor remains after its exclamation mark until another producer
+prints, explicitly advances the line, or causes ordinary wrapping. A later
+blink starts with its own newline; teleport can continue an already-open row
+before ending it. Vanish's result suppresses the later `killed!` line; any
+release/faint follow-up still owns its own text, as specified in Section 6.3.
+These events must not be converted wholesale to append-line operations.
+Source provenance: fresh original blink/driver execution and teleport/vanish
+string consumers in the same private analysis directories, issue #247.
+
 Note that `Failed!` is not unique to combat: the shipped data image holds four
 separate copies of that literal, and three of them belong to spell and dungeon
 paths - two spell load sites and one dungeon load site. Only the combat copy is
@@ -3781,8 +3843,8 @@ installer's uninstaller is not game code and was excluded.
   axis that setting moves - pitch band, duration or loudness - was not
   established, so no engine should infer that one burst is louder or shorter
   than the other.
-- **Not covered:** the spell overlays' own presentation around the shared result
-  narrator, the standing-hazard tier's trigger conditions, and the projectile
+- **Not covered:** spell-overlay presentation beyond the named attack and
+  directed-effect families now specified above, the standing-hazard tier's trigger conditions, and the projectile
   pass that is one of the three ways a monster's ranged miss stays silent. The
   residue "what a player can usefully do with a controlled monster once the
   prompt hands them one" is now largely closed by Section 8: the whole command
@@ -3909,7 +3971,7 @@ two readers - the one that prints the graze line, and the wider test that
 suppresses the rest of the narration and the stats-panel redraw. See Section
 11.1 and `RETRACTIONS.md` R352.)*
 
-**Damage modifiers.** Negative damage is clamped to zero and the shared result marker's graze bit is raised, so the narration reads `<target> grazed!` and every later result line is suppressed (Section 11.1). *(**Corrected.** This sentence previously called that bit an "attack missed" status flag and said "the narration reads as a miss"; that is withdrawn - `RETRACTIONS.md` R352.)* A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill/Slay Living reaches its death result only after the separate shared resistance predicate permits it and does not use that defense subtraction. For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat". Body armour enters neither the to-hit score nor the damage roll, but the **readied item id is a real to-hit input**: exactly five ids - Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer - switch the attacker term from Dexterity to Strength, and that is the only equipment input the to-hit score has (Section 11). *(An earlier revision of this sentence left the point open, saying "the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced". Section 11 now enumerates every character-record field the score reads, so that hedge is resolved rather than withdrawn.)* The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
+**Damage modifiers.** Negative damage is clamped to zero and the shared result marker's graze bit is raised, so the narration reads `<target> grazed!` and every later result line is suppressed (Section 11.1). *(**Corrected.** This sentence previously called that bit an "attack missed" status flag and said "the narration reads as a miss"; that is withdrawn - `RETRACTIONS.md` R352.)* A magic value (decimal 99) is treated as **instant kill** — bypass HP, force the death path; used for between-round death finalisation and one-shot-kill spell effects. Magic Missile and Fireball reach this handler only after the spell-damage wrapper rolls raw damage (`1..16` and `1..30`, respectively) and subtracts a random defense roll based on the target's combat defense; Kill uses its ordinary attack hit check and supplies the instant-kill damage value without that defense subtraction. The earlier separate creature-resistance attribution is withdrawn (R446). For party-member defenders, the damage roll reads the cached combat-defense byte in the character record at offset `+0x18`; factory-seed records carry value `7`. This is not one of the stat bytes earlier in the record — Strength `+0x0C`, Dexterity `+0x0D`, Intelligence `+0x0E`. The original game also defines a separate per-item defence contribution keyed by readied equipment, plus a small bonus that Protection's shared `P` tag was meant to add on top of it, but neither ever applies: every one of the per-item accumulations is guarded by a comparison that is tautologically true and therefore always skipped, and the resulting total is never consumed — one caller discards it, and the other is reachable only through an attribute-selector arm that no call site in the game ever selects. No traced combat path recomputes the character-defense byte from readied armour. Treat the intended contribution as an original-game defect and a deliberate decision point for a port; do *not* generalise it into "worn equipment has no effect on combat". Body armour enters neither the to-hit score nor the damage roll, but the **readied item id is a real to-hit input**: exactly five ids - Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer - switch the attacker term from Dexterity to Strength, and that is the only equipment input the to-hit score has (Section 11). *(An earlier revision of this sentence left the point open, saying "the surviving to-hit computation reads other character-record fields whose relationship to equipment has not been traced". Section 11 now enumerates every character-record field the score reads, so that hedge is resolved rather than withdrawn.)* The target's per-class flags are consulted: a "halve damage" flag halves *physical* (non-magical) damage; an "immune to physical" flag zeroes it.
 
 **Monster status/effect attacks.** The attack resolver checks monster-only
 status branches before ordinary melee damage. Classes with the poison/status
@@ -4331,7 +4393,7 @@ without independent behavioral consumers remain opaque metadata.
   victory bonus. Gold/food from a rewritten body-like slot is obtained only
   through the later Search/Get body rules in `containers.md`.
 
-- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, target-only combat-weight acceptance (`roll >= weight`), 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16 and Fireball rolls 1..30. Kill/Slay Living uses a creature target and the shared resistance predicate before applying its death result. The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep runs the shared resistance predicate before applying party sleep status or descriptor byte 2 bit `0x08` for non-party targets. Poison Wind uses the distinct target-only combat-weight gate before poison status. Death Wind runs the shared resistance predicate before using the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
+- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, target-only combat-weight acceptance (`roll >= weight`), 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16 and Fireball rolls 1..30. Kill uses the same aiming/attack family, with an attack hit check before its instant-kill damage value; the former creature-target attribution is withdrawn (R446). The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep runs the shared resistance predicate before applying party sleep status or descriptor byte 2 bit `0x08` for non-party targets. Poison Wind uses the distinct target-only combat-weight gate before poison status. Death Wind runs the shared resistance predicate before using the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
 
 - **Status narration.** "Sleep!", "Poison!", "Charm!" lines are not produced by the damage-and-status handler. They live in separate per-effect handlers (one per status). The exact wording and trigger mechanics belong in those handlers' specs.
 

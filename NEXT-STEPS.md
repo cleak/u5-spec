@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #247 spell narration.** Combat Section 11.1 now joins
+Missile/Fireball/Kill and directed effects to the shared result narrator,
+specifies Poison Wind's named poison-status line, and compares blink,
+vanish and teleport newline boundaries. Thirty-one isolated original cases
+support the contract. R446 corrects the old Kill/Polymorph helper confusion
+across magic, combat and the spell catalog; R447 removes magic8's stale
+negative-damage miss wording. Kill's later class-specific death rules remain.
+
 **2026-09-08 UTC, #245 Badge-password input.** R445 corrects Blackthorn
 Section 7a: its Your-response question ends with a newline and input starts
 at column zero without a colon. Section 4.1 explicitly retains the audience's
