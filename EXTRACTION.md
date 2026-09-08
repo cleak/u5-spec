@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - arms listing order and input follow-up (2026-09-08 UTC)
+
+Shops Section 8.1 corrects stock-call placement after the listing (R427),
+publishes the three-period row separator and clarifies repeated-list output.
+Existing post-item punctuation and Sell keys remain unchanged. Six Buy flow
+cases, 256 normalized Sell-input cases and fourteen command-normalization
+cases pass against original routines. The contrary live Sell-input report
+is tracked as a capture discrepancy; no full-game reproduction was performed.
+
 ## Issue #243 - saved NPC band accounting (2026-09-08 UTC)
 
 The complete map published for #217 remains unchanged. Saved-gam Section

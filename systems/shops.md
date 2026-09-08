@@ -1292,8 +1292,9 @@ leave the conversation alone.
 
 After a randomised greeting ("Hail, friend! Wouldst thou Buy or Sell?"), the player presses one of three keys:
 
-- `B` (Buy) — the overlay renders the shop's "We have:" line followed by an
-  item listing built from the current shop's eight-entry stock table. Slots are
+- `B` (Buy) — the shop prints an affirmation and stock introduction, then an
+  item listing and a stock-call question. The listing uses the current shop's
+  eight-entry stock table. Slots are
   assigned to menu letters `a` through `h`, but the row ends early at the
   `0xFF` terminator. The player picks a letter; the overlay confirms, refuses
   if the corresponding party inventory counter is already capped, runs the
@@ -1351,13 +1352,16 @@ equipment item id:
 | `8`, `15`, `35`, `39`, `40`, `41`, `47` | no arms-buy quote record in the traced selector; these ids are not present in the nine stock rows |
 
 The stock list itself is rendered from the row above. Each visible slot prints
-its menu letter followed by the item's display name. The display name is the
+its lowercase menu letter, exactly three ASCII full stops, then the item's
+display name, with no intervening spaces. The display name is the
 canonical equipment name from `catalogs/item-list.md`, *except* that a
 canonical name of thirteen characters or more is replaced by that item's
 shorter panel label, so the entry fits the shop's list column. The affected
 equipment ids and their shorter labels are published in `catalogs/item-list.md`
-Section 5.1.2. The list is preceded by a heading line and one of four resident
-"what we have" call lines chosen with a uniform `0..3` draw:
+Section 5.1.2. Each row ends at the next line, adding a line feed when the
+name has not already reached a line boundary. After the final row, another
+line feed leaves a blank line before one of four resident stock-call questions,
+chosen with a fresh uniform `0..3` draw:
 
 | Draw | Stock-call line |
 |---:|---|
@@ -1365,6 +1369,20 @@ Section 5.1.2. The list is preceded by a heading line and one of four resident
 | 1 | `Which wouldst thou like to see?` |
 | 2 | `What is thine interest?` |
 | 3 | `Which would ye see?` |
+
+The question is followed immediately by a closing double quote and one space.
+The earlier placement of this question before the item list is withdrawn (R427).
+
+On the initial `B`, the affirmation and stock introduction come from the two
+independent pools in Section 8.B. For example, their choices can produce
+`"But of course!\nThou canst buy:` before the listing's two leading line feeds.
+This is a combination of two selections, not a fixed two-line heading.
+Every later listing also starts with two line feeds, but does not repeat
+either of these initial selections. A purchase, decline, or carry-cap refusal
+prints the post-item prompt and then the whole listing with a new stock-call
+draw; the next valid item letter starts another quote without another `B`.
+Invalid listing keys keep the existing text and consume no new draw. Space
+and Escape at the listing end the visit through the ordinary farewell.
 
 After the item description, the buy path chooses one of four literal
 confirmation prompts uniformly: `Wouldst thou buy one?`, `Wilt thou take it?`,
@@ -1398,9 +1416,16 @@ A successful purchase debits the adjusted price, applies
 the normal post-transaction surcharge, increments the carried equipment counter
 or caps arrows/quarrels at `99`, and prints the fixed success line `Sold!`.
 There is no separate successful-purchase item-name template. It then prints the
-post-item prompt `"Anything else,` followed by `milady?` when the speaking
+post-item prompt `"Anything else,\n` followed by `milady?` when the speaking
 member's gender field is the female value and `sir?` otherwise, or `then?` when
-no transaction has completed in this visit.
+no transaction has completed in this visit. A decline or carry-cap refusal
+uses this same prompt, retaining whether an earlier purchase completed.
+The opening quote remains open through the suffix and repeated list until
+the next stock-call question supplies its closing quote.
+
+Source provenance for the listing order and repeated prompt: fresh original
+shop-entry, listing and confirmation traces in `u5-decomp/functions/SHOPPES_OVL/`
+and `u5-decomp/notes/`, checked with six isolated original-code Buy cases.
 
 Invalid buy selectors, including letters at or beyond the `0xFF` terminator,
 do not print a refusal line. The buy menu simply keeps waiting for a valid
@@ -1459,6 +1484,15 @@ the invalid state only when strict bug compatibility is required.
 Every other key is ignored. It performs no redraw, prints nothing, and consumes
 no random draw. Each accepted movement redraws the row area and page indicator,
 then waits for the next command key.
+
+**Capture discrepancy, issue #238 (2026-09-08 UTC).** The reported live Sell
+panel did not respond to arrows or Return. The accepted-key table above was
+already published and remains supported by a fresh exhaustive original-dispatch
+probe and command-normalization checks. Those isolated checks do not verify
+delivery through the live keyboard stack. Reconciling the capture needs its
+starting save and asset identity, exact key events, and frames showing the
+highlighted row and conversation window before and after input. Ordinary
+letters and unmodified digits are not row selectors.
 
 **Row cells.** Item rows begin at window-local `(1, 1)` and continue through
 `(1, 4)`. Under normal stock limits, each row consists of:

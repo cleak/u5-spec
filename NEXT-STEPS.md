@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 arms-list follow-up.** Shops Section 8.1 corrects
+the stock-call question's position to after the list (R427), supplies the
+three-period row separator, and clarifies initial-heading versus list-only
+repetition. The opening post-item quote and Sell key table were already
+published. Six Buy cases, 256 Sell dispatch cases and fourteen input
+normalization cases pass in isolated original-code probes. The reported
+silent Sell arrows/Return remain a capture question in OPEN-QUESTIONS.
+
 **2026-09-08 UTC, #243 saved NPC band follow-up.** The requested map and
 dialogue field were already published for #217 in 3a03fb7. Saved-gam Section
 12.1 now also states the byte accounting explicitly: 2,208 bytes of NPC
