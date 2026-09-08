@@ -23,8 +23,10 @@ the stock-call question's position to after the list (R427), supplies the
 three-period row separator, and clarifies initial-heading versus list-only
 repetition. The opening post-item quote and Sell key table were already
 published. Six Buy cases, 256 Sell dispatch cases and fourteen input
-normalization cases pass in isolated original-code probes. The reported
-silent Sell arrows/Return remain a capture question in OPEN-QUESTIONS.
+normalization cases pass in isolated original-code probes. A later author
+capture confirms Return; only arrows remain unsettled. Section 8.1 now makes
+Sell prompt wrappers and uniform draws 0..7 to records 49..56 explicit. R428
+propagates the ordering correction into the missed Section 8.A summary row.
 
 **2026-09-08 UTC, #243 saved NPC band follow-up.** The requested map and
 dialogue field were already published for #217 in 3a03fb7. Saved-gam Section

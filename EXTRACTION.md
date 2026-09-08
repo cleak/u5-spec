@@ -14,6 +14,10 @@ Existing post-item punctuation and Sell keys remain unchanged. Six Buy flow
 cases, 256 normalized Sell-input cases and fourteen command-normalization
 cases pass against original routines. The contrary live Sell-input report
 is tracked as a capture discrepancy; no full-game reproduction was performed.
+The author's later capture confirms Return selection, narrowing the remaining
+question to arrows. Sell-entry/offer wrappers and the draw 0..7 to record 49..56
+mapping are explicit. R428 corrects the duplicate ordering claim in Section 8.A
+that the preceding edit missed.
 
 ## Issue #243 - saved NPC band accounting (2026-09-08 UTC)
 
