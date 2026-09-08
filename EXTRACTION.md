@@ -6,6 +6,13 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #243 - saved NPC band accounting (2026-09-08 UTC)
+
+The complete map published for #217 remains unchanged. Saved-gam Section
+12.1 now makes the 2,208-plus-twelve byte accounting explicit and emphasizes
+that the source dialogue array is stored in runtime words. All fourteen
+ranges rechecked for contiguous coverage through the end of the save image.
+
 ## Issue #242 - outdoor swamp poisoning (2026-09-08 UTC)
 
 Movement Section 8.2 publishes the consumed-action/on-foot swamp condition,

@@ -627,6 +627,13 @@ byte is nonzero. Preserve slot zero and inactive slots when round-tripping.
 | `0x105E` | `0x8AA` | 1 byte | Dungeon view/flavour state; preserve outside dungeon play. |
 | `0x105F` | `0x8AB` | 1 byte | Pending shipwright delivery class/payload, specified in Section 9.3. |
 
+The six NPC tables occupy 2,208 bytes in total: schedules, runtime records,
+routes, route cursors, types and stuck counters. Six opaque bytes, the
+two-byte event pair and four final mode-state bytes account for the remaining
+twelve, giving exactly 2,220 bytes. Do not add the source roster's separate
+32-byte dialogue array: its values occupy the dialogue words inside the
+saved runtime records.
+
 The schedule record has exactly the source `.NPC` shape: record offsets
 `0..2` are the three behaviour bytes, `3..5` the X coordinates, `6..8` the Y
 coordinates, `9..11` the floor bytes, and `12..15` the four time boundaries.
