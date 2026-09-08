@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 Blue Boar listing.** Shops Section 8.C now compares
+three dotted formats, including the wine list's fixed sixteen-column rows.
+All six names and exact rows were already published; fresh original row,
+price and response checks confirm them and the lack of a repeated price
+in the accepted-choice response. This extends the comparison, with no
+behavioral reversal or new retraction.
+
 **2026-09-08 UTC, #238 tavern bill source.** Shops Section 4.1 distinguishes
 the resident bill's separate count word from decimal caret substitution:
 zero/one nondead members leave two spaces. Section 8.B groups the existing

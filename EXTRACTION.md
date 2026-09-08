@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - Blue Boar listing comparison (2026-09-08 UTC)
+
+Shops Section 8.C groups the Blue Boar's fixed sixteen-column wine rows
+with the distinct arms/reagent and guild formats. Existing names, exact
+rows and prices are confirmed by fresh original literal-length, display
+consumer and charge-table checks. The accepted-choice response does not
+repeat the price. Added comparison detail only; no new retraction.
+
 ## Issue #238 - tavern bill and record lookup (2026-09-08 UTC)
 
 Shops Sections 4.1 and 8.C explicitly identify the ordinary tavern bill as
