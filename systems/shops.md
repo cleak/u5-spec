@@ -1027,6 +1027,21 @@ token expansion follow Section 8.B. Each row describes a particular result,
 not a generic replacement for every refusal or cancellation. `SHOPPE.DAT`
 record numbers below are zero-based, counting empty records.
 
+**Take-it confirmation wording.** The offer question is reused by the
+following flows, with these text sources:
+
+| Flow | Confirmation source |
+|---|---|
+| Inn Rest and Leave | Identical resident tail: `\nWilt thou take\nit?" `. Each follows its own room-description or monthly-rate body. |
+| Shipwright ordinary Frigate and Skiff offers | `SHOPPE.DAT` record `126`, following offer record `117` or `118`. The asset owns the confirmation's text and spacing. |
+
+Both use Y/N confirmation and retain their individual outcomes below. Accepted
+Leave prints its attributed thank-you and then the inn's continuation question;
+the tavern uses its own continuation question, specified separately below.
+Fresh original literal and caller checks in
+`u5-decomp/functions/SHOPPES3_OVL/` and
+`u5-decomp/functions/SHOPPES2_OVL/` support this comparison.
+
 **Shared closing envelope.** Both ordinary farewell pools in Section 8.A
 use the same sequence: `\n\n"`, the selected record, a line feed only when
 the resulting local cursor column is nonzero, then token-expanded

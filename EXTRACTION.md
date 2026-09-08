@@ -6,6 +6,13 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - reused confirmation wording (2026-09-08 UTC)
+
+Shops Section 8.C groups the take-it question across inn Rest/Leave and
+ordinary ship offers while retaining their distinct text sources and
+continuations. Original checks confirm the existing monthly-rate and
+attributed Leave-success contracts. This is clarification, with no retraction.
+
 ## Issue #238 - inn companion picker (2026-09-08 UTC)
 
 Shops Section 8.C now identifies the shared Select: member surface, its

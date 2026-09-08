@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 confirmed inn Leave.** Section 8.C now groups
+the reused take-it confirmation wording: inn Rest/Leave use the same
+resident tail, and ordinary ship offers use record 126. Accepted Leave's
+thank-you and inn continuation remain distinct from tavern continuation.
+Fresh original checks agree with the reported monthly-rate sequence;
+existing behavior and R420's payment-at-Pickup rule stand. No retraction.
+
 **2026-09-08 UTC, #238 inn Leave picker.** Shops Section 8.C now makes
 the Select: roster surface and commit keys explicit: digits move, Return
 or Space commits, Escape cancels, Y/P/0 wait. It links the member-row and
