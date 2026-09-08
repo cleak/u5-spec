@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 final shop-cluster request.** Shops Section 8.B
+now groups horse104, Frigate117, Skiff118, ship menu119 and confirmation126
+in a compact resource lookup. Section 8.C compares fixed three-dot rows
+with the guild's fixed fourteen-column rows. Fresh original callers and
+literal lengths confirm existing behavior; no retraction. The colon and
+entry-key question is already resolved in8.B and the preceding reply.
+Answer the author, then resume monitoring at30 seconds.
+
 **2026-09-08 UTC, #238 entry punctuation follow-up.** Shops Section 4.1
 now groups vendor-prefix and vendor-suffix attribution forms. Section 8.B
 emphasizes conditional colon placement, same-row answer echoes and entry
