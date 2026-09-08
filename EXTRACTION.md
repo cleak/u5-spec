@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - horse/ship lookup and dotted row formats (2026-09-08 UTC)
+
+Shops Sections 8.B and 8.C consolidate existing quote/menu/confirmation
+record IDs and distinguish fixed three-dot rows from the guild's fixed
+fourteen-column rows. Fresh record enumeration, original consumers and
+literal lengths agree. The entry-colon/key rules remain unchanged; this
+clarification requires no new retraction.
+
 ## Issue #238 - entry punctuation and attribution forms (2026-09-08 UTC)
 
 Shops Section 4.1 distinguishes attribution before and after quoted speech

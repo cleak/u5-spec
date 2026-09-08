@@ -991,6 +991,25 @@ fragments in print order, preserving separately printed fragments:
 | Healer | `Yes\n\n`, then `"We have powers to Cure, Heal, or Resurrect."\n`, then token-expanded `says $.\n\n"What is the nature of thy need?" ` |
 | Innkeeper | `Yes`, then token-expanded `\n\n$ asks,\n"Art thou here\nto Pick up or\n`, then `Leave a\ncompanion, or\nto Rest for the\nnight?" ` |
 
+**Horse and ship resource lookup.** These are zero-based `SHOPPE.DAT`
+record ordinals, counting empty records. The resource bodies supply the
+original sentences and their substitutions; their surrounding resident
+fragments remain as specified above and in Section 8.C.
+
+| Requested text | Record ordinal | Following confirmation |
+|---|---:|---|
+| Stable / horse offer body | `104` | Resident `\n\nDeal?" ` |
+| Ordinary Frigate offer body | `117` | Record `126` |
+| Ordinary Skiff offer body | `118` | Record `126` |
+| Shipwright F/S selection menu | `119` | Menu choice precedes either ordinary offer |
+| Shared ship take-it confirmation | `126` | Y/N input; no added `(Y/N)` legend |
+
+The horse and ordinary ship offer prices use the Intelligence-adjusted
+amount through `%`. Pending-delivery special cases remain separate in
+Sections 8.C and 8.7. Fresh record enumeration and original consumer checks
+in `u5-decomp/functions/SHOPPES_OVL/` and
+`u5-decomp/functions/SHOPPES2_OVL/` confirm this lookup.
+
 Source provenance: fresh entry-to-input traces, literal/pool checks, and
 shared renderer/caller resolution in `u5-decomp/functions/SHOPPES_OVL/`,
 `u5-decomp/functions/SHOPPES2_OVL/` and
@@ -1023,6 +1042,20 @@ Other arms outcome and browser text remains in Section 8.1.
 
 **Guild stock and confirmation.** Print `a.........Keys\n`,
 `b.........Gems\n`, `c......Torches\n\n`, then `Thy concern?" `.
+
+**Two dotted row formats** occur in the stock lists:
+
+| Format | Shops | Row contract |
+|---|---|---|
+| Fixed three-dot separator | Arms Buy and reagents | One compact letter, exactly `...`, then the item name, with no intervening spaces. Width varies with the name. Arms letters are lowercase; reagent letters are uppercase. |
+| Fixed fourteen-column rows | Guild | Lowercase `a` or `b`, nine dots, then Keys or Gems; lowercase `c`, six dots, then Torches. Each of the three fixed rows occupies fourteen columns before its line ending, so the names end at the same column. |
+
+All leaders are ordinary full stops. The guild's exact three rows and line
+endings above are authoritative. The arms/reagent comparison below owns
+their different questions and input boundaries. Fresh original guild-row
+consumer and literal-length checks in `u5-decomp/functions/SHOPPES_OVL/`
+confirm the fourteen-column form reported by the author's Paws capture.
+
 A/B/C echo the corresponding lowercase letter. D renders record `164`, then
 redraws the stock menu. Space or Escape exits; other keys, including Return,
 silently wait at the existing menu.
