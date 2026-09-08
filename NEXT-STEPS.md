@@ -18,6 +18,15 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #244 Blackthorn dialogue and walk-up capture.** Blackthorn
+Sections 2, 4.1 and 5 now publish the automatic guard-contact route, all four
+ask records and their text, response prompt, reaction selectors and execution
+narration. The second Now-tell-me ask is distinct; the final demand lacks a
+closing quote. Original traces and 210 isolated cases support the contract.
+R440-R443 correct the nondead-party threshold, threat-name/victim distinction,
+silent negative-capability palace return, and stale denial of the standing
+debit. Town Section 14 carries the matching return correction.
+
 **2026-09-08 UTC, #238 Blue Boar listing.** Shops Section 8.C now compares
 three dotted formats, including the wine list's fixed sixteen-column rows.
 All six names and exact rows were already published; fresh original row,

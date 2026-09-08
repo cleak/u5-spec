@@ -44,6 +44,28 @@ being arrested inside Blackthorn's castle, which the player normally reaches by
 walking in; the only path that ever selects that location as a handoff target
 is the tail of this same cinematic, which returns the party there.
 
+**Walking into guard contact can start the audience.** The palace's shipped
+guards include the approach-and-converse behavior described in
+`systems/npc-schedules.md` Sections 9 and 9.2. During an eligible schedule
+pass, a guard in that mode engages when the party is within Manhattan
+distance three of its selected waypoint; cardinal adjacency to the guard's
+current position produces automatic contact. Town cleanup dispatches the
+guard demand without requiring the player to use Talk. In the palace,
+absence of the active Black Badge aura makes that demand fail without a
+password or payment prompt, and the resulting arrest enters the audience.
+The same route can therefore occur while simply walking up the approach.
+There is no special twelve-step counter or throne-approach coordinate test:
+the guard's schedule, current position and normal contact rules determine
+when it happens. With the Badge aura active, the password branch in
+Section 7a applies instead.
+
+Fresh checks of four shipped approach-guard schedules and the original
+contact-to-audience call sequence establish this route. They agree with the
+author's walk-up observation on issue #244, without claiming that every
+entry time and route takes exactly twelve steps. Source provenance:
+`u5-decomp/functions/NPC_OVL/`, `u5-decomp/functions/TALK_OVL/`,
+`u5-decomp/functions/TOWN_OVL/` and `u5-decomp/notes/`.
+
 **The rescue/refuge cinematic is the total-party-defeat handler.** It has no
 mode-local predicate at all. Town, overworld, and dungeon mode each open a turn
 with the same shared party-capability check described in Section 7, and its
@@ -108,8 +130,11 @@ sends the party to Yew or turns the guards hostile. Inside Lord Blackthorn's
 Castle, and only while the party-capability check of Section 7 reports that
 somebody can act or is asleep, it transfers to this audience/capture cinematic
 instead and re-enters town entry setup for the same location afterwards. If the
-party is arrested there with nobody able to act and nobody asleep, the arrest
-takes the ordinary surrender branch rather than the audience.
+party reaches that helper there with nobody able to act and nobody asleep,
+the helper returns silently, without the audience or a surrender question.
+The exploration loop's separate defeat check still owns rescue.
+The earlier ordinary-surrender fallback in this palace case is withdrawn
+(R442).
 
 After the challenge resolves, the handler can run a final throne cleanup beat
 and then hands control to a captive-cell scene. The traced handoff uses scene
@@ -153,16 +178,72 @@ Compatibility rules:
   renders and behaves as a ruined shrine until the player restores it by
   meditating there. The moral-standing debit is a clamped subtraction of five,
   floored at zero.
-- **A correct answer also decides a companion's fate.** If more than one
-  companion is still alive, Blackthorn thanks the player for their honesty and
-  **kills** one companion as "a merciful death". If only one remains, he spares
-  the player instead.
-- **A wrong answer, when few companions remain, ends the interrogation** with a
+- **A correct answer also decides a companion's fate.** The threshold counts
+  all nondead travelling party members at audience setup, including Avatar
+  when nondead. With at least two, Blackthorn thanks the player and **kills**
+  the second nondead member as "a merciful death". With only one, he spares
+  that survivor instead. Avatar plus one living companion is enough for the
+  execution branch; the earlier requirement for more than one living
+  companion is withdrawn (R440).
+- **A wrong answer, when fewer than two nondead party members remain, ends the interrogation** with a
   mocking line about lying and a threat of the dungeon.
 - **A wrong answer otherwise escalates.** The first wrong answer produces a
-  threat naming the companion at risk. Later wrong answers stamp a tile into
-  the cutscene map, and the fourth wrong answer **kills** the named companion
-  with the pendulum-blade narration.
+  threat naming the second roster entry. Later wrong answers stamp a tile
+  into the cutscene map, and the fourth wrong answer **kills** the second
+  nondead party member with the pendulum-blade narration. If the second
+  roster entry is dead, the threatened name and actual victim differ. The
+  earlier unconditional identification of the threatened name with the
+  execution victim is withdrawn (R441).
+
+### 4.1 Audience text and input
+
+These are zero-based `MISCMSG.DAT` record ordinals, as defined in
+`formats/miscmsg-dat.md`. Preserve the selected record's wording and spacing.
+In the following table, *virtue* means the selected shrine's virtue name;
+it never means the expected mantra.
+
+| Ask | Record | Complete demand, before the input prompt |
+|---|---:|---|
+| First | `0` | `"What is the Mantra of the Mystic Shrine of ` + *virtue* + `?"` |
+| Second | `1` | `"Now tell me, what is the Mantra of ` + *virtue* + `?"` |
+| Third | `2` | `"Resistance is futile! Thou must yield the truth unto me! Tell me, what is the Mantra of ` + *virtue* + `?"` |
+| Fourth | `3` | `"My patience with thee has worn away! SPEAK UNTO ME THE MANTRA, NOW!` |
+
+The fourth record has an opening quotation mark but **no closing quotation
+mark**, and its caller adds none. The first three records receive the virtue
+name and the question-mark/closing-quote suffix. There are four distinct
+demands: the first wrong answer's threat does not replace the second ask.
+The demand bodies contain no fixed line feeds; normal wrapping produces
+the displayed rows.
+
+Each demand is followed by `\n\nYour response?\n:`. The bounded text input
+then accepts the answer; submission is followed by `\n\n` before the outcome.
+This is distinct from the sage's `You respond:` prompt in `systems/shops.md`
+Section 8.C. Do not append an answer, prompt ordinal, roster slot number,
+cutscene timing value or other diagnostic information to the original text.
+
+The accompanying resource selections are:
+
+| Situation | Record and resident additions |
+|---|---|
+| Audience preamble immediately before interrogation | Record `11`, the Wait/Avatarhood speech, then acknowledgement and two line feeds before the first demand |
+| First wrong answer, at least two nondead members | Record `7`, the quoted laughing-at-me rebuke; after its scene beat, record `8`, which begins with two line feeds and the quoted sand/threat prefix; append the second roster entry's name and ` die!" `; acknowledgement, then `\n\n` before the second ask |
+| Wrong answer with only one nondead member | Record `10`: `"A child would catch thee in thy lies, foolish one! To the dungeon with thee!" `; acknowledgement and the closing scene beat |
+| Correct answer with only one nondead member | Record `9`, the truth/life reward speech; acknowledgement and the closing scene beat |
+| Correct answer with at least two nondead members | Record `5`, the merciful-death speech, then execution as described in Section 5 |
+| Fourth wrong answer with at least two nondead members | Record `4`, the unquoted pendulum narration, then execution as described in Section 5 |
+
+The threat names a person in the speech, rather than displaying a slot
+number. Its fixed second-entry selection and the execution's separate
+nondead-member selection are the compatibility distinction in R441.
+
+Source provenance: fresh original template, answer-reader, reaction and
+record-selection checks in `u5-decomp/functions/BLCKTHRN_OVL/` and
+`u5-decomp/notes/`. Two hundred isolated original interrogation cases cover
+all eight shrines, success on each reachable ask, four wrong answers, solo
+termination and rosters containing dead members. Printing, input and
+cinematic presentation were observation boundaries; these checks establish
+message order and state changes, not a new full-game visual capture.
 
 > **Withdrawal.** Earlier revisions of this section said the answer lookup was
 > "indexed by prompt ordinal rather than by party slot", that "this traced
@@ -192,8 +273,9 @@ The visible sequence is:
 
 **The punishment is an execution, and it is durable.** Earlier revisions of this
 section described only "a punishment animation" and "a dragged-away victim" and
-omitted the consequence entirely. The victim is the second living party member
-(the first living companion behind the Avatar), and the routine:
+omitted the consequence entirely. The victim is the second nondead party
+member, counting from the beginning of the travelling roster and skipping
+Dead entries, and the routine:
 
 - erases that companion's on-screen actor;
 - lifts their roster record out of the party, compacts the remaining records
@@ -207,13 +289,23 @@ can ever retrieve them, and nothing else in the game reads it back. The refuge/
 rescue sequence does not restore them either. **The companion is dead and gone,
 and the effect survives saving and reloading.**
 
-The same execution runs on the *correct*-answer branch whenever more than one
-companion is alive, under a different message — Blackthorn thanking the player
-for their honesty and granting the companion "a merciful death".
+The same execution runs on the *correct*-answer branch whenever at least two
+travelling party members are nondead, under a different message — Blackthorn
+thanking the player for their honesty and granting the companion "a merciful
+death". The earlier more-than-one-companion threshold is withdrawn (R440).
 
-The exact reaction-string builder and every static fragment's text remain
-data-owned. This spec intentionally records the behavior and actor roles
-rather than reproducing the source text.
+**Execution text.** The fourth-wrong-answer branch begins with `MISCMSG.DAT`
+record `4`: `With a wave of Blackthorn's hand, the pendulum blade falls!`.
+It is narration, with no quotation marks. After the execution and roster
+removal, print `\n\n`, the actual removed member's name, and
+` is sliced in half! `. After acknowledgement, record `6` supplies the
+quoted unfairness/treachery speech, including its leading two line feeds.
+The execution helper finishes with one line feed. The correct-answer
+execution instead begins with record `5` and omits the sliced-in-half
+narration and record `6`; it also finishes with one line feed.
+These resource selections and resident additions were checked against the
+original execution path in `u5-decomp/functions/BLCKTHRN_OVL/` and
+`u5-decomp/notes/`.
 
 ## 6. Cutscene Script VM
 
@@ -787,9 +879,10 @@ rescue trigger.
   timed-effect slot that the Black Badge aura occupies and that gates the
   palace-gate password branch; `catalogs/item-list.md` owns wearing and
   removing the Badge itself.
-- **Karma.** `systems/karma.md` owns numeric virtue standings. This overlay
-  can read virtue language and `KARMA.DAT` text but does not publish a traced
-  in-overlay karma-score adjustment.
+- **Karma.** `systems/karma.md` owns moral standing. Correct interrogation
+  answers debit five, clamped at zero; rescue applies the standing floor
+  described in Section 7. The earlier denial of a traced in-overlay
+  karma-score adjustment is withdrawn (R443).
 - **Magic.** `systems/magic.md` owns Blackthorn's-castle magic absorption and
   the Crown of Lord British pre-gate.
 - **Endgame.** `systems/endgame.md` owns the terminal victory state. The
