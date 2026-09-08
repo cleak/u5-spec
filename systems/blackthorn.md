@@ -680,9 +680,28 @@ record is not selected by this traced rescue/refuge table.
 Separately from the two cinematics, the regime has a small everyday presence in
 ordinary play: the guards who stop the party and demand something. These are not
 NPCs with dialogue files. They are reached from the conversation dispatcher's
-reserved "not a real NPC" dialog index, described in
+reserved "not a real NPC" dialog index `0xFF`, described in
 `systems/conversation.md`, which hands off to one scene-keyed handler instead of
 loading a `.TLK` blob.
+
+**Contact that reaches the demand.** Behavior chooses the automatic contact
+route; dialogue `0xFF` chooses the regime service once conversation is admitted.
+The service selector does not turn every kind of guard contact into a demand.
+
+| Contact | Result for a regime guard |
+|---|---|
+| Behavior 4 or 5 reaches cardinal adjacency, with nonzero live dialogue | Automatic conversation contact, without a player Talk command. The shared conversation gates below apply; admitted dialogue `0xFF` raises the scene's regime demand. |
+| Behavior 6 or 7 reaches cardinal adjacency, with dialogue `0xFF` and linked live sprite exactly `0x70` | Direct arrest, without first raising the regime demand. |
+| Explicit Talk reaches that NPC | The same shared conversation gates apply, independently of which behavior would produce automatic contact. Admitted dialogue `0xFF` selects the regime demand. |
+
+`systems/npc-schedules.md` Sections 9 and 9.2 specify approach distances,
+event timing, other dialogue values and other live sprites. For behavior 4,
+conversation is the contact outcome itself: there is no pending attack to
+resume after the demand. Payment or an accepted password ends this interaction
+peacefully. A failed demand enters arrest; outside the palace, this means the
+surrender question first. Accepting surrender takes the prison transfer;
+refusing surrender raises the alarm and sends the guard into conflict.
+The palace's distinct capture outcome is in `systems/town-mode.md` Section 14.
 
 That handler has exactly three branches, chosen by the current scene. The
 shared conversation dispatcher first applies the following gates after any
@@ -707,6 +726,16 @@ and 13:00–20:59; its other two destinations are upstairs. Some palace guards
 also author behavior 4 at waypoint 2, so Minoc's schedule is not a universal
 regime-guard timetable. The runtime schedule can differ from the asset after
 an alarm or contact; an all-7 runtime triple is not evidence of all-7 authoring.
+
+Thus the Minoc gate guard at its ground-floor waypoint at 16:00 can raise
+the charity demand when the party walks into cardinal adjacency. No `T`
+command is needed, and its authored behavior 4 is consistent with that result.
+
+Source provenance: fresh original-routine checks in `u5-decomp/notes/` for
+issue #245 cover ten adjacency/contact/payment/surrender cases and twenty-four
+shared-conversation behavior/waypoint cases. Presentation, clock progression,
+alarm, combat and scene entry use controlled boundaries; this is isolated
+execution, not a new complete walk-in capture.
 
 **Capture discrepancy, issue #216.** The earlier live report in issue #206
 used entry from the overworld at 16:00, a stock Quit-and-Save, relocation of

@@ -6,6 +6,16 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #245 - regime contact and demand routing (2026-09-08 UTC)
+
+Blackthorn Section 7a adds an explicit automatic-contact/explicit-Talk table
+and links NPC Section 9.2: behavior 4/5 conversation admits the reserved
+regime service through the shared gates, while behavior 6/7 guard contact
+starts direct arrest. Minoc's authored behavior 4 fits walk-up charity
+contact. Ten original contact chains and twenty-four shared-Talk cases
+verify routing and refusal stages. This clarifies existing behavior without
+a reversal; the separate issue #216 capture discrepancy remains open.
+
 ## Issue #244 - Blackthorn audience text and entry (2026-09-08 UTC)
 
 Blackthorn Sections 2, 4.1 and 5 supply automatic missing-Badge guard contact,
