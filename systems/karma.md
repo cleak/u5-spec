@@ -370,6 +370,14 @@ A blank virtue answer or any blank mantra ends the interaction immediately
 without the unfocused-result record. No shrine-handler standing penalty is
 confirmed for a mismatch.
 
+For example, at Honesty's shrine, a nonblank wrong virtue followed by `AHM`
+three times still reaches record `30`: the wrong virtue has already made the
+session unsuccessful, and correct later mantras do not repair that answer.
+The third nonblank mantra's twelve world ticks finish before that record.
+A blank submission at any of the three mantra prompts instead exits without
+record `30`, even after a wrong virtue. Five isolated original handler/editor
+cases confirmed these combinations under `u5-decomp/functions/CAST2_OVL/`.
+
 The answer is edited in place. Backspace or Left erases the last character;
 Escape erases the whole current answer and keeps the same prompt open. At an
 empty answer, Escape changes nothing visible. Return submits without echoing

@@ -83,8 +83,9 @@ priority order:
    echoed**. That matters for output parity, because a prompted pick *does*
    echo the chosen member's name after the pick is confirmed; an engine that
    echoes the name in the single-qualifier case prints a line the original does
-   not. If none qualifies, the command reports that
-   nobody is able and aborts - before the trap can fire. If two or more qualify,
+   not. If none qualifies, the selector prints exactly `None!\n`, with no
+   leading newline, member name or `Player: ` prompt of its own, and aborts
+   before the trap can fire. If two or more qualify,
    the player is prompted to pick one; a confirmed pick that is not Good or
    Poisoned is rejected with the short "disabled" notice and the prompt repeats;
    cancelling the prompt aborts the command, again before the trap fires.

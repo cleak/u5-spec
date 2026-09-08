@@ -941,6 +941,18 @@ On Buy, the echo is followed by one uniformly selected affirmation from
 one independently selected stock introduction from `We have:`, `We stock:`,
 `Thou canst buy:`, `We've got:`. The existing stock-list flow then follows.
 
+The draw order is affirmation first, stock introduction second. Each consumes
+one shared gameplay random-range draw over `0..3`, in the listed pool order.
+The affirmation is printed before the second draw; the introduction is printed
+before the stock-list renderer begins its two leading newlines and item rows.
+These two draws occur once per accepted Buy entry. Repeated item listings do
+not redraw either heading. The separate stock-call question is drawn after
+listing, as described in Section 8.1; other visit-level draws remain separate.
+
+Source provenance: original arms-entry and listing execution under
+`u5-decomp/functions/SHOPPES_OVL/`; all sixteen heading combinations confirmed
+the random-call bounds and output order with supplied random results.
+
 **All seven non-arms entries** first emit an opening double quote, render
 one record from their shared entry row, then place the input continuation
 according to the resulting window-local cursor column:

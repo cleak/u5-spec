@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #247 follow-up - three remaining questions (2026-09-08 UTC)
+
+Containers Section 4/traps Section 2.1 publish the exact `None!\n` refusal
+when the ordinary acting-member scan finds nobody qualified. Shops Section
+8.B makes the order of its already-published heading draws explicit before
+list rendering; karma Section 12 illustrates failure after a wrong virtue
+and three correct mantras. Twenty-nine isolated original cases pass.
+These are clarifications, with no new retraction.
+
 ## Issue #247 - spell narration and message boundaries (2026-09-08 UTC)
 
 Combat Section 11.1 adds explicit attack-spell and directed-effect caller
