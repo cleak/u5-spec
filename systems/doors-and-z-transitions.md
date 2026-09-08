@@ -396,18 +396,28 @@ Secret doors are walls that look like walls until the player searches the cell.
   in the location map itself. The normal direction and acting-member selection
   lead to a direct terrain test; no per-map object flag is required. On reveal,
   Search prints `\nThou dost find\na hidden door!\n` and changes the target
-  tile to the ordinary unlocked door `0xB9` on ground/above-ground floors
-  (floor byte below `128`), or `0xB8` on below-ground floors (floor byte at
-  least `128`). The map becomes dirty for repaint. The earlier object-table
-  flag and coordinate-match rule is withdrawn (`RETRACTIONS.md` R412).
+  tile to the ordinary **locked** door `0xB9` on ground/above-ground floors
+  (floor byte below `128`), or the closed, **unlocked** door `0xB8` on
+  below-ground floors (floor byte at least `128`). The map becomes dirty for
+  repaint. The earlier object-table flag and coordinate-match rule is withdrawn (`RETRACTIONS.md` R412).
 
 Source provenance: the ordinary Search terrain read, hidden-door comparison
 and floor-dependent tile replacement were freshly traced under
-`u5-decomp/functions/SJOG_OVL/`.
+`u5-decomp/functions/SJOG_OVL/`. Five isolated original Search/Open chains
+confirmed the revealed lock state and subsequent Open result across ground,
+upper and below-ground floor values, including the floor-class boundary;
+direction/member selection, the map accessor and previous-door cleanup were
+controlled. Issue #236 separately reports the locked result in the stock game
+at Britain (30, 12).
 
 Search is the only way to find these authored hidden passages. Once revealed,
-town/dwelling secret doors respond like ordinary unlocked doors. Dungeon reveal
-cells instead follow the movement/opening rules of the replacement dungeon byte
+town/dwelling secret doors obey the resulting lock state: direct O-Open on
+the ground/upper-floor reveal prints `Locked!\n` and leaves the door unchanged,
+whereas the below-ground reveal accepts O-Open, prints `Opened!\n` and clears
+the cell through the ordinary door-opening path. Search itself does not open
+either door. The earlier unqualified unlocked-door wording, including the
+replacement description in R412 and the closing answer to issue #236, is
+withdrawn (`RETRACTIONS.md` R448). Dungeon reveal cells instead follow the movement/opening rules of the replacement dungeon byte
 named above. Walking into an unrevealed wall-style secret fails the same way
 walking into a wall fails. Reveals are sticky for the visit but revert on
 location reload.
