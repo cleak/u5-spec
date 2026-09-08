@@ -218,6 +218,10 @@ step onto difficult terrain can then print `Slow progress!\n` or
 tile sets, extra time/object updates, transport behavior and hostile-interaction
 suppression are specified in `systems/movement.md` Section 8.1.
 
+On-foot swamp exposure can later print `Poisoned!\n` once per newly poisoned
+member during the consumed-turn tail. Its Dexterity save and silence on a
+successful save are specified in `systems/movement.md` Section 8.2.
+
 The resident dispatcher owns one literal per letter. Each arm loads its own
 literal; there is no key-indexed pointer array, and the literals are stored as a
 plain block of text rather than as a table addressed by the key code.

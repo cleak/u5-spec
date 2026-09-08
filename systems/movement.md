@@ -334,6 +334,61 @@ Those probes intercepted passability and actor/clock boundaries; the existing
 passability tables remain authoritative. Issue #241 independently captured
 the brush/forest/hill messages and one-cell movement on its outdoor route.
 
+### 8.2 Outdoor swamp poisoning
+
+Swamp terrain `0x04` can poison the outdoor party **while on foot**. After
+a consumed action's normal clock advance, the outdoor turn tail checks the
+tile currently beneath the party and the current transport. If the tile is
+swamp and the party is on foot, it performs the following per-member save.
+This includes consumed turns spent passing in place; successful displacement
+is not required. An action that consumes no turn, or a handoff out of the
+outdoor scene, does not reach this check. The same rule applies on either
+outdoor world plane.
+
+| Member/result | Effect |
+|---|---|
+| Dead or already Poisoned | Skip the member without a random draw. |
+| Any other status, including Sleeping | Draw once from the inclusive range `1..30`, separately for each eligible member in party order. |
+| Roll no greater than Dexterity | Keep the member's status and print nothing. |
+| Roll greater than Dexterity | Change status to Poisoned and print `Poisoned!\n`. |
+
+Dexterity is the only attribute compared. At Dexterity 30 or above, poisoning
+cannot occur through this save. For Dexterity zero through thirty, there are
+`30 - Dexterity` failing outcomes among the thirty possible roll values:
+Dexterity 29 fails only on 30, Dexterity 20 fails on ten values, and Dexterity
+zero fails on every value. There is no preceding fixed-rate chance to attempt
+the save and no level or maximum-HP test.
+
+Each newly poisoned member produces one bare status line, with no member
+name, leading newline, coordinate or diagnostic sentence. Multiple failures
+produce multiple lines in party order. The caller then pauses one world tick
+even if everyone saved or was skipped. The ordinary party-upkeep pass follows
+and charges one HP to each member now Poisoned on that same action. A sleeper
+who failed is now Poisoned and takes that hit too. The shared damage and
+subsequent regeneration rules remain as specified in `systems/time.md`
+Section 5; this is not an hourly poison-damage rule.
+
+Horse and carpet travel do not enter this poisoning check. Existing terrain
+passability still applies; the horse does not ordinarily enter swamp in the
+first place. The difficult-terrain surcharge from Section 8.1 neither repeats
+the poison save nor adds extra poison-upkeep hits. When a swamp step prints
+its slow-progress line, that line precedes this later poisoning result.
+
+Keep this outdoor save separate from town terrain and combat terrain. The
+town underfoot save in `systems/town-mode.md` uses `0..29`, so its immunity
+threshold is 29; this outdoor save uses `1..30`, with immunity at 30. Combat
+swamp follows the Poison-tier terrain result in `systems/combat.md` Section 11.
+
+Source provenance: fresh outdoor caller, overlay dispatch, poison mutator,
+random-range and party-upkeep traces under `u5-decomp/notes/`. Original-code
+execution checked all 930 combinations of Dexterity zero through thirty and
+roll one through thirty, plus status/order cases and nine action-tail cases
+covering the terrain, transport and consumed-action gates and actual HP
+damage. Presentation and unrelated world-update boundaries were intercepted;
+these are not new live-game captures. Issue #242's healthy swamp traversal
+is consistent with an immune Dexterity, but the reported seed does not give
+that attribute, so it does not establish the absence of swamp poisoning.
+
 ## 9. Mode Notes
 
 **Overworld.** Movement is party-centric and uses world coordinates, the live

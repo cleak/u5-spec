@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #242 swamp poisoning.** Movement Section 8.2 now gives
+the on-foot, consumed-turn swamp gate and each member's inclusive 1..30 DEX
+save, the Poisoned line, and same-action one-HP upkeep damage. DEX 30 is
+immune. R426 removes overworld's unqualified per-turn poisoning claim.
+930 DEX/roll combinations and nine original action tails plus status/order
+cases pass. Resume the issue monitor at 30 seconds after answering.
+
 **2026-09-07, #241 difficult terrain.** Movement Section 8.1 publishes the
 full terrain-cost table, extra object-update calls, horse/carpet behavior,
 message suppression and line endings. Time Section 10 withdraws the fixed

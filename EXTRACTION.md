@@ -4,7 +4,15 @@ Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.
 
-Last updated: 2026-09-07.
+Last updated: 2026-09-08 UTC.
+
+## Issue #242 - outdoor swamp poisoning (2026-09-08 UTC)
+
+Movement Section 8.2 publishes the consumed-action/on-foot swamp condition,
+per-member inclusive 1..30 Dexterity save, status line and same-action upkeep
+damage. Fresh original-code probes cover every normal Dexterity/roll pairing
+and the action/transport/status gates. R426 corrects overworld's previously
+unqualified poisoning cadence. Town's 0..29 save remains a separate contract.
 
 ## Issue #241 - difficult terrain (2026-09-07)
 
