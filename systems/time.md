@@ -149,6 +149,12 @@ order and, per member:
 - Every member that was neither Dead nor Sleeping increments the
   provision-consumer count, Poisoned members included.
 
+Outdoor swamp acquisition occurs before this upkeep pass, so a member
+poisoned by that action's swamp save immediately takes the ordinary one-point
+poison hit. Terrain's extra clock/object-update work does not repeat this
+upkeep pass. The acquisition gate and Dexterity roll are specified in
+`systems/movement.md` Section 8.2.
+
 *Hour-gated part.* The pass keeps its own previous-hour snapshot and compares it
 with the current hour. The two branches below are mutually exclusive, and
 neither runs when the hour has not changed:

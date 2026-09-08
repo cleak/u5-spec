@@ -223,9 +223,14 @@ dispatcher. Direction keys still run the normal facing and passability checks,
 but a set latch prevents the coordinate-update step from committing. This is a
 movement gate and lighting override, not a damage/status tick.
 
-The separate OUTSUBS party-status helper walks the active party once per
-overworld turn and can poison living members that are not already poisoned.
-That status tick is independent of the special-underfoot lighting latch.
+The separate swamp-poison pass runs only after a consumed outdoor action
+while the current terrain is swamp and the party is on foot. Each member
+who is neither Dead nor already Poisoned makes an inclusive `1..30` save
+against Dexterity; a higher roll poisons that member and prints `Poisoned!\n`.
+`systems/movement.md` Section 8.2 owns the full contract, including same-action
+upkeep damage. The earlier unqualified once-per-overworld-turn poisoning
+claim is withdrawn (`RETRACTIONS.md` R426). This check remains independent
+of the special-underfoot lighting latch.
 
 ## 6. Active objects and the per-turn animator
 
