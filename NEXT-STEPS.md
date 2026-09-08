@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 inn Leave picker.** Shops Section 8.C now makes
+the Select: roster surface and commit keys explicit: digits move, Return
+or Space commits, Escape cancels, Y/P/0 wait. It links the member-row and
+Arms-browser panel layouts. R439 corrects inventory's universal prompt/cancel
+wording; the inn supplies Who will stay and Nobody. Twelve isolated original
+selector cases pass. The monthly quote follows valid companion selection;
+Leave still charges no deposit. Reply, then resume issue monitoring.
+
 **2026-09-08 UTC, #238 inn branches.** Section 8.C now names each inn's
 room record: Hotel Brittany uses 188. The inn confirmation is resident text,
 whereas the ship confirmation uses record 126. Rest decline ends with the

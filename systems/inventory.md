@@ -209,7 +209,9 @@ three-digit zero-padded field.
 Every command that needs a party member - Z-stats, R-Ready, New Order, and the
 rest - shares one selection surface. Its contract is:
 
-- The message window shows the `Player:_` prompt (`commands.md` section 5.6).
+- The caller supplies the message-window question. Ordinary command callers
+  use `Player:_` (`commands.md` Section 5.6); inn Leave instead supplies its
+  vendor-attributed Who-will-stay question (`shops.md` Section 8.C).
 - The panel's **top border band** carries the framed label `Select:`. The
   stored literal is the bare word with its colon; the brackets a reader sees are
   the two end-cap glyphs the label writer draws around it (`text-output.md`
@@ -234,8 +236,17 @@ rest - shares one selection surface. Its contract is:
 **Nothing in the panel is cleared during member selection.** The six roster
 rows, the food-and-gold line and the date line all stay on screen; only the
 border label changes and one row inverts. The message window is untouched apart
-from the prompt itself. Cancelling prints the universal cancel word into the
-message window.
+from the caller's prompt itself. Cancellation returns to that caller, which
+supplies its own response; inn Leave prints `Nobody\n\n`. The earlier
+claim that every caller uses `Player:` and a universal cancellation word is
+withdrawn (R439).
+
+Fresh inn-Leave and shared-selector traces in
+`u5-decomp/functions/SHOPPES3_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/` confirm this separation. Twelve isolated
+original-selector cases verify the inn's digit, commit, cancellation and
+ignored-key behavior; input delivery and panel drawing are observation
+boundaries, not a live keyboard or pixel capture.
 
 ### 4.4 The item picker frame
 

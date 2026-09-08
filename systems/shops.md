@@ -1180,6 +1180,30 @@ Single-guest Pickup selects automatically. The register only offers guests
 at this inn, so it has no separate arbitrary-member/not-in-party refusal.
 Ordinary visit endings still use the shared farewell envelope.
 
+**Leave-companion selection.** After the vendor's Who-will-stay question,
+the inn uses the shared member selector in `inventory.md` Section 4.3.
+It initially indicates Avatar. A valid party digit moves the highlight;
+**Return or Space commits** the indicated member. The direction keys move
+within the travelling roster's bounds. `Y`, `P`, `0` and out-of-party digits
+leave the picker waiting. Escape cancels and prints `Nobody\n\n`, then
+reaches the inn's continuation question. Choosing Avatar prints the
+friend/friends refusal and repeats selection. Only a valid live companion
+reaches the monthly-rate quote; no deposit is displayed before selection
+or charged on Leave. Payment remains due at Pickup, as in Section 8.4.
+
+The two reported panel surfaces have different row contracts:
+
+| Surface | Label and rows | Existing layout contract |
+|---|---|---|
+| Inn Leave member selection | `Select:` on the top ribbon; retain the six roster rows, food/gold and date. Each member row has nine name cells, one marker cell, four HP cells and one status cell; highlight all fifteen content cells. | `inventory.md` Sections 4.2 and 4.3. Selection does not clear or rebuild the roster panel. |
+| Arms Sell browser | `Arms` on the top ribbon; up to four equipment rows in a separate frame. Each row has a right-aligned quantity of at least two cells, a hyphen and the short item name, padded through its thirteen-cell interior. | Section 8.1, including scrolling, selection keys and the exceptional quantity value. |
+
+The inn adds no `Player:` prompt or digit-key legend to its own question.
+Fresh original caller and selector checks in
+`u5-decomp/functions/SHOPPES3_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/` include twelve isolated key sequences;
+these confirm the input contract without claiming a new pixel capture.
+
 **Inn room-resource lookup.** These zero-based `SHOPPE.DAT` ordinals
 count empty records and supply the room-description body:
 
