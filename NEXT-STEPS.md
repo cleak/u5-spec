@@ -18,6 +18,18 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 tavern follow-up.**
+
+Shops Section 8.5 now preserves the message window through the stats refresh
+and explicitly quotes dismissal/continuation and attributes farewells (R430).
+Conversation Section 2 quotes the bed response (R431). Fresh provision tracing
+corrects the quote pool to seven records77..83 (R432), the table-scraps gift to
+one or two servings with a separate draw (R433), and both no-pack exits to
+skip the ordinary farewell (R434). Fifty-nine isolated original-code cases
+pass. A systematic check of the exact shop entry/outcome fragments found
+no additional missing quotation wrapper in those tables. Answer the author
+and resume monitoring at30 seconds.
+
 **2026-09-08 UTC, #238 arms-list follow-up.** Shops Section 8.1 corrects
 the stock-call question's position to after the list (R427), supplies the
 three-period row separator, and clarifies initial-heading versus list-only

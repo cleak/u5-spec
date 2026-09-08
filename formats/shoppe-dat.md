@@ -103,7 +103,7 @@ Known shipped record clusters are:
 | 0-7 | Shared short barks and farewells |
 | 8-48 | Weapon and armour item descriptions |
 | 49-56 | Arms `S`-menu haggle, confirmation, and refusal lines |
-| 57-91 | Tavern, meal-counter, and related interactive prompts and menus, including the four state list records `69-72`, the four state follow-up records `73-76`, the six provision-quote records `77-82`, and the table-scraps outcome `90` |
+| 57-91 | Tavern, meal-counter, and related interactive prompts and menus, including the four state list records `69-72`, the four state follow-up records `73-76`, the seven provision-quote records `77-83`, and the table-scraps outcome `90` |
 | 84-88 and 91 | Sage rumour records, interleaved inside the tavern/interactive cluster: `84` fee quote, `85-88` success templates, `91` paying-customers refusal. Records `89` and `90` between them belong to tavern branches, not to the sage |
 | 92-104 | Horse-trader barks |
 | 105-126 | Ship-broker barks |
@@ -136,8 +136,8 @@ behavior, with these traced shared rules:
 | Arms buy item quote | Select the item-description record from the chosen equipment id; the public mapping is in `systems/shops.md`. | No random draw. |
 | Tavern list | Select the tavern/menu record from the current tavern state, not from the tavern instance: states `0..3` map to records `69, 70, 71, 72`. The visible letter table for each state is in `systems/shops.md`. | No random draw for list selection. |
 | Tavern post-branch follow-up | After an accepted branch and a `Y` answer to the "anything else" prompt, render the current state's follow-up record: states `0..3` map to records `73, 74, 75, 76`. | No random draw. |
-| Tavern provision quote | Pick one of six interchangeable provision-quote records `77..82`. `%` is the Intelligence-adjusted per-unit price; every one of the six states the same twenty-five-serving pack size. | One uniform `0..5` draw when the provision branch renders its quote. |
-| Tavern table-scraps outcome | Render record `90` when the party cannot afford a single provision pack and its food counter is below `3`. | No random draw. The accompanying food gift is a fixed one unit. |
+| Tavern provision quote | Pick one of seven interchangeable provision-quote records `77..83`. `%` is the Intelligence-adjusted per-unit price; every one of the seven states the same twenty-five-serving pack size. | One uniform `0..6` draw when the provision branch renders its quote. |
+| Tavern table-scraps outcome | Render record `90` when the party cannot afford a single provision pack and its food counter is below `3`. | Record selection is fixed, but the food gift uses a separate uniform `0..1` draw plus one, giving one or two servings. |
 | Horse-trader quote | Render record `104` with the Intelligence-adjusted local price in `%`. | No random draw. |
 | Shipwright menu body | Render record `119` at the top of each pass of the Frigate/Skiff menu loop. | No random draw. |
 | Shipwright quote | Render record `117` for a Frigate or `118` for a Skiff, then the shared take-it confirmation record `126`. | No random draw. |
@@ -180,6 +180,12 @@ it is a resident literal; when it names a number, it is a record in this file.
 
 `systems/shops.md` owns any further per-flow record ids that have been
 promoted.
+
+The earlier six-record provision pool and `0..5` selection range are withdrawn
+(R432); the fixed-one-serving/no-random-draw charity claim is withdrawn too
+(R433). Fresh original consumer and bounded-draw checks in
+`u5-decomp/functions/SHOPPES2_OVL/` establish these corrections;
+`systems/shops.md` Section 8.5 owns their visit outcomes.
 
 ## 8. Consumer Behavior
 

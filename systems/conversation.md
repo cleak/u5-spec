@@ -22,8 +22,14 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
 
    | Live map tile | Shipped description of that tile | Result |
    |---|---|---|
-   | `0x9D` | a mirror | Print the "No response!" line and return. |
-   | `0xAB` | a bed | Print the "Zzzzzz..." line and return. |
+   | `0x9D` | a mirror | Print `\nNo response!\n` without quotation marks and return. |
+   | `0xAB` | a bed | Print `\n"Zzzzzz..."\n`, including both quotation marks, and return. |
+
+   Here `\n` denotes an explicit line feed. The bed response has five lowercase
+   z's after its capital Z and three dots. The earlier transcription that
+   omitted its displayed quotation marks is withdrawn (R431). Fresh original
+   Talk dispatch and literal checks in `u5-decomp/functions/TALK_OVL/` confirm
+   both rows; the author's Paws capture agrees with the bed response.
 
    Every other value falls through to step 5. The comparison is a single byte test with no ranges: only these two ids divert the command, and neighbouring ids such as the mirror-with-reflection and broken-mirror tiles do not.
 
