@@ -575,7 +575,9 @@ The input cursor is an animation, not a single glyph: it cycles through four
 consecutive fixed-cell glyph codes, `0x05` through `0x08`, drawn in place with
 the cursor-advance gate suppressed, and is erased with a space as soon as a key
 arrives. The starting code and the cycle length are resident values rather than
-literals, so an implementation should expose them as configuration.
+literals, so an implementation should expose them as configuration. The initial
+phase, frame order and per-poll wrap are specified in `systems/input.md`
+Section 3.
 
 Three readers share that presentation but differ in their key rules:
 

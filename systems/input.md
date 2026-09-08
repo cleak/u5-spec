@@ -18,27 +18,48 @@ The two modes share every other piece of behaviour: cursor blink, key polling, c
 
 ## 3. The Cursor-Blink and Poll Loop
 
-Inside each iteration of the wait loop, the engine performs a small fixed sequence:
+Each cursor-poll call performs the following operation at the current text
+cursor cell:
 
-1. **Save and suppress the cursor-advance gate.** The text-output system normally moves the cursor one cell to the right after every emitted glyph. The input system needs to draw and erase the blink in place, so it temporarily disables the advance gate, runs its blits, and restores the gate before returning. Save-and-restore on the local stack means a nested call (such as a text-input prompt that itself calls into this routine) composes cleanly.
-2. **Paint the next blink frame.** A single 16-bit blink counter is incremented, and a glyph code is computed as `blink_base + counter`. The glyph code is sent to the per-cell text emitter at the cursor's current position. Because the advance gate is suppressed, the cursor stays on the same cell.
-3. **Wrap the counter modulo a fixed limit.** When the counter reaches the wrap-around limit, it is reset to zero. The two parameters together — the base glyph and the modulus — fully describe the blink animation. (See the Cursor-Blink Parameters subsection for ranges.)
-4. **Peek the keyboard.** A single non-blocking call into the keyboard hardware abstraction returns either zero (no key pending) or a translated key byte.
-5. **Erase or rewind.** If a key arrived, the blink cell is overwritten with a literal space so the cursor visibly disappears at the moment the key is consumed. If no key arrived, the logical cursor X-position is rolled back by one cell (a side effect of the blit having been done with the gate suppressed already leaves it pinned, but this rewind handles the rare case where a nested emission did move it). Either way, the next iteration paints over the same physical cell.
+1. **Suppress cursor advance.** Save the incoming advance setting and disable it until this call returns. Both the animation glyph and any erasing space stay in the same cell; the saved setting is restored on return.
+2. **Draw the current frame and advance the phase.** The shared phase starts at zero. The drawn glyph is the base glyph plus the phase that was current on entry; advance the stored phase by one for the next call. With shipped settings, successive calls draw `0x05`, `0x06`, `0x07`, `0x08`, then repeat.
+3. **Peek the keyboard.** Poll once without blocking and retain the resulting key, or the no-key result.
+4. **Wrap the phase.** Reset the advanced phase to zero when it reaches the cycle length. The shipped cycle has four phases, 0 through 3. Wrapping occurs on both key and no-key calls.
+5. **Erase or delay.** If a key arrived, overwrite the animation with a space before returning that key. Otherwise request the calibrated one-tick delay and return the no-key result. The delay has the startup-calibration exception specified in `systems/timing.md` Section 8.3. Neither path rewinds or otherwise moves the cursor.
 
-The blink counter is a single global, shared across all four text windows. There is no per-window blink phase: only one cursor blinks at a time, and that is whichever window most recently received output.
+The earlier no-key cursor-rewind description is withdrawn; the cell remains fixed because cursor advance is suppressed (`RETRACTIONS.md` R450).
+
+One resident phase is shared across all four text windows and consecutive
+reads. Selecting another window does not start an independent animation or
+reset that phase. A key erases the visible cell but does not reset the phase
+except through the ordinary four-phase wrap.
 
 ### Cursor-Blink Parameters
 
-| Parameter | Default value | Meaning |
+| Parameter | Shipped value | Meaning |
 |---|---|---|
-| Blink base glyph | glyph code `4` | The first glyph code in the cursor-frame range. Each poll paints `base + phase` through the active font. |
-| Blink modulus | `4658` poll calls | Number of blink/poll calls before the phase counter wraps back to zero. This is an input-loop iteration count, not a real-time duration. |
+| Base glyph | glyph code `5` (`0x05`) | Glyph drawn at phase zero. |
+| Cycle length / modulus | `4` cursor-poll calls | Phases 0, 1, 2 and 3 select glyphs `0x05` through `0x08`, in that order. |
+| Initial phase | `0` | The first poll after initialization draws `0x05`. |
 
-Both parameters are mutable resident values. A DOS-compatible loop can use the
-same poll-count semantics; a modern fixed-timestep frontend should instead
-derive a visually similar blink cadence from elapsed time while preserving the
-same erase/rewind and no-advance behaviour.
+The earlier base `4`, modulus `4658`, and increment-before-glyph description are withdrawn; glyph selection uses the phase before its increment (`RETRACTIONS.md` R449).
+
+There is no 4,658-poll animation divider or whole-font cycle. The starting
+glyph and cycle length are resident parameters; with the shipped values,
+ordinary polling uses only those four cursor glyphs. This is the scrolling
+four-frame cursor described in `systems/text-output.md` Section 10.6.
+
+The cycle length counts calls, not elapsed time. A modern frontend may schedule
+these four frames from elapsed time, retaining their order, shared phase,
+in-place drawing and immediate space erasure. Original no-key cadence includes
+the calibrated delay and any caller work; the modulus alone specifies no
+wall-clock duration.
+
+Source provenance: a fresh resident input/data trace and 40 isolated original
+poll calls establish the defaults, phase order, wrap, key/no-key output and
+advance-setting restoration. Keyboard, glyph emission and delay were
+intercepted in those calls; they are not a full-game timing capture. Derived
+from private analysis in `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
 
 ## 4. Keyboard Hardware Abstraction
 
@@ -374,7 +395,7 @@ runtime gap: the full recognised set for the game-mode-specific entry stamp.
 The behaviour described here was derived from the private function notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
 - The top-level wait-for-input loop, idle vs prompt switching, case folding, numpad-to-direction translation, and the cardinal-direction renumbering — derived from `u5-decomp/functions/ULTIMA_EXE/`.
-- The cursor-blink animation, blink-base / blink-modulus parameters, cursor-advance gate save/restore, and erase-or-rewind step — derived from `u5-decomp/functions/ULTIMA_EXE/`.
+- The cursor-blink animation, blink-base / blink-modulus parameters, cursor-advance gate save/restore, and erase-or-delay step — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The keyboard hardware abstraction, the three input classes (regular ASCII, function-key remap, extended-scancode translation), the scancode-to-direction tables, the function-key block, the numpad-equivalent flag, and the buffer-flush gate — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The ASCII-only case-fold helper used between the keyboard peek and the caller — derived from `u5-decomp/functions/ULTIMA_EXE/`.
 - The central per-letter command dispatcher, the mode-aware routing, the verb-prefix printing, and the cross-overlay call model — derived from `u5-decomp/functions/ULTIMA_EXE/`. Per-letter handler behaviour is covered by `systems/commands.md`; only the input-side interface appears here.

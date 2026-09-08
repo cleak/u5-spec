@@ -1,5 +1,14 @@
 # Ultima V Extraction Inventory
 
+## Issue #248 - four-frame input cursor (2026-09-08 UTC)
+
+Input Section 3 now specifies shipped base 5, cycle length 4, initial phase 0,
+and glyph selection before phase increment. R449 withdraws base 4/modulus
+4658; R450 withdraws the no-key cursor rewind, which is a calibrated delay.
+A fresh resident trace and 40 isolated original polls support the correction.
+Text-output Section 10.6 keeps its already-correct four-glyph range and links
+to the precise phase contract.
+
 ## Issue #236 follow-up - revealed door lock state (2026-09-08 UTC)
 
 Doors-and-z-transitions Section 8 now identifies the ground/upper-floor
