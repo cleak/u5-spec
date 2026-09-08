@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 inn branches.** Section 8.C now names each inn's
+room record: Hotel Brittany uses 188. The inn confirmation is resident text,
+whereas the ship confirmation uses record 126. Rest decline ends with the
+visit's ordinary farewell; solo Leave checks before selection and ends with
+record 191 alone. R437 withdraws the blanket inn-refusal return summary;
+R438 withdraws a line feed incorrectly assigned to shared Y/N echoes.
+Fresh original static checks confirm these already-detailed boundaries.
+
 **2026-09-08 UTC, #238 sage follow-up.** Section 8.8 now agrees with the
 exact sage table in 8.C: the quoted question addresses Avatar, paid advice
 names the tavern vendor, and payment, empty input or fee refusal returns
