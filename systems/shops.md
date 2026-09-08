@@ -242,6 +242,22 @@ quantity, and item-name are filled mid-loop by the shop arm as the player picks
 items and prices are computed; the time-of-day byte is read fresh from the world
 clock on every render.
 
+**Attribution forms.** The vendor-name substitution is independent of the
+surrounding speech. Two common forms use the same Section 8.0 name:
+
+| Form | Placement and examples |
+|---|---|
+| Attribution before speech | The inn service question begins with `$ asks,\n"` before its quoted question. Arms entry similarly places `$ says,\n"` before its long greeting. Section 8.B supplies their complete spacing and text. |
+| Attribution after speech | Ordinary farewell records finish their quoted speech, then place `says $.\n` on the next available row. Healer powers/refusal and individual purchase outcomes have their own suffixes in Sections 8.B and 8.C. |
+
+The individual message controls the speech verb, quotation marks, position
+and line endings. For example, an outcome that uses `growls` or `yells`
+keeps that verb; a message without attribution does not acquire one from
+the vendor-name lookup. The inn prefix reported in the author's capture
+agrees with the original question and substitution calls in
+`u5-decomp/functions/SHOPPES3_OVL/` and
+`u5-decomp/functions/SHOPPES_OVL/`.
+
 A literal `&`, `%`, `*`, `$`, `#`, or `@` cannot be emitted as itself — none of the shipped record text uses these as literal punctuation, so the renderer always expands.
 
 ### 4.2 The phrase-token dictionary
@@ -919,6 +935,13 @@ according to the resulting window-local cursor column:
 | 1 through 11 | One space; no colon |
 | 12 through 15 | `\n\n:` |
 
+The colon is therefore conditional on the finished greeting's column. It
+is resident prompt punctuation, not part of the greeting record or a new
+key-summary line. Where a colon is emitted, the accepted answer appends
+directly after it, producing `:Yes` or `:No`; do not insert an intervening
+space. A greeting ending in columns 1 through 11 instead receives the
+single-space continuation shown above.
+
 The record supplies the greeting/question and its closing quote. This tail
 adds no words and no second question. The initial choice and following
 service surface are:
@@ -938,6 +961,22 @@ line feed, then exits through the appropriate closing-bark flow. Other
 initial keys leave the existing greeting visible and re-poll. In particular,
 inn and ship entry do have shared greeting records; neither starts directly
 at its service-letter menu.
+
+For the measured tavern, herbalist and inn entries, Y/N/Space are the only
+accepted choices, with Space meaning No. The healer entry accepts Y/N only
+and ignores Space. Return, Escape and service letters such as R at the inn
+do not select a service at this initial prompt: unaccepted normalized keys
+wait silently without redrawing the greeting or taking another greeting
+draw. These are entry-choice rules; the later service menus retain their
+own key sets.
+
+Fresh original-code checks cover every ending column and all 256 normalized
+key values in each of those four entry handlers: 1,040 isolated cases pass.
+The greeting renderer, stats refresh and input delivery are observation
+boundaries; this is not an independent live keyboard capture. Source
+provenance: `u5-decomp/functions/SHOPPES_OVL/`,
+`u5-decomp/functions/SHOPPES2_OVL/` and
+`u5-decomp/functions/SHOPPES3_OVL/`.
 
 The additional resident text after Yes is exact as follows; each row lists
 fragments in print order, preserving separately printed fragments:

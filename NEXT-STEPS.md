@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 entry punctuation follow-up.** Shops Section 4.1
+now groups vendor-prefix and vendor-suffix attribution forms. Section 8.B
+emphasizes conditional colon placement, same-row answer echoes and entry
+keys before service selection. All were already published; 1,040 isolated
+original-code cases confirm the tail and four measured entry handlers.
+No retraction is needed. Continue monitoring after answering the author.
+
 **2026-09-08 UTC, #238 Cove follow-up.** Shops Section 8.C now compares
 the common arms/reagent dotted listing shape and its per-shop letter case,
 question, repeat-heading and exit-key differences. Healer and herbalist
