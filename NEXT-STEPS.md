@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 single-guest Pickup.** Shops Section 8.C now
+explicitly says Pickup bills and returns the selected guest without Y/N
+confirmation. The existing poison-death body follows the bill's opening
+quote; paid Pickup converts Poisoned to Dead with zero HP. Leave/Pickup
+continue, but completed Rest ends the visit. Four isolated original cases
+verify Pickup's message, billing and return path. No prior contract is
+withdrawn; this clarifies the existing branch-specific rules.
+
 **2026-09-08 UTC, #238 confirmed inn Leave.** Section 8.C now groups
 the reused take-it confirmation wording: inn Rest/Leave use the same
 resident tail, and ordinary ship offers use record 126. Accepted Leave's

@@ -1174,7 +1174,7 @@ otherwise.
 | Rest offer | Opening quote, room record, then `\nWilt thou take\nit?" `. Records by inn row are `186, 187, 188, 188, 189, 190`. Y/N only, echo bare `Yes`/`No`, then `\n\n`. |
 | Declined Rest offer | After the bare `No` and two line feeds, end the visit through the ordinary farewell for the visit's existing outcome. A fresh unpaid visit uses records `178..181`, with quotation and vendor attribution; it does not return to the service question. |
 | Accepted Rest, short funds | `"Highwaymen!\nCheap, at that!\nOUT!" `, then token-expanded `screams\n$.\n` |
-| Paid Rest | `"Have a pleasant\nnight, `, honorific, token-expanded `!"\nsays $.\n\n`, then the rest sequence |
+| Paid Rest | `"Have a pleasant\nnight, `, honorific, token-expanded `!"\nsays $.\n\n`, then the rest sequence. On completion the visit ends without the inn continuation question or shared farewell. |
 | Sleep / morning | `Zzzzzz....\n\n` — four dots — followed at morning by `Morning!\n`. A poisoned member's recovery death adds `\n`, the member name, and ` has\npassed away.\n`. |
 | Leave with only Avatar travelling | After the lodging-capacity check, test party size before asking which companion should stay. Record `191`; visit ends without an added attribution or ordinary farewell |
 | Leave target question | Token-expanded `$ asks,\n"Who will\nstay?" `; cancellation adds `Nobody\n\n` |
@@ -1191,9 +1191,27 @@ otherwise.
 | Paid healthy pickup | `I hope thou hast found thy stay enjoyable,"\n`, then token-expanded `says $.\n\n` |
 | Paid poisoned pickup | `Thy friend has died, by the way."\n`, then the same attribution |
 
-Single-guest Pickup selects automatically. The register only offers guests
-at this inn, so it has no separate arbitrary-member/not-in-party refusal.
-Ordinary visit endings still use the shared farewell envelope.
+Single-guest Pickup selects automatically. After guest selection, the bill
+and affordability check proceed without a Y/N confirmation. If affordable,
+payment and the guest's return occur before the next input wait, which is
+the inn continuation question. Thus `P` with one local guest needs neither
+a picker nor a confirmation key. The register only offers guests at this
+inn, so it has no separate arbitrary-member/not-in-party refusal.
+
+The poisoned-Pickup body above follows the opening quote already printed
+with the bill, then receives the vendor attribution. The status conversion
+to Dead and zero HP occurs during paid Pickup, not through a separate
+registry-death timer. Successful Leave and Pickup continue on the inn's
+own question; Yes returns to its service question without a new greeting.
+Completed Rest instead ends the visit. Ordinary visit endings otherwise
+retain their shared farewell envelope.
+
+Fresh original Pickup and parent-return checks in
+`u5-decomp/functions/SHOPPES3_OVL/` include four isolated single-guest cases
+covering Good/Poisoned status and zero/two stored billing units. They verify
+the bill, absence of further input before completion, party growth, death
+conversion and exact result/continuation fragments. Printing, stats and
+surcharge are observation boundaries; no new full-game capture is claimed.
 
 **Leave-companion selection.** After the vendor's Who-will-stay question,
 the inn uses the shared member selector in `inventory.md` Section 4.3.
@@ -1929,7 +1947,8 @@ The main menu accepts three actions:
   with zero current hit points. The shared hourly provision cadence may apply
   as the clock advances. The quote is
   `adjusted(base_rate * travelling_party_size, speaker_intelligence)`. This is
-  a paid, safe town rest rather than a wilderness ambush-risk camp.
+  a paid, safe town rest rather than a wilderness ambush-risk camp. Finishing
+  Rest ends the inn visit without asking its continuation question.
 - `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. The quoted monthly rate is `adjusted(base_rate * 10, speaker_intelligence)`, due at Pickup; Leave performs no affordability check or gold debit. The earlier prepaid-deposit claim is retracted (R420).
 - `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill first computes `adjusted(base_rate * 10, speaker_intelligence)`, then multiplies that adjusted local lodging charge by the selected guest's stored stay counter, treating zero as one billable unit. The guest's record is copied into the next active roster slot, the party-size byte is incremented, the registry view is compacted as needed, and the returned slot's former guest marker is cleared to zero.
 
