@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #246 U-Use picker presentation.** Inventory Sections 4.4,
+4.5 and 7 now join the Items: frame to compact regalia labels, the uncounted
+Moonstone-plus-phase-glyph row, and selection inversion with middle-row
+scrolling. Twelve original row cases and eight navigator scenarios verify
+the contract. R444 corrects Section 5's old all-corners/eight-row navigation
+claim: Home/End select endpoints and Page keys move seven selectable items.
+
 **2026-09-08 UTC, #245 regime contact routing.** Blackthorn Section 7a now
 joins NPC Section 9.2 to the reserved dialogue selector explicitly: behavior
 4/5 automatic conversation can raise the demand, behavior 6/7 guards go

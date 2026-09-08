@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #246 - U-Use picker labels and navigation (2026-09-08 UTC)
+
+Inventory Sections 4.4 and 4.5 publish compact regalia names, the full
+uncounted Moonstone-plus-runic-glyph row, inversion of the selected text,
+and highlight movement with middle-row scrolling; Section 7 links them.
+Twelve original row-renderer cases and eight navigator scenarios pass.
+R444 corrects shared R-Ready Home/End/Page behavior in Section 5.
+
 ## Issue #245 - regime contact and demand routing (2026-09-08 UTC)
 
 Blackthorn Section 7a adds an explicit automatic-contact/explicit-Talk table
