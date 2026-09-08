@@ -6,6 +6,15 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - tavern bill and record lookup (2026-09-08 UTC)
+
+Shops Sections 4.1 and 8.C explicitly identify the ordinary tavern bill as
+resident text with a separate nondead-count word, blank for zero/one, and
+Avatar honorific. It is not a SHOPPE.DAT record or caret substitution.
+Section 8.B groups already-published horse, hull and room record IDs.
+Returning tavern purchase/dismissal paths share the existing continuation;
+direct endings remain distinct. Fresh static confirmation, no new retraction.
+
 ## Issue #238 - automatic Pickup and poison message (2026-09-08 UTC)
 
 Shops Sections 8.C and 8.4 make single-guest Pickup's lack of further

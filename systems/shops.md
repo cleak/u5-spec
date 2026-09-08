@@ -234,6 +234,19 @@ Within a record, certain printable-ASCII bytes are reserved as placeholders the 
 | `@`  | time of day | "morning" if hour < 12, "afternoon" if hour < 18, otherwise "evening".      |
 
 The substitution buffers are populated before any records are rendered.
+
+**Tavern count-word exception.** The ordinary round/meal and secondary-drink
+bill in Section 8.C is assembled from resident text, a decimal price, a
+separate count word and Avatar's honorific. It has no `SHOPPE.DAT` record
+ordinal and does not use the `^` substitution. Its count is the number of
+nondead party members: two through six produce English number words;
+zero or one produce nothing. The surrounding spaces remain, so a solo
+party sees `for the  of ye,` with two spaces, followed by a line feed and
+`sir.` or `milady.`. The `^` placeholder still renders a decimal quantity.
+Fresh bill, count-word and formatter checks in
+`u5-decomp/functions/SHOPPES2_OVL/` and
+`u5-decomp/functions/SHOPPES_OVL/` establish this distinction.
+
 Shop name (`#`) and vendor name (`$`) are set by the Talk shop dispatcher, not
 by the shop overlay and not from the NPC being spoken to: both are read from
 resident per-kind name tables using the shop-instance row resolved from the
@@ -1006,12 +1019,24 @@ fragments remain as specified above and in Section 8.C.
 | Ordinary Skiff offer body | `118` | Record `126` |
 | Shipwright F/S selection menu | `119` | Menu choice precedes either ordinary offer |
 | Shared ship take-it confirmation | `126` | Y/N input; no added `(Y/N)` legend |
+| Wayfarer Inn room offer | `186` | Resident inn take-it question, Section 8.C |
+| Warrior's Stead room offer | `187` | Same inn question |
+| Haunting Inn / Hotel Brittany room offer | `188` | Same inn question |
+| Smugglers' Inn room offer | `189` | Same inn question |
+| King's Ransom room offer | `190` | Same inn question |
+| Tavern ordinary round/meal and secondary-drink bill | None: resident text | No confirmation; bill and payment precede the result and continuation in Section 8.C |
 
 The horse and ordinary ship offer prices use the Intelligence-adjusted
 amount through `%`. Pending-delivery special cases remain separate in
 Sections 8.C and 8.7. Fresh record enumeration and original consumer checks
 in `u5-decomp/functions/SHOPPES_OVL/` and
 `u5-decomp/functions/SHOPPES2_OVL/` confirm this lookup.
+
+The inn entries collect the named room mapping already given in Section 8.C,
+confirmed by the original Rest consumer in
+`u5-decomp/functions/SHOPPES3_OVL/`. The tavern bill's complete resident
+fragments are in Section 8.C; its missing count word is explained in
+Section 4.1.
 
 Source provenance: fresh entry-to-input traces, literal/pool checks, and
 shared renderer/caller resolution in `u5-decomp/functions/SHOPPES_OVL/`,
@@ -1273,14 +1298,19 @@ follow-up record, a closing quote and a space. Invalid confirmation keys wait.
 Space is a No at entry, but is ignored at this continuation Y/N prompt.
 The earlier message-window clear is withdrawn (R430).
 
+Paid rounds/meals, ordinary secondary drinks, Blue Boar wine purchases and
+zero-quantity provision dismissal all reach this same continuation question.
+Direct visit endings, including unaffordable purchases and the provision
+gift/refusal endings below, retain their own exit behavior.
+
 Tavern and sage honorifics address Avatar: `sir` for male, otherwise `milady`.
 The original honorific helper also clears the active-member override.
 
 | Tavern result | Output |
 |---|---|
-| Ordinary meal/round bill | After the action-letter echo and `\n\n`: `"That will be `, decimal price, ` gold for the `, the count word, ` of ye,\n`, honorific, `.`. Count words exist only for two through six; the original emits no count word for zero or one. |
+| Ordinary meal/round or secondary-drink bill | After the action-letter echo and `\n\n`: `"That will be `, decimal price, ` gold for the `, the count word, ` of ye,\n`, honorific, `.`. Count words exist only for two through six; the original emits no count word for zero or one. This is resident text, not a resource record. |
 | Cannot afford that bill | `"\n\n"CAN'T PAY?\nBeat it!"\nyells `, vendor name, `.\n`; ends visit without shared farewell |
-| Paid meal/round | `\nEnjoy!"\n\n` |
+| Paid meal/round or ordinary secondary drink | `\nEnjoy!"\n\n` |
 | Fourth secondary drink attempt, when prior count is exactly three | `\n\n"I beg thy\npardon, `, honorific, `,"\nsays `, vendor name, `.\n"But haven't\nye had enough\nto drink?" ` |
 | Enough-drink answer | Y prints `Yes\n\n` and returns to continuation. N prints `No!` and proceeds with the purchase and existing drinking effects. Other keys wait. |
 | Blue Boar wine selection accepted | Uppercase selected letter, then `\n\n"Ah, a fine\nchoice, `, honorific and `.`; short funds uses the same CAN'T PAY envelope; paid purchase adds `\nEnjoy!"`, then `\n\n` |
