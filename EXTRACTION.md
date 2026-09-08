@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - Cove healer and herbalist comparison (2026-09-08 UTC)
+
+The new measurements agree with existing healer and reagent text. Shops
+Section 8.C consolidates the common dotted listing presentation and the
+arms/reagent differences in case, question, repeated heading and exit keys.
+Fresh original-path comparison supports the synthesis; no behavior is
+withdrawn and no new retraction is needed.
+
 ## Issue #238 - tavern wrappers and provision bounds (2026-09-08 UTC)
 
 Shops Section 8.5 now preserves the message window through the stats refresh
