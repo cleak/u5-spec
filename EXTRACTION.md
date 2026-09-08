@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - sage prompt and tavern continuation (2026-09-08 UTC)
+
+Shops Section 8.8 and the sage-rumour catalog now agree with the detailed
+Section 8.C contract. R435 withdraws the abbreviated ungendered question;
+R436 withdraws fee refusal ending the shop visit. Fresh original traces and
+sixteen isolated cases establish Avatar-owned honorific, vendor attribution,
+the 25-gold SPIR fee and the caller's continuation/exit boundaries.
+
 ## Issue #238 - horse/ship lookup and dotted row formats (2026-09-08 UTC)
 
 Shops Sections 8.B and 8.C consolidate existing quote/menu/confirmation

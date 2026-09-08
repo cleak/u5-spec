@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 sage follow-up.** Section 8.8 now agrees with the
+exact sage table in 8.C: the quoted question addresses Avatar, paid advice
+names the tavern vendor, and payment, empty input or fee refusal returns
+to tavern continuation. Short funds ends the visit. R435 withdraws the
+stale ungendered prompt; R436 corrects the refusal-exits summary here and
+in the rumour catalog. Sixteen isolated original cases pass. The horse/ship
+lookup and row formats remain published in 8.B/8.C; reply and resume monitoring.
+
 **2026-09-08 UTC, #238 final shop-cluster request.** Shops Section 8.B
 now groups horse104, Frigate117, Skiff118, ship menu119 and confirmation126
 in a compact resource lookup. Section 8.C compares fixed three-dot rows

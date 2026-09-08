@@ -11,20 +11,32 @@ reproduce the original lookup.
 
 ## 1. Runtime Contract
 
-The sage prompt accepts up to fifteen typed characters. Empty input exits. A
+The sage prompt accepts up to fifteen typed characters. Empty input returns
+to the enclosing tavern's anything-else question with continuation retained. A
 non-empty input is compared case-insensitively against the fixed topic table
 below. Each topic key is a four-letter keyword. The key must either consume the
 whole input or be followed by a space; longer words that merely start with the
 four-letter key do not match.
 
 On a match, the sage quotes the row's fee with SHOPPE.DAT record 84. If the
-player refuses, the shop exits. If the player accepts but lacks enough gold, the
+player refuses, no fee is charged and the tavern's anything-else question
+returns with continuation retained. The earlier claim that refusal exits
+the shop is withdrawn (R436). If the player accepts but lacks enough gold, the
 sage renders SHOPPE.DAT record 91, the paying-customers refusal, and exits. If
 the player accepts and can pay, the fee is deducted, the row subject fills the
 `&` placeholder, the row location fills the `*` placeholder, and one of the four
 shared success templates is selected randomly. The success-template random draw
-happens only after confirmation and a successful gold debit; refusal and
-short-funds exits do not consume a success-template draw.
+happens only after confirmation and a successful gold debit; declined or
+unaffordable offers do not consume a success-template draw.
+
+The paid template is followed by attribution to the current tavern vendor,
+then the tavern's anything-else question; continuation remains established.
+Only an unknown topic immediately repeats the topic question. The quoted
+prompt addresses Avatar according to Avatar's sex, independently of the
+selected speaking member. Exact question, input-prompt and attribution
+fragments are in `systems/shops.md` Section 8.C; Section 8.8 describes the
+complete branch. Fresh original caller traces and sixteen isolated cases
+in `u5-decomp/functions/SHOPPES2_OVL/` confirm these return boundaries.
 
 The same 26-row table is shared by the sage flow. There is no per-sage
 16-entry rumour table in the traced handler. Tavern/menu state only selects the

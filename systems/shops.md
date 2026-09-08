@@ -2238,29 +2238,52 @@ vehicle marker table in `systems/vehicles.md` rather than by the shop flow.
 
 ### 8.8 Sage / rumour vendor
 
-The sage uses free-text input rather than letter selection. After a banner ("Of
-what wouldst thou hear my lore?") the player types a keyword of up to fifteen
-characters. Empty input exits.
+The sage is the tavern's lore branch, reached through the continuation gate
+in Section 8.5. It echoes the advertised lore letter, then asks the quoted
+question specified in Section 8.C. The question addresses Avatar as `sir`
+when male and `milady` otherwise; this does not depend on the selected
+speaking member. A separate `You respond:` prompt follows, with the typed
+topic echoed below it. Input accepts up to fifteen characters. The earlier
+ungendered prompt transcription in this section is withdrawn (R435).
+
+An empty topic returns to the tavern's anything-else question, retaining
+the established continuation state. It does not leave the shop or ask for
+another topic immediately.
 
 The sage checks the input against the fixed 26-row table in
 `catalogs/sage-rumours.md`. Matching is case-insensitive and uses a strict
 topic-boundary check: after the four-letter topic key matches, the next input
 character must be either the end of the input or a space. Partial prefixes
 therefore do not match longer stored topics, and longer words that merely start
-with a topic are rejected. On no match, the sage replies "That, I cannot help
-thee with." and the keyword input is re-prompted.
+with a topic are rejected. On no match, the no-help text and topic question
+repeat with the quotation and line endings given in Section 8.C.
 
 Every topic carries a gold fee, a subject string, and a destination selector.
 When a topic matches, the sage renders SHOPPE.DAT record 84 to quote the fee
 and ask for confirmation; the `%` placeholder is the row fee. If the player
-refuses, the sage exits. If the player accepts but the party cannot pay, the
+refuses, the fee is not charged and the tavern's anything-else question
+returns with continuation retained. The earlier refusal-exits summary is
+withdrawn (R436). If the player accepts but the party cannot pay, the
 sage renders SHOPPE.DAT record 91, the paying-customers refusal, and exits
 without giving a rumour. If the player confirms and has enough gold, the fee is
 deducted, the topic's subject fills the `&` substitution, the selected
 destination fills the `*` substitution, and one of the four shared success
 templates is selected at random from SHOPPE.DAT records 85-88. The
 success-template draw is reached only after confirmation and successful payment;
-refusal and short-funds exits do not consume that draw.
+declined or unaffordable offers do not consume that draw.
+
+Paid advice is attributed to the current tavern vendor using the suffix
+in Section 8.C. For The Cat's Lair this names Dr. Cat; no separate sage
+identity replaces the vendor. After that suffix, the tavern's anything-else
+question returns with continuation retained. It does not immediately ask
+for another topic. `SPIR` matches catalog row 6, whose fee is 25 gold.
+
+Source provenance: fresh original greeting, honorific, paid-advice and
+caller-return traces in `u5-decomp/functions/SHOPPES2_OVL/`. Sixteen isolated
+original-code cases cover both Avatar sexes with an opposite-sex selected
+member, all four paid templates and the blank, declined, short-funds and
+unknown-topic outcomes. These tests observe text and resource calls with
+input and drawing boundaries substituted; they are not a full-game capture.
 
 The same topic table is used by the traced sage flow. There is no per-sage
 16-row rumour table. The tavern/menu state only controls which visible action
