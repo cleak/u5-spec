@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - entry punctuation and attribution forms (2026-09-08 UTC)
+
+Shops Section 4.1 distinguishes attribution before and after quoted speech
+using the same vendor-name substitution. Section 8.B emphasizes the existing
+conditional colon and initial-key contracts. Sixteen cursor-column cases
+and all256 normalized keys across four original entry handlers pass in
+isolated probes. This is clarification, with no retraction or live capture.
+
 ## Issue #238 - Cove healer and herbalist comparison (2026-09-08 UTC)
 
 The new measurements agree with existing healer and reagent text. Shops
