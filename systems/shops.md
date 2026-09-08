@@ -977,7 +977,9 @@ inside this envelope, rather than unquoted stand-alone barks.
 **Arms sell refusals.** Empty Sell inherits the opening quote from
 `Sell\n\n"`, then prints token-expanded
 `Thou hast nothing to sell!"\ngrowls $.\n`. The used-ammunition refusal is
-`\n\n"We don't deal in used \nammunition!"\ngrowls $.\n`.
+`\n\n"We don't deal in used ammunition!"\ngrowls $.\n`.
+The earlier embedded line feed between "used" and "ammunition" is withdrawn
+(R429); any on-screen break inside that sentence comes from normal text wrapping.
 Other arms outcome and browser text remains in Section 8.1.
 
 **Guild stock and confirmation.** Print `a.........Keys\n`,
@@ -1488,16 +1490,13 @@ Every other key is ignored. It performs no redraw, prints nothing, and consumes
 no random draw. Each accepted movement redraws the row area and page indicator,
 then waits for the next command key.
 
-**Capture discrepancy, issue #238 (2026-09-08 UTC).** The author's follow-up
-confirms that Return selects the highlighted row and reaches an offer. Only
-the reported lack of arrow movement remains unsettled. The accepted-key table
-above remains supported by exhaustive original-dispatch and command-normalization
-checks, which do not verify delivery through the live keyboard stack. Compare
-Down or Right when a following nonempty row exists: a previous-item command
-at the first item need not visibly move selection. Reconciling the capture
-needs the starting save and asset identity, exact key events, and frames
-showing the highlighted row and conversation window before and after input.
-Ordinary letters and unmodified digits are not row selectors.
+**Capture reconciliation, issue #238 (2026-09-08 UTC).** The author's later
+captures confirm both Return selection and Down movement, resolving the earlier
+report of ignored input. These agree with the original-dispatch and
+command-normalization checks supporting the table above. Ordinary letters and
+unmodified digits are not row selectors; a previous-item command at the first
+item need not visibly move selection. The captures were reported by the issue
+author; no new independent full-game replay was performed for this update.
 
 **Row cells.** Item rows begin at window-local `(1, 1)` and continue through
 `(1, 4)`. Under normal stock limits, each row consists of:
@@ -1577,7 +1576,12 @@ Every ordinary sellable equipment row uses this same pool; item identity
 does not select a smaller subset.
 
 The quote wait accepts only uppercase `Y` or `N`; other keys leave the quote
-visible and re-poll without a redraw or random draw. Both accepted answers
+visible and re-poll without a redraw or random draw. `N` prints `No` with no
+leading or trailing line feed: it appends after the space in `Deal?" `.
+`Y` prints the token-expanded `Yes\n\n"Done!"\nsays $.`, with no trailing
+line feed. The speaking vendor replaces `$`. Thus the successful Sell output
+is the attributed `Done!`; the `Sold!` line above belongs to Buy.
+Both accepted answers
 redraw the stats-panel gold field. A decline, a zero-price refusal, or a sale
 whose counter remains nonzero rebuilds the same page and selection. If a sale
 removes the page's first item, selection moves to the preceding nonzero id when
@@ -1586,6 +1590,13 @@ the page start, selection moves to the following nonzero id when one exists,
 otherwise to the last remaining id. The page is normalized around that choice.
 The frame is not reconstructed during these continuations—only its row
 interiors and page indicator are repainted.
+
+A zero-price selection prints token-expanded
+`\n\n"That, I cannot buy from thee."\nsays $.`, without a trailing line feed,
+then takes its normal continuation. The ammunition and empty-pack growls
+are specified in Section 8.C. The continuation supplies its own leading
+two line feeds after either the decline echo, success attribution or
+zero-price refusal.
 
 Escape or depletion repaints the complete ordinary stats panel and restores its
 plain top ribbon before browser-local conversation text continues. The outer
@@ -1608,11 +1619,17 @@ the visible question has both quotes, for example
 `"Which item wouldst thou like to sell?" `. A continuation prints `\n\n"`,
 its selected continuation question, and `" `.
 
+An ordinary browser-local goodbye prints `\n\n"`, its selected goodbye
+fragment, and `"\n`. If any equipment remains, it then appends
+token-expanded `says $.\n`, including the final full stop. When the final
+carried item has been sold, the quoted goodbye still prints but this
+attribution is omitted. Empty entry and the ammunition refusal take their
+already-specified exits without this local goodbye.
+
 Source provenance for these wrappers and draw-to-record mapping: fresh
 original seller and resource-selector traces in `u5-decomp/functions/SHOPPES_OVL/`
-and `u5-decomp/notes/`. The reported Return capture agrees with the quote
-prompt and existing selection contract; arrow delivery remains the separate
-capture question above.
+and `u5-decomp/notes/`. The author's reported Return, Down and transaction
+captures agree with the existing selection contract and the quoted output.
 
 There is no draw for movement, row rendering, empty inventory, a zero-price
 refusal, or the ammunition refusal itself. The browser performs no free-standing

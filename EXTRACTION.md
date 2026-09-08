@@ -12,12 +12,13 @@ Shops Section 8.1 corrects stock-call placement after the listing (R427),
 publishes the three-period row separator and clarifies repeated-list output.
 Existing post-item punctuation and Sell keys remain unchanged. Six Buy flow
 cases, 256 normalized Sell-input cases and fourteen command-normalization
-cases pass against original routines. The contrary live Sell-input report
-is tracked as a capture discrepancy; no full-game reproduction was performed.
-The author's later capture confirms Return selection, narrowing the remaining
-question to arrows. Sell-entry/offer wrappers and the draw 0..7 to record 49..56
-mapping are explicit. R428 corrects the duplicate ordering claim in Section 8.A
-that the preceding edit missed.
+cases pass against original routines. The author's later captures confirm
+Return selection and Down movement, resolving the contrary Sell-input report.
+No independent full-game reproduction was performed. Sell-entry/offer/outcome
+wrappers, same-row No echo, the goodbye attribution's remaining-equipment gate,
+and the draw 0..7 to record 49..56 mapping are explicit. R428 corrects the
+duplicate ordering claim in Section 8.A that the preceding edit missed;
+R429 removes an extra hard line feed from the ammunition refusal.
 
 ## Issue #243 - saved NPC band accounting (2026-09-08 UTC)
 
