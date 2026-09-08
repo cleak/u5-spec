@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - inn room lookup and refusal boundaries (2026-09-08 UTC)
+
+Shops Section 8.C now maps inn names to their room-description records and
+states Rest decline and solo Leave outcomes explicitly. Original record and
+caller checks confirm Hotel Brittany record 188, solo refusal 191 and a
+resident inn confirmation distinct from ship record 126. R437 corrects the
+overbroad inn-refusal summary; R438 assigns echo line feeds to their callers.
+
 ## Issue #238 - sage prompt and tavern continuation (2026-09-08 UTC)
 
 Shops Section 8.8 and the sage-rumour catalog now agree with the detailed

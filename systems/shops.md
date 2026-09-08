@@ -757,19 +757,22 @@ For frame-oriented rendering, the live transcript contract is:
 | Healer entry and service menu | Shared non-arms preamble row, resident entry literals, service prompts, and deterministic treatment text | Appends; no shop-local clear | Natural text advance only | Entry waits for `Y`/`N`; the service menu accepts `C`, `H`, `R`, Space, or Enter. Invalid service keys silently wait without reprinting (R419) |
 | Tavern / meal entry | One shared tavern greeting record selected uniformly from `57..60`; the later menu record is selected by tavern state | Appends in the inherited conversation text window; there is no entry clear | No shop-local cursor origin | Entry accepts `Y`, `N`, or Space. Other keys leave the greeting visible and keep polling |
 | Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
-| Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input returns; unknown topics print the no-help line and re-prompt. `N` exits before a success draw; short funds exits without a success draw |
+| Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input and declined fee return to tavern continuation; unknown topics repeat the topic question. Short funds ends the visit; only paid advice consumes a success draw |
 | Horse-trader entry and quote | Shared non-arms entry-greeting row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space echoes the resident `No` literal and exits through the nothing-bought closing bark, not silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
 | Shipwright entry and branch | Shared entry records, resident Yes/No echo, then menu record `119` and deterministic quote records | Appends throughout entry and the initial menu; no shop-local clear | Natural text advance only | Entry accepts `Y`, `N`, or Space; ignored entry keys do not redraw. After Yes, the Frigate/Skiff menu follows Section 8.7 |
-| Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Branch-local prompts wait according to the selected room, leave, or pickup path; failed eligibility checks print their refusal and return to the inn prompt path |
+| Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Each branch retains its Section 8.C continuation or exit rule. Declining Rest ends the visit through the ordinary farewell; solo Leave and dead-companion Leave end without that farewell |
 | Inn multi-guest pickup register | Resident register frame/list text and guest names copied from the inn registry | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
 
 The earlier table's shipwright-entry clear/resident-menu claim and its additional arms exit key are withdrawn; entry appends, the ship menu comes from record `119`, and only Space exits the arms prompt (R405).
+The blanket claim that inn eligibility refusals return to the inn prompt is withdrawn; some end the visit as specified in Section 8.C (R437).
 
 The short resident literal pools that affect prompt parity are:
 
+The earlier shared-Y/N echo rule added a line feed that belongs to individual callers, not to the shared echo; that claim is withdrawn (R438).
+
 | Use | Literal contract |
 |---|---|
-| Shared Y/N prompt echo | `Y` echoes `Yes` plus newline; `N` echoes `No` plus newline. Other keys print nothing and keep polling. |
+| Shared Y/N prompt echo | `Y` echoes bare `Yes`; `N` echoes bare `No`. Other keys print nothing and keep polling. Each caller supplies any following line feeds or punctuation. |
 | Arms buy confirmation prompts | One prompt is selected uniformly from: `Wouldst thou buy one?`, `Wilt thou take it?`, `Wish ye it?`, `May I get one for thee?` |
 | Arms buy decline echo | `N` prints `No` followed by a blank line, then returns from that quote without changing gold or inventory. |
 | Arms carry-cap refusal | Prints the fixed carry-cap refusal followed by the shopkeeper suffix, waits for one key, then returns from the quote. |
@@ -1154,10 +1157,11 @@ otherwise.
 |---|---|
 | Capacity check before Rest or Leave | First `\n\n`. If full: `"I am sorry,\n`, honorific, then `, but we\nhave no room\navailable."\n\n`. |
 | Rest offer | Opening quote, room record, then `\nWilt thou take\nit?" `. Records by inn row are `186, 187, 188, 188, 189, 190`. Y/N only, echo bare `Yes`/`No`, then `\n\n`. |
+| Declined Rest offer | After the bare `No` and two line feeds, end the visit through the ordinary farewell for the visit's existing outcome. A fresh unpaid visit uses records `178..181`, with quotation and vendor attribution; it does not return to the service question. |
 | Accepted Rest, short funds | `"Highwaymen!\nCheap, at that!\nOUT!" `, then token-expanded `screams\n$.\n` |
 | Paid Rest | `"Have a pleasant\nnight, `, honorific, token-expanded `!"\nsays $.\n\n`, then the rest sequence |
 | Sleep / morning | `Zzzzzz....\n\n` — four dots — followed at morning by `Morning!\n`. A poisoned member's recovery death adds `\n`, the member name, and ` has\npassed away.\n`. |
-| Leave with only Avatar travelling | Record `191`; visit ends without ordinary farewell |
+| Leave with only Avatar travelling | After the lodging-capacity check, test party size before asking which companion should stay. Record `191`; visit ends without an added attribution or ordinary farewell |
 | Leave target question | Token-expanded `$ asks,\n"Who will\nstay?" `; cancellation adds `Nobody\n\n` |
 | Leave selects Avatar | `\n\nThy friend`, plural `s` only when more than two members travel, then ` will not leave thee!\n\n`; repeat the target question |
 | Leave selects a dead companion | After the selection's `\n\n`, record `192`; visit ends without ordinary farewell |
@@ -1175,6 +1179,31 @@ otherwise.
 Single-guest Pickup selects automatically. The register only offers guests
 at this inn, so it has no separate arbitrary-member/not-in-party refusal.
 Ordinary visit endings still use the shared farewell envelope.
+
+**Inn room-resource lookup.** These zero-based `SHOPPE.DAT` ordinals
+count empty records and supply the room-description body:
+
+| Inn | Location | Room record |
+|---|---|---:|
+| The Wayfarer Inn | Britain | `186` |
+| The Warrior's Stead | Jhelom | `187` |
+| The Haunting Inn | Skara Brae | `188` |
+| Hotel Brittany | North Britanny | `188` |
+| The Smugglers' Inn | Paws | `189` |
+| The King's Ransom Inn | Buccaneer's Den | `190` |
+
+The price substitution uses the adjusted charge for the travelling party
+specified in Section 8.4; a reported three-gold offer does not make three
+the fixed price of that record. The inn then adds the resident confirmation
+shown in the Rest-offer row. The shipwright instead uses record `126` for
+its confirmation; similar wording does not make this a shared resource ID.
+
+Source provenance: fresh room-table enumeration, confirmation-helper,
+Rest-return and solo-Leave caller traces in
+`u5-decomp/functions/SHOPPES3_OVL/` and
+`u5-decomp/functions/SHOPPES_OVL/`. These are original static checks,
+not an independent full-game capture. Attribution remains a property of
+the individual message, as described in Section 4.1.
 
 **Tavern and sage continuation.** State-dependent initial records `69..72`
 and follow-up records `73..76` supply the actual menu choices. Unknown menu
