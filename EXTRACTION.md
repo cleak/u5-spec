@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #245 - Badge password input row (2026-09-08 UTC)
+
+Blackthorn Section 7a now specifies the colon-free input row after the
+password question; Section 4.1 distinguishes the audience's retained colon.
+R445 withdraws the prior password colon claim. Five original handler/editor
+cases verify the prompt and accepted/refused outcomes with controlled keys
+and text output.
+
 ## Issue #246 - U-Use picker labels and navigation (2026-09-08 UTC)
 
 Inventory Sections 4.4 and 4.5 publish compact regalia names, the full
