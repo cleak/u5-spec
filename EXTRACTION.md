@@ -1,5 +1,14 @@
 # Ultima V Extraction Inventory
 
+## Issue #241 follow-up - cadence per additional terrain call (2026-09-08 UTC)
+
+Movement Section 8.1 now gives the ordered Negate Time, Quickness and transport
+gates per object-update call, shared-parity examples and separate clock-call
+ordering. Overworld Section 6 and encounters Section 2.1 point to that scope.
+Fresh traces and 432 isolated original sequences confirm the existing rules;
+this is additive clarification with no retraction. Issue #242's follow-up
+accepts the existing swamp-save contract without a further spec change.
+
 Master tracking checklist for the cleanroom specification phase. This file maps
 the original DOS/GOG asset and code inventory to the public specification docs
 in this repository.

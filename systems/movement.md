@@ -313,6 +313,35 @@ ordinary encounter and hostile-object work. Each extra call is followed by
 the usual proximity pause: one world tick when active-object slot 1 is live,
 on the same floor and within five cells of the party on both axes.
 
+The cadence unit is **one object-update call**, including each additional
+terrain call and the later ordinary outdoor object call. They share the same
+stored parities; a movement action does not reset them or take one cadence
+decision for all its calls. Each call uses its current timing effect and
+transport marker, in this order:
+
+| Reached gate | Parity change | Result for this call |
+|---|---|---|
+| Negate Time active | Neither parity changes | Return without encounter or creature work; no hostile interaction reported. |
+| Quickness active, after passing Negate Time | Flip the Quickness parity | New value 1 returns as above; new value 0 continues to the transport gate. |
+| Transport marker `0x12..0x15`, after passing the earlier gates | Flip the transport parity | New value 1 returns as above; new value 0 continues to encounter and creature work. |
+| Quickness inactive, or marker outside the transport window | Leave that gate's parity unchanged | Continue past that gate. |
+
+For example, with no timed effect and transport parity initially 0, a
+horse/carpet step with two extra calls skips the first, runs the second,
+and leaves parity 0. The later ordinary object call then flips it to 1 and
+skips. With parity initially 1, that sequence is run, skip, run. On foot
+without either timed effect, all three calls reach the normal pipeline.
+These examples assume the effect and transport remain unchanged between calls.
+A Quickness return leaves transport parity untouched; Negate Time leaves
+both untouched. The proximity pause is still assessed after every extra
+call, including a cadence-skipped one.
+
+The terrain clock advance remains separate from the later ordinary two-minute
+advance: one call charges the terrain's two or four extra minutes after its
+additional object calls and possible feedback. The ordinary consumed-action
+tail subsequently performs its own clock and upkeep work. Apply the current
+timed-effect clock rules at each advance, as specified above.
+
 There is no separate chance roll for choosing the slow-terrain message.
 However, the message is suppressed if any of the additional object-update
 calls reports a hostile interaction: the adjacent-engagement path or a
@@ -331,7 +360,11 @@ object-update and clock traces under `u5-decomp/notes/`. Isolated execution
 checked all 256 tile ids with and without a reported interaction (512 cases),
 plus fifteen accepted movement cases across foot, horse and carpet states.
 Those probes intercepted passability and actor/clock boundaries; the existing
-passability tables remain authoritative. Issue #241 independently captured
+passability tables remain authoritative. An additional 432 isolated sequences
+checked the actual cadence gates across
+both parity phases, timing effects, transport markers and zero/one/two extra
+calls followed by an ordinary object call; downstream hostile results and
+clock/proximity boundaries were controlled. Issue #241 independently captured
 the brush/forest/hill messages and one-cell movement on its outdoor route.
 
 ### 8.2 Outdoor swamp poisoning
