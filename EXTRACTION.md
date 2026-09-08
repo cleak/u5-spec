@@ -6,6 +6,16 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #244 - Blackthorn audience text and entry (2026-09-08 UTC)
+
+Blackthorn Sections 2, 4.1 and 5 supply automatic missing-Badge guard contact,
+the four demand records and exact input envelope, named threat, reaction
+selectors and unquoted execution narration. Two hundred interrogation cases,
+six palace capability cases and four guard-contact chains execute the
+original routines with explicit presentation/input boundaries. R440-R443
+correct party-count, threat/victim, palace fallback and standing-summary
+claims; town Section 14 also carries the fallback correction.
+
 ## Issue #238 - Blue Boar listing comparison (2026-09-08 UTC)
 
 Shops Section 8.C groups the Blue Boar's fixed sixteen-column wine rows
