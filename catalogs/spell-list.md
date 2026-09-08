@@ -201,7 +201,7 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
 | 34 | `AEX` | An Xen Ex | Charm | 6 | Spider Silk + Black Pearl + Nightshade | C | buff/debuff; toggles the controlled/charmed descriptor bit `0x01` on the picked creature (a second cast clears it), sets a party-side target's roster status letter back to Good, prints `<name> charmed!` and suppresses the shared epilogue; it does not change faction |
 | 35 | `BRX` | Rel Xen Bet | Polymorph | 6 | Sulfur Ash + Spider Silk + Nightshade + Mandrake | C | buff/debuff |
 | 36 | `LS` | Sanct Lor | Invisibility | 7 | Blood Moss + Nightshade + Mandrake | C | buff/debuff; caster-only hidden flag with no duration at all, and no use of the shared timed-effect slot |
-| 37 | `CX` | Xen Corp | Kill | 7 | Black Pearl + Nightshade | C | damage; creature-target instant kill; classes 14/15/47 reject after charge, 7 MP, and pre-effect but before resistance, consume the turn, then report `Failed!` without gameplay randomness or a re-prompt |
+| 37 | `CX` | Xen Corp | Kill | 7 | Black Pearl + Nightshade | C | damage; shared Aim attack wrapper, attack hit check, then instant-kill damage value through shared damage/death and result narration; no separate creature-helper protected-class gate (R446) |
 | 38 | `IQX` | In Quas Xen | Clone | 7 | Sulfur Ash + Ginseng + Spider Silk + Blood Moss + Mandrake | C | summon |
 | 39 | `IQW` | In Quas Wis | Peer | 7 | Nightshade + Mandrake | D/I/O | utility |
 | 40 | `HIN` | In Nox Hur | Poison Wind | 7 | Sulfur Ash + Blood Moss + Nightshade | C | damage |
@@ -470,16 +470,15 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
   pre-exit removal; placed field markers persist until combat exit restores
   the pre-combat active-object table.
 
-- `CX` / Kill checks protected-target eligibility only after the shared cast
-  dispatcher has spent one premixed charge and seven MP and after target
-  confirmation has run Kill's normal audiovisual pre-effect. Classes 14
-  (Blackthorn), 15 (Lord British), and 47 (Shadow Lord) fail before the shared
-  resistance call, so this branch advances no gameplay PRNG and shows no
-  target-death animation or target-cell effect. It prints `Failed!` plus a
-  newline and plays the shared fifty-step speaker failure glissando. The cast
-  consumes the combat action and completes without re-opening either the
-  creature cursor or the same actor's command prompt. The pre-effect's separate
-  speaker jitter is presentation state, not the gameplay PRNG.
+- `CX` / Kill spends its charge and seven MP through the standard cast
+  gates, then uses `Aim! ` and the same attack-wrapper family as Magic Missile
+  and Fireball. Kill runs the attack hit check; its admitted collision supplies
+  the instant-kill damage value without damage randomization or defense
+  subtraction. Shared damage/death and target-result narration still apply,
+  including class-specific outcomes. The former creature prompt, protected
+  rejection and pre-effect envelope attributed to Kill are withdrawn (R446):
+  that helper belongs to Polymorph. `systems/magic.md` Section 8 and
+  `systems/combat.md` Section 11.1 give the corrected contract.
 
 - `IMX` / Create Food uses the standard cast gates and resource ordering. On
   an accepted cast it rolls a uniform `1..3` food/provisions delta, adds that
@@ -501,8 +500,8 @@ High-confidence engine-derived data:
 - Scene mask bit order and scene-byte classification, including the `0xFF`
   combat marker. The dungeon and combat bits were published transposed in
   earlier revisions; see the correction at the end of Section 4.
-- Kill's protected-target resource, action, randomness, presentation, and
-  prompt envelope, derived from private analysis in
+- Kill's corrected spell binding, aiming/attack path and shared narration,
+  derived from private analysis in
   `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/CAST2_OVL/`,
   `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/notes/`.
 

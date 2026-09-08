@@ -123,7 +123,7 @@ selects its target through `On who: ` (R409).
 | 6      | An Xen Ex                 | Charm               | Charm an enemy.                                            |
 | 6      | Rel Xen Bet               | Polymorph           | Transform a target into a Giant Rat.                       |
 | 7      | Sanct Lor                 | Invisibility        | Single-target invisibility buff.                           |
-| 7      | Xen Corp                  | Kill                | Creature-target death effect gated by shared resistance.   |
+| 7      | Xen Corp                  | Kill                | Combat attack with a hit check and instant-kill damage value.   |
 | 7      | In Quas Xen               | Clone               | Clone a person or creature.                                |
 | 7      | In Quas Wis               | Peer                | Reveal the map.                                            |
 | 7      | In Nox Hur                | Poison Wind         | Directed poison cone with a target-only weight gate.       |
@@ -786,40 +786,57 @@ shared resistance check, drives that actor's combat HP counter to one and sets
 its fleeing flag directly. The monster wound-score morale classifier then keeps
 re-asserting the flag from that critical-HP state on later turns.
 
-The shared resistance check used here, by Repel Undead, Charm, Kill/Slay
-Living, directed Sleep, Death Wind, and monster possession is defined exactly
+The shared resistance check used here, by Repel Undead, Charm, Polymorph,
+directed Sleep, Death Wind, and monster possession is defined exactly
 in `systems/combat.md` Section 9. It compares a side-aware party Intelligence or
 monster endurance rating, and equality permits the effect to land. Tremor and
 Poison Wind do not use that predicate; their separate target-only gate is
 described below.
 
-**Direct damage and wind attacks.** Magic Missile and Fireball are active-target attack wrappers: each spell prints the shared aiming prompt, uses the combat aiming/projectile path, and on an actor collision calls the combat spell-damage wrapper with the caster slot, target slot, and active spell tag. The projectile portion is presentation-only state: it builds and walks a temporary path, renders per-cell visual effects, and leaves no active-object slot or persistent projectile record behind. Magic Missile rolls raw damage in `[1, 16]`; Fireball rolls raw damage in `[1, 30]`. Each then subtracts a random defense roll from the target's applicable combat defense value; if the subtraction drives damage negative, the normal miss/no-damage path is used. Kill/Slay Living instead uses a creature target, rejects the protected special classes, runs the shared resistance predicate, and applies its death result only when that predicate does not block. Tremor is a table-wide combat scan, not a directional spell: it walks every combat actor slot, skips empty or non-damageable records, draws the standard skewed `1..30` roll, and accepts only when that roll is at least the target's combat weight. It then rolls 1..20 damage for each accepted actor and calls the combat damage/status handler with that roll and actor slot. If that handler returns a raw monster-kill reward unit, Tremor adds it to the caster's experience word with the normal 9999 cap. Tremor does not run the friend/foe lookup; party actors and monsters are both eligible if they pass the common gates. Poison Wind, Death Wind, and Flame Wind share the directed wind-cone family described below. Poison Wind uses Tremor's same target-only `roll >= combat weight` gate before routing an accepted target to the poison-status helper. Death Wind first runs the shared two-rating resistance predicate, then passes the decimal `99` instant-kill sentinel into the shared combat damage/status path only for an unblocked target. Flame Wind rolls raw damage in `[1, 30]` before the same damage/status path. Death Wind and Flame Wind add returned monster-kill reward units to the caster's experience with the normal 9999 cap. The shared directed scan and these per-effect branches do not run the friend/foe lookup or skip same-faction actors.
+**Direct damage and wind attacks.** Magic Missile and Fireball are active-target attack wrappers: each spell prints the shared aiming prompt, uses the combat aiming/projectile path, and on an actor collision calls the combat spell-damage wrapper with the caster slot, target slot, and active spell tag. The projectile portion is presentation-only state: it builds and walks a temporary path, renders per-cell visual effects, and leaves no active-object slot or persistent projectile record behind. Magic Missile rolls raw damage in `[1, 16]`; Fireball rolls raw damage in `[1, 30]`. Each then subtracts a random defense roll from the target's applicable combat defense value; nonpositive damage produces the shared target-named `grazed!` result, suppressing later wound or kill lines. Kill uses this same aiming/attack family, with its own attack hit check and the instant-kill damage value; its exact distinction is below. Tremor is a table-wide combat scan, not a directional spell: it walks every combat actor slot, skips empty or non-damageable records, draws the standard skewed `1..30` roll, and accepts only when that roll is at least the target's combat weight. It then rolls 1..20 damage for each accepted actor and calls the combat damage/status handler with that roll and actor slot. If that handler returns a raw monster-kill reward unit, Tremor adds it to the caster's experience word with the normal 9999 cap. Tremor does not run the friend/foe lookup; party actors and monsters are both eligible if they pass the common gates. Poison Wind, Death Wind, and Flame Wind share the directed wind-cone family described below. Poison Wind uses Tremor's same target-only `roll >= combat weight` gate before routing an accepted target to the poison-status helper. Death Wind first runs the shared two-rating resistance predicate, then passes the decimal `99` instant-kill sentinel into the shared combat damage/status path only for an unblocked target. Flame Wind rolls raw damage in `[1, 30]` before the same damage/status path. Death Wind and Flame Wind add returned monster-kill reward units to the caster's experience with the normal 9999 cap. The shared directed scan and these per-effect branches do not run the friend/foe lookup or skip same-faction actors.
 
-**Kill protected-target rejection envelope.** The three protected classes are
-tested inside Kill's effect handler, not during the earlier cast or cursor
-gates. With all shared gates satisfied, the dispatcher has already spent one
-premixed Kill charge and seven MP before it prints `Creature: ` and opens the
-arena cursor. Confirming Blackthorn (class 14), Lord British (class 15), or a
-Shadow Lord (class 47) then runs Kill's ordinary pre-effect before the class
-test rejects the target. Nothing is refunded.
+**Kill attack and narration.** Kill spends its charge and seven MP through
+ordinary cast gates, then uses the shared `Aim! ` cursor and projectile path.
+Magic Missile and Fireball force the attack hit check to succeed; Kill instead
+compares the ordinary two actor ratings and combat roll specified in
+`systems/combat.md` Section 11. Its admitted collision supplies the instant-kill
+damage value, which bypasses damage randomization and defense subtraction.
+The shared damage/death rules still own class-specific outcomes.
 
-The ordinary pre-effect begins with the spell's PC-speaker rumble. In the
-EGA/Tandy presentation it also changes palette entry 15, XOR-inverts the whole
-176-by-176-pixel gameplay viewport, holds that inverted view around paired
-speaker sweeps, and repeats the XOR to restore the view. Its small speaker
-jitter uses separate presentation-only state; it does not advance the shared
-gameplay PRNG. The protected-class test precedes resistance, so rejection
-consumes no resistance draw or other gameplay-PRNG draw. It also precedes the
-target-death animation and target-cell effect, so neither of those appears.
+Kill does not use a separate `Creature:` prompt, a protected-class rejection
+before resistance, or the creature helper's viewport-inversion pre-effect.
+The previous Kill protected-target envelope and creature-helper attribution
+are withdrawn (R446): the traced creature helper belongs to **Polymorph**.
+Classes 14, 15 and 47 can reach Kill's shared damage endpoint after an admitted
+hit; this does not remove their existing class-specific death behavior.
+Polymorph retains its own protected-class and resistance gates before replacing
+a permitted target with a Giant Rat.
 
-The handler reports ordinary failure. The shared cast tail prints exactly
-`Failed!` followed by a newline and plays the common failure glissando: fifty
-speaker-tone updates from parameter 800 toward 2000, with one calibrated delay
-unit per update. In combat the visible flow is `Cast...`, the spell-name
-prompt/echo, `Creature: ` and the confirmed-target newline, the pre-effect,
-then `Failed!` and the glissando. This is a committed cast action: the targeting
-cursor does not re-open, the same actor does not return to the combat command
-prompt, and the round walker advances after the normal committed-action tail.
+On a resolved actor hit, these three attack spells run impact presentation,
+a newline, shared damage resolution and the shared target-result narrator.
+An ordinary killed target therefore receives `<target> killed!`; surviving
+Missile/Fireball hits use the ordinary wound grade or graze. Vanish-class and
+other exceptional results remain as specified in combat Section 11.1. A
+resolved miss at an aimed actor uses `Failed!` without a target name; a shot
+with no resolved actor and no original aimed actor has no result line. The
+cast adds no spell-name announcement or generic `Success!` after these results.
+The earlier direct-damage paragraph's miss/no-damage wording for nonpositive
+damage is withdrawn (R447); its result is the shared `grazed!` line.
+
+**Directed-effect narration.** Accepted Sleep, Poison Wind, Death Wind and
+Flame Wind targets also reach the shared result narrator after their effects.
+For Poison Wind, a Good party target changes to Poisoned and the poison helper
+itself prints `<target> is poisoned!` followed by a newline. The shared narrator
+then suppresses a second result. Other party statuses and non-party targets
+use the existing poison helper's damage fallback, with its damage result.
+These effects add no spell-name announcement. Their application layer inserts
+no extra newline before each target's result; each producer retains its own
+text ending. Combat Section 11.1 gives the complete boundary comparison.
+
+Source provenance: fresh canonical spell-name/dispatch binding and original
+attack, directed-effect, poison and narration execution in
+`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/COMSUBS_OVL/`,
+`u5-decomp/functions/COMBAT_OVL/` and `u5-decomp/notes/`, issue #247.
 
 **Directed wind-cone geometry.** In Zu, In Nox Hur, In Vas Grav Corp, and In Flam Hur use the same combat cone enumerator. The spell prompts for a cardinal direction with the shared `Direction-` prompt; it does not open the arena cursor and it does not choose an arbitrary target cell. Starting from the cell adjacent to the caster in the chosen direction, the enumerator builds a widening forward cone and clips it to the eleven-by-eleven arena.
 
@@ -1088,7 +1105,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Handler family | Spells | Public contract now known |
 |---|---|---|
 | Light counter | In Lor, Vas Lor | Set the shared light-spell counter to 100 or 255, then return through the common cast-success path. |
-| Active-target attack wrapper | Grav Por, Vas Flam | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage and Vas Flam rolls 1..30; both subtract target defense before the shared damage/status path. |
+| Active-target attack wrapper | Grav Por, Vas Flam, Xen Corp | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage and Vas Flam rolls 1..30; both subtract target defense before the shared damage/status path. Xen Corp uses its attack hit check and the instant-kill damage value, without damage randomization or defense subtraction. All three use the shared result narrator. |
 | Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu prompts for one member and wakes that member only if Sleeping; the former no-prompt/first-sleeper claim is withdrawn (R409). An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires exactly Dead status - every other status, Ashes included, is refused by that one equality test, and no Ashes-specific check exists - changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
 | Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates to the arena-field helper. Player combat C-Cast uses the arena cursor followed by the ordinary projectile/impact resolver. Combat marker placement requires a confirmed impact cell but no Fire/Sleep/Energy random acceptance gate. The helper separately reports the first eligible descriptor at the impact coordinate; that placement-time result is not the later contact target. Contact runs after a current actor's dispatch returns, targets that same actor, and skips only its linked renderer record while looking for another colocated marker. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Sleep applies its status result without a hook-local draw. Energy blocks movement and has no contact-result arm. Contact does not consume markers, which persist until combat exit restores the pre-combat active-object table. |
 | Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock/trap bit on a co-located kind-1 chest object — which in combat includes the chest a dying monster drops, making Open's success case reachable in every arena — and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
@@ -1097,7 +1114,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Directed wind-cone effects | In Zu, In Nox Hur, In Vas Grav Corp, In Flam Hur | Prompt for a cardinal direction, build the widening clipped cone described in Section 8, and scan the combat actor table for actors whose arena coordinates match those cells. The normal cone starts one cell forward from the caster, widens by one cell on both sides per forward step, de-duplicates selected cells, and writes up to 63 coordinates. The common application layer skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common wind-cone layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors are eligible if their cells are in the directed area and they pass the non-faction gates. In Zu uses the shared resistance predicate before sleep; In Nox Hur uses the distinct target-only `roll >= combat weight` gate before poison; In Vas Grav Corp uses the shared resistance predicate before the decimal `99` instant-kill path; and In Flam Hur rolls raw `[1, 30]` damage with neither gate. The two damage winds credit returned monster-kill reward units to the caster's experience with the 9999 cap. |
 | Table-wide tremor damage | In Vas Por Ylem | Scans all thirty-two combat actor slots. For each non-empty, damageable slot, the spell draws a skewed 1..30 combat roll and accepts when that roll is at least the target's combat weight. It then rolls 1..20 damage and feeds that roll plus the actor slot to the shared combat damage/status handler. The handler applies HP damage, death effects, split checks, and temporary drop markers as usual. Any raw monster-kill reward unit returned by the handler is added to the caster's experience word, capped at 9999. Tremor does not run a faction filter, so friendly-fire is allowed for any party actor that passes the common gates. |
 | Active-effect display wrapper | In Sanct, Rel Tym, Quas An Wis, In An | Pass an animation/effect kind, visible tag, and counter to a shared active-effect helper: In Sanct uses `P` / 20, Rel Tym uses `Q` / 30, Quas An Wis uses `C` / 20, and In An uses `N` / 10. The helper stores one global visible tag/counter pair, plays the common animation, and refreshes the stats panel; resident update helpers age the counter until expiry clears the tag. This aging is separate from torch/light-spell cleanup cadence. Confirmed consumers: `P` has no consumer with any mechanical effect (the defence bonus it was meant to grant is never applied — see Section 8), `Q` runs an inclusive 0..1 gate at the head of the automatic actor driver, so self-acting actors skip about half their turns while the player's own command prompt is untouched (`systems/combat.md` Sections 8 and 9), `C` lets monster AI target selection roll a random byte against the acting monster's class charm threshold and remap the monster to neutral group 0 on a strictly greater roll, and `N` absorbs combat casts before the shared dispatcher consumes charge or MP. |
-| Creature-prompt targeters | An Xen Ex, Rel Xen Bet, Xen Corp, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, and apply spell-specific eligibility gates. Charm runs the shared resistance predicate before toggling the target's controlled/charmed marker — a second successful Charm on the same actor clears it, and the marker does not hand the target to the player's prompt, though it does flip the target's combat group for the same-faction filter (`systems/combat.md` Section 6.1a). Polymorph replaces the target with a class 20 Giant Rat at the same coordinates. Kill/Slay Living spends its charge and seven MP before targeting; after confirmation it runs its pre-effect, rejects protected classes 14/15/47 before resistance or death effects, and completes as a turn-consuming `Failed!` result with no gameplay-PRNG draw or re-prompt. Other targets run the shared resistance predicate and receive the death result only when unblocked. Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. No traced Clone helper installs a separate per-spell duration counter. |
+| Creature-prompt targeters | An Xen Ex, Rel Xen Bet, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, and apply spell-specific eligibility gates. Charm runs the shared resistance predicate before toggling the target's controlled/charmed marker — a second successful Charm on the same actor clears it, and the marker does not hand the target to the player's prompt, though it does flip the target's combat group for the same-faction filter (`systems/combat.md` Section 6.1a). Polymorph replaces the target with a class 20 Giant Rat at the same coordinates. Polymorph rejects protected classes 14/15/47 before resistance and replacement; other targets must pass its shared resistance gate. Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. No traced Clone helper installs a separate per-spell duration counter. |
 | Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
 | Table-wide fear sweeps | In Quas Corp, An Xen Corp | Not a prompt-driven target family. Sweeps all thirty-two combat actor slots and accepts every monster-side actor that is not one of the three protected special classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the shared resistance check. For each accepted actor **the spell itself** drives the combat HP counter to one and ORs in the fleeing bit `0x02`. The combat wound-score morale classifier does **not** perform that write; it only keeps re-asserting the flag from the resulting critical-HP state on later turns. Repel Undead (An Xen Corp) runs the identical sweep with one added condition, the undead class-flag bit, and writes the same two values. Neither spell places, re-types, tames, or repurposes an actor, and neither touches the controlled/charmed bit `0x01`. |
 | Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
@@ -1269,7 +1286,7 @@ forty-eight player spell definitions.
   forty-eight-entry table has been mapped in public spell order, and the major
   shared handler families are identified: light counter writes, field
   placement and Dispel Field removal, active-target attack wrappers with exact
-  Magic Missile and Fireball damage, Kill/Slay Living's resisted death result,
+  Magic Missile and Fireball damage, Kill's attack hit check and death result,
   Tremor's table-wide damage/reward
   path, directed wind-cone effects including exact cone geometry and
   wind/sleep friendly-fire behavior,
@@ -1302,8 +1319,8 @@ forty-eight player spell definitions.
 - **Target picking for formerly unique spells.** Sleep, Poison Wind, Death Wind,
   and Flame Wind share the directed wind-cone family and now have fixed
   cone geometry, non-faction eligibility, and per-effect result semantics;
-  Magic Missile and Fireball are active-target attack wrappers with fixed
-  damage semantics; Kill/Slay Living, Charm, Polymorph, and Clone use the
+  Magic Missile, Fireball and Kill are active-target attack wrappers with
+  the damage and hit-check distinctions above; Charm, Polymorph and Clone use the
   `Creature:` target prompt; Tremor and Cause Fear are full actor-table sweeps;
   and Mass Charm enters
   the shared active-effect path whose `C` tag is consumed by combat AI target
@@ -1355,7 +1372,7 @@ The behaviour described here was derived by reading the private function and for
   Fear's critical-HP flee setup is cross-checked against the combat current-HP
   field and wound-score classifier in `u5-decomp/formats/` and
   `u5-decomp/functions/COMBAT_OVL/`.
-- The active-target attack wrapper path for Magic Missile and Fireball — aiming/projectile routing, spell-tag damage lookup, and defense subtraction — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text. Kill/Slay Living's separate creature-target ordering, protected-class rejection, audiovisual failure presentation, resistance non-call, and committed-action result are derived from private analysis in `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/CAST2_OVL/`, `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/notes/`.
+- The active-target attack wrapper path for Magic Missile and Fireball — aiming/projectile routing, spell-tag damage lookup, and defense subtraction — is derived from local CAST, COMSUBS, and COMBAT helper analysis summarized without copying implementation text. Kill's corrected attack-wrapper binding, hit-check distinction and shared result narration are derived from private analysis in `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/CAST2_OVL/`, `u5-decomp/functions/COMBAT_OVL/`, and `u5-decomp/notes/`.
 - Create Food's 1..3 food/provisions delta and 9999 cap are derived from
   `u5-decomp/functions/CAST_OVL/`.
 - Source provenance: the identification of the Up and Down pair as the dungeon
