@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #243 saved NPC band follow-up.** The requested map and
+dialogue field were already published for #217 in 3a03fb7. Saved-gam Section
+12.1 now also states the byte accounting explicitly: 2,208 bytes of NPC
+tables plus twelve other bytes. The source dialogue array is represented by
+runtime words, not an additional saved array. All fourteen published ranges
+were rechecked for exact contiguous coverage. No layout or behavior changes.
+
 **2026-09-08 UTC, #242 swamp poisoning.** Movement Section 8.2 now gives
 the on-foot, consumed-turn swamp gate and each member's inclusive 1..30 DEX
 save, the Poisoned line, and same-action one-HP upkeep damage. DEX 30 is
