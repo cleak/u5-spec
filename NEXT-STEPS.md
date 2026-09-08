@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 tavern bill source.** Shops Section 4.1 distinguishes
+the resident bill's separate count word from decimal caret substitution:
+zero/one nondead members leave two spaces. Section 8.B groups the existing
+horse, hull and named room record IDs, while identifying the tavern bill as
+having no record ID. Section 8.C explicitly includes ordinary secondary
+drinks in the bill/result and lists returning tavern branches. Fresh original
+static checks confirm existing behavior; no retraction is needed.
+
 **2026-09-08 UTC, #238 single-guest Pickup.** Shops Section 8.C now
 explicitly says Pickup bills and returns the selected guest without Y/N
 confirmation. The existing poison-death body follows the bill's opening
