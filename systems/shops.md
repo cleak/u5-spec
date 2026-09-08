@@ -1086,18 +1086,25 @@ Other arms outcome and browser text remains in Section 8.1.
 **Guild stock and confirmation.** Print `a.........Keys\n`,
 `b.........Gems\n`, `c......Torches\n\n`, then `Thy concern?" `.
 
-**Two dotted row formats** occur in the stock lists:
+**Three dotted row formats** occur across these stock and wine lists:
 
 | Format | Shops | Row contract |
 |---|---|---|
 | Fixed three-dot separator | Arms Buy and reagents | One compact letter, exactly `...`, then the item name, with no intervening spaces. Width varies with the name. Arms letters are lowercase; reagent letters are uppercase. |
 | Fixed fourteen-column rows | Guild | Lowercase `a` or `b`, nine dots, then Keys or Gems; lowercase `c`, six dots, then Torches. Each of the three fixed rows occupies fourteen columns before its line ending, so the names end at the same column. |
+| Fixed sixteen-column rows with prices | Blue Boar wine list | Lowercase letter, `)`, a space, wine name, a dot leader and decimal price. The six fixed rows end their prices at column sixteen. Their complete names, leaders, prices and line endings appear in the Blue Boar table below. |
 
 All leaders are ordinary full stops. The guild's exact three rows and line
 endings above are authoritative. The arms/reagent comparison below owns
 their different questions and input boundaries. Fresh original guild-row
 consumer and literal-length checks in `u5-decomp/functions/SHOPPES_OVL/`
 confirm the fourteen-column form reported by the author's Paws capture.
+
+The Blue Boar rows are fixed resident text. Original row-length, display
+consumer and charge-table checks in `u5-decomp/functions/SHOPPES2_OVL/`
+confirm all six sixteen-column rows and their matching prices. They agree
+with the author's West Britanny capture; this adds the wine format to the
+comparison without changing the already-published exact rows below.
 
 A/B/C echo the corresponding lowercase letter. D renders record `164`, then
 redraws the stock menu. Space or Escape exits; other keys, including Return,
@@ -1338,6 +1345,11 @@ The Blue Boar list begins `"Our wine list,\n`, honorific, `.\n\n`, then:
 | F | `f) Chablis....98\n\n` |
 
 The final prompt is `Thy choice?" `, not a separate Choose-A-F instruction.
+
+Each row occupies sixteen columns before its line ending, with prices
+ending in the last column. These are the wine rows compared with arms,
+reagents and guild stock earlier in this section. The accepted-choice
+response above uses Avatar's honorific and does not repeat the price.
 
 | Sage result | Output |
 |---|---|
