@@ -760,9 +760,12 @@ The short resident literal pools that affect prompt parity are:
 | Arms no-credit barks | One no-credit bark is selected uniformly from the four-entry resident pool listed below, wrapped in the shopkeeper-attribution tail; this exits the shop flow without changing gold or inventory. |
 | Arms successful sale tail | Prints the fixed sold line, then the post-item "anything else" prompt addressed by the speaking member's gender field, or a neutral variant when no transaction has completed. |
 | Arms no-credit bark pool (verbatim) | `Can't pay?! Out with ye, orc-face!`, `What be ye trying to pull? OUT!`, `OUT, SLIME!`, `BEAT IT!` — one chosen uniformly, wrapped by the attribution tail `yells <shopkeeper>.` |
-| Arms stock-call pool (verbatim) | Printed once above the stock list, chosen uniformly from: `What may I show thee?`, `Which wouldst thou like to see?`, `What is thine interest?`, `Which would ye see?` |
+| Arms stock-call pool (verbatim fragments) | Printed after each stock list and a blank line, chosen uniformly from: `What may I show thee?`, `Which wouldst thou like to see?`, `What is thine interest?`, `Which would ye see?`; append a closing double quote and one space |
 | Arms carry-cap refusal (verbatim) | `"Thou canst not carry any more!"` followed by the attribution tail `says <shopkeeper>.` |
 | Shipwright post-sale tail | Renders the post-sale record, then addresses the buyer. The gender test in this branch compares a field against a value that field never holds, so the feminine form is unreachable and the shipped build always prints the masculine form. Implementations targeting frame parity should always print the masculine form here; the arms tail, by contrast, selects correctly. |
+
+The former stock-call row saying "once above the stock list" is withdrawn
+(R428), propagating Section 8.1's R427 correction into this summary.
 
 Prompt redraw rules are intentionally narrow. A prompt redraw occurs only when
 the flow explicitly calls the prompt/menu renderer again, such as healer service
@@ -1485,14 +1488,16 @@ Every other key is ignored. It performs no redraw, prints nothing, and consumes
 no random draw. Each accepted movement redraws the row area and page indicator,
 then waits for the next command key.
 
-**Capture discrepancy, issue #238 (2026-09-08 UTC).** The reported live Sell
-panel did not respond to arrows or Return. The accepted-key table above was
-already published and remains supported by a fresh exhaustive original-dispatch
-probe and command-normalization checks. Those isolated checks do not verify
-delivery through the live keyboard stack. Reconciling the capture needs its
-starting save and asset identity, exact key events, and frames showing the
-highlighted row and conversation window before and after input. Ordinary
-letters and unmodified digits are not row selectors.
+**Capture discrepancy, issue #238 (2026-09-08 UTC).** The author's follow-up
+confirms that Return selects the highlighted row and reaches an offer. Only
+the reported lack of arrow movement remains unsettled. The accepted-key table
+above remains supported by exhaustive original-dispatch and command-normalization
+checks, which do not verify delivery through the live keyboard stack. Compare
+Down or Right when a following nonempty row exists: a previous-item command
+at the first item need not visibly move selection. Reconciling the capture
+needs the starting save and asset identity, exact key events, and frames
+showing the highlighted row and conversation window before and after input.
+Ordinary letters and unmodified digits are not row selectors.
 
 **Row cells.** Item rows begin at window-local `(1, 1)` and continue through
 `(1, 4)`. Under normal stock limits, each row consists of:
@@ -1549,7 +1554,27 @@ The selected id then follows one of three paths:
 |---|---|---|
 | Arrows or Quarrels | Print the fixed used-ammunition refusal; do not change inventory or gold | Terminate immediately. Do not rebuild the panel or draw the browser's local goodbye line. |
 | Any zero-base-price id (`8`, `15`, `35`, `39`, `40`, `41`, or `47`) | Print the fixed cannot-buy refusal; do not ask Y/N and do not change state | If any equipment remains, redraw the same selection and page, choose a continuation prompt, and resume browsing. |
-| Any other nonzero id | Compute the Section 6 offer, choose one `SHOPPE.DAT` offer record, append the resident `Deal?` prompt, and wait for Y or N | `N` preserves the counter and selection. `Y` adds the offer to gold and subtracts one from the counter. If equipment remains, redraw and resume. |
+| Any other nonzero id | Compute the Section 6 offer, render one `SHOPPE.DAT` offer record inside the quote wrapper below, and wait for Y or N | `N` preserves the counter and selection. `Y` adds the offer to gold and subtracts one from the counter. If equipment remains, redraw and resume. |
+
+An ordinary offer starts with `\n\n"`, renders the selected resource record
+with the item-name and offer-price substitutions, then appends
+`\n\nDeal?" `, including the closing double quote and trailing space.
+There is no printed `(Y/N)` suffix. The offer text itself remains resource-owned.
+Each ordinary selection makes one fresh uniform `0..7` draw:
+
+| Draw | SHOPPE.DAT offer record |
+|---:|---:|
+| 0 | 49 |
+| 1 | 50 |
+| 2 | 51 |
+| 3 | 52 |
+| 4 | 53 |
+| 5 | 54 |
+| 6 | 55 |
+| 7 | 56 |
+
+Every ordinary sellable equipment row uses this same pool; item identity
+does not select a smaller subset.
 
 The quote wait accepts only uppercase `Y` or `N`; other keys leave the quote
 visible and re-poll without a redraw or random draw. Both accepted answers
@@ -1575,6 +1600,19 @@ listed below are browser-owned; no second shop-wide farewell bark follows.
 | Ordinary sellable selection, after offer substitutions are prepared | Uniform `0..7` over `SHOPPE.DAT` records `49..56` |
 | Decline, zero-price refusal, or completed sale when equipment remains | Uniform `0..3` over `What else can ye offer me?`, `What else hath ye to sell?`, `What else doth thou wish to sell?`, and `What other arms wilt thou sell?` |
 | Escape or depletion on the ordinary zero-return path | Uniform `0..3` over `Good-bye...`, `Mayhap another time...`, `Godspeed...`, and `Fare thee well...` |
+
+The prompt entries in this table are fragments inside speech wrappers.
+Nonempty Sell entry inherits its opening double quote from `Sell\n\n"`
+in Section 8.B and appends `" ` after the selected initial question. Thus
+the visible question has both quotes, for example
+`"Which item wouldst thou like to sell?" `. A continuation prints `\n\n"`,
+its selected continuation question, and `" `.
+
+Source provenance for these wrappers and draw-to-record mapping: fresh
+original seller and resource-selector traces in `u5-decomp/functions/SHOPPES_OVL/`
+and `u5-decomp/notes/`. The reported Return capture agrees with the quote
+prompt and existing selection contract; arrow delivery remains the separate
+capture question above.
 
 There is no draw for movement, row rendering, empty inventory, a zero-price
 refusal, or the ammunition refusal itself. The browser performs no free-standing
