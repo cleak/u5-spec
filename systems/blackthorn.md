@@ -218,6 +218,8 @@ the displayed rows.
 
 Each demand is followed by `\n\nYour response?\n:`. The bounded text input
 then accepts the answer; submission is followed by `\n\n` before the outcome.
+The colon belongs to this audience prompt. The Badge password in Section 7a
+uses the same question words but starts input on a colon-free row.
 This is distinct from the sage's `You respond:` prompt in `systems/shops.md`
 Section 8.C. Do not append an answer, prompt ordinal, roster slot number,
 cutscene timing value or other diagnostic information to the original text.
@@ -763,8 +765,12 @@ while the Black Badge aura's exact effect code `0x1D` is the party's active
 timed magic effect (see `systems/magic.md`), the guard asks the party to give
 the password as a bearer
 of the Badge - `"Give now the` / `password, bearer` / `of the Badge!"`, then
-a blank row and `Your response?` above the `:` input row - and prompts for a
-response; a match answers `"Pass, friend!"`. The player may type up to fourteen
+a blank row and `Your response?` above an input row starting at column zero,
+**without a colon**. The exact question ending is `\n\nYour response?\n`;
+the typed answer begins immediately at the left edge of that next row.
+The earlier Section 7a claim that this input row contains `:` is withdrawn
+(R445); Section 4.1's audience prompt does contain it. A match answers
+`"Pass, friend!"`. The player may type up to fourteen
 characters, but only the **first four** are compared, and the comparison folds
 letter case. The expected answer is the Oppression-side password that
 `catalogs/quest-graph.md` Section 3 names, and that word is longer than four
@@ -775,6 +781,12 @@ shared timed-effect slot, this branch is unreachable until the party actually
 uses the Black Badge, and it becomes unreachable again the moment anything
 clears that slot — camping or resting, entering an innkeeper's menu, using the
 Badge a second time to take it off, or donning the Amulet or Crown instead.
+
+Source provenance: fresh original password-handler, editor and comparison
+execution in `u5-decomp/functions/TALK_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, issue #245.
+Five cases check accepted, case-folded prefix, wrong, empty and missing-Badge
+outcomes; key delivery and text output are controlled observation boundaries.
 
 **Branch 2 — the Minoc charity demand.** In Minoc, the guard announces that the
 party will give half its gold to charity. On a yes, the party's gold word is

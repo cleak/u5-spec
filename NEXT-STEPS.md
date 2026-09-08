@@ -18,6 +18,12 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #245 Badge-password input.** R445 corrects Blackthorn
+Section 7a: its Your-response question ends with a newline and input starts
+at column zero without a colon. Section 4.1 explicitly retains the audience's
+different colon row. Five original handler/editor cases confirm the prompt
+and match/refusal outcomes. The automatic-contact table remains unchanged.
+
 **2026-09-08 UTC, #246 U-Use picker presentation.** Inventory Sections 4.4,
 4.5 and 7 now join the Items: frame to compact regalia labels, the uncounted
 Moonstone-plus-phase-glyph row, and selection inversion with middle-row
