@@ -283,6 +283,26 @@ if nothing is usable; print `Item:_` into the message window; select the panel;
 write the framed border label `Items:`; draw the eight-row frame; run the
 picker; restore the message-window frame; redraw the full roster.
 
+**Selection and scrolling.** The selected item is drawn with its ordinary
+label and padding in inverted glyph pixels. Its text is not replaced by a
+row of cursor characters. Selection starts at the first visible item on
+interior row one. Moving Down through a long list first moves the highlight
+through rows one to four. Further Down steps scroll the list while the
+highlight stays on row four. Once the final seven-item window is visible,
+the remaining steps move the highlight through rows five to seven. Up uses
+the corresponding behavior toward the beginning. When all carried entries
+fit in the panel, the list stays fixed and the highlight moves among them.
+Movement skips absent entries and stops at the first or last selectable item.
+
+Home selects the first item; End selects the last, showing up to seven items
+ending there. Page Up and Page Down move seven selectable items, stopping at
+the relevant endpoint. These navigation rules are shared with R-Ready in
+Section 5. Enter or Space confirms the selected U-Use row; Escape cancels.
+
+Source provenance: fresh original shared-picker and row-scanner execution in
+`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`, issue #246;
+glyph inversion independently traced in `u5-decomp/functions/ULTIMA_EXE/`.
+
 ### 4.5 Picker row format
 
 A picker row is **`[two-cell quantity][one-cell selector][name]`**, i.e. window
@@ -343,6 +363,38 @@ cell holds whatever character the caller passes: a space for an unreadied
 carried item in R-Ready, a runic glyph for a readied one, and the small solid
 diamond (selector code `0x0F`) when marked in M-Mix (`magic.md` Section 6).
 The marker changes no item id or counter band.
+
+**U-Use short labels and the moonstone row.** The family names in the
+classification table identify items; they are not a table of literal row
+labels. The U-Use picker uses the following compact labels for these entries:
+
+| Carried item | Plain name in the picker |
+|---|---|
+| Skull Keys | `Skull Keys` |
+| Amulet of Lord British | `Amulet` |
+| Crown of Lord British | `Crown` |
+| Sceptre of Lord British | `Sceptre` |
+
+Each of those rows uses the normal two-cell quantity and one space before
+the name. With quantity one, the row starts with one space, `1`, then one
+space; unused cells after the short name are padded to the thirteen-cell
+interior. Long names from other inventory surfaces are not substituted here.
+
+A carried moonstone uses the **no-quantity** case: no number and no selector
+cell precede its name. Its complete visible content is the ten text-font
+cells `Moonstone ` followed by the single runic phase glyph specified above,
+then two padding spaces. This fits the thirteen-cell interior. There is no
+literal opening parenthesis, parenthesised suffix, or `phase` plus decimal
+number to clip off at the frame edge. The phase glyph is part of the row's
+rendered content; an apparent parenthesis in a text transcription does not
+establish a longer hidden label. Only carried phases appear in U-Use.
+
+Source provenance: fresh canonical compact-name lookup, carried-stock
+snapshot and twelve original row-renderer checks in
+`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`, issue #246.
+Eight original navigation scenarios additionally verify Section 4.4.
+Font/glyph output, cursor coordinates and normalized input were controlled
+observation boundaries, rather than a fresh complete-game pixel capture.
 
 **R-Ready's readied selector is item-specific.** If the selected character
 has the row's item in any equipment slot, use the following `RUNES.CH` glyph;
@@ -527,9 +579,11 @@ these readied-equipment writes.
    "nothing to ready" refusal and exits.
 3. Otherwise it opens an eight-row picker over the equipment stock band.
 4. Up/down movement scrolls to the previous or next displayable equipment id.
-   The four corner keys — Home, End, PgUp and PgDn, or the numpad corners, which
-   the input layer delivers as the four diagonal codes — page the list by a full
-   eight-row window. This and the shop list navigator are the only places
+   Home and End select the first and last displayable items; PgUp and PgDn
+   move seven displayable items toward the relevant endpoint. The input layer
+   delivers these four corner keys, including their numpad equivalents, as
+   four distinct diagonal codes. The earlier claim that all four keys page
+   an eight-row window is withdrawn (R444). This and the shop list navigator are the only places
    outside combat's targeting cursor that consume those codes at all. **Enter
    or Space** confirms the current row - the picker tests the two keys
    separately and both reach the same eligibility cascade. (*Corrected:* an
@@ -780,6 +834,11 @@ The item-use handler opens an item picker over usable carried stock. If the
 party has no usable item, it prints the no-usable-items refusal and exits. A
 selected row dispatches by the handler's use-item enumeration rather than by
 the forty-eight-entry equipment id space.
+
+The panel title is `Items:`. Sections 4.4 and 4.5 specify its seven visible
+rows, selection and scrolling, short regalia labels, and the uncounted
+`Moonstone ` plus runic phase-glyph row. The selected label remains drawn
+under inversion; it is not replaced by a separate cursor-glyph string.
 
 In non-combat exploration, dispatching U-Use always commits one normal action.
 The outer command layer does not distinguish a successful item effect from an
