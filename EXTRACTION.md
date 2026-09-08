@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - inn companion picker (2026-09-08 UTC)
+
+Shops Section 8.C now identifies the shared Select: member surface, its
+Return/Space commit keys and the distinct Arms browser row format. The
+monthly rate follows selection, with payment still due at Pickup. R439
+withdraws inventory's universal Player/cancel wording: the selector's caller
+owns those words. Twelve original selector cases verify the inn key mode.
+
 ## Issue #238 - inn room lookup and refusal boundaries (2026-09-08 UTC)
 
 Shops Section 8.C now maps inn names to their room-description records and
