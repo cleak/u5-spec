@@ -288,6 +288,11 @@ neither observe nor advance them — and a gated turn advances its own toggle
 rather than skipping the alternation. See `RETRACTIONS.md` row R374, which
 propagates R370 into this document.
 
+The gate rules above apply on every invocation of the outdoor object block,
+including the additional terrain calls from `systems/movement.md` Section
+8.1. Those calls share the ordinary call's parities and advance each gate
+only when reached; that movement section gives the per-call table and examples.
+
 ### 6.1 How a creature chooses its step
 
 Creature movement on the overworld is simpler than it is often assumed to be,

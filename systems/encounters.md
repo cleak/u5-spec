@@ -57,6 +57,11 @@ next, which would leave two vehicle facings ungated. The value window is
 and the reading of the low bits as facing is *inferred*. A value test is correct
 under both readings, a family test only under one.
 
+For difficult terrain, apply this gate order separately to every additional
+object-update call, using the same stored parities as the ordinary outdoor
+call. The turn-shaped table below describes one invocation; a single accepted
+step can invoke it several times (`systems/movement.md` Section 8.1).
+
 **The probe itself is memoryless, and the alternation state belongs to the
 gates.** Issue #189 asked what happens on a gated turn to "the phase or countdown
 nibble that gates the next probe". **There is no such field.** The probe holds no
