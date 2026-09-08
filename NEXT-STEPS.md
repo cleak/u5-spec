@@ -18,6 +18,13 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #247 follow-up.** Containers Section 4 and traps Section 2.1
+now give the exact no-qualified-member refusal, `None!\n`. Shops Section 8.B
+specifies the two Buy-heading draws before the stock list. Karma Section 12
+adds the wrong-virtue/three-correct-mantras example and blank-answer contrast.
+Twenty-nine focused original cases support these additive clarifications;
+no prior published claim was withdrawn.
+
 **2026-09-08 UTC, #247 spell narration.** Combat Section 11.1 now joins
 Missile/Fireball/Kill and directed effects to the shared result narrator,
 specifies Poison Wind's named poison-status line, and compares blink,

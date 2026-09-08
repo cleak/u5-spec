@@ -168,6 +168,19 @@ selects that member silently. `systems/traps.md` § 2.1 owns the priority order
 and its consequences, including the case where the selection returns nobody and
 the command aborts before any trap can fire.
 
+When the ordinary roster scan finds no Good or Poisoned member, the selector
+appends exactly `None!\n`, with no leading newline, member name or `Player: `
+prompt of its own. The matching surface/town chest and the dungeon closed-chest
+Open path then return without firing a trap, granting contents, changing the
+container or charging the chest's standing debit. This refusal applies when
+selection is reached; dungeon Get of an already-open chest does not introduce
+an acting-member selection. The combat and active-character overrides retain
+the priority described in `systems/traps.md` Section 2.1.
+
+Source provenance: fresh original selector and both chest-helper executions
+under `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/functions/SJOG_OVL/`;
+eight isolated no-qualifier cases confirmed the output and unchanged state.
+
 The helper then **clears the matched object record outright** — its kind, its
 position, and the byte carrying its lock/trap flag and content class are all
 zeroed — marks inventory/status state dirty, and in town-family scenes reduces
