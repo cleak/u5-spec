@@ -777,6 +777,13 @@ can proceed to conflict. `systems/town-mode.md` Section 14 specifies arrest
 and the exceptional explicit-T failure result, including retained-event
 precedence. A successful shop contact does not enter any of those alarm paths.
 
+For the reserved dialogue value `0xFF`, `systems/blackthorn.md` Section 7a
+joins these contact routes to the regime demand, including Minoc's authored
+behavior-4 gate guard. The demand is automatic conversation's selected
+service, with no subsequent attack after success; behavior-6/7 guard contact
+instead starts direct arrest. Fresh original-routine checks for issue #245
+confirm both routes and the separate payment and surrender decisions.
+
 Source provenance: event producer and pass order in
 `u5-decomp/functions/NPC_OVL/`, consumer in `u5-decomp/functions/TOWN_OVL/`,
 and shared explicit/automatic dialogue dispatch in

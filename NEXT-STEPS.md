@@ -18,6 +18,14 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #245 regime contact routing.** Blackthorn Section 7a now
+joins NPC Section 9.2 to the reserved dialogue selector explicitly: behavior
+4/5 automatic conversation can raise the demand, behavior 6/7 guards go
+directly to arrest, and explicit Talk uses the shared conversation gates.
+Payment succeeds peacefully; demand refusal asks surrender before conflict.
+Thirty-four isolated original-routine cases confirm this existing contract;
+no retraction. Issue #216's separate failing Talk capture remains unresolved.
+
 **2026-09-08 UTC, #244 Blackthorn dialogue and walk-up capture.** Blackthorn
 Sections 2, 4.1 and 5 now publish the automatic guard-contact route, all four
 ask records and their text, response prompt, reaction selectors and execution
