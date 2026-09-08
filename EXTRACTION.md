@@ -1,5 +1,13 @@
 # Ultima V Extraction Inventory
 
+## Issue #236 follow-up - revealed door lock state (2026-09-08 UTC)
+
+Doors-and-z-transitions Section 8 now identifies the ground/upper-floor
+hidden-door reveal as locked and the below-ground reveal as closed/unlocked.
+Five original Search/Open chains confirm the subsequent refusal or opening.
+R448 withdraws the unqualified unlocked wording, including R412's replacement
+adjective and the earlier issue answer. Tile ids and floor selection stay valid.
+
 ## Issue #241 follow-up - cadence per additional terrain call (2026-09-08 UTC)
 
 Movement Section 8.1 now gives the ordered Negate Time, Quickness and transport
