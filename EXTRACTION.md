@@ -6,6 +6,14 @@ in this repository.
 
 Last updated: 2026-09-08 UTC.
 
+## Issue #238 - automatic Pickup and poison message (2026-09-08 UTC)
+
+Shops Sections 8.C and 8.4 make single-guest Pickup's lack of further
+confirmation explicit and distinguish successful Leave/Pickup continuation
+from completed Rest ending the visit. The poison-death line was already
+published. Four isolated original Pickup/caller cases confirm the bill,
+status conversion, message envelope and continuation. No new retraction.
+
 ## Issue #238 - reused confirmation wording (2026-09-08 UTC)
 
 Shops Section 8.C groups the take-it question across inn Rest/Leave and
