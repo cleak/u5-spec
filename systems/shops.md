@@ -1002,6 +1002,31 @@ Offer input accepts Y/N only; unrecognized keys produce no line or redraw.
 short reagent name, and `\n`. After the list print `\nThy interest?" `.
 Invalid or unavailable letters silently wait. Space, Escape, and Return exit.
 
+**Common arms/reagent listing presentation.** Both flows first show their
+shop-specific heading, a blank row, compact stock rows made from a letter,
+exactly three full stops and a name, then a blank row and a closing-quoted
+selection question. There are no spaces around the three full stops.
+Use the following distinctions when applying that common presentation:
+
+| Detail | Arms Buy | Reagents |
+|---|---|---|
+| Row letters and names | Lowercase compact letters and equipment names, with the long-name rule in Section 8.1 | Uppercase compact letters and short reagent names; omit unavailable reagents and keep letters consecutive |
+| Initial heading | The affirmation and stock introduction from Section 8.B | `"Fine! We sell:\n\n`, after the Yes echo |
+| Question after every listing | A fresh selection from the four stock-call questions in Section 8.A, then a closing quote and space | Fixed `Thy interest?" ` |
+| Declined quote | The No echo and arms post-item question from Section 8.1, then repeat rows and stock-call question | `No\n\n"What else?\n\n`, then repeat rows and interest question |
+| Repeated listing | Retains the conversation transcript; does not repeat the initial affirmation/introduction | Retains the conversation transcript; does not repeat Fine! We sell |
+| Invalid stock selection | Wait silently at the current listing | Wait silently at the current listing |
+| Listing exits | Space or Escape; Return is ignored | Space, Escape, or Return |
+
+This common presentation does not add a separate heading on each redraw or
+replace either shop's quoted continuation. The initial and repeated text
+fragments remain specified in Sections 8.B, 8.C and 8.1.
+
+Source provenance: fresh comparison of the original stock selection and
+output paths in `u5-decomp/functions/SHOPPES_OVL/`. The author's Cove
+herbalist capture agrees with the reagent presentation; no independent live
+capture was taken for this comparison.
+
 | Reagent result | Output and wait |
 |---|---|
 | Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`; consume one command key, then redraw stock |

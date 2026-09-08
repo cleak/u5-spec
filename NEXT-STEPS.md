@@ -18,6 +18,12 @@
 
 A durable handoff document for resuming specification work. Updated after each meaningful chunk of progress.
 
+**2026-09-08 UTC, #238 Cove follow-up.** Shops Section 8.C now compares
+the common arms/reagent dotted listing shape and its per-shop letter case,
+question, repeat-heading and exit-key differences. Healer and herbalist
+measurements agree with the already-published exact text. This is a sourced
+synthesis with no behavior change or new retraction. Continue monitoring.
+
 **2026-09-08 UTC, #238 tavern follow-up.**
 
 Shops Section 8.5 now preserves the message window through the stats refresh
