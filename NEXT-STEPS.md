@@ -1,5 +1,19 @@
 # Next Steps for u5-spec
 
+## Issue #249 - stray capture and checker coverage (2026-09-09 UTC)
+
+Removed the unreferenced original-game screenshot and a generated Python cache
+from the tracked tree. The contamination checker now checks media/game-data
+filenames even inside capture and script directories, and scans Markdown in
+capture directories. Synthetic traversal checks and a positive check against
+the reported screenshot verify the former blind spot. Capture and Python-cache
+paths are ignored. No behavioral contract changed.
+
+Historical copies of the screenshot remain reachable from earlier commits.
+Rewriting shared history requires a separate owner decision; issue #249 remains
+open for that decision, including its separately reported historical provenance
+and author-metadata concerns.
+
 ## Issue #248 - four-frame input cursor (2026-09-08 UTC)
 
 Input Section 3 now specifies shipped base 5, cycle length 4, initial phase 0,

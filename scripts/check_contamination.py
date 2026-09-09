@@ -27,6 +27,8 @@ Exit status: 0 clean, 1 contamination found, 2 the checker itself is broken.
 import os
 import re
 import sys
+import tempfile
+from pathlib import Path
 
 # Each rule: (name, compiled pattern, why it is forbidden)
 RULES = [
@@ -76,7 +78,15 @@ RULES = [
      "Raw byte sequence."),
 ]
 
-SKIP_DIRS = {".git", "capture", "scripts"}
+SKIP_DIRS = {".git", "__pycache__"}
+# This prose repository has no shipped-media or original-data assets.
+# Check filenames independently of the Markdown rules, including in capture/.
+FORBIDDEN_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".wav", ".mp3",
+    ".ogg", ".mp4", ".avi", ".exe", ".com", ".ovl", ".drv", ".dat",
+    ".gam", ".ool", ".tlk", ".npc", ".pth", ".cbt", ".bit", ".ch",
+    ".hcs", ".pcs", ".16", ".4", ".xmi", ".mus", ".opl",
+}
 
 
 # Cases the checker MUST flag, and cases it must NOT. The checker is itself a
@@ -134,6 +144,20 @@ def self_test():
         if ctrl:
             failures.append("MANGLED ESCAPE in rule [%s]: %s" % (name, ctrl))
 
+    # Exercise directory traversal, not just the filename predicate: capture/
+    # used to be skipped entirely, allowing a committed screenshot to pass.
+    with tempfile.TemporaryDirectory() as tmp:
+        for relative in ("capture/example.png", "nested/GAME.OVL", "scripts/example.wav"):
+            path = Path(tmp, relative)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"synthetic test fixture")
+        Path(tmp, "capture/note.md").write_text("mov ax, bx\n", encoding="utf-8")
+        Path(tmp, "clean.md").write_text("Ordinary semantic prose.\n", encoding="utf-8")
+        found = {hit[0] for hit in scan(tmp)}
+        expected = {"capture/example.png", "nested/GAME.OVL", "scripts/example.wav", "capture/note.md"}
+        if found != expected:
+            failures.append("ARTIFACT/TRAVERSAL TEST: %r != %r" % (found, expected))
+
     if failures:
         print("SELF-TEST FAILED (%d):" % len(failures))
         for f in failures:
@@ -151,10 +175,16 @@ def scan(root):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in filenames:
-            if not fn.endswith(".md"):
-                continue
             path = os.path.join(dirpath, fn)
             rel = os.path.relpath(path, root).replace("\\", "/")
+            if Path(fn).suffix.lower() in FORBIDDEN_SUFFIXES:
+                hits.append((rel, 0, "media or original-data artifact",
+                             "Keep captures and game assets outside the clean prose repository.", fn))
+                continue
+            if rel.startswith("scripts/"):
+                continue
+            if not fn.endswith(".md"):
+                continue
             try:
                 text = open(path, encoding="utf-8").read()
             except (OSError, UnicodeDecodeError) as exc:
