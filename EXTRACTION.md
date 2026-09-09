@@ -1,5 +1,15 @@
 # Ultima V Extraction Inventory
 
+## Issue #251 - carried-carpet boarding terrain (2026-09-09 UTC)
+
+Inventory Sections 7/7.1 now define the boarding predicate: every current map
+tile except mountains `0x0C`, with separate eligible-scene and exact on-foot
+transport gates. Movement Section 4 and vehicles Section 3 distinguish this
+from movement passability. Chairs permit activation. Fresh traces and 1,284
+controlled original executions cover all tile, scene and transport bytes,
+both carpet frames and refusal precedence. This fills an undefined predicate;
+no existing movement or boarding claim is withdrawn, so no retraction applies.
+
 ## Issue #250 - Codex entry and display (2026-09-09 UTC)
 
 E-Enter on live tile `0x11` at the shipped surface position `(233, 233)`

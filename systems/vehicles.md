@@ -179,10 +179,14 @@ purchase is also Talk-entered: payment queues an overworld acquisition, and the
 next overworld entry places either a Frigate as a ship-family object or a
 standalone skiff-family object at the selling shipwright's fixed delivery cell
 (`systems/shops.md` Section 8.7). A purchased
-Magic Carpet can also be activated through U-Use: outside dungeon/combat scenes,
-when the party is on foot and the current tile accepts it, the item-use handler
-changes the party transport marker to a carpet state and decrements the carried
-carpet counter. That U-Use path is inventory-owned; B-Board remains the command
+Magic Carpet can also be activated through U-Use: in scene ids `0x00..0x20`,
+with exact on-foot transport marker `0x1C`, every current map tile except
+mountains `0x0C` allows activation. This uses neither movement predicate;
+chairs therefore allow activation despite rejecting carpet movement. The
+item-use handler chooses carpet marker `0x14` or `0x15` with equal probability
+and consumes one carried carpet. `systems/inventory.md` Section 7.1 specifies
+the refusal precedence and verification. That U-Use path is inventory-owned;
+B-Board remains the command
 for boarding a carpet object already present on the map.
 
 The delivered Frigate starts with hull condition `99` in byte `+5` and two

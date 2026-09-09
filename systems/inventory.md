@@ -863,7 +863,7 @@ Confirmed U-Use families:
 |---|---|
 | Spell scrolls | Eight scroll counters dispatch to spell-like effects: light, wind change, Protection, Negate Magic, View, Summon Daemon, Resurrection, and Negate Time. A scroll counter is decremented before its branch-specific scene gate, target prompt, or helper return. Scrolls share the spell-code labels but have item-specific constants: `LV` sets the magic-light counter to 240 minutes, while `IS`, `AI`, and `AT` write the single shared timed-effect slot in `systems/magic.md` with `P`/100, `N`/20, and `T`/20 turns respectively — replacing whatever effect was already there. `AT` reports no effect in Stonegate and Doom. |
 | Potions | Eight colour-coded potion counters dispatch through a party-member target path. Display order is Blue, Yellow, Red, Green, Orange, Purple, Black, White, with normal effects wake, heal, cure poison, poison, sleep, combat-only "Poof" presentation, combat invisibility, and a surface/town visibility repaint sequence. A consumed potion normally applies the selected colour's effect, but a variation roll gives one chance in sixteen to force the Orange sleep effect and one chance in sixteen to replace the effect with a random potion row. Before that roll, the selected colour drives a blocking EGA/Tandy full-playfield invert/sound/restore presentation, so a substituted effect retains the selected bottle's presentation. All eight selected-colour timing rows use the same rumble and paired-sweep structure; the complete numeric table is in `catalogs/item-list.md` Section 7.2. Orange uses an ordinary persistent sleep tile with a one-in-seventeen scheduled wake check; Purple rewrites the combat record to ordinary tile `0x90` without a timer; White reveals the whole eleven-by-eleven viewport window straight from the map, with no distance or line-of-sight test, and repaints that unchanged grid twenty times (**corrected, R318**: the earlier "inclusive squared-distance-threshold-32 visibility grid" wording is withdrawn). Exact rasters, timing, restoration, and no-extra-turn rules are normative in that catalog section. |
-| Magic Carpet | Usable outside dungeon/combat scenes when the party is on foot and the current tile accepts carpet boarding. On success it changes the party transport marker to a carpet state and decrements the carried carpet counter. If the party is aboard a ship or otherwise not on foot, it prints the matching refusal instead. |
+| Magic Carpet | Usable in scene ids `0x00..0x20` when the party has exact on-foot transport marker `0x1C` and the current map tile is anything except mountains `0x0C`. This boarding test is independent of movement passability; Section 7.1 gives its precedence and outcomes. On success it chooses carpet marker `0x14` or `0x15` with equal probability and consumes one carried carpet. |
 | Skull Key | Decrements the skull-key/special-key counter, then asks for a cardinal target and runs the lock helper in town/overworld or combat. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. The earlier non-combat-only scope is withdrawn (R415). |
 | Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
 | Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
@@ -932,6 +932,38 @@ Utility results follow those completions:
 | Sextant accepted | `Position:`, then the existing coordinate formatter in `catalogs/item-list.md` |
 | Pocket Watch | `The pocket watch reads_`, hour, colon, two-digit minute, then `_AM.\n` or `_PM.\n`; hours are 1 through 12 without a leading zero |
 | Box | `How?\n` |
+
+**Carpet boarding terrain and precedence** *(clarified 2026-09-09, issue
+#251)*. Activating a carried carpet uses its own terrain rule: it accepts
+map tile ids `0x00..0x0B` and `0x0D..0xFF`, and rejects only mountains
+`0x0C`. Neither the on-foot nor the carpet movement predicate is consulted.
+The tested tile is the current map cell at the party's coordinates, not the
+party's displayed sprite. There is no surface-versus-Underworld plane gate.
+
+The family completion `Carpet\n\n` precedes every result. Scene ids
+`0x21..0xFF` produce `Not here!\n` without a terrain lookup. In an eligible
+scene, mountains produce that same refusal before transport is considered.
+On other tiles, exact transport marker `0x1C` permits boarding; ship markers
+`0x20..0x27` produce `X-it ship first!\n`, and every other marker produces
+`Only on foot!\n`. Thus a ship marker on mountains receives `Not here!\n`.
+
+Success prints `Boarded!\n`, selects one of the two carpet frames with equal
+probability, and removes one carpet from carried stock. It leaves the map cell,
+scene and party coordinates unchanged. Refusals preserve the carpet stock and
+transport. The ordinary U-Use action cost described in Section 7 still applies.
+This is activation of a carried item; B-Board of a carpet object already on
+the map is separately specified in `systems/vehicles.md` Section 3.
+
+Consequently, chair tiles `0x90..0x93` permit boarding even though subsequent
+carpet movement rejects them. The boarding rule also accepts tiles excluded
+from foot movement, such as `0x0D`. Controlled placement proves that handler
+behavior; it does not establish that every accepted tile is ordinarily
+reachable on foot. Fresh original-handler traces and 1,284 isolated executions
+cover all tile, scene and transport byte values, both successful frame choices,
+and refusal precedence. Picker, rendering and random endpoints were controlled;
+the original coordinate lookup and boarding decisions executed. Source
+provenance: private analysis in `u5-decomp/functions/CAST_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/`.
 
 The shard continuation is `Thou dost hold above thee the evil Shard of_`
 followed by `Falsehood...`, `Hatred...` or `Cowardice...`. A wrong destruction
