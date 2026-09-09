@@ -138,6 +138,12 @@ while the horse and magic-carpet queries reject at least the chair variants.
 Callers that do not use the on-foot exception continue to force-reject the
 chair run even though the base bitset alone would otherwise allow it.
 
+These movement sets do not govern U-Use activation of a carried carpet.
+That action has a separate terrain rule which rejects only mountains `0x0C`;
+it can therefore board from a chair even though later carpet movement rejects
+chair cells. The complete activation gates, outcomes and verification are in
+`systems/inventory.md` Section 7.1.
+
 Additional non-vehicle query families are promoted at predicate-family depth.
 Many of their sprite-run names are owned by `systems/encounters.md` and
 `catalogs/monster-bestiary.md`; the movement contract here is the terrain
