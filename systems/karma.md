@@ -557,12 +557,75 @@ fourteen controlled original-code dispatch cases. Content, graphics and timing
 endpoints were intercepted, so these cases establish routing and state
 restoration rather than a full rendered quest playthrough.
 
-Urn reading is gated by the ordained mask set at the virtue shrines. The reader
-walks the eight virtues in the standard virtue order and considers only virtues
-whose ordained bit is set. For the selected ordained virtue, the reader sets the
-matching Codex-read bit and displays that virtue's prophecy/Codex text. If all
-Codex-read bits are already set, the reader takes its completed branch instead
-of stamping another virtue.
+### 8.1. Codex record selection and quest state
+
+Every Codex presentation begins with `MISCMSG.DAT` record `46`, followed by
+shared preambles `37` and `38` at the key boundaries below. Record ordinals
+here are zero-based. These introductions do not require an ordained virtue.
+
+With no ordained bits set, the page result is record `39`, the unexpected
+visitor response. Neither quest mask changes, and the reader returns after
+that result without a further key wait. This also applies when all Codex-read
+bits are already set but no virtue remains ordained.
+
+Otherwise, select the **first ordained virtue in the standard virtue order**.
+An already-set Codex-read bit does not exclude that virtue. Set its matching
+Codex-read bit, retain the ordained mask, and print its aphorism from records
+`20` through `27`: Honesty uses `20`, Compassion `21`, Valor `22`, Justice
+`23`, Honor `24`, Sacrifice `25`, Spirituality `26`, and Humility `27`.
+The aphorism is enclosed by an opening double quote and a closing double quote
+followed by two newlines, in addition to the record's own authored content.
+Only one virtue is selected per visit. Repeating the visit while that first
+virtue remains ordained repeats its aphorism; it does not advance to the next
+unread ordained virtue.
+
+After the aphorism and its following key wait, inspect the **updated**
+Codex-read mask. If it is incomplete, finish the presentation. If all eight
+bits are set, continue with three shared viewport flash/rumble effects, then
+record `40` once as the page-turn transition. After another key, print
+`Thou dost read:\n\n` and the shared runic pages `41`, `42`, `43`, `44`
+in that order, with the waits below. These four pages are common to all
+virtues; record `40` is not repeated between them. This extension occurs both
+when the selected virtue supplies the final missing read bit and when the
+read mask was already complete on arrival with at least one ordained virtue.
+The earlier claim that an already-complete read mask takes a completed branch
+instead of stamping a selected virtue is retracted (`RETRACTIONS.md` R452).
+
+### 8.2. Presentation key waits
+
+The presentation uses the shared command-key input described in
+`systems/input.md` Section 3. Each accepted key advances the presentation;
+its command value is discarded and produces no ordinary command echo or
+world command. There is no automatic timed advance in place of these waits.
+The counts begin after the initial approach record `46`:
+
+| Advance key | Result before the next wait or return |
+|---|---|
+| 1 | Print shared record `37`. |
+| 2 | Print shared record `38`. |
+| 3 | With no ordained virtue, print `39` and finish. Otherwise stamp the selected virtue and print its quoted aphorism `20`–`27`. |
+| 4, ordained path only | If the updated read mask is incomplete, finish. Otherwise perform the three flash/rumble effects and print page-turn record `40`. |
+| 5, completion extension only | Print the ordinary-font read lead-in, then runic record `41`. |
+| 6, completion extension only | Print runic record `42`. |
+| 7, completion extension only | Print runic record `43`. |
+| 8, completion extension only | Print runic record `44`. |
+| 9, completion extension only | Finish and allow the enclosing presentation to restore the prior scene. |
+
+Thus a no-ordained visit consumes **three** keys, an ordained visit with an
+incomplete resulting read mask consumes **four**, and an ordained visit with
+a complete resulting read mask consumes **nine**. Records `41`–`44` use the
+ordinary message window with the runic font selected for each record; the
+normal font is restored before each following key wait. Preserve the stored
+glyphs and separators rather than inserting extra page-turn narration.
+
+Source provenance: fresh reader, wrapper and font-selection traces under
+`u5-decomp/functions/CAST2_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`,
+shipped message-table/selector mapping, and 1,047 controlled original-code
+executions under `u5-decomp/notes/`. The executions verify record order and
+quest state at each input wait, including scene restoration in fifteen wrapper
+cases; graphics, input and timing endpoints are controlled. Issue #253's
+reported original-game decoded rows separately corroborate the three-key
+no-ordained path. No rendered or audible duration is established here.
 
 This is the middle state in the shrine quest cycle:
 
@@ -572,8 +635,9 @@ This is the middle state in the shrine quest cycle:
    the virtue's stat/standing reward, and leaves the Codex-read bit as the
    durable completed marker.
 
-The urn text is supplied by `MISCMSG.DAT`; the file format spec owns the record
-cluster, while this spec owns the quest-bit transition.
+The urn text is supplied by `MISCMSG.DAT`; `formats/miscmsg-dat.md` Section 3
+indexes the record roles, while this section owns selection, quest state and
+presentation waits.
 
 ## 9. Virtue-to-class linkage and the avatar's class
 

@@ -436,8 +436,9 @@ Janell and Kindor connect Spirituality to a midnight moongate route.
 
 At runtime, each virtue path advances through the shrine and Codex urn masks:
 correct mantra at an unstarted shrine sets the ordained bit; reading the
-corresponding Codex urn/page sets the Codex-read bit; returning to the shrine
-with both bits set completes that virtue by clearing ordained and leaving the
+Codex selects the first still-ordained virtue and sets its Codex-read bit;
+returning to the shrine with both bits set completes that virtue by clearing
+ordained and leaving the
 Codex-read bit as the durable completed marker. The full mechanics live in
 `systems/karma.md`; this catalog tracks the quest dependency edge.
 
