@@ -1,5 +1,16 @@
 # Next Steps for u5-spec
 
+## Issue #252 - arena command output reconciled (2026-09-09 UTC)
+
+Combat Section 8.4 now includes empty Get/Search results and their newline
+boundaries. Nine fresh original-code cases verify four-direction empty
+results and X-it's newline before both refusal tones. The author's full-game
+sequence reports persistent G/S/X output, resolving that part of #231;
+armour and invisibility remain open. Found-object wording and measured audio
+are outside this new observation. No retraction applies: the existing output
+contract stands, added result detail fills a gap, and a disputed observation
+has been reconciled without reversing a published behavior.
+
 ## Issue #251 - carried-carpet boarding terrain (2026-09-09 UTC)
 
 Inventory Sections 7/7.1 now define the boarding predicate: every current map
