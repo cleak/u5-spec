@@ -1,5 +1,17 @@
 # Ultima V Extraction Inventory
 
+## Issue #253 - Codex records and presentation waits (2026-09-09 UTC)
+
+Karma Sections 8.1/8.2 and the message format now distinguish virtue aphorisms
+20–27 from shared preambles37/38, no-ordained39, transition40 and runic41–44.
+The first ordained virtue is selected even when already read. Presentation
+consumes three, four or nine keys according to quest state. Fresh mapping and
+1,047 original cases verify every wait boundary, masks, fonts and record order.
+R452 corrects the published pre-stamp completion gate; R453 corrects the
+separate-renderer description. The exact record selector and wait counts are
+additive detail, not a retraction of the valid virtue-specific aphorism claim.
+The author's three-key capture is corroborated for its no-ordained scope.
+
 ## Issue #252 - arena command output reconciled (2026-09-09 UTC)
 
 Combat Section 8.4 now includes empty Get/Search results and their newline

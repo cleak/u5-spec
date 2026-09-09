@@ -35,9 +35,12 @@ The known record clusters are:
 |---|---|---|
 | 0-11 | Blackthorn capture audience | Challenge templates, audience prompts, and related punishment/release presentation text |
 | 12-19 | Shrine and virtue presentation | Virtue-failing or weakness phrases keyed by the eight virtues |
-| 20-27 | Shrine and virtue presentation | Virtue aphorism paragraphs keyed by the eight virtues |
+| 20-27 | Codex virtue reading | One aphorism per virtue, Honesty through Humility in canonical order |
 | 28-36 | Shrine meditation | Meditation prompts, altar text, offering text, and ordained/quest turn-in presentation |
-| 37-44 | Urn/Codex prophecy | Codex revelation or prophecy pages, including tile-glyph text |
+| 37-38 | Codex reading | Shared book-open and page-introduction preambles, independent of quest state |
+| 39 | Codex reading | Result when no virtue is ordained |
+| 40 | Codex completion | Page-turn transition, printed once before the shared completion pages |
+| 41-44 | Codex completion | Four shared runic pages, presented sequentially when the selected virtue leaves the read mask complete |
 | 45 | Shrine entry | Approach narration before the kneeling and virtue-input records |
 | 46 | Codex entry | Approach narration for the Codex presentation |
 
@@ -53,8 +56,10 @@ by fresh resource selection and isolated original-code execution under
 The record-family boundaries are consumer contracts, not in-file structure. The
 Blackthorn audience loads the front cluster as its temporary message source.
 The shrine path loads the later message window before dispatching either shrine
-meditation or urn reading. The urn reader then selects Codex prophecy text from
-that loaded window through its virtue-specific pointer table.
+meditation or urn reading. Codex reading selects an ordained virtue's aphorism
+from `20`–`27`; the `37`–`44` cluster is not an eight-entry virtue selector.
+`systems/karma.md` Sections 8.1 and 8.2 specify the first-ordained selection,
+shared completion extension and three/four/nine-key presentation paths.
 
 The exact one-line ordinal-to-English mapping is intentionally not duplicated
 here. Implementations should treat the shipped file as authored content and use
@@ -76,18 +81,21 @@ sign-style text:
 | `]` | `NG` digraph |
 | `_` | `ER` digraph |
 
-These glyph records are intended for a Codex/sign-style display path, not the
-ordinary prose printer. A reader should keep the record's bytes intact and let
-the caller choose the correct renderer. See `formats/signs-dat.md` for the
-closely related sign-stream formatter; `MISCMSG.DAT` itself only supplies the
-message bytes.
+For Codex records `41`–`44`, the caller selects the runic font and uses the
+ordinary fixed-window message printer, then restores the normal font before
+the following key wait. Keep the authored glyph stream and line separators
+intact. The related glyph convention in `formats/signs-dat.md` does not make
+these records sign streams or require that parser.
+The earlier direction to use a separate Codex/sign-style display path rather
+than the ordinary message printer is retracted (`RETRACTIONS.md` R453).
 
 ## 5. Consumer Behavior
 
 `MISCMSG.DAT` is loaded into a scratch buffer by scene handlers that need the
-current cluster. The caller chooses a record or loaded-window offset, sends it
-to either the ordinary text-output pipeline or the tile-glyph renderer, and
-performs any prompt, virtue check, flag update, or animation separately.
+current cluster. The caller chooses a record, prints it with the appropriate
+active font, and performs any prompt, virtue check, flag update, or animation
+separately. Codex runic pages share the fixed-window text-output path; their
+font selection is part of the Codex caller's presentation contract.
 
 The file does not encode branching, karma adjustments, shrine outcomes, Codex
 state, or Blackthorn punishment logic. It only provides the text shown by
@@ -100,7 +108,7 @@ Public consumer contracts:
 | `systems/blackthorn.md` | Loads the audience cluster for capture/challenge prompts and related presentation strings. The challenge answer words are selected from resident virtue/Word tables, not from `MISCMSG.DAT`. |
 | `systems/karma.md` | Owns shrine meditation, virtue aphorism/failing text, and the ordained/Codex-read state transitions that decide which virtue text can be shown. |
 | `catalogs/quest-graph.md` | Describes the quest-state effect of the urn/Codex flow: ordained virtues become Codex-read when the corresponding urn page is read. |
-| `systems/text-output.md` | Owns ordinary fixed-window text printing. Codex tile-glyph presentation is a caller-selected rendering mode layered above the raw message table. |
+| `systems/text-output.md` | Owns ordinary fixed-window text printing. Codex runic pages use that same message window with a caller-selected font. |
 
 ## 6. Validation and Error Handling
 
@@ -118,9 +126,9 @@ No file-layout work remains for the shipped DOS data set. The sequential
 forty-seven-record layout, record-family ownership, and plain-text versus
 tile-glyph rendering boundary are public.
 
-Exact visual parity for the Codex tile-glyph presentation still depends on the
-display/layout contract for that caller. The message-file contract is stable:
-preserve the tile-glyph bytes and let the caller render them.
+Codex presentation order, input waits and font selection are specified in
+`systems/karma.md` Section 8. Preserve the stored glyph bytes and apply the
+ordinary message-window layout with the selected font.
 
 Individual record ordinals inside each family are data-authored content. A
 modern content tool may expose them for editing, but gameplay code should
@@ -138,3 +146,9 @@ This is a cleanroom prose specification derived from:
 - `u5-spec/systems/karma.md`.
 - `u5-spec/systems/blackthorn.md`.
 - `u5-spec/systems/text-output.md`.
+
+The Codex record map and font use were freshly verified for issue #253 from
+original caller/data traces and 1,047 controlled original-code cases under
+`u5-decomp/functions/CAST2_OVL/`, `u5-decomp/functions/ULTIMA_EXE/` and
+`u5-decomp/notes/`. These cases establish selection and ordering, not rendered
+frame timing.
