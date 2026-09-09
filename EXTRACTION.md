@@ -1,5 +1,13 @@
 # Ultima V Extraction Inventory
 
+## Issue #249 - repository artifact cleanup (2026-09-09 UTC)
+
+The tracked tree no longer contains the reported original-game screenshot or
+the generated Python cache. The contamination check now covers media/game-data
+filenames, including capture directories, with synthetic traversal checks.
+Earlier commits still contain the screenshot; history cleanup remains tracked
+in issue #249 pending an owner decision. No gameplay specification changed.
+
 ## Issue #248 - four-frame input cursor (2026-09-08 UTC)
 
 Input Section 3 now specifies shipped base 5, cycle length 4, initial phase 0,
