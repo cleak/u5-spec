@@ -2474,7 +2474,8 @@ and the full/short retry distinction remain as specified in Section 8.1.
 | Escape refused by context | `Escape-Not here!\n` |
 | Escape refused while fight remains undecided | `Escape-Not yet!\n` |
 | Escape accepted | `Escape!`, with no trailing line feed from this handler |
-| Party Get / Search | `Get-` or `Search-`, then the shared cardinal-direction input |
+| Party Get | `Get-`, then the shared cardinal-direction input; an empty target adds `\nNothing to get!\n` |
+| Party Search | `Search-`, then the shared cardinal-direction input; an ordinary target with nothing to discover adds `\nThou dost find\nnothing of note.\n` |
 | X-it | `X-it what?\n`, followed by the refusal tones and a full retry |
 | Party Cast | `Cast...\n`, then the spell-name exchange if prerequisite gates pass |
 
@@ -2498,19 +2499,29 @@ spell-name prompt follows directly after the cast echo and prerequisite gates.
 The lookup's exact-`0x80` boundary still uses the shared non-arena selection
 path; this statement does not widen its comparison.
 
-**Issue #231 capture mismatch remains open.** The reported absence of all
-G/S/X text conflicts with their original output calls. Isolated original-code
-probes emit Get-/Search- before their delegated input, and X-it plus its
-refusal tail before the sound. These probes establish emitted text, not its
-duration in a full-game frame sequence. Reconciliation needs the original
-save, canonical asset identity, exact input sequence and frames from command
-dispatch through the next input wait. Neither a new silent contract nor an
-unverified text-erasure explanation follows from the current evidence.
+For these empty Get/Search outcomes, the direction name completes the open
+verb row and includes its own newline. The result's leading newline leaves
+one blank row before the result; its trailing newline closes the last result
+row. The next full actor banner begins with its own newline, leaving a blank
+row after the result. X-it likewise closes its refusal row before the next
+full banner's leading newline. These empty-result descriptions do not specify
+the wording of found-object outcomes.
+
+**The G/S/X capture mismatch is resolved by issue #252.** The author reports
+a full-game dungeon-room sequence whose decoded message-window rows retain
+these command echoes and results through the next input wait. That report
+corroborates the existing original output-call evidence and withdraws the
+previous absence observation. Fresh isolated original-code executions also
+verify the empty Get/Search results in all four directions and X-it's newline
+before both refusal tones. These executions verify emission and ordering;
+the screen-persistence observation is the author's report, not an independent
+capture reproduction. The separate armour and invisibility observations in
+issue #231 remain open.
 
 Source provenance: fresh dispatch, input and output traces plus isolated
 original-routine emulation in `u5-decomp/functions/COMBAT_OVL/`,
 `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
-`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/` (#231/#238).
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/` (#231/#238/#252).
 
 ## 9. Monster AI
 
