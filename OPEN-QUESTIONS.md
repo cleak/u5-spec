@@ -21,12 +21,16 @@ Two rules govern what belongs here:
   answer reverses published text.
 
 Last reconciled: 2026-09-05. Every `trace` item has been closed against the
-shipped files; what remains needs an owner decision (none at present), a live
+shipped files; what remains needs an owner decision (Section 1), a live
 capture (section 2), or a change of scope (section 4).
 
 ## 1. Owner decisions
 
-None open. The shipped-text policy (how much of the game's own text this
+| Item | Where | What settles it |
+|---|---|---|
+| Whether to rewrite shared history to purge the removed original-game screenshot, and whether to include historical provenance/author metadata cleanup. | Issue #249; `NEXT-STEPS.md` | Explicit owner scope decision and approval before rewriting and force-pushing shared history. Current-tree cleanup is already published; earlier commits still contain the image. |
+
+The shipped-text policy (how much of the game's own text this
 specification reproduces) was decided on 2026-09-04: the four items outside
 the interface-string justification stay as published, for the functional
 reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
