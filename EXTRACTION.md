@@ -1,5 +1,15 @@
 # Ultima V Extraction Inventory
 
+## Issue #250 - Codex entry and display (2026-09-09 UTC)
+
+E-Enter on live tile `0x11` at the shipped surface position `(233, 233)`
+starts the Codex presentation. The temporary scene is `0xFF`; decorative
+`0x41` is local `(5, 2)`, not the entry trigger. Karma Section 8 now separates
+surface and display coordinates; gazetteer, tile catalog, commands and the
+small-map format agree. Fresh traces, shipped-map scans and fourteen isolated
+original dispatch cases support the contract. R451 withdraws remaining
+M-family attributions. No separate coordinate sidecar is required by this route.
+
 ## Issue #249 - repository artifact cleanup (2026-09-09 UTC)
 
 The tracked tree no longer contains the reported original-game screenshot or

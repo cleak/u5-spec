@@ -744,12 +744,14 @@ local-light systems as moon-gate-family state, while active-object records use
 byte through the buffer they are reading: live terrain, rendered scratch, or
 active-object slot.
 
-**Shrines and Codex urns.** Shrine-family special tiles are consumed by the
-M-command kneel handler, not merely by stepping onto them. Ordinary virtue
-shrines prompt for the correct mantra and advance the shrine quest state as
-specified in `systems/karma.md`. The Codex urn special tile routes through the
-same command family but reads the Codex/prophecy text and sets the Codex-read
-quest bit for an ordained virtue.
+**Shrines and Codex urns.** E-Enter on live tile `0x19` begins ordinary
+virtue-shrine meditation. E-Enter on live tile `0x11` begins Codex reading;
+the shipped surface marker is at `(233, 233)`. Neither requires an M command.
+The earlier M-command kneel-handler attribution is retracted
+(`RETRACTIONS.md` R451). The temporary Codex display contains decorative tile
+`0x41` at local `(5, 2)`, but that tile does not trigger entry. See
+`systems/karma.md` Sections 7 and 8 for the command, display and quest-state
+contracts and their original-code evidence.
 
 **Town and dungeon entrances.** Entering on a fixed entrance coordinate sets the scene byte and dispatches the town-mode or dungeon-mode setup. The trigger is recognised by the resident world-location table, not by tile id alone; rows 0..31 select town-mode scenes and rows 32..39 select dungeon scenes.
 
