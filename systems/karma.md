@@ -527,12 +527,35 @@ not publish a traced in-overlay virtue-score adjustment before selection. See
 
 ## 8. Codex Urn Reading
 
-The same `M` command family also owns the Codex urn interaction. When the party
-kneels on the urn/Codex special tile instead of an ordinary virtue shrine, the
-handler suspends the normal active-object presentation, loads the Codex message
-cluster, and dispatches to the urn reader rather than the shrine-mantra flow.
-The saved scene and active-object state are restored afterward and the screen is
-fully redrawn.
+Use **E-Enter while standing on live terrain tile `0x11`** to begin the Codex
+interaction. Its shipped location is the Britannia surface cell `(233, 233)`.
+The command prints `Enter the Shrine of the Codex!\n` and immediately starts
+the shrine/Codex presentation. This tile arm does not require a separate
+coordinate-table match. `M` remains Mix Reagents at this location.
+The earlier statement that the M command owns Codex entry is retracted
+(`RETRACTIONS.md` R451).
+
+The presentation is temporary, with scene byte `0xFF`; it is not an explorable
+town or dungeon interior. It suspends the ordinary active objects and shows
+the eleven-by-eleven Codex map from `MISCMAPS.DAT`, record 2 (zero-based).
+Within that display, decorative tile `0x41` is at local `(5, 2)`, measured
+from the top-left cell with zero-based coordinates. The animated party reaches
+the cell immediately south of it, `(5, 3)`, before the reader runs. These are
+display coordinates: the party's surface coordinates and plane remain intact.
+The original scene and active-object state are restored afterward and the world
+is redrawn.
+
+Tile `0x41` is not an alternative entry trigger. E-Enter on that tile takes
+the ordinary `Enter What?\n` refusal without starting the Codex interaction.
+The surface approach gate at `(233, 235)` is a separate event, described in
+`catalogs/gazetteer.md` Section 8.1.
+
+Source provenance: fresh original command and presentation traces under
+`u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/CAST2_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/`; shipped surface/display-map inspection;
+fourteen controlled original-code dispatch cases. Content, graphics and timing
+endpoints were intercepted, so these cases establish routing and state
+restoration rather than a full rendered quest playthrough.
 
 Urn reading is gated by the ordained mask set at the virtue shrines. The reader
 walks the eight virtues in the standard virtue order and considers only virtues

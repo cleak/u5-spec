@@ -579,7 +579,12 @@ is an ordinary row and matches by position like the rest.
 
 The **Shrine of the Codex** is a separate landmark with its own tile, occurring
 exactly once on the Britannia surface at `(233, 233)` and nowhere in the
-Underworld. Its approach gate is described in Section 8.1.
+Underworld. That live tile is `0x11`: E-Enter starts the Codex presentation
+there. It does not lead to a persistent interior location. The temporary scene
+uses `0xFF` and the Codex display's decorative `0x41` cell is local `(5, 2)`;
+neither is a new gazetteer destination. See `systems/karma.md` Section 8 for
+the traced entry and restoration contract. Its approach gate is described in
+Section 8.1.
 
 ## 8. Other Travel Landmarks
 
@@ -653,6 +658,10 @@ castle, cave, mine, dungeon, **the shrine of** *virtue* (the virtue selected
 from the Section 7 table), ruins, lighthouse, **the palace of Blackthorn!**,
 and **the Castle of Lord British!**. Standing on anything else answers `What?`
 and consumes nothing.
+
+For the Codex marker, the label is followed immediately by the temporary
+Codex interaction described in `systems/karma.md` Section 8. There is no
+additional Enter step or normal interior scene to navigate.
 
 Recognising the terrain is not the same as entering: the town-family and
 dungeon paths still require the party's coordinate to match a Section 5.1 row,

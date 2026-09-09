@@ -335,7 +335,7 @@ key does not select the noun.
 | dungeon | `dungeon` |
 | ruins | `ruins` with no newline; this is a direct non-transition arm |
 | lighthouse | `lighthouse` |
-| Codex shrine | `the_Shrine_of_the_Codex!\n` |
+| Codex shrine | `the_Shrine_of_the_Codex!\n`, then the temporary Codex presentation on live tile `0x11`; see `systems/karma.md` Section 8. |
 | virtue shrine | `the_shrine_of\n` followed by the coordinate-matched virtue name and `\n`. The seven stock surface cells are Honesty, Compassion, Valour, Justice, Sacrifice, Honor, and Humility; Spirituality has no stock surface `0x19` cell. |
 | Blackthorn's palace | `the_palace_of_Blackthorn!` |
 | Lord British's castle | `the_Castle_of_Lord_British!` |
@@ -1134,9 +1134,10 @@ reproduced here.
 - The CMDS overlay command-family inventory and corrected F/J/O/G/S ownership:
   `u5-decomp/functions/CMDS_OVL/`, and
   `u5-decomp/functions/CMDS_OVL/`.
-- The M-family split between CMDS reagent mixing and CAST2 shrine/urn entry:
-  `u5-decomp/functions/CMDS_OVL/` and
-  `u5-decomp/functions/CAST2_OVL/`.
+- M reagent mixing and the separate E-Enter shrine/Codex route:
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/CMDS_OVL/` and `u5-decomp/functions/CAST2_OVL/`.
+  The earlier M-family split attribution is retracted (`RETRACTIONS.md` R451).
 - The New Order active-party record exchange, leader refusal, cancel paths, and
   same-slot self-swap behaviour:
   `u5-decomp/functions/CMDS_OVL/`.
