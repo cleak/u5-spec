@@ -1,5 +1,15 @@
 # Ultima V Extraction Inventory
 
+## Issue #254 - shipwright greeting selection (2026-09-10 UTC)
+
+Shops Sections 8.A/8.7 and the shop message format now make the existing
+four-way ship greeting draw explicit near the entry description: records
+105–108, with 107 and 108 matching the two reported welcome templates.
+Shared machinery uses separate pools for the seven non-arms shop kinds.
+Fresh checks cover 84 original greeting/loader/formatter cases and all 65,536
+incoming bounded-draw states. No retraction applies: record pools and uniform
+selection were already published; this clarifies their scope and location.
+
 ## Issue #253 follow-up - shared ST rune (2026-09-10 UTC)
 
 R455 corrects miscmsg4's surviving underscore/ER label to ST, aligning it
