@@ -1,5 +1,13 @@
 # Ultima V Extraction Inventory
 
+## Issue #253 follow-up - shared ST rune (2026-09-10 UTC)
+
+R455 corrects miscmsg4's surviving underscore/ER label to ST, aligning it
+with the existing endgame contract. Fresh shipped word contexts and the
+original endgame font/printer selection confirm the shared glyph meaning.
+Codex record selection, presentation waits and proportional prose handling
+remain unchanged.
+
 ## Issue #253 follow-up - Sacrifice/Honor page labels (2026-09-10 UTC)
 
 R454 corrects the two labels transposed in ad46c06's karma8.1: Sacrifice uses
