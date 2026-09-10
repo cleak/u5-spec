@@ -572,7 +572,9 @@ Otherwise, select the **first ordained virtue in the standard virtue order**.
 An already-set Codex-read bit does not exclude that virtue. Set its matching
 Codex-read bit, retain the ordained mask, and print its aphorism from records
 `20` through `27`: Honesty uses `20`, Compassion `21`, Valor `22`, Justice
-`23`, Honor `24`, Sacrifice `25`, Spirituality `26`, and Humility `27`.
+`23`, Sacrifice `24`, Honor `25`, Spirituality `26`, and Humility `27`.
+The earlier assignment of record `24` to Honor and `25` to Sacrifice is
+retracted (`RETRACTIONS.md` R454); the virtue and bit order in Section 2 stands.
 The aphorism is enclosed by an opening double quote and a closing double quote
 followed by two newlines, in addition to the record's own authored content.
 Only one virtue is selected per visit. Repeating the visit while that first

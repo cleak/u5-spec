@@ -1,5 +1,14 @@
 # Ultima V Extraction Inventory
 
+## Issue #253 follow-up - Sacrifice/Honor page labels (2026-09-10 UTC)
+
+R454 corrects the two labels transposed in ad46c06's karma8.1: Sacrifice uses
+record24 and Honor uses record25, matching the existing virtue/save-bit order.
+Fresh original name/mantra-table inspection and added name-to-record assertions
+in the 1,047-case probe verify the mapping. All cases pass. The completion
+sequence and 3/4/9-key counts remain as published; the follow-up's completed
+branch questions are already answered in Sections 8.1/8.2.
+
 ## Issue #253 - Codex records and presentation waits (2026-09-09 UTC)
 
 Karma Sections 8.1/8.2 and the message format now distinguish virtue aphorisms
