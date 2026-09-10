@@ -1,5 +1,15 @@
 # Next Steps for u5-spec
 
+## Issue #255 - complete U-Use labels and quantity rules (2026-09-10 UTC)
+
+Inventory Section 4.5 now gives all plain compact names and scroll rune
+labels, completing the existing potion/moonstone presentation families.
+Normal full stock has 18 counted and 20 uncounted entries, with saved-value
+handling explicit. R456 withdraws the blanket counted-regalia wording;
+the earlier quantity-one observations remain valid for that state.
+Fresh checks cover all 38 names and 446 original snapshot/row executions.
+No engine/QA assets or full-game capture were inspected.
+
 ## Issue #254 - shipwright greeting selection (2026-09-10 UTC)
 
 Shops Sections 8.A/8.7 and the shop message format now make the existing

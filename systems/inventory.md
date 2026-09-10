@@ -305,9 +305,12 @@ glyph inversion independently traced in `u5-decomp/functions/ULTIMA_EXE/`.
 
 ### 4.5 Picker row format
 
-A picker row is **`[two-cell quantity][one-cell selector][name]`**, i.e. window
-columns 1 and 2 hold the quantity right-aligned, window column 3 holds the
-selector character, and window columns 4 through 13 hold the name.
+A counted picker row is **`[two-cell quantity][one-cell selector][name]`**:
+window columns 1 and 2 hold the quantity right-aligned, window column 3
+holds the selector, and the name has ten cells in columns 4 through 13.
+A no-quantity row instead starts its name in column 1 and has all thirteen
+interior cells available. These widths describe the ordinary row layout;
+the picker does not derive labels by truncating long item names.
 
 | Quantity case | Rendered |
 |---|---|
@@ -364,37 +367,107 @@ carried item in R-Ready, a runic glyph for a readied one, and the small solid
 diamond (selector code `0x0F`) when marked in M-Mix (`magic.md` Section 6).
 The marker changes no item id or counter band.
 
-**U-Use short labels and the moonstone row.** The family names in the
-classification table identify items; they are not a table of literal row
-labels. The U-Use picker uses the following compact labels for these entries:
+**Complete U-Use labels.** The family table above identifies the items; its
+long names are not literal row labels. The following table gives every
+undecorated entry in the 38-entry family. Use these labels verbatim, including
+abbreviations and the singular `Plan`.
 
 | Carried item | Plain name in the picker |
 |---|---|
+| Magic Carpet | `Magic Crpt` |
 | Skull Keys | `Skull Keys` |
 | Amulet of Lord British | `Amulet` |
 | Crown of Lord British | `Crown` |
 | Sceptre of Lord British | `Sceptre` |
+| Shard of Falsehood | `Shard/Falsehd` |
+| Shard of Hatred | `Shard/Hatred` |
+| Shard of Cowardice | `Shard/Cowrdce` |
+| Spyglass | `Spyglass` |
+| HMS Cape Plans | `HMS Cape Plan` |
+| Sextant | `Sextant` |
+| Pocket Watch | `Pocket Watch` |
+| Black Badge | `Black Badge` |
+| Wooden Box | `Wooden Box` |
 
-Each of those rows uses the normal two-cell quantity and one space before
-the name. With quantity one, the row starts with one space, `1`, then one
-space; unused cells after the short name are padded to the thirteen-cell
-interior. Long names from other inventory surfaces are not substituted here.
+The eight scrolls use the scroll decoration above followed by these compact
+rune labels, still in the runic font:
 
-A carried moonstone uses the **no-quantity** case: no number and no selector
-cell precede its name. Its complete visible content is the ten text-font
-cells `Moonstone ` followed by the single runic phase glyph specified above,
-then two padding spaces. This fits the thirteen-cell interior. There is no
-literal opening parenthesis, parenthesised suffix, or `phase` plus decimal
-number to clip off at the frame edge. The phase glyph is part of the row's
-rendered content; an apparent parenthesis in a text transcription does not
-establish a longer hidden label. Only carried phases appear in U-Use.
+| Scroll | Rune label after the decoration |
+|---|---|
+| Light | `VL` |
+| Wind Change | `RH` |
+| Protection | `IS` |
+| Negate Magic | `IA` |
+| View | `IQW` |
+| Summon Daemon | `KXC` |
+| Resurrection | `IMC` |
+| Negate Time | `AT` |
 
-Source provenance: fresh canonical compact-name lookup, carried-stock
-snapshot and twelve original row-renderer checks in
-`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`, issue #246.
-Eight original navigation scenarios additionally verify Section 4.4.
-Font/glyph output, cursor coordinates and normalized input were controlled
-observation boundaries, rather than a fresh complete-game pixel capture.
+The eight potions use the potion decoration followed by their text-font
+colour names: `Blue`, `Yellow`, `Red`, `Green`, `Orange`, `Purple`, `Black`,
+`White`. The eight moonstones use the phase composition below. Together,
+these cases specify all 38 labels. The row renderer prints each authored
+label and then pads short rows; it does not abbreviate or truncate a longer
+name at runtime.
+
+**Which U-Use rows omit quantity.** Quantity suppression is independent of
+name decoration. In the picker stock, value 255 is the no-quantity marker;
+zero means absent from U-Use, and ordinary positive quantities produce the
+counted layout. The shared renderer can print a zero row as `--` when another
+caller requests one. A plain-name row means only that it has no scroll,
+potion or moonstone decoration; it does not imply a numeric quantity.
+
+For items carried through normal game acquisition or initial party state:
+
+| Items | Quantity presentation |
+|---|---|
+| Eight scrolls, eight potions, Magic Carpet, Skull Keys | Counted: two quantity cells and a selector space before the name |
+| Amulet, Crown, Sceptre | No quantity or selector |
+| Eight carried moonstone phases | No quantity or selector |
+| Three shards | No quantity or selector |
+| Spyglass, HMS Cape Plans, Sextant, Pocket Watch, Black Badge, Wooden Box | No quantity or selector |
+
+Thus the normal full family contains 18 counted entries and 20 uncounted
+entries. Only entries actually carried and usable are shown.
+
+The saved value matters. Apart from moonstone and plans conversion, the
+picker preserves the carried item's stored value. A saved Amulet, Crown or
+Sceptre value of one therefore produces the counted row with one leading
+space, `1`, another space, and its short name; normal acquisition gives each
+of these the no-quantity value instead. The same distinction applies to the
+copied shard and utility values. The plans row becomes uncounted for any
+nonzero plans value. A moonstone appears only when its placement state is
+carried, and its picker value is then uncounted. See `formats/saved-gam.md`
+Section 7 for the saved inventory fields.
+The earlier unconditional statement that the Amulet, Crown and Sceptre use
+normal quantity cells is withdrawn; that result applies to quantity-one
+saved values, not their normal acquisition state (R456).
+
+An uncounted `Shard/Falsehd` or `Shard/Cowrdce` is twelve text cells followed
+by one padding space; `Shard/Hatred` is eleven cells followed by two spaces.
+`HMS Cape Plan` occupies all thirteen cells. Each begins in the first
+interior column. A quantity-one carpet starts with one space, `1`, one
+space, and `Magic Crpt`, then one padding space. Short rows are padded to the
+thirteen-cell interior and end with a newline.
+
+**Moonstone composition.** A carried moonstone's complete visible content is
+the ten text-font cells `Moonstone ` followed by the single runic phase
+glyph specified above, then two padding spaces. No number or selector
+precedes it. There is no literal opening parenthesis, parenthesised suffix,
+or `phase` plus decimal number to clip off at the frame edge. The phase
+glyph is part of the row's rendered content; an apparent parenthesis in a
+text transcription does not establish a longer hidden label.
+
+Source provenance: fresh original compact-name, inventory snapshot,
+acquisition and initial-party-state inspection in
+`u5-decomp/functions/ZSTATS_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+`u5-decomp/functions/TALK_OVL/` and `u5-decomp/notes/`, issue #255.
+All 38 name mappings, 256 snapshot cases covering every source-byte value,
+38 typical carried rows and 152 row cases covering values 0, 1, 99 and 255
+were checked. Glyph/font output, numeric output and cursor coordinates were
+controlled observation boundaries, not a fresh complete-game pixel capture.
+The earlier eight original navigation scenarios for issue #246 still verify
+Section 4.4.
 
 **R-Ready's readied selector is item-specific.** If the selected character
 has the row's item in any equipment slot, use the following `RUNES.CH` glyph;
