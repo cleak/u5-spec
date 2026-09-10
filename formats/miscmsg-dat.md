@@ -79,7 +79,10 @@ sign-style text:
 | `@` | Inter-word space in tile-glyph text |
 | `[` | `TH` digraph |
 | `]` | `NG` digraph |
-| `_` | `ER` digraph |
+| `_` | `ST` digraph |
+
+The earlier `ER` label for `_` is retracted (`RETRACTIONS.md` R455);
+Codex and endgame text use the same runic `ST` glyph.
 
 For Codex records `41`–`44`, the caller selects the runic font and uses the
 ordinary fixed-window message printer, then restores the normal font before
@@ -152,3 +155,8 @@ original caller/data traces and 1,047 controlled original-code cases under
 `u5-decomp/functions/CAST2_OVL/`, `u5-decomp/functions/ULTIMA_EXE/` and
 `u5-decomp/notes/`. These cases establish selection and ordering, not rendered
 frame timing.
+
+The underscore/ST mapping was independently rechecked in the shipped Codex
+word contexts and the endgame title, whose original caller selects the same
+runic font. Source provenance: `u5-decomp/functions/ENDGAME_OVL/` and
+`u5-decomp/notes/` (#253 follow-up).
