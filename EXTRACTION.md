@@ -1,5 +1,16 @@
 # Ultima V Extraction Inventory
 
+## Issue #258 - shared result feeds and cast refusals (2026-09-10 UTC)
+
+Combat Section 8.4 and commands Section 5.8 now state that Get/Search feeds
+belong to the shared handlers, with separate dungeon-exploration wording.
+Magic Section 7 gives exact refusal output, sound and cost in every mode.
+R460 corrects level rejection's message; R461 removes the nonexistent
+no-charge Failed/sound tail; R462 aligns audio's absorption label and Crown
+gate with the existing magic contract. All 132 focused original-code cases
+pass, including output, resource debits and sound calls; no raster capture
+or engine/QA was inspected.
+
 ## Issue #257 - NAME prefix and framing (2026-09-10 UTC)
 
 Conversation Sections 5/6 publish the fixed `My name is ` prefix, opening

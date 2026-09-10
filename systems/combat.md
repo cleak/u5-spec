@@ -2507,6 +2507,17 @@ row after the result. X-it likewise closes its refusal row before the next
 full banner's leading newline. These empty-result descriptions do not specify
 the wording of found-object outcomes.
 
+**These result feeds are not combat-local.** The shared Get/Search handlers
+supply the same leading, internal and trailing feeds in overworld and town
+mode; `systems/commands.md` Section 5.8 specifies their ownership and the
+separate dungeon-exploration wording. Combat supplies the following banner's
+leading feed, not an extra feed to close the result row. Similarly, the shared
+cast dispatcher emits `Not here!\n`, `None mixed!\n` and
+`M.P. too low!\n` with their trailing feeds in every applicable scene class.
+Their distinct completion/sound tails are specified in `systems/magic.md`
+Section 7; do not add a universal combat result-closing operation. In
+particular, None mixed has no additional Failed line; low mana does.
+
 **The G/S/X capture mismatch is resolved by issue #252.** The author reports
 a full-game dungeon-room sequence whose decoded message-window rows retain
 these command echoes and results through the next input wait. That report
@@ -2521,7 +2532,7 @@ issue #231 remain open.
 Source provenance: fresh dispatch, input and output traces plus isolated
 original-routine emulation in `u5-decomp/functions/COMBAT_OVL/`,
 `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
-`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/` (#231/#238/#252).
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/` (#231/#238/#252/#258).
 
 ## 9. Monster AI
 

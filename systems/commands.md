@@ -472,6 +472,29 @@ empty row.
 | `N`, cancelled | `Swap nobody!` |
 | `Space` | `Pass` |
 
+**Get/Search result whitespace is shared across modes.** On ordinary empty
+terrain in overworld, town or combat, the Get handler supplies exactly
+`\nNothing to get!\n`; Search supplies exactly
+`\nThou dost find\nnothing of note.\n` after successful member selection.
+The leading feed and the Search preamble belong to the shared interaction
+handler; the final feed is included in each empty-result text. The feed after
+`find` is explicit and is not merely window wrapping. Combat does not add or
+remove these feeds. The direction echo and any member-selection exchange
+precede them and have their own output rules.
+
+Dungeon exploration uses different branches, not these generic results:
+Get on a non-chest prints `Get\nNot here!\n`. A lit Search of an ordinary
+passage supplies `You find:\nNothing of note.\n` after its target-selection
+exchange, with capital `Nothing`; other feature and lighting cases have their
+own results in `systems/dungeon-mode.md` Section 8.1. Combat entered from a
+dungeon still uses the combat/shared interaction path.
+
+Source provenance: fresh private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/SJOG_OVL/`; 80 original Get/Search executions cover
+scene boundaries, four directions and the separate dungeon branches. Output
+calls were verified with controlled input and map access, not a new raster
+capture.
+
 **Conditional acting-member exchange.** Running this selector does not always
 print `Player: `. In exploration with no active-member override, it counts
 Good or Poisoned members of the active party. Exactly one is chosen silently:

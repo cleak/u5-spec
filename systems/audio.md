@@ -640,15 +640,28 @@ decrements its own count, prints its banner, then:
 Potion use passes the bottle index straight through, confirming the existing
 "bottle id, not effect variation, chooses the variant" contract of section 7.2.
 
-**Two pre-commit sounds that section 8 does not list:**
+**Cast rejection sounds:**
 
-- `Magic absorbed!` - in one specific scene, and in a second scene when a state
-  flag is set, the cast is absorbed **before** reagents or magic points are
-  spent, and plays a manual envelope cue (the same recipe as Negate Time's
-  absorb branch).
-- `Not here!` - a spell rejected by the castability mask plays the 50-update
-  cast-failure glissando, also before commit. `M.P. too low!` and `None mixed!`
-  reach the shared epilogue's `Failed!` plus the same glissando.
+- `Absorbed!` - Stonegate always absorbs casts; Lord Blackthorn's Castle
+  absorbs them while the Crown of Lord British is absent. Before a charge or
+  mana is spent, this prints `Absorbed!\n` and plays a manual envelope cue
+  (the same recipe as Negate Time's absorb branch).
+  *Corrected 2026-09-10 (R462): the earlier `Magic absorbed!` label and
+  set-flag reading of the castle gate are withdrawn.*
+- `Not here!` - a spell rejected by the castability mask prints
+  `Not here!\n` and plays the 50-update cast-failure glissando before any
+  resource debit, with no additional Failed line.
+- Insufficient mana prints `M.P. too low!\nFailed!\n`; insufficient level
+  after mana debit prints only `Failed!\n`. Both play the same failure
+  glissando after Failed. A zero premixed-charge count prints only
+  `None mixed!\n` and returns without a failure sound.
+  *Corrected 2026-09-10 (R461): the earlier claim that None mixed reaches
+  Failed and the glissando is withdrawn.*
+
+The shared dispatcher owns these result feeds and sound choices in every
+mode; `systems/magic.md` Section 7 gives the complete refusal/cost table.
+Fresh original-code cases and private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/CAST_OVL/` verify the branch and call boundaries.
 
 **Unresolved in this section, so the engine stops treating it as pending:**
 
