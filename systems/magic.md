@@ -162,9 +162,11 @@ Both cases print `Absorbed!` and abort before charge or mana consumption.
 
 **Step 4 — charges gate.** The dispatcher reads the per-spell charge counter. If the counter is zero, the dispatcher prints `None mixed!` and aborts. Otherwise the counter is decremented immediately, before any further checks — the charge is "spent" the moment the dispatcher commits to the cast.
 
-**Step 5 — mana gate.** The dispatcher reads the active player's current mana points and compares against the spell's mana cost. If insufficient, the dispatcher prints `M.P. too low!` and aborts. The charge has already been spent, but no mana is debited.
+**Step 5 — mana gate.** The dispatcher reads the active player's current mana points and compares against the spell's mana cost. If insufficient, the dispatcher prints `M.P. too low!` followed by `Failed!`, each with a trailing newline, and plays the failure sound. The charge has already been spent, but no mana is debited.
 
-**Step 6 — debit mana and check level.** Mana is subtracted from the active player's record, then the dispatcher compares the player's experience level against the same cost. If the level is below the cost, the dispatcher also prints `M.P. too low!` and aborts without refunding mana or the charge. This is a deliberate penalty: a level-3 character attempting a circle-7 spell loses seven points of mana and watches the cast fail.
+**Step 6 — debit mana and check level.** Mana is subtracted from the active player's record, then the dispatcher compares the player's experience level against the same cost. If the level is below the cost, the dispatcher prints only `Failed!` with a trailing newline and the failure sound, without refunding mana or the charge. This is a deliberate penalty: a level-3 character attempting a circle-7 spell loses seven points of mana and watches the cast fail.
+
+*Corrected 2026-09-10 (R460): the earlier claim that level rejection also prints `M.P. too low!` is withdrawn.*
 
 **Step 7 — dispatch to the effect handler.** The dispatcher computes the spell's index (0..47) into a forty-eight-entry dispatch table and calls the matching handler. Handlers fall into a small set of families described in Section 8.
 
@@ -356,10 +358,34 @@ in `formats/saved-gam.md` Section 10.
 
 5. **Scene gate** — per-spell allow-mask matches the current scene byte, otherwise `Not here!`.
 6. **Charges gate** — `[per-spell charge] > 0`, otherwise `None mixed!`; on success, the charge is decremented immediately.
-7. **Mana gate** — `[active-player mana] >= circle`, otherwise `M.P. too low!` (no mana spent, but the charge has already been consumed).
-8. **Level gate** — `[active-player level] >= circle`, otherwise `M.P. too low!` (mana and charge are both spent).
+7. **Mana gate** — `[active-player mana] >= circle`, otherwise `M.P. too low!` then `Failed!` (no mana spent, but the charge has already been consumed).
+8. **Level gate** — `[active-player level] >= circle`, otherwise only `Failed!` (mana and charge are both spent).
 
-The two-stage failure for "M.P. too low!" is a player-visible artefact: a low-mana character loses a premixed charge but no mana, while a low-level character loses both the charge and the mana. The intended message is the same; the underlying penalties differ.
+Low mana and low level have distinct narration as well as different costs.
+*Corrected 2026-09-10 (R460): the earlier same-message claim for both gates is
+withdrawn; only the mana gate prints `M.P. too low!` before the failure line.*
+
+**Exact result output in every mode.** The following is output from the
+shared cast dispatcher after spell input, independent of whether the caller
+is overworld, town, dungeon or combat. Each shown `\n` is a supplied line
+feed, not inferred wrapping. None of these literals begins with a line feed;
+the spell-input exchange closes its own row before the result. Each trailing
+feed is part of the selected result text. Combat's subsequent actor banner
+has its own leading feed, which leaves a blank row after a completed result.
+
+| Rejection | Exact result output | Sound from this rejection | Resource cost |
+|---|---|---|---|
+| Spell not allowed in the scene | `Not here!\n` | Failure glissando; no Failed line | None |
+| No premixed charge | `None mixed!\n` | None; no Failed line | None |
+| Insufficient mana | `M.P. too low!\nFailed!\n` | Failure glissando after Failed | One charge; no mana |
+| Insufficient level after mana debit | `Failed!\n` | Failure glissando after Failed | One charge and the spell's mana cost |
+| Castle/Stonegate absorption from Section 5 | `Absorbed!\n` | Absorption envelope; no Failed line | None |
+
+Source provenance: fresh private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/CAST_OVL/`; 52 original dispatcher cases cover scene
+classes, actual spell masks, gate outputs, resource debits and sound calls.
+Selectors and output/audio endpoints were controlled; pixel spacing and
+wall-clock sound duration were not remeasured.
 
 The *order* of the gates matters:
 
