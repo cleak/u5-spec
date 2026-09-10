@@ -711,6 +711,12 @@ ordinal is not retained in shared state; a caller that re-polls input without
 recalling the bark dispatcher reuses the visible text already on screen, while
 a later dispatcher call draws again.
 
+“Shared” refers to the greeting selection and formatting behavior. Each shop
+kind has its own four-record row; horse traders, shipwrights and inns do not
+draw from each other's welcome text. The seven users are taverns, horse
+traders, shipwrights, reagent vendors, guildmasters, healers and innkeepers.
+The ordinary arms greeting has its separate resident-text contract below.
+
 | Shop trigger / role | Entry-greeting records | Exit records, nothing bought | Exit records, purchase completed |
 |---|---|---|---|
 | `0x81` Weaponsmith / armourer | Not used by the ordinary arms entry path | `0, 1, 2, 3` | `4, 5, 6, 7` |
@@ -772,7 +778,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Tavern / meal post-list menu | Deterministic state menu/list record, then branch-local quantity, provision, follow-up, or drink text | Appends after the list | Natural text advance only | Space, Escape, or Enter exits. Invalid letters leave the list visible; the gated sage/lore letter is ignored until the tavern continuation state allows it |
 | Sage topic flow | Resident sage prompt, free-text input, record `84` fee quote, success records `85..88`, or no-credit record `91` | Appends in the tavern-owned transcript | Natural text advance only | Empty input and declined fee return to tavern continuation; unknown topics repeat the topic question. Short funds ends the visit; only paid advice consumes a success draw |
 | Horse-trader entry and quote | Shared non-arms entry-greeting row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space echoes the resident `No` literal and exits through the nothing-bought closing bark, not silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
-| Shipwright entry and branch | Shared entry records, resident Yes/No echo, then menu record `119` and deterministic quote records | Appends throughout entry and the initial menu; no shop-local clear | Natural text advance only | Entry accepts `Y`, `N`, or Space; ignored entry keys do not redraw. After Yes, the Frigate/Skiff menu follows Section 8.7 |
+| Shipwright entry and branch | One uniformly selected `SHOPPE.DAT` greeting from `105..108`, resident Yes/No echo, then menu record `119` and deterministic quote records | Appends throughout entry and the initial menu; no shop-local clear | Natural text advance only | Entry accepts `Y`, `N`, or Space; ignored entry keys do not redraw. After Yes, the Frigate/Skiff menu follows Section 8.7 |
 | Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Each branch retains its Section 8.C continuation or exit rule. Declining Rest ends the visit through the ordinary farewell; solo Leave and dead-companion Leave end without that farewell |
 | Inn multi-guest pickup register | Resident register frame/list text and guest names copied from the inn registry | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
 
@@ -2263,14 +2269,42 @@ shop model. Tavern/meal-counter service is the shop-owned food-purchase route.
 
 ### 8.7 Ship broker / shipwright
 
-The shipwright entry is a Talk-triggered vehicle sale flow. It opens with the
-shared greeting and a `Y`/`N` choice; Space means No. Yes echoes `Yes` and
+The shipwright entry is a Talk-triggered vehicle sale flow. Each rendered
+entry greeting selects one of `SHOPPE.DAT` records `105`, `106`, `107`, `108`
+with a fresh uniform four-way draw, giving each variant probability one
+quarter. These are the shipwright's own row of the shared greeting table in
+Section 8.A. The welcome prose is token-compressed in `SHOPPE.DAT`; resident
+state supplies the selector and substitutions, not four resident welcome
+literals. A plain-text search for the fully expanded sentence can therefore
+miss its asset source.
+
+Record `107` is the time-of-day greeting that introduces the vendor and boasts
+about the fastest ships; `108` introduces the vendor first and asks about
+swift, durable ships. Both welcome templates reported in issue #254 are
+shipped variants. The hour changes any time-of-day substitution; it does not
+choose the greeting record. Separately seeded runs can legitimately select
+different variants, including on otherwise identical visits. Variant choice
+should be distinguished from whether the selected record's substitutions,
+wrapping and prompt punctuation are correct. Ignored entry keys preserve the
+visible greeting and consume no additional greeting draw.
+
+The greeting leads to a `Y`/`N` choice; Space means No. Yes echoes `Yes` and
 renders menu record `119`: `F` offers Frigates and `S` offers Skiffs, while
 Space or Escape exits that menu. Entry and this menu append to the inherited
 message window. The former immediate-letter-menu and entry-clear descriptions
 are withdrawn (R405). Each shipwright has local prices for both sale classes.
 The flow quotes the selected price, asks for confirmation, runs the ordinary
 affordability check, and debits gold on success.
+
+Source provenance for greeting selection: fresh original shared-helper,
+ship-entry and record-loader traces under `u5-decomp/functions/SHOPPES_OVL/`
+and `u5-decomp/functions/SHOPPES2_OVL/`, shared caller checks including
+`u5-decomp/functions/SHOPPES3_OVL/`, and canonical text/selector mapping.
+Eighty-four controlled original greeting/loader/formatter cases cover seven
+kinds, four variants and three hours. Executing the original bounded draw
+across all 65,536 incoming random states gives equal counts for its four
+results; this does not assert independence of successive PRNG outputs.
+Private verification is recorded under `u5-decomp/notes/` (#254).
 
 Both quotes are Intelligence-adjusted from the speaking party member with the
 same shape used by inn charges and horse sales:

@@ -106,7 +106,7 @@ Known shipped record clusters are:
 | 57-91 | Tavern, meal-counter, and related interactive prompts and menus, including the four state list records `69-72`, the four state follow-up records `73-76`, the seven provision-quote records `77-83`, and the table-scraps outcome `90` |
 | 84-88 and 91 | Sage rumour records, interleaved inside the tavern/interactive cluster: `84` fee quote, `85-88` success templates, `91` paying-customers refusal. Records `89` and `90` between them belong to tavern branches, not to the sage |
 | 92-104 | Horse-trader barks |
-| 105-126 | Ship-broker barks |
+| 105-126 | Ship-broker text, including the four interchangeable entry greetings `105..108` |
 | 127-146 | Reagent vendor records |
 | 148-162 | Guild or magic-shop records |
 | 163 and 165-173 | Healer or sanctum records |
