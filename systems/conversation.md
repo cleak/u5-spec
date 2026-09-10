@@ -177,7 +177,7 @@ The fixed reserved table is:
 
 | Index | Keyword | Behavior |
 |---:|---|---|
-| 0 | `NAME` | Run the Name entry with the fixed name prefix. |
+| 0 | `NAME` | Run the Name entry preceded by `My name is ` (one trailing space), inside the response quote framing described in Section 6. |
 | 1 | `JOB` | Run the Job entry. |
 | 2 | `WORK` | Alias for `JOB`. |
 | 3 | `BYE` | Run the Bye entry and exit the conversation. |
@@ -226,7 +226,7 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 
 3. **Empty-input shortcut.** If the player pressed Enter on an empty line, the engine prints `BYE\n\n`, runs the NPC's `Bye` entry through the byte runner, and returns to the caller. This is the most common way conversations end.
 
-4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, table keywords are compared by their NUL-terminated length, and a match accepts either exact end-of-input or a literal space immediately after the reserved word. `NAME` runs the Name entry with the engine's prefix, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below.
+4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, table keywords are compared by their NUL-terminated length, and a match accepts either exact end-of-input or a literal space immediately after the reserved word. `NAME` runs the Name entry with the fixed `My name is ` prefix and framing specified below, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below.
 
 5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword is compared against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
 
@@ -235,6 +235,36 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 7. **No match.** When both scans complete without a match, the engine prints `I cannot help thee with that.\n\n` and returns to step 1.
 
 The match is space-boundary prefix matching, not arbitrary prefix matching. An NPC with separate `gran` and `grandpa` keywords resolves them independently: `grandpa` does not match `gran` because there is no boundary after `gran`, while `gran something` may match `gran` and leave the remaining words available to the surrounding handler. The keyword's actual length is whatever the NUL terminator says it is; the four-character "U4 convention" is a player-side discipline, not an engine constraint. The fifteen-character input limit on the typed side caps the longest entered phrase.
+
+**NAME response prefix and framing.** Whenever the ordinary reserved `NAME`
+response runs, its fixed words are exactly `My name is `, including one
+trailing space. The fixed output also supplies the opening double quote
+immediately before `My`; it contains no closing quote or newline. The Name
+entry then runs through the ordinary dialogue byte runner. On normal completion
+at the entry terminator, the response handler requests a closing double quote
+and two newline operations, using the shared conversation output rules. If the
+Name stream instead signals a stop, that normal closing-quote/newline suffix is
+skipped. Any output or control actions authored inside the Name entry retain
+their usual effects.
+
+The two newline operations preceding a nonempty keyword's response belong to
+the input loop after the answer is read and before keyword dispatch. They are
+not part of the NAME prefix. For an ordinary plain-text Name entry, the visible
+response is therefore the quoted words `My name is ` followed by the NPC's
+name, with shared response spacing before and after it. Line wrapping belongs
+to the active text window, not to a newline embedded between the prefix and name.
+
+There is no NPC, location, acquaintance, clock or random variation in this
+prefix on the ordinary reserved NAME path. The scoped sub-prompts in Section
+7.7 suppress the entire global NAME response while they handle their local
+keywords; they do not run the ordinary Name entry without its prefix. The
+opening self-introduction in Section 9 is a separate path and uses `I am
+called ` instead, also with one trailing space and an opening quote.
+
+Source provenance: fresh private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/TALK_OVL/`, with 520 original-code dispatcher, input-loop
+and opener cases. Response-body/rendering hooks were controlled; these checks
+establish output boundaries and state gates rather than pixel wrapping.
 
 The fixed-table profanity/default branch is presentation-confirmed but no
 longer public as a confirmed karma mutator. Matching one of those fixed words
@@ -778,7 +808,8 @@ Putting the pieces together, a single conversation runs through a fixed envelope
      and immediately flips a fair coin. On one outcome the conversation
      simply proceeds to the keyword prompt with nothing said after the
      description. On the other the NPC introduces itself: the engine prints the
-     "I am called" lead-in and runs the **Name** entry (entry 1 of the five
+     `I am called ` lead-in (one trailing space, preceded by the opening
+     quote) and runs the **Name** entry (entry 1 of the five
      mandatory leading entries) instead of the Greeting, then closes the quote.
 
    So a stranger volunteers its name roughly half the time and is otherwise
