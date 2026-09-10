@@ -1,5 +1,14 @@
 # Ultima V Extraction Inventory
 
+## Issue #257 - NAME prefix and framing (2026-09-10 UTC)
+
+Conversation Sections 5/6 publish the fixed `My name is ` prefix, opening
+quote, trailing space, input-loop preceding newlines and response suffix.
+The scoped-prompt exception and stream-stop suffix boundary are explicit;
+Section 9 distinguishes the opening self-introduction. All 520 focused
+original-code cases pass. This fills omitted detail without withdrawing a
+published claim; no retraction applies. Pixel wrapping was not remeasured.
+
 ## Issue #256 - Z-stats member cycle and entry (2026-09-10 UTC)
 
 Inventory Sections 4/4.3/4.7 now specify 2N+5 screens: Attributes and Arms
