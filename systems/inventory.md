@@ -113,9 +113,10 @@ Z-stats has two roles:
 1. It displays per-character stats and readied equipment.
 2. It browses inventory pages over shared counter bands.
 
-The first two pages are character-specific: page 1 is the primary stat page and
-page 2 is the equipment page. Later inventory pages walk shared counter bands
-for reagents, spell charges, special/use items, and the weapons/armour stash.
+Each current party member has two consecutive screens: Attributes and Arms
+(readied equipment). After all member pairs comes one shared Equipment
+counter screen, then the shared Reagents, Spells, Items and Armaments lists.
+Section 4.7 gives the complete cycle, entry and wrap rules.
 The inventory list renderer skips zero-count entries unless the caller provides
 a character slot and that character already has the item in the six-slot
 equipment block. R-Ready uses that form so the picker can show both carried
@@ -126,17 +127,23 @@ a leading marker to request a scroll, potion or moonstone row layout.
 These are display conventions only;
 the counter band remains the source of ownership.
 
-The command starts by choosing a character. In combat scenes, Z-stats and
-R-Ready bind to the currently active living combat actor when that actor maps
-to a party slot; outside combat they use the normal party-member selector.
-Escape cancels the selector, while the explicit none/retry result only redraws
-the prompt path and does not select a character.
+Outside combat, Z starts with the normal party-member selector, initially
+indicating the first slot. A confirmed member opens that member's Attributes;
+the currently active world member does not change the initial indication.
+In combat scenes above `0x80`, when the active combat record is marked as a
+party record, Z opens that record's member Attributes without the selector;
+otherwise it uses the normal selector. R-Ready shares this member-selection
+wrapper. Escape cancels initial selection. At the initial Z selector, `0`
+opens the shared Equipment screen without choosing a member.
+The earlier claim that this explicit none result merely retries the prompt
+is withdrawn for Z (R459).
 
-The Z-stats page loop preserves a single page index. Space or Escape exits and
-restores the HUD. Direction-style navigation moves backward or forward through
-the visible page sequence; number keys `1..6` jump to the corresponding active
-party slot while preserving whether the current character page is the stats
-page or the equipment page. Jumps beyond the active party size are rejected.
+Space or Escape while browsing exits and restores the HUD. Up and Down walk
+the visible page sequence. Number keys `1..6`, bounded by current party size,
+jump directly to that member's Attributes from any screen; `0` jumps to shared
+Equipment. An out-of-range member digit leaves the current page unchanged.
+The earlier claim that digit jumps preserve the Attributes/Arms half is
+withdrawn; they always choose Attributes (R458).
 
 ### 4.1 The panel's cell rectangle
 
@@ -224,7 +231,8 @@ rest - shares one selection surface. Its contract is:
   by the party size, reposition the inverted row exactly as the direction keys
   do and leave the prompt open. Only Return or Space commits the indicated row,
   Escape cancels, and `0` commits the explicit "no one" answer only in the
-  callers that allow it (the active-player prompt); elsewhere `0` is ignored.
+  callers that allow it, including the active-player prompt and Z-stats;
+  other callers ignore `0`. Z uses that answer to open shared Equipment.
   This is one shared routine, so the rule is the same for Z-stats, R-Ready, New
   Order, the fountain, Search and every other caller. *(Clarified 2026-09-06,
   issue #192; the earlier "select directly" wording was read as a commit.)*
@@ -232,6 +240,9 @@ rest - shares one selection surface. Its contract is:
   inversion is its own undo.
 - Number keys `1` through `6` select directly, bounded by the current party
   size; the four direction keys move the indicator.
+
+The earlier statement that only the active-player prompt accepts `0` is
+withdrawn; the Z-stats selector accepts it too (R459).
 
 **Nothing in the panel is cleared during member selection.** The six roster
 rows, the food-and-gold line and the date line all stay on screen; only the
@@ -542,30 +553,59 @@ pixel span. See `dungeon-mode.md` section 4.1 and `text-output.md` section 10.7.
 
 ### 4.7 Pages, field labels and placeholders
 
-There are **seven** screens in the cycle, walked in this order by the
-direction keys and wrapping from the last back to the first:
+For **N current party members**, the cycle contains **2N + 5 screens**.
+Walk the Attributes/Arms pair for each member in current party-slot order,
+then the five shared screens below. With three members there are **eleven**
+screens; seven is the total only for a one-member party.
 
-| Screen | Border label | Slots |
-|---|---|---:|
-| Attributes | the member's name | - |
-| Arms (readied equipment) | the member's name | 6 |
-| Equipment (the counters: food, gold, keys, gems, torches, grapple) | `Equipment` | - |
-| Reagents | `Reagents` | 8 |
-| Spells | `Spells` | 48 |
-| Items | `Items` | 38 |
-| Armaments | `Armaments` | 48 |
+| Scope | Screen | Border label | Slots |
+|---|---|---|---:|
+| Repeat this pair for each current member | Attributes | the member's name | - |
+| Same member | Arms (readied equipment) | the member's name | 6 |
+| Shared, after the last member's Arms | Equipment (food, gold, keys, gems, torches, grapple) | `Equipment` | - |
+| Shared | Reagents | `Reagents` | 8 |
+| Shared | Spells | `Spells` | 48 |
+| Shared | Items | `Items` | 38 |
+| Shared | Armaments | `Armaments` | 48 |
 
-*Corrected 2026-09-06 (R392, issue #202).* This table previously said six
-pages in the order attributes, equipment, armaments, spells, reagents, items,
-with the Arms and counters halves on one page. The shipped navigator keeps two
-per-member screens - the readied-equipment half headed `Arms` and the counters
-half headed `Equipment` - and then walks the four shared inventory pages in
-the order reagents, spells, items, armaments; the literals below were already
-right, only the page count and order were wrong. The four inventory screens
-are drawn inside the Section 4.4 frame with the same page badge. The items
+The earlier universal seven-screen cycle and the description pairing Arms
+with Equipment as the two member screens are withdrawn (R457); this also
+supersedes that part of R392's replacement wording and the issue #202 reply.
+The two member screens are Attributes and Arms. Equipment is shared, followed
+by the four shared inventory lists; the existing label literals remain valid.
+
+**Membership and wrap.** The current party size defines the member range.
+Every slot within that range participates, including dead members and members
+with other status conditions. Browsing does not search for a live or nonempty
+record. Companion records beyond the current party-size boundary do not
+participate, even if they contain a name and other stored state.
+
+Down from the last member's Arms opens Equipment. Down from Armaments wraps
+to the **first member's Attributes**, regardless of which member was selected
+on entry. Up reverses that order: Equipment goes to the last member's Arms,
+and the first member's Attributes goes to Armaments. For party sizes one
+through six, the totals are respectively 7, 9, 11, 13, 15 and 17 screens.
+
+Up/Down traverse these screens. On Attributes, Arms and Equipment,
+Left/Right also move backward/forward through the cycle. Within a populated
+shared inventory list, Left/Right instead scroll its entries; Up/Down return
+to the outer page cycle. The initial member-selection and digit-shortcut
+rules are specified at the start of Section 4.
+
+The four inventory lists use the Section 4.4 frame and page badge. The Items
 page catalogues **all eight** moonstones by phase glyph whether or not any is
-carried, whereas the U-Use picker lists only carried stones; the two surfaces
-use different predicates.
+carried, whereas U-Use lists only carried stones; the two surfaces use
+different predicates.
+
+Source provenance: fresh original selector, top-level page navigator and
+shared-list navigation analysis in `u5-decomp/functions/ZSTATS_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, issue #256.
+711 original selector/page-loop scenarios cover all party sizes and starting
+members, both cycle directions, dead and other member statuses, entry,
+cancellation and numeric shortcuts from every screen. Another 132 original
+shared-list scenarios verify the returned navigation keys across four
+categories and three stock fixtures. Drawing, cursor position and normalized
+input are controlled observation boundaries, not a fresh full-game capture.
 
 Leaving the pages prints `Done\n` in the message window. Long pages **do not
 paginate**: the navigator scans forward or backward for the next slot with a

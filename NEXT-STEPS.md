@@ -1,5 +1,15 @@
 # Next Steps for u5-spec
 
+## Issue #256 - Z-stats member cycle and entry (2026-09-10 UTC)
+
+Inventory Sections 4/4.3/4.7 now specify 2N+5 screens: Attributes and Arms
+for each current party member, followed by five shared screens. Dead members
+remain included; wrap returns to the first member's Attributes. Initial
+selection, zero-to-Equipment and digits-to-Attributes are explicit.
+R457-R459 withdraw the seven-screen, parity-preservation and none/retry claims.
+All 843 original selector/navigation scenarios pass; no engine/QA or full-game
+capture was inspected.
+
 ## Issue #255 - complete U-Use labels and quantity rules (2026-09-10 UTC)
 
 Inventory Section 4.5 now gives all plain compact names and scroll rune
