@@ -292,7 +292,14 @@ viewport are genuinely untouched.
 The `U`-Use flow is the reference sequence: refuse with `No_usable_items!\n`
 if nothing is usable; print `Item:_` into the message window; select the panel;
 write the framed border label `Items:`; draw the eight-row frame; run the
-picker; restore the message-window frame; redraw the full roster.
+picker; restore the panel border and footer graphics; redraw the full roster.
+
+The frame restoration is graphical. It does not reshape the message window
+or change its saved cursor row or column. The roster redraw uses the panel
+and then reselects the message window at its retained cursor. The picker
+also uses that message cursor for the input indicator; it does not insert
+two rows before the accepted family completion. This clarifies the earlier
+phrase "restore the message-window frame" (issue #259).
 
 **Selection and scrolling.** The selected item is drawn with its ordinary
 label and padding in inverted glyph pixels. Its text is not replaced by a
@@ -997,7 +1004,9 @@ Cancelling the picker prints `None!\n` after the open `Item:_` prompt.
 
 On acceptance the item's handler completes that same prompt with its family
 word, not the decorated picker-row name. The following table gives the exact
-completion, including its following line breaks:
+completion, including its following line breaks. These are emitted strings,
+subject to the ordinary wrapping and scrolling in `systems/text-output.md`;
+they are not a diagram of the final screen rows:
 
 | Family | Completion after `Item:_` |
 |---|---|
@@ -1014,6 +1023,34 @@ completion, including its following line breaks:
 | Pocket Watch | `Watch\n\n` |
 | Black Badge | `Badge\n\n` |
 | Wooden/Sandalwood Box | `Box\n\n` |
+
+**Completion position** *(clarified 2026-09-11, issue #259)*. There is no
+leading line feed or literal indentation before the family word. When
+`Item:_` starts at the left margin, its retained cursor is column six;
+`Skull Key`, `Sceptre` and `Gem Shard` begin there on that same row. Their
+listed line feeds occur after the family word. Ordinary wrapping still
+applies when output begins at another column, and bottom-row output can
+scroll the window.
+
+For Moonstones, "followed immediately" means consecutive text emission,
+without an extra separator inserted by the command. At the standard
+sixteen-column message width, `Moonstone_` starting at column six prints
+the family word on the prompt row, and its trailing space causes the
+wrap-aware printer to move to the next row at column zero. The outcome
+starts there; the phrase does not require a single physical screen row.
+
+Fresh execution of the original picker, input wrapper, complete roster
+redraw and text primitives verifies these cursor results for four families
+across all thirteen message rows (52 cases). Graphics and driver output
+were observation boundaries, so this does not establish the final raster.
+**Open capture discrepancy:** issue #259 reports a family word two rows
+below the prompt, still indented six columns. That layout remains
+unreproduced; it is not explained by the traced frame restoration or a
+leading completion prefix. A stock save, asset identity, exact inputs and
+full original frames from before U through the next command wait are
+needed to settle its cause. Source provenance: fresh private analysis in
+`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/ZSTATS_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
 
 Utility results follow those completions:
 
