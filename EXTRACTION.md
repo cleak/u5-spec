@@ -1,5 +1,15 @@
 # Ultima V Extraction Inventory
 
+## Issue #260 - combat Negate Magic absorption (2026-09-11 UTC)
+
+Magic Section 7, combat Section 10 and audio Section 6.1 now publish the
+consecutive Cast/Absorbed rows, manual absorption envelope, no spell prompt
+or resource debit, and consumed action with normal cleanup/scheduling.
+All 48 focused original command/scheduler cases pass. This fills omitted
+presentation and turn-cost detail without reversing the published absorption
+or resource contract; no retraction applies. No engine/QA, raster rendering
+or sound wall-clock measurement was used.
+
 ## Issue #259 - U completion cursor and wrapping (2026-09-11 UTC)
 
 Inventory Sections 4.4/7.1 now distinguish graphical frame restoration from
