@@ -1637,7 +1637,12 @@ traces under `u5-decomp/functions/SJOG_OVL/` and
 `u5-decomp/functions/DNGLOOK_OVL/`; issue #228 supplies matching paired
 captures, including the repeated Search result.
 
-The fountain prompt is the only state-mutating L-Look class currently identified: it can change the selected party member's status, HP, or both. Other L-Look classes narrate the inspected feature only. L-Look does *not* repaint the first-person view; the message appears in the message panel and the view stays as it was. L-Look does *not* advance time; it is a free action.
+The fountain prompt is the only state-mutating L-Look class currently identified: it can change the selected party member's status, HP, or both. Other L-Look classes narrate the inspected feature only. L-Look does *not* repaint the first-person view; the message appears in the message panel and the view stays as it was. L-Look retains the resident dispatcher's acted result, even if its focus
+prompt is cancelled, and selects the ordinary dungeon post-action pass.
+The dungeon loop owns clock advancement at the input boundary; Look has no
+special time exemption. See `systems/commands.md` Section 3 and
+`systems/time.md` Section 10.
+*Corrected 2026-09-11 (R465): the earlier free-Look/no-time claim is withdrawn.*
 
 **V-View.** The V letter routes through the resident dispatcher before it reaches the dungeon-look overlay. The dispatcher requires a *gem of vision*, prints the no-gem refusal if the count is zero, and decrements the gem count before dispatching to the dungeon view handler. The shared look/view contract, including combat's no-consume `V` branch, lives in `view.md`.
 

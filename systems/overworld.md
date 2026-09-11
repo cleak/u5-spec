@@ -216,7 +216,15 @@ uses no randomness. It is distinct from the ordinary encounter and
 animate/prune epilogue of step 6. The rescue begins only after the write
 succeeds; the ordinary consumed-turn path is skipped on defeat.
 
-The "consumed a turn" gate means looking at the sky, opening the inventory, mistyping a command, talking-to-no-one cost zero time. Only a successful action advances the clock.
+The post-action gate follows the command's returned status; success,
+movement and descriptive-only output do not determine turn cost. In
+particular Look, Open, Ready and Z-stats retain acted, even when their
+handler returns an incidental zero; an unrecognized command returns no
+action. Look therefore reaches the ordinary two-minute epilogue, including
+on direction cancellation. See `systems/commands.md` Section 3 and
+`systems/time.md` Section 10.
+*Corrected 2026-09-11 (R466): the earlier blanket free-inspection examples
+and claim that only successful actions advance the clock are withdrawn.*
 
 The pre-loop underfoot latch is also passed into the outdoor movement
 dispatcher. Direction keys still run the normal facing and passability checks,

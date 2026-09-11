@@ -745,6 +745,33 @@ taken for those either.
 
 ### 9.2 Contact events and town routing
 
+**Cadence.** This is the ordinary acted-command schedule pass from Section 5,
+not an unconditional pass after every command or every direction-key input.
+Town result zero and the immediate harpsichord retry skip it; the special
+arrest result also skips the schedule walker. The transport, Negate Time and
+Quickness gates still apply. L-Look returns acted even when cancelled, so
+it reaches the ordinary town epilogue: clock/underfoot processing first,
+then the eligible walkers and contact-event routing. A displayed clock or
+turn counter changing is not a substitute for those command/effect gates.
+
+**Adjacency is a current-state test.** When an eligible NPC reaches its
+engagement check, the party being cardinally adjacent now is sufficient.
+There is no requirement that either participant moved into adjacency during
+that command, nor a previous-adjacency latch. A party already next to the
+Minoc guard can trigger the demand on its first eligible Look or other acted
+command. Diagonal and same-cell positions do not satisfy this contact test.
+This does not promise repeated demands after payment: contact and dialogue
+can change the NPC's behavior, as specified below.
+
+Source provenance: fresh original dispatcher/town-loop/NPC/contact traces
+in `u5-decomp/notes/`, `u5-decomp/functions/TOWN_OVL/` and
+`u5-decomp/functions/NPC_OVL/`. All 114 focused original-code cases pass:
+48 combined Look/control-command and town-gate cases, 18 repeated stationary
+adjacency checks, and 48 cross-mode dispatcher controls. The combined cases
+reach the original guard question and successful payment without party
+movement. Description, clock and presentation endpoints were controlled;
+this does not reproduce the reported save or raster capture.
+
 The schedule pass clears the shared event kind and NPC index, then visits
 roster slots 1 through 31. An engagement event records its producer's roster
 index. Events do not stop the pass or form a queue: if more than one NPC

@@ -498,7 +498,12 @@ The Talk command is town-mode-only. The shared per-letter dispatcher routes T-Ta
 
 Several letter commands map to per-tile interactions that are interesting in town mode.
 
-**Look.** L-Look prompts for a direction and samples the facing cell, then routes the terrain tile and active-object context through the shared world/town look handler. That handler resolves command-layer overlay markers to the tile being described, then either runs a special look path for wells, signs, and dungeon-mouth tiles or indexes `LOOK2.DAT` by the final tile id. Clock, shrine, and dungeon-entrance tiles print the base description and append their current context. Look does not consume a turn.
+**Look.** L-Look prompts for a direction and samples the facing cell, then routes the terrain tile and active-object context through the shared world/town look handler. That handler resolves command-layer overlay markers to the tile being described, then either runs a special look path for wells, signs, and dungeon-mouth tiles or indexes `LOOK2.DAT` by the final tile id. Clock, shrine, and dungeon-entrance tiles print the base description and append their current context. Look consumes one ordinary town action, including when its direction
+prompt is cancelled. After the command returns, it runs the normal one-minute
+clock/underfoot epilogue and remains eligible for the object/NPC walkers,
+subject to Section 7's existing gates. The direction exchange itself runs
+no separate schedule/contact pass.
+*Corrected 2026-09-11 (R463): the earlier free-Look claim is withdrawn.*
 
 **Read sign.** Tile-class encoding for sign tiles triggers a prompt that loads the sign's text from a per-location sign data file, indexed by the sign's coordinates.
 
@@ -534,7 +539,11 @@ effects belong to `catalogs/item-list.md` and `systems/inventory.md` as they
 are promoted. Do not fold J-Jimmy key use, V-View gem use, or I-Ignite torch
 use into this command; those are separate letter commands.
 
-All these interactions except Look and inspect-style actions consume a turn and run the per-turn epilogue.
+Turn cost follows the command's published result contract, not whether it
+moves the party or merely inspects something. Look is an acted command even
+on direction cancellation; there is no general free-inspection or free-cancel
+exemption. See `systems/commands.md` Section 3.
+*Corrected 2026-09-11 (R463): the earlier blanket Look/inspection exemption is withdrawn.*
 
 ### Underfoot effects
 
@@ -546,8 +555,11 @@ it once per consumed turn. Its cadence matters as much as its contents:
   party that stands still and passes turns, waits, attacks, opens a door, or
   takes any other turn-costing action re-runs the whole handler, including the
   tile effect for the cell it is standing on.
-- Actions that consume no turn — Look, a cancelled prompt, an unrecognized key
-  — do not run it at all.
+- A command that actually returns no action, such as an unrecognized command,
+  skips this pass. Look and its direction cancellation are acted and run it.
+  Other cancelled prompts retain their command-specific cost.
+  *Corrected 2026-09-11 (R463): the earlier Look and generic cancelled-prompt
+  examples of a skipped underfoot pass are withdrawn.*
 - If an effect moves the party to a different floor, the handler re-reads the
   tile under the party's new position and applies that tile's effect too, so
   chained effects within one turn are possible.
