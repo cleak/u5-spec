@@ -648,6 +648,13 @@ Potion use passes the bottle index straight through, confirming the existing
   (the same recipe as Negate Time's absorb branch).
   *Corrected 2026-09-10 (R462): the earlier `Magic absorbed!` label and
   set-flag reading of the castle gate are withdrawn.*
+- Combat Negate Magic absorption prints `Cast...\nAbsorbed!\n` before
+  invoking that same manual envelope: phase increment 9800, idle count 1,
+  28000 iterations, initial comparison 1000 and comparison increment 2.
+  Sound enablement controls audibility; this path has no failure glissando
+  or `Failed!` tail. It completes the action without opening spell selection
+  or spending a charge or MP. See `systems/magic.md` Section 7 for the
+  original command/scheduler verification and interference precedence.
 - `Not here!` - a spell rejected by the castability mask prints
   `Not here!\n` and plays the 50-update cast-failure glissando before any
   resource debit, with no additional Failed line.

@@ -337,6 +337,36 @@ normally. This gate is not a combat-side MP, reagent, level, spell-allowed, or
 spell-target check; those concerns remain in the shared dispatcher and the
 individual spell handlers.
 
+**Combat Negate Magic absorption.** After the interference gate passes,
+pressing `C` while the shared `N` tag is active produces exactly
+`Cast...\nAbsorbed!\n`. The command label and result each supply their
+trailing line feed; the result has no leading feed, so these occupy
+consecutive message rows, subject to ordinary wrapping and scrolling.
+There is no spell-selection prompt and no additional `Failed!` line.
+The result is followed by the manual absorption envelope used by the
+castle/Stonegate gate, not the cast-failure glissando (see
+`systems/audio.md` Section 6.1).
+
+This **completes the current combat action** while spending no premixed
+charge or MP. Normal completed-action cleanup, effect countdown aging,
+interference-source clearing and subsequent actor scheduling still occur.
+The member does not receive an immediate free retry. In particular, an `N`
+effect with one remaining count absorbs this attempt and then expires in
+cleanup. The next actor is chosen by the normal combat scheduling rules.
+An earlier interference block instead retains the same-member prompt and
+never reaches this absorption check. The `N` check applies regardless of
+Crown ownership or the location from which combat was entered.
+
+Source provenance: fresh private analysis in `u5-decomp/functions/COMBAT_OVL/`,
+`u5-decomp/functions/COMSUBS_OVL/`, `u5-decomp/functions/SJOG_OVL/` and
+`u5-decomp/notes/`. All 48 focused original command/scheduler cases pass,
+covering tag presence, Crown ownership, ordinary/castle parent location,
+three countdown states and both sound settings. They verify output calls,
+envelope arguments, dispatcher bypass, unchanged charges/MP, completed-action
+cleanup and progression to the next actor. Presentation/audio endpoints and
+peripheral maintenance were controlled; raster spacing and sound duration
+were not measured.
+
 **Interference-source lifecycle.** An ordinary automatic adjacent attack records
 the attacker in the victim's entry after range and adjacency have been accepted
 but before the hit test. Hits and misses therefore both record; a later
@@ -734,7 +764,8 @@ the otherwise permanent regalia auras:
   skipped outright while the tag lasts; the party is still prompted normally.
 - **`N` Negate Magic.** On the party's combat C-Cast path, the cast is absorbed
   before the shared spell dispatcher runs, so the premixed charge and MP debit
-  gates are not reached. Enemy-side suppression is not one spell chooser. The
+  gates are not reached. Section 7 gives its exact text, sound and completed-action
+  behavior. Enemy-side suppression is not one spell chooser. The
   same tag is tested at three narrower automatic-action boundaries. First, it
   bypasses the complete per-class possess/blink/summon-daemon hook before any
   of that hook's random draws; the hook reports unhandled, so the actor proceeds

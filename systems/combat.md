@@ -2982,8 +2982,22 @@ trusting its history. `systems/magic.md` Section 7 gives the full predicate and
 `formats/saved-gam.md` Section 10 gives the saved representation. The charge,
 mana, level, and scene checks remain owned by the shared dispatcher. The combat
 C-Cast path also checks the shared active-effect tag:
-when Negate Magic's `N` tag is active, the cast is absorbed/refused before the
-shared spell dispatcher consumes charge or MP.
+when Negate Magic's `N` tag is active, the cast is absorbed before the
+shared spell dispatcher or spell-selection prompt runs. The exact command
+output is `Cast...\nAbsorbed!\n`: consecutive rows with one supplied
+trailing line feed each, no inserted blank row, and no `Failed!` tail.
+After the result text, the manual absorption envelope plays, using the
+same recipe as castle/Stonegate absorption (`systems/audio.md` Section 6.1).
+
+This attempt consumes the current combat action, but no charge or MP.
+It reaches normal completed-action cleanup, including timed-effect aging
+and the acting slot's interference-source clear, then ordinary actor
+scheduling. It does not re-prompt the member for free. An `N` countdown of
+one still absorbs the attempt before expiring in cleanup. The earlier
+interference rejection remains a separate, free retry and takes precedence.
+See `systems/magic.md` Section 7 for the full contract and the 48-case
+original command/scheduler verification; no raster or wall-clock sound
+measurement is claimed.
 
 **Scene gate.** Each spell carries a four-bit allow-mask for the scenes it works in: combat, dungeon, indoor/town-mode, and overworld. Scenes for which the spell has no entry print a `Not here!` refusal. Most damaging spells are gated to combat-only.
 
