@@ -1,5 +1,15 @@
 # Next Steps for u5-spec
 
+## Issue #259 - U completion cursor and wrapping (2026-09-11 UTC)
+
+Inventory Sections 4.4/7.1 now distinguish graphical frame restoration from
+message cursor position. The cursor is retained; family labels have no
+leading feeds or indentation. Moonstone's immediate outcome can wrap onto
+the next row. All 52 focused original-code cases pass. The reported two-row
+capture gap remains unreproduced and is indexed in OPEN-QUESTIONS.md; no
+engine/QA or original raster was inspected. This adds positioning detail
+without reversing the existing completion strings; no retraction applies.
+
 ## Issue #258 - shared result feeds and cast refusals (2026-09-10 UTC)
 
 Combat Section 8.4 and commands Section 5.8 now state that Get/Search feeds
