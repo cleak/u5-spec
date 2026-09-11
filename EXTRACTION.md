@@ -1,5 +1,15 @@
 # Ultima V Extraction Inventory
 
+## Issue #261 - Look consumes a turn; adjacency needs no step (2026-09-11 UTC)
+
+R463-R466 remove stale free-Look and blanket free-inspection/success-only
+claims from town, time, dungeon and overworld prose. Look is acted even on
+cancellation. The town schedule pass remains command/effect gated and runs
+after the Look exchange; current cardinal adjacency suffices for guard
+contact. All 114 focused original cases pass, including stationary Minoc
+contact/payment. No engine/QA or reported save/raster replay was inspected.
+Issue #216's separate explicit-T discrepancy remains open.
+
 ## Issue #260 - combat Negate Magic absorption (2026-09-11 UTC)
 
 Magic Section 7, combat Section 10 and audio Section 6.1 now publish the

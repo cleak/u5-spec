@@ -730,8 +730,14 @@ regime-guard timetable. The runtime schedule can differ from the asset after
 an alarm or contact; an all-7 runtime triple is not evidence of all-7 authoring.
 
 Thus the Minoc gate guard at its ground-floor waypoint at 16:00 can raise
-the charity demand when the party walks into cardinal adjacency. No `T`
-command is needed, and its authored behavior 4 is consistent with that result.
+the charity demand when the eligible contact pass finds the party cardinally
+adjacent. Walking into adjacency is one way to reach that state; starting
+already adjacent also qualifies. L-Look consumes an ordinary town action and
+can trigger the demand after its direction/description exchange without any
+party movement. No `T` command or adjacency transition is required, and the
+authored behavior 4 is consistent with that result. See
+`systems/npc-schedules.md` Section 9.2 for cadence, gates and the original
+stationary-contact verification. The earlier walk-in example remains valid.
 
 Source provenance: fresh original-routine checks in `u5-decomp/notes/` for
 issue #245 cover ten adjacency/contact/payment/surrender cases and twenty-four

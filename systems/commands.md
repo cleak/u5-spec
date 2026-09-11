@@ -154,6 +154,13 @@ handoffs.
 The earlier M-row shrine dispatch is withdrawn (`RETRACTIONS.md` R425),
 propagating the E-entry correction already recorded by R411.
 
+`L` Look also retains the default acted result in overworld, town and dungeon
+routes, including cancellation inside the Look handler. The direction or
+focus prompt is part of that one command, not a separate schedule tick.
+Town Look therefore reaches the normal epilogue and can trigger an eligible
+NPC's contact event while the party remains stationary. See
+`systems/npc-schedules.md` Section 9.2 and `systems/view.md` Section 3.
+
 `R` Ready and `Z` Z-stats are worth calling out against the return contract of
 Section 3: the status/equipment overlay produces no status word of its own, and
 the dispatcher discards whatever it returns, so both letters always report the

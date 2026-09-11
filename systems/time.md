@@ -128,8 +128,10 @@ mode, and dungeon mode, invoked from each mode's per-turn epilogue after the
 cleanup call has already advanced the clock. It also runs once per ten-minute
 step of the town-bed rest loop. It does **not** run in combat mode, and it does
 not run inside the wilderness camp loop, which advances the clock in
-five-minute steps without entering this pass. Actions that do not consume a
-turn, such as Look, do not trigger it.
+five-minute steps without entering this pass. A command whose result skips
+the owning mode's post-action pass does not trigger it. Look returns acted,
+including cancellation, and follows the normal mode-specific path.
+*Corrected 2026-09-11 (R464): the earlier free-Look example is withdrawn.*
 
 *Unconditional part, every invocation.* The pass walks the active party in slot
 order and, per member:
@@ -386,7 +388,17 @@ The per-turn cleanup is called from each mode loop with the increment shown in S
   calling the full cleanup; the Journey Onward save-load path reads state and
   returns to the top-level dispatcher without its own cleanup call.
 
-A handful of conversations and prompts (talking to an NPC, opening a door, looking at a tile) take *no* time — they do not invoke the cleanup at all, and the clock is unaffected by the time spent on the prompt.
+Waiting within a modal prompt does not itself run an additional command
+epilogue. Completing or cancelling the command still has its command-specific
+cost: Look, Open, Ready and Z-stats retain the acted result. In town, Look
+therefore takes the ordinary one-minute increment and eligible post-action
+work; outdoors it takes the ordinary two-minute increment. Existing time-tag
+modifiers still apply. Dungeon clock advancement occurs at the loop's input
+boundary, and Look also selects the normal dungeon post-action pass; it has
+no free-Look exception. See `systems/commands.md` Section 3 and
+`systems/npc-schedules.md` Section 9.2 for the original verification.
+*Corrected 2026-09-11 (R464): the earlier blanket no-time examples for
+conversation, opening and looking are withdrawn.*
 
 ## 11. Persistence
 

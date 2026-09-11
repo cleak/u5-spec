@@ -30,8 +30,15 @@ DNGLOOK can render anything.
 
 ## 3. Overworld And Town Look
 
-LOOKOBJ's look entry runs after the dispatcher has collected a direction. The
-entry:
+The direction exchange belongs to the same L-Look command as the resulting
+description. Look retains the acted result in every non-combat mode, including
+cancellation; it is not a free inspection. Town and overworld apply their
+normal post-action epilogues afterward, and dungeon follows its own input-time
+and post-action rules. The direction sub-prompt does not itself run the town
+schedule/contact pass. See `systems/commands.md` Section 3 and
+`systems/npc-schedules.md` Section 9.2 for the original verification.
+
+After an accepted direction, the look entry:
 
 1. Runs a preflight visibility/reach gate. A failed gate exits quietly.
 2. Computes the target coordinate from the party position plus the chosen
