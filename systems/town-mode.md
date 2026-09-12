@@ -534,7 +534,9 @@ or pull succeeds.
 **Get.** G-Get applied to an interactable tile (chest, body, dropped item) runs the per-tile-class get-handler. Chests prompt for a key on locked variants; bodies are searched for items; dropped items are picked up directly. The handler is shared across modes.
 
 **Use.** U-Use routes to the CAST-owned item-use handler shared by
-non-combat modes. It picks from the party's usable item stock and dispatches by
+non-combat modes. It picks from the party's carried item stock - an entry is
+listed exactly when its stock value is nonzero, with no usability test on the
+path (`systems/inventory.md` Section 4.5) - and dispatches by
 item id; detailed potion, scroll, Moonstone, carpet, regalia, and quest-item
 effects belong to `catalogs/item-list.md` and `systems/inventory.md` as they
 are promoted. Do not fold J-Jimmy key use, V-View gem use, or I-Ignite torch

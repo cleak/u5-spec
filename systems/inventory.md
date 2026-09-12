@@ -301,7 +301,7 @@ as a side effect of panel overflow (Section 7.1). The earlier claim that
 the message window was untouched is withdrawn (R467).
 
 The `U`-Use flow is the reference sequence: refuse with `No_usable_items!\n`
-if nothing is usable; print `Item:_` into the message window; select the panel;
+if no stock entry has a nonzero value (Section 4.5, "Which entries get a row"); print `Item:_` into the message window; select the panel;
 write the framed border label `Items:`; draw the eight-row frame; run the
 picker; restore the panel border and footer graphics; redraw the full roster.
 
@@ -334,18 +334,30 @@ glyph inversion independently traced in `u5-decomp/functions/ULTIMA_EXE/`.
 
 ### 4.5 Picker row format
 
-A counted picker row is **`[two-cell quantity][one-cell selector][name]`**:
-window columns 1 and 2 hold the quantity right-aligned, window column 3
-holds the selector, and the name has ten cells in columns 4 through 13.
-A no-quantity row instead starts its name in column 1 and has all thirteen
-interior cells available. These widths describe the ordinary row layout;
-the picker does not derive labels by truncating long item names.
+A counted picker row begins **`[quantity][one-cell selector][name]`**: the
+quantity is right-aligned in a two-cell field in window columns 1 and 2, the
+selector occupies the next column, and the name begins in the column after it -
+column 4 for the ordinary two-cell quantity. A no-quantity row instead starts
+its name in column 1 and has all thirteen interior cells available. The picker
+does not derive labels by truncating long item names, and it does not clip one
+at run time either: the shared word-wrapping printer moves a label that will not
+fit the rest of the display line onto the next line whole
+(`systems/text-output.md` Section 6), so a counted row with a long label
+occupies **two display lines**. "Row widths, in emitted cells" below gives the
+resulting cell positions.
+
+*(**Corrected.** This paragraph previously read "the name has ten cells in
+columns 4 through 13". That is the `Magic Crpt` row's geometry generalised into
+a rule, and no thirteen-cell label can occupy it; the name field is as long as
+the label, and an overflow wraps rather than being clipped or truncated.
+`RETRACTIONS.md` R481.)*
 
 | Quantity case | Rendered |
 |---|---|
-| Zero | The two-character literal `--` |
+| Zero | The two-character literal `--`, then the selector cell. In `U`-Use this case never reaches a row at all: that command's filter omits a zero-valued entry outright, so `--` is reachable only through another caller's filter (Section 5) |
 | One to ninety-nine | The number, right-aligned in two cells, space-padded |
-| "No quantity" marker | Neither the quantity nor the selector cell is emitted; the row prints only its name |
+| One hundred to 254 | Three digit cells. The field is **never clamped**, so the selector and the name each begin one column further right and one less column is left for the label on that display line |
+| "No quantity" marker (255) | Neither the quantity nor the selector cell is emitted; the row prints only its name |
 
 Selector characters below the printable range are drawn from the **runic** font
 rather than the text font; the renderer switches fonts for that one cell and
@@ -439,10 +451,27 @@ these cases specify all 38 labels. The row renderer prints each authored
 label and then pads short rows; it does not abbreviate or truncate a longer
 name at runtime.
 
+**Which entries get a row.** An entry of the 38-entry stock gets a row exactly
+when its stock value is **nonzero**. Both the forward scanner that builds and
+pages the list and the backward scanner that scrolls upward apply that test
+first, before and independently of anything else. There is no equality test
+against the no-quantity marker 255, no other threshold, and **no usability test
+anywhere in the path**; the value only selects the row layout afterwards. The
+scanners also take a filter argument, and that argument decides what happens to
+an entry whose value is zero. `U`-Use passes the value that names no party
+member, and under that filter a zero-valued entry is omitted outright. Under any
+other filter the argument is a party-member index, and a zero-valued entry is
+still listed when that member holds the item in one of six equipment slots.
+Which command passes a party-member index was not established in this pass; only
+the scanner's behaviour under one was. "Zero means absent" is
+therefore a property of the `U`-Use call, not of the scanner, and an engine that
+folds it into the scanner builds the wrong list for the other caller.
+
 **Which U-Use rows omit quantity.** Quantity suppression is independent of
 name decoration. In the picker stock, value 255 is the no-quantity marker;
-zero means absent from U-Use, and ordinary positive quantities produce the
-counted layout. The shared renderer can print a zero row as `--` when another
+zero means absent from U-Use - a property of the filter that command passes
+rather than of the scanner, as "Which entries get a row" above sets out - and
+ordinary positive quantities produce the counted layout. The shared renderer can print a zero row as `--` when another
 caller requests one. A plain-name row means only that it has no scroll,
 potion or moonstone decoration; it does not imply a numeric quantity.
 
@@ -457,7 +486,16 @@ For items carried through normal game acquisition or initial party state:
 | Spyglass, HMS Cape Plans, Sextant, Pocket Watch, Black Badge, Wooden Box | No quantity or selector |
 
 Thus the normal full family contains 18 counted entries and 20 uncounted
-entries. Only entries actually carried and usable are shown.
+entries, the three shards among the uncounted 20. Those figures classify the
+38-entry family under normal acquisition values; they are not a row count for an
+arbitrary save. The same stock with the three shard flags edited to one
+enumerates 38 rows as 21 counted and 17 uncounted, and with the shards consumed
+it enumerates 35 rows. The descending scan is the exact reverse of the ascending
+scan in every case. Only entries whose stock value is nonzero are shown.
+*(**Tightened, not reversed:** this sentence previously read "only entries
+actually carried and usable are shown", which implies a usability test. There is
+none - see "Which entries get a row" above. The 18/20 totals are confirmed as
+published.)*
 
 The saved value matters. Apart from moonstone and plans conversion, the
 picker preserves the carried item's stored value. A saved Amulet, Crown or
@@ -472,12 +510,77 @@ The earlier unconditional statement that the Amulet, Crown and Sceptre use
 normal quantity cells is withdrawn; that result applies to quantity-one
 saved values, not their normal acquisition state (R456).
 
-An uncounted `Shard/Falsehd` or `Shard/Cowrdce` is twelve text cells followed
-by one padding space; `Shard/Hatred` is eleven cells followed by two spaces.
-`HMS Cape Plan` occupies all thirteen cells. Each begins in the first
-interior column. A quantity-one carpet starts with one space, `1`, one
-space, and `Magic Crpt`, then one padding space. Short rows are padded to the
-thirteen-cell interior and end with a newline.
+**Normal shard acquisition writes the no-quantity marker.** The shared
+Search/Get/container grant that hands the party a shard writes 255 into that
+shard's carried flag and into no other byte, so a normally acquired shard is an
+uncounted row: no quantity cells, no selector cell, just the label. An edited or
+otherwise counted value survives into the layout unchanged, because the stock
+builder copies the three shard flags through without normalising them. The
+grant's own two-line message is specified in `systems/commands.md` Section 5.8.
+
+**Exactly two families are normalised on the way into the stock**, now
+established exhaustively rather than by sample: a moonstone phase becomes the
+no-quantity marker only when its carried value is exactly that marker, and
+otherwise becomes absent; the HMS Cape plans entry becomes the marker for any
+nonzero carried value. The remaining twenty-nine entries - the eight scroll
+counters, the eight potion counters, magic carpet, skull keys, the three
+regalia, the three shards and the five other utility items - are copied byte for
+byte. Thirty-eight carried bytes feed the thirty-eight entries, one each, and
+**two** bytes of the special/quest-item band reach no entry at all and therefore
+produce no row (`formats/saved-gam.md` Section 7).
+
+**Nothing but the stored flag decides whether a shard appears.** The stock
+builder reads only the carried scroll, potion, special/quest-item and moonstone
+bands, and the scanners and row renderer read only that stock and the name
+table. Shadowlord hideout and vanquish state, the active-Shadowlord handshake
+and the quest-progress bits reach no part of the picker path: with the shard
+flags held fixed, varying all of them leaves the three shard rows present every
+time. The Shadowlord gates live in the destruction handler, which runs only
+after a row has been picked (`catalogs/quest-graph.md` Section 5). Quest
+progress removes a shard row only indirectly - a successful destruction clears
+that shard's carried flag in the same step that retires the Shadowlord, and a
+cleared flag is what the picker skips.
+
+**Row widths, in emitted cells.** The frame's interior is thirteen cells,
+window columns 1 through 13 (Section 4.4); the renderer homes the cursor to
+window column 1 before every row and pads a short row until the column count
+reaches fourteen. The active **text window** is wider than the frame: it is the
+one the shipped panel routine leaves in place, and it spans screen columns 24
+through 39. Its last legal window column is therefore **15** - one column past
+the frame's right rule at window column 14, screen column 38 - and a row emits
+through column 15 and wraps only after it. Sixteen cells, not fifteen: state the
+capacity, never the last-legal-index, as the width (`systems/text-output.md`
+Section 4).
+
+| Row | Emitted content |
+|---|---|
+| Uncounted `Shard/Falsehd` | thirteen label cells, columns 1 through 13, **no padding** |
+| Uncounted `Shard/Hatred` | twelve label cells, columns 1 through 12, then one padding space |
+| Uncounted `Shard/Cowrdce` | thirteen label cells, **no padding** |
+| Uncounted `HMS Cape Plan` | thirteen label cells, **no padding** |
+| `Magic Crpt` at quantity one | one space, `1`, the selector space, then the ten-cell label: thirteen cells, **no padding** |
+| `Shard/Falsehd` or `Shard/Cowrdce` at any counted value | two quantity cells and the selector on the first display line; the thirteen-cell label plus one padding space on the second |
+| `Shard/Hatred` at a counted value below one hundred | the two-cell quantity, the selector and all twelve label cells are emitted on one display line - its last two cells land on and past the frame's right rule - the cursor then wraps at the window edge, and the renderer's fourteen padding cells land on the following line |
+| `Shard/Hatred` at one hundred or above | the three-cell quantity leaves too little room, so the label wraps to the second line like the other two |
+
+*(**Corrected.** This section previously said an uncounted `Shard/Falsehd` or
+`Shard/Cowrdce` was twelve text cells followed by one padding space, that
+`Shard/Hatred` was eleven cells followed by two spaces, and that a quantity-one
+carpet row ended with one padding space. All three were one cell short: the two
+long shard labels fill the interior exactly with no padding, `Shard/Hatred` takes
+one padding space, and the quantity-one carpet row is thirteen cells with no
+padding at all. `RETRACTIONS.md` R481.)*
+
+Short rows are padded to that fourteen-column boundary and end with a newline.
+The wrap is ordinary word wrapping, not a picker rule: a label containing a
+space breaks at the space instead of moving whole, which is what identifies the
+mechanism. Two consequences an implementation must not paper over: **no shard
+row is ever clipped**, and **no counted shard row is a single over-long line**.
+Both readings are withdrawn with the widths above. The wrap reported here is
+established in the original's own column and row bookkeeping, not from a raster:
+what the display driver paints from that character stream, and how many items a
+page holds once a wrapped row consumes two of the page's rows, are open
+(`OPEN-QUESTIONS.md`).
 
 **Moonstone composition.** A carried moonstone's complete visible content is
 the ten text-font cells `Moonstone ` followed by the single runic phase
@@ -493,10 +596,27 @@ acquisition and initial-party-state inspection in
 `u5-decomp/functions/TALK_OVL/` and `u5-decomp/notes/`, issue #255.
 All 38 name mappings, 256 snapshot cases covering every source-byte value,
 38 typical carried rows and 152 row cases covering values 0, 1, 99 and 255
-were checked. Glyph/font output, numeric output and cursor coordinates were
+were checked. *(Superseded in part by issue #263-#264's exhaustive pass: the row
+widths and the counted-row geometry above are the corrected readings, R481.)* Glyph/font output, numeric output and cursor coordinates were
 controlled observation boundaries, not a fresh complete-game pixel capture.
 The earlier eight original navigation scenarios for issue #246 still verify
 Section 4.4.
+
+Source provenance for the membership rule, the row widths, the normalisation
+census and the shard acquisition value: derived from private analysis in
+`u5-decomp/notes/`, with the picker, scanners and row renderer in
+`u5-decomp/functions/ZSTATS_OVL/`, the grant dispatcher in
+`u5-decomp/functions/SJOG_OVL/` and the command entry in
+`u5-decomp/functions/CAST_OVL/`; issue #264. 12,786 executed original cases,
+among them: 1,540 scanner cases plus six whole-command drives for the membership
+rule; 768 row renders covering all three shard entries at every stored value,
+with 254 quantity-width cases and six neighbouring-family rows; 7,424
+stock-building cases sweeping all 256 values of each of the twenty-nine source
+bytes the builder copies byte for byte, over a 76-case probe that mapped every
+byte of both carried bands to the entry it reaches; 256 grant cases over every
+sub-index; and 72 quest-state cases. Cell positions were measured at the character-output boundary with the
+original column and row bookkeeping running; no raster, font or pixel result is
+claimed.
 
 **R-Ready's readied selector is item-specific.** If the selected character
 has the row's item in any equipment slot, use the following `RUNES.CH` glyph;
@@ -961,8 +1081,10 @@ handler; that is withdrawn. What differs in combat is not the routing but the
 per-family gates — several item families test the scene and refuse in an arena,
 as the family table below and `catalogs/item-list.md` record.
 
-The item-use handler opens an item picker over usable carried stock. If the
-party has no usable item, it prints the no-usable-items refusal and exits. A
+The item-use handler opens an item picker over the carried stock. Membership is
+the stock value alone - an entry is listed exactly when its value is nonzero,
+and there is no usability test on the path (Section 4.5). If no entry qualifies,
+the handler prints the no-usable-items refusal and exits. A
 selected row dispatches by the handler's use-item enumeration rather than by
 the forty-eight-entry equipment id space.
 
@@ -997,7 +1119,7 @@ Confirmed U-Use families:
 | Magic Carpet | Usable in scene ids `0x00..0x20` when the party has exact on-foot transport marker `0x1C` and the current map tile is anything except mountains `0x0C`. This boarding test is independent of movement passability; Section 7.1 gives its precedence and outcomes. On success it chooses carpet marker `0x14` or `0x15` with equal probability and consumes one carried carpet. |
 | Skull Key | Decrements the skull-key/special-key counter, then asks for a cardinal target and runs the lock helper in town/overworld or combat. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. The earlier non-combat-only scope is withdrawn (R415). |
 | Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
-| Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
+| Shards | A shard row is present exactly when that shard's carried flag is nonzero, and normal acquisition sets the flag to the no-quantity marker 255, so the ordinary row is uncounted (Section 4.5). The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only when the scene byte is `0x00` through `0x20` inclusive - the overworld and the town family, so dungeon and combat scenes are outside the band - and only on the accepted tile ids; **no transport test exists anywhere in the branch**, so a party afloat is refused by the tile alone. Search/Get recovery later invalidates the slot. |
 | Spyglass | Night utility, surface plane only. It permits a look when all three of these hold: the party is on the surface plane, the scene is the outdoor world or a town-class scene (dungeon-class and combat-class scenes are excluded), and the hour is in the night window `19..23` or `0..5`. The Underworld fails the plane condition, exactly as the Sextant does. A scene or plane failure prints the "not here" refusal; a daytime hour prints the no-stars refusal; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
 | HMS Cape plans | Shipboard-only utility. When used aboard ship, it marks the ship-rigging flag so the ship is rigged for double speed; otherwise it refuses. `weather.md` owns the resulting hoisted-sail wait-pass timing change. |
@@ -1007,10 +1129,12 @@ Confirmed U-Use families:
 
 ### 7.1 U-Use family echoes, prompts and utility results
 
-The picker shows usable carried items only. There are **no separate
-item-specific ownership refusals** such as `No Sceptre!`, `No Potion!` or
-`No Skull Keys!` in the ordinary U-Use flow. An absent item is not selectable;
-if every usable item is absent, the command prints `No usable items!\n`.
+The picker shows exactly those entries whose carried stock value is nonzero
+(Section 4.5); the "usable" in the refusal's own wording is not a test the
+handler performs. There are **no separate item-specific ownership refusals**
+such as `No Sceptre!`, `No Potion!` or `No Skull Keys!` in the ordinary U-Use
+flow. An absent item is not selectable; if every entry is zero, the command
+prints `No usable items!\n`.
 Cancelling the picker prints `None!\n` after the open `Item:_` prompt.
 
 On acceptance the item's handler completes that same prompt with its family

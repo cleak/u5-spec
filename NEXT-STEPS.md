@@ -1,5 +1,87 @@
 # Next Steps for u5-spec
 
+## Issue #264 - U-Use picker membership and the shard rows (2026-09-12 UTC)
+
+R481 withdraws three sentences of `systems/inventory.md` Section 4.5's row
+geometry: the two long shard labels' widths, the counted row's "ten cells in
+columns 4 through 13" name field, and the quantity-one carpet's trailing padding
+space. The corrected readings are thirteen, twelve and thirteen label cells with
+no padding on the two long labels, a name field as long as the label, and a
+counted row whose label does not fit the rest of the display line wrapping whole
+onto a second line rather than being clipped or run long.
+
+Newly published: membership in the picker is the **nonzero stock value alone**,
+applied first by both scanners, with no equality test against the no-quantity
+marker and no usability test anywhere on the path; "zero means absent" belongs to
+the `U`-Use filter argument rather than to the scanner, which under a
+party-member filter still lists a zero-valued entry the member has equipped;
+normal shard acquisition writes the no-quantity marker `255` and nothing else,
+so a normally acquired shard is an uncounted row; the quantity field is never
+clamped, taking three cells from 100 to 254 and shifting the selector and name
+right; the exhaustive normalisation census - only moonstones and the plans entry
+are normalised, the other twenty-nine entries are copied byte for byte, and two
+bytes of the special/quest-item band reach no picker entry at all; no quest,
+proximity or Shadowlord gate exists anywhere on the picker path, the
+destruction handler owning all of those; the published 18-counted/20-uncounted
+totals are confirmed, with the three shards among the uncounted twenty; and the
+shard grant masks an out-of-range sub-index to two bits rather than rejecting
+it, so three of every four out-of-range values grant a real shard and the fourth
+writes a byte no row can ever show. The acquisition value and the masking now
+appear in `systems/containers.md`, `catalogs/item-list.md`,
+`systems/commands.md` Section 5.8 and `formats/saved-gam.md` Section 7; the
+shipped grant text is four separate stored strings, so no concatenated two-line
+literal exists to test against.
+
+12,786 executed original cases. Four trace items and one capture item are
+recorded in `OPEN-QUESTIONS.md`. No engine or QA files were read; the issue text
+was the only engine-side input.
+
+## Issue #263 - the monster arena exit (2026-09-12 UTC)
+
+R480 withdraws the published reading of ordinary AI stepping as a two-axis
+attempt with randomized axis priority. One per-turn draw over the inclusive
+range `0..255` selects the branch, and the low branch never offers the
+X-displaced candidate at all. R482 withdraws a second sentence of the same
+paragraph, one that R311's corrected column first published: when all four
+random-cardinal attempts fail, whether the actor is reported as having moved
+turns on the direction code the last draw produced, not on whether that draw
+repeated the first attempt.
+
+Newly published as `systems/combat.md` Section 9.1, with its consequences in
+Sections 3, 6.3, 7, 11.1 and 14: the arena-exit predicate is the step the actor
+actually took, not a flag and not a separate roll; the step-validity helper
+splits on geometry before occupancy and accepts an off-grid candidate only for
+an actor whose fleeing bit is set, so the flag legalises the destination rather
+than selecting the arm, and a cell is blocked only when the occupying object
+record is marked solid; the fleeing bit is re-evaluated by the morale classifier
+at the head of every fleeing turn, so a healed monster stops fleeing and can no
+longer leave, and the same pre-step block rolls a one-in-four point of
+self-healing; the random-cardinal fallback is a second producer of off-grid
+steps; a no-move turn with the flag still set dispatches into the ordinary
+attack/target routine and performs no world tick of its own; the surrounded
+predicate is flee-sensitive, so a fleeing actor on an edge is never surrounded,
+and it gates a second, previously unpublished early return ahead of target
+selection, reconciled in place against R311 rather than restoring the withdrawn
+wording; the exit emission is a line feed, the actor's name, the stored line
+` escapes!` and one further line feed, with the 40-update action snap played
+between the leading line feed and the name - the same recipe, with the same
+arguments, that the party-side accepted exit uses; the release runs through the
+same helper and the same mode as the party-side exit, but for an ordinary
+departing class it touches neither the active-player marker nor the stats panel
+and ends with exactly one world tick, while a Shadow Lord's escape additionally
+runs the release/faint pass, which repaints, may clear the selection and adds a
+second tick; and the departure reaches the side census in the same loop
+iteration, so an escape by the last hostile arms `VICTORY!` on that turn. The
+per-slot clear of the shared action-result code is recorded as load-bearing:
+nothing else in the shipped program clears the out-of-arena value.
+`systems/audio.md` Section 11 now names this caller of the action snap and drops
+its unnamed-site count from eight to seven, and Section 8.3 records that the
+faint envelope's caller list was never exclusive to the vanish path.
+
+59 executed original cases. Two trace items and one capture item are recorded in
+`OPEN-QUESTIONS.md`. No engine or QA files were read; the issue text was the only
+engine-side input.
+
 ## Issue #262 follow-up - the missing player-visible text (2026-09-12 UTC)
 
 R476-R479 withdraw four published claims: that `G` Get filters candidate

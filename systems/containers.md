@@ -686,7 +686,7 @@ The found-item class code maps to these public result families:
 | `0x0F` | Food / grain | Adds the supplied food quantity to the food counter. |
 | `0x19` | Moonstone | Sets the Moonstone ownership flag for the supplied moonstone slot. |
 | `0x1B` | Magic Carpet | Grants the magic-carpet ownership state; one scene-specific acquisition path also raises a quest/event marker. |
-| `0xB4` | Shadowlord shard | Sets the Falsehood, Hatred, or Cowardice shard flag for valid shard subtypes `0..2`. |
+| `0xB4` | Shadowlord shard | Writes the no-quantity marker `255` into the Falsehood, Hatred or Cowardice shard flag for shard subtypes `0..2`, and into no other byte; the U-Use row is then uncounted (`systems/inventory.md` Section 4.5). The subtype is **masked to two bits**, not validated: subtypes congruent to 0, 1 and 2 grant a real shard and print its line, and subtypes congruent to 3 write the unused byte after the third shard flag, printing the Cowardice line while granting nothing usable. See `catalogs/item-list.md` Section 8. |
 | `0xB5` | Crown of Lord British | Sets the Crown ownership flag and runs the accompanying regalia acquisition side effects. |
 | `0xB6` | Sceptre of Lord British | Sets the Sceptre ownership flag. |
 | `0xB7` | Amulet of Lord British | Sets the Amulet-of-Lord-British ownership flag. |

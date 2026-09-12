@@ -498,7 +498,12 @@ If an attack path does not consume the turn, monster movement uses the shared
 movement fallback described in `systems/combat.md`: teleport-capable classes can
 attempt a random legal arena cell, ordinary stepping uses the surrounded check
 and in-arena step test, and successful moves update both the combat descriptor
-and linked render object.
+and linked render object. The in-arena step test is flee-sensitive: an off-grid
+destination is refused like a wall for every actor except one whose fleeing flag
+is set, and a fleeing actor whose step lands off the grid **leaves the fight**,
+printing its class name and `escapes!`. For class 47, Shadow Lord, that
+departure additionally frees one controlled party member. Both are specified in
+`systems/combat.md` Sections 9.1, 11.1 and 14.
 
 Current traces prove shared target selection, Cause Fear's HP-forced flee
 setup, wound-score flee writes, flee inversion, and several per-class combat

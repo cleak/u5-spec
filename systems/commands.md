@@ -568,7 +568,7 @@ kinds:
 | Sandalwood box | `A sandalwood box!` |
 | Moonstone | `A moonstone!` |
 | Magic carpet | `A magic carpet!` |
-| Shard | `The Shard of` ⏎ `Falsehood!`, `Hatred!` or `Cowardice!` |
+| Shard | `The Shard of` ⏎ `Falsehood!`, `Hatred!` or `Cowardice!` - four separate stored strings, one shared first line and three virtue lines, each carrying its own terminator; no concatenated two-line form is stored anywhere, so a test that looks for one as a shipped literal will not find it. The grant writes the no-quantity marker `255` into the matching shard flag and into no other byte, and masks an out-of-range shard sub-index to two bits (`systems/containers.md` Section 8) |
 | Regalia | `The Crown of Lord British!`, `The Sceptre of Lord British!` or `The Amulet of Lord British!` |
 | Equipment | the item's own row name from the shared equipment name table, then `!` — for example `Chain Coif!`, `Leather Armour!` |
 
