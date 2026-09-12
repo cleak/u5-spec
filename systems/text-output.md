@@ -4,7 +4,7 @@
 
 Ultima V draws all of its game text — narration, names, prompts, conversation lines, and status panels — through a single small subsystem. It maintains four independent text windows on a fixed 40-column by 25-row character grid, exposes a small set of primitive operations (emit one character, emit a word-wrapped string, emit a padded number, erase or pad typed input, read or write the cursor), and hands the pixels of each character off to a separately loaded display driver.
 
-At any moment, exactly one of the four windows is the *active* window and is the destination of every text-emitting call. Each window owns its own rectangle on the grid, its own cursor, its own colour, and its own small set of style flags. The primitives consult the active window, advance its cursor, and wrap and scroll within its bounds; they never touch any other window. Switching the active window takes effect immediately, and the new window's cursor is wherever it was last left, so a UI can move focus between (for example) a dialogue window and a status window without losing position in either.
+At any moment, exactly one of the four windows is the *active* window and is the destination of every text-emitting call. Each window owns its own rectangle on the grid, its own cursor, its own colour, and its own small set of style flags. The primitives consult the active window and update its cursor. Their scroll requests pass through the display driver: on EGA, a request whose left edge is screen column 24 moves a fixed right-side pixel strip, even when the active window is the upper inventory panel. Another window's pixels can therefore move without its descriptor changing. The earlier guarantee that scrolling stays within the active window and never touches another is withdrawn (R468). Switching the active window takes effect immediately, and the new window's cursor is wherever it was last left, so a UI can move focus between (for example) a dialogue window and a status window without losing position in either.
 
 Driver-level concerns — which font is used, how the framebuffer is laid out, what a cell's pixel size actually is — are walled off from the text system. The text system asks the driver to render the glyph for a given code at a given cell, in a given colour, with optional underline and inverse, and the driver does the rest. The driver-side ABI is described elsewhere; here we describe only what the text system promises.
 
@@ -73,8 +73,8 @@ The system exposes five families of operations. None of them takes a window argu
 
 **The per-cell emitter** takes one byte and either renders one glyph at the active window's cursor or interprets newline/carriage-return as cursor movement. It is the foundation of the system; both the wrap-aware printer and the numeric printer go through it. Its behaviour:
 
-- A byte with the high bit clear and not equal to line-feed or carriage-return is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, the window scrolls (Section 7) and the cursor is left on the bottom row. The scroll does not blank the vacated row; the glyph that triggered the scroll is written over it immediately.
-- A line-feed byte is a **combined carriage return and line feed**: it emits no glyph, advances the cursor down one row *and* returns the column to the window's left edge. If that step carries the cursor past `bottom_right_y`, the window scrolls. Implementations must not treat it as a bare row advance — the blank-row mechanism of Section 10.4 depends on the column reset.
+- A byte with the high bit clear and not equal to line-feed or carriage-return is rendered as a glyph at the current cursor cell, in the active window's current colour and with any active style flags applied. The cursor then advances one cell to the right. If the advance would carry the cursor past `bottom_right_x`, the cursor wraps to the window's left edge and steps down one row. If the row advance would carry the cursor past `bottom_right_y`, a scroll is requested and the active cursor is left on its bottom row. The driver determines the actual pixel region and exposed-band behavior (Section 10.5). The triggering glyph was drawn before this overflow check; it does not guarantee a repaint of the exposed bottom row. The earlier active-window-only and immediate-repaint claims are withdrawn (R468).
+- A line-feed byte is a **combined carriage return and line feed**: it emits no glyph, advances the cursor down one row *and* returns the column to the window's left edge. If that step carries the cursor past `bottom_right_y`, the emitter requests a scroll using the active rectangle; the driver determines the pixel region (Section 10.5). Implementations must not treat it as a bare row advance — the blank-row mechanism of Section 10.4 depends on the column reset.
 - A carriage-return byte returns the cursor to the window's left edge without changing the row and without emitting a glyph. It is the column-only half of the line-feed behaviour.
 - Selected high-bit control bytes are handled by the adjacent extended-control
   path. The confirmed controls are `0xFB` for centre-output off, `0xFC` for
@@ -550,16 +550,30 @@ last.
 
 ### 10.5 Scrolling the message window
 
-When output would carry the cursor below the message window's bottom row, the
-window scrolls up by exactly one cell row and the cursor is left on the last
-visible row. The vacated bottom row is **not** blanked; the output that caused
-the scroll immediately overwrites it. There is no "press a key to continue"
-pause anywhere on this path, and no page-at-a-time behaviour.
+When output carries the cursor below its active window's bottom row, the
+text layer requests a scroll and leaves that window's cursor on its bottom
+row. EGA selects the actual operation by the requested pixel left edge.
+At pixel column 192 (screen cell column 24), it shifts the fixed right-side
+strip up one cell row, regardless of the requested vertical bounds or
+distance. Other left edges use the general rectangle-scroll behavior in
+`display-driver-abi.md` Section 9.5.
 
-The underlying display entry is hardwired to this window's pixel column and to a
-one-cell-row step, and ignores any larger requested distance; a general
-scroll-by-N request therefore still scrolls exactly one row on the original.
-See `display-driver-abi.md` section 9.5.
+The gameplay message window normally uses that fixed path. So does an
+upper inventory-panel overflow, since its left edge is also column 24.
+Such an overflow moves already-painted message pixels but does not move
+the message cursor. A later indicator or completion may appear below the
+old prompt; `inventory.md` Section 7.1 gives controlled examples.
+
+The fixed path does not blank its exposed band. Later drawing can replace
+those pixels, but an overflow caused by panel output need not repaint the
+message bottom row at all. The earlier unconditional immediate-overwrite
+claim is withdrawn (R468). There is no continuation-key or paging wait in
+this scroll operation. Descriptor preservation and pixel preservation are
+separate properties.
+
+Source provenance: fresh original emitter/picker and EGA copy execution in
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/ZSTATS_OVL/`,
+`u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`, issue #259.
 
 ### 10.6 The live input line and its cursor
 
@@ -708,15 +722,14 @@ show it.
   the snapshot as title/overlay scratch reuse unless a future caller-level
   trace proves otherwise.
 
-- **Scroll-by-N semantics.** Auto-scroll after bottom overflow moves the active
-  text-window rectangle up by exactly one cell row and leaves the cursor on the
-  last visible row. It does **not** blank the vacated row: whatever pixels lay
-  immediately below the window scroll into it, and the caller's next output
-  covers them. An earlier revision of this bullet said the bottom row is left
-  blank in the current background colour; that is withdrawn. The lower-level
-  driver operation nominally accepts a pixel-distance argument, but the EGA
-  entry ignores it and always steps one cell row; see `display-driver-abi.md`
-  section 9.5.
+- **Scroll-by-N semantics.** The text layer preserves the active cursor's
+  bottom-row clamp, but the driver determines which pixels move. EGA uses
+  its fixed one-row, unblanked right-side strip when the requested left edge
+  is pixel column 192, including upper-panel callers. Other left edges use
+  the general signed-distance rectangle operation and blank the exposed
+  band. The earlier blanket active-rectangle, one-row and subsequent-cover
+  claims are withdrawn (R468). See Section 10.5 and
+  `display-driver-abi.md` Section 9.5.
 
 - **Proportional right-edge exactness.** Resolved. The advance table is
   published in `formats/font-pcs.md` section 4, the exclusive right-edge test,
