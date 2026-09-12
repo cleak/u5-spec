@@ -111,6 +111,19 @@ state can expose a sail path to the town loop as well as to the overworld and
 dungeon loops. The town loop's numeric distinctions must not turn the leaked
 text-renderer value into cursor-dependent gameplay.
 
+The `E` refusal inside a town or dungeon retains the default **acted** result.
+It prints `Enter what?` and does not enter a location or move the party. This
+is a different turn-cost case from an unrecognized entrance on the overworld,
+whose delegated handler reports no action. In town, the refused E therefore
+reaches the ordinary clock/underfoot/contact epilogue, subject to its existing
+effect and transport gates. An already-adjacent eligible guard can open its
+interaction before the next world command is read.
+
+Source provenance: fresh original command and town-contact execution in
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/TOWN_OVL/` and
+`u5-decomp/notes/`, issue #261 follow-up; the combined verification is
+summarized in `systems/npc-schedules.md` Section 9.2.
+
 Beyond those six routes, a modern implementation should preserve each command's
 observable turn cost rather than depend on numeric equality everywhere. Mode
 specs document the visible turn-cost rules for their command families.
@@ -128,7 +141,7 @@ handoffs.
 | `B` | Board. | Routes to the vehicle-boarding handler; succeeds only when the local vehicle/object context allows boarding. See `vehicles.md`. |
 | `C` | Cast. | Routes to the spell-casting overlay. Spell prerequisites, parser rules, charge use, mana use, and scene masks live in `magic.md`. |
 | `D` | Default refusal. | No resident world-command handler is currently confirmed; it falls through to the stock "What?" response when it reaches this dispatcher. |
-| `E` | Enter. | Overworld routes to the location/dungeon entry helper. Non-overworld scenes use the resident refusal prompt path. |
+| `E` | Enter. | Overworld routes to the location/dungeon entry helper. Non-overworld scenes use the resident refusal prompt path and retain acted, despite no transition. |
 | `F` | Fire. | Routes to the fire/cannon handler family. Overworld ship broadsides use a sub-handler; dungeon mode refuses. Door-destruction messages belong to this family, not to Open or Jimmy. See `vehicles.md`. |
 | `G` | Get. | Routes to the Search/Jimmy/Open/Get overlay's Get handler. Dungeon mode skips the surface/town Get prefix and falls into the underfoot chest path. |
 | `H` | Hole up / rest. | Overworld and dungeon use the rest-with-watch path. Town mode uses the inn/bed-hours path and refuses off bed tiles. The shared rest handler owns the hours prompt, sleep cleanup, HP recovery, rest-interruption checks, and the rare outdoor Lord British camp event; see `rest-and-camp.md`. |

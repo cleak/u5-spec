@@ -812,6 +812,18 @@ survivors. The demanded amount is printed in the line. On a yes, and only if the
 party can afford the full amount, that amount is subtracted; if the party cannot
 pay, the handler refuses, takes nothing, and proceeds to arrest.
 
+The default tribute excludes Minoc and Blackthorn's palace: those locations
+select the charity and palace branches above. A capture showing this tribute
+at a place described as a palace gate needs its actual location and live guard
+state identified before attributing it to the palace branch. Likewise,
+behavior-6/7 automatic contact enters the town arrest route, with its separate
+palace handling; it does not first run this tribute demand. These distinctions
+do not change cadence: a refused in-town E is acted and may trigger the
+eligible interaction before the next command, without movement. See
+`systems/npc-schedules.md` Section 9.2 and `systems/town-mode.md` Section 14.
+Source provenance: fresh original dispatcher/contact/demand execution in
+`u5-decomp/notes/`, issue #261 follow-up.
+
 **Exact demand endings.** The two payment branches append
 `\n\nDost thou pay?\n\n:`; the accepted answer completes that colon row
 with `Yes\n` or `No!\n`. There is a blank row between the question and

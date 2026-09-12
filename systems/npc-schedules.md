@@ -754,6 +754,12 @@ it reaches the ordinary town epilogue: clock/underfoot processing first,
 then the eligible walkers and contact-event routing. A displayed clock or
 turn counter changing is not a substitute for those command/effect gates.
 
+The in-town `E` refusal also returns acted. Its failed entrance attempt can
+therefore trigger contact while the party stays in place. Resolve that
+eligible epilogue and any interaction it opens before accepting another world
+command. A subsequent direction key belongs to the open question's input
+rules; it is not a movement command deferred until after the demand.
+
 **Adjacency is a current-state test.** When an eligible NPC reaches its
 engagement check, the party being cardinally adjacent now is sufficient.
 There is no requirement that either participant moved into adjacency during
@@ -772,6 +778,18 @@ reach the original guard question and successful payment without party
 movement. Description, clock and presentation endpoints were controlled;
 this does not reproduce the reported save or raster capture.
 
+A further 108 original-code cases verify refused E versus a free unknown-key
+control across six town cadence gates, with behavior 4, 6 and 7 in ordinary,
+Minoc and palace scene fixtures. The original contact routes produce payment,
+arrest or palace audience as appropriate without requiring a step. In the
+payment and ordinary arrest cases, a North key is consumed inside the pending
+yes/no wait, which continues to wait for a valid answer. The fixtures explicitly
+set the live guard behavior and dialogue; they do not establish which guard or
+scene appeared in the reporter's capture. Clock, presentation, underfoot,
+loose-object and terminal audience/conflict endpoints were controlled.
+Source provenance: fresh original execution in `u5-decomp/notes/` and
+`u5-decomp/functions/NPC_OVL/`, issue #261 follow-up.
+
 The schedule pass clears the shared event kind and NPC index, then visits
 roster slots 1 through 31. An engagement event records its producer's roster
 index. Events do not stop the pass or form a queue: if more than one NPC
@@ -786,6 +804,11 @@ in Section 7.
 | AI 6 or 7 | Dialogue `0xFE` | Shouted brush-off followed by that NPC's flight rewrite. |
 | AI 6 or 7 | Any other dialogue, linked live sprite byte exactly `0x70` | Arrest interaction. This route does not first ask the reserved regime demand. |
 | AI 6 or 7 | Dialogue other than `0xFE`, linked live sprite other than `0x70` | Conflict outcome: linked actor byte at least `0x40` gives `Attacked!` and the NPC-conflict chain; a lower actor byte clears the NPC slot. |
+
+Both contact families use the cadence and current-adjacency rule above, but
+their interactions remain distinct. A ten-gold-per-living-member tribute
+identifies the shared guard-demand branch; its text alone is not evidence of
+a behavior-6/7 arrest-contact producer. See `systems/blackthorn.md` Section 7a.
 
 Conversation contact uses the **same dispatcher as explicit Talk**, but does
 not perform Talk's direction, target lookup or mirror/bed terrain checks.
