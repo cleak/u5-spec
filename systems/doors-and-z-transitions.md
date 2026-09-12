@@ -457,10 +457,18 @@ Section 5.4: the chosen direction's name is appended to the prefix row, the pass
 key prints the cancel word and aborts the command, and every other key —
 Escape included — is re-read, so the pass key is the only cancel.
 
-With a direction chosen, the handler tests the target cell against **exact tile
-identities, not classes**: one identity is the blocked variant and prints
-"Impassable!", exactly one identity is climbable, and every other identity
-prints "Not climbable!". On the climbable identity, each living party member
+With a direction chosen, the handler reads the **map tile** of the target cell
+(the party's cell plus the chosen step) and tests it against **exact tile
+identities, not classes**: id `0x0D` is the blocked variant and prints
+"Impassable!"; id `0x0C` is the one climbable identity; every other identity
+prints "Not climbable!". The order is fixed: the `0x0D` test comes first, then
+the `0x0C` test, and nothing else is consulted before them. In particular the
+handler does not scan the active-object table, does not ask any walkability or
+terrain-damage predicate, and does not read the party's facing: an object
+standing on the target cell, a water or lava cell, or any other non-mountain
+terrain all answer "Not climbable!" purely by not being `0x0C`. (Clarified
+2026-09-12 for issue #265; the two ids were previously described without being
+named.) On the climbable identity, each living party member
 rolls `1..30` against that character's Dexterity; if Dexterity is lower than the
 roll, it prints "Fell!" and applies `1..5` fall damage to that member. Dead
 party members skip this risk roll, and the climb itself happens whether nobody,
