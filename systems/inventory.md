@@ -290,8 +290,18 @@ picker every caller in the game uses:
 | Frame width | 15 cells, screen columns 24 to 38 |
 | Frame height | 9 rows, screen text rows 1 to 9 |
 | Vertical rules | window columns 0 and 14 (screen columns 24 and 38) |
-| Interior item rows | 7 (window rows 1 to 7, screen rows 2 to 8) |
-| Interior content columns | 13 (window columns 1 to 13, screen columns 25 to 37) |
+| Interior item rows | 7 (window rows 1 to 7, screen rows 2 to 8). A page shows seven **entries** only when no entry takes two display lines; see "How the list is drawn" below. |
+| Interior content columns | 13 (window columns 1 to 13, screen columns 25 to 37). This is the drawn frame's interior, not the writable width of the text window behind it: that window is sixteen cells wide, and a row can legally emit through window column 15 - screen column 39, outside the frame entirely (Section 4.5). |
+
+The row-count argument shapes the clear and the drawn rules, and nothing else.
+The panel text window the picker writes through, and the render loop's own
+terminating row, are both fixed at the nine-row geometry above and do not follow
+the argument. What the argument changes is the rectangle that is pre-cleared and
+how many rule rows are drawn inside it. At a row count of nine or more the frame
+draw itself runs past the window and issues the strip scroll of
+`display-driver-abi.md` Section 9.5; at eight or fewer it does not. The shipped
+count is eight, so no shipped frame draw disturbs the message window. Row counts
+of three, five, seven, eight, nine and twelve were executed.
 
 Because the clear covers the whole panel, **the food-and-gold line and the date
 line are erased for the duration of the picker**, and both are restored by a
@@ -312,25 +322,75 @@ also uses that message cursor for the input indicator; it does not insert
 a fixed two-row completion prefix. This clarifies the earlier
 phrase "restore the message-window frame" (issue #259).
 
-**Selection and scrolling.** The selected item is drawn with its ordinary
+**How the list is drawn: a repaint, not a scroll.** *(Published 2026-09-12,
+issue #259.)* The picker's main loop re-renders **the entire visible list into
+the same rectangle on every pass**. Each pass selects the panel window, homes the
+cursor to window column 1 of window row 1, and renders rows until the cursor
+reaches window row 8 — the frame's bottom border row, which is also the text
+window's last row. Moving the highlight and advancing the page change two loop
+variables that the next pass reads; neither of them moves a pixel, and the panel
+itself is never scrolled by the picker. "Further Down steps scroll the list" in
+the navigation paragraph below is a description of **logical paging** — which
+entries the next pass renders — not of a pixel scroll.
+
+Four consequences an implementation has to get right:
+
+- **The panel is not cleared between passes.** The only thing that erases the
+  previous pass's text is each row's own pad-to-a-fixed-column before its line
+  feed. A page that renders fewer rows than its predecessor therefore leaves
+  visible residue: on any row the new page does not render at all, and in the two
+  window columns past the pad column on every row.
+- **A page shows seven entries only when no entry takes two display lines.** The
+  loop terminates on the cursor's row, not on an entry count, so an entry that
+  wraps onto a second display line costs a row: an overflowing page shows six
+  entries, or five if two of them wrap, and the picker's own count of entries
+  shown falls with it (Section 4.5 gives which entries can wrap).
+- **Every key that is not accept or cancel causes a full re-render**, including a
+  key the picker does not recognise at all. An unrecognised code redraws the list
+  exactly as an arrow key does, while leaving the page-top index and the
+  highlight row untouched. Accept and cancel leave without re-rendering, so one
+  command performs one pass for the initial draw plus one per non-terminating
+  key, and no more.
+- **A re-render can overflow the panel, and that is the only thing in the picker
+  that can.** When the entry that begins on window row 7 takes two display lines,
+  its second line lands on window row 8 — over the frame's bottom border — and
+  the line feed that closes it steps the cursor past the window's bottom row. The
+  text layer then clamps the panel cursor and requests a scroll whose left edge
+  belongs to the strip that carries the message window, which is what displaces
+  the already-painted message history. Section 7.1 gives the per-key counts and
+  the exact rule; `display-driver-abi.md` Section 9.5 gives what the strip copy
+  moves.
+
+**Selection and navigation.** The selected item is drawn with its ordinary
 label and padding in inverted glyph pixels. Its text is not replaced by a
 row of cursor characters. Selection starts at the first visible item on
 interior row one. Moving Down through a long list first moves the highlight
-through rows one to four. Further Down steps scroll the list while the
-highlight stays on row four. Once the final seven-item window is visible,
-the remaining steps move the highlight through rows five to seven. Up uses
-the corresponding behavior toward the beginning. When all carried entries
-fit in the panel, the list stays fixed and the highlight moves among them.
-Movement skips absent entries and stops at the first or last selectable item.
+through rows one to four. Further Down steps page the list — each press
+advances the page's top entry by one — while the highlight stays parked on row
+four. Once the final page is visible, the remaining steps move the highlight
+through rows five to seven. Up uses the corresponding behavior toward the
+beginning. When all carried entries fit in the panel, the list stays fixed and
+the highlight moves among them. Movement skips absent entries and stops at the
+first or last selectable item. Left behaves as Up and Right as Down.
 
-Home selects the first item; End selects the last, showing up to seven items
-ending there. Page Up and Page Down move seven selectable items, stopping at
-the relevant endpoint. These navigation rules are shared with R-Ready in
-Section 5. Enter or Space confirms the selected U-Use row; Escape cancels.
+Home selects the first item, with the highlight on the first visible row; End
+selects the last, showing the last page with the highlight walked down toward
+row seven. Page Up and Page Down are the ordinary up and down handlers applied
+seven times, and so stop at the relevant endpoint. All of these re-render.
+These navigation rules are shared with R-Ready in Section 5. Enter or Space
+confirms the selected U-Use row; Escape cancels, and the cancellation line is
+printed into the message window from inside the picker before it returns.
 
 Source provenance: fresh original shared-picker and row-scanner execution in
 `u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`, issue #246;
 glyph inversion independently traced in `u5-decomp/functions/ULTIMA_EXE/`.
+The repaint contract, the key-by-key re-render and the overflow condition are
+from fresh integrated original executions of the whole `U`-Use command in
+`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/ZSTATS_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, with the keyboard
+driven through emulated firmware so the original scancode handling runs, and
+with the picker's page-top, highlight-row and entries-shown loop variables read
+out at every key wait; issue #259.
 
 ### 4.5 Picker row format
 
@@ -577,10 +637,65 @@ space breaks at the space instead of moving whole, which is what identifies the
 mechanism. Two consequences an implementation must not paper over: **no shard
 row is ever clipped**, and **no counted shard row is a single over-long line**.
 Both readings are withdrawn with the widths above. The wrap reported here is
-established in the original's own column and row bookkeeping, not from a raster:
-what the display driver paints from that character stream, and how many items a
-page holds once a wrapped row consumes two of the page's rows, are open
-(`OPEN-QUESTIONS.md`).
+established in the original's own column and row bookkeeping, not from a raster;
+what the display driver paints from that character stream is still open
+(`OPEN-QUESTIONS.md`). How many items a page holds once a wrapped row consumes
+two of the page's rows is no longer open: the render loop stops on the cursor's
+row, so a page with one wrapped entry shows six entries and a page with two shows
+five (Section 4.4).
+
+**Which rows take a second display line, and which never can.** *(Published
+2026-09-12, issue #259.)* This matters beyond cosmetics: a second display line is
+the only thing in the picker that can overflow the panel and displace the message
+window (Section 4.4, Section 7.1).
+
+The condition is a property of the shared word-wrapping printer, not of a picker
+rule and not of a glyph running off the screen. A list row starts in window
+column 1. A quantity takes two cells for values 1..99 and for the zero form and
+three cells for 100 and above; one selector cell follows it; a no-quantity row
+emits neither. So a label begins in window column 1, 4 or 5. **A row takes a
+second display line exactly when the label's last cell would fall on or past
+window column 15** — the sixteenth and last writable cell of the text window.
+That held in every one of 1,562 measured renders.
+
+Two shapes result, and they look nothing alike on screen:
+
+| Shape | What is emitted |
+|---|---|
+| The label does not fit at all | The first display line carries only the quantity and selector; the label that will not fit is moved off it whole, and lands on the next display line starting in window column 0 — over the frame's **left** vertical rule. (A label containing a space still breaks at the space, as the paragraph above says; it is the word that moves whole, not necessarily the entire label.) |
+| The label ends exactly on window column 15 | It stays on its line, overwriting the frame's **right** vertical rule and writing screen column 39, one cell outside the drawn frame. Only the renderer's padding lands on the second line. |
+
+Measured across every entry of all four shipped name vocabularies at one-, two-
+and three-digit quantities, at the zero form and at the no-quantity marker —
+which are the only distinct printed widths a one-byte counter can produce:
+
+| Vocabulary | Entries that take a second display line |
+|---|---|
+| Carried items (the 38-entry `U`-Use/Items family) | The three Shard entries, the HMS Cape plans entry and the Pocket Watch entry, at any one- or two-digit quantity and at the zero form; the eight Moonstone entries and the Black Badge entry additionally at a three-digit quantity. |
+| Equipment, reagents, spell charges | **None**, at any tested quantity width, including three digits. |
+| Any vocabulary, at the no-quantity marker | **None.** No shipped name is long enough to reach column 15 from window column 1. |
+
+**What an ordinary save can actually reach.** The snapshot that feeds the picker
+normalises the eight moonstone entries and the plans entry to the no-quantity
+marker or to absent ("Exactly two families are normalised" above), so on this
+path those nine entries can never carry a printed digit and never take a second
+line. The reachable two-row rows in an ordinary save are therefore a **counted
+shard**, a **counted Pocket Watch**, and a **Black Badge at a count of one
+hundred or more**. Normal acquisition leaves all three uncounted, which is why an
+ordinary `U`-Use picker very often overflows nothing at all.
+
+Scope: this covers the four shipped vocabularies at the shipped panel width. A
+modified vocabulary or a different panel width is outside it. Cell positions were
+measured at the character-output boundary with the original column and row
+bookkeeping running; no raster, font or pixel result is claimed here either.
+
+Source provenance: 1,562 single-row executions of the original row renderer, one
+per vocabulary, entry and quantity combination, each started from the panel's
+first interior cell and scored by the resulting cursor row and by the cell
+position of every glyph emitted; 142 further no-quantity renders to measure each
+label's rendered length; and three executions of the inventory snapshot with the
+moon phases and plans set to ordinary counts. Derived from private analysis in
+`u5-decomp/functions/ZSTATS_OVL/` and `u5-decomp/notes/`; issue #259.
 
 **Moonstone composition.** A carried moonstone's complete visible content is
 the ten text-font cells `Moonstone ` followed by the single runic phase
@@ -727,7 +842,12 @@ through six, the totals are respectively 7, 9, 11, 13, 15 and 17 screens.
 Up/Down traverse these screens. On Attributes, Arms and Equipment,
 Left/Right also move backward/forward through the cycle. Within a populated
 shared inventory list, Left/Right instead scroll its entries; Up/Down return
-to the outer page cycle. The initial member-selection and digit-shortcut
+to the outer page cycle. *(Flagged 2026-09-12, issue #259: a static reading of
+this page's key dispatch, plus executed runs in which Right left the page after a
+single render pass, both point the other way - Left/Right leaving for the outer
+cycle and Up/Down moving the selection. Not enough keys were executed to conclude
+either way, and the sentence above has its own executed backing, so it stands
+pending a re-derivation; `OPEN-QUESTIONS.md` Section 3 indexes it.)* The initial member-selection and digit-shortcut
 rules are specified at the start of Section 4.
 
 The four inventory lists use the Section 4.4 frame and page badge. The Items
@@ -961,6 +1081,32 @@ Closing the picker restores the message-window frame and then triggers a full
 roster redraw, which is what puts the six member rows, the food-and-gold line
 and the date line back on the panel.
 
+**The panel-overflow side effect is shared, but its trigger is not.** *(Published
+2026-09-12, issue #259.)* R-Ready runs the same picker routine and the same frame
+as `U`-Use, and the Z-stats inventory pages use the same frame and the same row
+renderer, so all of them can in principle run off the bottom of the panel and
+displace the message window (Section 4.4, Section 7.1). In practice they mostly
+cannot, because the condition is a name long enough to take a second display
+line, and the equipment, reagent and spell vocabularies contain none at any
+quantity width — three digits included (Section 4.5). Executed R-Ready pickers issued
+**no** strip scroll in any of six runs, at counter fills of one, of a three-digit
+value and of the no-quantity marker; the Z-stats equipment, reagent and spell
+pages issued none in any of twenty-seven runs, at those same three fills under
+three key patterns each. The one shared page that does is the Z-stats
+carried-items page, which draws from the same vocabulary the `U`-Use picker uses:
+with every counter at one it issues the identical scroll, with the identical
+requested rectangle and the identical panel cursor, and with every counter at the
+no-quantity marker it issues none. So an implementation must put the overflow in
+the shared renderer rather than in the `U`-Use command.
+
+Two limits on that negative. It is scoped to the four shipped vocabularies at the
+shipped panel width and to the printed quantity widths of Section 4.5; and one of
+the three key patterns drove Left/Right, which on a Z-stats list page do not page
+the list, so those runs measured a single render pass rather than a sweep
+(Section 4.7 and `OPEN-QUESTIONS.md`). A Z-stats carried-items page filled with
+three-digit counts is a renderer measurement rather than a reachable state,
+because the snapshot normalises the moon and plan entries (Section 4.5).
+
 ### 5.2 R-Ready result and refusal text
 
 Each ordinary voiced refusal below prints **two line feeds, the listed
@@ -1089,8 +1235,9 @@ selected row dispatches by the handler's use-item enumeration rather than by
 the forty-eight-entry equipment id space.
 
 The panel title is `Items:`. Sections 4.4 and 4.5 specify its seven visible
-rows, selection and scrolling, short regalia labels, and the uncounted
-`Moonstone ` plus runic phase-glyph row. The selected label remains drawn
+rows - which hold seven entries only when none of them wraps onto a second
+display line - its selection and paging, its short regalia labels, and the
+uncounted `Moonstone ` plus runic phase-glyph row. The selected label remains drawn
 under inversion; it is not replaced by a separate cursor-glyph string.
 
 In non-combat exploration, dispatching U-Use always commits one normal action.
@@ -1177,14 +1324,60 @@ at the retained column and row, below the displaced `Item:`. Each such
 scroll can increase the visible gap; there is no fixed one- or two-row rule.
 A prompt near the top can scroll out of view entirely.
 
-Long counted picker labels can wrap and use additional panel rows. Whether
-a page overflows depends on the visible entries, their quantities and the
-page reached by navigation. Redrawing an overflowing page can repeat the
-message shift, even when navigation stays on the same selected item.
-Changing only the initial message row does not isolate that cause. The
-frame-restoration helpers themselves still do not reposition the message
-cursor. See `systems/display-driver-abi.md` Section 9.5 and
-`systems/text-output.md` Section 10.5 for the driver behavior.
+**How many scrolls a keypress costs.** *(Published 2026-09-12, issue #259;
+this is the counting rule the section previously left to inference.)* The picker
+never scrolls the panel to move its list — it repaints the list into the same
+rectangle on every pass (Section 4.4). A pass displaces the message strip only as
+a side effect of running off the bottom of the panel, and the condition is exact:
+
+> **One re-render costs one strip scroll if and only if the entry that begins on
+> window row 7 takes two display lines. Otherwise it costs none.**
+
+Four things follow, and each of them refutes a plausible wrong model:
+
+- **Merely having a wrapping entry on the page is not enough.** An inventory
+  whose second entry wraps costs nothing on any press, and so does a page that
+  ends with a wrapping entry that began a row higher.
+- **A single re-render can never cost two.** The loop stops the moment the cursor
+  is clamped back onto the window's bottom row.
+- **The initial draw costs zero or one**, each navigation key costs zero or one,
+  and an unrecognised key costs zero or one by the same rule, because it
+  re-renders too (Section 4.4).
+- **Acceptance costs zero.** It runs no further render pass, and the post-picker
+  ornament and roster redraws issued no strip scroll in any executed case.
+
+Measured cost per keypress, one member in the party, with the message window at
+its ordinary rows. The visible gap at any moment is the running sum of these:
+
+| Picker contents | Cost by keypress |
+|---|---|
+| Keys only | Zero at every press, and zero on the initial draw. |
+| A stock special-items inventory | Nothing for the first nine Downs, then one each on the tenth, twelfth and fourteenth. |
+| A full thirty-eight-entry stock | Nothing for the first twenty-five Downs, then one each on the twenty-sixth, twenty-eighth and thirtieth. |
+| Keys, the three regalia and three **counted** shards | One on the initial draw, and one on every Down except the fourth. |
+| An inventory whose only wrapping row is a three-digit-count Black Badge sitting last | One on the initial draw and one on **every** press. |
+| An inventory whose only wrapping row is not last | Zero at every press. |
+
+Up presses from the first item cost nothing in every inventory whose first page
+does not overflow, and one each in the one that does — an Up that cannot move is
+still a re-render.
+
+**Acceptance is not the end of the gap.** Acceptance itself costs no re-render
+and no panel scroll, but the accepted item's completion and result text is then
+printed into the message window, and that text can overflow the message window
+and issue the identical left-edge scroll on its own account. That was observed in
+the executed runs. Cancellation does the same from inside the picker, since the
+picker prints its own refusal line before returning. So the distance between a
+prompt and its completion can still grow after the picker has closed, by ordinary
+message-window scrolling rather than by anything the panel did.
+
+Whether a page overflows depends on the visible entries, their quantities and the
+page reached by navigation (Section 4.5 lists the entries that can wrap, and how
+few of them an ordinary save can reach). Changing only the initial message row
+does not isolate that cause. The frame-restoration helpers themselves still do
+not reposition the message cursor. See `systems/display-driver-abi.md`
+Section 9.5 and `systems/text-output.md` Section 10.5 for what the strip copy
+moves and what the message window loses.
 
 The listed completion line feeds follow the family word. For Moonstones,
 "followed immediately" means consecutive text emission without an added
@@ -1193,26 +1386,56 @@ starting at column six prints the family word at the retained cursor;
 its trailing space causes a wrap to the next row at column zero, where
 the outcome starts. It need not occupy the visible `Item:` row.
 
-The earlier 52 cases verified descriptors and text calls with driver output
-hooked; they did not establish final screen alignment. A follow-up runs
-39 original picker/text and EGA-scroll cases with symbolic glyph markers,
-covering three inventories/input sequences across all thirteen message rows.
-The same selected Skull Key has zero, one or two displaced prompt rows,
-while its message cursor stays unchanged. Three separate original EGA
-copy checks establish the same screen shift for different requested
-rectangles sharing the left edge. These are controlled spatial probes,
-not a replay of the reporter's save or a complete DOSBox raster capture.
+**What the message window loses.** A strip scroll lifts the whole right-hand
+band from the message window's top row downward by one cell row. The top message
+row's pixels are lost outright — nothing preserves or restores them — each row
+below takes the row below it, and the bottom message row takes the gutter row
+beneath the window. Nothing in the text layer repaints any of it afterwards. The
+rows above the message window, the picker frame among them, never move, because
+the copied band always starts at the message window's top row. That is the whole
+of the "what absorbs the lift" question: nothing does.
+`systems/display-driver-abi.md` Section 9.5 gives the band and the gutter row.
 
-**Open capture reconciliation:** the follow-up report also observes zero,
-one and two rows, already at the picker wait. The mechanism above explains
-how this can occur, but the exact reported sequence still needs its stock
-counts and full picker panels before and after each navigation key, alongside
-message frames through acceptance. A standalone original-game save and exact
-inputs would permit a replay. Do not infer a particular inventory or scroll
-count from the decoded message rows alone. Source provenance: fresh private
-analysis in `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/ZSTATS_OVL/`,
-`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/EGA_DRV/` and
-`u5-decomp/notes/`.
+**Evidence and its limits.** The original 52 cases verified descriptors and text
+calls with driver output hooked; they did not establish final screen alignment. A
+2026-09-12 pass drove complete original `U`-Use commands — snapshot, frame,
+picker, key waits, post-picker ornaments and full roster — with the keyboard
+delivered through emulated firmware so the original scancode handling runs, every
+driver dispatch and every emitted character recorded, and the picker's own
+page-top, highlight-row and entries-shown loop variables read out at each key
+wait. Twelve integrated command runs across seven inventories and six key
+patterns, ten direct overflow cases against the character primitive, six frame
+builds at different row counts, forty-two runs of the shared picker in R-Ready
+and Z-stats form, and 1,562 single-row renders back the rule above; the full
+message descriptor was byte-identical across the picker in every accepting case,
+including every case that scrolled. *(Method note: an earlier follow-up's fixture
+labels named arrow keys that its harness did not in fact deliver — it fed raw
+codes past the extended-key handling, and the picker treated them as unrecognised
+input. Its scroll counts stand unchanged, because an unrecognised key re-renders
+exactly as an arrow key does; only the key names attached to those fixtures were
+wrong, and this document never carried them.)* The glyph blitter and several
+resident graphics helpers remain returns-only endpoints: their call arguments
+were censused and all lie above the message window, which bounds a repaint out
+from that direction, but no raster was captured.
+
+**Open capture reconciliation.** The follow-up report observes zero, one and two
+rows within a single run, already at the picker wait, and the rule above explains
+how: most re-renders cost nothing, so the history is not touched, and the gap
+grows only on the re-renders that overflow. What cannot be settled from this side
+is which inventory that run held. An attribution of those beats to a stock
+special-items inventory does not survive the counting rule: because the highlight
+parks on window row 4, the first four render passes of a command all show the same
+page and therefore all cost the same, so a within-command gap cannot climb from
+zero to one to two across beats whose press counts differ by only one or two.
+Either the press counts differ by more than three between those beats, or the
+inventories differ between them because items are consumed as the run proceeds;
+neither is in the report. Settling it needs, for each beat, the complete picker
+panel **and** the number of navigation presses. Do not infer a particular
+inventory or scroll count from the decoded message rows alone.
+
+Source provenance: fresh private analysis in `u5-decomp/functions/CAST_OVL/`,
+`u5-decomp/functions/ZSTATS_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`,
+`u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`; issue #259.
 
 Utility results follow those completions:
 

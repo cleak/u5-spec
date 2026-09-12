@@ -347,13 +347,18 @@ pixel comparison against the original will show.
 | left ribbon `x = 0..6` | not overpainted | `x = 0..6` |
 | bottom ribbon `y = 185..191` | not overpainted | `y = 185..191` |
 
-Text row 24 (`y = 192..199`) is left black by the phase-0 clear and is never
-painted again by any gameplay path. It is not outside the text grid, though: it
-is the last row of the full-screen window 0 that the chrome writers use
-(`text-output.md` section 10.1), and the intro's Return-to-View chapter caption
-is printed on that row through the same window. An earlier revision said it
-"belongs to no text window"; that is withdrawn in favour of the narrower and
-accurate statement that no gameplay path writes it.
+Text row 24 (`y = 192..199`) is left black by the phase-0 clear and no gameplay
+path emits text into it. It does not stay black, though: the message-strip scroll
+writes its right-hand cells, columns 24..39, with unblanked bytes fetched from
+beyond the visible raster every time it runs, and those bytes are what the
+message window's vacated bottom row inherits on the following scroll
+(`display-driver-abi.md` section 9.5, `text-output.md` section 10.1). The
+"never painted again" half of this paragraph is withdrawn (R484). It is not
+outside the text grid either: it is the last row of the full-screen window 0 that
+the chrome writers use (`text-output.md` section 10.1), and the intro's
+Return-to-View chapter caption is printed on that row through the same window. An
+earlier revision said it "belongs to no text window"; that is withdrawn in favour
+of the narrower and accurate statement that no gameplay path writes text there.
 
 #### Resulting zones
 
@@ -365,7 +370,7 @@ accurate statement that no gameplay path writes it.
 | Counters box | interior `(192, 64) - (311, 79)` | cols 24..38, rows 8..9 | food/gold and date rows (`stats-panel.md`) |
 | Lower divider band | `(192, 81) - (312, 86)` visible | row 10 | plain chrome |
 | Message window | `(192, 88) - (319, 191)` | cols 24..39, rows 11..23 | command echo, output, and the live input line (`text-output.md`) |
-| Bottom gutter | `(0, 192) - (319, 199)` | row 24 | always black |
+| Bottom gutter | `(0, 192) - (319, 199)` | row 24 | Black at frame paint; columns 0..23 stay black all session, while columns 24..39 are overwritten by every message-strip scroll with unblanked off-raster bytes (section 9.5 of `display-driver-abi.md`, R484) |
 
 The chrome ribbons carry three label gaps that other systems paint into: the
 sky strip in the top ribbon (`moons.md`), the wind banner in the bottom ribbon
@@ -448,11 +453,17 @@ must match:
   special case taken when the rectangle's left edge is the message window's
   left pixel column, which moves a 128-pixel-wide stripe up by exactly one
   8-pixel cell row, ignores the requested distance, and leaves the vacated band
-  unblanked. Because the resident text layer always presents that left edge,
-  text scrolls always take the fast path and always move one row. An earlier
-  revision said the entry "accepts only" the message window's left column and
-  never honours a row count; that is withdrawn. See `display-driver-abi.md`
-  section 9.5.
+  unblanked. The two right-hand gameplay text windows - the stats/inventory panel
+  and the message window - share that left pixel column, so an overflow in either
+  takes the fast path and moves one row, whichever of them is active. The two
+  full-screen windows do not start there (`text-output.md` section 10.1), and the
+  same driver entry is armed from three further sites besides the
+  emitter's overflow tail - a public scroll-the-active-window-by-N entry and a
+  general scroll-a-caller's-rectangle up/down pair - whose left edge is the
+  caller's, so "every text scroll takes the fast path" is not a property of the
+  entry. An earlier revision said the entry "accepts only" the message window's
+  left column and never honours a row count; that is withdrawn. See
+  `display-driver-abi.md` section 9.5.
 
 ## 8. Intro and Cutscene Effects
 

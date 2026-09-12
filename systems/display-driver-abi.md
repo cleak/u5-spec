@@ -522,10 +522,13 @@ hardwired and ignores both the rest of the rectangle and the distance argument:
 
 | Property | Value |
 |---|---|
-| Horizontal extent | Pixel columns 192 through 319 inclusive (a 128-pixel-wide right-side text panel, 16 character cells wide). |
-| Vertical extent | Pixel rows 88 through 199, advanced one row per inner iteration; iterations that reach beyond the visible 200 rows write to non-visible video memory and are harmless. |
+| Horizontal extent | Pixel columns 192 through 319 inclusive (a 128-pixel-wide right-side text panel, 16 character cells wide). The left three quarters of every scanline the path touches is neither read nor written. |
+| Vertical extent | **232 destination scanlines**, beginning at pixel row 88 — the first scanline of the message window's top cell row — and ending about 120 scanlines past the bottom of the visible 200-row raster. *(Corrected 2026-09-12, issue #259: this row previously gave the extent as "pixel rows 88 through 199". The visible consequence is unchanged, because every destination scanline past row 199 is off-screen, but the figure understated the band by more than half. The earlier row already said the loop runs past the visible rows; only the count is new, so no retraction applies.)* |
+| Per-scanline source | Each destination scanline takes the scanline **eight below it**, which is exactly one cell row up. |
 | Scroll distance | Exactly eight scanlines upward, hardcoded. The caller's distance argument is not read on this path. |
-| Exposed band | Not blanked. After the scroll, the bottom eight scanlines of the panel inherit whatever pixels happened to lie immediately below the panel before the scroll. A later draw may replace those pixels, but the scroll does not guarantee that the caller will repaint them. |
+| Arguments actually read | The left edge only, and only to select the path. The requested top, right and bottom edges are all ignored: a request naming the upper inventory panel's pixel rectangle and a request naming the message window's pixel rectangle differ in three of their four values and produce **byte-identical** rasters. |
+| Exposed band | Not blanked anywhere. Every destination scanline, the last visible one included, simply receives the scanline eight below it: the screen's bottom cell row therefore inherits bytes from beyond the visible raster, and the message window's own bottom row inherits that gutter row. A later draw may replace those pixels, but the scroll does not guarantee that the caller will repaint them. |
+| Beyond-raster writes | The whole written range lies above the last byte of the visible page and below the first byte of the driver's back buffer, which the driver's back-buffer setup places in a separate page of display memory (Section 9.4). The overrun therefore corrupts neither the visible image nor the back buffer. Earlier revisions called it "harmless" as an assumption; that word now has a checked basis. |
 | Caller responsibility | Callers that need a clear bottom row must request a fill or a fresh glyph draw for those scanlines after the scroll completes. |
 
 The fixed strip includes the gameplay message window at screen columns
@@ -535,16 +538,87 @@ identity or vertical bounds. An upper inventory-panel overflow also has
 left edge 192 and therefore moves this same message strip. The text layer
 clamps only the active panel cursor; the message cursor is unchanged.
 
+**What the copy does, cell row by cell row.** *(Published 2026-09-12, issue
+#259; this is the companion statement the section previously lacked.)* Because
+the band always begins at the message window's top cell row, a caller cannot
+move its own pixels unless it is the message window: a panel overflow displaces
+the message window and leaves the panel that requested it exactly where it was,
+and a message-window overflow likewise cannot move the panel. That is why a
+picker frame stays put across a scroll its own output caused.
+
+| Screen cell rows | What the fast path does to them |
+|---|---|
+| 0 through 10 — the stats/inventory panel, the two divider bands and the chrome above the message window | Untouched. No scanline of them is read or written. |
+| 11 — the message window's top row | **Its pixels are lost outright.** They are overwritten by row 12's, and nothing in the driver or the text layer preserves, saves or restores them. |
+| 12 through 22 | Each takes the row below it, so the visible history rises by exactly one cell row per scroll. |
+| 23 — the message window's bottom row | Takes the pixels of screen row 24, the bottom gutter row, in columns 24..39. |
+| 24 — the bottom gutter row | Takes bytes fetched from **beyond the visible raster**, in columns 24..39, and the path does not blank them. |
+
+The consumer consequence is load-bearing and easy to get wrong. On a session's
+first strip scroll the gutter row is still the black the frame paint left there,
+so the message window's vacated bottom row comes up correctly blank; on every
+later scroll that row inherits whatever the previous scroll deposited in the
+gutter. An implementation that models the message window as a self-contained
+scroll region with a blanked bottom line matches the first scroll and diverges
+afterwards.
+
+**Nothing repaints the displaced band.** Over complete original `U`-Use
+commands — the panel frame draw, the picker, its key waits, the post-picker
+panel-ornament redraws and the full roster redraw — no character emitted while a
+window other than the message window was selected ever landed inside the message
+rectangle, and no dispatch into this driver after the picker returns names a
+pixel rectangle that overlaps it. The only writes into the message rectangle are
+message-window writes at that window's own retained cursor: the input indicator
+drawn and erased at each key wait, the cancellation line, and the completion text
+after acceptance. The "Caller responsibility" row above says what a caller *must*
+do to get a clean bottom row; it is not a claim that the shipped callers do it,
+and on this path they do not.
+
+**Which operations issue this scroll.** The dispatch entry is armed from four
+distinct places in the shipped program: the character emitter's bottom-edge
+overflow tail, a public "scroll the active window by N rows" entry in the text
+layer, and a general scroll-a-caller's-rectangle-up and scroll-it-down pair. An
+implementation that wires up only the text-overflow issuer is missing three
+callers of the same entry. Inside a `U`-Use command, however, only the first of
+them is reached:
+
+| Operation during `U`-Use | Issues a strip scroll? |
+|---|---|
+| The character emitter stepping the active window's cursor past that window's own bottom row | **Yes** — this is the only issuer reached on the command path. During the picker the active window is the upper inventory panel, whose cell rectangle converts to a pixel rectangle with left edge 192, so this path is taken. |
+| Drawing the picker's ornamental frame | No. Each border row writes fifteen glyphs into panel columns 0 through 14 and leaves the cursor on column 15, one column short of a wrap. |
+| Moving the highlight, advancing the page, or any other navigation key | Only through the emitter above. Navigation re-renders the list, and a re-render scrolls only under the rule in `inventory.md` Section 7.1; most re-renders scroll nothing. |
+| Accepting a row | No. Acceptance runs no further render pass. |
+| The post-picker panel-ornament redraws and the full roster redraw | No strip scroll was issued by either in any executed case. |
+| Printing the accepted item's completion and result text into the message window afterwards | **Yes, when that text overflows the message window.** That is an ordinary message-window overflow with the same left edge and the same fixed body, and it occurs inside a completed `U`-Use command. |
+
 The earlier blanket wording that every text scroll uses the fixed path,
 and that the caller immediately masks the exposed band, is withdrawn (R469).
 Other left edges still use the general path. A compatible rendering contract
 must retain the left-edge selection rule, including its panel-to-message
 side effect; recognizing only a designated message-window object misses it.
-See `inventory.md` Section 7.1 for the resulting variable prompt gap.
+See `inventory.md` Section 7.1 for the resulting variable prompt gap and for
+the rule that decides when a picker re-render overflows.
 
-Source provenance: fresh original picker/emitter traces and three actual EGA
-copy checks with different requested rectangles in
-`u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`, issue #259.
+**Scope of this pass.** Everything above about the fast path was established by
+executing the original copy body over labelled synthetic video memory and by
+re-observing the same lift inside complete original `U`-Use commands. The
+**general path** was read rather than executed — it needs driver initialisation
+state a bare harness cannot supply — so its signed-distance walk, its blanking of
+the vacated band and its hidden-surface body remain static readings, and only its
+path selection is executed (`OPEN-QUESTIONS.md`). The glyph blitter and several
+resident graphics helpers are returns-only endpoints in that harness; their call
+arguments were censused and every one that reads as a vertical coordinate lies
+above the message window's first scanline, which bounds a repaint out from that
+direction without executing their bodies. What the beyond-raster region holds
+after the mode set is also unestablished, which is the one step between "the
+gutter row is not blanked" and "the vacated message row shows residue".
+
+Source provenance: fresh original driver-body execution over labelled video
+memory, integrated original `U`-Use command runs with every driver dispatch and
+every emitted character recorded, and a static census of the sites that arm this
+entry, in `u5-decomp/functions/EGA_DRV/`, `u5-decomp/functions/ULTIMA_EXE/`,
+`u5-decomp/functions/ZSTATS_OVL/`, `u5-decomp/functions/CAST_OVL/` and
+`u5-decomp/notes/`; issue #259.
 
 ### 9.6 Rectangle Dissolve Visit Order
 
