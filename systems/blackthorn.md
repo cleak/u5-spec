@@ -270,8 +270,31 @@ The visible sequence is:
 1. Build and print the failure reaction text.
 2. Play the failed-demand cutscene beat.
 3. Move one of the two guards and the victim through the audience scene.
-4. Print the static punishment fragments around the named victim.
-5. Wait for player acknowledgement before returning to the caller branch.
+4. Apply the roster change - erase the victim's on-screen actor, lift the
+   record, decrement the party count - and repaint the stats panel
+   **immediately afterwards**.
+5. Print the static punishment fragments around the named victim.
+6. Wait for player acknowledgement before returning to the caller branch.
+
+**The roster edit and its repaint both precede the held page.** The panel is
+repainted as the step immediately after the party count is decremented, and the
+acknowledgement wait of step 6 comes after that repaint and gates nothing; no
+key wait anywhere in this routine suppresses a refresh. What makes the roster
+look frozen is step order alone: for the whole reaction page and the two-phase
+blade animation, nothing has been removed yet, so the panel correctly still
+lists the full party. On the wrong-answer branch the victim therefore leaves
+the panel **between** the pendulum-narration page and the page that names them,
+and it is that later page which waits for the key. An implementation that
+defers the durable roster edit to the acknowledgement matches the held frames
+but lands the drop on the wrong page, and moves a durable gameplay change for a
+presentation reason; the edit belongs after the narration and animation and
+before the acknowledgement, and the refresh needs no deferral at all. The
+correct-answer branch's punishment has no key wait of its own. Wrong answers
+past the first advance the clock and then repaint unconditionally with the
+roster intact; the fourth wrong answer is the one that runs the punishment, and
+its key wait, too, comes after that punishment's repaint. The lone-survivor arms
+execute nobody and repaint nothing.
+`systems/stats-panel.md` Section 2.4.
 
 **The punishment is an execution, and it is durable.** Earlier revisions of this
 section described only "a punishment animation" and "a dragged-away victim" and

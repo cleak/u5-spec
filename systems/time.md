@@ -186,7 +186,9 @@ plays the standard damage feedback — a brief highlight of the affected member'
 roster row and a short noise burst — subtracts the amount from that member's
 current hit points, and, if the result is zero or below, stores zero, sets that
 member's status to Dead, and clears the active-member selector when the selector
-pointed at that member. It then marks the stats panel for repaint. A poisoned,
+pointed at that member. It then repaints the stats panel immediately, as its
+last act, rather than filing a deferred refresh request
+(`systems/stats-panel.md` Section 2.2). A poisoned,
 starving member can therefore be killed by either effect in the same pass, and
 no separate "death check" step is needed anywhere else in the pass.
 
@@ -199,7 +201,11 @@ success that member gains exactly 1 current hit point, capped at maximum hit
 points. Like the poison tick, this is per invocation, not per hour: a wearer
 gets one roll per turn-consuming action, one roll per ten-minute town-bed rest
 step, and one roll per five-minute wilderness camp step, the last of these
-issued directly by the camp loop rather than through this pass.
+issued directly by the camp loop rather than through this pass. Unlike the
+damage path above, the ring's gain **files a deferred panel refresh request**
+instead of repainting, so a regenerated hit point appears as the next command
+prompt comes up rather than during the pass (`systems/stats-panel.md`
+Sections 2.2 and 2.3).
 
 *Worked consequence.* A poisoned member walking through town loses one hit point
 per turn, so poison is a strong pressure on movement rather than a slow hourly
@@ -259,6 +265,15 @@ minute advancement while Negate Time is active.
 When the day rolls over (the hour-to-day path in Section 5), the cleanup routine
 runs the midnight Shadowlord-location maintenance before the normal end-of-pass
 daylight recompute and before any month rollover side effects.
+
+**The day rollover also repaints the stats panel, and it is the only
+time-driven refresh in the game.** A pass that advances no time, one that leaves
+the minute count short of an hour, and one that leaves the hour short of a day
+all bypass the repaint; the day-in-range, month-roll and year-roll arms all
+converge on it, so it fires exactly once per in-game day boundary. Because every
+mode loop gates its own call to this routine, it is a backstop only where and
+when the clock is actually called, and a party that stops taking turns never
+reaches it (`systems/stats-panel.md` Section 2.4).
 
 **Shadowlord hideout maintenance.** Three persistent one-byte slots track the
 current hideout for Faulinei, Astaroth, and Nosfentor. A living slot holds a

@@ -347,11 +347,14 @@ When the wait-for-input routine has no key to consume and the prompt-character b
 The internals of the tick belong in a separate spec. From the input system's perspective, the contract is simple:
 
 - The tick is invoked exactly once per failed keyboard peek, *only* when the prompt-character byte is non-printable (Section 2).
-- The tick can take long enough to be perceptible — a full viewport rebuild,
-  active-object animation frames, or a first-frame panel repaint — and the
-  input system trusts it to return promptly enough that the cursor blink
-  remains responsive.
-- The wait-for-input routine, on entry, also sets a one-shot "first-tick after mode entry" hint when it detects entry to town mode; the world tick uses this to do a fuller initial re-paint. The hint write is the only piece of world-tick state the input system touches directly.
+- The tick can take long enough to be perceptible — a full viewport rebuild or
+  active-object animation frames — and the input system trusts it to return
+  promptly enough that the cursor blink remains responsive.
+- The wait-for-input routine, on entry, also sets a one-shot "first-tick after mode entry" hint when it detects entry to town mode; the world tick's tail reads that hint to decide whether to run the ambient-audio tick, and normalises it afterwards. The hint write is the only piece of world-tick state the input system touches directly.
+
+> **Corrected 2026-09-12 (R488).** The bullet above previously said the world tick uses that hint "to do a fuller initial re-paint", and the bullet before it listed "a first-frame panel repaint" among what the tick can take long enough to do. Both are withdrawn: no world-tick path repaints the stats panel (`systems/stats-panel.md` Section 2.2, `systems/main-loop.md` Section 9).
+
+Separately from the tick, this same routine is where the overworld and town loops **consume** the stats-panel refresh request. On the full-prompt arm, after the world-tick call and before the prompt newline and the key read, it tests the request, repaints the whole stats panel if it is set, and clears it; the quick-poll arm does not test it and leaves any request pending. `systems/stats-panel.md` Section 2.3 has all four mode consumers.
 
 A modern implementation can time-slice (cap the tick to one per render frame, or once every fixed number of milliseconds) without losing fidelity — the game does not depend on precise wall-clock pacing of the idle redraw ticks, and the game clock is advanced only by the per-turn cleanup that the mode loops call, never by the idle tick. Do not read that as "the clock advances only on a consumed turn": the overworld, town, and combat loops gate their cleanup call on a consumed turn, but the dungeon loop's call is ungated and costs a minute every iteration (`systems/main-loop.md` Section 6, `systems/dungeon-mode.md` Section 15). An earlier revision of this paragraph said the clock is advanced only by committed-turn cleanup; that framing is withdrawn.
 

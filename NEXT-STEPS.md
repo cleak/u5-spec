@@ -1,5 +1,50 @@
 # Next Steps for u5-spec
 
+## Issue #267 - the panel refresh cadence (2026-09-12 UTC)
+
+The missing contract is published: `systems/stats-panel.md` Sections 2.2 to 2.4.
+Two mechanisms, chosen per call site - an immediate full repaint by the routine
+that changed the state, or a one-byte refresh request drained at the head of the
+next command prompt. Four consumers, one per mode loop, each testing, repainting
+and clearing in that order; combat drains per acting character on the first
+keystroke, town only on its full-prompt arm, and nothing else in the program ever
+clears the request, so it survives a change of scene. The only time-driven
+refresh is one repaint per in-game day boundary inside the shared clock, and it
+is a backstop only where that clock is actually called.
+
+All three reported cases are answered without deferring a gameplay change, and
+the two Blackthorn deferrals the reporter added should be removed: the panel is
+repainted immediately after the roster edit, and the held roster is produced by
+the routine's own step order. The wishing well never refreshes at all, so the
+published coin ordering in `view.md` Section 3 stands.
+
+Two withdrawals, R488 and R489, matter more than the new text for an engine that
+has already been built: the world tick's first-tick full-panel repaint does not
+exist (it gates an ambient-audio tick), and the four consumers are not uniformly
+"once per turn at the top of the loop". An engine repainting the panel every
+frame implements exactly the withdrawn premise.
+
+Next work on this thread, in priority order:
+
+1. Settle the dungeon loop's gate on the shared clock (`OPEN-QUESTIONS.md`
+   section 3). `main-loop.md` Section 6 and the call site read for this pass
+   disagree, and nothing should assert either way until it is executed.
+2. Measure the double repaint a request pending across a scene change should
+   cause; it is currently reasoned from the census.
+3. Exercise the shrine's mantra-mismatch and quest-blessing arms, which this pass
+   stubbed past.
+4. Close the weaker display-driver form of the "no other route to the refresh"
+   negative, or leave it worded as it now is.
+
+Changed: `systems/stats-panel.md` Sections 2.2, 2.3, 2.4, 10, 12 and 13;
+`systems/view.md` Section 3; `systems/blackthorn.md` Section 5;
+`systems/karma.md` Section 7; `systems/main-loop.md` Sections 6, 8 and 9;
+`systems/input.md` Section 12; `systems/town-mode.md` Section 7;
+`systems/dungeon-mode.md` Section 4; `systems/combat.md` Sections 7 and 8;
+`systems/commands.md` Section 13; `systems/time.md` Sections 5 and 7;
+`systems/animation.md` Section 13.4; `RETRACTIONS.md` R488-R489;
+`OPEN-QUESTIONS.md` section 3.
+
 ## Issue #266 - the two ASK-WHO acknowledgements (2026-09-12 UTC)
 
 `conversation.md` Section 7.6 now carries a "What ASK-WHO prints" subsection

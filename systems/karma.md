@@ -426,7 +426,7 @@ keep the chooser open without repeating its question.
 | `0` | After echoing the digit, append ` gp\n` and end the interaction without payment or the ten-tick result pause. |
 | `1` through `9` | After echoing the digit, append `00 gp\n\n`, so the displayed amount is in gold pieces. Check affordability after this echo. |
 | Insufficient gold | Print record `35`, the insufficient-gold response, then repeat record `34` and the single-digit chooser. No payment or standing increase occurs. |
-| Affordable nonzero offering | Deduct the displayed gold amount, refresh the stats display and award the digit's standing increase. Print `ALAKAZAM` using the runic font, restore the normal font and append `!\n`. Play the local viewport/sound effect and finish with ten world ticks. |
+| Affordable nonzero offering | Deduct the displayed gold amount, refresh the stats display - an immediate full-panel repaint a step after the debit, not a deferred request, and before any of the text below is printed (`systems/stats-panel.md` Section 2.4) - and award the digit's standing increase. Print `ALAKAZAM` using the runic font, restore the normal font and append `!\n`. Play the local viewport/sound effect and finish with ten world ticks. |
 
 Source provenance for editing, completion and offerings: fresh original
 shrine-handler, shared editor and resource-selection traces under

@@ -797,8 +797,9 @@ The visible consumed-object rules are:
   current-status gate, damage roll, HP change, or active-member change. Normal
   selection supplies an in-party member; an imported status admitted by the
   active-member override is overwritten with Poisoned as well. The repaint is
-  deferred to the enclosing mode's next refresh boundary rather than called
-  inside the Plague branch. Literal forced invocation with an in-range Dead or
+  deferred to the enclosing mode loop's next command prompt, where that loop
+  drains the shared refresh request (`systems/stats-panel.md` Section 2.3),
+  rather than called inside the Plague branch. Literal forced invocation with an in-range Dead or
   Sleeping slot would also overwrite it; an out-of-range slot is a memory-unsafe
   call edge because this helper performs no local bound check. Neither case is
   reachable through normal Search selection.
