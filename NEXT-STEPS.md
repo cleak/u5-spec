@@ -1,5 +1,57 @@
 # Next Steps for u5-spec
 
+## Issue #266 - the two ASK-WHO acknowledgements (2026-09-12 UTC)
+
+`conversation.md` Section 7.6 now carries a "What ASK-WHO prints" subsection
+with the whole exchange as a character sequence, which is what the reporter
+needed and what Section 7 had never published. The affirmative is two line
+feeds, an opening double quote and `A pleasure!`; the dismissive is two line
+feeds, an opening double quote and `If you say so...`. **Neither closes its
+quote and neither ends in a line feed** - each stops on its last visible
+character - and the blank row above each one is the literal's own first feed
+closing the answer row the typed line left the cursor on. The blank row *below*
+is the stream's, and is not always there: the stream carries two feeds at
+thirty-four of the forty-eight shipped sites, one feed and a stop code at three,
+and nothing at all at the eleven where the record ends on the control byte.
+
+Two withdrawals. **R486:** the match is not against a *live* party member - the
+scan reads only the name field, so a dead, poisoned, sleeping or charmed member
+matches and sets the bit exactly as a healthy one does; the bound is the
+party-count byte alone. The same wording was corrected in `quest-flags.md`,
+`formats/tlk.md` and `karma.md`. **R487:** the prompt is not a four-row literal
+(the quoted question wraps), and the stream does not supply the quotes - the
+handler emits the opening quote itself, each acknowledgement carries its own,
+the stream's quote after the control byte is swallowed by the runner's
+duplicate-quote rule at thirty-seven of forty-eight sites, and a closing quote
+precedes the control byte at only eleven.
+
+Also newly published: the empty-input arm and the no-match arm are two separate
+stored copies of the same text, so an implementation must not route empty input
+into the scan; an empty line at the name prompt is **not** the Bye shortcut,
+which belongs to the keyword prompt alone, though both prompts share one input
+path and one fifteen-character buffer; the match tests only the *first*
+occurrence of a member's needle in the typed line; short roster names contribute
+only their own characters; one condition drives both the flag write and the
+affirmative, with no second path to either; and a slot index of thirty-two or
+more builds a zero mask rather than wrapping, which confirms the recommendation
+`quest-flags.md` Section 7 already made. The published adjacency figure of nine
+is kept and disambiguated: nine occurrences are guarded by an IF-ELSE carrying
+the reserved argument, twenty by an IF-ELSE of any argument.
+
+Changed: `systems/conversation.md` Sections 6, 7.6, 10 and 12;
+`systems/quest-flags.md` Sections 3, 6 and 7; `systems/karma.md` Section 4.1;
+`formats/tlk.md` Section 9.
+
+Forty-five executed input cases over the original handler and the surrounding
+stream runner, the stored text read back from the shipped data file, and a
+census of all forty-eight shipped occurrences in the four dialogue files, whose
+blob and IF-ELSE counts were re-measured independently and reproduce. One trace
+item (whether the reserved-keyword scan accepts a reserved word that begins a
+later typed word) and one extended capture item (the row splits are the
+word-break rule applied to an executed character sequence, not a renderer
+measurement) are recorded in `OPEN-QUESTIONS.md`. No engine or QA files were
+read; the issue text was the only engine-side input.
+
 ## Issue #259 second follow-up - what issues the strip scroll (2026-09-12 UTC)
 
 R484 and R485 withdraw two negatives that a consumer would otherwise build on:

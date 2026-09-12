@@ -253,9 +253,9 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 
 2. **Read a line of free-text input.** The free-text input pipeline (described in `input.md`) accepts up to fifteen characters with backspace handling. The line is stored uppercased in a small buffer. Function keys, direction codes, and other non-printable bytes are silently discarded; Enter terminates the line.
 
-3. **Empty-input shortcut.** If the player pressed Enter on an empty line, the engine prints `BYE\n\n`, runs the NPC's `Bye` entry through the byte runner, and returns to the caller. This is the most common way conversations end.
+3. **Empty-input shortcut.** If the player pressed Enter on an empty line, the engine prints `BYE\n\n`, runs the NPC's `Bye` entry through the byte runner, and returns to the caller. This is the most common way conversations end. **The shortcut belongs to this prompt alone.** The ASK-WHO name prompt of Section 7.6 applies its own empty test to the same shared buffer and never reaches the farewell path: an empty line there prints the dismissive acknowledgement and returns to the stream, exactly as a non-matching word does. *(Settled 2026-09-12, issue #266.)*
 
-4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, table keywords are compared by their NUL-terminated length, and a match accepts either exact end-of-input or a literal space immediately after the reserved word. `NAME` runs the Name entry with the fixed `My name is ` prefix and framing specified below, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below.
+4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, table keywords are compared by their NUL-terminated length, and a match accepts either exact end-of-input or a literal space immediately after the reserved word. `NAME` runs the Name entry with the fixed `My name is ` prefix and framing specified below, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below. *(Open, 2026-09-12: a reading taken during the issue #266 pass suggests this scan reaches the same substring search and word-start acceptance that Section 7.6's ASK-WHO match uses, which would also accept a reserved word beginning a later typed word rather than only the first. That reading was not measured and nothing here is changed on it; see `OPEN-QUESTIONS.md`.)*
 
 5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword is compared against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
 
@@ -460,7 +460,7 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 | 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes, mask each to seven bits, interpret them as ASCII decimal digits, and run the gold-payment routine against that three-digit amount. Used for tolls, bribes, and donations. |
 | 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
 | 0x87  | KEYWORD-ALIAS   | none                    | Save the current stream position; skip forward past the remainder of the current record, past any run of terminators, and past the whole record that follows; run the record after that as a nested stream. If the nested stream signals stop, the outer stream stops too; otherwise the saved position is restored and the outer stream continues where it left off. No keyword matching, no player input, no flag write. |
-| 0x88  | ASK-WHO         | none                    | Prompt the player for a name and read a typed line. The prompt is the engine's own four-row literal - a quoted `"What is thy name?"` line, a blank row, `You respond-`, and a `:` input row - the code consumes no text from the stream, and the stream around it carries only the closing and opening quotes (*added 2026-09-06, issue #198*). On a match against a live party member, **set the active scene's branch-flag bit for the NPC currently speaking** and print the affirmative acknowledgement; on empty input or no match, print the dismissive one. This is the in-stream setter for the bank that `0x8C` tests. |
+| 0x88  | ASK-WHO         | none                    | Prompt the player for a name and read a typed line. Every visible byte of the exchange is the engine's own stored text; the code consumes no text from the stream. In order: an opening double quote the handler emits itself, the question `What is thy name?` with its own closing quote, a blank row, `You respond-`, and a `:` row that the typed answer echoes onto. On a match against a roster slot within the current party count, **set the active scene's branch-flag bit for the NPC currently speaking** and print the affirmative acknowledgement; on empty input, and again on a completed scan that matched nothing, print the dismissive one. Section 7.6 "What ASK-WHO prints" gives both acknowledgements, their leading feeds, their missing closing quote, and which quotes the stream supplies. This is the in-stream setter for the bank that `0x8C` tests. *(Corrected 2026-09-12, issue #266: the earlier "four-row literal" count, the claim that "the stream around it carries only the closing and opening quotes", and the qualifier "live party member" are withdrawn - R486 and R487.)* |
 | 0x8C  | IF-ELSE         | one                     | Collect one argument byte, which is the **branch target label**, then test the active scene's branch-flag bit for the NPC currently speaking. If the bit is clear, fall through in-stream with the byte after the argument. If it is set, transfer to the labelled record named by the argument — or, for the reserved argument `0xFF`, end the response and return to the keyword prompt. The tested bit is chosen by the engine, never by the script. |
 | 0xFE  | IF-ELSE-ALT     | two                     | Multi-byte alternative branch form. Collects a moral-standing threshold byte and a target-label byte; if the shared moral-standing selector is at or above the threshold, the runner branches to the target label. |
 
@@ -498,7 +498,8 @@ bit index is always supplied by the engine — it is the slot of the NPC current
 being spoken to — so a script can neither choose nor forge it.
 
 - `0x88` **sets** the current NPC's bit, but only after the player types a line
-  that names a live party member.
+  that names a member occupying a roster slot below the current party count.
+  Member status is never consulted.
 - `0x8C` **tests** the current NPC's bit and branches on it.
 
 The bank has one further reader outside the script language: the conversation
@@ -508,21 +509,57 @@ step 3. An implementation must therefore treat the bit as engine-visible state,
 not as a private script variable.
 
 The `0x88` match rule is worth stating exactly, because it is looser than the
-top-level keyword match. For each active party slot in order, the engine takes
-the **first four characters** of that member's name and searches for them as a
-substring of the typed line. A hit counts only at the start of the line or
-immediately after a literal space; a hit in the middle of a longer word is
-rejected and the scan continues with the next member. The first accepted hit ends
-the scan, sets the bit, and prints the affirmative line. Empty input is its own
-early exit and never sets the bit.
+top-level keyword match. For each party slot below the current party-count byte,
+in order, the engine takes the **first four characters** of that member's name
+and searches for them as a substring of the typed line, folding case on both
+sides. Only the **first** occurrence found is tested. It is accepted at the start
+of the line or immediately after a literal space; when it is rejected - a hit in
+the middle of a longer word - the engine abandons that member and moves on to the
+next slot rather than looking for a later, qualifying occurrence of the same name
+in the same line. A typed line whose first hit is mid-word therefore fails even
+when a clean hit follows it later in the line. The first accepted hit ends the
+scan, sets the bit, and prints the affirmative line. Empty input is its own early
+exit and never sets the bit; a line containing only a space is *not* empty, runs
+the scan normally, and ends on the no-match arm.
+
+Four characters is a cap, not a requirement. A roster name shorter than four
+characters contributes only its own characters, so a two-character name matches
+any word beginning with those two letters and a one-character name matches any
+word beginning with that letter, while a zero-length name never matches at all.
+Party member names are typed by the player at character creation, so short names
+are reachable content, not a theoretical edge.
+
+The party-count byte is the only bound on the scan, and it is re-read on every
+iteration: a roster record sitting past the count is invisible, and a count of
+zero examines no slot at all, so every non-empty line takes the no-match arm.
+**Member status is never read.** The walk touches only the name field, so a dead,
+poisoned, sleeping or charmed member matches exactly as a healthy one does.
+Earlier revisions of this section said the match was against a *live* party
+member; that qualifier is withdrawn (R486).
+
+One condition drives both effects, and there is no second path to either. When a
+slot matches, the engine sets the speaking NPC's bit and prints the affirmative,
+in that order, with no status test, no scene test and no test of the bit's
+previous value in between. On empty input and on a completed scan that matched
+nothing, no bit is written anywhere. The bit set is the one selected by the
+speaking NPC's roster slot, in the current scene's word only, and no other
+scene's word changes. Slots zero through thirty-one are reachable; at slot index
+thirty-two - the first value out of range, and the only out-of-range value
+exercised - the mask built is zero, so nothing is written and nothing wraps onto
+bit zero (`systems/quest-flags.md` section 3).
 
 The shipped idiom guards the `0x88` with an IF-ELSE carrying the reserved `0xFF`
 argument, usually in the NPC's Name or Greeting entry: if the NPC already knows
 the party, the `0x8C 0xFF` ends the entry and drops straight to the keyword
 prompt; if not, execution falls through to the `0x88` prompt, which asks and then
 remembers. Forty-six of the one hundred thirty-five shipped blobs contain an
-ASK-WHO, and forty-three of those also contain an IF-ELSE; nine use the two codes
-directly adjacent.
+ASK-WHO, and forty-three of those also contain an IF-ELSE. Of the forty-eight
+ASK-WHO occurrences, **twenty** are immediately preceded by an IF-ELSE and its
+argument byte, and in **nine** of those twenty the argument is the reserved
+`0xFF` - the guard form described here. No shipped occurrence carries the two
+codes in the opposite order. *(The figure of nine was previously published
+without saying that it counts only the reserved-argument form; both counts are
+now given.)*
 
 A second, richer shipped form uses **two** IF-ELSE tests around one ASK-WHO to
 make a one-time reward. Reached by a GOTO from a keyword response, the routing
@@ -552,6 +589,94 @@ the band it occupies.
 Consequently a clean implementation must not model `0x8C`'s argument as a flag
 id, and must not conclude that the bank has no setter. Both errors were present
 in earlier public answers and are withdrawn.
+
+#### What ASK-WHO prints (`0x88`)
+
+*(Added 2026-09-12, issue #266. Both acknowledgements are now established byte
+for byte; neither was published before.)*
+
+The question, the lead-in and both acknowledgements are stored engine text. One
+ASK-WHO produces, in order:
+
+1. **An opening double quote emitted by the handler itself**, before any other
+   output, through the same path ordinary stream text takes.
+2. **The question**: the words `What is thy name?`, a closing double quote, and
+   one line feed. The stored text carries no opening quote of its own - step 1
+   supplies it.
+3. **The lead-in**: one line feed, the words `You respond-`, a second line feed,
+   and a colon.
+4. **The player's typed line**, echoed after the colon by the free-text input
+   routine as the characters arrive. Nothing is emitted for the Enter that ends
+   the line, so the cursor is still on the answer row when the handler resumes.
+5. **One acknowledgement**, selected by the arm the handler took:
+
+   | Arm | Stored text |
+   |---|---|
+   | A roster slot below the party count matched the typed line | two line feeds, an opening double quote, then `A pleasure!` |
+   | The typed line was empty | two line feeds, an opening double quote, then `If you say so...` |
+   | The scan completed and matched nothing | the same three elements again, from a second stored copy |
+
+Three properties of the acknowledgements are load-bearing, and each is a
+property of the stored text rather than of how the rendering happens to look:
+
+- **Each acknowledgement begins with two line feeds of its own.** The first
+  closes the answer row the player's typing left the cursor on; the second makes
+  the blank row above the acknowledgement. That blank row belongs to the
+  acknowledgement, not to anything around it.
+- **Neither acknowledgement closes its quote, and neither ends in a line feed.**
+  Each stops on its last visible character - the exclamation mark, or the third
+  full stop. An implementation that appends a closing quote, or a trailing feed,
+  diverges immediately.
+- **The blank row that follows is never the acknowledgement's.** It is made by
+  whatever the stream carries next, and at the shipped sites that is two line
+  feeds at thirty-four of the forty-eight occurrences, one line feed followed by
+  a stream-stop code at three, and nothing at all at the eleven where the record
+  ends on the ASK-WHO byte itself. An implementation must emit no trailing feed
+  of its own and let the stream supply what follows, or it will add a blank row
+  at fourteen of the forty-eight sites.
+
+The empty-input arm and the no-match arm print the **same text from two separate
+stored copies**: the empty test is an early exit taken before the scan begins,
+and the no-match text is reached by falling out of the completed scan. The
+rendering is identical, so one dismissive line reproduces both; the two arms
+matter because an implementation must not route empty input into the scan, where
+a zero party count or a zero-length roster name could behave differently.
+
+**Which quotes are the stream's.** The handler prints every quote the player
+sees: the one before the question at step 1, and the one inside whichever
+acknowledgement runs at step 5. The stream *does* carry a double quote
+immediately after the ASK-WHO byte at thirty-seven of the forty-eight shipped
+occurrences, but the player never sees it: the byte runner drops a quote whenever
+the last printable byte it recorded was already a quote (Section 7, and the
+renderer note in Section 9), and the handler's own opening quote leaves exactly
+that state behind, because the stored-text path used for the question and the
+acknowledgements does not update that record. Removing the single ASK-WHO byte
+from a shipped record makes the swallowed quote appear as a stray lone row -
+which is precisely the symptom an implementation shows if it emits neither the
+handler's opening quote nor the duplicate-quote guard. Nor does the stream
+reliably carry a closing quote *before* the control byte: only eleven of the
+forty-eight occurrences are directly preceded by a quote and two line feeds, the
+rest being preceded by IF-ELSE guards, pauses, key-waits or label-record headers.
+The earlier statement that "the stream around it carries only the closing and
+opening quotes" is withdrawn on both halves (R487).
+
+**How many rows this is.** At the message window's width the quoted question
+wraps, so the prompt is not the fixed four rows an earlier revision claimed
+(R487): it is the opening quote and the first words of the question, then the
+remainder of the question with its closing quote, then a blank row, then
+`You respond-`, then the colon row. The row split follows the window's own
+word-break rule (Section 9) applied to the character sequence above. The
+sequence is the contract; the rows are what that rule makes of it.
+
+**Where the census stops.** The counts above walk each shipped blob linearly.
+The six occurrences whose control byte has no predecessor inside its own record
+were traced back to the records that jump to them, and thirty-one of the
+forty-eight were then executed from their record start: every one opened with
+the handler's own quote, and every one of those carrying a following quote had
+it suppressed. The shipped contract is therefore settled. Custom content that
+reached an ASK-WHO from a record ending on a quote would instead have the
+handler's own opening quote suppressed; exactly one shipped record of the four
+thousand-odd ends on a quote, and nothing jumps from it to an ASK-WHO.
 
 #### The gold-payment envelope (`0x85`)
 
@@ -912,7 +1037,7 @@ Talk entry newline has been emitted. Shop-specific clear, append, or side-panel
 behaviour is therefore owned by the selected shop flow, not by a separate
 conversation-to-shop window setup layer.
 
-**Free-text input.** The keyword prompt and the ASK-WHO name prompt use the free-text input variant described in `input.md`. (RECRUIT-SPEAKER reads no input and is not a prompt; see Section 7.6.) The engine clears the buffer-flush gate on entry to allow type-ahead and restores it on exit. The fifteen-character cap is the engine's invariant; the input pipeline itself does not know about it.
+**Free-text input.** The keyword prompt and the ASK-WHO name prompt use the free-text input variant described in `input.md`. (RECRUIT-SPEAKER reads no input and is not a prompt; see Section 7.6.) The engine clears the buffer-flush gate on entry to allow type-ahead and restores it on exit. The fifteen-character cap is the engine's invariant; the input pipeline itself does not know about it. **The two prompts share one input path and one fifteen-character line buffer**, so a name typed at the ASK-WHO prompt overwrites whatever the keyword prompt last held; only the empty-line test differs between them, and Section 6 step 3 gives the consequence. The reader echoes only ordinary printable characters and emits nothing for the Enter that ends the line, which is why the acknowledgement's own first feed is what closes the answer row. *(Added 2026-09-12, issue #266.)*
 
 **Single-keystroke input.** The PAUSE and WAIT-KEY codes use the single-keystroke "wait for the next command" routine — the same one that drives the per-mode loops — but in *prompt mode*, with the prompt-character byte set so that the world tick is suppressed. Time does not pass while the player is reading.
 
@@ -1039,6 +1164,22 @@ The behaviour described here was derived from the private function and format no
 - The corrected `.TLK` header contract of Section 3 — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, dialog index `1` as an ordinary NPC, and the withdrawal of the sentinel/alias reading — re-derived from the shipped `.TLK` and `.NPC` files against the header walk in `u5-decomp/functions/TALK_OVL/`, and cross-checked against the sprite-class description strings of `LOOK2.DAT`.
 - The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/`, with the published word list in `catalogs/common-word-dictionary.md`.
 - The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/` and `u5-decomp/functions/TALK_OVL/`.
+
+- **Issue #266, the ASK-WHO acknowledgement pass (2026-09-12).** Both
+  acknowledgement texts, the question and lead-in texts, their leading feeds and
+  absent closing quote, the two separate stored copies behind the empty-input and
+  no-match arms, the single match condition shared by the flag write and the
+  affirmative, the handler's own opening quote and the byte runner's suppression
+  of the stream's following quote, the name-match rule including short names and
+  first-occurrence-only acceptance, the irrelevance of member status, and the
+  party-count bound - established by executing the original handler and the
+  surrounding stream runner over forty-five input cases, with the stored text
+  read back from the shipped data file and a census of all forty-eight shipped
+  occurrences across the four dialogue files. Derived from private analysis in
+  `u5-decomp/notes/`, `u5-decomp/functions/TALK_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`. The row splits are the window's word-break
+  rule applied to an executed character sequence, not a measurement of the
+  renderer against real cursor state; see `OPEN-QUESTIONS.md`.
 
 - **Issue #262 follow-up, the conversation-entry pass (2026-09-12).** The entry
   sequence and its stored lead-ins, the dispatcher's leading line feed, the five

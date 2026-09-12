@@ -186,7 +186,9 @@ records, and the introduce-yourself branch decides which one runs:
 The routing block tests the durable per-NPC "has been told the party's name" bit
 first: if it is already set, control transfers straight to the plain record. If
 it is clear, the NPC prints a welcome, pauses, runs the name prompt (which sets
-the bit on a successful match against a live party member), and tests the bit
+the bit on a successful match against a member in a roster slot below the party
+count - status is not consulted; see `systems/conversation.md` Section 7.6 and
+R486), and tests the bit
 again — reaching the bonus record only if the prompt just succeeded, and
 otherwise falling through to the plain record. So the `+5` is a **one-time
 introduction reward**, needs an affordable payment on the same visit (an

@@ -55,9 +55,11 @@ The public contract is:
    into the active scene's slot. The tester builds the same mask and returns
    true when the bit is already set.
 4. **The setter is reachable from the byte runner.** The ASK-WHO control code
-   (`0x88`) calls it after the player types a line that names a live party
-   member. That is the only in-stream writer, and it is the only writer traced
-   anywhere.
+   (`0x88`) calls it after the player types a line naming a member in a roster
+   slot below the current party count; that member's status is never consulted.
+   That is the only in-stream writer, and it is the only writer traced
+   anywhere. *(Corrected 2026-09-12, issue #266: this step previously said "a
+   live party member", and the word was wrong - R486.)*
 5. The IF-ELSE control code (`0x8C`) calls the tester. Its argument byte is the
    **branch target label**, not a flag identifier: when the bit is clear the
    runner falls through in-stream, and when it is set the runner transfers to
@@ -211,7 +213,9 @@ own the flag stores. Runtime handling belongs here and in
 - `0x8C` tests the active scene's per-scene 32-bit branch slot at the speaking
   NPC's roster-slot bit, and uses its argument byte as the branch target label.
 - `0x88` (ASK-WHO) sets that same bit, for that same NPC, on a successful name
-  match. It is the bank's only setter.
+  match, and prints its affirmative acknowledgement under the same single
+  condition - there is no separate gate on either effect. It is the bank's only
+  setter.
 - `0xFE` is a separate karma-threshold branch; it compares the shared
   moral-standing selector to a threshold and jumps to a label when the
   comparison succeeds. `systems/karma.md` owns that selector.
@@ -230,7 +234,10 @@ branch argument as a save-backed quest bit.
 - Model the per-scene TALK flag bank as 32-bit slots indexed by NPC roster slot.
   The index is engine-supplied and cannot exceed thirty-one through normal
   content; if an implementation can produce an out-of-range index anyway, make
-  it build a zero mask so setters become no-ops and tests read as clear.
+  it build a zero mask so setters become no-ops and tests read as clear. This
+  recommendation is also what the original does: at a slot index of thirty-two
+  the mask it builds is zero, so nothing is written and nothing wraps onto bit
+  zero. *(Measured 2026-09-12, issue #266.)*
 - Keep ASK-WHO wired to the setter. Removing it leaves a bank that is tested but
   never set, which silently breaks every "have we met" branch in the shipped
   dialogue.
