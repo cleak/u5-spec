@@ -55,9 +55,18 @@ counted BIOS timer-tick delay. The helper temporarily installs a user-tick
 counter, waits until the requested number of ticks has elapsed, and restores the
 prior timer hook. A one-tick request is skipped entirely — no hook, no wait —
 when the boot calibration value reports a CPU **at or below** the original IBM
-PC measured baseline; any faster host performs the real one-tick wait. Earlier
-revisions of this section stated that direction backwards ("skipped on
-sufficiently fast machines"); that is retracted. Section 5.2 gives the gate and
+PC measured baseline. Earlier revisions of this section stated that direction
+backwards ("skipped on sufficiently fast machines"); that is retracted.
+
+**The threshold test is a signed comparison of the full calibration word.** A
+host above the baseline performs the real one-tick wait only while that word is
+positive; a calibration word with its high bit set compares as *below* the
+baseline and skips the wait exactly as a small value does. The earlier
+unqualified "any faster host performs the real one-tick wait" is withdrawn on
+that ground (R491), and an implementation that models the word as unsigned
+diverges on every value in the high half of the range. Which side of the
+threshold a real install lands on during gameplay is not established and is
+recorded in `OPEN-QUESTIONS.md`. Section 5.2 gives the gate and
 the calibration-override pattern that suppresses it. This wait is for visible pacing
 only; it is not the calendar, not an animation phase counter, and not a source
 of deterministic gameplay time.
@@ -209,8 +218,10 @@ hardware constant.
 The hardware-tick wait helper has a fast-path skip: when the boot calibration
 value indicates a CPU at or below the original IBM PC measured baseline, the
 helper short-circuits and returns immediately without installing the timer
-hook or waiting. This keeps total time stable on the original target hardware
-where the surrounding loop body itself already consumed comparable time.
+hook or waiting. The comparison is signed over the whole calibration word, so a
+word with its high bit set takes the skip as well (section 4, R491). This keeps
+total time stable on the original target hardware where the surrounding loop
+body itself already consumed comparable time.
 
 Three intro paths override the calibration for the duration of an inner loop
 so the hardware-tick wait runs on every host, not only on hosts above the
