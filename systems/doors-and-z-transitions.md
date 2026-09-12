@@ -55,7 +55,7 @@ through the object scan (§ 3.2). Earlier drafts listed a locked-versus-closeabl
 "chest-on-floor tile pair" here alongside the door pair; treat the object record,
 not a tile pair, as the authority for whether a container is locked.
 
-The dungeon grid packs the tile class into the high four bits of the cell byte and a sub-type into the low four bits. One high-nibble value identifies "heavy door"; another identifies "secret door / room trigger". The low nibble selects per-class variant — open versus closed, orientation. The dungeon Open handler matches purely on the high nibble; the dungeon Jimmy and Search handlers consult the low nibble for variant-specific narration.
+The dungeon grid packs the tile class into the high four bits of the cell byte and a sub-type into the low four bits. One high-nibble value identifies "heavy door"; another identifies "secret door / room trigger". The low nibble selects per-class variant — open versus closed, orientation. The dungeon Open handler selects its arm from the high nibble — but only against the two chest classes, never a door class — and then reads the cell's **low three bits** as the trap sub-type; the dungeon Jimmy and Search handlers consult the low nibble for variant-specific narration.
 
 A separate set of tile codes encodes *secret doors* — see § 8.
 
@@ -270,7 +270,7 @@ report already open, and non-lockable classes report the generic refusal.
 
 ## 4. The O-Open command
 
-O-Open is the lighter cousin of Jimmy: it acts only on already-unlocked doors and chests, and never consumes a key. The dispatcher prints `Open-`, prompts for direction, and then runs the Open handler. As with Jimmy, scene byte routes between a dungeon-mode inner variant (which consults the *underfoot* tile rather than the tile in front — see § 9) and a non-dungeon variant.
+O-Open is the lighter cousin of Jimmy: it acts only on already-unlocked doors and chests, and never consumes a key. The dispatcher prints `Open-` — in **every** scene, the dungeon included — and then routes on the scene byte. The non-dungeon variant prompts for a direction and probes the tile in front. The dungeon-mode inner variant consults the *underfoot* cell and **prompts for no direction at all**; it recognises exactly two cell classes, the closed chest and the open chest, and refuses everything else, so no dungeon door is reachable from O (`systems/commands.md` Section 7, `RETRACTIONS.md` R473). Its transcript and chest lifecycle are in `systems/dungeon-mode.md` Section 8.1.
 
 The non-dungeon Open handler always begins with one piece of bookkeeping: the door auto-close pass (§ 5). It then runs the shared pre-flight reachability gate, computes target coordinates, fetches the front-tile byte, and cascades:
 
@@ -424,40 +424,112 @@ location reload.
 
 ## 9. The K-Klimb command
 
-K-Klimb is the climb / descend verb, mode-aware: the resident dispatcher routes K through one of three handlers depending on scene byte — overworld, town, or dungeon — each with its own interpretation.
+K-Klimb is the climb / descend verb, mode-aware: the **resident dispatcher**
+routes K through one of three handlers depending on scene byte — overworld,
+town-family, or dungeon — each with its own interpretation. Combat is a fourth
+owner and does not reach this dispatcher at all: combat's own command handling
+calls a combat-only Klimb handler that carries its own copy of the verb prefix
+and its own follow-on words (`systems/combat.md` Section 8.4). "Three handlers"
+describes this dispatcher's routing, not the whole build.
+
+**Who prints the verb prefix.** Exactly one layer prints `Klimb-` per mode, and
+never two. The dispatcher prints it **only** on the overworld arm, from inside
+that arm after the scene test rather than before the branch; for a location
+scene and for a dungeon-band scene the dispatcher prints nothing and the mode
+handler prints its own. The town-family handler prints the same bare `Klimb-`
+unconditionally at entry. The dungeon handler prints no separate prefix at all —
+each of its four prompt forms embeds one. The combat handler prints its own
+prefix at entry and then, where applicable, a separate two-way marker, where the
+dungeon handler prints a single combined form. No copy of `Klimb-` carries a
+line feed of its own, so whatever the handler prints next continues the same
+row.
 
 **Overworld K.** On the surface and underworld planes, K is the outdoor climb
-verb. The handler first requires the Grapple quest flag; if the party does not
-have it, it prints "With what?" and exits. It then requires the party to be on
-foot; any vehicle state prints "On foot!" and exits. After the shared
-pre-action gate, it probes the target tile in the current facing direction.
-The climbable outdoor target is the mountain tile family. A separate blocked
-mountain/impassable variant prints "Impassable!", non-climbable classes print
-"Not climbable!", and the confirmed climbable mountain class continues. For
-each living party member, the handler rolls `1..30` against that character's
-Dexterity; if Dexterity is lower than the roll, it prints "Fell!" and applies
-`1..5` fall damage to that member. Dead party members skip this risk roll.
-After all living members are checked, the successful path calls the resident
-climb/move helper with the original direction vector, advancing the party one
-cell without changing Z. Falling through a chasm to the underworld is a
-separate underfoot trigger, not a Klimb path (§ 10).
+verb, and the order of its output is fixed. The handler first requires the
+Grapple quest flag; if the party does not have it, the row is completed with
+"With what?" — lower case *what*, a different stored string from the dungeon
+handler's "With What?" — and the command ends **without ever asking for a
+direction** and without rolling anything. It then requires the party to be on
+foot; **every** other transport state is refused with "On foot!", the magic
+carpet included, which is the opposite of the town handler's rule below. Only
+then does it run the shared direction prompt of `systems/commands.md`
+Section 5.4: the chosen direction's name is appended to the prefix row, the pass
+key prints the cancel word and aborts the command, and every other key —
+Escape included — is re-read, so the pass key is the only cancel.
+
+With a direction chosen, the handler tests the target cell against **exact tile
+identities, not classes**: one identity is the blocked variant and prints
+"Impassable!", exactly one identity is climbable, and every other identity
+prints "Not climbable!". On the climbable identity, each living party member
+rolls `1..30` against that character's Dexterity; if Dexterity is lower than the
+roll, it prints "Fell!" and applies `1..5` fall damage to that member. Dead
+party members skip this risk roll, and the climb itself happens whether nobody,
+some, or every member fell. The successful path then commits the step through
+the outdoor step-commit helper, which **emits no text**: there is no success
+line, no destination or terrain report and no location line, so an applied
+outdoor Klimb prints nothing after the direction name except one fall line per
+member who failed. Falling through a chasm to the underworld is a separate
+underfoot trigger, not a Klimb path (§ 10).
+
+*Corrected 2026-09-12 (issue #262).* An earlier revision of this paragraph said
+the handler "probes the target tile in the current facing direction" after a
+shared pre-action gate. There is no facing to probe: that gate **is** the
+direction prompt, it echoes the chosen direction's name on the prefix row, and
+the pass key cancels the command outright. See `RETRACTIONS.md` R470. The same
+revision called the step-commit routine "the resident climb/move helper"; it is
+an overlay routine reached through a resident thunk, which changes nothing an
+implementation does.
 
 **Town K and stair movement.** Inside a town, dwelling, castle, or keep,
-K is "climb the ladder". The handler echoes the verb prefix, refuses while the
-party is mounted on a horse with "-On foot!" at no turn cost, and otherwise
+K is "climb the ladder". **An applied town Klimb prints nothing beyond the verb
+prefix and a one-word outcome** — no location line, no floor number, no
+narration of any kind follows it in the message window. The handler echoes the
+verb prefix, refuses while the party is mounted on a horse with "-On foot!" at
+no turn cost, and otherwise
 reads the cell under the party: the ascend link `0xC8` moves to the floor above,
 and the descend link `0xC9` or a metal grate `0x86` moves to the floor below.
+
+Three properties of that refusal and those tests are easy to get wrong:
+
+- **The mount refusal literal begins with its own hyphen**, so the finished row
+  renders with two of them: `Klimb--On foot!`. The prefix supplies the first.
+- **It is raised for the horse alone.** A party on a magic carpet, or aboard a
+  vessel, is *not* refused and climbs a ladder normally. This is the exact
+  opposite of the outdoor verb above, which refuses every transport state except
+  on foot, and the two must not share an implementation.
+- **Every underfoot and neighbour test here is against an exact tile identity**,
+  never a range or a family, so an implementation that matches a tile *class*
+  accepts cells the original rejects.
+
+The town handler reads **no climbing-gear flag at all**. The Grapple gate
+belongs to the outdoor verb only; carrying or lacking it changes nothing about a
+ladder in a location.
 **There is no two-way ladder cell in town mode** and no up-or-down prompt on
 this path; the two link ids are directional and a cell is one or the other.
 An earlier revision of this section gave the town arm a two-way ladder cell
 that prompts up-or-down; that is retracted.
+There is no direction prompt on either ladder arm: the outcome word follows the
+prefix on the same row, so the applied rows read exactly `Klimb-Up!` and
+`Klimb-Down!`. The floor index changes by one and the location's tile buffer is
+reloaded, and nothing further is printed.
+
 When the underfoot cell is none of the three, K instead prompts for a direction
 and inspects the neighbour: the pile of rocks `0x4C` or either wooden-fence id
 `0xCA`/`0xCB` there moves the party one cell onto it **without any floor
 change**, and anything else prints "What?" and consumes no turn. (Corrected
 2026-08-22: this accepted set was previously given as "a wooden fence or gate
-cell"; no gate id is on this path and the rubble id was missing.) A cancelled direction prompt still counts as the party's
-action.
+cell"; no gate id is on this path and the rubble id was missing.) The prompt is
+the shared direction prompt of `systems/commands.md` Section 5.4 — the chosen
+direction's name completes the prefix row, the pass key is the only cancel and
+prints the cancel word, and every other key including Escape is re-read. A
+step onto one of the three accepted neighbours prints **nothing further**: the
+direction name is the last text the command produces. A cancelled direction
+prompt still counts as the party's action.
+
+Turn cost differs by arm, and the split is not the one an implementer would
+guess: the mount refusal and the "What?" refusal both report *no action taken*,
+while both ladder arms, the step-across, **and a cancelled direction prompt**
+all report *acted*.
 
 Facing-sensitive walk-on stairs are the separate `0xC4..0xC7` tile family: their
 low two bits match the town movement wrapper's normalized facing value for an
@@ -471,14 +543,20 @@ unlinked from the active-object table. X and Y are preserved; only the floor
 index and the surrounding 32-by-32 tile content shift. Trapdoors are a separate
 underfoot trigger, not a K path (§ 10).
 
-**Dungeon K.** In a dungeon scene, K reads the underfoot dungeon tile's high
-nibble and offers whichever directions that cell provides. Up is offered on an
+**Dungeon K.** In a dungeon scene, K reads the underfoot dungeon cell and offers
+whichever directions that cell provides. Up is offered on an
 up-ladder or two-way cell, and also on a cell marked climbable-with-equipment
 while the party carries the climbing gear; down is offered on a down-ladder,
 two-way, or pit cell; when both are available the handler prompts for a
-direction. Up decrements the level Z, down increments it, and X and Y on the new
-level are the same as on the old. Because the handler compares only the high
-nibble, the whole pit family `0x6?` offers down, not just the exact byte
+direction. The two halves of that test read the cell differently: the **class**
+comes from the cell's high half, but the **climbable-with-equipment mark is a
+bit of the stored cell byte read raw**, so it is honoured at any class and not
+only in the high ones. A gear-marked pit cell carried with the gear therefore
+offers *both* directions and raises the up-or-down prompt, and a gear-marked
+cell of any class takes the gear route. Up decrements the level Z, down
+increments it, and X and Y on the new
+level are the same as on the old. Because the class test compares only the high
+half, the whole pit family `0x6?` offers down, not just the exact byte
 `0x60`, and it descends through the same apply helper a down ladder uses; an
 earlier revision claimed exact `0x60` bypassed that helper and invoked the
 dungeon surface-reset helper directly, and that claim is withdrawn. Other cells
@@ -491,7 +569,9 @@ applied climb, pit fall, or cancel at the direction prompt counts as an action.
 Two corrections to earlier revisions of this paragraph. First, a **climb never
 tests the cell it lands on** - the ladder or pit under the party is treated as
 sufficient, and the destination-cell test described here previously belongs to
-the dungeon level-change spells, not to K. Second, **boundary ladders do define
+the dungeon level-change spells, not to K. The visible consequence, restated
+here because other sections had not propagated it: **the failure word never
+appears on the K route at all** (`RETRACTIONS.md` R040). Second, **boundary ladders do define
 a plane transition**: attempting to climb above the topmost level or below the
 lowest one is not refused, it leaves the dungeon through the shared exit
 contract, surfacing on Britannia from the top and in the Underworld from the
@@ -501,7 +581,7 @@ bottom. `systems/dungeon-mode.md` Section 13 owns both contracts.
 
 Three movement events change Z without a Klimb:
 
-- **Dungeon fall traps.** Exact bytes `0x61` and `0x69` trigger an automatic drop. Each fired step prints the pit/fall messages, increments Z by one, and lands the party at the same X and Y on the next level. The handler rewrites the loaded dungeon image as it falls: it clears marker bits on the departure cell and, when the destination byte is below the wall/door band (`< 0x90`), marks bit `0x08` in that destination cell. If the destination is another `0x61` or `0x69`, the fall repeats, so multi-level drops are vertical trap chains rather than a direct subtype-to-distance table. If the chain increments past the deepest level, the dungeon scene byte is cleared with the off-bottom level byte and same X/Y still in resident state; this is not the surface-reset helper. The pit family `0x6?` is not a fall trap at all under K-Klimb: it is a climb-down feature that descends one level through the ordinary apply helper and reaches the surface-reset helper only from the deepest level (§ 9). Bomb traps `0x62` and `0x6A` share the high-nibble family but do not change Z.
+- **Dungeon fall traps.** Exact bytes `0x61` and `0x69` trigger an automatic drop. Each fired step prints the pit/fall messages, increments Z by one, and lands the party at the same X and Y on the next level. **The order within one step is fixed and is part of the contract:** the trap name, the falling line, the level change and the level-entry repaint, the landing line, and only then the per-member damage sweep. No text sits between the landing line and the damage, so the visible rows are the same either way, but an implementation that damages before printing the landing line is out of order against the original. The exact three lines and the damage roll are in `systems/dungeon-mode.md` Section 8.1. The handler rewrites the loaded dungeon image as it falls: it clears marker bits on the departure cell and, when the destination byte is below the wall/door band (`< 0x90`), marks bit `0x08` in that destination cell. If the destination is another `0x61` or `0x69`, the fall repeats, so multi-level drops are vertical trap chains rather than a direct subtype-to-distance table. If the chain increments past the deepest level, the dungeon scene byte is cleared with the off-bottom level byte and same X/Y still in resident state; this is not the surface-reset helper. The pit family `0x6?` is not a fall trap at all under K-Klimb: it is a climb-down feature that descends one level through the ordinary apply helper and reaches the surface-reset helper only from the deepest level (§ 9). Bomb traps `0x62` and `0x6A` share the high-nibble family but do not change Z.
 - **Overworld chasms.** The trigger is the **waterfall tile family**
   `0xD4..0xD7` - south of the party, or under it - on **either** plane, not a
   coordinate. The handler prints its banner, force-steps the party two cells
@@ -893,3 +973,17 @@ The behaviour described here was derived from the private function notes listed 
   withdrawn and the corrected width. The rendered rows are identical under
   either width, which is a coincidence of these particular strings rather than
   support for the withdrawn figure.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.

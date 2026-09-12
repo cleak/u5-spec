@@ -28,6 +28,15 @@ The party inventory consists of several counter families:
 - The spell-charge band is also forty-eight entries, but it is a separate
   spell-stock store. C-Cast and M-Mix own that band.
 
+Pickup grants are not all one unit. An arrow or quarrel record grants five
+units per `G` Get; every other equipment row grants one; keys, gems, torches,
+gold and food credit the quantity the picked record carries; and a Moonstone, a
+shard or a piece of regalia is a per-slot flag with no quantity at all. Every
+stock is capped on the way in - ninety-nine for the small byte counters, nine
+thousand nine hundred ninety-nine for food and gold. `systems/containers.md`
+Section 8 owns the class-to-family mapping and `systems/commands.md` Section 5.8
+the printed line.
+
 A zero byte in a carried-counter band means the party owns none of that item.
 Nonzero values are quantities, unless the consuming system documents that a
 particular item behaves as a present/absent flag.
@@ -989,7 +998,7 @@ Confirmed U-Use families:
 | Skull Key | Decrements the skull-key/special-key counter, then asks for a cardinal target and runs the lock helper in town/overworld or combat. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. The earlier non-combat-only scope is withdrawn (R415). |
 | Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
 | Shards | The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
-| Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only outside dungeon/combat scenes and only on accepted terrain; Search/Get recovery later invalidates the slot. |
+| Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only when the scene byte is `0x00` through `0x20` inclusive - the overworld and the town family, so dungeon and combat scenes are outside the band - and only on the accepted tile ids; **no transport test exists anywhere in the branch**, so a party afloat is refused by the tile alone. Search/Get recovery later invalidates the slot. |
 | Spyglass | Night utility, surface plane only. It permits a look when all three of these hold: the party is on the surface plane, the scene is the outdoor world or a town-class scene (dungeon-class and combat-class scenes are excluded), and the hour is in the night window `19..23` or `0..5`. The Underworld fails the plane condition, exactly as the Sextant does. A scene or plane failure prints the "not here" refusal; a daytime hour prints the no-stars refusal; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
 | HMS Cape plans | Shipboard-only utility. When used aboard ship, it marks the ship-rigging flag so the ship is rigged for double speed; otherwise it refuses. `weather.md` owns the resulting hoisted-sail wait-pass timing change. |
 | Sextant | Outdoor night-only utility, surface plane only. It permits a reading only when all three of these hold: the party is on the **surface** world plane, the scene is the outdoor world scene, and the hour is in the night window `19..23` or `0..5`. **The Underworld does not qualify**: it is the outdoor world scene on the other world plane, so it fails the plane condition and produces the same "only outdoors" refusal an indoor scene produces — there is no Underworld-specific message and no coordinate readout. The item label prints before any of the three tests, so it is emitted even on a refusal. The branch consumes nothing and writes nothing on any of its paths, but every outcome still commits one normal U-Use action and runs the current mode's ordinary per-turn processing. Coordinate formatting is in `catalogs/item-list.md`. |
@@ -1111,6 +1120,21 @@ Utility results follow those completions:
 | Sextant accepted | `Position:`, then the existing coordinate formatter in `catalogs/item-list.md` |
 | Pocket Watch | `The pocket watch reads_`, hour, colon, two-digit minute, then `_AM.\n` or `_PM.\n`; hours are 1 through 12 without a leading zero |
 | Box | `How?\n` |
+
+**The Moonstone branch has exactly one refusal literal, and no failure tail.**
+*(Added 2026-09-12, issue #262.)* `cannot be buried here!\n` answers every
+rejection cause there is - a scene outside `0x00..0x20`, and any underfoot tile
+outside the accepted ids `4..10`, `44` and `45`. There is no shipboard-specific
+message, because the branch never reads the party's transport marker: identical
+output was measured on foot, on a horse, on a carpet, aboard a frigate and
+aboard a skiff. Nor is the accepted set a terrain family - swamp, tile `4`, is
+accepted - so it must be carried as the explicit id set rather than as a "land
+only" rule. The label `Moonstone_` is printed before any test, is exactly ten
+characters ending in a space, and carries no line feed; each completion line
+carries its own. Neither outcome is followed by the shared U-Use failure tail:
+this branch never sets the command's failure result, so `Failed!` cannot appear
+after either line. On acceptance the party's current X, Y, scene and Z are
+written into the selected phase's slot and no other slot is touched.
 
 **Carpet boarding terrain and precedence** *(clarified 2026-09-09, issue
 #251)*. Activating a carried carpet uses its own terrain rule: it accepts
@@ -1407,3 +1431,11 @@ handler the world modes use, after the party-side gate. Source provenance:
 derived from private analysis in
 `../u5-decomp/notes/` and
 `../u5-decomp/functions/COMBAT_OVL/`.
+
+Moonstone burial provenance *(issue #262 follow-up, 2026-09-12)*: the scene
+band, the accepted tile ids, the single all-purpose refusal, the absence of any
+transport test and the absence of a `Failed!` tail were re-derived and
+re-executed from private analysis in `u5-decomp/notes/`,
+`u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/SJOG_OVL/`, over
+twenty-four transport/tile/scene combinations across five vehicles with the
+routine's memory reads watched.

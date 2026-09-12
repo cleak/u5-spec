@@ -513,7 +513,7 @@ Representative literals, exactly as they appear on screen:
 | `Pass` + newline | complete |
 | `Board ` | operand follows |
 | `Cast...` + newline | sub-mode |
-| `Fire-`, `Get-`, `Jimmy-`, `Klimb-`, `Open-`, `Push-`, `Search-`, `Talk-` | direction follows |
+| `Fire-`, `Get-`, `Jimmy-`, `Klimb-`, `Open-`, `Push-`, `Search-`, `Talk-` | direction follows — **outside a dungeon**. Three of these rows have dungeon carve-outs specified in `systems/commands.md` Sections 5.2 and 5.3: `Get-` is not emitted at all in a dungeon (the dungeon handler opens with its own `Get` and a line feed), `Open-` is emitted but no direction follows, and `Klimb-` awaits nothing on the town ladder arms and awaits an up/down choice rather than a direction in a dungeon. |
 | `Hole up- ` | direction follows, then an operand |
 | `Mix Reagents` + two newlines | complete plus blank row |
 | `Ready...` + two newlines | sub-mode plus blank row |

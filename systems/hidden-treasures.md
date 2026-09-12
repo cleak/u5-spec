@@ -37,6 +37,48 @@ an unlimited supply of Glass Swords. Likewise, a party that discards or loses
 its Glass Sword makes the record available again — that is original behaviour,
 not a defect. `formats/saved-gam.md` Sections 7 and 10 carry the field offsets.
 
+## 2.1 What a found record prints
+
+A staged record is narrated with one line from a fixed seventeen-name
+vocabulary, selected by the record's pickup class, on the row after the Search
+preamble of `systems/commands.md` Section 5.8:
+
+| Pickup class in Section 3 | Narrated row |
+|---|---|
+| Sack of gold | `a sack of gold!` |
+| Potion | `a potion!` |
+| Scroll | `a scroll!` |
+| Weapon | `a weapon!` |
+| Ring of keys | `a ring of keys!` |
+| Gem | `a gem!` |
+| Ring | `a ring!` |
+| Armour | `some armour!` |
+| Amulet | `an amulet!` |
+| Torches | `some torches!` |
+| Food | `some food!` |
+| Rotting body | `a rotting body!` |
+| Moldy corpse | `a moldy corpse!` |
+
+The selector is a **thirty-one-slot jump table** indexed directly by the pickup
+class, so classes `1` through `31` each have a slot whether or not a name was
+authored for it; the unused slots and every class outside `1..31` fall to the
+capitalised default below. That structure is what makes "lands on one of its
+unused slots" a case distinct from "outside the vocabulary".
+
+The vocabulary also holds `a chest!`, `a shield!`, `a helm!` and its own copy of
+`a strange rock!`, but **no shipped record reaches them** - the thirteen rows
+above are the whole reachable set, and the strange rock a player actually sees
+comes from the buried-Moonstone table rather than from here. A record whose
+class falls outside the vocabulary, or lands on one of its unused slots, prints
+the capitalised `Nothing of note.` - a different stored string from the treasure
+scan's own lower-case `nothing of note.`, and the only place the capitalised
+form appears on the surface path.
+
+Twelve of the 113 records (`0` through `11`) carry the filler coordinate
+`(233, 233)` at an impossible floor and cannot be reached by an ordinary Search.
+Whether anything rewrites those records at runtime was not traced, so their
+narrated classes are unverified in play.
+
 `Z/floor` is the active floor/depth byte. For overworld entries, `0` is
 Britannia and `255` is the Underworld plane. For town-style interiors it is the
 local floor. The `State` column is the per-record pickup state staged into the
@@ -169,3 +211,7 @@ dumps, or private address tables.
 - `u5-decomp/functions/SJOG_OVL/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-spec/catalogs/gazetteer.md`.
+
+- The found-object vocabulary of Section 2.1, its four unreachable names and the
+  capitalised no-result line — private analysis in `u5-decomp/notes/` and
+  `u5-decomp/functions/SJOG_OVL/`, issue #262 follow-up, 2026-09-12.

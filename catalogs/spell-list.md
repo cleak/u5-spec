@@ -170,7 +170,7 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
 | 3 | `AN` | An Nox | Cure | 1 | Ginseng + Garlic | C/D/I/O | healing; selected-member Poisoned-to-Good status gate |
 | 4 | `M` | Mani | Heal | 1 | Ginseng + Spider Silk | C/D/I/O | healing; selected-member HP add from halved 0..60 roll with minimum 1, skips only Dead targets, clamps at maximum HP |
 | 5 | `AY` | An Ylem | Vanish | 1 | Garlic + Blood Moss | C/I | utility; directed tile helper, clears a removable-object tile to the shared cleared-cell tile `0x44` and prints `POOF!`; works on combat-arena terrain too |
-| 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility; directed tile helper, unlocks a locked door (`0xB9`→`0xB8`, `0xBB`→`0xBA`) or clears the lock/trap bit on a co-located kind-1 chest object — including a monster's combat drop; separate dungeon-cell arm in dungeon scenes |
+| 6 | `AS` | An Sanct | Open | 2 | Sulfur Ash + Blood Moss | C/D/I/O | utility; directed tile helper, unlocks a locked door (`0xB9`→`0xB8`, `0xBB`→`0xBA`) or clears the lock/trap bit on a co-located kind-1 chest object — including a monster's combat drop; separate dungeon-cell arm underground, which opens a **closed-chest** cell underfoot or one step along the party's facing with no direction prompt, prints `Disarmed!` when the cell's lowest bit is set and then `Chest opened!` (`RETRACTIONS.md` R475) |
 | 7 | `ACX` | An Xen Corp | Repel Undead | 2 | Sulfur Ash + Garlic | C | buff/debuff; drives every undead-class monster-side actor that fails the resistance check to combat HP 1 and sets its fleeing bit; protected classes 14/15/47 excluded; creates and repurposes nothing |
 | 8 | `HR` | Rel Hur | Wind Change | 2 | Sulfur Ash + Blood Moss | O | utility |
 | 9 | `IW` | In Wis | Locate | 2 | Nightshade | O | utility; prints the shared sextant-style Y-then-X coordinate line |
@@ -185,8 +185,8 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
 | 18 | `AG` | An Grav | Dispel Field | 4 | Sulfur Ash + Black Pearl | C/D | field |
 | 19 | `IS` | In Sanct | Protection | 4 | Sulfur Ash + Ginseng + Garlic | C/D/I/O | buff/debuff; shared timed-effect slot, tag `P`, 20 turns; no mechanical consequence in the shipped game |
 | 20 | `GIS` | In Sanct Grav | Energy Field | 4 | Spider Silk + Black Pearl + Mandrake | C/D | field |
-| 21 | `PU` | Uus Por | Up | 4 | Spider Silk + Blood Moss | D | utility; moves the party one dungeon level up from wherever it stands, no ladder needed; refuses a destination cell in the base or wall/door classes; cast on the topmost level it leaves the dungeon to Britannia; refused outright in Doom |
-| 22 | `DP` | Des Por | Down | 4 | Spider Silk + Blood Moss | D | utility; the mirror of id 21 - one level down, no ladder needed, same destination-cell refusal; cast on the lowest level it leaves the dungeon into the Underworld; refused outright in Doom |
+| 21 | `PU` | Uus Por | Up | 4 | Spider Silk + Blood Moss | D | utility; moves the party one dungeon level up from wherever it stands, no ladder needed; **accepts only an open-passage (base-class) destination cell and refuses every other class** - ladders, chests, fountains, pits, fields, room states, walls and door variants included (`RETRACTIONS.md` R472); cast on the topmost level it leaves the dungeon to Britannia; refused outright in Doom |
+| 22 | `DP` | Des Por | Down | 4 | Spider Silk + Blood Moss | D | utility; the mirror of id 21 - one level down, no ladder needed, same open-passage-only destination test; cast on the lowest level it leaves the dungeon into the Underworld; refused outright in Doom |
 | 23 | `QW` | Wis Quas | Reveal | 4 | Spider Silk + Nightshade | C | utility |
 | 24 | `BIX` | In Bet Xen | Swarm | 5 | Sulfur Ash + Spider Silk + Blood Moss | C | summon; up to eight probes find one legal cell, then up to four Insect Swarm actors are placed at that single coordinate |
 | 25 | `AEP` | An Ex Por | Magic Lock | 5 | Sulfur Ash + Garlic + Blood Moss | C/I | utility; directed tile helper, `0xB8`/`0xB9`→`0x97` and `0xBA`/`0xBB`→`0x98`; works on combat-arena terrain too |
@@ -255,6 +255,13 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
   and does not use the ordinary movement passability or active-object
   occupancy checks. If no grass tile is found, the spent cast fails without
   moving the party.
+- **A successful non-combat Blink prints nothing.** The direction word the
+  shared prompt appends to `Direction-` is the last row; there is no result
+  line, no destination and no terrain report. A ray with no grass prints the
+  shared `Failed!`, and Space prints only the prompt's own `Pass`. All three
+  outcomes have already spent the charge and the mana. The combat arm asks for
+  no direction and prints `Success!` or `Failed!` through the shared epilogue;
+  it gives up after seven candidate steps.
 - `AY`, `AS`, `AEP` and `EIP` form one directed-tile family. Each prompts for a
   direction, resolves the single orthogonally adjacent cell, tests that cell's
   live tile and rewrites it. The prompt origin is the party's map cell outside
@@ -422,7 +429,7 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
   private visual pattern and is not a traced party C-Cast row for Conjure,
   Swarm, or Summon. Do not publish or reuse that private pattern as spell
   placement data.
-  `PRV` prompts `To phase:` and accepts digits `1`..`8`,
+  `PRV` prompts `To phase:_` and accepts digits `1`..`8`,
   mapping the digit to the matching persisted moonstone slot before teleporting
   to that slot's saved scene/X/Y/Z destination. Moonstone burying writes those
   slots only outside dungeon/combat scenes and only from underfoot tile ids

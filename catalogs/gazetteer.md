@@ -249,6 +249,35 @@ stairs, possible hostility, and quest-specific scripts. Their resident order is:
 
 Two resident one-byte-per-scene tables in `DATA.OVL` (one for X, one for Y) carry every scene's overworld entry / return coordinate. The full forty-entry table, indexed by `(scene - 1)`:
 
+**A return coordinate is never stored anywhere; it is re-derived on the way
+out.** *(Established 2026-09-12, issue #262.)* Nothing caches the party's
+outdoor position when they enter a location. Entry overwrites the party's
+coordinates with the location's fixed arrival cell and writes the scene byte,
+and the outdoor coordinate is simply gone. Every exit route then reads the
+position back out of the two tables above, indexed by the live scene byte: the
+town-family boundary exit (`systems/town-mode.md` Section 15) and the dungeon
+exit taken by climbing or casting off the top or bottom of the level stack
+(`systems/dungeon-mode.md` Section 13.2) use the identical pair. Location entry
+uses the same tables in the other direction — it scans them for the party's
+outdoor position to decide which scene to enter — which is exactly why an exit
+lands the party where entry took place.
+
+Three consequences an implementation should build on:
+
+- **A save cannot lack a return position, because no save carries one.** For
+  every legal scene byte the corresponding row exists and is populated in the
+  shipped data, and all forty pairs are distinct. The correct behaviour for a
+  save whose scene byte names a location is to take the return position from
+  the table at the moment the player leaves.
+- **An engine diagnostic about missing return-coordinate metadata has no
+  original counterpart** and should be removed rather than made silent; the
+  state it guards against does not exist. See `RETRACTIONS.md` R474 and
+  Section 9 below.
+- **Scope.** The entry-side scan covers only the thirty-two location rows,
+  while the exit side indexes all forty. Dungeon mouths are entered by a
+  separate seed path, so "entry caches nothing" is established for the
+  location-entry route; the dungeon-entry seed was not re-read in that pass.
+
 | Scene | Name | X | Y |
 |---:|---|---:|---:|
 | 1 | Moonglow | 232 | 135 |
@@ -726,9 +755,13 @@ Runtime error handling should be conservative:
 - If a scene byte points outside its class file's eight-block range, treat the
   save or content as corrupt.
 - If a shrine coordinate resolves to no virtue, do not run shrine meditation.
-- If a dungeon return coordinate is missing, keep the party in dungeon mode or
-  fail the load with a diagnostic rather than dropping to a default surface
-  cell.
+- *Withdrawn 2026-09-12 (issue #262).* This list previously read "If a dungeon
+  return coordinate is missing, keep the party in dungeon mode or fail the load
+  with a diagnostic rather than dropping to a default surface cell." There is no
+  per-save return-coordinate datum to be missing: the position is read from the
+  static tables of Section 5.1 at the moment of leaving, so that branch is
+  unreachable and any player-visible message on it has no original counterpart.
+  See `RETRACTIONS.md` R474.
 - If two gazetteer rows claim the same trigger coordinate, report an ambiguity
   and require a priority rule from the owning system spec.
 
@@ -833,3 +866,17 @@ Private analysis provenance:
   `u5-decomp/functions/OUTSUBS_OVL/`,
   `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/formats/`, and
   `u5-decomp/notes/`.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.

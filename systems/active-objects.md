@@ -901,6 +901,39 @@ scroll bases and frees slots more than thirty-two cells away.
 
 **Dungeon entry.** Dungeon exploration does not populate the table for its first-person view. The dungeon loop reads the player's dungeon Z/X/Y and facing globals, renders from the loaded dungeon record, and does not run the town NPC scheduler or the overworld active-object walker. The active-object table remains part of global saved state, but it is not the dungeon renderer's actor list. If a dungeon room, trap, ambush, or attack enters combat, the combat framer takes over as described in Section 9.
 
+**No player-driven placement happens underground, and nothing narrates it.**
+*(Established 2026-09-12, issue #262.)* In dungeon mode the only writer of the
+active-object record is the automatic wandering-monster setup step that runs on
+entry, on an accepted level change, and on return from a dungeon fight
+(`systems/dungeon-mode.md` Sections 4.1 and 6.9). That step is silent on both
+its success and its failure arm. Every letter the dungeon key router forwards to
+the shared command dispatcher was exercised in a dungeon scene with the whole
+table watched, and none of the twenty-six wrote a record. The dungeon
+interaction commands - Get, Open, Jimmy, Search, Look - act on the packed
+dungeon cell grid rather than on this table, and the only table call on the
+dungeon Get path passes the "no slot" sentinel to a routine that clears a slot
+rather than filling one. Floor traps rewrite the dungeon cell only. Monster
+death drops are real but belong to the arena, where the framer's backup and
+restore (Section 9) keeps a drop from surfacing as an object standing in a
+corridor.
+
+**The correct justification is the transport state, not command reachability.**
+It is *not* true that the commands which can write this table are unreachable
+underground: Board, Fire, X-it and Yell all reach their handlers from a dungeon
+scene and handle the dungeon case themselves. X-it in particular does place an
+object - the vehicle the party steps out of - and what actually prevents it
+underground is that the party is on foot. On foot, X-it refuses and writes
+nothing; given a mounted transport value it prints its own vehicle line and does
+place an object. X-it also carries a scene test of its own that is dead code,
+both of its comparisons branching to the same place, so the dungeon-specific
+refusal line it appears to own can never print. An implementation that blocks
+placement by scene rather than by transport state will agree with the original
+on shipped play and disagree on the reasoning; one that reproduces neither gate
+will place objects in dungeon corridors. Two dependencies are stated rather than
+proved: that the dungeon entry path forces the on-foot transport state, and the
+combat backup and restore, which is carried from Section 9 rather than
+re-derived here.
+
 **Combat entry.** Section 9.
 
 Slot zero is preserved, reloaded, or written by the entry handler before any
@@ -1083,3 +1116,13 @@ The behaviour described above was derived by reading the function and format not
   of the routines that own slot zero rather than a census; a pointer-based
   census of this table is not feasible, and the three named exceptions are the
   ones that trace found.
+
+- **Issue #262, the dungeon-object pass (2026-09-12).** The dungeon O-Open and
+  G-Get transcripts and their prefix rules, the chest lifecycle and its trap
+  sub-type bits, the Open spell's underground arm, the dungeon chest reward
+  generator's emitted rows and depth thresholds, and the negative that no
+  reachable dungeon state places an active object were re-derived from private
+  analysis in `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
+  the word, gate and quantity tables read back from the shipped data file.

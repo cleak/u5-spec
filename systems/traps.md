@@ -257,7 +257,15 @@ confirmed:
   stamp and not as a tile. The step is fully implementable.
 - The trap conditions differ in kind, matching the two storage forms named
   above: a single flag on the container object versus a non-zero lock/trap
-  sub-type on the dungeon chest cell.
+  sub-type on the dungeon chest cell. **Underground the test is the cell's low
+  *three* bits, not its low bit alone**, so a chest cell whose low nibble is 4
+  is trapped (established 2026-09-12, issue #262). The dungeon O-Open site reads
+  nothing else — no lock difficulty, no spell duration, no party flag and no
+  status byte — which is why it has no protected or bypassed outcome and no
+  bypass line: a chest disarmed beforehand by J-Jimmy produces a transcript
+  identical to one that was never trapped. The pick *difficulty* is the separate
+  depth-and-Dexterity expression that belongs to Jimmy
+  (`systems/doors-and-z-transitions.md` Section 3.2).
 
 A fourth difference is easy to miss and matters for § 2.1: the `O` Open
 dispatcher routes to the dungeon chest handler **only** for the narrow band of

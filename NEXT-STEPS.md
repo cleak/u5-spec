@@ -1,5 +1,63 @@
 # Next Steps for u5-spec
 
+## Issue #262 follow-up - the missing player-visible text (2026-09-12 UTC)
+
+R476-R479 withdraw four published claims: that `G` Get filters candidate
+records by a visual family separate from the inventory-add code (it is one
+class byte, which is both the gate and the grant selector); that surface
+Search dispatches a found object through the inventory-add path (its object
+branch accepts only the container class and narrates a trap assessment,
+granting nothing); that Get's borrow case is a table item (it is the
+wall-torch pair, and the laden tables are the eating case, which does debit
+moral standing); and that the guard and shop dispatch gate is equality with
+waypoint 1 (it is a parity test on the waypoint index, agreeing at the shipped
+indices and diverging above them).
+
+Newly published: every successful `G` Get line by pickup class, with the
+counted stems, the singular/plural rule, the potion/scroll lookup asymmetry and
+the two guard classes; the five successful Search shapes, the furniture prefix
+set that replaces the find preamble, and the two distinct no-result lines; the
+laden-table and wall-torch Get cases with their direction rules and their
+unequal grant tails; the found-object vocabulary of `hidden-treasures.md` and
+its four unreachable names; Blink's complete narration contract, including the
+silent success, the shared-gate refusal cascade and the combat arm; the
+Moonstone burial transcript, its scene band and its single all-purpose refusal
+with no transport test; the two-command directional recovery and the silent
+slot invalidation with its three quiet consumers; and the conversation entry
+sequence, which contains no engine-composed sentence at all, together with the
+dispatcher's five stored branch lines. The engine's
+`Talked to <name>: <description>. <legacy text> Your interest?` is wrong on
+every element.
+
+1652 executed original cases across two clusters. Eleven trace items and one
+capture item are recorded in `OPEN-QUESTIONS.md`. No engine or QA files were
+read; the issue text was the only engine-side input.
+
+## Issue #262 - Klimb, dungeon level change and dungeon chest text (2026-09-12 UTC)
+
+R470-R475 withdraw six published claims: outdoor Klimb probing a facing
+direction rather than running the shared direction prompt; the resident
+tile-restoration flag as the two-way ladder discriminator and as the Klimb
+handler's second reader, with the ordering constraint that rested on it; the
+dungeon level-change spells' destination test, which is exactly inverted and
+accepts only the open-passage class; a dungeon door arm of O-Open, which does
+not exist; a per-save dungeon return coordinate that can be missing; and the
+Open spell's dungeon arm acting on a door/urn cell, gating on the trapped
+variant bit and prompting for a direction. Newly published: per-mode verb
+prefix ownership with combat as a fourth owner; the full town and outdoor
+Klimb transcripts, refusal literals and per-arm turn costs; the dungeon
+level-change vocabulary and the shared exit line's two callers; the pit-chain
+narration order; the dungeon chest lifecycle, its low-three-bit trap test and
+the identical transcript of a disarmed chest; the dungeon Get contents rows,
+their per-row plural fragments, colour and rune words, second character set
+and depth thresholds; and the negative that no reachable dungeon state places
+an active object, blocked by the party's transport state rather than by
+command reachability. 4281 executed original cases across two clusters. The
+"nothing further is printed" negatives are scoped to the message window with
+the repaint endpoints excluded; nine trace items and one capture item are
+recorded in `OPEN-QUESTIONS.md`. No engine or QA files were read; the issue
+text was the only engine-side input.
+
 ## Issue #261 follow-up - refused town Enter and modal contact (2026-09-12 UTC)
 
 The in-town Enter-what refusal is acted and can trigger an already-adjacent

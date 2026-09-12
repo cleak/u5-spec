@@ -163,15 +163,16 @@ The framing function bridges the world-mode loop and the combat round loop. It m
   register already carrying a neighbouring constant, or a word-sized write
   straddling the byte from below, would fall outside it.
 
-  **A second reader constrains the ordering.** The dungeon K-Klimb handler
-  consults the same flag to decide whether the ladder under the party goes both
-  ways, and offers the up-or-down prompt instead of assuming "Up!" when it is
-  set (`systems/dungeon-mode.md` Sections 13.1 and 14.1). The flag therefore
-  does double duty - "tile graphics are saved and owe a restore" and "this
-  ladder is two-way" - so the restore phase's clear must not be reordered ahead
-  of a Klimb that could still read it. *(First publication of the operand set,
-  the setter census and the second reader; nothing here withdraws earlier
-  text.)*
+  **No Klimb ordering constraint.** *Corrected 2026-09-12 (issue #262).* This
+  bullet previously read "A second reader constrains the ordering", said the
+  dungeon K-Klimb handler consults the same flag to decide whether the ladder
+  under the party goes both ways, and required that the restore phase's clear
+  not be reordered ahead of a Klimb. The Klimb dispatcher was read end to end
+  and does not touch this flag (`systems/dungeon-mode.md` Sections 13.1 and
+  14.1), so the flag does **not** do double duty and the framer's clear is
+  unconstrained by any climb. See `RETRACTIONS.md` R471. The operand set and the
+  setter census published alongside that claim stand; the census's second read
+  is now unattributed rather than identified as Klimb's.
 - Restore the player's coordinates and the scene byte from the saved slots.
 - Mark visibility dirty so the next world frame redraws fully, and refresh the on-screen party-stats panel.
 - Restore the active-player slot — but only if the pre-combat active player has not died or fallen asleep during the fight; if their status is now `'D'` (dead) or `'S'` (asleep), keep the active-player slot cleared and let the player re-select.
@@ -4883,3 +4884,17 @@ The behaviour described here was derived from the private function and format no
   `NEXT-STEPS.md` rather than published here: what the roster picker behind `Z`
   accepts, and what the class effect arm does for a controlled monster of a
   non-melee class.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.

@@ -138,6 +138,18 @@ The subsequent save-read sequence is:
 
 8. **Final commit.** A display-mode flag is set to indicate "transition to gameplay", and the intro overlay returns to the main game loop. The next iteration reads the loaded scene byte and dispatches to the correct mode-loop overlay (overworld, town, or dungeon). For a town-family scene it dispatches in the **preserving entry mode**, because neither the overworld nor the dungeon handler ran on that iteration; `systems/active-objects.md` Section 10 owns what that mode does and does not rebuild, and it is what makes the restored NPC cast survive.
 
+**A save carries no return coordinate, and cannot be missing one.** *(Added
+2026-09-12, issue #262.)* Nothing in the save image records where the party was
+standing outdoors before they entered a location or a dungeon. Entering
+overwrote the party's coordinates with the destination's fixed arrival cell, and
+the outdoor position is re-derived from two static per-scene tables at the
+moment the player leaves (`catalogs/gazetteer.md` Section 5.1). Every legal
+scene byte has a populated row, so there is no loaded state in which the return
+position is absent. The load flow therefore needs no validation, no defensive
+branch and no diagnostic for this: a save whose scene byte names a location
+loads into that location and takes its return position from the table on the
+way out.
+
 **The load path recomputes and normalises no restored byte.** Beyond the file reads themselves, its only effect on the save image is the pre-restore wind pair the read overwrites. It performs no clock call, no ambient-light recompute, no moon-phase refresh, no NPC load and no active-object rebuild, and it validates nothing. Everything a save/load round trip appears to "change" is written by the **first mode dispatch after the load**, not by the load:
 
 | Save byte | Written by | On the first dispatch because |
@@ -401,3 +413,17 @@ generic DOS file I/O, not an LZW decompressor.
   derived from private analysis in `u5-decomp/notes/`, cross-checked against
   `u5-decomp/functions/INTRO_OVL/`, `u5-decomp/functions/CAST2_OVL/`,
   `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/functions/TOWN_OVL/`.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.

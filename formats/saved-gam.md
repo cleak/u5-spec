@@ -243,7 +243,7 @@ A long band of bytes after the inn-guest registry holds the party's shared inven
 | `0x020A..0x0219` | 16 bytes | Special / quest items | One-byte counters or flags for carried/useable special items. Confirmed members include Magic Carpet at `0x020A`, skull/special key stock at `0x020B`, Amulet/Crown/Sceptre of Lord British at `0x020D..0x020F`, shard flags at `0x0210..0x0212`, Spyglass at `0x0214`, HMS Cape plans at `0x0215`, Sextant at `0x0216`, Pocket Watch at `0x0217`, Black Badge at `0x0218`, and the Wooden/Sandalwood Box story flag at `0x0219`. The byte at `0x0219` is the save-backed box flag: item acquisition sets it and the endgame reads it. **`0x020C` is not a carried-item counter**: it is the fixed hidden-treasure daily cooldown cookie described in Section 10, and it happens to live in this band. Other individual meanings remain cross-system. |
 | `0x021A..0x0249` | 48 bytes | Equipment inventory | One byte per equipment item id. Arms shops, Z-stats, and R-Ready use the same id to index the shop stock table, base-price table, display-name row, carried counter, and readied-equipment slot value. The span covers ammunition and carried weapons/armour/helms/shields/rings/amulets. |
 | `0x024A..0x0279` | 48 bytes | Spell-charge stock | One byte per pre-mixed spell charge. See Section 7.1.                                                         |
-| `0x027A..0x0281` | 8 bytes | Scroll counters | One byte per usable scroll row, in the same order as the U-Use scroll dispatch: `LV`, `HR`, `IS`, `AI`, `IQW`, `CKX`, `CIM`, `AT`. |
+| `0x027A..0x0281` | 8 bytes | Scroll counters | One byte per usable scroll row, in the same order as the U-Use scroll dispatch: `VL`, `RH`, `IS`, `IA`, `IQW`, `KXC`, `IMC`, `AT`. |
 | `0x0282..0x0289` | 8 bytes | Potion counters | One byte per potion row, in display order: Blue, Yellow, Red, Green, Orange, Purple, Black, White. |
 | `0x02AA` | 8 bytes | Reagents           | Sulfurous ash, ginseng, garlic, spider silk, blood moss, black pearl, nightshade, mandrake. One byte each - the mixing display order of `catalogs/item-list.md` Section 6. *Corrected 2026-09-06 (R391): this row previously listed the eight alphabetically, black pearl first.* |
 
@@ -299,8 +299,23 @@ records the party's current scene, X, Y, and Z/floor into the chosen slot.
 Burying is accepted only outside dungeon/combat scenes and only when the tile
 under the party is one of these world-tile ids: `4..10`, `44`, or `45`.
 
-Recovery is Search/Get driven rather than a direct spell action. Non-dungeon
-Search compares the target coordinate against all valid saved Moonstone slots.
+**The scene byte is also the carried marker, and its invalidation is silent.**
+*(Added 2026-09-12, issue #262.)* The grant writes the invalid sentinel into the
+same byte that held the destination scene, and prints nothing about it. All
+three readers of that byte then go quiet: a Gate Travel cast naming the phase
+echoes its digit and reports the ordinary `Failed!`; the nightly live-terrain
+pass stops stamping the gate tile at that cell, so that moongate stops appearing
+altogether; and a moon-phase arrival that selects the slot plays the gate
+animation, leaves the cell as grass, moves nobody and prints nothing. Only the
+readers were enumerated in this pass; a save/load or story path that *writes*
+the byte would change this picture.
+
+Recovery is Search/Get driven rather than a direct spell action. It takes two
+commands and both are **directional**: burial records the party's own cell,
+while Search and Get act on the party's cell plus the chosen direction step, so
+a stone is recovered by standing beside the buried cell and searching, then
+getting, toward it. Non-dungeon Search compares that target coordinate against
+all valid saved Moonstone slots.
 When a slot matches, the engine creates a visible "strange rock" pickup tagged
 with that slot. Collecting that pickup grants the Moonstone and invalidates the
 slot by writing the invalid scene sentinel, so later Gate Travel casts to that
@@ -909,3 +924,10 @@ The byte-level layout described here was derived from the project's private save
   in `systems/moons.md` Section 3, which covers direct calls and jumps across
   the shipped executable and all twenty-three code overlays and does not cover a
   call target computed at run time.
+
+- The Moonstone slot block's scene byte doubling as the carried marker, the
+  silence of its invalidation and the three consumers that go quiet — derived
+  from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CAST_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, issue #262 follow-up, 2026-09-12. Only the
+  readers of that byte were enumerated; see `OPEN-QUESTIONS.md`.

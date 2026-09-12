@@ -139,7 +139,7 @@ Five authored cell families change the floor while the party is inside a locatio
 
 **K-Klimb inside a location.** The handler echoes the verb prefix `Klimb-`, then:
 
-1. If the party is mounted on a horse it prints `-On foot!`, changes nothing, and costs no turn.
+1. If the party is mounted on a horse it prints `-On foot!`, changes nothing, and costs no turn. The refusal literal carries its own leading hyphen, so the finished row reads `Klimb--On foot!` with two of them. **Only the horse is refused**: a party on a magic carpet or aboard a vessel climbs a ladder normally here, unlike the outdoor climb verb, which refuses every transport state but on foot. The handler reads no climbing-gear flag at all.
 2. Otherwise it reads the cell under the party. An ascend ladder goes up; a descend ladder or a metal grate goes down. There is no two-way ladder cell in town mode — the two ladder ids are directional and a given cell is one or the other.
 3. If the cell under the party is none of those, the command instead prompts for a direction and looks at the adjacent cell. Three ids are accepted: the pile of rocks `0x4C` and the two wooden-fence ids `0xCA`/`0xCB`. Any of them moves the party one cell onto that neighbour; this is climbing *over* something and **does not change the floor**. (Corrected 2026-08-22: this list was previously described as "a wooden fence or gate cell" — there is no gate id on this path, and the rubble id `0x4C` was missing.) Anything else prints `What?` and costs no turn. A cancelled direction prompt still counts as the party's action.
 
@@ -155,9 +155,10 @@ floor's page is loaded in place. The party lands on the *corresponding cell* of
 the new page. The entry cell is **not** recomputed on a floor change; it applies
 only to entry from the overworld.
 
-A separate path within the Klimb command moves the party one cell in its facing
-when climbing a fence or wall tile. That is a move within a floor, not a page
-change, and it does not interact with the rule above.
+A separate path within the Klimb command moves the party one cell in the
+**prompted** direction — not its facing — when climbing a rubble or fence tile.
+That is a move within a floor, not a page change, and it does not interact with
+the rule above. It prints nothing beyond the direction name.
 
 ### The floor byte has two roles
 
@@ -490,7 +491,7 @@ unestablished and read the player's position from the world-state globals.
 
 The Talk command triggers the conversation engine. The handler reads the player's current facing direction, computes the facing tile as `(player_x + dx, player_y + dy)`, and looks for an NPC whose linked sprite occupies that cell. If found, the NPC's dialogue index is handed to the conversation engine. If not found, the handler tests the facing tile for *talk-through* status (shop counters, low fences); if pass-through, it advances once more and queries again. If still no match, "Nobody's here!" is printed.
 
-A pre-conversation gate then inspects the **live map tile at the resolved cell** — not the NPC's sprite. Tile `0xAB` (the bed tile) produces the "Zzzzzz..." line and tile `0x9D` (the mirror tile) produces the "No response!" line; both return without entering the engine, consuming the dialogue index, or reaching shop-trigger dispatch. Every other tile value falls through. `systems/conversation.md` Section 2 owns the full gate contract.
+A pre-conversation gate then inspects the **live map tile at the resolved cell** — not the NPC's sprite. Tile `0xAB` (the bed tile) produces the "Zzzzzz..." line and tile `0x9D` (the mirror tile) produces the "No response!" line; both return without entering the engine, consuming the dialogue index, or reaching shop-trigger dispatch. Every other tile value falls through. `systems/conversation.md` Section 2 owns the full gate contract, and Section 9 of that document owns the entry sequence a successful Talk produces - a fixed envelope of stored lead-ins, the NPC's own Description and Greeting entries and the keyword prompt, with **no engine-composed sentence** anywhere in it.
 
 The Talk command is town-mode-only. The shared per-letter dispatcher routes T-Talk to the conversation engine when the scene byte indicates town mode; in overworld and dungeon modes the same key produces "Funny, no response!" or similar. There are no schedule-driven NPCs to talk to outside the named locations.
 
@@ -1245,7 +1246,15 @@ destination plane, clears the scene byte, computes the player's overworld
 coordinate from the fixed world-location coordinate tables, writes the
 destination plane (Britannia for ordinary scenes, the Underworld for scene byte
 `0x19`), clears the town-local curse/state latch, and signals the loop to
-break. Declining — by answering no or by cancelling — prints the refusal,
+break. **That coordinate is re-derived here, not recalled.** Entry cached
+nothing: it overwrote the party's coordinates with the location's fixed arrival
+cell, so the outdoor position is read back out of the two static per-scene
+tables at the row for the live scene byte on the way out. No save carries a
+return position and none can lack one (`catalogs/gazetteer.md` Section 5.1).
+The exact prompt, answer and exit literals — including that the negative answer
+and Escape behave identically and that any other key re-reads — are in
+`systems/doors-and-z-transitions.md` Section 12.1; note that this two-part exit
+wording is a **different** set of strings from the dungeon exit's. Declining — by answering no or by cancelling — prints the refusal,
 clears the pending-exit flag, leaves town mode active, and does not move the
 party; the step itself is discarded either way, so a declined exit never nudges
 the avatar onto the boundary cell.
@@ -1338,7 +1347,7 @@ at slot fifteen after.
 
 **Visibility.** Town mode shares the visibility producer with overworld and dungeon modes. The producer runs against the location's tile buffer and the active-object table on each render. Town mode sets the visibility-dirty flag on entry, on floor change, and on schedule-walker reports of "any NPC moved", forcing a recompute.
 
-**Command dispatch.** The shared per-letter dispatcher receives every keystroke not handled by the town-mode movement table. It routes mode-aware commands (A-Attack, K-Klimb, T-Talk) to town-specific handlers and shared commands (G-Get, P-Push, V-View) to cross-mode handlers.
+**Command dispatch.** The shared per-letter dispatcher receives every keystroke not handled by the town-mode movement table. It routes mode-aware commands (A-Attack, K-Klimb, T-Talk) to town-specific handlers and shared commands (G-Get, P-Push, V-View) to cross-mode handlers. For K the dispatcher prints **no** verb prefix in a location scene: the town-family handler prints its own, and the applied climb adds nothing but a one-word outcome — no floor number, no location line (`systems/doors-and-z-transitions.md` Section 9).
 
 **NPC schedules.** Town mode invokes the schedule processor once per ordinary
 consumed turn. The explicit-T arrest-cleanup result is the one exception: it
@@ -1537,3 +1546,17 @@ mistake re-sync, and completion effect.
   town-entry clear), the harpsichord digit behaviour and its no-turn re-prompt
   status, and the town loop's four-way reading of the command status. Source
   provenance: derived from private analysis in `../u5-decomp/notes/`.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.

@@ -44,15 +44,18 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
    **The guard gate, and where the two refusal lines come from** *(added 2026-09-06, issues #198 and #206; read from the dispatcher and checked live)*. Before the index is used, the dispatcher looks at the behaviour value of the NPC's **current** waypoint - the waypoint it last reached, not the one the hour selects - and at the NPC's sprite:
 
    - If that waypoint's behaviour is the approach-and-converse mode (`npc-schedules.md` Section 9, value `4`), the dispatcher first **rewrites that waypoint's behaviour to the bounded-wander mode** (value `1`, a persisted schedule edit: the guard stands down for the rest of the period and the edit travels with the save) and then dispatches on the dialog index. An index of zero prints the bare `No response!` line; anything else proceeds.
-   - Otherwise, if the NPC's live sprite is the guard sprite, the NPC answers `The guard offers no response!` unless *both* its current waypoint is waypoint 1 *and* its dialog index is non-zero, in which case it dispatches normally. This line is one stored literal; it is not composed from the NPC's Look description, and nothing else prints it.
+   - Otherwise, if the NPC's live sprite is the guard sprite, the NPC answers `The guard offers` on one row and `no response!` on the next, unless *both* its current waypoint index is **odd** *and* its dialog index is non-zero, in which case it dispatches normally. The two rows are one stored literal; it is not composed from the NPC's Look description, and nothing else prints it.
+
+     *Corrected 2026-09-12 (issue #262).* This bullet previously gave the escape as "its current waypoint is waypoint 1". The test is on the **parity** of the current waypoint index, not equality with one: an even index always gives the guard refusal and an odd index with a non-zero dialogue index always dispatches. The two readings agree at the waypoint indices `0`, `1` and `2` that ordinary schedules use, and diverge at any higher index. The same parity bit separately gates the shop path in `systems/shops.md` Section 2, which the published text did not describe as waypoint-conditioned at all. See `RETRACTIONS.md` R479.
    - Any other NPC dispatches on its dialog index; index zero prints the bare `No response!`.
 
    The bare line comes from the mirror check or a zero live dialogue index
    reached through the dispatcher. A valid reserved index `0xFF` is not treated
    as zero: it enters the regime handler of `systems/blackthorn.md` Section 7a
    from both explicit Talk and automatic conversation contact, subject to the
-   gates above. In particular, a guard at reached waypoint 1 with nonzero
-   dialogue can pass even when its behavior is no longer 4. The earlier
+   gates above. In particular, a guard at an **odd reached waypoint
+   index** (waypoint 1 included) with nonzero dialogue can pass even when its
+   behavior is no longer 4. The earlier
    assertion that its approach period was the only route is withdrawn (R401).
    The conflicting bare-refusal capture in issue #216 remains unresolved;
    Section 7a records the earlier reproduction method and the stock runtime
@@ -67,6 +70,32 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
    predicate, fixed refusal and turn accounting. `systems/npc-schedules.md`
    Section 9.2 gives event production and routing. These facts were established
    by shared-caller and gate traces in `u5-decomp/functions/TALK_OVL/`.
+
+   **The dispatcher's own lines.** Five branches replace the ordinary
+   description-and-greeting entry with a stored line, and every one of them
+   follows the dispatcher's own leading line feed. None of them prints a
+   description, a greeting, a name, or the keyword prompt.
+
+   | Branch | Rows |
+   |---|---|
+   | Guard sprite, refused by the parity/index test above | `The guard offers` ⏎ `no response!` |
+   | Dialogue index zero | `No response!` |
+   | The silent-figure index | `"` then `Don't hurt me!` ⏎ `Please go away!` then `"` and a line feed |
+   | A shop index whose gate does not pass | `A merchant says:` ⏎ `"Come see me at` ⏎ `my shoppe, when` ⏎ `it's open!"` |
+   | The scare index and the reserved regime index | hand off to the town scare-and-flee helper and to the Blackthorn shakedown handler; neither hand-off was entered in this pass, so no literals are established for either |
+
+   The merchant brush-off is two stored strings printed back to back, the first
+   ending with a space after the comma; `systems/shops.md` Section 2 owns it.
+   The silent-figure line is framed by two separately emitted double-quote
+   characters. The waypoint behaviour rewrite described above happens **before**
+   any of these lines, and applies to shopkeepers as well as guards.
+
+   **The typed Talk command's own three lines never reach the dispatcher** and
+   each carries its leading line feed inside the stored string: `Nobody's here!`
+   when the reached cell holds no NPC, `"Zzzzzz..."` on the bed tile, and
+   `No response!` on the mirror tile - which is a *different* stored string from
+   the dispatcher's bare `No response!`, because it begins with its own line
+   feed where the dispatcher's does not.
 
    **What loading a save does to this.** The runtime NPC table, including each NPC's dialog index and current waypoint, sits inside `SAVED.GAM` (`formats/saved-gam.md`), and a save the shipped game writes inside a location restores it, so Talk works after Journey Onward exactly as it did before the save (checked live in Skara Brae). A save written by another program that leaves that region zero makes every NPC in the location answer `No response!` until the location is re-entered from outside - that is a property of the save, not of the game.
 
@@ -785,11 +814,13 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
 1. **Entry.** The Talk command resolves an NPC and a dialog index. The conversation overlay loads the matching `.TLK` file's header, finds the right entry, and reads the blob.
 
-2. **Opening preamble.** The entry preamble prints the fixed `You see ` lead-in
-   (with its trailing space), runs the Description entry (entry 2 of the five
-   mandatory leading entries), and emits the blank-line spacing before the NPC
-   greeting. *Corrected 2026-09-06 (R393): this step previously named the
-   lead-in "Thou seest"; the stored literal is `You see `.*
+2. **Opening preamble.** The dispatcher first emits a single line feed. The
+   entry preamble then prints the fixed `You see ` lead-in (with its trailing
+   space), runs the Description entry (entry 2 of the five mandatory leading
+   entries), and emits the blank-line spacing before the NPC greeting.
+   *Corrected 2026-09-06 (R393): this step previously named the lead-in "Thou
+   seest"; the stored literal is `You see `.* If the Description entry signals a
+   stop, the opener returns and nothing further is printed.
 
 3. **Opening: acquaintance test, then greeting or introduction.** After the
    description, the engine consults the same per-scene "this NPC has been told
@@ -808,8 +839,9 @@ Putting the pieces together, a single conversation runs through a fixed envelope
      and immediately flips a fair coin. On one outcome the conversation
      simply proceeds to the keyword prompt with nothing said after the
      description. On the other the NPC introduces itself: the engine prints the
-     `I am called ` lead-in (one trailing space, preceded by the opening
-     quote) and runs the **Name** entry (entry 1 of the five
+     stored lead-in `"I am called ` — a single string whose **own** opening
+     quote and one trailing space are part of it, unlike the Greeting, whose
+     surrounding quotes the renderer emits separately — and runs the **Name** entry (entry 1 of the five
      mandatory leading entries) instead of the Greeting, then closes the quote.
 
    So a stranger volunteers its name roughly half the time and is otherwise
@@ -828,6 +860,39 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 4. **Keyword loop.** Section 6's loop runs until the player exits.
 
 5. **Bye sequence.** When the player exits (typed empty input, or a keyword response that ends the stream), the engine emits `BYE\n\n` and runs the Bye entry (entry 5 of the five mandatory leading entries).
+
+**The complete shape of an ordinary entry** *(added 2026-09-12, issue #262)* is
+therefore: a blank row, `You see ` plus the description, a blank row, the
+greeting inside double quotes, a blank row, then `Your interest?` on its own row
+and a colon on the next. **There is no engine-composed sentence anywhere in it.**
+There is no name before the description, no `Talked to` lead-in, no engine-added
+period after the description, and no unquoted greeting; a line of the form
+`Talked to <name>: <description>. <legacy text> Your interest?` is wrong on
+every element, and it also leaks what the original withholds - at entry the
+original never volunteers the NPC's name except through the stranger's
+coin-flip self-introduction.
+
+Three mechanical points matter to anyone reproducing the rows:
+
+- The dispatcher's leading line feed is an ordinary line-feed character through
+  the shared character printer, but the blank rows and both double quotes are
+  emitted through the conversation overlay's own script-character renderer,
+  using its high-bit control codes. The renderer rewrites the row-break code
+  into a line feed before handing it on, and the shared printer masks the high
+  bit off anything it is not told to treat as an escape, so the quote code
+  arrives as an ordinary double quote. A row-break byte routed straight to the
+  shared printer instead would produce a carriage return, so the renderer's
+  rewrite is load-bearing.
+- The renderer drops a quote that would immediately follow another quote, so a
+  Greeting entry that ends with its own closing quote does not produce a doubled
+  one.
+- Conversation text passes through a word accumulator that breaks the row when
+  the current column plus the pending word would reach column eighteen.
+
+The closing quote and its two row breaks are skipped when the entry that ran
+signals a stop. This describes the opener path only: a conversation pre-empted
+by the Talk command's own tile cases (Section 2) prints one of those lines
+instead and never reaches any of this.
 
 6. **Cleanup.** A final per-conversation cleanup pass runs, then output is flushed and control returns to the caller. That pass is *not* a general side-effect reconciliation: it is the Shadowlord of Falsehood's theft and nothing else, and away from Faulinei's hiding place it returns immediately without touching party state. Section 10 gives its full contract. Any gold movement, party-roster change, or signal-flag write has already happened inline, at the control code that performed it.
 
@@ -974,3 +1039,14 @@ The behaviour described here was derived from the private function and format no
 - The corrected `.TLK` header contract of Section 3 — `(npc_id, blob_offset)` entry order, ids running `1..npc_count`, dialog index `1` as an ordinary NPC, and the withdrawal of the sentinel/alias reading — re-derived from the shipped `.TLK` and `.NPC` files against the header walk in `u5-decomp/functions/TALK_OVL/`, and cross-checked against the sprite-class description strings of `LOOK2.DAT`.
 - The resident common-word dictionary and its shop-renderer token order -- derived from `u5-decomp/formats/`, with the published word list in `catalogs/common-word-dictionary.md`.
 - The 2026-08-22 retrace that corrected the `0x87` keyword-alias semantics, identified `0x88` as the in-stream setter for the per-scene branch-flag bank, re-read the `0x8C` argument as a branch target label, reclassified `0x89`/`0x8A` as moral-standing writers, identified `0x8E` as the alternate-font toggle, and fixed the dictionary token range and emission order -- derived from `u5-decomp/notes/` and `u5-decomp/functions/TALK_OVL/`.
+
+- **Issue #262 follow-up, the conversation-entry pass (2026-09-12).** The entry
+  sequence and its stored lead-ins, the dispatcher's leading line feed, the five
+  dispatcher branch lines and the typed command's own three, the waypoint-parity
+  gate shared with the shop path, and the renderer's row-break rewrite,
+  quote-suppression rule and column-eighteen word break were re-derived and
+  re-executed from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/TALK_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
+  the stored text read back from the shipped data file. The renderer's
+  column-dependent flush rules were read but not fully exercised; see
+  `OPEN-QUESTIONS.md`.

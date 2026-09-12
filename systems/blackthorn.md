@@ -711,9 +711,14 @@ explicit Talk target/terrain checks:
 
 - If the **cached reached waypoint** has behavior 4, that behavior changes
   to 1 and the nonzero reserved dialogue is dispatched. This bypasses the
-  guard's waypoint-1 restriction.
+  guard's waypoint-parity restriction.
 - Otherwise, an NPC whose linked live sprite byte is exactly `0x70` proceeds
-  only with **reached waypoint 1 and nonzero live dialogue**. Behavior 4 is
+  only with an **odd reached waypoint index** (waypoint 1 included) and
+  **nonzero live dialogue**. *(Corrected 2026-09-12, issue #262: this bullet
+  and the one above previously gave the test as equality with waypoint 1. It
+  is a parity test on the reached waypoint index; the two readings agree at
+  the indices `0`, `1` and `2` that shipped schedules use and diverge above
+  them - `RETRACTIONS.md` R479.)* Behavior 4 is
   not required in this case: even behavior 1 after a previous stand-down, or
   behavior 7 after an alarm, can pass explicit Talk here.
 - A different linked live sprite does not have that guard-specific restriction.

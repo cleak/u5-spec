@@ -228,7 +228,7 @@ Negative boundaries for unpromoted action families:
 
 | Action family | Likely trigger | Public status |
 |---|---|---|
-| Theft or dishonest object action | Field object, shop, or conversation side-effect path | Town-family chests, crops, table food, and cannon hits have confirmed scalar penalties; the traced borrowed-furniture Get branch mutates the tile and plays feedback without a confirmed selector debit. TALK can display stolen-action warnings and run presentation/transient-signal cleanup, but those warnings are not the scalar writer. |
+| Theft or dishonest object action | Field object, shop, or conversation side-effect path | Town-family chests, crops, table food, and cannon hits have confirmed scalar penalties; the traced **wall-torch borrow** Get branch mutates the tile, plays feedback and sets a byte to one hundred (published as the party's torch counter, an identification recorded as open in `OPEN-QUESTIONS.md`) without a confirmed selector debit. *(Corrected 2026-09-12, issue #262: this row called that branch "borrowed-furniture"; the two tiles that answer `Borrowed!` are the wall-torch pair, and the laden tables are the separate eating case, which does debit - `RETRACTIONS.md` R478. The no-debit half of the row is unchanged.)* TALK can display stolen-action warnings and run presentation/transient-signal cleanup, but those warnings are not the scalar writer. |
 | False dialogue answer | Conversation keyword path with a known-false answer | No traced direct scalar or per-virtue writer is promoted from the decoded conversation runner. |
 | Profanity at the conversation prompt | Conversation reserved-keyword table default/rebuke branch | Rebuke and bounded pause/timing behavior confirmed; no direct virtue-standing write confirmed in the decoded branch |
 | Refusing requested aid | Conversation refusal branch | No separate traced writer is promoted. Branch text may express virtue judgement without proving a runtime standing delta. |
@@ -831,7 +831,7 @@ The behaviour described here was derived from the private function and format no
 - The resurrection moral-standing XP penalty -- derived from
   `u5-decomp/functions/CAST2_OVL/`.
 - The Get-side object-taking scalar boundaries -- town-family chest debit,
-  crop/table-food debit, and borrowed-furniture no-debit behavior -- are
+  crop/table-food debit, and wall-torch-borrow no-debit behavior -- are
   derived from `u5-decomp/functions/SJOG_OVL/`, and
   `u5-decomp/notes/`.
 - The stolen-action warning and no-promoted-standing-writer boundary --
