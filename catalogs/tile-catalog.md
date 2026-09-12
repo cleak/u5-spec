@@ -692,6 +692,16 @@ is independently confirmed as a light source by the local-light source list in
 `systems/visibility.md` Section 12.3. This document already named `0x8F` molten
 lava in Section 5, so the two sections contradicted each other.
 
+**Laden tables and wall torches are command tiles, not step tiles.** The three
+laden-table ids `0x9A..0x9C` and the wall-torch pair `0xB0..0xB1` are consumed
+by `G` Get and by nothing else: the town-family per-turn underfoot handler
+dispatches only the trapdoor family, the burning family and poison terrain, and
+never inspects them. Get from the laden side eats (`Mmmmm...!`), Get from the
+wrong side refuses (`Can't reach plate!`), and Get on a wall torch borrows it
+(`Borrowed!`), rewriting the cell to `0x44`. `systems/containers.md` Section 7
+owns the direction rules and the state each arm leaves behind. That negative is
+scoped to the town-family step handler, which is the one that was read.
+
 **Falls.** The falls chain is triggered by the **waterfall family**
 `0xD4..0xD7`, in the cell immediately south of the party or under the party
 itself, on either plane. The handler prints its banner, force-steps the party
@@ -811,7 +821,16 @@ owned by `systems/doors-and-z-transitions.md`. Source provenance: derived from
 private analysis in `u5-decomp/functions/SJOG_OVL/` and
 `u5-decomp/formats/`.
 
-**Chests.** Stepping onto a chest tile triggers G-Get. The handler may prompt for a key on locked chests, apply a random trap, and either yield treasure or print "Nothing of note".
+**Chests.** A chest is opened with O-Open and its contents are then taken with
+G-Get; stepping onto the tile does not trigger either. `systems/containers.md`
+Sections 3 and 6 and `systems/commands.md` Section 5.8 own the transcripts and
+the trap behaviour. In particular there is no key prompt on Open, a Get against
+an unopened container record answers `Open it first!` (`Must open first!`
+underground), and no Get path prints "Nothing of note": the surface refusal is
+`Nothing to get!` and an empty dungeon chest prints its preamble alone.
+*(Corrected 2026-09-12, issue #262: the previous wording gave a step trigger, a
+key prompt and a "Nothing of note" result, none of which the traced handlers
+do.)*
 
 **Signs.** Sign-post tiles trigger the read-sign handler — a sign sub-table in `SIGNS.DAT` is indexed by per-location coord.
 

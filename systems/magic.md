@@ -213,7 +213,7 @@ remain visible even where no generic completion line is appended.
 | An Ylem; An Xen Ex | Their own effect narration (`POOF!` for Vanish; the target's charmed result for Charm), with no appended `Success!`. |
 | An Nox; Mani; Kal Xen; In Xen Mani; In Bet Xen; An Ex Por; In Ex Por; Vas Mani; Rel Xen Bet; Sanct Lor; In Quas Xen; In Mani Corp | `Success!` after the successful effect. Clone's previously specified undefined capacity-failure result is outside this successful-placement row. |
 | An Sanct | Dungeon chest handling prints its own chest-opened line, preceded by its disarmed line when applicable, and adds no generic completion line. A successful non-dungeon door/chest operation prints `Success!`. |
-| In Por | A successful combat relocation prints `Success!`; a successful non-combat landing adds no completion line. |
+| In Por | A successful combat relocation prints `Success!`; a successful non-combat landing adds no completion line at all, so the direction word is the last row printed. A non-combat ray that finds no grass reports ordinary failure and receives `Failed!`; cancelling the direction prompt prints only its own `Pass`. |
 | An Grav | A successful dungeon-cell removal prints `Field destroyed!` with no generic completion line; successful combat field removal prints `Success!`. |
 | Kal Xen Corp | A controlled Daemon placement prints `Success!`. The rebound prints `Oops...` with neither generic success nor failure; it still leaves the uncontrolled Daemon. Failure to place a Daemon reports `Failed!`. |
 
@@ -426,13 +426,15 @@ The *order* of the gates matters:
 
 The forty-eight spell effects fall into seven broad categories. Each handler takes the active-player slot and the dispatcher's per-spell context as input; each returns a success/failure code that the dispatcher uses to print the trailing `Failed!` if appropriate.
 
-**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. An earlier published range of `0..2`, which admitted a successful zero-food cast, is retracted. Most utility effects have a short narration message and finish in a single handler call. X-Ray (*Wis An Ylem*) is one of the two callers of the shared visibility sweep — the other is the White potion — and that sweep is a full reveal of the whole eleven-by-eleven viewport window straight from the map, ignoring line of sight, followed by twenty repaint frames; the complete contract, including the withdrawn distance-threshold reading, is in `catalogs/item-list.md` Section 7.2. Because it blocks for twenty frames, it is also a worked example of the presentation contract in `systems/animation.md` Section 13.5: the sweep pumps the sprite animator and the world tick, and moves no actor while it does.
+**Utility effects.** Light, Open, Vanish, Wind Change, Locate, Create Food, Great Light, Blink, Up, Down, Reveal, Magic Lock, Unlock Magic, X-Ray, and Peer. These are scene-altering or single-step interactions: they place a flag, write a value, redraw a panel, or move the party. *In Lor* writes a 100-unit light-spell duration and *Vas Lor* writes a 255-unit duration; `lighting.md` owns the shared counter decay and visibility consequences. Create Food (*In Xen Mani*) rolls a uniform food/provisions delta in `[1, 3]`, adds it to the shared party food word with the normal 9999 cap, marks the stats panel dirty, and returns through the ordinary success path. Because the lower bound is 1, there is no successful zero-food Create Food cast in the traced baseline. An earlier published range of `0..2`, which admitted a successful zero-food cast, is retracted. Several utility effects have a short narration message and finish in a single handler call, but that is not a general rule and must not be used to supply one: Blink and the two light spells narrate nothing at all on success, and Section 5.1's census gives the completion text of every one of the forty-eight spells. X-Ray (*Wis An Ylem*) is one of the two callers of the shared visibility sweep — the other is the White potion — and that sweep is a full reveal of the whole eleven-by-eleven viewport window straight from the map, ignoring line of sight, followed by twenty repaint frames; the complete contract, including the withdrawn distance-threshold reading, is in `catalogs/item-list.md` Section 7.2. Because it blocks for twenty frames, it is also a worked example of the presentation contract in `systems/animation.md` Section 13.5: the sweep pumps the sprite animator and the world tick, and moves no actor while it does.
 
 **Directed utility tile helpers.** Four utility spells — Vanish (*An Ylem*),
 Open (*An Sanct*), Magic Lock (*An Ex Por*) and Unlock Magic (*In Ex Por*) —
 share one shape: prompt for a direction, resolve the single cell one step away
 in that direction, test that cell's live tile against a fixed set, rewrite it,
-and mark the view dirty. They are the reason those four spells carry the combat
+and mark the view dirty. **Open's dungeon arm is the one exception to the shared
+shape and raises no prompt at all** (see its bullet below and
+`RETRACTIONS.md` R475). They are the reason those four spells carry the combat
 bit in their scene masks, and their combat behaviour is described in
 Section 9's *Directed utility tile spells in combat*.
 
@@ -486,12 +488,44 @@ effect in every case.
   adjacent dropped chest unlocks it for the combat J-Jimmy and S-Search
   commands. The spell only clears the lock/trap bit; it never grants contents,
   and it is not the O-Open command.
-  Inside a dungeon scene Open takes a different arm entirely:
-  it acts on the party's own dungeon cell when that cell is a door/urn-class
-  cell, otherwise on the direction-biased neighbour, prints a disarm line when
-  the cell carries the trapped variant bit, rewrites the cell to the opened form
-  while preserving its visited marker, prints the chest-opened line and returns
-  handled-silently.
+  Inside a dungeon scene Open takes a different arm entirely, and it is a
+  *command that opens the chest itself* rather than a state that makes a later
+  O-Open safe. It plays its sound, then selects a target: the party's own
+  dungeon cell when that cell is a **closed-chest** cell, otherwise the cell one
+  step along the party's **current facing**, wrapped on both axes of the
+  eight-by-eight level. **It prompts for no direction** — the facing is read
+  directly, and the shared direction prompt this family otherwise uses belongs
+  to Open's surface arm alone. If the selected cell is not a closed chest the
+  spell fails and the shared epilogue supplies `Failed!` with the failure sound.
+  On a closed chest it prints `Disarmed!` when the cell's **lowest bit** is set,
+  rewrites the cell to the open-chest class while preserving its **visit** bit,
+  prints `Chest opened!` and returns handled-silently, so no `Success!` follows.
+  It never invokes the trap resolver.
+
+  Three details a faithful implementation needs. The disarm line is gated on the
+  lowest bit alone, while the O-Open **command's** trap test reads the low three
+  bits, so a chest cell whose low nibble is 4 opens under the spell with no
+  `Disarmed!` line even though the same cell would spring a trap under O-Open.
+  The bit the rewrite preserves is the visit bit, which is not the bit it tests.
+  And this arm's scene gate is **wider** than the dungeon arms of O-Open and
+  G-Get: it is taken for every scene above the last town value and below the
+  combat band, where the two commands take their dungeon arms only inside the
+  narrower dungeon-proper band — a contract that says "in a dungeon" for all
+  three will diverge on any scene between the two bands. Both of this arm's
+  lines carry a trailing exclamation mark, and `Chest opened!` is a **different**
+  shipped string from the O-Open command's `Chest opened`, which has none and
+  carries a leading line feed instead. On stock data every chest cell in the
+  shipped dungeon map has its lowest bit set, so the no-disarm arm is reachable
+  only on custom data.
+
+  *Corrected 2026-09-12 (issue #262).* An earlier revision of this bullet said
+  the dungeon arm "acts on the party's own dungeon cell when that cell is a
+  door/urn-class cell" and "prints a disarm line when the cell carries the
+  trapped variant bit", and the handler-family map below described all four
+  helpers, this arm included, as beginning "Prompt for a direction". The class
+  is the closed-chest class, the gate is the cell's lowest bit, the variant/visit
+  bit is the one the rewrite *preserves* rather than the one it tests, and the
+  dungeon arm prompts for nothing. See `RETRACTIONS.md` R475.
 - **Magic Lock.** Applies a magic lock to a surface-style door. Both the
   unlocked and the ordinary-locked forms of an orientation collapse onto that
   orientation's magic-locked form: `0xB8` or `0xB9` becomes `0x97`, and `0xBA`
@@ -568,6 +602,44 @@ ordinary failure message. No random displacement, retry budget, active-object
 occupancy check, vehicle-specific refusal, or generic movement passability
 query is part of the non-combat Blink path.
 
+**What Blink prints** *(added 2026-09-12, issue #262; the issue's table named
+the incantation `Vas Por`, which is not this spell - Blink is `In Por`, spell 17
+of the third circle, and `Vas Rel Por` is Gate Travel).* Outside combat, a
+**successful Blink prints nothing at all**: the party moves, and the last row in
+the message window is the direction word the shared direction prompt appended to
+`Direction-`. The silence is neither the spell's own narration nor a suppressed
+epilogue - a completed non-combat Blink reports the neutral completion result,
+which bypasses both arms of the shared epilogue of Section 5, so no `Success!`
+line is produced. When the ray reaches no grass cell before leaving the active
+window, the party does not move and the shared `Failed!\n` and its failure
+sound follow the direction word. Cancelling with Space prints only the prompt's
+own `Pass\n` and nothing after it, and reads no map cell. **All three outcomes,
+the cancelled one included, have already spent the premixed charge and the three
+mana of a third-circle spell.**
+
+Combat Blink is the opposite shape: it never prompts for a direction, and it
+does use the shared epilogue. An accepted arena step prints `Success!\n` with
+no sound; both failure causes - the combat refusal state and exhausting the
+fixed budget of seven candidate steps - print `Failed!\n` with the shared
+failure sound. The meaning of that refusal state is named here only by its
+effect.
+
+Refusals before dispatch are the shared cast gate's, not the spell's, and Blink
+shows the whole cascade. `catalogs/spell-list.md` gives the allow-mask as
+combat plus the overworld scene, so an ordinary town or dungeon scene prints
+`Not here!\n` with the failure glissando before any prompt and before the
+charge or the mana are touched — but the two absorbing locations intercept
+ahead of that mask test and print `Absorbed!\n` with the absorption envelope
+instead. The remaining outcomes are the ordinary ones of Sections 5 and 7:
+`None mixed!\n` alone with nothing spent; `M.P. too low!\n` then `Failed!\n`
+with the charge already burnt; and a bare `Failed!\n` after the mana has been
+debited when the caster's level is too low.
+
+The non-combat handler distinguishes nothing by world plane: the overworld scene
+value is the same byte on both planes and the handler's only map access is the
+shared tile lookup, so this contract is stated for the overworld **scene**
+rather than for one plane. No Underworld grass ray was run.
+
 **Healing effects.** Heal, Great Heal, Cure, Awaken, and Resurrect read
 party-member records, modify HP/status fields and update the displayed stats.
 Awaken and Cure both ask **`On who: `**, echo the chosen member's name and
@@ -615,8 +687,7 @@ the status byte itself is not changed. On success it rolls one random value in
 the inclusive range zero through sixty, divides that value by two with integer
 truncation, and promotes zero to one. The resulting heal amount is therefore
 one through thirty, with one also covering rolls whose halved result is zero.
-The helper adds
-that amount to current HP, clamps at the member's maximum HP, marks the stats
+The helper adds that amount to current HP, clamps at the member's maximum HP, marks the stats
 display dirty, and returns success to the dispatcher. A member already at
 maximum HP still follows the successful helper path; the clamp simply leaves
 current HP unchanged. Great Heal is a separate selected-member path: it refuses
@@ -828,9 +899,8 @@ and exactly five ids (Spiked Helm, Spiked Shield, Club, Mace and 2H Hammer)
 switch the attacker term of the to-hit score from Dexterity to Strength. See
 `systems/combat.md` Section 11.
 
-Polymorph removes the accepted
-creature target and places a class 20 Giant Rat at the target's same combat
-coordinates.
+Polymorph removes the accepted creature target and places a class 20 Giant Rat
+at the target's same combat coordinates.
 Invisibility carries no timer of any kind and never touches the shared slot. It
 is active-caster only: it marks the current combat actor hidden/phase-shifted,
 updates the parallel visual actor state for that same slot, and sets a flag in
@@ -1101,8 +1171,7 @@ narrowed to undead classes; it never touches the controlled bit. Earlier drafts
 called this a "lower-tier summon/tame-style helper" that set the controlled bit;
 that description is withdrawn.
 
-Clone is
-target-derived: after the `Creature:` target is accepted, it searches for one
+Clone is target-derived: after the `Creature:` target is accepted, it searches for one
 free combat actor slot and one free dynamic-object slot, copies the target's
 paired records only after both slots exist, relinks the new combat record to the
 new dynamic-object slot, then places the copy at a random legal coordinate in
@@ -1153,7 +1222,19 @@ pattern and is not reached as a party C-Cast summon row in the traced caller
 census. Do not use that private pattern as the source for Conjure, Swarm, or
 Summon placement.
 
-**Special / marquee effects.** Negate Magic, Gate Travel, and Negate Time. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher, while the three enemy-side consumers are the class-special, teleport, and scene-resistant ranged/effect boundaries specified earlier in this section. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when outside dungeon/combat scenes and on accepted world-tile ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. Negate Time scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
+**Special / marquee effects.** Negate Magic, Gate Travel, and Negate Time. These are the fewest-use spells with the largest gameplay impact. Negate Magic installs the shared `N`/10 active-effect tag; combat C-Cast checks that tag and routes to the absorption/refusal path before queueing the normal spell dispatcher, while the three enemy-side consumers are the class-special, teleport, and scene-resistant ranged/effect boundaries specified earlier in this section. Gate Travel is a keyed moonstone teleport rather than a fixed astronomical moongate table: it requires the party not to be shipboard, prompts `To phase:_`, accepts digits `1` through `8`, converts that to a zero-based moonstone slot, and invokes the world-transition helper for that saved slot. Each slot stores the destination's scene, X, Y, and Z/floor values; an invalid scene sentinel makes the helper return failure and the cast does not teleport. Burying a Moonstone records the current valid location into that slot when the scene byte is `0x00` through `0x20` inclusive - overworld and town family, so dungeon and combat scenes are outside the band - and when the tile underfoot is one of the ids `4..10`, `44`, or `45`; later Search/Get recovery invalidates it. The whole burial transcript is two pieces, the item label `Moonstone_` and then either `buried!` or `cannot be buried here!`, and that single refusal covers every cause including a party afloat: the branch reads no transport marker at all, and open water is refused only because its tile ids are outside the accepted set. Note that the accepted set is not a terrain family - swamp, tile 4, is classed with water elsewhere and is accepted here - so an implementation must carry the id set rather than a "land only" rule. `systems/inventory.md` Section 7.1 owns the U-Use transcript.
+
+**Recovery invalidates the slot silently, and the loss is wider than Gate
+Travel.** The byte that records a burial's destination scene is the same byte
+that records the stone as carried, so the Get that collects a recovered stone
+overwrites the saved destination with the carried marker and says nothing about
+it. Three consumers read that byte and all three go quiet: a later Gate Travel
+cast naming that phase prints `To phase:_`, echoes the digit and a line feed and
+then reports the ordinary `Failed!`; the nightly live-terrain pass stops
+stamping the gate tile at that cell, so that moongate no longer appears; and a
+moon-phase arrival that selects the slot plays the gate animation, leaves the
+cell as grass, moves nobody and prints nothing. `systems/commands.md` Section
+5.8 owns the two-command, directional recovery itself. Negate Time scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
 
 ### Handler-family map
 
@@ -1165,16 +1246,16 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Active-target attack wrapper | Grav Por, Vas Flam, Xen Corp | Print the shared aiming prompt, use the combat aiming/projectile path, and on actor collision call the shared combat spell-damage wrapper. Grav Por rolls 1..16 raw damage and Vas Flam rolls 1..30; both subtract target defense before the shared damage/status path. Xen Corp uses its attack hit check and the instant-kill damage value, without damage randomization or defense subtraction. All three use the shared result narrator. |
 | Party/character restore handlers | An Zu, An Nox, Mani, Vas Mani, In Mani Corp | Mutate party-member status/HP records through small helper families. An Zu prompts for one member and wakes that member only if Sleeping; the former no-prompt/first-sleeper claim is withdrawn (R409). An Nox prompts for one member and changes only Poisoned targets back to Good. Mani skips only Dead targets, adds a random HP roll formed by halving an inclusive 0..60 roll and flooring zero to one, clamps at maximum HP, and leaves status unchanged. Vas Mani refuses Dead targets, fails during the dungeon combat-active substate, and otherwise restores current HP to maximum. Resurrection additionally requires exactly Dead status - every other status, Ashes included, is refused by that one equality test, and no Ashes-specific check exists - changes status to Good, sets current HP to 1 on the spell path, rebuilds mana from class and Intelligence, conditionally rescales experience, recomputes level from experience, and sets maximum HP to thirty times the recomputed level. |
 | Shared field helper | In Flam Grav, In Nox Grav, In Zu Grav, In Sanct Grav | Pass a field-kind argument into one placement helper. Dungeon placement bytes and no-write failure are exact above. Combat dispatch maps Fire/Poison/Sleep/Energy to field-kind bytes `0x35`/`0x33`/`0x34`/`0x36`, then delegates to the arena-field helper. Player combat C-Cast uses the arena cursor followed by the ordinary projectile/impact resolver. Combat marker placement requires a confirmed impact cell but no Fire/Sleep/Energy random acceptance gate. The helper separately reports the first eligible descriptor at the impact coordinate; that placement-time result is not the later contact target. Contact runs after a current actor's dispatch returns, targets that same actor, and skips only its linked renderer record while looking for another colocated marker. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Sleep applies its status result without a hook-local draw. Energy blocks movement and has no contact-result arm. Contact does not consume markers, which persist until combat exit restores the pre-combat active-object table. |
-| Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction, resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock/trap bit on a co-located kind-1 chest object — which in combat includes the chest a dying monster drops, making Open's success case reachable in every arena — and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
+| Directed utility tile helpers | An Ylem (Vanish), An Sanct (Open), An Ex Por (Magic Lock), In Ex Por (Unlock Magic) | Prompt for a direction — **except Open's dungeon arm, which prompts for nothing and reads the party's facing directly (`RETRACTIONS.md` R475)** — resolve the single adjacent cell, test its live tile against a fixed id set, rewrite it and mark the view dirty. The prompt's origin is the party cell outside combat and the acting combat actor's arena cell inside combat, and the live-tile lookup resolves to the combat-arena terrain grid in combat scenes, so all four genuinely mutate arena terrain. Vanish clears thirteen removable-object tile ids to the shared cleared-cell tile and prints `POOF!`; Open steps a locked door down to its unlocked form or clears the lock/trap bit on a co-located kind-1 chest object — which in combat includes the chest a dying monster drops, making Open's success case reachable in every arena — and takes a separate dungeon-cell arm in dungeon scenes; Magic Lock collapses both door forms of an orientation onto its magic-locked form; Unlock Magic performs the inverse. Space/Pass is silent, a matched tile prints `Success!` (or the helper's own line), and a non-matching tile prints `Failed!`. Section 8 has the exact tile ids. |
 | Field removal helper | An Grav | Uses a separate Dispel Field path. Dungeon scenes inspect the faced adjacent live cell and turn recognized field cells back into open/visited-live-cell state while preserving only the visit marker. Combat/non-dungeon spell scenes use the shared direction prompt and remove a matching active-object field marker at the cached target coordinate. Failure leaves the map image or active-object table unchanged. |
-| Directional Blink | In Por | Outside combat, prompts for a cardinal direction, scans that ray through the active 32-by-32 loaded world window, and moves the party to the farthest grass tile (`0x05`) found. No random target, retry budget, occupancy check, or generic passability query is used; no matching grass tile reports ordinary spell failure after the shared charge/mana spend. |
+| Directional Blink | In Por | Outside combat, prompts for a cardinal direction, scans that ray through the active 32-by-32 loaded world window, and moves the party to the farthest grass tile (`0x05`) found. No random target, retry budget, occupancy check, or generic passability query is used; no matching grass tile reports ordinary spell failure after the shared charge/mana spend. A successful non-combat landing prints **nothing**; the combat arm prompts for nothing and prints `Success!` or `Failed!` through the shared epilogue. See Section 8. |
 | Directed wind-cone effects | In Zu, In Nox Hur, In Vas Grav Corp, In Flam Hur | Prompt for a cardinal direction, build the widening clipped cone described in Section 8, and scan the combat actor table for actors whose arena coordinates match those cells. The normal cone starts one cell forward from the caster, widens by one cell on both sides per forward step, de-duplicates selected cells, and writes up to 63 coordinates. The common application layer skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common wind-cone layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors are eligible if their cells are in the directed area and they pass the non-faction gates. In Zu uses the shared resistance predicate before sleep; In Nox Hur uses the distinct target-only `roll >= combat weight` gate before poison; In Vas Grav Corp uses the shared resistance predicate before the decimal `99` instant-kill path; and In Flam Hur rolls raw `[1, 30]` damage with neither gate. The two damage winds credit returned monster-kill reward units to the caster's experience with the 9999 cap. |
 | Table-wide tremor damage | In Vas Por Ylem | Scans all thirty-two combat actor slots. For each non-empty, damageable slot, the spell draws a skewed 1..30 combat roll and accepts when that roll is at least the target's combat weight. It then rolls 1..20 damage and feeds that roll plus the actor slot to the shared combat damage/status handler. The handler applies HP damage, death effects, split checks, and temporary drop markers as usual. Any raw monster-kill reward unit returned by the handler is added to the caster's experience word, capped at 9999. Tremor does not run a faction filter, so friendly-fire is allowed for any party actor that passes the common gates. |
 | Active-effect display wrapper | In Sanct, Rel Tym, Quas An Wis, In An | Pass an animation/effect kind, visible tag, and counter to a shared active-effect helper: In Sanct uses `P` / 20, Rel Tym uses `Q` / 30, Quas An Wis uses `C` / 20, and In An uses `N` / 10. The helper stores one global visible tag/counter pair, plays the common animation, and refreshes the stats panel; resident update helpers age the counter until expiry clears the tag. This aging is separate from torch/light-spell cleanup cadence. Confirmed consumers: `P` has no consumer with any mechanical effect (the defence bonus it was meant to grant is never applied — see Section 8), `Q` runs an inclusive 0..1 gate at the head of the automatic actor driver, so self-acting actors skip about half their turns while the player's own command prompt is untouched (`systems/combat.md` Sections 8 and 9), `C` lets monster AI target selection roll a random byte against the acting monster's class charm threshold and remap the monster to neutral group 0 on a strictly greater roll, and `N` absorbs combat casts before the shared dispatcher consumes charge or MP. |
 | Creature-prompt targeters | An Xen Ex, Rel Xen Bet, In Quas Xen | Prompt `Creature:`, resolve a creature at the selected cell, and apply spell-specific eligibility gates. Charm runs the shared resistance predicate before toggling the target's controlled/charmed marker — a second successful Charm on the same actor clears it, and the marker does not hand the target to the player's prompt, though it does flip the target's combat group for the same-faction filter (`systems/combat.md` Section 6.1a). Polymorph replaces the target with a class 20 Giant Rat at the same coordinates. Polymorph rejects protected classes 14/15/47 before resistance and replacement; other targets must pass its shared resistance gate. Clone duplicates the target into paired free actor/dynamic-object slots before placing the copy at a random legal arena coordinate. Clone writes no partial copy if either table is full; the original's capacity-failure result word is undefined. No traced Clone helper installs a separate per-spell duration counter. |
 | Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
 | Table-wide fear sweeps | In Quas Corp, An Xen Corp | Not a prompt-driven target family. Sweeps all thirty-two combat actor slots and accepts every monster-side actor that is not one of the three protected special classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the shared resistance check. For each accepted actor **the spell itself** drives the combat HP counter to one and ORs in the fleeing bit `0x02`. The combat wound-score morale classifier does **not** perform that write; it only keeps re-asserting the flag from the resulting critical-HP state on later turns. Repel Undead (An Xen Corp) runs the identical sweep with one added condition, the undead class-flag bit, and writes the same two values. Neither spell places, re-types, tames, or repurposes an actor, and neither touches the controlled/charmed bit `0x01`. |
-| Gate travel | Vas Rel Por | Refuses while the party is shipboard, prompts `To phase:`, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
+| Gate travel | Vas Rel Por | Refuses while the party is aboard a frigate or a skiff **before** printing anything, so that transcript is a bare `Failed!` with no `To phase:_` row. Otherwise prompts `To phase:_`, echoes the typed key and a line feed, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. A key outside `1`..`8`, and a slot whose stone has been recovered, both report the ordinary `Failed!`. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
 | Negate Time | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
 This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's automatic-actor-driver gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's party-cast absorption and three enemy-side action boundaries, and the combat post-dispatch contact boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
@@ -1253,7 +1334,12 @@ What actually happens:
   selected only for dungeon-*exploration* scenes; the combat scene class routes
   to the non-dungeon arm even when the fight is a dungeon-room encounter. The
   earlier caveat suggesting combat Open might route through the dungeon trapped
-  chest helper is withdrawn.
+  chest helper is withdrawn. Refined 2026-09-12: that arm's gate is "above the
+  last town value and below the combat band", which is **wider** than the
+  dungeon-proper band gating the O-Open and G-Get commands' dungeon arms, but it
+  still stops short of the combat band, so the conclusion is unchanged. A
+  contract that says "in a dungeon" for the spell and for the two commands alike
+  will diverge on any scene between the two bands.
 
 Section 8's *Directed utility tile helpers* carries the exact tile-id mappings
 and result/narration rules; nothing about them changes between scenes except the
@@ -1564,3 +1650,29 @@ The behaviour described here was derived by reading the private function and for
   `u5-decomp/functions/CAST2_OVL/`.
 - The twenty-four-entry rune-syllable dictionary, the forty-eight-entry resident long-incantation display phrase table and its per-id pointer table, the eight reagent abbreviations and full names, the eight shrine mantras, the forty-eight-entry compact rune-code table, and the resident recipe/scene-mask tables — derived from `u5-decomp/formats/`, private analysis in `u5-decomp/notes/`, and local `DATA.OVL` table reads.
 - The character record fields read by the magic system — strength, dexterity, intelligence, mana, level, status — and the persistent layout of the per-spell charge counters, the eight reagent counters, the gold counter, and the shrine quest masks — derived from `u5-decomp/formats/`.
+
+- **Issue #262, the dungeon-object pass (2026-09-12).** The dungeon O-Open and
+  G-Get transcripts and their prefix rules, the chest lifecycle and its trap
+  sub-type bits, the Open spell's underground arm, the dungeon chest reward
+  generator's emitted rows and depth thresholds, and the negative that no
+  reachable dungeon state places an active object were re-derived from private
+  analysis in `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
+  the word, gate and quantity tables read back from the shipped data file.
+
+- **Issue #262, the magic/moonstone pass (2026-09-12).** Blink's non-combat
+  silence, its combat `Success!`/`Failed!` arms and seven-step budget, the
+  shared cast gate's refusal cascade with the absorbing-scene interception
+  ahead of the allow mask, the Moonstone burial scene band and single refusal
+  literal, Gate Travel's pre-prompt shipboard refusal, and the three silent
+  consumers of an invalidated slot were re-derived and re-executed from private
+  analysis in `u5-decomp/notes/`, `u5-decomp/functions/CAST_OVL/`,
+  `u5-decomp/functions/SJOG_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. 1192
+  executed original cases, including a forty-scene sweep of the cast gate, a
+  forty-eight-case cascade matrix pinning the order and the spend of each arm,
+  window-clip and memory-read-watch cases for the ray, and twenty-four
+  transport-marker cases across five vehicles establishing that the burial
+  branch reads no transport marker. The absorbing-scene interception was
+  executed for this spell only; it sits in the shared gate ahead of the
+  per-spell mask, so it should apply to every spell.

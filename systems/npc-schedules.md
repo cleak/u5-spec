@@ -819,8 +819,13 @@ It is saved with the schedule. There is no shop-only contact exemption;
 ordinary conversation contact itself does not trigger a town-wide alarm.
 
 The shared guard gate still applies before dialogue dispatch. Shop opening
-then requires reached waypoint 1 and hour-selected waypoint 1, with the later
-horse check specified in `systems/shops.md` Section 2. A shop refusal returns
+then requires an **odd reached waypoint index** (waypoint 1 included) and
+hour-selected waypoint 1, with the later horse check specified in
+`systems/shops.md` Section 2. The parity gate runs first: an **even** reached
+waypoint index prints the merchant brush-off without the open-for-business
+check being consulted at all. *(Corrected 2026-09-12, issue #262: this sentence
+previously gave the first test as equality with waypoint 1 - `RETRACTIONS.md`
+R479.)* A shop refusal returns
 the same peaceful outcome as a normal conversation. A reserved regime demand
 that returns failure enters arrest; arrest refusal raises the town alarm and
 can proceed to conflict. `systems/town-mode.md` Section 14 specifies arrest

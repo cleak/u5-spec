@@ -65,6 +65,14 @@ A shopkeeper NPC carries one shop kind at a time — weaponsmith *or* tavernkeep
 multiple commerce types; players who want a weapon and a drink must talk to two
 different NPCs.
 
+**A parity gate runs first.** *(Added 2026-09-12, issue #262.)* The shared
+dispatcher reaches the shop path only when the NPC's cached reached waypoint
+index is **odd**; at an even index it prints the merchant brush-off below
+without consulting the open-for-business check at all. The two rules agree on
+shipped schedules, where the indices are `0`, `1` and `2`, but an implementation
+that runs only the open-for-business check will diverge on any higher index.
+`systems/conversation.md` Section 2 owns the same bit on the guard path.
+
 **Open-for-business gate.** Both the NPC's cached reached waypoint and the
 waypoint selected by the current world hour must be **waypoint 1**. Waypoint
 numbers are zero-based (`0`, `1`, `2`); `npc-schedules.md` Section 3 defines

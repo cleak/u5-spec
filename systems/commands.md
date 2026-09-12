@@ -147,7 +147,7 @@ handoffs.
 | `H` | Hole up / rest. | Overworld and dungeon use the rest-with-watch path. Town mode uses the inn/bed-hours path and refuses off bed tiles. The shared rest handler owns the hours prompt, sleep cleanup, HP recovery, rest-interruption checks, and the rare outdoor Lord British camp event; see `rest-and-camp.md`. |
 | `I` | Ignite. | Routes to the torch-lighting handler. It consumes one torch if available and then sets or extends the torch duration as described in `lighting.md`. |
 | `J` | Jimmy. | Routes to the lockpick handler for doors, restraint tiles, and locked containers. |
-| `K` | Klimb. | Mode-aware: overworld, town-family locations, and dungeons each have their own climb/Z-transition handler; the gear gate, on-foot check, ladder cases, and dungeon level rules are specified in `doors-and-z-transitions.md`. |
+| `K` | Klimb. | Mode-aware: overworld, town-family locations, and dungeons each have their own climb/Z-transition handler off this dispatcher, and combat has a fourth of its own that this dispatcher never sees (`combat.md` Section 8.4); the gear gate, on-foot check, ladder cases, per-mode prefix ownership and dungeon level rules are specified in `doors-and-z-transitions.md`. |
 | `L` | Look. | Dungeon scenes route to DNGLOOK. Overworld and town-family scenes route to LOOKOBJ and `LOOK2.DAT`; see `view.md`. |
 | `M` | Mix Reagents. | Routes to reagent mixing, including while standing on a shrine. Ordinary shrine meditation begins through E-Enter; see `systems/karma.md` Section 7. |
 | `N` | New order. | Routes to the party-order swap handler described in Section 6. |
@@ -255,15 +255,15 @@ plain block of text rather than as a table addressed by the key code.
 | `D` | `D-What?\n` | |
 | `E` | `Enter_` followed by a place noun (section 5.5) | Off the overworld: `Enter_what?\n` |
 | `F` | `Fire-` | |
-| `G` | `Get-` | |
+| `G` | `Get-` outside dungeons; **nothing** in a dungeon | The prefix is emitted only when the scene byte is below the dungeon band. The dungeon Get handler opens with its own `Get\n` instead, printed unconditionally before it looks at anything, and prompts for no direction; section 5.8 and `dungeon-mode.md` section 8.1 carry the dungeon transcript. This row previously published `Get-` with no carve-out, although the command list and section 5.8 already gave the dungeon form, so the qualifier is a clarification rather than a reversal. |
 | `H` | `Hole_up-_` | Hyphen **then** a space. Bed refusal: `Only_in_bed!\n`. Shipboard and camp forms in section 5.5. |
 | `I` | `Ignite_torch!\n` | |
 | `J` | `Jimmy-` | |
-| `K` | `Klimb-` | Dungeon form `Klimb-U/D-`, then `Up!\n`, `Down!\n` or `Failed!\n`; Space at the up/down chooser answers `Pass\n\n` and climbs nothing. Gearless dungeon form: `Klimb-\nWith_What?\n`; the no-feature dungeon form is `Klimb-what?\n`. In a dungeon the resident dispatcher prints no `Klimb-` prefix of its own - all four prompt forms are the overlay's. |
+| `K` | `Klimb-` | **Exactly one layer prints this per mode, never two.** The dispatcher prints it only on the overworld arm, from inside that arm after the scene test; for a location scene and for a dungeon-band scene the dispatcher prints nothing and the mode handler prints its own. The town-family handler prints the same bare `Klimb-` unconditionally at entry. In a dungeon all four prompt forms are the overlay's: `Klimb-U/D-` then `Up!\n` or `Down!\n`, with Space at the up/down chooser answering `Pass\n\n` and climbing nothing; `Klimb-` then the single word when only one direction is offered; the gearless form `Klimb-\nWith_What?\n`; and the no-feature form `Klimb-what?\n`. `Failed!\n` belongs to the dungeon level-change **spells**, not to K (`dungeon-mode.md` section 8.1). Combat is a fourth owner outside this dispatcher and carries its own copy of the prefix (`combat.md` section 8.4). No copy of the prefix carries a line feed. |
 | `L` | `Look` then either `-` or `...\n` | See section 5.3. |
 | `M` | `Mix_Reagents\n\n` | |
 | `N` | `New_Order` | **No** trailing newline. |
-| `O` | `Open-` | |
+| `O` | `Open-` | Printed in **every** scene, the dungeon included - unlike `Get-`. The dungeon arm acts on the cell underfoot and awaits no direction. |
 | `P` | `Push-` | Dungeon refusal replaces the echo entirely: `Push\nNot_here!\n`. Ordinary source/path refusals continue the direction echo; see Section 8.1. |
 | `Q` | `Quit:` | |
 | `R` | `Ready...\n\n` | |
@@ -294,7 +294,7 @@ Two ordering details are easy to get wrong and are part of the contract:
 
 | Suffix | Meaning | Verbs |
 |---|---|---|
-| `-` | A **direction** is awaited. The chosen direction's name is appended on the same line. | Attack (outside dungeons), Fire, Get, Jimmy, Klimb, Open, Push, Search (direction form), Talk, Look (surface and town) |
+| `-` | A **direction** is awaited. The chosen direction's name is appended on the same line. | Attack (outside dungeons), Fire, Get (outside dungeons), Jimmy, Klimb (overworld, and the town non-ladder arm), Open (outside dungeons), Push, Search (direction form), Talk, Look (surface and town). The dungeon arms of Get and Open act on the cell underfoot and await nothing; the dungeon arm of Klimb awaits an up-or-down choice rather than a direction, and the town ladder arms await nothing. |
 | `...` | A follow-up selection is awaited: a party member, item, spell, page, or dungeon-relative direction. | Cast, Ready, Z-stats, Search (dungeon), Look (dungeon) |
 | trailing space | A further keystroke or a typed argument continues the **same** line. | Board, X-it, Yell, Hole up (hyphen then space) |
 | newline, or nothing | The command completes immediately. | Pass, Ignite torch, Mix Reagents (two newlines), New Order (no newline at all), Use item (two newlines) |
@@ -477,6 +477,13 @@ empty row.
 | `G` + direction, nothing there | `Get-North` ⏎ `[blank]` ⏎ `Nothing to get!` |
 | `S` + direction (town or overworld) | `Search-North`, then the conditional acting-member exchange below; after a successful selection, an empty search prints `[blank]` ⏎ `Thou dost find` ⏎ `nothing of note.`. Cancellation aborts before the search. |
 | `K` + direction, no feature | `Klimb-North` ⏎ `What?` |
+| `K` in town on an ascent link / on a descent link or grate | `Klimb-Up!` / `Klimb-Down!` on one row, and **nothing else** - no direction prompt, no floor number, no location line |
+| `K` in town, mounted on a horse | `Klimb--On foot!` on one row - two hyphens, because the refusal literal begins with its own. A carpet or a vessel is not refused |
+| `K` + direction in town onto rubble or a fence | `Klimb-North` and nothing further; the party steps across with no floor change |
+| `K` on the overworld, no Grapple | `Klimb-With what?` on one row - lower case *what*, and no direction is ever requested |
+| `K` on the overworld, not on foot (carpet included) | `Klimb-On foot!` on one row |
+| `K` + direction on the overworld, climbable target | `Klimb-North`, then one `Fell!` row per party member who failed the risk roll, and **nothing else** - no success line, no destination or terrain report |
+| `K` + direction on the overworld, other targets | `Klimb-North` ⏎ `Impassable!` for the one blocked tile identity, or `Klimb-North` ⏎ `Not climbable!` for every identity other than the single climbable one |
 | `X` on foot | `X-it what?` on one row (the verb echo and the refusal are two literals) |
 | `E` off an entrance | `Enter what?` |
 | `H` in town, not on an inn bed | `Hole up- Only in bed!` on one row |
@@ -491,6 +498,21 @@ empty row.
 | `N`, the leader | `Swap Avatar` ⏎ `[blank]` ⏎ `Avatar must lead!` |
 | `N`, cancelled | `Swap nobody!` |
 | `Space` | `Pass` |
+
+**An applied Klimb narrates nothing of its own.** *(Added 2026-09-12, issue
+#262.)* Neither the town nor the overworld climb prints a success line, a
+destination, a floor number, a terrain report or a location line: the town arms
+end at the one-word outcome, and the outdoor arm ends at the direction name plus
+one fall line per member who failed. The exact literals are
+`With_what?\n` (outdoor, lower case, and a *different* string from the
+dungeon's `With_What?\n`), `On_foot!\n` (outdoor), `-On_foot!\n` (town,
+leading hyphen), `Impassable!\n`, `Not_climbable!\n`, `Fell!\n`, `Up!\n`,
+`Down!\n` and `What?\n`. Both climb verbs use the shared direction prompt of
+section 5.4 unchanged, so the pass key is the only cancel on either. The full per-arm
+contract, including which arms consume a turn, is in
+`doors-and-z-transitions.md` Section 9. That negative is scoped to the message
+window with the repaint endpoints excluded: the town floor reload and the
+resident view routine do repaint panel content.
 
 **Get/Search result whitespace is shared across modes.** On ordinary empty
 terrain in overworld, town or combat, the Get handler supplies exactly
@@ -515,6 +537,141 @@ scene boundaries, four directions and the separate dungeon branches. Output
 calls were verified with controlled input and map access, not a new raster
 capture.
 
+**Successful Get, Search and eat results.** *(Added 2026-09-12, issue #262.)*
+The rows above give the *empty* Get and the *empty* Search. The successful
+shapes follow, for overworld, town-family and combat scenes; the dungeon band
+keeps the separate branches given just above.
+
+Get's leading line feed is emitted before the handler looks at the target cell,
+so it precedes every line in this group, the refusal included. It is **not**
+unconditional: the handler consults the shared reachability gate first, and a
+Get that gate refuses prints nothing at all — not even that feed.
+
+*Counted pickups* print the quantity in plain decimal, with no padding and no
+leading space, then a stem, then a terminator. The stems are `_gold!\n` and
+`_food!\n`, which carry their own terminator, and `_key`, `_odd_key`, `_gem`
+and `_torch`, which do not; those four take `!\n` when the quantity byte is
+exactly one and `s!\n` — `es!\n` for torches — otherwise. Singular is chosen by
+testing against one, so a quantity of zero takes the plural form. A key record
+flagged as an odd key credits the odd-key stock instead and reads
+`1_odd_key!`. Complete examples: `3_gold!`, `1_key!`, `4_keys!`, `1_gem!`,
+`7_gems!`, `1_torch!`, `3_torches!`, `5_food!`.
+
+*Named pickups* print one fixed sentence, or two rows for the shard and regalia
+kinds:
+
+| Picked object | Rows after the leading feed |
+|---|---|
+| Potion | `A_` + the colour word + `_potion!` — for example `A blue potion!` |
+| Scroll | `A_scroll:_` + the rune mnemonic (two or three characters; `systems/containers.md` Section 6 lists all eight) + `!` — for example `A scroll: VL!` |
+| Scroll flagged as the plans | `The plans for the HMS Cape!` |
+| Sandalwood box | `A sandalwood box!` |
+| Moonstone | `A moonstone!` |
+| Magic carpet | `A magic carpet!` |
+| Shard | `The Shard of` ⏎ `Falsehood!`, `Hatred!` or `Cowardice!` |
+| Regalia | `The Crown of Lord British!`, `The Sceptre of Lord British!` or `The Amulet of Lord British!` |
+| Equipment | the item's own row name from the shared equipment name table, then `!` — for example `Chain Coif!`, `Leather Armour!` |
+
+The two table lookups are **not** symmetric, and the asymmetry is visible in
+play. The scroll mnemonic index is masked to three bits, so an out-of-range
+scroll sub-kind wraps inside the eight mnemonics; the potion colour index is
+used unmasked, so a potion record whose sub-kind is eight or more reads past the
+eight colour words into the adjoining mnemonic table and prints, for example,
+`A VL potion!`. The mnemonic is also drawn in the alternate typeface — the
+engine selects it before the mnemonic and restores the ordinary font after it —
+while the potion colour is not.
+
+Two class values are guards rather than grants. A container record prints
+`Open_it_first!\n` and changes nothing at all: no inventory, no slot clear, no
+dirty marking, no turn sentinel. A record whose class byte is zero reaches the
+class dispatcher's default arm and prints the ordinary `Nothing_to_get!\n`, also changing nothing. `Nothing_to_get!\n` exists as two byte-identical stored
+copies, one for that default arm and one for the tile cascade; they are
+indistinguishable on screen. Every granting kind clears the consumed record,
+sets the party-dirty marking and sets the turn sentinel, so a second Get on the
+same cell falls through to the tile cases.
+
+*Search* has five successful shapes, all built on the same preamble
+`\nThou_dost_find\n`. Before any of them Search consults the shared
+reachability gate and then the acting-member exchange; if either refuses, Search prints
+nothing at all, even when something is present at the cell.
+
+| Search outcome | Rows after `Search-North` and the member exchange |
+|---|---|
+| Container object at the cell | `[blank]` ⏎ `Thou dost find` ⏎ one of `no trap!`, `a simple trap!`, `a complex trap!`, `a trap!` |
+| Corpse at the cell, emptied | `[blank]` ⏎ `Thou dost find` ⏎ one of `nothing!`, `worms!`, `guts!`, `a bloody pulp!` |
+| Corpse at the cell, disease | `[blank]` ⏎ `Thou dost find` ⏎ `Plague!`, with a tone, and the acting member becomes Poisoned |
+| Corpse at the cell, contents | `[blank]` ⏎ `Thou dost find` ⏎ `food!` or `gold!`, staging an object of one to three units on the cell for a following Get |
+| Furniture or fixture cell | the cell's own prefix in place of the blank row and `Thou dost find` — see below — then whichever result row below applies, or `nothing of note.` |
+| Hidden door | `[blank]` ⏎ `Thou dost find` ⏎ `a hidden door!`, and the live cell is rewritten |
+| Buried Moonstone | `[blank]` ⏎ `Thou dost find` ⏎ `a strange rock!`, staging the stone on the cell |
+| Rare reagent at the harvest hour | `[blank]` ⏎ `Thou dost find` ⏎ the rolled count, then `_sprigs_of` ⏎ `mandrake root!` or `nightshade!` |
+| Fixed hidden treasure | `[blank]` ⏎ `Thou dost find` ⏎ the staged object's name from the found-object vocabulary in `systems/hidden-treasures.md` |
+
+The furniture prefixes replace the whole preamble: the stored pieces are
+`\nIn_the_stump`, `\nIn_the_wall`, `\nOn_the_shelf`, `\nIn_the_bookshelf`,
+`\nNear_the_well`, `\nIn_the_desk`, `\nIn_the_barrel`, `\nIn_the_vanity`,
+`\nUnder_the_bed`, `\nIn_the_dresser`, `\nIn_the_trunk`, `\nIn_the_brazier`
+and `\nIn_the_fireplace`, each of which ends in the lower-case `t` that opens
+the next word, and a shared tail supplies `hou_dost_find\n`. Every other tile,
+the cask included, uses the two-byte default prefix that splices with the same
+tail to give the ordinary `\nThou_dost_find\n`. The prefix is chosen before the
+Moonstone, reagent and treasure tables run, so it precedes both a find and
+`nothing_of_note.\n`.
+
+There are **two** near-identical no-result lines and they are different strings.
+The treasure scan's own miss is the lower-case `nothing_of_note.\n`; the
+found-object vocabulary's unused slots print the capitalised
+`Nothing_of_note.\n`, which is the only place the capitalised form appears on
+the surface path. The dungeon band holds two further capitalised copies of its own; which dungeon
+caller uses which was not settled in this pass
+(`systems/dungeon-mode.md` Section 8.1).
+
+*Eating and borrowing are Get cases, not movement cases.* The town-family
+per-turn underfoot handler never touches the laden-table tiles; the party eats
+by issuing Get with a direction that reaches one.
+
+| Reached tile and direction | Rows after the leading feed | Live cell after |
+|---|---|---|
+| Laden table `0x9A`, reached one step south | `Mmmmm...!` | `0x95` |
+| Laden table `0x9B`, reached one step north | `Mmmmm...!` | `0x95` |
+| Laden table `0x9C`, reached one step north or south | `Mmmmm...!` | `0x9A` or `0x9B`, keeping the food the party did not take |
+| Laden table `0x9A`/`0x9B` from any other direction, or `0x9C` from east or west | `Can't reach plate!` | unchanged |
+| Crops `0x2D`, any direction | `Crops picked!` | `0x2C` |
+| Wall torch `0xB0` or `0xB1`, any direction | `Borrowed!`, with the theft sound | `0x44` |
+| every other tile | `Nothing to get!` | unchanged |
+
+`Mmmmm...!\n` and `Can't_reach_plate!\n` each exist as three byte-identical
+stored copies, one per dispatch site. The three eat arms and the crop arm share
+a grant tail — one food with the 9999 cap, the party-dirty bit, and the
+moral-standing debit when that byte is non-zero — but **not** the turn
+sentinel: only the crop arm and the `0x9A` arm set it. `systems/containers.md`
+Section 7 owns the state each arm leaves behind, and the wall-torch borrow is
+specified there too; it is a lit fixture, not a table item.
+
+*Recovering a buried Moonstone takes two commands, and both are directional.*
+Burial records the party's own cell, but Search and Get act on the party's cell
+plus the chosen direction step, so a stone is recovered by standing next to the
+buried cell and searching, then getting, toward it; standing on the buried cell
+and searching away from it finds nothing. Search alone grants nothing — it only
+stages the rock — and searching the same cell again before collecting prints
+`nothing_of_note.\n`, because the duplicate guard sees the staged object and
+creates no second one. The Get that follows prints `A_moonstone!\n` and records
+the stone as carried. A Get into a buried cell that has **not** been searched
+finds no object and falls through to the tile cascade, so on eight of the nine
+accepted bury terrains it is the ordinary `Nothing_to_get!\n`, and on crops it
+harvests the crop instead. Once a Search has staged the rock, the object
+outranks the cascade: Get on that same crop cell grants the Moonstone and leaves
+the crop standing.
+
+Source provenance: fresh private analysis in `u5-decomp/notes/`,
+`u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CAST_OVL/` and
+`u5-decomp/functions/TOWN_OVL/`; 1652 executed original cases across the two
+clusters of issue #262's second pass, covering every pickup class with measured
+stock deltas, the trap-narration grid, the corpse and reagent rolls, the
+furniture prefix set, twenty scene-band repeats and thirty-five tile/direction
+eat cases. Literal identity was established by capturing the string pointer, not
+by matching the rendered row.
+
 **Conditional acting-member exchange.** Running this selector does not always
 print `Player: `. In exploration with no active-member override, it counts
 Good or Poisoned members of the active party. Exactly one is chosen silently:
@@ -522,7 +679,14 @@ no prompt and no name echo. With none, it prints `None!\n` without a preceding
 `Player: ` and the command aborts. With two or more, it prints `Player: ` and
 opens the roster picker; a confirmed eligible pick completes that row with
 the member's name. An ineligible pick prints `Disabled!\n\n` and repeats the
-prompt; Escape prints `None!\n` on the prompt row and aborts. Combat and an
+prompt; Escape prints `None!\n` on the prompt row and aborts. The selector's
+epilogue has a **fourth** outcome: a distinct "no selection" result completes
+the row as `Player:_` plus a bare line feed and lets the caller proceed as
+though a member had been chosen. It is unreachable from the chest sites,
+because the entry point those use hardwires the picker argument that would
+produce it to zero, and the digit `0` the reader would need is simply ignored;
+an implementation should still define the outcome rather than treat the three
+reachable results as exhaustive. Combat and an
 explicit active-member selection supply their own silent overrides, with the
 exact priority and status rules in `systems/traps.md` Section 2.1.
 
@@ -607,15 +771,28 @@ mode-aware command handlers, not simple dispatcher stubs:
 
 `G` Get picks up things from the target cell. In surface/town scenes it first
 scans the current map's object table for a matching pickup slot, but it does not
-accept every record at that coordinate. The accepted set is limited to special
-pickup-category markers and the loose-object visual family; actor, blocker,
-already-handled, and unrelated object entries are skipped even if their
-coordinates match. Accepted slots dispatch the slot's item code into the
-inventory-add routine. If that object is a Search-surfaced Moonstone "strange
-rock", the pickup grants the Moonstone and invalidates the associated Gate
-Travel slot. If no accepted object slot matches, Get falls back to tile-specific
-cases such as borrowing a table item, picking crops, or eating from a reachable
-plate; otherwise it prints the nothing-to-get refusal. In dungeons, Get reads
+accept every record at that coordinate. **The gate is the record's own
+inventory class byte, and the same byte then selects the grant**: a record is
+accepted when that byte is below sixteen, or is the Moonstone class, the magic
+carpet class, or one of the four regalia/shard classes; actor, blocker,
+already-handled, and unrelated records are skipped even if their coordinates
+match. The record's auxiliary byte carries the quantity, or the sub-kind for
+potions, scrolls, equipment and shards. If that object is a Search-surfaced
+Moonstone "strange rock", the pickup grants the Moonstone and invalidates the
+associated Gate Travel slot. If no accepted object record matches, Get falls
+back to tile-specific cases — borrowing a lit wall torch, picking crops, or
+eating from a reachable laden table; otherwise it prints the nothing-to-get
+refusal. Section 5.8 gives every successful line and
+`systems/containers.md` Sections 3, 7 and 8 give the accepted classes and the
+state each arm leaves behind.
+
+*Corrected 2026-09-12 (issue #262).* This paragraph previously said "the
+accepted set is limited to special pickup-category markers and the loose-object
+visual family" and that accepted slots then dispatch "the slot's item code",
+implying a visual filter and a separate grant code. There is one byte: the
+record's class byte is both the acceptance test and the dispatcher's selector.
+It also named the borrow case "a table item"; the two tiles that answer
+`Borrowed!` are the wall-torch pair. See `RETRACTIONS.md` R476 and R478. In dungeons, Get reads
 the underfoot cell: closed chest cells refuse until opened, open chest cells are
 consumed in the loaded dungeon image and roll the seven-row reward generator
 described in `containers.md`, and unrelated cells refuse.
@@ -657,35 +834,59 @@ tracker before probing the target tile. Already-open targets acknowledge that
 state, heavy targets refuse without a lock-pick roll, locked targets refuse,
 openable targets snapshot their previous tile and rewrite the live cell to the
 open tile, and unclassified chest-like fallthroughs are delegated to the chest
-helper. Dungeon Open checks the underfoot dungeon class: door cells route to the
-dungeon door opener, chest cells open, and unrelated cells refuse.
+helper. **Dungeon Open recognises exactly two underfoot classes — the closed
+chest and the open chest — and refuses everything else.** It awaits no
+direction, runs the shared acting-member prompt before anything else, and reads
+the cell's low three bits as the trap sub-type; `dungeon-mode.md` Section 8.1
+owns the transcript and the lifecycle.
+
+*Corrected 2026-09-12 (issue #262).* This paragraph previously read "Dungeon
+Open checks the underfoot dungeon class: door cells route to the dungeon door
+opener, chest cells open, and unrelated cells refuse." **There is no door arm**:
+the handler was read in full and dispatches on the two chest classes only, and
+the call that reading labelled a door opener is the shared trap resolver of
+`systems/traps.md`. Whatever opens a dungeon door, it is not O. See
+`RETRACTIONS.md` R473.
 
 `S` Search probes for hidden objects, traps, secret features, and buried
 Moonstones. In surface/town scenes, Search first runs the shared pre-search
 gate and direction prompt. A failed gate or cancelled direction exits without a
 map, inventory, or object-table change. A successful prompt computes the
-adjacent target cell, then scans the live runtime object table for a hidden
-entry at that coordinate. Multi-floor locations also require the hidden entry
-to belong to the active floor/chunk. A matching hidden object prints the found
-result and dispatches the object through the same inventory-add path used by
-pickup/container commands.
+adjacent target cell, then scans the live runtime object table for a matching
+entry at that coordinate. Multi-floor locations also require the entry to
+belong to the active floor/chunk. **That branch accepts only the container
+class**, and it narrates the container's trap state through the assessment roll
+of `systems/containers.md` Section 5; it grants no inventory and never reaches
+the inventory-add dispatcher.
 
-If no hidden object is found, surface/town Search checks for a slot-indexed
-treasure marker at the target coordinate. That coordinate lookup scans the
-active-object table in reverse priority order and only the treasure marker
-short-circuits into an immediate found-object grant. Other active-object
-classes do not drive the fallback narration; Search uses the live tile byte
-read before the coordinate lookup.
+*Corrected 2026-09-12 (issue #262).* This paragraph previously read "A matching
+hidden object prints the found result and dispatches the object through the same
+inventory-add path used by pickup/container commands." The surface Search
+object branch was read end to end: it tests for exactly the container class and
+calls the trap narrator, which contains no inventory grant. Search's grants
+come from its later Moonstone, reagent and fixed-treasure tables, and those
+stage an object for a following Get rather than crediting inventory
+themselves. See `RETRACTIONS.md` R477.
+
+If no container object is found, surface/town Search checks the target
+coordinate for a corpse, and then falls through to live-tile classification.
+That coordinate lookup scans the active-object table in reverse priority order.
+Other active-object classes do not drive the fallback narration; Search uses the
+live tile byte read before the coordinate lookup.
 
 The live-tile fallback table supplies fixed furniture/location prefixes such
 as stump, shelf, bookshelf, wall, desk, barrel, vanity, bed, dresser, trunk,
-brazier, and fireplace. The hidden-door marker is the mutating case: it prints
-the hidden-door result, rewrites the live tile to the revealed variant, marks
-the map dirty, and stops. Otherwise, Search continues through the saved
+brazier, and fireplace. The complete stored set is in Section 5.8, and so is
+the point that each prefix *replaces* the ordinary find preamble rather than
+preceding it. None of them can appear on a Moonstone recovery, because all nine
+terrains on which a burial is accepted take the default prefix. The hidden-door
+marker is the mutating case: it prints the hidden-door result, rewrites the
+live tile to the revealed variant, marks the map dirty, and stops. Otherwise, Search continues through the saved
 Moonstone table, rare-reagent harvest table, and fixed hidden-treasure table
 in that order; one live-tile marker skips only the Moonstone table before
-continuing. Object-table, slot-indexed treasure, Moonstone, reagent, and fixed
-hidden-treasure results feed their owning inventory or pickup-staging paths.
+continuing. Object-table (container), corpse, Moonstone, reagent, and fixed
+hidden-treasure results feed their owning narration or pickup-staging paths;
+the container and corpse branches grant no ordinary inventory.
 Ordinary feature descriptions are narration only. Per-map object slots that
 carry trap-class metadata use a member-stat threshold roll only to choose the
 visible no-trap/simple/complex/generic-trap narration, including possible
@@ -712,6 +913,19 @@ first-person view on the hidden surface and dissolve it into the visible
 viewport before Search returns. This presentation tail belongs only to Search;
 no Open outcome calls it. Inventory grants and chest contents belong to
 `containers.md` and `catalogs/item-list.md`.
+
+**No dungeon arm of any command writes the active-object table.** *(Established
+2026-09-12, issue #262.)* Get, Open, Jimmy, Search and Look all act on the
+packed dungeon cell grid, and the only object-table call on the dungeon Get path
+passes the sentinel meaning "no slot" to a routine that clears one. The commands
+that *can* write the table — Board, Fire, X-it and Yell — do reach their
+handlers from a dungeon scene and handle the dungeon case themselves, so the
+block is not command reachability: what actually prevents placement underground
+is the party's transport state, because X-it on foot refuses and writes nothing
+while a mounted X-it does place the vehicle. X-it also carries a scene test of
+its own that is dead code, both comparisons branching to the same place, so the
+dungeon-specific refusal line it appears to own can never print.
+`systems/active-objects.md` Section 10 owns this contract.
 
 When an Open or container outcome selects the shared resident trap-effect
 resolver, the common party damage and poisoning effects are specified in
@@ -860,8 +1074,7 @@ Combat is a supported caller of this same handler. The combat command parser
 prints the `Push-` label and enters P-Push directly, without the party-side gate
 used by the combat Get/Jimmy/Open/Search prompt helper (`systems/combat.md`
 Section 8; that gate reads the party-side descriptor bit, not liveness).
-Because combat runs with
-an actor-anchor scene frame, a successful push/pull advances the currently
+Because combat runs with an actor-anchor scene frame, a successful push/pull advances the currently
 acting combat actor in the arena and mutates only the temporary combat tile and
 object state that the combat framer later tears down.
 
@@ -1233,3 +1446,38 @@ reproduced here.
 - The withdrawal of the global "turn consumed" flag reading, and the fact that
   Ready and Z-stats always report the default status. Source provenance:
   derived from private analysis in `../u5-decomp/notes/`.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.
+
+- **Issue #262, the dungeon-object pass (2026-09-12).** The dungeon O-Open and
+  G-Get transcripts and their prefix rules, the chest lifecycle and its trap
+  sub-type bits, the Open spell's underground arm, the dungeon chest reward
+  generator's emitted rows and depth thresholds, and the negative that no
+  reachable dungeon state places an active object were re-derived from private
+  analysis in `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
+  the word, gate and quantity tables read back from the shipped data file.
+
+- **Issue #262 follow-up, the surface Get/Search/eat pass (2026-09-12).** The
+  successful `G` Get lines by inventory class, the class gate that admits a
+  record, the five successful Search shapes, the furniture prefix set, the two
+  distinct no-result lines, the laden-table and wall-torch Get cases and their
+  unequal grant tails, and the two-command directional Moonstone recovery were
+  re-derived and re-executed from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CAST_OVL/`,
+  `u5-decomp/functions/TOWN_OVL/` and `u5-decomp/functions/COMBAT_OVL/`, with
+  the stored text read back from the shipped data file and each literal
+  identified by its string pointer rather than by its rendered row.

@@ -297,6 +297,19 @@ Slime alone receive a special upper/ceiling placement test: an inclusive draw
 from 0 through 99 sets the flag when greater than 48 (51/100). It is not an
 invisibility state.
 
+**This setup step is silent, and it is the only writer of the record
+underground.** *(Established 2026-09-12, issue #262.)* Neither its success arm
+nor its failure arm emits any text - no message, no prefix, no acknowledgement -
+so an accepted level change, a dungeon entry and a return from a dungeon fight
+all re-roll the wandering monster with nothing printed. **No player command
+available underground places an object in the active-object table**, so there is
+no original counterpart for a "dropped object" or placement message in a
+dungeon; the correct behaviour is silence, because the event such a message
+would describe cannot be caused by the player underground.
+`systems/active-objects.md` Section 10 states the same negative from the table's
+side, including the qualification that the block is the party's transport state
+rather than command reachability.
+
 ## 5. Special underfoot reactions
 
 Two underfoot tile classes have *immediate* effects that fire before the player can act:
@@ -1379,25 +1392,79 @@ share a row unless the overlay's line begins with a line feed:
 | Command | Prefix | Overlay lines |
 |---|---|---|
 | `J` Jimmy | `Jimmy-` | a bare `\n` first, so the result always starts on a new row; then one of `No keys!\n`, `Key broke!\n`, `Chest unlocked\n`, `Already open!\n`, `What?\n` |
-| `O` Open | `Open-` | trapped chest: the trap word below, then `\nChest opened\n`; already-open cell: `Already Open!\n` - capital `O`, a **different** literal from Jimmy's; anything else: `What?\n`. Because those last two carry no leading line feed they render on the prefix's own row, as `Open-Already Open!` and `Open-What?` |
-| `G` Get | none in a dungeon | `Get\n` first; then `Must open first!\n` on a closed chest, `Not here!\n` on a non-chest, or `contents\nof chest\nYou find:\n` on an open chest followed by the item lines |
+| `O` Open | `Open-`, printed by the dispatcher in **every** scene including this one | trapped chest: the trap word below, then `\nChest opened\n`; already-open cell: `Already Open!\n` - capital `O`, a **different** literal from Jimmy's; anything else: `What?\n`. Because those last two carry no leading line feed they render on the prefix's own row, as `Open-Already Open!` and `Open-What?` |
+| `G` Get | none in a dungeon - the dispatcher's `Get-` is emitted only outside the dungeon band | `Get\n` first, printed unconditionally before the handler looks at anything; then `Must open first!\n` on a closed chest, `Not here!\n` on a non-chest, or `contents\nof chest\nYou find:\n` on an open chest followed by the item lines |
 
 **The chest trap words.** A trapped dungeon chest opens with the shared trap
 resolver of `systems/traps.md`, which prints exactly one of `ACID!\n`,
 `POISON!\n`, `BOMB!\n` or `GAS!\n` before its effect. The dungeon chest site
 prints no trap notice of its own, so with a single eligible party member the
-trap word lands directly after the prefix: `Open-ACID!`.
+trap word lands directly after the prefix: `Open-ACID!`. **Which word appears is
+not decided here.** The resolver chooses by scene band, and a dungeon is a
+non-combat scene, so it draws uniformly over the eight-entry table of
+`systems/traps.md` Section 3 - ACID three times in eight, POISON and BOMB twice
+each, GAS once. Only in a combat scene is the draw narrowed to ACID and POISON.
+
+**The dungeon chest lifecycle, and what O-Open does and does not consult.**
+*(Established 2026-09-12, issue #262.)*
+
+- **O-Open runs the shared acting-member prompt first**, exactly as the "Who
+  acts" paragraph below describes. A cancel, or a party with no eligible member,
+  answers `None!\n` and ends the command **completely**: no trap fires, the cell
+  is not rewritten, and nothing further is printed.
+- **The trap condition is the cell's low three bits**, its lock/trap sub-type -
+  not the low bit alone. A chest cell whose low nibble is 4 is trapped.
+- **There is no locked outcome for a dungeon chest.** Open consults no lock
+  difficulty at all; a chest that has not been picked simply springs its trap
+  when opened. The pick difficulty is a separate depth-and-Dexterity expression
+  belonging to J-Jimmy.
+- **The cell rewrite and the opened line happen identically whether or not a
+  trap fired.** The cell becomes the open-chest class with its visit bit
+  preserved, then `\nChest opened\n` prints.
+- **A "trapped chest opened safely" is not a state this command can be in.** It
+  reads nothing but those three bits - no spell duration, no party flag, no
+  status byte - so it can notice no protective effect and has no bypass line.
+  Disarming happens beforehand and is purely a change of cell state: a
+  successful dungeon Jimmy clears those bits, and the same O-Open then prints
+  exactly what an untrapped chest prints. The transcript of a disarmed chest is
+  identical to that of a chest that was never trapped.
+- **Underground the Open spell is a third way to open a chest**, not a modifier
+  on this command; it prints its own two lines and never reaches the trap
+  resolver (`systems/magic.md` Section 8).
+- **Stock-data scope.** Every dungeon chest cell in the shipped dungeon map is
+  trapped, so in ordinary play the untrapped arm of O-Open is reached only after
+  a successful Jimmy or after the Open spell, never on a fresh chest.
+
+**The dungeon Get transcript in full.** Get runs no acting-member prompt and
+springs no trap. On an open-chest cell it consumes the chest first - the cell
+becomes plain passage keeping only its visit bit - then prints the three-row
+preamble and runs the seven-row reward generator of `systems/containers.md`
+Section 6, which appends one row per firing reward. A chest whose rows all fail
+prints the preamble and nothing else: `Get` / `contents` / `of chest` /
+`You find:` is the complete transcript of an empty dungeon chest, and there is
+no "empty" line on this path.
 
 **Klimb.** `Klimb-U/D-` when both directions are available (it blocks until up
 or down is chosen, and Space answers `Pass\n\n` and climbs nothing);
 `Klimb-` when exactly one is; `Klimb-\nWith What?\n` when neither is but the
 cell is the climb-with-equipment kind and the party lacks the gear; and
 `Klimb-what?\n` when neither is and the cell has no climbable feature at all.
-Applying a climb prints `Up!\n` or `Down!\n` **first**, before any test, and an
-impassable destination then adds `Failed!\n` with the short **rising** sweep
+The dungeon handler owns all four forms; the resident dispatcher prints no
+`Klimb-` of its own in a dungeon scene.
+Applying a climb prints `Up!\n` or `Down!\n` **first**, before any test.
+`Failed!\n` — with the short **rising** sweep
 `systems/audio.md` section 5.2 tabulates as the 50-update, delay-1 recipe -
 800 Hz stepping up to a last tone of 1976 Hz against a nominal 2000 Hz target -
-the same recipe the spell-failure tail uses.
+the same recipe the spell-failure tail uses - belongs to the **level-change
+spells**, not to K: it follows the climb word when the spell's destination cell
+is refused, and replaces it when either spell is cast in Doom.
+*Corrected 2026-09-12 (issue #262):* this paragraph previously attributed that
+line to K, saying "an impassable destination then adds `Failed!`". A K climb
+never tests the cell it lands on and is never refused in Doom, so the failure
+word cannot appear on the K route at all. That destination test was already
+withdrawn from K in Section 13.1 (`RETRACTIONS.md` R040); this sentence was the
+un-propagated remainder, and the correction is a propagation rather than a new
+reversal.
 There is **no** "you are at the top/bottom level" refusal line: on a level edge
 the direction word prints and the dungeon exit lines of Section 13.2 follow it
 immediately. That negative was checked over the whole body of both Klimb
@@ -1433,7 +1500,8 @@ and adding the two resident helpers the dungeon calls: the per-move footstep
 rumble; the sleep-field and poison-field status hits, which are **one** family
 because both call sites emit the identical rumble recipe; the electric-field
 push-back; the wall-decoration drip tone emitted at render time with no text of
-its own; the Klimb `Failed!` sweep; the chest trap resolver's rumble; and the
+its own; the level-change spells' `Failed!` sweep (reached from a dungeon by
+casting Up or Down, not by K); the chest trap resolver's rumble; and the
 damage helper's flash and rumble on every applied HP loss, which dungeon paths
 reach indirectly but which is the seventh member of the scanned set rather than
 an addition to it. The same scope caveat applies: forwarded resident
@@ -1837,21 +1905,60 @@ gated quite differently.
 **K-Klimb.** K reads the cell the party is standing on and offers whichever
 directions that cell provides:
 
-- **Up** is offered when the cell is an up ladder or a two-way ladder, and also
-  when the cell is marked climbable-with-equipment and the party is carrying the
-  climbing gear.
-- **Down** is offered when the cell is a down ladder, a two-way ladder, or a pit.
-- **How "two-way" is recognised.** A two-way ladder is painted with the same
-  glyph as a plain up ladder, so the tile alone cannot distinguish them. In
-  room-entry mode the handler therefore consults the **resident
-  tile-restoration flag** (Section 14.1): party standing on the up-ladder glyph,
-  in room-entry mode, with that flag set, means the ladder goes both ways and
-  the up-or-down prompt is offered instead of an assumed climb up. That is the
-  flag's second consumer, and it is why the combat framer's clear of the same
-  flag must not be reordered ahead of a Klimb.
+- **Up** is offered when the cell's **class** is the up-ladder class or the
+  two-way class, **or** when the cell carries the climbable-with-equipment mark
+  and the party is carrying the climbing gear.
+- **Down** is offered when the class is the down-ladder class, the two-way
+  class, or the pit class.
+- **The two halves read the cell differently.** The class is the cell's high
+  half. The climbable-with-equipment mark is a bit of the **stored cell byte,
+  read raw**, so it is honoured at *any* class rather than only in the high
+  ones, and it can never reach the class test because the high-half mask
+  discards it. Two consequences follow that a class-only reading misses: a
+  gear-marked cell of any class takes the gear route, and a gear-marked **pit**
+  cell carried with the gear offers *both* directions and raises the up-or-down
+  prompt rather than descending.
+- **How "two-way" is recognised: by the two-way class alone.** *Corrected
+  2026-09-12 (issue #262).* This bullet previously said a two-way ladder is
+  painted with the up-ladder glyph, so the tile cannot distinguish them, and
+  that in room-entry mode the handler consults the **resident tile-restoration
+  flag** of Section 14.1 to tell them apart. The whole dispatcher was read: it
+  consults no room-entry mode and no tile-restoration flag. The only flag it
+  reads is the climbing-gear byte, and that byte selects the **up-only** arm
+  rather than raising a prompt. See `RETRACTIONS.md` R471, which also withdraws
+  the two claims that depended on it in Section 14.1 and in
+  `systems/combat.md` Section 4.
 - When both are available the handler prompts for up or down, accepting the
   explicit up and down selections and the standard cancel/pass keys.
 - Any other cell returns with no level change.
+
+**What a level change prints.** The whole message-window vocabulary of a
+deliberate dungeon level change is the two climb words, one failure word that
+belongs to the spell route only, and the two-part exit line. **Nothing
+resembling a "Descend!" line and no dungeon-name or level announcement is ever
+written to the message window**, on any of these routes.
+
+| Route and cell | Rows, in order |
+|---|---|
+| K, exactly one direction offered | `Klimb-` then `Up!\n` or `Down!\n` |
+| K, both offered | `Klimb-U/D-`, then a blocking wait: the up key or the up-direction key gives `Up!\n`, the down key or the down-direction key gives `Down!\n`, the pass key gives `Pass\n\n` and changes no level, and any other key is re-read |
+| K, neither offered, cell carries the gear mark | `Klimb-\nWith What?\n` and nothing else |
+| K, neither offered, no climbable feature | `Klimb-what?\n` and nothing else |
+| Up or Down spell, ordinary level change | the same `Up!\n` or `Down!\n`, and only that — the casting framework adds no success line of its own on this route |
+| Up or Down spell, destination refused | the climb word (already printed), then `Failed!\n` with the error tone |
+| Up or Down spell cast in Doom | `Failed!\n` with the error tone, in place of any climb word, from the framework's own refusal arm |
+| Any route that leaves the level stack | the climb word, then the shared exit line of Section 13.2 |
+
+The climb word is printed **before** anything is tested, which is why a refused
+spell destination shows it first. Both K refusals report "no action taken";
+every climbing arm reports "acted".
+
+**"Prints nothing" means nothing in the message window.** Every dungeon level
+entry — K, spell or pit fall alike — repaints the dungeon status panel, whose
+level ordinal (one-based) and facing name are persistent indicators rather than
+narration rows (Section 4.1). That repaint carries no climb or level word. An
+implementation should not read "a level change prints nothing" as "the screen
+does not change".
 
 A climb **never inspects the cell it lands on.** The ladder or pit under the
 party is treated as proof enough that the destination is reachable, so a climb
@@ -1875,9 +1982,29 @@ that forward their handler's own value.
 ids 21 and 22) are castable only inside a dungeon, and they move the party one
 level from wherever they stand with **no ladder, pit, or equipment required**.
 They are the stricter of the two routes in one respect only: they do test the
-destination cell and refuse it when it is in the base `0x0` class or in the wall
-and door-presentation families `0xB?` through `0xE?`. Both spells refuse Doom
-outright.
+destination cell, and **they accept exactly one class — open passage — and
+refuse every other class**, ladders, chests, fountains, pits, energy fields,
+room states, walls and door variants alike. The decision is on the destination
+cell's class alone; the low half of the cell byte is ignored entirely, so every
+variant within the open-passage class passes. A refused destination prints the
+climb word, then the failure word with the error tone, and leaves the level
+index unchanged. Both spells refuse Doom outright.
+
+*Corrected 2026-09-12 (issue #262).* This paragraph previously said the spells
+"refuse [the destination] when it is in the base `0x0` class or in the wall and
+door-presentation families `0xB?` through `0xE?`". That is the exact inverse of
+the rule: the base class is the **only** one accepted. The comparisons against
+the wall and door-presentation classes that a reader would expect to find in
+that test are unreachable — the test rejects on the first check whenever the
+class is anything but open passage — so they describe nothing. See
+`RETRACTIONS.md` R472.
+
+Two orderings inside that route matter. The climb word is printed by the shared
+apply routine **before** both the edge check and the destination test. The
+**edge check runs before the destination test**, so leaving the dungeon off the
+top or the bottom is unaffected by whatever the destination cell holds. The K
+route asks for no destination test at all: it takes the non-strict form of the
+same helper, which reports "passable" before reading anything.
 
 Two further routes change the level without being asked to: automatic pit falls
 (Section 8 and `systems/doors-and-z-transitions.md` Section 10), and the
@@ -1895,7 +2022,10 @@ dungeon-to-outdoor path in the build and no per-dungeon special case:
 
 - The destination X and Y are the dungeon's own **outdoor entrance
   coordinate**, taken from the same per-scene location table that entry used.
-  Both arms use the identical cell.
+  Both arms use the identical cell. That coordinate is **re-derived here, never
+  stored**: nothing caches the party's outdoor position on the way in, and no
+  save carries one, so there is no state in which it can be absent
+  (`catalogs/gazetteer.md` Section 5.1).
 - The destination **world plane** comes from the level the party was standing on
   when the edge was reached. Level zero means they left off the top, so they
   surface on Britannia; any other level - in practice the lowest one - means
@@ -1906,10 +2036,19 @@ dungeon-to-outdoor path in the build and no per-dungeon special case:
   `systems/doors-and-z-transitions.md` Section 12.1.
 - The dungeon scene byte is then cleared, which is what returns the game to
   outdoor mode.
+- **The narration is identical on every deliberate route.** The climb word
+  prints first, then the shared exit line: a line-feed-led `Exit to ` followed
+  on the same row by the plane name, then a blank row — `Britannia!` off the
+  top, `Underworld!` off the bottom. K and both level-change spells reach that
+  shared contract, the spells through a resident thunk, so it has two distinct
+  callers and no per-route wording. Passing the top or bottom of the stack is
+  **not** a refusal and adds no failure word.
 - **The pit-chain off-bottom path narrates nothing at all.** That is worth
   stating because the ordinary exit does narrate: an implementation that shares
   one code path between them will emit an exit line the original never prints.
-  The negative covers the whole off-bottom body.
+  The negative covers the whole off-bottom body. That path also leaves the
+  party's X and Y untouched and the level index one past the deepest level, and
+  prints nothing to mark either.
 
 Because seven of the eight dungeon mouths carry an entrance tile at the same
 coordinate on **both** world maps, one coordinate serves both arms. Entry is the
@@ -2091,10 +2230,19 @@ step. Two of these are load-bearing outside this section:
   half is not *only* a save: see the driver spec for the substitution it
   performs in the same operation.
 
-**The flag has a second reader, and the ordering matters.** The K-Klimb handler
-consults the same flag (Section 13.1), which is how a two-way ladder is
-distinguished from a plain up ladder at climb time. An implementation must not
-move the combat framer's clear ahead of a Klimb that could still read it.
+**The K-Klimb handler is not a second reader.** *Corrected 2026-09-12 (issue
+#262).* This paragraph previously read "The flag has a second reader, and the
+ordering matters", said the K-Klimb handler consults the same flag to
+distinguish a two-way ladder from a plain up ladder, and required that an
+implementation not move the combat framer's clear ahead of a Klimb. The whole
+Klimb dispatcher was read and it does not touch this flag; two-way is the
+two-way class alone (Section 13.1). There is therefore **no Klimb ordering
+constraint on the framer's clear**, and an implementation may drop any sequencing
+it added for one. See `RETRACTIONS.md` R471; `systems/combat.md` Section 4
+carried the same claim and is corrected with it. The census below still counts
+two reads of the byte, and the second one is now **unattributed**: what reads it
+besides the combat framer has not been identified, so do not infer from this
+correction that the flag has only one consumer.
 
 *Scope of the "only setter" negative:* a displacement census of the flag byte
 across the shipped executable, all twenty-four overlays and all four display
@@ -2518,3 +2666,27 @@ The behaviour described here was derived by reading the private function notes l
   private analysis under `../u5-decomp/functions/SJOG_OVL/`,
   `../u5-decomp/functions/DUNGEON_OVL/`, and
   `../u5-decomp/functions/EGA_DRV/`.
+
+- **Issue #262, the Klimb and dungeon-level-change pass (2026-09-12).** Prefix
+  ownership per mode, the town and outdoor climb transcripts and their per-arm
+  turn costs, the dungeon prompt family and its raw-byte gear mark, the
+  level-change and exit vocabulary, the pit-chain narration order, the
+  level-change spells' destination class, and the static return-coordinate
+  tables were re-derived from private analysis in `u5-decomp/notes/`,
+  `u5-decomp/functions/CMDS_OVL/`, `u5-decomp/functions/TOWN_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/SJOG_OVL/`,
+  `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`, against the shipped resident data image.
+  Every literal was re-read from the shipped data rather than carried forward,
+  and the negatives are scoped to the message window with the repaint endpoints
+  excluded.
+
+- **Issue #262, the dungeon-object pass (2026-09-12).** The dungeon O-Open and
+  G-Get transcripts and their prefix rules, the chest lifecycle and its trap
+  sub-type bits, the Open spell's underground arm, the dungeon chest reward
+  generator's emitted rows and depth thresholds, and the negative that no
+  reachable dungeon state places an active object were re-derived from private
+  analysis in `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
+  the word, gate and quantity tables read back from the shipped data file.
