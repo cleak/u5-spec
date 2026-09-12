@@ -82,7 +82,10 @@ The edge helper applies these rules in order:
    1200-to-2000 Hz glissando.
 4. Clear active-player selection, remove only the acting combatant, run the
    party/status check and one world tick, and report success to the command
-   parser. The arena coordinate itself is never committed outside combat.
+   parser. The selection marker takes the no-selection value *before* the
+   release, and a full party stats-panel repaint follows it; the self-acting
+   exit of Section 9.1 deliberately does neither for an ordinary departing
+   class (Section 14). The arena coordinate itself is never committed outside combat.
 
 An accepted edge is therefore an individual actor departure, not an immediate
 fight exit. Remaining actors keep taking turns. An earlier revision said the
@@ -1424,6 +1427,23 @@ The scan returns the matched slot, including five for the last party slot, but
 the vanish caller ignores it. With no match it returns the no-match sentinel
 and performs none of these effects.
 
+**The vanish path is not its only caller.** This scan is not a property of
+that path. It is also run by the self-acting arena exit when the departing actor's
+class is the Shadow Lord's (Sections 9.1 and 14), by the AI target picker's
+no-candidate fallback (Section 9), and by the round loop's defeat arm before it
+prints the loss line (Sections 7 and 14). Those three were enumerated in this
+pass; the total number of callers is not published here. Its effects are the
+same wherever it is reached, so no consumer should describe them as belonging to
+any one of those events. It frees **one** member per invocation: a second controlled party member
+is not released by the same escape, defeat or vanish.
+
+**The two indexes it uses are different values.** The matched descriptor's
+roster-index byte selects the printed character name and the character whose
+Sword of Chaos is removed, while the matched **combat slot** is what the sleep
+helper is applied to. A member whose combat slot does not equal its roster index
+is an ordinary state, and an implementation that carries one index for both
+prints the wrong name or sleeps the wrong actor.
+
 There is no full-arena redraw after the vanished actor's records are released.
 The guaranteed visible state comes from the earlier direct reveal: all 256
 pixels of the cell already show the underlying terrain before record cleanup.
@@ -1507,7 +1527,18 @@ bytes 0, 1, 2, 4, 5, 6, and 7 but deliberately preserves byte 3, the overloaded
 owner/target/class field. It also zeros linked active-object bytes 0 through 5
 while preserving that record's two trailing auxiliary bytes. The zero flags
 byte makes the descriptor available for re-allocation; an all-zero record is
-not required. *Corrected (2026-08-27): an earlier revision said release cleared
+not required.
+
+That helper has **two calling modes**, selected by the form of the slot argument
+the caller passes. The mode used by the party-side accepted exit of Section 3,
+by the vanish path, and by the self-acting arena exit of Section 9.1 clears the
+descriptor and then the linked active-object record, exactly as described above;
+the other mode skips the descriptor entirely and clears only the object record.
+The party-side exit and the self-acting exit use the same mode and the same
+argument convention, so an implementation should share one routine between them.
+The preserved class/roster byte is load-bearing on the exit path in particular:
+the departing actor's name is printed from it after the release, and so is the
+class test that selects the extra pass below (Section 14). *Corrected (2026-08-27): an earlier revision said release cleared
 the record to all zeros; the preserved fields make that statement false.*
 
 A second, parallel table — the dynamic-objects table that combat overlays onto the world's normal table — holds the same actors indexed by class for purposes the renderer cares about. The two tables are kept in sync by the movement step primitive (Section 11): when an actor moves, its (X, Y) is written into both.
@@ -1568,6 +1599,16 @@ withdrawn outright:
   thirty-two-byte per-slot band that Section 10 calls the incoming-attacker map,
   which the round loop never resets wholesale, and which combat entry and combat
   exit do not touch either.
+- **That clear is load-bearing, not housekeeping.** The narration status byte in
+  that bundle is a one-of action-result **code** rather than a set of independent
+  flags: every site that writes it assigns the whole byte, at least six distinct
+  values are written across combat, and **nothing else in the shipped program
+  clears the out-of-arena value** that selects the self-acting escape arm
+  (Section 9.1). An engine that keeps one shared result byte and omits this
+  per-slot clear will make the next self-acting actor that merely steps inside
+  the arena take the escape arm. The one shipped exception is the Shadow Lord
+  branch of that arm, whose release tail overwrites the byte with its own code
+  before the dispatch returns (Section 6.3).
 
 **It runs once per encounter, not once per round, and its first action draws.**
 Two corrections belong here, and an engine that seeds its stream from this
@@ -2785,7 +2826,11 @@ The target's distance is `floor(sqrt(dx^2 + dy^2))`, computed from the acting ac
 
 The target scan also tracks whether any of the first five party slots survived
 the filters. If no target and no counted party member survive, the AI asks the
-per-turn cleanup/effect helper for a fallback target. If that still leaves no
+per-turn cleanup/effect helper for a fallback target. That request is one of the
+sites that runs the shared controlled-party release/faint pass of Section 6.3,
+so a no-candidate turn can free one controlled party member with every effect
+listed there; it is reached only when both the party-candidate counter and the
+best-target slot are still empty. If that still leaves no
 usable target, the original moves toward the centre of the eleven-by-eleven
 arena. During this centre fallback, it scans the monster-side slot range
 backwards and, for each live monster-class record, stamps the same critical-HP
@@ -2849,10 +2894,26 @@ bypass, the probe shape and the draw budget; **probable** for the flag's
 "teleport-capable" naming, which rests on this single read site, and for the
 class-index-to-name pairing behind the roster.
 
-Ordinary stepping first tries the target vector on one axis, with randomized axis priority, then falls back to random
-cardinal tries when the direct axes are blocked. An accepted move updates both
+Ordinary stepping is **not** a symmetric two-axis attempt. The actor draws one
+per-turn value over the inclusive byte range `0..255` and branches on the
+midpoint of that range:
+
+- **Above the midpoint**, the actor offers the candidate displaced on the X axis
+  first, and offers the Y-displaced candidate only if that one is refused.
+- **At or below the midpoint**, the actor offers **only** the Y-displaced
+  candidate. There is no X attempt at all on this branch.
+
+A candidate whose displacement on the offered axis is zero is the actor's own
+cell, which the actor's own object record occupies solidly, so an attempt along
+a zero component is always refused. When no axis attempt is accepted, the actor
+falls back to random cardinal tries. An accepted move updates both
 the combat actor/effect record and the linked renderer-facing active-object
-record before the post-step terrain/effect check runs.
+record before the post-step terrain/effect check runs. *(**Corrected.** This
+paragraph previously read "first tries the target vector on one axis, with
+randomized axis priority". That licenses an implementation that offers both
+axes in a random order, which matches the original on the high branch and
+diverges on the low one, where the X candidate is never offered.
+`RETRACTIONS.md` R480; Section 9.1 has the full step-validity contract.)*
 
 **The random-cardinal fallback is four independent draws, not a neighbour
 scan.** *(**Corrected.** An earlier revision described this arm as asking a
@@ -2865,9 +2926,18 @@ consequences an engine must reproduce rather than optimise away:
 
 - A monster with exactly one open direction can still fail to move within its
   four attempts, purely because the draws never landed on it.
-- When all four attempts fail, the routine still reports the action as consumed
-  unless the final draw happened to be the first direction tried, and the
-  committed displacement in that case is zero.
+- When all four attempts fail, what the routine reports turns on **which
+  cardinal the last draw produced**, not on how that draw compares with the
+  first attempt. If the last direction drawn is any cardinal other than the
+  first of the four direction codes, the routine commits a zero-length step,
+  reports the actor as having moved, and runs the post-step in-arena test on the
+  unchanged position; if it is the first code, it reports that the actor did not
+  move. *(**Corrected.** This bullet - and the corrected column of
+  `RETRACTIONS.md` R311, which first published it - made the discriminator "the
+  final draw happened to be the first direction tried". With every draw pinned
+  to a single direction, so that the last draw is always the first one tried,
+  the two outcomes still diverge by direction code, which that reading cannot
+  express. `RETRACTIONS.md` R482.)*
 
 This is what makes a monster stranded on terrain it cannot enter (Section 7.1)
 look stuck without being frozen: it acts every round, it attacks anything in
@@ -2879,8 +2949,12 @@ accepted actor has its combat HP counter driven to one *and* its fleeing bit set
 directly by the spell, so the flag is already up before the classifier next runs,
 and the critical HP keeps the classifier re-asserting it. The classifier compares the acting monster's current HP against its
 class maximum: below one quarter sets fleeing, one-quarter through just under
-one-half rolls a morale check that sets fleeing on 252 of 256 possible
-random-byte results, and one-half or higher clears fleeing. It also returns a
+one-half rolls a morale check that sets fleeing on only 4 of 256 possible
+random-byte results (a roll of 252 or more) and otherwise clears it, and
+one-half or higher clears fleeing. *Corrected (issue #263): this sentence
+previously said the morale check sets fleeing on 252 of 256 results; the
+branch was read backwards, and the correct odds are 4 of 256. See
+`RETRACTIONS.md` row R483.* It also returns a
 four-bucket wound score for other AI consumers.
 
 Cause Fear sweeps all thirty-two combat slots and accepts every monster-side
@@ -2931,6 +3005,120 @@ and the miss line all live *above* the join, on the keyboard-driven side only.
 That is precisely why an ordinary hostile monster announces nothing and, on a
 melee miss, prints nothing at all. Section 11 describes the shared primitives
 and Section 11.1 gives the exact narration census for both sides.
+
+### 9.1 Fleeing, off-grid steps, and the self-acting arena exit
+
+A self-acting monster can leave the arena on its own turn. That departure is a
+different mechanism from the player-driven edge helper of Section 3: nothing
+prompts or shares a direction, no `Blocked!`, `Escape!` or `Leave!` line is
+printed, and the whole decision is made inside the movement primitive.
+
+**The step-validity test splits on geometry before occupancy.** One shared
+helper vets every candidate cell the AI offers, and its first question is
+whether both coordinates lie in `0..10`:
+
+- A candidate **inside** the eleven-by-eleven grid goes on to the ordinary
+  occupancy probe. An occupied cell refuses the step only when the occupying
+  object record is **marked solid**; an engine whose occupancy test ignores that
+  marker reproduces neither this test nor the surrounded predicate below.
+- A candidate **outside** the grid skips the occupancy probe entirely and is
+  accepted **only when the acting actor's fleeing bit is set**. For every other
+  actor an off-grid candidate is refused exactly as a wall is.
+
+The fleeing flag is therefore not the exit predicate. It is what makes an
+off-grid destination legal in the first place.
+
+**The exit predicate is the step the actor actually took.** At the end of the
+movement primitive's step arm - after the accepted step has already been written
+into the actor's descriptor coordinates and mirrored into the matching
+coordinates of its linked active-object record - the primitive asks the same
+in-arena predicate the rest of combat uses whether both coordinates still lie in
+`0..10`, and on a negative answer stores the out-of-arena code into the shared
+per-action result byte. The automatic driver, having been told the actor moved,
+tests that byte, and that test is the whole arena-exit arm. There is no separate
+escape roll, and no fleeing test at this point. The teleport arm cannot reach
+the exit: it returns before this test, and its destination comes from two
+`0..15` draws that are rejected outright unless both land at ten or below, so a
+committed teleport is always inside the grid.
+
+The per-action result byte is a one-of action **code**, not a bitfield of
+independent flags. The write is an assignment of the whole byte, so any other
+code standing in it is wiped, and nothing else in the shipped program clears the
+out-of-arena value. Section 7's per-slot clear at the head of each dispatch is
+consequently load-bearing rather than cosmetic.
+
+**Two producers of an off-grid step, not one.**
+
+- An **axis attempt** whose displacement carries the actor over an edge. A
+  fleeing actor's step vector is negated (see "Step direction" above), so a
+  fleeing actor on an edge is usually stepping outward already.
+- The **random-cardinal fallback**, whose up-to-four attempts are tested with
+  the same flee-sensitive helper. A fleeing actor on an edge can therefore leave
+  in a direction unrelated to its flee vector.
+
+**The fleeing flag is re-evaluated at the head of every fleeing turn.** Before a
+fleeing actor moves, the driver runs the morale classifier described above over
+that actor's current health, and the classifier both sets **and clears** the
+bit: a fleeing actor healed back above the classifier's clear threshold stops
+fleeing and can no longer leave the arena. The same pre-step block also rolls a
+one-in-four chance to restore one point of that actor's health. An engine that
+latches the flag once raised will let monsters escape that the original keeps in
+the fight, and will never show the slow self-healing of a cornered fleeing
+monster.
+
+**When the primitive reports that it did not move and the fleeing bit is still
+set**, the turn is not silent: the driver dispatches that actor into the
+ordinary attack/target routine instead, and performs no world tick of its own on
+that path.
+
+**The surrounded predicate is flee-sensitive, and it has a second consumer.**
+The predicate builds the four cardinal neighbours of the actor's own cell, asks
+the step-validity helper above about each, and reports true only when all four
+are refused. Because that helper accepts an off-grid cell for a fleeing actor, a
+**fleeing actor standing on an edge is never reported surrounded**, while a
+non-fleeing actor in the same cell can be. Interior actors are unaffected by the
+flag. Two sites consult the predicate, both inside the movement primitive:
+
+1. The teleport arm's encirclement bypass already specified above.
+2. An **early return taken before target selection** and before either axis
+   attempt: a surrounded actor takes no step at all and the primitive reports
+   that it did not move. This is not a draw-budget statement: a surrounded
+   **teleport-capable** actor has already spent the teleport arm's two
+   cell-probe draws before it reaches this return.
+
+*Reconciling the second site with `RETRACTIONS.md` R311.* R311 withdrew a
+sentence that put a neighbour scan **inside** the random-cardinal fallback and
+had it return "no action" when every neighbour was blocked. That withdrawal
+stands: the fallback still performs no neighbour scan and is still four
+independent draws. The gate published here is a **different site**, ahead of
+target selection, and the withdrawn wording must not be reinstated from it.
+
+What the exit arm does once it fires - the release, the side recount and the
+class-specific extra - is in Section 14. The text and cue it prints are in
+Section 11.1.
+
+**Scope.** Every executed case behind this subsection ran on open arena floor, so
+a step onto blocked or hazard terrain exercises only the in-bounds branch of the
+step-validity test and is not covered. The "one producer, one reader" census for
+the per-action result byte, and the reading that only monster-side actors are
+ever fleeing in the shipped game, are both bounded to sites that name the byte
+or the bit by a literal displacement; a write through a base register already
+holding the address would not appear. What the attack/target routine does when
+the second flee arm dispatches into it - whether it narrates, draws, or ticks -
+was not executed; only the driver's own zero-tick behaviour on that path is
+established. The solidity marker's value for arena monsters was read from the
+arena seeder rather than observed in a live session. The terrain, attack-routine
+and solidity items are indexed in `OPEN-QUESTIONS.md`; the two census scopes are
+bounded negatives, stated here rather than listed there.
+
+Source provenance: derived from private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/COMBAT_OVL/`, issue #263. Fifty-nine executed original
+cases cover the corner-by-corner exits with both outcomes of the axis roll, the
+own-cell refusal, the fallback's off-grid escape, the morale rewrite and the
+health-restore roll, the second flee arm, the surrounded predicate on an edge
+and in the interior, the solidity marker, and the result byte's assignment and
+stickiness.
+
 
 ## 10. Spells in combat (summary)
 
@@ -3798,7 +3986,7 @@ descriptively, or not at all, before this revision: `<target> grazed!`,
 `<monster> teleports!`, `A <monster> stole some food!`, `<monster> reappears!`,
 `<monster> disappears!` and `<monster> gates in a daemon!`. The last six are
 printed on a self-acting monster's turn outside the attack chain: `escapes!`
-with a rising cue on the arena-exit arm, `teleports!`, printed straight after the class name with no
+with a rising cue on the arena-exit arm (its exact framing is below), `teleports!`, printed straight after the class name with no
 newline before it, `possessed!` and the daemon-gate line each with their own
 software envelope, and `reappears!` / `disappears!` on the blink ability with
 **no trailing newline on either**. The already-published lines `missed!`,
@@ -3816,6 +4004,7 @@ itself append a message-window newline.
 | Blink reappearance | `\n<monster> reappears!`, no trailing newline |
 | Vanish-on-death | `<monster> vanishes!`, no leading or trailing newline of its own; the ordinary landed-attack caller has already printed its hit newline |
 | Monster teleport | `<monster> teleports!\n`, no leading newline of its own and **with** a trailing newline |
+| Self-acting arena exit | `\n<monster> escapes!\n`, one leading **and** one trailing line feed of its own; see below |
 
 Blink consumes the automatic action and returns without a separator. The
 open message cursor remains after its exclamation mark until another producer
@@ -3826,6 +4015,50 @@ release/faint follow-up still owns its own text, as specified in Section 6.3.
 These events must not be converted wholesale to append-line operations.
 Source provenance: fresh original blink/driver execution and teleport/vanish
 string consumers in the same private analysis directories, issue #247.
+
+#### The self-acting arena exit line
+
+The complete emission on the arena-exit arm of Section 9.1 is **a line feed, the
+actor's name, the stored line ` escapes!`, and one further line feed**. Two of
+those pieces come from different places:
+
+- The **leading** line feed is not part of the stored string. The arm prints it
+  as a single character, before anything else on the turn.
+- The **stored** line is exactly one leading space, the word `escapes`, an
+  exclamation mark and one line feed - no carriage return and no trailing space.
+  It occurs exactly once in the shipped data image.
+
+The name comes from the shared actor-name printer, which reads the departing
+descriptor's side bit while that descriptor is still intact, because the slot
+release happens afterwards (Section 14). For a monster-side descriptor it prints
+the **class** name, giving the line the same class-name-plus-verb shape as
+`<monster> teleports!`. The printer's party branch is live code rather than an
+unreachable arm - a departing descriptor carrying the party bit prints that
+character's roster name instead - but no shipped writer of the fleeing bit can
+produce such a descriptor, so that branch is a statement about the printer, not
+about reachable play.
+
+| Departing actor | Emitted character stream |
+|---|---|
+| An Orc | `\nOrc escapes!\n` |
+| The Shadow Lord | `\nShadow Lord escapes!\n`, followed by the release pass of Section 6.3 - `\nShadow Lord escapes!\n<member> passes out!`, where `<member>` is the freed character's roster name |
+
+Unlike `<monster> teleports!`, which has no leading newline of its own, this line
+owns **both** a leading and a trailing line feed.
+
+**The cue is the 40-update action snap** - `systems/audio.md` section 5.2's rising
+1200-toward-2000 Hz recipe - and it is played with the same span, per-update
+delay, target and initial value the party-side accepted combat exit uses, so the
+two exits sound identical. It is **not** the 400-to-750 Hz projectile/swing
+sweep. Its **position** differs from the party side: the party-side leave prints
+its whole line and plays the cue afterwards, while this arm plays the cue after
+the leading line feed and before the name. The interleaved order here is line
+feed, cue, name, stored line.
+
+Source provenance: derived from private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/COMBAT_OVL/`, issue #263; eight corner-by-roll cases
+reproduce the full character stream and event order, and one case exercises the
+printer's roster-name branch.
 
 Note that `Failed!` is not unique to combat: the shipped data image holds four
 separate copies of that literal, and three of them belong to spell and dungeon
@@ -4301,6 +4534,62 @@ possible after a party member flees. If the last party actor leaves while foes
 remain, the subsequent side recount prints `BATTLE IS LOST!` and returns word
 one. The previous claim that the first accepted edge ended combat immediately
 is withdrawn.
+
+**Self-acting departure: a monster escapes.** A fleeing self-acting actor whose
+step lands outside the grid takes a separate arm that never touches the edge
+helper above (Section 9.1 has the predicate; Section 11.1 has the text and cue).
+What that arm does, in order:
+
+1. Prints its line and plays its cue.
+2. Releases the acting slot through the shared release helper of Section 6.3,
+   in the same mode and with the same argument convention as the party-side
+   accepted exit: descriptor bytes 0, 1, 2 and 4 through 7 cleared, the
+   class/roster byte preserved, and bytes 0 through 5 of the linked
+   active-object record cleared with its two trailing bytes intact.
+3. For a departing actor **that is not of the Shadow Lord's class**, does
+   **not** touch the active-player selection marker and runs **no** stats-panel
+   repaint - both of which the party-side exit does - and ends with **exactly
+   one** world tick.
+4. For a departing actor **of the Shadow Lord's class**, runs the release pass
+   of Section 6.3 after the slot release and before that tick. The gate is the
+   class byte alone: the arm also tests the descriptor's side bit, but it does
+   so after the release has already zeroed the flags byte, so that test always
+   passes and is dead code. The pass frees the first controlled party member it
+   finds in slots zero through five, prints that character's roster name and
+   ` passes out!`, plays the shared faint envelope, removes the Sword of Chaos
+   from that character, and applies the sleep helper to that member's **slot**.
+   The sleep tail then repaints the stats panel, clears the active-player
+   selection if it names the released slot, and runs its own world tick unless
+   the rest/camp entry guard is set - so a Shadow Lord escape can end with a
+   repaint, a cleared selection and **two** ticks, where an ordinary escape ends
+   with one tick and neither. None of the sleep tail runs when the freed
+   member's roster status is already Dead, by which point the control clear, the
+   line, the sound and the item removal have already happened.
+
+Because the Shadow Lord is teleport-capable, its turn consults the teleport arm
+first and reaches the escape arm only when the teleport chance roll declines or
+the destination draw is rejected (Section 9).
+
+**The departure counts toward the side recount immediately.** The census walks
+all thirty-two descriptors and skips any whose flags byte is zero or which
+carries the marked-dead bit; the release has just zeroed the departing actor's
+flags byte, and the round loop runs the census as soon as the dispatch returns,
+before advancing to the next slot, with the post-action hazard and render pass
+running over the already-cleared slot in between. **An escape by the last
+hostile therefore arms `VICTORY!` on that same turn.** Run end to end, a lone
+fleeing hostile against one party member prints the escape line and then the
+victory line back to back, sets the one-shot announcement guard and keeps
+looping rather than returning; with a second hostile still standing, the same run
+prints only the escape line and leaves the guard clear.
+
+Source provenance: derived from private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/COMBAT_OVL/`, issue #263. Both records were pre-dirtied
+before each run, so the preserved bytes are demonstrated rather than assumed;
+the release pass and its sleep tail were executed live across the
+selection-hits-slot, selection-elsewhere, rest-guard-set and already-dead
+configurations, and the census and victory arming were observed through the
+shipped round loop itself with an open-floor arena and a stubbed player-command
+dispatch.
 
 The Escape key uses a distinct cleanup handler and always prints the bare prefix
 `Escape` first. Contrary to the earlier contract, its table scan does **not**

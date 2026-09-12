@@ -214,7 +214,14 @@ floor, and cell must match the row exactly.
 clears the used shard's carried flag in the same step that it writes the
 vanquished value into the Shadowlord slot and ORs the quest bit. After success
 the party no longer owns that shard, and it will not appear in the U-Use item
-list or the character inventory panel. Nothing else about the party's inventory
+list or the character inventory panel. The U-Use half is now established
+directly: that picker lists an entry exactly when its carried value is nonzero,
+with no quest, proximity or Shadowlord gate anywhere on its path
+(`systems/inventory.md` Section 4.5), so clearing the flag is what removes the
+row. The character inventory panel is a **different renderer** and has not been
+executed; that half of this sentence still rests on the cleared flag alone
+(`OPEN-QUESTIONS.md`). The destruction handler's own gates below are carried
+from earlier analysis and were not re-executed in this pass either. Nothing else about the party's inventory
 changes: no counter for any other item is touched, and a refused attempt (wrong
 cell, wrong floor, wrong scene, no active Shadowlord, or a mismatched active
 Shadowlord index) leaves the shard in the party's possession.
