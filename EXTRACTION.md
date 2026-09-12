@@ -1,5 +1,17 @@
 # Ultima V Extraction Inventory
 
+## Issue #259 follow-up - panel overflow moves message pixels (2026-09-12 UTC)
+
+R467-R469 correct unconditional same-row completion, window-isolation and
+blanket scroll/repaint claims. An EGA scroll request at screen column24
+moves the fixed message strip even when the active caller is the upper
+inventory panel. Long counted labels can cause that overflow; repeated
+redraws can repeat it while the message cursor stays unchanged. Three actual
+driver copy checks and39 original picker/scroll cases with symbolic glyphs
+verify the mechanism and zero/one/two-row gaps for the same selected item.
+The exact reported save/stock sequence remains open; full per-key picker
+panels and message frames are needed. No engine/QA files were inspected.
+
 ## Issue #261 - Look consumes a turn; adjacency needs no step (2026-09-11 UTC)
 
 R463-R466 remove stale free-Look and blanket free-inspection/success-only

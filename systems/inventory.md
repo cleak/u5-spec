@@ -286,8 +286,10 @@ picker every caller in the game uses:
 
 Because the clear covers the whole panel, **the food-and-gold line and the date
 line are erased for the duration of the picker**, and both are restored by a
-full roster redraw when the picker closes. The message window and the map
-viewport are genuinely untouched.
+full roster redraw when the picker closes. The map viewport is untouched.
+The message descriptor is preserved, but EGA scrolling can move its pixels
+as a side effect of panel overflow (Section 7.1). The earlier claim that
+the message window was untouched is withdrawn (R467).
 
 The `U`-Use flow is the reference sequence: refuse with `No_usable_items!\n`
 if nothing is usable; print `Item:_` into the message window; select the panel;
@@ -298,7 +300,7 @@ The frame restoration is graphical. It does not reshape the message window
 or change its saved cursor row or column. The roster redraw uses the panel
 and then reselects the message window at its retained cursor. The picker
 also uses that message cursor for the input indicator; it does not insert
-two rows before the accepted family completion. This clarifies the earlier
+a fixed two-row completion prefix. This clarifies the earlier
 phrase "restore the message-window frame" (issue #259).
 
 **Selection and scrolling.** The selected item is drawn with its ordinary
@@ -1024,33 +1026,60 @@ they are not a diagram of the final screen rows:
 | Black Badge | `Badge\n\n` |
 | Wooden/Sandalwood Box | `Box\n\n` |
 
-**Completion position** *(clarified 2026-09-11, issue #259)*. There is no
+**Completion position** *(corrected 2026-09-12, issue #259)*. There is no
 leading line feed or literal indentation before the family word. When
-`Item:_` starts at the left margin, its retained cursor is column six;
-`Skull Key`, `Sceptre` and `Gem Shard` begin there on that same row. Their
-listed line feeds occur after the family word. Ordinary wrapping still
-applies when output begins at another column, and bottom-row output can
-scroll the window.
+`Item:_` starts at the left margin, it leaves the message cursor at column
+six. The accepted family starts at that retained cursor, subject to ordinary
+wrapping. This is a cursor-position contract, not a guarantee that the
+already-painted `Item:` is still on that screen row. The earlier unconditional
+same-row wording here and in the first issue answer is withdrawn (R467).
 
-For Moonstones, "followed immediately" means consecutive text emission,
-without an extra separator inserted by the command. At the standard
-sixteen-column message width, `Moonstone_` starting at column six prints
-the family word on the prompt row, and its trailing space causes the
-wrap-aware printer to move to the next row at column zero. The outcome
-starts there; the phrase does not require a single physical screen row.
+**EGA panel-overflow side effect.** Both the inventory panel and the message
+window begin at screen column 24. EGA selects its fixed right-side scroll
+solely from that left edge, even when the requested rectangle belongs to
+the upper inventory panel. Thus an overflow while printing a picker page
+can shift existing message pixels up one row while leaving the message
+cursor unchanged. The next input indicator or family word still appears
+at the retained column and row, below the displaced `Item:`. Each such
+scroll can increase the visible gap; there is no fixed one- or two-row rule.
+A prompt near the top can scroll out of view entirely.
 
-Fresh execution of the original picker, input wrapper, complete roster
-redraw and text primitives verifies these cursor results for four families
-across all thirteen message rows (52 cases). Graphics and driver output
-were observation boundaries, so this does not establish the final raster.
-**Open capture discrepancy:** issue #259 reports a family word two rows
-below the prompt, still indented six columns. That layout remains
-unreproduced; it is not explained by the traced frame restoration or a
-leading completion prefix. A stock save, asset identity, exact inputs and
-full original frames from before U through the next command wait are
-needed to settle its cause. Source provenance: fresh private analysis in
-`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/ZSTATS_OVL/`,
-`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
+Long counted picker labels can wrap and use additional panel rows. Whether
+a page overflows depends on the visible entries, their quantities and the
+page reached by navigation. Redrawing an overflowing page can repeat the
+message shift, even when navigation stays on the same selected item.
+Changing only the initial message row does not isolate that cause. The
+frame-restoration helpers themselves still do not reposition the message
+cursor. See `systems/display-driver-abi.md` Section 9.5 and
+`systems/text-output.md` Section 10.5 for the driver behavior.
+
+The listed completion line feeds follow the family word. For Moonstones,
+"followed immediately" means consecutive text emission without an added
+separator. At the standard sixteen-column message width, `Moonstone_`
+starting at column six prints the family word at the retained cursor;
+its trailing space causes a wrap to the next row at column zero, where
+the outcome starts. It need not occupy the visible `Item:` row.
+
+The earlier 52 cases verified descriptors and text calls with driver output
+hooked; they did not establish final screen alignment. A follow-up runs
+39 original picker/text and EGA-scroll cases with symbolic glyph markers,
+covering three inventories/input sequences across all thirteen message rows.
+The same selected Skull Key has zero, one or two displaced prompt rows,
+while its message cursor stays unchanged. Three separate original EGA
+copy checks establish the same screen shift for different requested
+rectangles sharing the left edge. These are controlled spatial probes,
+not a replay of the reporter's save or a complete DOSBox raster capture.
+
+**Open capture reconciliation:** the follow-up report also observes zero,
+one and two rows, already at the picker wait. The mechanism above explains
+how this can occur, but the exact reported sequence still needs its stock
+counts and full picker panels before and after each navigation key, alongside
+message frames through acceptance. A standalone original-game save and exact
+inputs would permit a replay. Do not infer a particular inventory or scroll
+count from the decoded message rows alone. Source provenance: fresh private
+analysis in `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/ZSTATS_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/EGA_DRV/` and
+`u5-decomp/notes/`.
 
 Utility results follow those completions:
 

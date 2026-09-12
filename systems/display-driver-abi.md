@@ -525,21 +525,26 @@ hardwired and ignores both the rest of the rectangle and the distance argument:
 | Horizontal extent | Pixel columns 192 through 319 inclusive (a 128-pixel-wide right-side text panel, 16 character cells wide). |
 | Vertical extent | Pixel rows 88 through 199, advanced one row per inner iteration; iterations that reach beyond the visible 200 rows write to non-visible video memory and are harmless. |
 | Scroll distance | Exactly eight scanlines upward, hardcoded. The caller's distance argument is not read on this path. |
-| Exposed band | Not blanked. After the scroll, the bottom eight scanlines of the panel inherit whatever pixels happened to lie immediately below the panel before the scroll. The caller paints fresh content into the bottom row immediately after the scroll, which masks the un-blanked content. |
+| Exposed band | Not blanked. After the scroll, the bottom eight scanlines of the panel inherit whatever pixels happened to lie immediately below the panel before the scroll. A later draw may replace those pixels, but the scroll does not guarantee that the caller will repaint them. |
 | Caller responsibility | Callers that need a clear bottom row must request a fill or a fresh glyph draw for those scanlines after the scroll completes. |
 
-The panel this fast path serves is the gameplay message window, text cells
-columns 24..39 rows 11..23 — see `text-output.md` sections 10.1 and 10.5. The
-resident text layer converts its scroll requests to pixel rectangles before
-dispatching, and the message window's rectangle always presents that same left
-edge, so on the shipped EGA baseline the fast path is the one the text layer
-observes and every text scroll moves exactly one cell row regardless of the
-distance the resident helper computed.
+The fixed strip includes the gameplay message window at screen columns
+24..39, rows 11..23, and extends through the bottom screen row. Selection
+of this path depends only on the requested left edge, not on a window's
+identity or vertical bounds. An upper inventory-panel overflow also has
+left edge 192 and therefore moves this same message strip. The text layer
+clamps only the active panel cursor; the message cursor is unchanged.
 
-A compatible engine should implement the general signed-distance,
-render-target-aware, band-blanking scroll and then special-case the message
-panel to the eight-scanline, no-blank behaviour above. Implementing only the
-panel case — or treating other rectangles as no-ops — is not ABI-faithful.
+The earlier blanket wording that every text scroll uses the fixed path,
+and that the caller immediately masks the exposed band, is withdrawn (R469).
+Other left edges still use the general path. A compatible rendering contract
+must retain the left-edge selection rule, including its panel-to-message
+side effect; recognizing only a designated message-window object misses it.
+See `inventory.md` Section 7.1 for the resulting variable prompt gap.
+
+Source provenance: fresh original picker/emitter traces and three actual EGA
+copy checks with different requested rectangles in
+`u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`, issue #259.
 
 ### 9.6 Rectangle Dissolve Visit Order
 
