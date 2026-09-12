@@ -983,6 +983,13 @@ visibly wrong.
 
 ### 13.4 What is *not* on this path
 
+The stats panel is not on this path. Neither the world tick nor the per-frame
+active-object animator repaints it - not on the first tick after a mode entry,
+not on any other - and the tick's own conditional tail call is the ambient-audio
+tick, not a panel redraw. Everything that repaints the panel is either a routine
+that just changed a displayed number or a mode loop draining a refresh request
+at its command prompt (`systems/stats-panel.md` Sections 2.2 and 2.3).
+
 The game clock and the NPC schedule walk are not part of the idle pass at all.
 They advance in the per-turn epilogue after a command has been executed
 (`systems/time.md`, `systems/npc-schedules.md`). Capture confirms the visible

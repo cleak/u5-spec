@@ -1358,7 +1358,10 @@ boundaries.
   treats those as "acted" and never reproduces the residue. There is no global
   turn-consumed flag to model: an earlier reading that treated a shared resident
   byte as a cross-mode turn sentinel is withdrawn — that byte is a stats-panel
-  repaint request, a rendering concern rather than a timekeeping one.
+  repaint request, a rendering concern rather than a timekeeping one. The cadence
+  that byte drives - which routines raise it instead of repainting inline, and
+  where each mode loop drains it - is specified in `systems/stats-panel.md`
+  Sections 2.2 and 2.3.
 - **Full control-code pre-routing — closed.** Each mode loop owns its own small
   control-code table; the four tables agree on the four shared bindings and the
   cardinal direction codes, and combat replaces the scheme with its own parser

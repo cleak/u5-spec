@@ -1644,10 +1644,24 @@ nothing, directly or transitively.
 flag.** Nothing anywhere in the game leaves combat, breaks a loop, returns from
 a handler, or writes a scene byte on the strength of it. It is a one-bit "the
 party stats panel is stale" request with a single consumer shape: each of the
-four world/combat mode loops - combat, dungeon, outdoor and town - reads it once
-at the top of its per-turn entry point and, if it is set, redraws the full party
-stats panel and clears it. That is the whole contract, and it is what Section 11
-already says for this same tier. The request is raised in twenty-three places
+four world/combat mode loops - combat, dungeon, outdoor and town - tests it at
+the head of its **command prompt** and, if it is set, redraws the full party
+stats panel and clears it. Where in that prompt, and how often, differs by
+mode, and `systems/stats-panel.md` Section 2.3 owns the detail: combat drains
+at the top of a human-controlled actor's prompt on that actor's **first**
+keystroke only, so a refused or multi-part command re-enters the prompt below
+the test and leaves the request pending for a later drain point; town drains
+on its full-prompt arm and not on its quick-poll arm; and nothing else in the
+game clears the request, so one raised in combat can be drained at another
+mode's prompt after the arena is gone. That is the whole contract, and it is
+what Section 11 already says for this same tier.
+
+*(**Corrected 2026-09-12 (R489).** This paragraph previously said each of the
+four loops "reads it once at the top of its per-turn entry point". Combat's
+read is once per acting character's first keystroke, not once per round or per
+turn, and town's quick-poll arm does not read it at all.)*
+
+The request is raised in twenty-three places
 across the game, every one of them a routine that has just changed a number the
 panel shows - spell mana, food, gold, HP from a hazard, or the active-player
 marker - so an engine should model it as a shared display latch owned by the
@@ -1656,10 +1670,18 @@ stats panel, not as combat state and certainly not as a contact-record field.
 across the executable, all twenty-four overlays and all four display drivers -
 four reads, one per mode loop, each followed by the same redraw-and-clear. A
 read through a computed pointer would fall outside it, and none was observed.
-The twenty-three-site raise count was verified in the same census; one of those
-sites, on the boarding/transport path, was spot-checked rather than read, so the
-generalisation "every raiser has just changed a displayed number" is
-**probable** while the census itself is established.)*
+The twenty-three-site raise count was verified in the same census, and rebuilt
+independently on 2026-09-12 by exact byte pattern with the same total. That
+rebuild supersedes rather than confirms the earlier boarding/transport-path
+spot-check: the two raises in the resident image are the Hole-up command's
+ship-repair branch, which prints the repaired hull value, and the Ring of
+Regeneration healing pass, and **no raise sits on the attack path**. Both
+resident raisers have just changed a displayed number, so the generalisation
+holds where it has been read; across the overlay sites, which were counted
+rather than read one by one, "every raiser has just changed a displayed number"
+remains **probable** while the census itself is established.
+`systems/stats-panel.md` Sections 2.2 to 2.4 own the cadence this request
+belongs to.)*
 
 **The top tier's effect is sleep, applied instead of damage.** The tier calls
 the same shared routine the Gazer's gaze calls, and that routine applies the
@@ -1980,6 +2002,14 @@ player command handler first rolled an inclusive 0..1 gate whenever Quickness's
 Time `T` skip live at the head of the **automatic actor driver** — the other
 half of the round walker's two-way dispatch, described in Section 9 — so they
 suppress self-acting actors' turns, not the player's keystroke prompt.
+
+That prompt is also where combat consumes the shared stats-panel refresh
+request: before the keystroke is read, it tests the request, repaints the whole
+stats panel if it is set, and clears it. The drain happens once per acting
+character, on that character's **first** keystroke - a refused command or one
+that needs a further keystroke re-enters the prompt below the test, so a request
+raised by that command survives to a later drain point. Combat therefore drains
+per actor, not per round (`systems/stats-panel.md` Section 2.3).
 
 The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Ctrl-B, Space, digits, direction codes). Every letter and every special input is now pinned, and recognition is not the same as world-mode success. The parser routes its letters through two shared shapes plus a handful of direct calls.
 

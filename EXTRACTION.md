@@ -1,5 +1,54 @@
 # Ultima V Extraction Inventory
 
+## Issue #267 - when the stats panel refreshes (2026-09-12 UTC)
+
+`systems/stats-panel.md` Section 2 now has a cadence contract - Sections 2.2,
+2.3 and 2.4 - where it previously specified only what a refresh paints. The
+original has **two** mechanisms and picks between them per call site: the routine
+that changed the state either repaints the whole panel itself, or raises a
+one-byte refresh request that a mode loop drains at the head of its next command
+prompt. Nothing refreshes at a turn boundary, no idle tick or sprite animator
+refreshes at all, and the only time-driven refresh is a single repaint per
+in-game day boundary inside the shared clock. The request is a plain boolean
+with no indirect writer, and no rule derived from the counter, the command class
+or the scene predicts which mechanism a site uses - the shared damage path
+repaints inline while the healing helper files a request; the troll-bridge toll
+files a request while every shop, healer, guild, inn, resurrection and
+conversation gold debit repaints inline.
+
+The three reported cases resolve without deferring any gameplay change.
+**Blackthorn**: the repaint is the step immediately after the party count is
+decremented and the acknowledgement wait comes after it, so the held roster is
+step order - reaction page, blade animation, *then* the roster edit - and the
+victim leaves the panel between the narration page and the naming page. **The
+shrine**: the offering repaints inline right after the debit, before the
+announcement. **The wishing well**: the handler never repaints and never files a
+request on any arm, so the debit stays invisible for the whole scenario and the
+published coin ordering stands unchanged.
+
+Two withdrawals. **R488:** the world tick's "first tick after a mode entry"
+full-panel repaint does not exist - that hint gates an ambient-audio tick - and
+the same reading is removed from `input.md`. **R489:** the four consumers are not
+each "once at the top of its per-turn entry point": combat drains per acting
+character on that character's first keystroke, and town's quick-poll arm does not
+drain at all.
+
+Changed: `systems/stats-panel.md` Sections 2.2, 2.3, 2.4, 10, 12 and 13;
+`systems/view.md` Section 3; `systems/blackthorn.md` Section 5;
+`systems/karma.md` Section 7; `systems/main-loop.md` Sections 6, 8 and 9;
+`systems/input.md` Section 12; `systems/town-mode.md` Section 7;
+`systems/dungeon-mode.md` Section 4; `systems/combat.md` Sections 7 and 8;
+`systems/commands.md` Section 13; `systems/time.md` Sections 5 and 7;
+`systems/animation.md` Section 13.4.
+
+An exhaustive positional census of the shipped program (resident image and all
+twenty-four code overlays) plus thirty executed original cases: both polarities
+of all four consumers, the town quick-poll arm, a combat refusal, both Blackthorn
+punishment arms, the shrine offering, the well on five arms, the toll on three
+arms, two previously unopened spell sites and six clock arms. Four trace items
+are recorded in `OPEN-QUESTIONS.md`. No engine or QA files were read; the issue
+text was the only engine-side input.
+
 ## Issue #259 second follow-up - what issues the strip scroll (2026-09-12 UTC)
 
 R484 and R485 withdraw two negatives that a consumer would otherwise build on:

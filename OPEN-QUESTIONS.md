@@ -30,7 +30,8 @@ more trace items (section 3) and two more capture items (section 2). The issue #
 picker-overflow pass closed one of those trace items - how many items a page holds
 once a row wraps - narrowed two capture items, and opened two trace items and two
 capture items of its own. The issue #266 ASK-WHO pass opened one trace item and
-extended one capture item. What else
+extended one capture item. The issue #267 panel-refresh-cadence
+pass opened four more trace items (section 3). What else
 remains needs an owner decision (section 1) or a change of scope (section 4).
 
 ## 1. Owner decisions
@@ -150,6 +151,15 @@ the sky readout, the whirlpool script, the two blips, the endgame helpers, the
 controlled monster's `Z` and cast arm, the arena-record scratch and the
 underworld object writers. Each closure is recorded in its owning document with
 the date, and in `EXTRACTION.md` and `NEXT-STEPS.md` under 2026-09-05.
+
+Opened 2026-09-12 by the issue #267 panel-refresh-cadence pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| How often the dungeon loop reaches the shared per-turn clock, and therefore how often the day-rollover panel repaint can fire in a dungeon. `systems/main-loop.md` Section 6 publishes an ungated per-iteration call; the call site read for this pass looks narrower than that (conditioned on a timed-effect state and then alternating). Neither reading was executed, and whether dungeon turns advance the calendar by some other route was not established, so the published ungated wording in `systems/main-loop.md` Section 6, `systems/dungeon-mode.md` Section 15 and `systems/input.md` Section 12 is left standing pending execution rather than amended on the strength of an unexecuted read; the cadence contract asserts nothing about the dungeon's rate. | `systems/main-loop.md` Section 6; `systems/time.md` Section 7; `systems/stats-panel.md` Section 2.4 | Execute the dungeon loop across ordinary turns with the calendar observed, or read that call site's guard through to the clock. |
+| Whether the extra repaint caused by a refresh request left pending across a scene change is observable. Scene entry repaints inline without clearing the request, so the following prompt should repaint a second time. This was reasoned from the consumer and clear-site census, not measured. | `systems/stats-panel.md` Sections 2.3 and 2.4 | Execute a command that files a request, change scene, and count repaints at the next prompt. |
+| The "nothing else reaches the full-panel refresh" negative is weaker for the display-driver images than for the rest of the program. The resident image and every code overlay were read exhaustively; the driver images were searched for the two relevant references and not read through. They are separate images that cannot make a near call to the resident refresh, but that is an argument, not a reading. | `systems/stats-panel.md` Sections 2.2 and 12 | Read the display-driver images through, or establish the call-form negative for them directly. |
+| The shrine meditation handler's mantra-validation branch was not exercised. Only the offering path's ordering - debit, immediate repaint, standing increase, announcement - was executed, with the answer comparison forced to match. | `systems/karma.md` Section 7; `systems/stats-panel.md` Section 2.4 | Execute the handler through a mismatched mantra and through the quest-blessing arm, watching for any refresh. |
 
 ## 4. Deferred by scope
 

@@ -231,6 +231,18 @@ coin and open the shared twelve-character text input.
 
 These completions do not name the horse. The coin prompt accepts Y or N;
 other keys continue waiting. `\n` above denotes a literal line feed.
+
+**The debit is ordered as written above, and nothing in this handler makes it
+visible.** The well handler neither repaints the stats panel nor files a panel
+refresh request on any arm - coin accepted, coin declined, no gold, empty wish,
+matching or unmatched wish alike - and neither the Look dispatcher nor the town
+loop's epilogue and post-action cleanup repaints on the way out. The following
+command prompt therefore finds no request pending and paints nothing, so the
+spent coin stays off the panel until some unrelated event repaints it. That is
+the original's behaviour and not a missing step: the coin is still spent here,
+at the wish prompt, and an implementation must not move the debit later to make
+the panel agree. `systems/stats-panel.md` Section 2.4.
+
 Source provenance: fresh well, vision, acting-member and damage-helper
 traces under `u5-decomp/functions/LOOKOBJ_OVL/`,
 `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, issue #225.

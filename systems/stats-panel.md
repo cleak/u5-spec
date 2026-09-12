@@ -54,6 +54,140 @@ Systems that heal, damage, poison, resurrect, change active player, age light
 counters, or leave combat should assume the next refresh can redraw everything
 visible in the panel.
 
+### 2.2 Refresh cadence: immediate repaint versus deferred request
+
+Sections 2 and 2.1 say what a refresh paints and what it touches. This section
+says **when** it runs.
+
+The original has two refresh mechanisms and chooses between them **per call
+site**, not by any general rule:
+
+- **Immediate repaint.** The routine that changed the state paints the whole
+  panel itself, so the panel is already correct before that routine returns,
+  and before any narration, animation or key wait that follows inside it.
+- **Deferred request.** The routine instead raises a one-byte *panel refresh
+  request*. The panel stays stale until a mode loop's command prompt consumes
+  the request (Section 2.3).
+
+Nothing refreshes the panel at a turn boundary. The per-turn cleanup does not
+refresh it except on a day rollover (Section 2.4), and no idle world tick and no
+per-frame sprite animator refreshes it at all.
+
+Census of the shipped program. The full-panel refresh has eighty direct call
+sites: seventy-four immediate repaints inside a command, a shop or inn
+sub-screen, a cutscene or a shared helper; the four mode-loop consumers of
+Section 2.3; the boot-time first paint; and the day-rollover repaint of
+Section 2.4. Twenty-three further sites raise the deferred request instead of
+painting. Nine of the eighty painting sites are resident and the rest live in
+overlays; five code overlays never paint the panel at all.
+
+**The same counter goes both ways.** Which mechanism a site uses is not
+predictable from the counter that changed, from the command class, or from the
+scene, so an implementation must carry the mechanism per caller rather than
+derive it. Four worked cases:
+
+| Change | Mechanism |
+|---|---|
+| Damage applied to a party slot through the shared party-damage path | immediate repaint, as that path's last act |
+| The shared healing helper's hit-point gain | deferred request |
+| The troll-bridge toll's gold debit | deferred request |
+| The shop, healer, guild, inn, resurrection and conversation-payment gold debits | immediate repaint, a few steps after the debit |
+
+There is a tendency, useful as a sanity check and not as a rule: a flow that
+holds the screen before returning — shop and inn menus, the stats browser, the
+camp hour loop, mix-reagents, conversations, cutscenes, blocking narration
+pages — repaints inline, while a command that ends promptly tends to file a
+request.
+
+**The request is a plain boolean.** It is written only "set" or "clear", is
+only ever tested against "clear", and has no second value, no bitmask, no
+priority and no partial-refresh encoding. No shipped binary reaches it through
+a computed pointer, so there is no indirect writer. Its initial value is clear.
+Do not model it as a queue of regions or as a count of pending refreshes.
+
+**A raise does not depend on the change surviving.** The troll-bridge toll
+raises the request before it tests whether the party can afford the toll, and
+does not lower it when an unaffordable debit is rolled back. A raise can
+therefore outlive the change that prompted it; the only consequence is one
+redundant repaint of an unchanged panel.
+
+### 2.3 Where the deferred request is consumed
+
+Exactly four places consume the request, one per mode loop, and all four do the
+same three things in the same order: test the request, refresh the whole panel
+if it is set, clear it. All four sit at the **head of that loop's command
+prompt**, not at the end of a turn:
+
+| Mode | Consumption point |
+|---|---|
+| Overworld | in the shared input helper, after that helper's world-tick call and before the prompt newline and the key read |
+| Town | the same helper at the same position, but only on its full-prompt arm; the quick-poll arm does not test the request at all |
+| Dungeon | the first thing the render-and-poll step does, before the newline and the input poll |
+| Combat | at the top of a human-controlled actor's command prompt, so combat drains once per acting character rather than once per round |
+
+What an implementation must reproduce:
+
+1. **A deferred change becomes visible one prompt late.** The command's own
+   narration prints first, against the stale panel; the repaint lands as the
+   *next* command prompt comes up.
+2. **Combat drains on the acting character's first keystroke only.** A refused
+   command, or one that needs a further keystroke, re-enters the prompt below
+   the test-and-clear, so a request raised by that command waits for a later
+   drain point — a later actor, a later round, or another mode's prompt.
+3. **Town consumes but never raises.** Town mode's own files raise no request;
+   every request it drains was raised by a shared or overlay routine.
+4. **The request survives a change of scene.** Nothing else in the program
+   clears it — not scene entry, not scene exit, not save, not load — so a
+   request raised in one mode is still pending when a different mode's command
+   prompt comes up, and is drained there. Scene entry repaints inline without
+   clearing the request, so a request left pending across a scene change costs
+   one extra, redundant repaint at the following prompt.
+
+### 2.4 Held pages, state that is never refreshed, and the day rollover
+
+**A held page never suppresses a refresh.** No key wait anywhere in the game
+gates a panel refresh. Where a held reaction page appears to freeze the panel,
+the cause is the order of that routine's own work:
+
+- **Blackthorn's punishment** prints its reaction page, runs its two-phase
+  blade animation, and only then erases the victim's on-screen actor, lifts the
+  roster record and decrements the party count — with the full-panel repaint as
+  the very next step. The acknowledgement wait comes after that repaint and
+  gates nothing. So the panel legitimately lists the whole party for the whole
+  narration-and-animation hold, and on the wrong-answer branch the victim leaves
+  the panel **between** the pendulum-narration page and the page that names
+  them, which is the page that waits for the key. `systems/blackthorn.md`
+  Section 5.
+- **The shrine offering** repaints inline immediately after the gold debit and
+  before the announcement page is printed, and raises no request at all; its key
+  waits are all earlier. `systems/karma.md` Section 7.
+
+The observable that separates this model from a "suppressed until
+acknowledgement" model is **which page the change lands on**, not whether a key
+was pressed. Deferring the durable gameplay change to the acknowledgement
+reproduces neither case, and moves a roster edit for a presentation reason.
+
+**Some changes are simply never refreshed.** The wishing-well handler neither
+repaints nor raises the request on any arm. The coin is spent exactly where
+`systems/view.md` Section 3 puts it, and nothing on the way out — the Look
+dispatcher, the town loop's epilogue, its post-action cleanup — repaints
+either, so the next command prompt finds the request clear and paints nothing.
+The debited gold stays invisible until some unrelated event repaints the panel:
+any inline repaint, any request raised by a later command and drained at a
+prompt, or the day rollover below. Do not move the debit to make it appear.
+
+**The only time-driven refresh is the day rollover.** The shared per-turn clock
+repaints the whole panel exactly once per in-game day boundary. A call that
+advances no time, one that leaves the minute count short of an hour, and one
+that leaves the hour short of a day all bypass the repaint; only when the hour
+wraps do the day-in-range, month-roll and year-roll arms converge on it
+(`systems/time.md` Section 7). It is a backstop only where and when the clock is
+actually called, and every mode loop gates its own call — the overworld and town
+loops on a consumed turn, combat on a round cadence — so a party that stops
+taking turns never reaches it. Do not model it as a per-turn or wall-clock
+repaint. How often the dungeon loop reaches the shared clock is recorded as open
+in `OPEN-QUESTIONS.md`; nothing in this section depends on the answer.
+
 ## 3. Panel Geometry
 
 The panel lives in the stats text window, cell columns 24 through 39, rows 1
@@ -357,6 +491,11 @@ Common refresh triggers include:
 The panel does not decide whether those state changes are legal. It only reads
 the resulting state and paints it.
 
+Whether a given trigger repaints immediately or only files a deferred request
+is a property of the calling routine, not of the trigger class. Section 2.2
+gives the rule and the worked cases; Section 2.3 gives the four places a
+deferred request is consumed.
+
 ## 11. Compatibility Rules
 
 - Always clear unused party rows during a full refresh.
@@ -380,7 +519,13 @@ the resulting state and paints it.
 
 ## 12. Boundaries And Owned Work
 
-No stats-panel-specific open work is currently known at this layer. Remaining
+The refresh cadence of Sections 2.2 to 2.4 leaves three soft edges, all indexed
+in `OPEN-QUESTIONS.md`: how often the dungeon loop reaches the shared clock, and
+therefore how often the day-rollover backstop can fire there; whether the extra
+repaint a request pending across a scene change causes is observable, which was
+reasoned from the census rather than measured; and the weaker form of the
+"no other route to the refresh" negative for the display-driver images, which
+were searched for the relevant references rather than read through. Remaining
 transport-marker, combat-descriptor, and text-rendering questions live in
 `systems/vehicles.md`, `systems/combat.md`, and `systems/text-output.md`.
 
@@ -410,6 +555,18 @@ private address tables, or implementation listings.
   field matching the drawn row) and the withdrawal of the earlier "casting and
   self-targeted" reading:
   private analysis under `../u5-decomp/notes/`.
+- The refresh cadence of Sections 2.2 to 2.4 - the two mechanisms and the split
+  between them, the eighty painting sites and twenty-three request sites, the
+  boolean nature and initial value of the request, the four consumers and their
+  exact positions in each mode's command prompt, the combat first-keystroke and
+  town quick-poll narrowings, the survival of a request across a scene change,
+  the Blackthorn and shrine orderings, the wishing well's total absence of both
+  mechanisms, and the day-rollover backstop with its three bypasses - is derived
+  from private analysis under `../u5-decomp/notes/`, combining an exhaustive
+  positional census of the shipped program with execution of the original code
+  over thirty cases covering both polarities of all four consumers, both
+  punishment arms, the shrine offering, the well on five arms, the toll on three
+  arms, and six clock arms. Issue #267.
 - Text-window primitives used by the panel: `systems/text-output.md`.
 - Saved calendar, food, gold, transport/action, and character-record fields:
   `formats/saved-gam.md`.

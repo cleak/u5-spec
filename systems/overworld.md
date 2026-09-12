@@ -571,8 +571,10 @@ panel row, plays the shared damage rumble, and inverts the row back. It then:
   (`formats/saved-gam.md` Section 5). That value is the no-active-member
   sentinel; it is **not** an attacker id, and nothing on this path reads it back
   as one;
-- requests a complete stats-panel repaint, after all HP clamp, Dead-status, and
-  death-triggered selector writes above.
+- performs a complete stats-panel repaint, after all HP clamp, Dead-status, and
+  death-triggered selector writes above. This is an **immediate** repaint made
+  by the helper itself as its last act, not a deferred refresh request left for
+  a mode loop to drain (`systems/stats-panel.md` Section 2.2).
 
 Maximum hit points, experience, level, magic points and equipment are untouched
 by this helper. That list is exhaustive for the helper and its closing repaint,
