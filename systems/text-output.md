@@ -424,16 +424,28 @@ and keeps the full-screen default for the whole session.
   cursor is wherever the last chrome writer left it. Window 2's cursor is
   explicitly set to window-relative `(0, 12)` — absolute row 23, its own last
   row — so the message log is bottom-anchored from the very first frame.
-- **Column 39.** The stats window spans columns 24..39, but the panel only ever
-  writes columns 24..38, because the roster and counter boxes are fifteen cells
-  wide: their right rule sits at pixel `x = 312`, the first pixel of column 39.
+- **Column 39.** The stats window spans columns 24..39. Its *resting* content —
+  the six roster rows, the counters row and the date row — writes only columns
+  24..38, because the roster and counter boxes are fifteen cells wide: their
+  right rule sits at pixel `x = 312`, the first pixel of column 39. The item
+  picker that borrows the same window is **not** bounded that way: a list row
+  whose label ends on the window's last writable cell writes screen column 39,
+  one cell outside the drawn frame (`inventory.md` Sections 4.4 and 4.5). The
+  earlier wording, that the panel only ever writes columns 24..38, is withdrawn
+  (R485); an implementation that clips window-1 output at column 38 loses that
+  cell.
 - **Row 24.** Absolute text row 24 (`y = 192..199`) is addressable — it is the
-  last row of window 0's full-screen rectangle above — but **no gameplay path
-  writes it**. It is cleared to black when the frame is painted and stays black
-  for the rest of the session. (An earlier revision said it "lies inside no
-  window", which contradicted this section's own window-0 rectangle. Outside
-  gameplay the row is used: the Return-to-View chapter caption is printed on it
-  through the same full-screen window, `systems/intro.md` section 12.)
+  last row of window 0's full-screen rectangle above — and **no gameplay path
+  emits text into it**. It does *not* stay black for the session, though: every
+  message-strip scroll writes its columns 24..39 with bytes fetched from beyond
+  the visible raster, and does not blank them (`display-driver-abi.md`
+  Section 9.5). Those bytes then become the message window's vacated bottom row
+  on the *next* scroll, so the row is load-bearing rather than inert. The earlier
+  "stays black for the rest of the session" is withdrawn (R484). (An earlier
+  revision also said it "lies inside no window", which contradicted this
+  section's own window-0 rectangle. Outside gameplay the row carries text: the
+  Return-to-View chapter caption is printed on it through the same full-screen
+  window, `systems/intro.md` section 12.)
 
 An earlier revision of section 9 said, on the strength of a shop-overlay
 geometry census, that windows 2 and 3 are never passed to the rectangle setter
@@ -562,18 +574,49 @@ The gameplay message window normally uses that fixed path. So does an
 upper inventory-panel overflow, since its left edge is also column 24.
 Such an overflow moves already-painted message pixels but does not move
 the message cursor. A later indicator or completion may appear below the
-old prompt; `inventory.md` Section 7.1 gives controlled examples.
+old prompt; `inventory.md` Section 7.1 gives the rule for how often a picker
+page overflows and the measured per-key counts.
 
-The fixed path does not blank its exposed band. Later drawing can replace
-those pixels, but an overflow caused by panel output need not repaint the
-message bottom row at all. The earlier unconditional immediate-overwrite
-claim is withdrawn (R468). There is no continuation-key or paging wait in
-this scroll operation. Descriptor preservation and pixel preservation are
-separate properties.
+**What the message window's rows do.** *(Published 2026-09-12, issue #259.)*
+
+| Row | Effect of one scroll on the fixed path |
+|---|---|
+| The window's top row | Its pixels are **lost**. The row beneath overwrites it, and nothing in the text layer or the driver saves, preserves or restores it. |
+| Every row between | Takes the row below it. The visible history rises by exactly one cell row. |
+| The window's bottom row | Takes the pixels of screen row 24, the gutter row below the window. |
+| Screen row 24 | Takes bytes from beyond the visible raster, in columns 24..39, unblanked. |
+| Every row above the window | Untouched. The band always begins at the message window's top row, so a panel caller displaces the message window and never itself. |
+
+Nothing repaints the band afterwards. Over complete original commands that
+overflow the upper panel, no character emitted while a non-message window was
+selected landed inside the message rectangle, and no later driver request named
+a rectangle overlapping it. The consequence an implementation will notice: on a
+session's first scroll the vacated bottom row inherits a black gutter row and
+looks correctly blank, while a later scroll lifts whatever the previous one left
+in the gutter. The fixed path does not blank its exposed band, and an overflow
+caused by panel output need not repaint the message bottom row at all. The
+earlier unconditional immediate-overwrite claim is withdrawn (R468). There is no
+continuation-key or paging wait in this scroll operation. Descriptor
+preservation and pixel preservation are separate properties.
+
+**No cursor is adjusted to compensate.** The emitter's overflow tail takes the
+active window's descriptor from a single read at entry and decrements only that
+descriptor's cursor row before requesting the scroll; it reads and writes no
+other descriptor, and the cell-to-pixel conversion it calls is read-only. A panel
+overflow therefore clamps the panel's own cursor and leaves the message window's
+cursor exactly where the last message left it — which is precisely why a gap
+opens: the painted prompt rises while the write position does not. Executed
+directly with a second window parked elsewhere, that window's descriptor was
+bit-identical across the overflow. The one qualification is that a routine which
+prints into the message window itself does move the message cursor in the
+ordinary way; a cancelled item picker is such a routine.
 
 Source provenance: fresh original emitter/picker and EGA copy execution in
 `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/ZSTATS_OVL/`,
-`u5-decomp/functions/EGA_DRV/` and `u5-decomp/notes/`, issue #259.
+`u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/EGA_DRV/` and
+`u5-decomp/notes/`, issue #259. The row-by-row mapping was established by
+executing the original copy body over row-labelled synthetic video memory and
+re-confirmed end to end inside complete original commands.
 
 ### 10.6 The live input line and its cursor
 
@@ -729,7 +772,16 @@ show it.
   the general signed-distance rectangle operation and blank the exposed
   band. The earlier blanket active-rectangle, one-row and subsequent-cover
   claims are withdrawn (R468). See Section 10.5 and
-  `display-driver-abi.md` Section 9.5.
+  `display-driver-abi.md` Section 9.5. Two further points settled 2026-09-12
+  (issue #259): the strip copy destroys the message window's top row outright
+  and nothing restores it, so an append-and-scroll log model must drop its
+  oldest visible row on every such scroll; and the emitter adjusts only the
+  active window's cursor, never another window's, so a displaced window's
+  write position is unchanged and the visual gap that opens is expected
+  behaviour rather than a defect to correct. This entry-point is also armed
+  from three places besides the overflow tail — a public scroll-the-active-
+  window-by-N entry and a general scroll-a-rectangle up/down pair — so a port
+  that wires up only text overflow is missing callers.
 
 - **Proportional right-edge exactness.** Resolved. The advance table is
   published in `formats/font-pcs.md` section 4, the exclusive right-edge test,

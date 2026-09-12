@@ -1,5 +1,58 @@
 # Next Steps for u5-spec
 
+## Issue #259 second follow-up - what issues the strip scroll (2026-09-12 UTC)
+
+R484 and R485 withdraw two negatives that a consumer would otherwise build on:
+absolute screen row 24 does **not** stay black for the session - every
+message-strip scroll writes its columns 24..39 with unblanked bytes fetched from
+beyond the visible raster, and the message window's vacated bottom row inherits
+them on the next scroll - and the stats window's "only ever writes columns
+24..38" is true of the resting roster/counters/date content but not of the item
+picker, whose label can end on the window's last writable cell and write screen
+column 39.
+
+Newly published, answering the reporter's two questions directly. **The picker
+repaints; it does not scroll.** Its loop re-renders the whole visible list into
+the same rectangle on every pass, homing to the panel's first interior cell and
+stopping on the window's bottom row; the highlight and the page top are loop
+variables, and a re-render happens after every key that is not accept or cancel,
+including a key the picker does not recognise. **The counting rule:** one
+re-render costs one strip scroll if and only if the entry beginning on the last
+list row takes two display lines, never two, and acceptance costs none - so most
+navigation costs nothing at all, which is why the original's message history
+survives where a per-frame-row hook blanks it. Measured cumulative gap tables for
+seven inventories are published. **Which entries can wrap** is settled for all
+four shipped vocabularies at every printable quantity width, with the rule (the
+label's last cell falling on or past the window's sixteenth cell), the two
+resulting screen shapes, and the note that an ordinary save can only reach a
+counted shard, a counted Pocket Watch, or a Black Badge at a hundred or more.
+**What the message window loses:** the strip copy lifts the band from the message
+window's top row down, that row's pixels are lost outright, each row takes the
+row below, the bottom row takes the gutter row, and nothing repaints any of it -
+so an append-and-scroll log model must drop its oldest visible row, which is what
+the reporter implemented correctly. The band is 232 destination scanlines, not
+the 112 the vertical-extent row implied, and its beyond-raster overrun is now
+shown to lie above the visible page and below the driver's back buffer. The entry
+is armed from four places in the program, only one of which the `U`-Use command
+reaches. R-Ready and the Z-stats equipment, reagent and spell pages share the
+mechanism but never trigger it; the Z-stats carried-items page does.
+
+Changed: `systems/display-driver-abi.md` Section 9.5; `systems/inventory.md`
+Sections 4.4, 4.5, 4.7, 5.1, 7 and 7.1; `systems/text-output.md` Sections 10.1, 10.5
+and 11; `systems/display-driver.md` Section 7; `systems/stats-panel.md`
+Section 3.
+
+Roughly 1,800 executed original cases: twelve integrated `U`-Use commands with
+the keyboard driven through emulated firmware, ten direct overflow cases, six
+frame builds, forty-two R-Ready and Z-stats page runs, 1,562 single-row renders
+and 142 label measurements, plus driver-body execution over labelled video
+memory. Two trace items and two capture items are recorded in
+`OPEN-QUESTIONS.md`, one earlier trace item is closed and two capture items are
+narrowed. A method correction is noted in place: the previous follow-up's fixture
+labels named arrow keys its harness did not deliver, and its scroll counts stand
+because an unrecognised key re-renders identically. No engine or QA files were
+read; the issue text was the only engine-side input.
+
 ## Issue #265 - overworld Klimb target identities (2026-09-12 UTC)
 
 Doors-and-z-transitions Section 9 and commands Section 5.8 now name the two

@@ -59,9 +59,14 @@ visible in the panel.
 The panel lives in the stats text window, cell columns 24 through 39, rows 1
 through 9 (`text-output.md` section 10.1). Inside that window it writes a
 **fifteen-column** field, absolute columns 24 through 38. Column 39 is never
-written by the panel, because the roster and counter boxes drawn by the
-game-screen frame are fifteen cells wide: their right rule sits at pixel
-`x = 312`, the first pixel of column 39 (`display-driver.md` section 7).
+written by *this* panel content, because the roster and counter boxes drawn by
+the game-screen frame are fifteen cells wide: their right rule sits at pixel
+`x = 312`, the first pixel of column 39 (`display-driver.md` section 7). That is
+a statement about the resting roster, counters and date rows, not about the
+window: the item picker borrows the same window and a list row whose label ends
+on the window's last writable cell does write column 39
+(`inventory.md` Sections 4.4 and 4.5). The earlier unqualified "column 39 is
+never written by the panel" is withdrawn (R485).
 
 | Absolute row | Contents |
 |---:|---|
