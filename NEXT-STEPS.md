@@ -1,5 +1,14 @@
 # Next Steps for u5-spec
 
+## Issue #265 - overworld Klimb target identities (2026-09-12 UTC)
+
+Doors-and-z-transitions Section 9 and commands Section 5.8 now name the two
+ids the outdoor K test turns on: `0x0D` prints Impassable!, `0x0C` is the one
+climbable identity, everything else prints Not climbable!. The handler reads
+the target map tile only; no active-object, walkability or terrain-damage
+test precedes the id tests. Clarification of the issue #262 text; no
+retraction. The town arm has no Not climbable! outcome.
+
 ## Issue #264 - U-Use picker membership and the shard rows (2026-09-12 UTC)
 
 R481 withdraws three sentences of `systems/inventory.md` Section 4.5's row

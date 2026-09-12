@@ -483,7 +483,7 @@ empty row.
 | `K` on the overworld, no Grapple | `Klimb-With what?` on one row - lower case *what*, and no direction is ever requested |
 | `K` on the overworld, not on foot (carpet included) | `Klimb-On foot!` on one row |
 | `K` + direction on the overworld, climbable target | `Klimb-North`, then one `Fell!` row per party member who failed the risk roll, and **nothing else** - no success line, no destination or terrain report |
-| `K` + direction on the overworld, other targets | `Klimb-North` ⏎ `Impassable!` for the one blocked tile identity, or `Klimb-North` ⏎ `Not climbable!` for every identity other than the single climbable one |
+| `K` + direction on the overworld, other targets | `Klimb-North` ⏎ `Impassable!` when the target map tile is exactly `0x0D`, or `Klimb-North` ⏎ `Not climbable!` for every identity other than the climbable `0x0C` (objects on the cell, water and lava included); no object or walkability test precedes the id tests. |
 | `X` on foot | `X-it what?` on one row (the verb echo and the refusal are two literals) |
 | `E` off an entrance | `Enter what?` |
 | `H` in town, not on an inn bed | `Hole up- Only in bed!` on one row |
