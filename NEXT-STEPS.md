@@ -1,5 +1,17 @@
 # Next Steps for u5-spec
 
+## Issue #261 follow-up - refused town Enter and modal contact (2026-09-12 UTC)
+
+The in-town Enter-what refusal is acted and can trigger an already-adjacent
+NPC before another world command. A direction key arriving during the guard's
+question belongs to that question's input. All 108 original E/free-control
+and contact-route cases pass across six cadence gates and three behavior
+values. Commands, town mode, NPC schedules and Blackthorn now give explicit
+examples. The tribute text does not establish behavior-6/7 contact or actual
+palace location; those routes remain distinct. This is additive clarification
+of existing command and routing contracts, with no retraction. The reporter's
+exact scene/save attribution was not reproduced; no engine/QA files were read.
+
 ## Issue #259 follow-up - panel overflow moves message pixels (2026-09-12 UTC)
 
 R467-R469 correct unconditional same-row completion, window-isolation and

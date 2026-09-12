@@ -545,6 +545,14 @@ on direction cancellation; there is no general free-inspection or free-cancel
 exemption. See `systems/commands.md` Section 3.
 *Corrected 2026-09-11 (R463): the earlier blanket Look/inspection exemption is withdrawn.*
 
+The in-town `E` refusal is another stationary acted case: `Enter what?`
+is followed by the ordinary eligible epilogue, even though no entrance or
+movement succeeds. If that epilogue opens an NPC question, the next key is
+input to that interaction. For example, a North key while a guard's payment
+question is open is rejected by the yes/no wait; it does not produce a North
+movement command or a blocked-step result. See `systems/commands.md` Section 3
+and `systems/npc-schedules.md` Section 9.2 for the traced return and cadence.
+
 ### Underfoot effects
 
 Town mode has a single underfoot-effect handler, and Section 7's epilogue calls
