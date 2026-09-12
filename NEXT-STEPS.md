@@ -1,5 +1,46 @@
 # Next Steps for u5-spec
 
+## Issue #268 - the Blackthorn audience's exit beat (2026-09-12 UTC)
+
+The missing contract is published: `systems/blackthorn.md` Section 4.2. The
+phrase "the closing scene beat" was one blocking key wait plus the cutscene
+vector Section 6.3 already carried, and it is the one exit shared by every
+branch that ends the interrogation well - the two solo records and the
+correct-answer merciful-death execution, on any of the four asks. The punishing
+wrong-answer branches never reach it, which is also why only they reach the
+conditional Blackthorn-tableau cleanup vector.
+
+The reported two-row offset is answered as timing rather than text. One key
+leaves the threat page; the animation after it consumes no input and cannot be
+skipped; nothing selects, clears, scrolls or writes either text window between
+the record and the end of the handoff; and the hold has a floor of about five
+seconds. An engine that performs the handoff and opens the command row on that
+key produces identical message-window bytes, just early.
+
+Two withdrawals matter to an engine already built: **R490** (the vector is not a
+per-question intermission and must not be played between questions) and **R491**
+(the one-tick slow-CPU gate is a signed comparison, so a calibration word with
+the high bit set skips the wait like a small one).
+
+Next work on this thread, in priority order:
+
+1. Capture the beat end to end and pin its real duration; the published five
+   seconds is a floor computed from executed counts and excludes 73 viewport
+   rebuild passes.
+2. Run the ambient audio tick against a loaded Blackthorn cutscene grid. Until
+   then no "the VM plays only stingers" statement is in scope
+   (`systems/audio.md` Section 11).
+3. Establish whether town entry setup clears the cutscene flag the handoff
+   leaves raised; if it does not, the moon/date and wind rows stay blank in the
+   captive cell.
+4. Identify the glyph byte the town command-row opener emits before its chrome,
+   and re-run the handoff through the arrest handler's palace arm as one
+   continuous execution rather than three driven segments.
+
+Changed: `systems/blackthorn.md` Sections 3, 4.1, new 4.2, 5, 6, 6.3, 10 and 11;
+`systems/timing.md` Sections 4 and 5.2; `systems/audio.md` Sections 8.6, 11 and
+12; `RETRACTIONS.md` R490-R491; `OPEN-QUESTIONS.md` sections 2 and 3.
+
 ## Issue #267 - the panel refresh cadence (2026-09-12 UTC)
 
 The missing contract is published: `systems/stats-panel.md` Sections 2.2 to 2.4.

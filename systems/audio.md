@@ -1297,7 +1297,7 @@ stage; that event owns the sound, not the movement command.
 | Return-to-View strip 2 | Each scheduled inner tick runs rumble `(20, 60, 10000)`, exactly three random pitches in 100..10000 Hz. The enclosing tick is BIOS-clock paced. |
 | Return-to-View strip 3 | At local phase 0 play a 3000 Hz blocking tone for 3 calibrated units; at phase 4 play 2000 Hz for 3. The enclosing tick remains BIOS-clock paced. |
 | Harpsichord digit puzzle | Each accepted digit plays its digit-specific note through the software envelope generator, only while sound is enabled. The note **blocks** for its full 4,000 iterations, about 172 ms, and ends in a hard silence. Muting skips the generator call outright and therefore removes the hold as well as the sound - the one caller-level exception to section 3. `town-mode.md` section 13.1 owns the ten-note table, the ascending scale, and the plucked amplitude contour. Ordinary name or text typing does not reuse this behavior. |
-| Blackthorn cinematic movement or stinger pause | Run the Section 5.3 short two-part sting: 25 sound-LFSR updates at `100..1000 Hz`, hard silence, a 20-unit calibrated silent hold, 25 updates at `100..1500 Hz`, then hard silence. The cinematic VM then requests its separate two-tick quiet redraw pause. Sound mute preserves both rumble loops, all fifty sound-state advances and timer writes, the silent hold, and the cinematic pause. |
+| Blackthorn cinematic movement or stinger pause | Run the Section 5.3 short two-part sting: 25 sound-LFSR updates at `100..1000 Hz`, hard silence, a 20-unit calibrated silent hold, 25 updates at `100..1500 Hz`, then hard silence. The cinematic VM then requests its separate two-tick quiet redraw pause. Sound mute preserves both rumble loops, all fifty sound-state advances and timer writes, the silent hold, and the cinematic pause. **This is the same cue Section 11's rescue-envelope row calls "the random-rumble stinger"**: the two-part sting is built from two random-rumble calls around the calibrated hold, so the two rows describe one sound, not two. `blackthorn.md` Section 4.2 counts the 36 repetitions the audience exit beat plays. |
 
 #### 8.6.1 The intro rectangle-dissolve click
 
@@ -1995,14 +1995,24 @@ listed in `RETRACTIONS.md`.
 | Envelope cue before a summon | Monster summon on successful placement; player Summon on accepted placement. | Failed chance, coordinate, legality, or allocation gates - all silent. |
 | Wind-change sequence | The Wind Change spell (variant 2) and the Wind Change scroll (variant 1). See section 7.3. | The autonomous wind drift, which is silent on every path. The wind setter itself, which contains no sound call. |
 | Nothing at all, on a passed direction prompt | Blink and Vanish both return the shared cancelled sentinel, which matches neither epilogue branch. See section 8.3.2. | There is no Blink pass in combat: the scene gate takes an arm that never prompts. |
-| Short two-part movement stinger | Top-down foot/horse movement and accepted combat steps under Section 7.5; Blackthorn VM stinger-pause repetitions and animated steps with per-step pauses enabled; endgame target steps and refusal staging under Section 8.7. | First-person dungeon walking. The final endgame random-jitter loop. Falling through the certificate's infinite loop never reaches the helper, but direct endgame movement calls do. |
-| Blackthorn rescue envelopes | One fixed six-row sequence after the refuge tableau first redraws the party actor. See Section 8.6.2 and `blackthorn.md` Section 7. | The Blackthorn VM movement scripts, which use the random-rumble stinger instead. No visual operation occurs inside the six-row loop. |
+| Short two-part movement stinger | Top-down foot/horse movement and accepted combat steps under Section 7.5; Blackthorn VM stinger-pause repetitions and animated steps with per-step pauses enabled; endgame target steps and refusal staging under Section 8.7. This row says what the VM *itself* plays; it is not a claim that a Blackthorn cinematic is otherwise silent — see the open scope note below. | First-person dungeon walking. The final endgame random-jitter loop. Falling through the certificate's infinite loop never reaches the helper, but direct endgame movement calls do. |
+| Blackthorn rescue envelopes | One fixed six-row sequence after the refuge tableau first redraws the party actor. See Section 8.6.2 and `blackthorn.md` Section 7. | The Blackthorn VM movement scripts, which use the random-rumble stinger instead — that is the short two-part sting of Sections 5.3 and 8.6 under its other name, not a third recipe. No visual operation occurs inside the six-row loop. |
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |
 
-One scope question in this table is **open** rather than answered, and is
-flagged at its own section rather than resolved here: whether the ambient
-shrine/flame tick can sound during an arbitrary keyboard prompt (section 8.3.2).
+Two scope questions in this table are **open** rather than answered, and are
+flagged at their own sections rather than resolved here. The first is whether
+the ambient shrine/flame tick can sound during an arbitrary keyboard prompt
+(section 8.3.2). The second is what that same tick contributes **inside a
+Blackthorn cinematic**: the VM's pause and movement forms each run a world tick,
+the world tick runs the ambient tick, and the ambient tick's reachable work
+includes the software envelope generator, driven by the loaded cutscene terrain
+rather than by the live map. The audience exit beat of `blackthorn.md` Section
+4.2 runs 73 world ticks by itself. Until that tick is exercised against a loaded
+Blackthorn cutscene grid, no statement of the form "the Blackthorn VM scripts
+play only stingers" is in scope, and the rows above should be read as what the
+VM plays rather than as a complete inventory of the scene.
+
 The other question this paragraph used to carry - whether a *missed combat
 attack* also produces the blocked-step beep - is now answered for melee and
 weapon attacks: **it does not** (section 7.4). Failed *spell* attacks were not
@@ -2028,6 +2038,13 @@ The sailing-collision and rough-seas trigger, order, and random-stream details
 were derived from private analysis under
 `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`, and
 `u5-decomp/notes/`.
+
+The audience exit beat's audio profile — the two solo interrogation records
+reaching one shared beat and producing an identical 36-repetition sting profile,
+the absence of thunder, full-viewport flash and rescue envelopes on that path,
+and the unresolved ambient-tick scope noted in section 11 — was derived from
+private analysis under `u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
 
 The Blackthorn movement-stinger identity, mute-preserved timing boundary, and
 ordered six-row rescue-envelope table were derived from private analysis under

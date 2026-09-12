@@ -97,8 +97,23 @@ The setup contract is:
 6. Place the party, two guards, and the initially suppressed seated-Blackthorn
    tableau into cutscene actor slots.
 7. Run the scripted throne approach and Blackthorn presentation beats.
-8. Greet the current leader by name and print the gendered release line.
-9. Enter the challenge loop.
+8. Greet the addressed member by name, **wait for an acknowledgement key**,
+   then print the gendered release lines and run the guard-release route
+   script of Section 6.3.
+9. Print the preamble record of Section 4.1, wait for a second acknowledgement
+   key, and enter the challenge loop.
+
+The acknowledgement in step 8 is easy to miss: the audience takes **two**
+blocking key presses before the first demand is ever asked, one after the
+greeting page and one after the preamble record. Section 4.2 counts the whole
+solo audience.
+
+Setup also raises the cutscene presentation flag and calls the shared
+moon-phase-row and scene-announce helpers. At setup the scene byte is still the
+ordinary town value, so both of them run, and they blank the moon/date row and
+the wind-or-location row for the duration of the audience. The same pair is
+called again at the handoff in Section 4.2, where the scene byte is the
+cutscene value instead and both return without drawing anything.
 
 The active-object writes in this flow are presentation state. They do not
 describe the live town map and should not be saved back as ordinary world
@@ -137,7 +152,10 @@ The earlier ordinary-surrender fallback in this palace case is withdrawn
 (R442).
 
 After the challenge resolves, the handler can run a final throne cleanup beat
-and then hands control to a captive-cell scene. The traced handoff uses scene
+and then hands control to a captive-cell scene. That cleanup beat is
+conditional, and Section 4.2 says exactly when it is reached: only the punishing
+wrong-answer branches reach it, because every other branch has already cleared
+the tableau slot its test reads. The handoff itself prints nothing. The traced handoff uses scene
 byte eighteen, the gazetteer's `CASTLE:1` location associated with Lord
 Blackthorn's Castle, with local position `(10, 7)`.
 Entering that location does not create a captivity timer or context field; the
@@ -228,11 +246,11 @@ The accompanying resource selections are:
 
 | Situation | Record and resident additions |
 |---|---|
-| Audience preamble immediately before interrogation | Record `11`, the Wait/Avatarhood speech, then acknowledgement and two line feeds before the first demand |
+| Audience preamble immediately before interrogation | Record `11`, the Wait/Avatarhood speech, then acknowledgement and two line feeds before the first demand. This is the audience's **second** acknowledgement; the greeting page of Section 3 step 8 takes one of its own before the release lines. |
 | First wrong answer, at least two nondead members | Record `7`, the quoted laughing-at-me rebuke; after its scene beat, record `8`, which begins with two line feeds and the quoted sand/threat prefix; append the second roster entry's name and ` die!" `; acknowledgement, then `\n\n` before the second ask |
-| Wrong answer with only one nondead member | Record `10`: `"A child would catch thee in thy lies, foolish one! To the dungeon with thee!" `; acknowledgement and the closing scene beat |
-| Correct answer with only one nondead member | Record `9`, the truth/life reward speech; acknowledgement and the closing scene beat |
-| Correct answer with at least two nondead members | Record `5`, the merciful-death speech, then execution as described in Section 5 |
+| Wrong answer with only one nondead member | Record `10`: `"A child would catch thee in thy lies, foolish one! To the dungeon with thee!" `; then the audience exit beat of Section 4.2, whose blocking key wait **is** this row's acknowledgement |
+| Correct answer with only one nondead member | Record `9`, the truth/life reward speech; then the audience exit beat of Section 4.2, whose blocking key wait **is** this row's acknowledgement |
+| Correct answer with at least two nondead members | Record `5`, the merciful-death speech, then execution as described in Section 5, **then the audience exit beat of Section 4.2** — on any of the four asks, not only the first |
 | Fourth wrong answer with at least two nondead members | Record `4`, the unquoted pendulum narration, then execution as described in Section 5 |
 
 The threat names a person in the speech, rather than displaying a slot
@@ -259,6 +277,147 @@ message order and state changes, not a new full-game visual capture.
 > flag set is a shrine's, not a party member's; the "silent routing" is a
 > companion being killed; and the interrogation *does* debit moral standing.
 
+### 4.2 The audience exit beat
+
+Section 4.1 used to end two of its rows with the phrase "the closing scene
+beat" and say nothing more. This subsection is that phrase's contract. The beat
+is neither a new cinematic nor nothing: it is one blocking key wait followed by
+the viewport-only cutscene vector Section 6.3 lists, and it is the exit shared
+by the three branches that end the interrogation **without** punishing the
+player further. The punishing branches end it by another route and never play
+it.
+
+**Which branches reach it.**
+
+| Interrogation outcome | Runs the exit beat? |
+|---|---|
+| Wrong answer with only one nondead member (record `10`) | Yes, immediately after the record is printed |
+| Correct answer with only one nondead member (record `9`) | Yes, immediately after the record is printed |
+| Correct answer with at least two nondead members (record `5`), on **any** of the four asks | Yes, immediately after the Section 5 execution |
+| First wrong answer with at least two nondead members | **No.** The failure reaction of Section 5 runs instead and the loop asks again |
+| Second or third wrong answer with at least two nondead members | **No.** The clock advance, repaint and hourglass stamp of Section 6.1, then the loop asks again |
+| Fourth wrong answer with at least two nondead members | **No.** The pendulum execution of Section 5, then the loop's own exit. This branch ends the audience without the exit beat |
+
+Every path that ends the interrogation *well* — the two solo records and the
+merciful-death execution — runs the beat; no wrong-answer path with a companion
+to punish ever does, the fourth ask's pendulum execution included. One audience
+can contain both cinematics: a wrong answer followed by a correct one plays the
+failed-challenge reaction first and the exit beat afterwards.
+
+That split has a visible consequence. The exit beat's script clears the
+seated-Blackthorn tableau slot, and the tableau slot is exactly what the
+audience tests afterwards to decide whether to run the conditional
+Blackthorn-tableau cleanup vector of Section 6.3. Every branch that runs the
+exit beat therefore skips that cleanup; only the punishing branch, which never
+ran the beat, reaches it.
+
+**Exactly one key press leaves the audience.** The record is printed and the
+very next thing that happens is the beat's blocking key wait. That wait *is* the
+acknowledgement Section 4.1 names on these rows — there is no separate
+acknowledgement before it and no second wait after it, and nothing on the path
+is a timed wait that could swallow a key. Counting the solo audience from the
+top there are **three** blocking key presses in all: the greeting page's
+(Section 3 step 8), the preamble record's, and this one.
+
+**The animation cannot be skipped.** After the key, the beat hands the exit
+vector to the cutscene script VM. The script language has no input command at
+all (Section 6), the repeated pause form polls no keyboard, and there is no
+abort path anywhere on it. Holding or repeating a key shortens nothing.
+
+**Neither text window is touched.** Across the whole beat, and across the
+handoff that follows it, there is no window selection, no window clear, no
+cursor write, no string print and no character output of any kind. Scrolling in
+this window is only ever a side effect of characters walking off its bottom row,
+and no character is emitted, so nothing scrolls either. The message window
+carries the record that was just printed into the captive cell unchanged.
+
+**Where the cursor is left.** Records `9` and `10` both end with a closing
+double quote followed by one trailing space, and neither contains a line feed.
+The cursor is therefore left mid-row, one cell past that trailing space, and it
+stays there through the beat, through the handoff, and into the next scene.
+
+**How long it holds.** The beat is simultaneously a timed hold. Across the
+script it runs 36 repetitions of the shared stinger pause of Section 6, which is
+36 two-part stings, 72 one-BIOS-tick delay requests, and 73 world ticks in all
+(72 from the pauses, plus the script's one explicit redraw). At the published
+sting length and the standard BIOS tick rate that is about 3.95 s of timer waits
+and about 0.97 s of stings, so the hold has a **floor of roughly five seconds**
+before the handoff begins — and that floor excludes the cost of the 73 full
+viewport rebuild and render passes, which has not been measured. Treat five
+seconds as a lower bound, not as the duration.
+
+The call counts do not depend on the host. The **duration** does, in two ways:
+
+- The one-tick delay requests are real timer waits only above the slow-CPU gate
+  of `systems/timing.md` Sections 4 and 5.2. At or below the baseline the delay
+  helper returns immediately and the beat is much shorter. That comparison is a
+  **signed** one, so a calibration word with its high bit set skips the wait
+  exactly as a small value does; see R491.
+- With the cinematic-animation setting disabled, all of the pause work
+  disappears and only the script's own single explicit world tick survives. The
+  key wait and the 36 stings remain in both cases.
+
+**The handoff.** When the script returns, the audience performs the captive-cell
+handoff described in Section 3 — the cutscene presentation flag, the scene byte
+and the local position — and it prints nothing at all. Two shared service calls
+sit inside it, the same moon-phase-row and scene-announce pair the audience
+setup called; on this path the scene byte is still the cutscene value the setup
+left behind, so both return without drawing. That is a property of the state the
+audience leaves, not of the helpers: at setup, where the scene byte is still the
+town value, the same pair does blank the two panel rows (Section 3). The
+captive-cell entry setup the arrest handler runs next prints nothing either.
+
+The handoff leaves the cutscene presentation flag **raised**, and nothing in
+this overlay lowers it again. Whether the town entry setup that follows clears
+it was not established; that gap is recorded in `OPEN-QUESTIONS.md`.
+
+**What the player sees next.** The first output after the handoff belongs to the
+town loop, not to Blackthorn: its input helper emits a single line feed, the
+command-row opener emits one glyph byte before drawing its chrome, and then the
+loop blocks on the ordinary command key wait. There is no location line and no
+banner anywhere on this path.
+
+**Reconciling a sample taken shortly after the key.** On that one key the
+original starts a multi-second animation with the message window untouched, does
+the handoff, and only the *following* town-loop iteration emits the prompt line
+feed and opens the command row. An implementation that performs the handoff and
+opens the command row on the key itself ends up with the same message-window
+bytes about five seconds earlier. A frame captured a couple of seconds after the
+key therefore shows the original still holding the threat page while the faster
+implementation is already two rows further on — the derived blank plus the open
+command row. The difference is timing, not text.
+
+**Audio.** The two solo records are audibly identical: both reach the same beat
+and the same script, and both produce the same 36 shared two-part stings, with
+the global sound setting's already-published effect on that sting and nothing
+else of the beat's own. There is no thunder and no full-viewport flash here —
+those belong to the rescue family of Section 7 — and the rescue envelope
+sequence is not reached. What is **not** established is that the beat contains
+nothing but those 36 stings: each of its 73 world ticks also runs the shared
+ambient shrine/flame audio tick, whose reachable work includes the software
+envelope generator and which is driven by the loaded cutscene terrain. That
+scope question is recorded in `systems/audio.md` Section 11 and in
+`OPEN-QUESTIONS.md`.
+
+The two solo branches differ only in durable state taken *before* the beat: the
+correct answer ruins the selected shrine and debits five points of moral
+standing, and the wrong answer changes neither.
+
+Source provenance: derived from private analysis in
+`u5-decomp/functions/BLCKTHRN_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`,
+`u5-decomp/functions/TOWN_OVL/` and `u5-decomp/notes/`. The interrogation's
+terminating join, the exit helper and the exit vector were re-derived
+independently and agree: the helper has exactly one caller and the vector
+exactly one reference in the whole overlay, both on that join. Several hundred
+isolated original cases — the two solo records across the single-survivor party
+patterns, the companion branches across two- and three-survivor patterns, all
+four asks, all eight shrines, and a calibration sweep across the slow-CPU gate —
+reproduce one identical profile: one key wait, 36 stings, 73 world ticks, 72
+one-tick delay requests, and no print, character, window or input event between
+the record and the end of the handoff. The millisecond figures are arithmetic
+over those executed counts and the already-published sting length, not a
+wall-clock capture; `OPEN-QUESTIONS.md` carries that gap.
+
 ## 5. Failure Reaction
 
 When the interrogation fails on a branch that can punish a companion, Blackthorn
@@ -276,6 +435,17 @@ The visible sequence is:
 5. Print the static punishment fragments around the named victim.
 6. Wait for player acknowledgement before returning to the caller branch.
 
+**This five-step sequence is not the audience's exit.** It is the punishing
+branches' own cutscene, and those branches never run the audience exit beat of
+Section 4.2: after the first wrong answer's reaction the loop asks the next
+question, and the later wrong answers, the fourth ask's execution included,
+leave through the loop's own tail. The exit beat is reached by the
+two solo records and by the *correct*-answer execution below, and by nothing
+else. That is also why only the punishing branches ever reach the conditional
+Blackthorn-tableau cleanup vector of Section 6.3 — the exit beat clears the
+tableau slot that cleanup's test reads, so every branch that plays the beat
+skips it.
+
 **The roster edit and its repaint both precede the held page.** The panel is
 repainted as the step immediately after the party count is decremented, and the
 acknowledgement wait of step 6 comes after that repaint and gates nothing; no
@@ -289,9 +459,10 @@ defers the durable roster edit to the acknowledgement matches the held frames
 but lands the drop on the wrong page, and moves a durable gameplay change for a
 presentation reason; the edit belongs after the narration and animation and
 before the acknowledgement, and the refresh needs no deferral at all. The
-correct-answer branch's punishment has no key wait of its own. Wrong answers
-past the first advance the clock and then repaint unconditionally with the
-roster intact; the fourth wrong answer is the one that runs the punishment, and
+correct-answer branch's punishment has no key wait of its own — the key that
+follows it belongs to the exit beat of Section 4.2, not to the punishment.
+Wrong answers past the first advance the clock and then repaint
+unconditionally with the roster intact; the fourth wrong answer is the one that runs the punishment, and
 its key wait, too, comes after that punishment's repaint. The lone-survivor arms
 execute nobody and repaint nothing.
 `systems/stats-panel.md` Section 2.4.
@@ -317,7 +488,9 @@ and the effect survives saving and reloading.**
 The same execution runs on the *correct*-answer branch whenever at least two
 travelling party members are nondead, under a different message — Blackthorn
 thanking the player for their honesty and granting the companion "a merciful
-death". The earlier more-than-one-companion threshold is withdrawn (R440).
+death". The earlier more-than-one-companion threshold is withdrawn (R440). That
+branch then ends the audience through the exit beat of Section 4.2, on whichever
+of the four asks the correct answer arrives.
 
 **Execution text.** The fourth-wrong-answer branch begins with `MISCMSG.DAT`
 record `4`: `With a wave of Blackthorn's hand, the pendulum blade falls!`.
@@ -348,7 +521,7 @@ The exact presentation commands are:
 
 | Command | Exact effect |
 |---------|--------------|
-| Quiet redraw pause | Consume one following byte as an unsigned count. If cinematic animation is enabled, repeat that many times: run one world tick, then one shared one-BIOS-tick delay. It neither reads nor changes any text window, cursor, font, glyph style, or text pixels. |
+| Quiet redraw pause | Consume one following byte as an unsigned count. If cinematic animation is enabled, repeat that many times: run one world tick, then one shared one-BIOS-tick delay. It neither reads nor changes any text window, cursor, font, glyph style, or text pixels. The delay is a real timer wait only above the slow-CPU gate of `systems/timing.md` Sections 4 and 5.2, and that gate is a **signed** comparison (R491), so the number of ticks a script requests is fixed while the wall-clock time it costs is not. |
 | Terrain write | Consume `(value, column, row)` and replace that byte in the 32-byte-stride cutscene terrain buffer. The write itself draws nothing. |
 | Explicit redraw | Run one unconditional world tick. This rebuilds and repaints the viewport; it does not clear the viewport or either text window. |
 | Stinger pause | Repeat the current count: play the shared two-tone PC-speaker sting, then request a two-tick quiet redraw pause. The repeat count resets to one afterward. |
@@ -426,12 +599,19 @@ The public actor roles identified so far are:
 | 7 | Right/secondary guard; actor byte `0x70` |
 | 8 | Seated Blackthorn and throne tableau; initially suppressed, then actor byte `0x78` |
 
-The known script beats are the per-question intermission, the failed-answer
+The known script beats are the audience exit beat, the failed-answer
 punishment, the audience guards' approach and separation, the acting guard's
 release route after Blackthorn's order, and a conditional seated-Blackthorn
 cleanup after a successful audience flag. A
 modern engine can model these as named cinematic actions as long as it
 preserves actor order, pauses, tile writes, and final scene handoff.
+
+**Retraction.** Earlier revisions called the first of those beats the
+"per-question intermission" and placed it between interrogation questions. It
+never runs between questions: it runs exactly once, on the audience's
+terminating join, as the audience exit beat of Section 4.2. The vector's own
+observable sequence is unchanged; only its name and placement are withdrawn
+(R490).
 
 **Retraction.** Earlier revisions assigned slot 6 to Blackthorn and described
 that sprite as approaching the throne, rising, and dragging the victim. Slot 6
@@ -503,11 +683,19 @@ text-window clear.
 
 | Beat | Observable sequence |
 |------|---------------------|
-| Per-question intermission | The acting guard first steps west with one animated stinger pause. Cobble `0x44` is buffered at `(0,4)` and the next explicit world tick exposes it. The subsequent guard/Avatar repositioning remains animated one step at a time. Door `0xBB` replaces the cobble and the following one-repetition stinger pause exposes the door. The seated-Blackthorn tableau and both guards then continue moving or are cleared with per-step redraws; each cleared actor disappears on the next movement or pause redraw. The first repetition of the final six-repetition stinger pause exposes the empty tableau and the remaining five hold it. |
+| Audience exit (formerly "per-question intermission"; see R490 and Section 4.2) | The acting guard first steps west with one animated stinger pause. Cobble `0x44` is buffered at `(0,4)` and the next explicit world tick exposes it. The subsequent guard/Avatar repositioning remains animated one step at a time. Door `0xBB` replaces the cobble and the following one-repetition stinger pause exposes the door. The seated-Blackthorn tableau and both guards then continue moving or are cleared with per-step redraws; each cleared actor disappears on the next movement or pause redraw. The first repetition of the final six-repetition stinger pause exposes the empty tableau and the remaining five hold it. |
 | Failed challenge | Quiet pause 22; the acting guard moves to and with the second member; quiet pause 3; buffer pendulum `0x82` at `(5,7)` and clear that member; one explicit world tick exposes both changes together. The acting guard returns with animated steps; quiet pause 12; the secondary guard walks west three animated steps; hourglass `0xE9` is buffered at `(5,9)`; the first of that guard's three animated east steps exposes it. |
 | Guard approach | One stinger-pause repetition; both guards move north together one animated step; then slot 6 moves west while slot 7 moves east for three animated paired steps, opening the centre; quiet pause 8. The caller then hides slot 8 at `(5,5)`, reveals seated Blackthorn `0x178` there with the 256-pixel transition, assigns actor byte `0x78` to preserve it, and performs another quiet pause 8 before Blackthorn's speech. |
 | Guard release route | After Blackthorn orders the guard to release the captive: quiet pause 11; the acting guard moves west once, north four times, and east once, with a stinger-plus-two-tick redraw after every step. Blackthorn remains seated in slot 8. |
 | Conditional Blackthorn-tableau cleanup | Quiet pause 4; seated Blackthorn and the throne move east once and south five times with an animated redraw after every step; slot 8 is cleared; one explicit world tick repaints the resulting tableau. It does not clear the screen. |
+
+The audience exit row is the vector the audience exit beat of Section 4.2 plays
+once, after its blocking key wait, on each of the three branches that end the
+audience without punishing a companion for a wrong answer.
+Across the whole of it there are 36 stinger-pause repetitions, 73 world ticks
+and 72 one-BIOS-tick delay requests, and no text output of any kind. Earlier
+revisions named this row "per-question intermission" and so placed it between
+questions; that name and placement are withdrawn (R490).
 
 These vectors deliberately test visible checkpoints rather than duplicating the
 already-published movement byte stream. A conforming renderer must additionally
@@ -997,6 +1185,14 @@ used by the direct reveals, all quiet-pause operands, the absence of any
 output-byte/text effect, every redraw boundary, the three single-cell reveals,
 the paired flash/rumble, and both rectangle dissolves.
 
+The audience's exit is public too: Section 4.2 gives the single blocking key
+press that leaves the threat page, the unskippable viewport-only animation that
+follows it, the count of stings, ticks and timer requests it costs, the fact
+that neither text window is touched and where the cursor is left, the silent
+captive-cell handoff, and the town loop's own prompt as the first output
+afterwards. What is left open there is wall-clock: the hold is a floor computed
+from executed call counts, not a capture (`OPEN-QUESTIONS.md`).
+
 - ~~The per-member Blackthorn-jail flag band is claimed by more than one
   reader.~~ **Resolved.** That band is the shrine ruin flags. It is *shared*
   world state, not a Blackthorn-owned band: the interrogation sets a shrine's
@@ -1058,6 +1254,16 @@ matching the direct reveal/flash/dissolve helpers to their shared contracts.
 Source provenance: private analysis in `u5-decomp/functions/BLCKTHRN_OVL/`,
 `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/EGA_DRV/`,
 `u5-decomp/formats/`, and `u5-decomp/notes/`.
+
+The audience exit beat of Section 4.2 — its key wait, its identification with
+the exit vector of Section 6.3, the three branches that reach it and the
+punishing branches that never do, the absence of any text-window, cursor or input
+work between the terminating record and the captive-cell handoff, the stinger,
+tick and timer-request counts, the slow-CPU gate's signed comparison, and the
+town loop's prompt as the first output after the handoff — was derived from
+private analysis in `u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/TOWN_OVL/` and
+`u5-decomp/notes/`, and independently re-derived before publication.
 
 The movement-stinger identity, mute boundary, and ordered six-row rescue audio
 table were derived from private analysis in
