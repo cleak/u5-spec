@@ -471,6 +471,88 @@ monster summon cue of section 8.3 - ramps its comparison value **past the
 16-bit wrap**, at which point the duty jumps discontinuously. That cue's
 amplitude contour is marked unresolved in section 8.3 rather than guessed.
 
+#### 5.4.7 The two shrine-meditation recipes
+
+*(Added 2026-09-12, issue #271 follow-up.)* The shrine's closing beat is this
+generator rather than a sting or a flash, and it uses two recipes that appear
+nowhere else in this document. `systems/karma.md` Section 7.2 owns the
+surrounding contract - which arm plays which, what blocks, and the interval to
+the next command prompt. This subsection owns the parameters.
+
+**The ordination chime.** Seven consecutive envelope runs, one per row of a
+stored seven-row parameter list, with no pause and no other work between them:
+
+| Note | Phase increment | Idle count | Iterations | Initial comparison | Comparison delta | Approx. gate pitch | Approx. audible length |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 3300 | 1 | 7,000 | 1000 | +9 | 1.17 kHz | 301 ms |
+| 2 | 3925 | 1 | 6,000 | 1000 | +10 | 1.39 kHz | 258 ms |
+| 3 | 3925 | 1 | 3,000 | 1000 | +21 | 1.39 kHz | 129 ms |
+| 4 | 3925 | 1 | 3,000 | 1000 | +21 | 1.39 kHz | 129 ms |
+| 5 | 3925 | 1 | 3,000 | 1000 | +21 | 1.39 kHz | 129 ms |
+| 6 | 3700 | 1 | 3,000 | 1000 | +21 | 1.31 kHz | 129 ms |
+| 7 | 3925 | 1 | 8,000 | 500 | +8 | 1.39 kHz | 344 ms |
+
+Thirty-three thousand iterations in all, about **1.42 seconds** audible and
+about **1.10 seconds** muted (section 10.3). Every parameter and every count is
+exact; the pitches and the milliseconds are calibrated approximations and
+inherit section 5.4.3's band as a unit.
+
+Row 1's phase increment is not new to this document. Section 8.6.2 already
+publishes 3300 at about **1.17 kHz** for rows 5 and 6 of the Blackthorn rescue,
+and the same pitch relation reproduces it here, which is an independent
+cross-check of the model on a value this document had already committed to.
+Increments 3925 and 3700 are published here for the first time.
+
+By section 5.4.6 each note's rising comparison value is a falling duty cycle -
+about 98 per cent down to between about 2 and 7 per cent - so each note swells to
+a peak near its own midpoint and then fades. The result is a chime of bell-like
+strikes: one lower opening note, the same higher note four times, one dip in
+sixth place and a longer final note. No note reaches the 16-bit wrap; the largest
+comparison value in the whole chime is 64,492, so the discontinuity of the summon
+cue in section 8.3 does not arise. It is not a scale, not a glissando and not a
+flat tone.
+
+This is the recipe's only caller. A byte census of the shipped executables,
+overlays and drivers finds the chime's parameter list referenced only in the
+shrine overlay, consumed by a single call site; the one other match in that
+census is a two-byte coincidence inside a display driver.
+
+**The 920-step swell.** One long sweep of 920 consecutive envelope runs at a
+single fixed pitch: the initial comparison rises 2000, 2050 ... 24950 across 460
+runs, then resets to 25000 and falls 25000, 24950 ... 2050 across 460 more.
+Every run uses comparison delta 0 and idle count 1, so within a run the duty
+cycle is constant and only the run-to-run ramp moves it - from about 97 per cent
+down to about 62 per cent and back. By section 5.4.6 that is one slow swell and
+decay at one unmoving pitch, the opposite character to the chime's seven
+strikes.
+
+| Caller | Phase increment | Iterations per run | Total iterations | Approx. pitch | Approx. audible / muted |
+|---|---:|---:|---:|---:|---:|
+| Shrine offering accepted (`systems/karma.md` Section 7.2) | 2700 | 200 | 184,000 | about 958 Hz | 7.91 s / 6.13 s |
+| Shrine Codex turn-in (`systems/karma.md` Section 7.2) | 3100 | 150 | 138,000 | about 1.10 kHz | 5.93 s / 4.60 s |
+| Shadowlord destruction | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
+| One Blackthorn cutscene beat | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
+
+Increment 3100 is the one section 5.4.4 already prices at about 1,101 Hz; the
+turn-in swell and that entry are the same pitch. The four rows come from a
+byte-signature census of the shipped executables, overlays and drivers for this
+sweep geometry. A site appears in it only if it builds the sweep the way these
+four do; a site that assembles the same geometry differently would not show up,
+so four is a floor on the family rather than a proven total.
+
+Both shrine callers precede their sweep with a single **unrestored**
+inversion of the gameplay viewport - the operation of section 6, issued as one
+exclusive-or rectangle fill and never undone, so the following redraws simply
+paint over it. Whether the
+Shadowlord and Blackthorn callers do the same was not established here.
+
+Neither recipe is skipped by the sound toggle: muting takes the generator's
+silent arm in the usual way (sections 3 and 5.4.5), which is not cost-matched
+but runs the identical iteration count. Neither is gated by the master
+redraw/animation gate, neither reads a key, and neither issues an interrupt or
+touches the timer's counting channel, so neither costs a BIOS tick.
+`systems/karma.md` Section 7.2 states those gates in full.
+
 ## 6. Shared potion and wind envelope table
 
 The nine low-numbered audiovisual variants share one sequence:
@@ -1224,6 +1306,13 @@ an observed target for that emulator setup. Dividing by 1856 gives about
 spacing of individual bands. The report does not specify CPU/core/cycle
 settings, and this is not a measurement on period reference hardware.
 
+Two callers wrap this effect in an envelope beat that belongs to them rather
+than to it: Shadowlord destruction and the shrine's Codex-turn-in arm each play
+the 920-step envelope swell of section 5.4.7, the shrine's immediately before
+this flash. The shrine's other two meditation arms never invoke this effect at
+all (`systems/karma.md` Section 7.2), and the Codex urn's completion beat
+invokes it three times (`systems/karma.md` Section 8.1).
+
 Every caller uses the same fixed sweep geometry and band count, without a
 caller-selected delay. Under the same display driver and execution settings,
 the measurement is applicable to the shared effect at shrine restoration,
@@ -1938,6 +2027,9 @@ envelope's idle count does not affect its baseline duration.
 | Moongate transit (section 8.3) | 30,000 | **1.29 s** | about 999 ms |
 | Endgame member restoration (section 8.7) | 40,000 | **1.72 s** | about 1.33 s |
 | Endgame box/tableau (section 8.7) | 50,000 | **2.15 s** | about 1.67 s |
+| Shrine ordination chime, all seven notes (section 5.4.7) | 33,000 | **1.42 s** | about 1.10 s |
+| Shrine offering swell, 920 runs (section 5.4.7) | 184,000 | **7.91 s** | about 6.13 s |
+| Shrine Codex-turn-in swell, 920 runs (section 5.4.7) | 138,000 | **5.93 s** | about 4.60 s |
 | Harpsichord key note (`town-mode.md` 13.1) | 4,000 | **172 ms** | **no note at all** - the handler skips the call |
 
 The complete shared sequence of section 6 is its lead rumble plus both
@@ -2045,6 +2137,7 @@ listed in `RETRACTIONS.md`.
 | Blackthorn rescue envelopes | **Two** sites in the one cinematic: the fixed six-row sequence after the refuge tableau first redraws the party actor, and one further envelope per in-party slot inside the party-restoration step, at a per-slot phase increment. See Section 8.6.2 and `blackthorn.md` Section 7. *(Corrected 2026-09-12, issue #269: this row previously named the six-row sequence as the cinematic's whole envelope content - `RETRACTIONS.md` R494.)* | The Blackthorn VM movement scripts, which use the random-rumble stinger instead — that is the short two-part sting of Sections 5.3 and 8.6 under its other name, not a third recipe. No visual operation occurs inside the six-row loop. |
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |
+| Shrine meditation closing recipes | The meditation handler only, one recipe per completed arm: the seven-note ordination chime after the quest-instruction record, and the 920-step swell on the accepted-offering and Codex-turn-in arms. The swell's geometry is shared with Shadowlord destruction and one Blackthorn cutscene beat at their own phase increments. See section 5.4.7 and `systems/karma.md` Section 7.2. | The Codex urn reader, which runs no software envelope at all - its closing beat is three shared flash/rumble cycles (`systems/karma.md` Section 8.1). The three refusal arms - a blank mantra line, a wrong mantra and a zero offering - which reach no sound. The shared flash of section 8.4, which the ordination and offering arms never invoke. |
 
 Two scope questions in this table are **open** rather than answered, and are
 flagged at their own sections rather than resolved here. The first is whether

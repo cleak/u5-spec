@@ -656,11 +656,12 @@ the dismissing keystroke is spent the command returns, the loop polls, and the
 blank and marker appear exactly as for any other result. Ordinary results
 return immediately, so their blank is already on screen when the game is next
 idle, subject only to any epilogue text above. Not every such report is a
-deferral case: the shrine's closing quest record is followed only by a short
-sound sequence and ten world ticks, neither of which prints or waits for a key,
-so the original does spend the blank there - one blank row between the closing
-line and the prompt row, plus one blank row above the closing line contributed
-by the record's own leading feed (`systems/karma.md` Section 7).
+deferral case: the shrine's closing quest record is followed only by the
+ordination chime - seven software-envelope notes, about 1.4 seconds - and ten
+world ticks, neither of which prints or waits for a key, so the original does
+spend the blank there: one blank row between the closing line and the prompt
+row, plus one blank row above the closing line contributed by the record's own
+leading feed (`systems/karma.md` Sections 7 and 7.2).
 
 Source provenance: fresh original mode-loop, input-helper, dispatcher,
 step-interaction, look-handler, shrine-handler and printer execution in

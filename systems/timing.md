@@ -766,7 +766,15 @@ pending answers and treats them as known gaps:
     shrine entry, twelve for the Codex, seventeen for an entry abandoned at the
     virtue prompt (`systems/karma.md` Section 7) — so what remains unpriced is
     the duration of one sting, not how many play. Any seconds figure for a
-    shrine entry inherits that unpriced constant.*
+    shrine entry inherits that unpriced constant.* *Narrowed again
+    2026-09-12 (issue #271 follow-up): the meditation handler's closing
+    beat is not a per-tone loop at all but a run of the software envelope
+    generator, and it is now priced by iteration count in `audio.md`
+    sections 5.4.7 and 10.3. The published floors in
+    `systems/karma.md` Section 7.2 therefore rest on exactly two unpriced
+    terms: the per-frame sting, which those floors take at the shared
+    two-part sting's 27 ms on an identification that was assumed rather
+    than established, and the per-step viewport rebuild.*
 11. **Whether an implementation applies its per-tone constant to the
     blocking-tone wrapper as well as to sweeps was not established.** If it
     does, the right figure there is 18.8 inner units, not 17.4.

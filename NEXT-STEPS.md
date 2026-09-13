@@ -73,7 +73,8 @@ reader's own poll, animates the cursor in place and discards the dismissing key
 - so the blank has not been emitted yet while the screen is idle. The shrine's
 closing record is not such a case and does spend its blank; its two key waits
 both precede it, and its sound sequence and ten world ticks neither print nor
-wait.
+wait. (That sound sequence is now named and priced: the ordination chime of
+`systems/karma.md` Section 7.2.)
 
 Three withdrawals, all of one unconditional reading. **R496:** town does not
 emit the prompt pair on every polled turn; the harpsichord re-poll emits
@@ -148,6 +149,49 @@ Next work on this thread, in priority order:
 Changed: `systems/karma.md` Sections 7, 8, 8.2 and 13; `systems/animation.md`
 Section 13.5; `systems/timing.md` Sections 4 and 7.6; `RETRACTIONS.md` R492;
 `OPEN-QUESTIONS.md` sections 2 and 3.
+
+### Follow-up - how long the closing sound sequence is, and whether it blocks (2026-09-12 UTC)
+
+The engine author's follow-up question is answered in a new `systems/karma.md`
+Section 7.2, with both recipes published in a new `systems/audio.md`
+Section 5.4.7. The closing beat is the software envelope generator: a seven-note
+chime of about **1.42 seconds** on the ordination arm, and on the other two a
+single unrestored XOR viewport inversion followed by a 920-step single-pitch
+swell - about 7.9 seconds at an accepted offering, about 5.9 at a Codex turn-in,
+the turn-in then adding the shared flash. It blocks, reads and discards no key,
+costs no BIOS tick and no repaint, survives the sound toggle, and is not touched
+by the master redraw/animation gate; the calibration word sizes it through the
+envelope's own idle factor rather than through the one-tick-delay threshold.
+
+The interval the reporter actually asked about is published per arm from the
+acknowledging key to the next command prompt - 61, 61 and 73 world steps, eight
+exit frames and stings, with arithmetic floors of about 5.0, 11.5 and 11.0
+seconds - and on the ordination arm the sound is only about 28 per cent of
+that interval. An engine
+that opens its command row after "sound, then ten ticks" is roughly three
+seconds early; the exit pacing is most of the wait.
+
+No retraction: the vague phrases this replaces were gaps, not errors.
+
+Next work on this thread, in priority order:
+
+1. Re-run all three completion arms, and the Codex exit, on the frame harness
+   with the world step and the real one-tick delay live. The handler's own
+   contribution is executed; the 61/61/73 whole-window counts are derived.
+2. Settle whether the presentation's per-frame sting is the shared two-part
+   sting. Every seconds figure on this path prices it at that recipe's 27 ms on
+   an assumption, and `systems/timing.md` Section 7.6 item 10 still carries it
+   as unpriced.
+3. Price one world step inside a presentation hold. It is now the single
+   unpriced term standing between the published counts and a real duration at
+   both ends of a meditation.
+4. Render the unrestored viewport inversion, and trace the other two callers of
+   the 920-step swell for their own surrounding beats.
+
+Changed: `systems/karma.md` Sections 7, 7.2 (new) and 8.1; `systems/audio.md`
+Sections 5.4.7 (new), 8.4, 10.3 and 11; `systems/timing.md` Section 7.6;
+`systems/text-output.md` Section 10.4; `EXTRACTION.md`; `OPEN-QUESTIONS.md`
+sections 2 and 3.
 
 ## Issue #268 - the Blackthorn audience's exit beat (2026-09-12 UTC)
 

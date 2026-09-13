@@ -92,8 +92,10 @@ crystal-sphere vision parks at a key wait **inside** the command - the same poll
 the command reader is built from, animating the cursor in place and discarding
 the dismissing key - so while the screen is idle the command has not returned
 and the feed has not been emitted. The shrine's closing record is not such a
-case: it is followed only by a sound sequence and ten world ticks, neither of
-which prints or waits, so the original does spend the blank there.
+case: it is followed only by the ordination chime - about 1.4 seconds of
+software-envelope notes, since named in `systems/karma.md` Section 7.2 - and ten
+world ticks, neither of which prints or waits, so the original does spend the
+blank there.
 
 Three withdrawals, all of the same unconditional reading. **R496:** the town
 loop does **not** emit the feed-and-marker pair on every polled turn - the
@@ -174,6 +176,51 @@ the stubbed terrain probe under the walk. All are in `OPEN-QUESTIONS.md`.
 Changed: `systems/karma.md` Sections 7, 8, 8.2 and 13; `systems/animation.md`
 Section 13.5; `systems/timing.md` Sections 4 and 7.6; `RETRACTIONS.md` R492;
 `OPEN-QUESTIONS.md` sections 2 and 3.
+
+### Follow-up - how long the closing sound sequence is, and whether it blocks (2026-09-12 UTC)
+
+The three places that named the closing beat only as "the shrine's sound
+sequence", "the viewport/sound presentation" and "the local viewport/sound
+effect" are filled in, in a new `systems/karma.md` Section 7.2, with the two
+recipes published in a new `systems/audio.md` Section 5.4.7.
+
+The beat is the software envelope generator, not a sting and not a flash. On the
+ordination arm it is a **seven-note chime** - seven envelope runs from a
+seven-row parameter list, 33,000 iterations, about **1.42 seconds** audible and
+1.10 muted - whose notes each swell and fade because the comparison ramp is an
+amplitude contour. On the offering and Codex-turn-in arms it is one **unrestored
+XOR inversion of the gameplay viewport** followed by a **920-step swell** at one
+fixed pitch: 184,000 iterations and about 7.9 seconds at an accepted offering,
+138,000 and about 5.9 seconds at a turn-in, the turn-in then adding the shared
+flash. The chime's opening note is the phase increment `systems/audio.md`
+Section 8.6.2 already publishes at 1.17 kHz, which cross-checks the pitch model
+on a value this repository had already committed to.
+
+It blocks and cannot be skipped. It reads no key and discards none, it costs no
+BIOS tick and no repaint, the sound toggle never skips or shortens it in count,
+and the master redraw/animation gate does not reach it - that gate removes the
+counted pauses instead, all of them in this window rather than only the
+handler's ten. The boot calibration word sizes the envelope through its own idle
+factor, which is a different gate from the signed one-tick-delay threshold. The
+three refusal arms - blank mantra line, wrong mantra, zero offering - reach none
+of it.
+
+The end-to-end interval is published per arm, from the acknowledging key to the
+mode loop's next command prompt: **61 world steps** on the ordination and
+offering arms and **73** on the turn-in arm, each with its own delay request,
+repaint and wind draw, plus eight exit animation frames and stings. The
+arithmetic floors are about **5.0 s**, **11.5 s** and **11.0 s**. They are
+floors, not estimates: the per-step viewport rebuild is unpriced, the per-frame
+sting is priced on an assumed identification, and the shared flash's 0.86 s is
+the reported DOSBox figure.
+
+No retraction. Nothing this repository had published about the closing beat is
+reversed; the vague phrases were gaps, not errors, and the counts published for
+the entry pacing are untouched.
+
+Changed: `systems/karma.md` Sections 7, 7.2 (new) and 8.1; `systems/audio.md`
+Sections 5.4.7 (new), 8.4, 10.3 and 11; `systems/timing.md` Section 7.6;
+`systems/text-output.md` Section 10.4; `OPEN-QUESTIONS.md` sections 2 and 3.
 
 ## Issue #268 - the Blackthorn audience's exit beat (2026-09-12 UTC)
 
