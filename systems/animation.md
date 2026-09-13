@@ -1053,7 +1053,16 @@ traced cases are:
   succession of absolute cells between blocking cell-reveal beats, despawning
   and respawning the record rather than walking it;
 - the **shrine/urn entry sequence**, which places the avatar's record at a fixed
-  cell and then walks it north and back south one cell per blocking beat;
+  cell and then walks it north and back south one cell per blocking beat. Two
+  details of it matter here and are specified in `systems/karma.md` Section 7.
+  First, the sequence begins by clearing the **type** byte of all thirty-two
+  slots and re-stamping only slot zero, so the rest of the cast is unpainted
+  for the whole presentation, not merely undisplaced; the stored positions and
+  per-frame tile bytes survive, and the saved table is restored at the end.
+  Second, the walk is longer than it looks: nine frames for a shrine and twelve
+  for the Codex, four of them before the avatar is drawn at all, and each frame
+  is one world step, a two-part sting and four more world steps - **five
+  viewport repaints per frame**, forty-five for a shrine walk;
 - the **endgame entry sequence**, which walks a record the same way between its
   paced beats;
 - the **waterfall/falls sequence**, which displaces the *party* between its
@@ -1096,6 +1105,17 @@ that pumps the world redraw pays all of it: sprite phases and facings, the tile
 layers, the wind check, the moongate refresh and beacon step outside combat, and
 the ambience tick — several of which consume the shared random stream and so
 shift every later roll. Both gates of Section 13.1 still apply.
+
+*One presentation's counts, as a worked scale.* A shrine entry taken as far as
+its virtue prompt pumps **fifty-seven** world steps, and one abandoned at that
+prompt pumps **one hundred and eight** — so it takes that many wind draws from
+the shared generator and advances every animated family that many times, inside
+a single command. They are given here as a worked scale for the general rule
+above, not as a maximum - no survey of every presentation's step count has been
+made. `systems/karma.md` Section 7 gives the breakdown. With the master redraw gate
+clear (Section 13.1) all of it vanishes and the same presentation pumps
+nothing, which is a second reason an engine must model the gate rather than
+assume a world step always does work.
 
 Source provenance: derived from private analysis note
 `u5-decomp/notes/2026-09-02_issue-180_blocking-presentation-world-step-census.md`.

@@ -2113,10 +2113,12 @@ is asleep, the turn loop stops. Its epilogue first performs the transient-only
 graphics teardown specified in § 4: release the dungeon-specific banks,
 restore the ordinary tile atlas with retry semantics, mark dungeon graphics
 inactive, and leave the visible framebuffer unchanged. It then runs the
-rescue/refuge sequence specified in `systems/blackthorn.md` Section 7. That sequence restores every
+rescue/refuge sequence specified in `systems/blackthorn.md` Section 7. That sequence revives every Dead
 member, reads out a moral-standing verdict, and resumes ordinary play in Lord
 British's Castle, so an ordinary wipe underground is **not** a terminal
-game-over. An earlier revision of this section routed the wipe to a "death
+game-over. It is not a free restore: each revived member's experience is scaled
+by the party's moral standing and their level and maximum hit points are
+recomputed from the result (`systems/blackthorn.md` Section 7). An earlier revision of this section routed the wipe to a "death
 sequence" and a "game-over flow"; no such dungeon-side path exists and that
 claim is withdrawn. Losing a fight in a dungeon room reaches the same place
 indirectly: combat returns to the dungeon loop that framed it, and the loop's

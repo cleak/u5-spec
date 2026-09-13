@@ -203,13 +203,22 @@ fixed eight-by-eight text font - the same glyph the framed border labels use as
 their **right** end cap - drawn on its own with no closing cap.
 
 Every mode's turn loop opens its input line with the same two steps: emit a
-newline into the message window, then draw that one triangle. The rule has
-consequences an implementation must reproduce:
+newline into the message window, then draw that one triangle. Two
+qualifications belong with that sentence, and `text-output.md` Section 10.2
+specifies both: the pair is emitted from seven places rather than one, and two
+ordinary paths skip it - the overworld suppresses one pair after **any**
+direction taken while aboard a ship, and the town re-poll after a harpsichord
+digit emits neither feed nor marker. *(Corrected 2026-09-12, issue #270: this
+sentence and the bullet below previously carried the unconditional reading;
+`RETRACTIONS.md` R498.)* The rule has consequences an implementation must
+reproduce:
 
 - The marker belongs to the turn loop, not to any verb literal. **No verb
   literal contains it.**
-- It is emitted exactly once per input line, so it persists in the
-  message-window scrollback exactly where it was drawn.
+- Where it is emitted at all, it is emitted exactly once per input line, so it
+  persists in the message-window scrollback exactly where it was drawn. It is
+  never emitted twice for one line, and a line whose prompt the gates above
+  skipped carries none.
 - The wrap-aware string printer emits no prefix of its own, so wrapped
   continuation lines carry no marker.
 - A second line printed by the same command - a refusal, a follow-up prompt -

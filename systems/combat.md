@@ -279,7 +279,13 @@ letters of `CONFLICT`, one space, three flank glyphs. Its properties:
 - **Its trailing line feed costs no row.** The row is full when the line feed is
   reached inside the same source string, so the printer's full-row suppression
   consumes it (`systems/text-output.md` Section 6). The cursor is left at column
-  0 of the following row and **no blank row** appears under the banner.
+  0 of the following row and **no blank row** appears under the banner. That is
+  a statement about the banner's own string, not about what the screen holds
+  later: the cursor still ends at column 0 of the next row, so the next command
+  prompt's leading line feed spends one blank row here exactly as it does under
+  a shorter result. The suppression removes a double row advance inside one
+  string, never the command-boundary blank. *(Scoped 2026-09-12, issue #270;
+  both widths executed - `systems/text-output.md` Sections 6 and 10.4.)*
 - **It is unconditional.** The test that precedes it cannot fail, so every
   terrain-setup entry prints it.
 
@@ -4551,8 +4557,10 @@ meaningless verbs (Section 8). What happens next is not decided by combat:
 control returns to the exploration loop that framed the fight, and that loop's
 next per-turn party-capability check sees the result. A wipe with nobody left
 able to act and nobody asleep runs the rescue/refuge cinematic specified in
-`systems/blackthorn.md` Section 7 — which restores the party and resumes play at
-Lord British's Castle, so an ordinary wipe is not a terminal game-over. A wipe
+`systems/blackthorn.md` Section 7 — which revives the party and resumes play at
+Lord British's Castle, so an ordinary wipe is not a terminal game-over, though
+it does cost the revived members experience in proportion to the party's moral
+standing. A wipe
 that leaves a sleeping member instead simply passes turns until someone wakes
 or dies.
 

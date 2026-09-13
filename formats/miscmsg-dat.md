@@ -108,7 +108,7 @@ Public consumer contracts:
 
 | Consumer | MISCMSG role |
 |---|---|
-| `systems/blackthorn.md` | Loads the audience cluster for capture/challenge prompts and related presentation strings. The challenge answer words are selected from resident virtue/Word tables, not from `MISCMSG.DAT`. |
+| `systems/blackthorn.md` | Loads the audience cluster for capture/challenge prompts and related presentation strings. The challenge answer words are selected from resident virtue/Word tables, not from `MISCMSG.DAT`. Neither is the **total-party-defeat rescue narration**: none of its nine beats is a record in this file, and none has a record ordinal - they are fixed strings in the resident data image, and a substring sweep of the shipped asset finds no beat body and none of their distinctive words. `systems/blackthorn.md` Section 7 carries them. *(Added 2026-09-12, issue #269.)* |
 | `systems/karma.md` | Owns shrine meditation, virtue aphorism/failing text, and the ordained/Codex-read state transitions that decide which virtue text can be shown. |
 | `catalogs/quest-graph.md` | Describes the quest-state effect of the urn/Codex flow: ordained virtues become Codex-read when the corresponding urn page is read. |
 | `systems/text-output.md` | Owns ordinary fixed-window text printing. Codex runic pages use that same message window with a caller-selected font. |

@@ -71,6 +71,23 @@ the calibration-override pattern that suppresses it. This wait is for visible pa
 only; it is not the calendar, not an animation phase counter, and not a source
 of deterministic gameplay time.
 
+**What the request count means, and what it does not.** The number of one-tick
+requests a sequence issues is a program constant and is the thing an engine
+must reproduce; the time they cost is not. Two consequences follow, and between
+them they are why a sampled interval and an executed count can disagree without
+either being wrong. First, a one-tick request waits for the
+**next** timer edge, not for a fixed interval from the moment it is issued, and
+the work between two consecutive requests in a paced animation is a full
+viewport rebuild and blit of unbounded cost — so a sequence of *n* one-tick
+requests takes **at least** *n* ticks and can take a multiple of that on a slow
+display path. Second, on the skip side of the threshold the same sequence costs
+no timer time at all and is bounded only by its repaints. A sequence is
+therefore not a duration, and a wall-clock sample of one cannot be converted
+back into a count. The largest published example is the shrine entry's approach
+walk, forty-five requests before the kneel and ten more before the virtue
+prompt: `systems/karma.md` Section 7, where a sampled interval about one
+sample shorter than the arithmetic floor is reconciled this way.
+
 Input-facing modal waits layer on top of the same presentation boundary: they
 poll the blinking-cursor input helper for a bounded number of iterations and
 return early when a key arrives. They may temporarily override the calibration
@@ -744,7 +761,12 @@ pending answers and treats them as known gaps:
 10. **Only two per-tone loops were priced.** The four-phase swept envelope and
     the shrine dispatch were not priced at all, and other call sites may wrap
     the same primitives in more or less bookkeeping. Nothing in 7.4.1 should be
-    generalised to them.
+    generalised to them. *Narrowed 2026-09-12 (issue #271): the shrine
+    dispatch's per-entry **counts** are now firm — nine stings for an ordinary
+    shrine entry, twelve for the Codex, seventeen for an entry abandoned at the
+    virtue prompt (`systems/karma.md` Section 7) — so what remains unpriced is
+    the duration of one sting, not how many play. Any seconds figure for a
+    shrine entry inherits that unpriced constant.*
 11. **Whether an implementation applies its per-tone constant to the
     blocking-tone wrapper as well as to sweeps was not established.** If it
     does, the right figure there is 18.8 inner units, not 17.4.
@@ -754,6 +776,13 @@ pending answers and treats them as known gaps:
     conventional mode with low-then-high byte access (`audio.md` section 8.6.1
     records the same assumption for the driver's own carrier).
     If it were low-byte-only, several derivations collapse rather than shift.
+    *Scope of the negative, widened 2026-09-12 (issue #271): the game programs
+    neither the timer's system counting channel nor its mode port anywhere in
+    any of the twenty-nine shipped images, the four display drivers included.
+    The only writes anywhere in the timer's port range go to the speaker
+    channel, and no indirect write to the counting channel or the mode port
+    was found either. The system tick rate during play is therefore the stock one, which
+    is what lets a request count be converted to seconds at all.*
 
 ## 8. Gameplay Idle Cadence And Catch-Up
 

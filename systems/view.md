@@ -199,7 +199,17 @@ Special LOOKOBJ look cases include:
   than the roll, print `Strange vision!\n` and paint the local
   thirty-two-by-thirty-two view overlay. This view is modal: the next accepted
   key dismisses it, is consumed by the view, and triggers the ordinary viewport
-  redraw rather than another command. Otherwise print `Death vision!\n`
+  redraw rather than another command. *(Refined 2026-09-12, issue #270.)* The
+  dismissal loop is the same keyboard poll the ordinary command reader is built
+  from: each pass draws one frame of the animated input cursor in place with
+  cursor advance suppressed so the column never moves, erases it with a space
+  when a key is detected, and re-draws the party marker every fourth idle pass.
+  It exits on any key and throws that key away, so dismissing the vision costs
+  a real keystroke that is not a command and produces no echo, and it emits
+  neither a line feed nor a prompt marker while it waits - which is why the
+  command-boundary blank row of `systems/text-output.md` Section 10.4 is not on
+  screen until the vision has been dismissed. The failed-check arm has no view
+  and no wait at all. Otherwise print `Death vision!\n`
   and apply **one HP of damage** to that member with the ordinary hit feedback
   and stats redraw. HP reaching zero sets the member Dead and clears an
   active-member override naming that member. No member number or name is

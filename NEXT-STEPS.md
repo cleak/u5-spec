@@ -1,5 +1,154 @@
 # Next Steps for u5-spec
 
+## Issue #269 - the rescue cinematic's narration, waits and window (2026-09-12 UTC)
+
+The rescue's text is published, and the shape of the answer is the finding:
+**there is no record table to publish.** None of the nine narrative beats is a
+`MISCMSG.DAT` record; they are fixed strings compiled into the resident data
+image, so an implementation has to carry them rather than read them from the
+user's data. `systems/blackthorn.md` Section 7 now holds the beat table, the
+complete twenty-five-step print-and-wait order, the verdict's quote framing and
+the single acknowledgement key wait; Section 7.1 holds all eight tick waits
+(seventy-four ticks, two more waits than either this document or `audio.md`
+Section 8.6.2 used to enumerate); and new Section 7.2 holds the message-window
+contract - never cleared, only scrolled, with per-band glyph and scroll counts
+and the frame the handoff leaves on screen.
+
+Three withdrawals an engine already built must act on. **R493** is the one that
+changes play: the rescue is not a lossless restore. The shared revive routine
+acts only on a Dead slot, and below a moral standing of ninety-eight it scales
+that member's experience by the standing and recomputes level and maximum hit
+points from the result, so a party wipe costs progression in proportion to
+karma. **R494:** the cinematic has a second envelope site, one note per restored
+member. **R495:** the `KARMA.DAT` consumer seeks to a band offset and issues one
+fixed-length read that runs to end of file; it does not skip terminators, and a
+reader that validates the read length diverges.
+
+`systems/town-mode.md`'s Stonegate scripted-death pointer, which named Section
+7.1 (Drunkenness), now names Section 10's Underfoot effects, and
+`systems/doors-and-z-transitions.md`'s pointer to the same contract was
+repointed with it rather than left a hop short.
+
+Next work on this thread, in priority order:
+
+1. Capture a rescue that records the host's boot calibration word, so the
+   eight-wait schedule and the still-open six-row envelope burst of issue #220
+   can be reconciled against one recording instead of two models.
+2. Execute a stats-panel repaint with its fill coordinates captured. The scroll
+   question is closed; whether a fill can reach inside the message-window
+   rectangle is the last thing standing between the handoff frame and a
+   pixel-level claim.
+3. Sweep the level-from-experience recomputation across the full experience
+   range, including a value that would exceed the top level. The rescue penalty
+   is the first published consumer of that curve and currently rests on nine
+   executed standings.
+4. Continue one executed run through the castle location load, so the handoff
+   frame stops being a claim about the instant the handler returns.
+5. Settle which test selects the reader's world-ticking idle arm.
+   `systems/input.md` Section 12 and the rescue pass name different conditions
+   and neither was amended on the strength of the other.
+
+Changed: `systems/blackthorn.md` Sections 7, 7.1 and new 7.2;
+`formats/karma-dat.md` Sections 2, 4 and 7; `systems/audio.md` Section 8.6.2 and
+the cue producer census; `systems/stats-panel.md` Sections 2.1 and 10;
+`systems/town-mode.md` Sections 3 and 10; `systems/doors-and-z-transitions.md`
+Section 10; `systems/dungeon-mode.md`; `systems/combat.md`; `RETRACTIONS.md`
+R493-R495; `EXTRACTION.md`; `OPEN-QUESTIONS.md` sections 1, 2 and 3.
+
+## Issue #270 - when the mode loop spends its leading line feed (2026-09-12 UTC)
+
+The rule in `systems/text-output.md` Section 10.4 is confirmed, not corrected:
+nothing tests the cursor, the per-cell emitter has no column-zero suppression,
+and no "a row is already open" state exists, so a feed-terminated result always
+leaves exactly one blank row before the next prompt. What the reports needed was
+the scoping around it, which the section now carries - the blank belongs to the
+**next prompt** rather than to the result, so per-turn epilogue text can land
+between them; a result that does not end in a feed gets no blank at all; and
+the full-row suppression of Section 6 removes a double advance inside one
+string, never the blank.
+
+The three reported beats are separated by their producer. Two of them park at a
+key wait inside the command - the crystal-sphere vision runs the command
+reader's own poll, animates the cursor in place and discards the dismissing key
+- so the blank has not been emitted yet while the screen is idle. The shrine's
+closing record is not such a case and does spend its blank; its two key waits
+both precede it, and its sound sequence and ten world ticks neither print nor
+wait.
+
+Three withdrawals, all of one unconditional reading. **R496:** town does not
+emit the prompt pair on every polled turn; the harpsichord re-poll emits
+neither feed nor marker. The dungeon half of that sentence stands and is now
+executed. **R497:** the overworld's prompt flag is cleared by any direction
+taken aboard a ship, not only by the repeat-heading path, so an engine that
+suppresses only on a repeat emits a stray prompt row on every course change
+under sail. **R498:** `systems/commands.md` Section 5.1 carried the same
+reading twice and is corrected with them.
+
+Next work on this thread, in priority order:
+
+1. Execute the combat loop's prompt cadence. It is the one mode whose pair
+   gating is still unstated, and its single pair site was located but not run.
+2. Enumerate the overlay handlers the town dispatcher forwards, and settle
+   whether anything but the harpsichord digit can return the re-poll code. The
+   published "only producer" sentence is an unverified negative until then.
+3. Re-establish the overworld prompt flag's write-site census by a means that
+   covers indirect writes; the current locality claim is a byte-pattern scan.
+4. Re-run the command-arm sweep with the real overlay handlers resident, per
+   mode, so the open-row population can be published as a contract rather than
+   as a stub-dependent count.
+
+Changed: `systems/text-output.md` Sections 6, 10.2 and 10.4;
+`systems/commands.md` Section 5.1; `systems/main-loop.md` Section 6;
+`systems/overworld.md` Section 5; `systems/town-mode.md` Section 7;
+`systems/karma.md` Section 7; `systems/view.md`; `systems/movement.md`;
+`RETRACTIONS.md` R496-R498; `EXTRACTION.md`; `OPEN-QUESTIONS.md` sections 2
+and 3.
+
+## Issue #271 - what paces the shrine's approach (2026-09-12 UTC)
+
+The missing number is published. `systems/karma.md` Section 7's entry table now
+has an interval column, and the interval between the Approach and Kneel records
+is an approach walk of nine animation frames - forty-six world steps,
+forty-five one-tick delay requests and nine stings - run by the shrine
+presentation before the meditation handler is entered. The published ten world
+ticks before the virtue question is confirmed unchanged; it was the right
+figure in the wrong place in the reporter's reading.
+
+The reporter's three questions are answered in the same section. The hold is
+the animation, not a wait constant. It blocks and cannot be skipped, but it
+reads no input and discards none, so a player can type the whole answer through
+it and the virtue prompt consumes it. The later six- and twelve-tick waits are
+the same primitive as the ten-tick one: blocking, non-consuming, silent.
+
+One withdrawal an engine already built must act on: **R492**, the meditation
+handler does not render the kneeling avatar. It stamps a kneeling pose and
+repaints once; the animation before it is a *walking* pose rendered by the
+presentation, with four frames in which nothing is drawn at all and the entire
+rest of the cast hidden by a type-byte clear.
+
+Next work on this thread, in priority order:
+
+1. Capture a shrine entry that also reports the host's boot calibration word.
+   The counts are settled; the seconds are not, and the executed floor is about
+   one sample longer than the issue's `(1800, 2400]` ms bound. The same capture
+   would close the standing question of which side of the signed calibration
+   gate a real install lands on.
+2. Trace the town/location turn loop's automatic entry into the same shrine
+   presentation. It is a second, non-`E` route keyed on a different tile, and
+   until it is run nothing establishes how the Shrine of Spirituality is
+   physically reached - Section 7's `(0, 0)` fall-through does not answer it.
+3. Price one world step inside a presentation hold: the viewport rebuild, the
+   ambient audio tick and the wind drift. Every seconds figure on this path
+   rests on them, and the Blackthorn thread needs the same measurement against
+   its own grid.
+4. Re-run the approach walk with the terrain probe live rather than stubbed, so
+   the frame-by-frame sprite results stop depending on a synthetic reading of
+   the ground under the avatar.
+
+Changed: `systems/karma.md` Sections 7, 8, 8.2 and 13; `systems/animation.md`
+Section 13.5; `systems/timing.md` Sections 4 and 7.6; `RETRACTIONS.md` R492;
+`OPEN-QUESTIONS.md` sections 2 and 3.
+
 ## Issue #268 - the Blackthorn audience's exit beat (2026-09-12 UTC)
 
 The missing contract is published: `systems/blackthorn.md` Section 4.2. The

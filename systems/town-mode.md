@@ -145,7 +145,7 @@ Five authored cell families change the floor while the party is inside a locatio
 
 **Trapdoors.** Stepping onto a trapdoor cell announces `A TRAPDOOR!` and drops the party one floor. It is an underfoot reaction in the per-turn tile-effect pass, not a command. It is suppressed entirely while the party is on the magic carpet, which floats over the cell. Lord Blackthorn's Castle is built around this: its entry floor and the three floors above it carry forty-five, thirty-six, thirty, and thirty-six trapdoor cells respectively. Its basement carries none, so the bottom of the tower is where falling stops.
 
-**One location overrides the trapdoor.** Stonegate is a single-floor keep whose trapdoor cells form a ring around one open centre cell. Walking into that ring does not descend; it runs the scripted-death sequence specified in Section 7.1. The event blacks the map viewport directly, replaces all 1,024 cells of the live location grid with tile byte `0x8F`, clears all 32 active-object records including record zero, and sets every in-party member's current HP to zero and status to Dead. This is the *only* place a trapdoor is not a floor transition; every other trapdoor in the game takes the generic descend path above. Specify it as a scripted location event, not as part of floor selection.
+**One location overrides the trapdoor.** Stonegate is a single-floor keep whose trapdoor cells form a ring around one open centre cell. Walking into that ring does not descend; it runs the scripted-death sequence specified in Section 10, under Underfoot effects, as the "Stonegate scripted-death contract". *(Corrected 2026-09-12, issue #269: this sentence previously pointed at Section 7.1, which is Drunkenness and has never held that contract.)* The event blacks the map viewport directly, replaces all 1,024 cells of the live location grid with tile byte `0x8F`, clears all 32 active-object records including record zero, and sets every in-party member's current HP to zero and status to Dead. This is the *only* place a trapdoor is not a floor transition; every other trapdoor in the game takes the generic descend path above. Specify it as a scripted location event, not as part of floor selection.
 
 **Every floor change is a full reload.** A transition re-runs the whole location load against the new page: read the page, harvest NPC start markers and the beacon's light sources (Section 5 step 3 - **not** spawn markers), run the dawn/dusk substitution if the hour is in the night band, run the Shadowlord blight pass, relink the active-object table for the new floor, and mark visibility dirty. It is never a partial update, and the announcement (`Up!` / `Down!`) is printed before the reload.
 
@@ -391,7 +391,11 @@ Its four-way test is specified in `commands.md` Section 3: the arrest-cleanup
 result runs the common clock/underfoot epilogue, skips the NPC schedule
 processor, and fires town post-action cleanup with the arrest discriminator;
 the "re-prompt" result returns straight to the input parser with no turn and no
-epilogue at all. Each special result has exactly one producer: failed explicit
+epilogue at all - and, because the loop's full-prompt request has already been
+cleared by then, with no leading line feed and no prompt marker either. It is
+the only ordinary command path in town that emits neither, so a tune keyed at
+the harpsichord stays on one row instead of opening a prompt row per digit
+(`systems/text-output.md` Section 10.2). Each special result has exactly one producer: failed explicit
 Talk against the reserved Blackthorn guard demand for the former, and the
 harpsichord digit handler below for the latter.
 
@@ -654,10 +658,14 @@ schedule pass also run.
 No player-input window follows the script. When the town loop reaches its next
 iteration, the shared party-capability check sees nobody able to act and nobody
 Sleeping, so it immediately enters the generic total-party-defeat rescue in
-`systems/blackthorn.md` Section 7. That later cinematic restores the roster,
+`systems/blackthorn.md` Section 7. That later cinematic revives the roster,
 moves the party to Lord British's Castle, and applies its already-specified
 moral-standing floor; those are generic defeat-rescue effects, not a hidden
-Stonegate flag or an extra part of the trapdoor mutation.
+Stonegate flag or an extra part of the trapdoor mutation. The revival is not
+lossless - it scales each Dead member's experience by the party's moral
+standing and recomputes level and maximum hit points from the result
+(`systems/blackthorn.md` Section 7) - so a Stonegate wipe costs progression
+like any other.
 
 For presentation verification, expose the ordered black-fill, descending-tone,
 per-member rumble, and per-member stats-repaint events if the host has an
