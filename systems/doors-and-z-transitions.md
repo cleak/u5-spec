@@ -763,6 +763,111 @@ a **full** row, which the original hard-breaks at the row edge rather than
 moving whole (`systems/text-output.md` Section 6). See `RETRACTIONS.md` R347 and
 R349.
 
+**What the exit costs the message window.** *(Published 2026-09-13, issue
+#270.)* The rendered rows above are half the contract; the other half is how
+many times the window **advances**, because every advance that steps past the
+window's bottom row scrolls it, destroying the oldest visible row
+(`systems/text-output.md` Section 10.5). The transition moves the painted
+history **only** through ordinary message-window line feeds. Each one is
+emitted from the shared character emitter's bottom-edge tail with the message
+window active and that window's own rectangle requested; the transition changes
+no window rectangle, issues no window clear, and never positions the cursor
+while the message window is selected. A reimplementation whose history sits one
+row low or high on this beat has a line-feed count wrong, not a hidden scroll.
+
+Counted from the moment the climb key is accepted, the dungeon exit spends
+exactly **six** advances, in this order:
+
+| # | Advance | Source |
+|---:|---|---|
+| 1 | the climb word's trailing feed | `Up!\n` or `Down!\n` (`systems/dungeon-mode.md` Section 13.1) |
+| 2 | the exit line's leading feed | the `\n` that opens `\nExit to ` |
+| 3 | the wrap advance before the plane name | emitted by the printer, not decided by layout - see below |
+| 4 | the exit line's first trailing feed | `Britannia!\n\n` / `Underworld!\n\n` |
+| 5 | the exit line's second trailing feed | the same literal |
+| 6 | the first overworld command prompt's leading feed | the destination mode's own prompt pair (`systems/text-output.md` Section 10.2) |
+
+**Always state the anchor.** The dungeon loop's own preceding command prompt
+emits an ungated feed of its own, so the identical beat costs **seven**
+advances when it is counted from that prompt instead of from the key. The two
+figures describe the same frame; quoting one without its anchor is what makes
+the town and dungeon exits look interchangeable when they are not.
+
+**The wrap advance is a real emitted feed.** The chunk-break mechanism above is
+not a layout decision taken while composing the row: the printer emits a line
+feed, and that feed reaches the overflow tail and can scroll the window exactly
+like any other. An implementation that renders the two rows by arithmetic -
+wrapping the text into rows without spending an advance - produces the same
+visible text and ends the beat one row lower than the original.
+
+**How many of the six scroll.** As many as overrun the window. With the message
+cursor already on the window's bottom row when the climb key is accepted, all
+six scroll, and the six oldest rows on screen at that moment are gone. With the
+cursor on any of the window's **top seven rows** at that moment, none of them
+scrolls and the beat simply fills downward. Anchored at the preceding command
+prompt instead, the no-scroll region is the top six rows.
+
+**What the window looks like afterwards.** Fixed, wherever the beat started:
+the plane name has its own row, and **two blank rows** separate that name from
+the next command prompt's marker row. The exit line's two trailing feeds leave
+the cursor two rows below the name, and the prompt's own leading feed then
+carries it one row further, onto the marker row. An implementation that leaves
+one blank row there is short exactly one advance.
+
+**The cursor is preserved, never set.** The exit path neither sets nor clears
+the message cursor; its final position is fully accounted for by the advances
+above plus the prompt marker. Every cursor placement the transition does
+perform belongs to the full-screen chrome window, or to the stats window when
+the panel repaints, and each of those routines re-selects the message window
+before returning. This is a real difference from the save-load path, which
+*does* set the message cursor (`systems/save-load.md` Section 4.2).
+
+**No panel overflow is involved on this path.** The right-hand strip scroll that
+a *stats-panel* overflow can issue - which lifts the message pixels while the
+message cursor stays put (`systems/stats-panel.md` Section 2.1,
+`systems/display-driver-abi.md` Section 9.5) - does not arise on an on-foot
+dungeon exit: nothing on the path raises the deferred panel-repaint request, and
+the panel is not repainted at all. It is the absence of a pending repaint that
+matters here, not the transport.
+
+**The first overworld prompt.** Advance 6 is the one a mode change can
+plausibly lose, and the handoff is what arms it: entry into overworld mode sets
+the one-byte prompt gate of `systems/text-output.md` Section 10.2
+unconditionally, so the first command prompt after this transition spends its
+leading feed exactly like an ordinary mid-session prompt. One arm still skips
+it - a waterfall in the cell immediately south of the party is tested *before*
+the gate is consulted and hands off to the falls chain, whose earlier entry
+point is specified in `systems/overworld.md` Section 8; on that pass the prompt
+block is skipped and the beat costs five advances. Whether any dungeon mouth's
+exterior cell has a waterfall to its south is not established
+(`OPEN-QUESTIONS.md`).
+
+**The Underworld arm costs the same.** Leaving off the bottom spends the same
+six advances and scrolls the same number of times; only the surrounding chrome
+differs. The overworld re-entry paints neither the top header band nor the wind
+banner when the destination plane is the Underworld, because both routines
+apply the same signed test to the byte that carries a dungeon's level, a town's
+floor index and the outdoor plane (`systems/overworld.md` Section 8.1,
+`systems/weather.md` Section 2.1). Neither omission costs a feed or a scroll.
+
+**There is no dungeon chrome teardown.** Nothing on the exit path erases the
+dungeon's level label or facing label (`systems/dungeon-mode.md` Section 4.1).
+Both are written through the full-screen window on the top and bottom screen
+rows, far from that window's bottom row, so neither can ever overflow; on the
+surface they simply disappear under the destination mode's own chrome, whose
+header band and wind banner cover the same cells. On the Underworld plane,
+where neither of those is painted, what if anything repaints those two rows was
+not established, so an implementation should not assume the transition clears
+them. *(This paragraph and the entry counts below were not re-executed in the
+2026-09-13 verification pass and are carried at lower confidence than the rest
+of this subsection; `OPEN-QUESTIONS.md`.)*
+
+**Entry moves the strip too.** Walking into a dungeon from the surface spends
+three advances before the dungeon loop's own ungated prompt pair adds a fourth:
+the terrain noun, then two feeds, then the centred dungeon name, then one more
+feed (`systems/commands.md` Section 5.5). Again the only mechanism is the
+message-window feed.
+
 **Town-family boundary exit.** This is the only key wait on any plane-change
 path. In order:
 
@@ -787,6 +892,28 @@ Note how this differs from the dungeon form: here the break before the plane
 name **is** in the data, and the blank row sits *before* `Exit to` rather than
 after the plane name. Accepting and declining are both silent.
 
+**What the boundary exit costs the message window.** *(Published 2026-09-13,
+issue #270.)* The same accounting applies, with different totals, and the two
+exits must not share one contract. Counted from the question's own leading
+feed, the accepted boundary exit spends **seven** advances: the question's
+leading feed; a wrap advance inside the question; two feeds after the
+affirmative echo; the feed that closes `Exit to`; one trailing feed after the
+plane name; and the first overworld prompt's leading feed. Counted from the key
+that answers the question, it spends five - against the dungeon exit's six from
+the climb key - and counted from each mode's own preceding command prompt the
+two beats cost eight and seven. Because the totals move with the anchor, the
+durable difference to implement is the rendered one: **the dungeon exit leaves
+two blank rows between the plane name and the next prompt marker, the boundary
+exit leaves one**, and the boundary exit's blank row sits before `Exit to`
+rather than after the name. Declining costs three advances after the prompt -
+the question with its wrap, then `No\n` - and leaves the party in the location.
+
+Everything the dungeon subsection says about the mechanism holds here too: the
+advances are ordinary message-window feeds, each one that overruns the bottom
+row scrolls the window, no rectangle is written, no window is cleared, the
+message cursor is never positioned, and the overworld re-entry that follows is
+the same sequence in both cases.
+
 **The refused boundary step** never reaches the prompt. It prints `Blocked!\n`,
 plays the blocked-step tone of `systems/audio.md` section 7.4 - 165 Hz for 200
 delay units - and flushes type-ahead. This is one of that tone's four sites.
@@ -809,6 +936,21 @@ Source provenance: derived from private analysis under `u5-decomp/notes/`,
 re-read every literal from the shipped resident data image and hand-traced the
 word-wrap printer against the message window's rectangle. The rendered line
 breaks are derived from that printer rather than observed in an emulator.
+
+Source provenance for the advance accounting: derived from private analysis
+under `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+`u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/TOWN_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/` - issue #270's exit-handoff pass, in which
+both exits were executed end to end with the real string printer, the real
+character emitter and the real overflow tail running unmodified, every emission
+logged against the active window and the cursor before and after it, and every
+display-driver request intercepted with its opcode and its rectangle. The beat
+was then re-derived from the shipped images and re-executed in a second,
+independent probe at **every one of the thirteen** starting message-cursor rows
+on both destination planes, across party sizes and a transport-by-hull grid: 81
+asserted cases, no failures, on top of the first pass's own runs. The rendered
+frame reproduces the reporter's stock capture cell for cell. Dungeon entry and
+the chrome-overwrite reasoning were not re-executed in that second pass.
 
 ## 13. Hooks into the rest of the engine
 

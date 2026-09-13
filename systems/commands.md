@@ -215,6 +215,13 @@ reproduce:
 
 - The marker belongs to the turn loop, not to any verb literal. **No verb
   literal contains it.**
+- **A mode change does not cost a prompt.** Entry into overworld mode arms that
+  mode's gate unconditionally, so the first command prompt after a dungeon
+  exit, a boundary exit or a plane change emits the pair exactly like any other
+  prompt; its leading feed is part of the transition's visible row accounting
+  (`systems/doors-and-z-transitions.md` Section 12.1). The one thing that can
+  still take it away is the falls hand-off tested ahead of the gate
+  (`systems/text-output.md` Section 10.2). *(Added 2026-09-13, issue #270.)*
 - Where it is emitted at all, it is emitted exactly once per input line, so it
   persists in the message-window scrollback exactly where it was drawn. It is
   never emitted twice for one line, and a line whose prompt the gates above

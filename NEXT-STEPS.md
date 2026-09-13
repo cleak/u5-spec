@@ -1,5 +1,67 @@
 # Next Steps for u5-spec
 
+## Issue #270 follow-up - what the dungeon exit costs the message window (2026-09-13 UTC)
+
+The reported symptom - after a Klimb out of a dungeon's entrance level the
+original's message history sits one row **higher** than an engine that prints
+the same literals - is a **line-feed count**, not a hidden scroll and not the
+right-hand-panel displacement of issue #259. Nothing in the dungeon-to-overworld
+handoff repaints the stats panel: every strip scroll in the beat is an ordinary
+message-window line feed reaching the character emitter's bottom-edge tail with
+the message window active and that window's own rectangle requested.
+
+The beat spends **six** advances counted from the climb key, and seven counted
+from the dungeon loop's own preceding prompt: the climb word's trailing feed,
+the exit line's leading feed, the wrap advance before the plane name, the exit
+line's two trailing feeds, and the first overworld command prompt's leading
+feed. Each advance that steps past the window's bottom row scrolls it. Two
+points decide the reported row. The wrap advance is a **real emitted feed**, so
+laying the two rows out by arithmetic costs one advance too few. And the first
+overworld prompt really does spend its pair, because entry into overworld mode
+arms that mode's prompt gate unconditionally - though a waterfall directly south
+of the party is tested ahead of the gate and skips the prompt block entirely.
+
+Three withdrawals. **R504** is the one an engine acts on: `dungeon-mode.md`
+Section 13.2 put the plane name on the same row as `Exit to ` and gave the line
+one trailing blank row; the name has its own row and there are **two** blank
+rows before the next prompt. **R502** and **R503** are the panel's: the
+full-panel refresh does request a scroll on one arm - a ship-family transport
+with a hull of 100 or more writes the stats window's last column, wraps onto the
+panel's bottom row, and makes the panel's next feed overrun - so the refresh is
+not scroll-free and the panel's resting content is not confined to columns
+24..38. Whether a party-held hull reaches 100 in stock play is left open; the
+delivered Frigate starts at 99.
+
+Also published: the transition sets no window rectangle, clears no window and
+never positions the message cursor, which is a real difference from the
+save-load path that does set it; the boundary exit and the dungeon exit are
+separate contracts, differing in the rendered gap before the next prompt (one
+blank row against two) rather than by a fixed advance count; an underworld
+arrival paints neither the top header band nor the wind banner, by one signed
+test on the byte that carries level, floor index and plane; and there is no
+dungeon chrome teardown - the labels are overwritten, not erased.
+
+Next work on this thread, in priority order:
+
+1. Census every writer of a vessel record's hull byte and settle whether a
+   party-held hull can reach 100. That decides whether the panel's scroll arm
+   is a live compatibility contract or a defensive one.
+2. Check the eight dungeon exterior coordinates against the waterfall family on
+   both shipped maps. A hit changes the answer this issue needs by one row.
+3. Re-execute the surface-to-dungeon entry beat and the arrival chrome in a
+   second harness; they are the only parts of this pass carried at lower
+   confidence.
+4. Execute the falls hand-off from the input helper's pre-prompt entry, which is
+   an endpoint in both probes.
+
+Changed: `systems/doors-and-z-transitions.md` Section 12.1;
+`systems/dungeon-mode.md` Section 13.2; `systems/stats-panel.md` Sections 2.1
+and 6; `systems/text-output.md` Sections 10.1, 10.2 and 10.5;
+`systems/display-driver-abi.md` Section 9.5; `systems/save-load.md` Section 4.2;
+`systems/commands.md` Section 5.1; `systems/overworld.md` Section 8.1;
+`systems/weather.md` Section 2.1; `RETRACTIONS.md` R502-R504;
+`OPEN-QUESTIONS.md` sections 2 and 3.
+
 ## Issue #269 - the rescue cinematic's narration, waits and window (2026-09-12 UTC)
 
 The rescue's text is published, and the shape of the answer is the finding:

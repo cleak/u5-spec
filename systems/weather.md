@@ -83,7 +83,14 @@ visibly short, visibly wrong banner rather than a clamp to Calm or to any valid
 direction.
 
 **Suppression and erase.** The banner is not drawn in combat-class scenes, in
-the underworld scene, or on below-surface map levels. Combat and the underworld
+the underworld scene, or on below-surface map levels. *(Clarified 2026-09-13,
+issue #270: the underworld and below-surface cases are one test, not two - the
+banner routine applies a **signed** test to the single byte that carries a
+town's floor index, a dungeon's level and the outdoor plane, and the underworld
+plane value simply is a negative value of that byte. The combat case is a
+separate test on the scene byte. The top header band is skipped by the same
+signed test, which is why an arrival in the Underworld has neither
+- `systems/overworld.md` Section 8.1.)* Combat and the underworld
 simply skip it. A below-surface level actively **erases** it: it strokes the rule
 `(48, 184)` to `(152, 184)` in the accent colour and then fills
 `(48, 185) - (152, 191)` in the chrome colour, restoring the plain ribbon. Stale

@@ -591,6 +591,20 @@ them is reached:
 | The post-picker panel-ornament redraws and the full roster redraw | No strip scroll was issued by either in any executed case. |
 | Printing the accepted item's completion and result text into the message window afterwards | **Yes, when that text overflows the message window.** That is an ordinary message-window overflow with the same left edge and the same fixed body, and it occurs inside a completed `U`-Use command. |
 
+**Outside `U`-Use, two more cases worth naming.** *(Added 2026-09-13, issue
+#270.)* First, the emitter's overflow tail can arm this entry several times in
+one beat: a dungeon-to-overworld exit with the message cursor on the window's
+bottom row spends six message-window line feeds, from the climb key through the
+first overworld command prompt, so it issues six of these scrolls back to back and the
+vacated bottom row inherits the gutter row six times running
+(`systems/doors-and-z-transitions.md` Section 12.1). Second, the stats-panel
+refresh reaches this entry on one arm - a ship-family transport with a hull of
+100 or more, which carries the panel's cursor onto its own bottom row - and
+does so under the **panel's** pixel rectangle, which this path's left-edge rule
+then treats as the message strip anyway (`systems/stats-panel.md` Sections 2.1
+and 6). That is the same panel-displaces-message effect the `U`-Use picker
+produces, from a different caller.
+
 The earlier blanket wording that every text scroll uses the fixed path,
 and that the caller immediately masks the exposed band, is withdrawn (R469).
 Other left edges still use the general path. A compatible rendering contract

@@ -109,6 +109,16 @@ message area once and leaves the prompt on screen row 23. Subsequent output
 can scroll an earlier command echo upwards; its later visible row is not
 the load cursor's initial row.
 
+**Setting the cursor is peculiar to this path.** *(Added 2026-09-13, issue
+#270.)* The in-play mode transitions do not do it. A dungeon-to-overworld exit
+and a town boundary exit change no window rectangle, clear no window, and never
+position the cursor while the message window is selected; they move it only by
+printing, so the message history carries across the transition and is merely
+scrolled by the feeds the transition spends
+(`systems/doors-and-z-transitions.md` Section 12.1). An implementation that
+re-anchors the message cursor on every scene change is modelling the load path
+in a place the original does not.
+
 **Capture discrepancy, issue #210.** The reported first echo on screen row
 14 does not match this traced normal-load path. Its cause remains open; a
 stock save and frames at the first prompt, immediately after the first

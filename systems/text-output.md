@@ -424,16 +424,22 @@ and keeps the full-screen default for the whole session.
   cursor is wherever the last chrome writer left it. Window 2's cursor is
   explicitly set to window-relative `(0, 12)` — absolute row 23, its own last
   row — so the message log is bottom-anchored from the very first frame.
-- **Column 39.** The stats window spans columns 24..39. Its *resting* content —
-  the six roster rows, the counters row and the date row — writes only columns
-  24..38, because the roster and counter boxes are fifteen cells wide: their
-  right rule sits at pixel `x = 312`, the first pixel of column 39. The item
-  picker that borrows the same window is **not** bounded that way: a list row
-  whose label ends on the window's last writable cell writes screen column 39,
-  one cell outside the drawn frame (`inventory.md` Sections 4.4 and 4.5). The
-  earlier wording, that the panel only ever writes columns 24..38, is withdrawn
-  (R485); an implementation that clips window-1 output at column 38 loses that
-  cell.
+- **Column 39.** The stats window spans columns 24..39. Its resting content —
+  the six roster rows, the counters row and the date row — writes columns
+  24..38 in every state executed before 2026-09-13, because the roster and
+  counter boxes are fifteen cells wide: their right rule sits at pixel
+  `x = 312`, the first pixel of column 39. **The counters row's ship variant is
+  the exception**: at a hull condition of 100 or more its third digit lands in
+  column 39 and the cursor wraps onto the panel's bottom row, which then makes
+  the panel's own next line feed overrun and request a strip scroll
+  (`stats-panel.md` Sections 2.1 and 6). *Corrected 2026-09-13 (issue #270):
+  the "resting content writes **only** columns 24..38" reading is withdrawn
+  with it; see `RETRACTIONS.md` R503.* The item picker that borrows the same
+  window is **not** bounded that way either: a list row whose label ends on the
+  window's last writable cell writes screen column 39, one cell outside the
+  drawn frame (`inventory.md` Sections 4.4 and 4.5). The earlier wording, that
+  the panel only ever writes columns 24..38, is withdrawn (R485); an
+  implementation that clips window-1 output at column 38 loses that cell.
 - **Row 24.** Absolute text row 24 (`y = 192..199`) is addressable — it is the
   last row of window 0's full-screen rectangle above — and **no gameplay path
   emits text into it**. It does *not* stay black for the session, though: every
@@ -519,7 +525,19 @@ dungeon half stands and is now executed; the town half is withdrawn
 The overworld gate's published **purpose** is confirmed: suppressing one pair
 after a shipboard direction is what keeps synthesised sailing turns from
 accumulating empty prompt rows, and exactly one is suppressed because the
-helper re-arms the flag as soon as it has tested it. Every read and write of
+helper re-arms the flag as soon as it has tested it. *(Added 2026-09-13, issue #270.)*
+Two further facts about that gate matter at a mode change. The overworld's
+per-entry initialiser sets the flag **unconditionally**, before the turn loop
+runs, so after any entry into overworld mode - a dungeon exit, a town boundary
+exit, a plane change - the first command prompt spends its feed and marker like
+an ordinary mid-session prompt; an engine that opens the overworld silently is
+one row short of the original from that moment on
+(`systems/doors-and-z-transitions.md` Section 12.1). And the gate is not the
+only thing that can cost a prompt: the overworld helper tests the map cell
+immediately south of the party against the waterfall family **before** it reads
+the gate, and on a match hands off to the falls chain and skips the prompt
+block entirely (`systems/overworld.md` Section 8). A prompt can therefore be
+lost on a pass where the gate is armed. Every read and write of
 that flag lives in the overworld module itself - four sites set it, one clears
 it - so no command handler elsewhere can suppress an overworld prompt. That
 negative rests on a byte-pattern scan rather than a control-flow proof and is
@@ -712,6 +730,19 @@ caused by panel output need not repaint the message bottom row at all. The
 earlier unconditional immediate-overwrite claim is withdrawn (R468). There is no
 continuation-key or paging wait in this scroll operation. Descriptor
 preservation and pixel preservation are separate properties.
+
+**Two producers, and they look different to the player.** *(Added 2026-09-13,
+issue #270.)* A scroll requested with the **message window** active is an
+ordinary line feed: the history rises and the cursor comes with it, so nothing
+looks displaced. A scroll requested with the **stats window** active - the
+three-digit-hull arm of `stats-panel.md` Section 2.1 - lifts the same pixels
+while the message cursor stays put, which is what opens a visible gap. Both
+reach the same fixed strip body, so the raster cannot tell them apart; only the
+cursor bookkeeping differs. Runs of consecutive scrolls are ordinary rather than
+exceptional: a dungeon-to-overworld exit with the cursor on the bottom row
+spends six message-window advances in one beat and therefore scrolls the strip
+six times in a row, so the vacated bottom row inherits the gutter row six times
+running (`systems/doors-and-z-transitions.md` Section 12.1).
 
 **No cursor is adjusted to compensate.** The emitter's overflow tail takes the
 active window's descriptor from a single read at entry and decrements only that

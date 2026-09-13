@@ -2037,12 +2037,37 @@ dungeon-to-outdoor path in the build and no per-dungeon special case:
 - The dungeon scene byte is then cleared, which is what returns the game to
   outdoor mode.
 - **The narration is identical on every deliberate route.** The climb word
-  prints first, then the shared exit line: a line-feed-led `Exit to ` followed
-  on the same row by the plane name, then a blank row — `Britannia!` off the
-  top, `Underworld!` off the bottom. K and both level-change spells reach that
-  shared contract, the spells through a resident thunk, so it has two distinct
-  callers and no per-route wording. Passing the top or bottom of the stack is
-  **not** a refusal and adds no failure word.
+  prints first, then the shared exit line: a line-feed-led `Exit to `, then the
+  plane name — `Britannia!` off the top, `Underworld!` off the bottom — and
+  then two more line feeds. The plane name does **not** share the row with
+  `Exit to `: the row is full, so the printer breaks it, and the break costs a
+  real emitted line feed. Rendered, the exit puts the plane name on its own row
+  and leaves **two** blank rows between that name and the next command prompt.
+  *Corrected 2026-09-13 (issue #270): this bullet previously said the plane
+  name follows `Exit to ` "on the same row", and that one blank row follows it.
+  Both are withdrawn; `systems/doors-and-z-transitions.md` Section 12.1 has
+  always rendered the rows correctly and now also carries the advance
+  accounting. See `RETRACTIONS.md` R504.* K and both level-change spells reach
+  that shared contract, the spells through a resident thunk, so it has two
+  distinct callers and no per-route wording. Passing the top or bottom of the
+  stack is **not** a refusal and adds no failure word.
+- **What the exit costs the message window.** Counted from the moment the climb
+  key is accepted, the beat spends exactly six message-window advances — the
+  climb word's trailing feed, the exit line's leading feed, the wrap advance
+  before the plane name, the exit line's two trailing feeds, and the first
+  overworld command prompt's leading feed — and seven when it is counted from
+  the dungeon loop's own preceding prompt instead. Every one of them is an
+  ordinary line feed into the message window, and each that steps past the
+  window's bottom row scrolls it. The transition writes no window rectangle,
+  clears no window, and never positions the message cursor; no stats-panel
+  repaint happens on an on-foot exit, so no right-hand-panel overflow is
+  involved. The full accounting, the scroll counts at other starting cursor
+  rows, and the destination-plane differences are in
+  `systems/doors-and-z-transitions.md` Section 12.1. Nothing on the exit path
+  erases the dungeon's own level and facing labels (Section 4.1); on the
+  surface they are overwritten by the destination mode's chrome, and on the
+  underworld plane, where that chrome is not painted, what becomes of those two
+  rows is not established (`OPEN-QUESTIONS.md`).
 - **The pit-chain off-bottom path narrates nothing at all.** That is worth
   stating because the ordinary exit does narrate: an implementation that shares
   one code path between them will emit an exit line the original never prints.
