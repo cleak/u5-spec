@@ -358,7 +358,9 @@ interaction. Suppression does not remove the terrain's time charge.
 When printed, the feedback starts directly after the compass echo's newline
 and has one trailing newline, with no leading blank row. The ordinary next
 command boundary supplies the subsequent separation described in
-`systems/text-output.md` Section 10.2. Mounted and carpet direction echoes
+`systems/text-output.md` Section 10.2 - except aboard a ship, where that
+boundary's leading feed and marker are suppressed for one prompt by the
+overworld gate specified there. Mounted and carpet direction echoes
 can include their normal `Ride ` or `Fly ` prefix before the compass word.
 
 Source provenance: fresh destination-cost, committed-movement, outdoor

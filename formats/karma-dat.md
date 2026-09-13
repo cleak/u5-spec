@@ -26,9 +26,27 @@ The file is a sequential string table:
 | Encoding | Plain low-ASCII text |
 | Trailer | Ends after the final record terminator |
 
-Records are packed back-to-back. To read record `n`, a reader starts at the
-beginning of the file and skips `n` NUL-terminated records. The file itself
-does not store tier thresholds, virtue ids, standing values, or record offsets.
+Records are packed back-to-back, and the file itself stores no tier
+thresholds, virtue ids, standing values, or record offsets.
+
+**How the original reads a record.** It does not walk the file. The consumer
+holds the five band start positions itself, seeks straight to the selected
+one, and issues **one fixed-length request** - two thousand bytes, from a
+761-byte file - into a scratch buffer. The request therefore always reads to
+end of file and always returns fewer bytes than asked for, and the printed
+record is delimited by its own NUL terminator, not by the length read. A reader
+that validates the requested length, or that treats a short read as an error,
+diverges from the original on every verdict it prints. *(Corrected 2026-09-12,
+issue #269: this paragraph previously said a reader "starts at the beginning of
+the file and skips `n` NUL-terminated records". That description is withdrawn -
+`RETRACTIONS.md` R495. Skipping terminators yields the same five record bodies
+for the five defined bands, which is why the difference went unnoticed; it does
+not yield the same behaviour for a short read, a truncated asset, or an
+out-of-range band.)*
+
+A modern implementation is free to index a parsed list of six strings instead,
+provided it accepts a file whose final record runs to end of file and does not
+require a fixed record length.
 
 ## 3. Record Semantics
 
@@ -53,8 +71,20 @@ CAST2 shrine path uses shrine-local text and `MISCMSG.DAT` instead.
 The traced Blackthorn rescue/refuge presentation divides a one-byte verdict
 selector into five twenty-point bands and selects records zero through four.
 Record five is the sixth record by zero-based index and is not selected by that
-table. The selector is related to moral presentation, but the current public
-evidence does not prove that it is the entire per-virtue karma store.
+table: the five band start positions match the shipped records' starts exactly,
+while the table entry that would follow the fifth is not a record start. The
+selector is related to moral presentation, but the current public evidence does
+not prove that it is the entire per-virtue karma store.
+
+That selector's divide is eight-bit and cannot overflow, so a standing of one
+hundred or more produces a band of five through twelve and indexes past the
+five-entry table into adjacent data, issuing the read at a position beyond end
+of file. Nothing traps and only the printed text is affected. Treat it as
+observed behaviour rather than a contract: clamp or reject the band.
+`systems/blackthorn.md` Section 7 owns the surrounding print order, the
+quotation marks the consumer adds around the record - a leading line feed and
+an opening quote before it, one closing quote after it - and the fact that the
+record body itself carries no line feed at either end.
 
 The traced Lord British-in-disguise camp event also prints `KARMA.DAT` after
 its level-up/stat-reward pass. It uses the same twenty-point band scale for the
@@ -103,3 +133,6 @@ This is a cleanroom prose specification derived from:
 - `u5-decomp/functions/BLCKTHRN_OVL/`.
 - `u5-decomp/functions/OUTSUBS_OVL/`.
 - `u5-spec/systems/karma.md`.
+- Fresh original consumer execution for the read shape, band offsets and
+  out-of-range behaviour in `u5-decomp/functions/BLCKTHRN_OVL/` and
+  `u5-decomp/notes/`, issue #269.

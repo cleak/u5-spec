@@ -746,36 +746,221 @@ atlas with retry semantics, marks dungeon graphics inactive, and draws no
 intermediate frame. Neither preamble changes the shared predicate or makes
 rescue conditional; rescue follows the successful persistence/resource step.
 
-Because this cinematic restores the party and returns it to play, an ordinary
+Because this cinematic revives the party and returns it to play, an ordinary
 party wipe in Ultima V is not a terminal game-over: the run continues from Lord
 British's Castle, with a verdict on the party's moral standing read out along
-the way.
+the way. It is not a free restore - "Party restoration" below prices what the
+revival costs in experience, level and maximum hit points.
 
 The rescue contract:
 
-1. Enter cutscene mode and suppress ordinary map play.
+1. Enter cutscene mode and suppress ordinary map play. Before the first beat,
+   issue one disk-swap request - whose visible prompt and own key wait are
+   `systems/disk-prompt.md`'s contract and were not re-executed for this pass -
+   and then wait for the overworld map file `BRIT.DAT` to become present,
+   retrying a presence probe - an open followed immediately by a close - until
+   it succeeds. That wait is blocking and is
+   part of the contract: an implementation that begins the narration
+   immediately skips a wait the original performs. Apart from that probe, the
+   cinematic performs exactly one file read, the verdict read of step 5.
 2. Wait ten BIOS ticks, print the unending-darkness beat, then dissolve the map viewport out to
    black. This happens before clearing terrain or temporary-object scratch
    state and before building the refuge tableau.
 3. Clear terrain and temporary-object scratch state for the cinematic.
-4. Print the refuge, thunder, and fortune-themed narrative beats; run the
-   audio-envelope sequence, three cell reveals, and paired viewport flash.
-5. Select and print one `KARMA.DAT` record through the five-band rescue
-   selector.
-6. Restore every party member: the member's status is reset to able-bodied and
-   their current hit points are set to their maximum.
-7. Print the disorientation or vertigo beat.
-8. Fill the hidden map viewport black, draw the on-foot party sprite at its
+4. Print the three refuge fragments, the shout beat and the thunder line; run
+   the audio-envelope sequence, three cell reveals, and paired viewport flash
+   between them. Those beats are **not** adjacent in execution - the shout
+   follows the six-row envelope sequence and the thunder line follows both
+   Guardian reveals - and the ordered sequence below places each one exactly.
+5. Select one `KARMA.DAT` record through the five-band rescue selector and
+   print it framed as speech: first the two-byte prefix `\n"`, then the record
+   body, then one closing `"` emitted as a single character. Neither quotation
+   mark is part of the record, and the record body carries no line feed at
+   either end, so the closing quote lands directly against its last character
+   and the cursor is left mid-row until the next beat's leading feeds move it.
+6. Wait for **one acknowledgement key**. This is the only key wait anywhere in
+   the cinematic; every other beat is timed by the BIOS-tick schedule of
+   Section 7.1 alone.
+7. Restore every in-party member, one slot at a time in ascending slot order.
+   This is neither an unconditional status reset nor a lossless restore; the
+   contract is under "Party restoration" below.
+8. Print the disorientation or vertigo beat.
+9. Fill the hidden map viewport black, draw the on-foot party sprite at its
    centre cell `(5,5)`, and dissolve that image onto the visible viewport.
-9. Raise the moral-standing selector to a floor of seventy-five if it was
+10. Raise the moral-standing selector to a floor of seventy-five if it was
    below that, so the rescue cannot regress the save state. The verdict record
    printed in step 5 is chosen from the standing *before* this raise.
-10. Hand control to scene byte seventeen, the gazetteer's
+11. Hand control to scene byte seventeen, the gazetteer's
    `CASTLE:0` location associated with Lord British's Castle, on logical floor
    one at local position `(10, 10)`, with the clock spun forward until the hour
    reads 06:00.
-11. Clear both light counters. If and only if the full two-byte food word is
+12. Clear both light counters. If and only if the full two-byte food word is
     zero, replace it with 63; preserve every nonzero value unchanged.
+
+Two non-text steps are conditional on the saved incoming scene value: a world
+tick before the first wait when that value is below the top of the town range,
+and one state-flag call at the very end when it is inside the town range.
+Nothing else in the sequence varies with where the wipe happened.
+
+**Rescue narration text.** Section 4.1 tabulates the audience's text as
+`MISCMSG.DAT` record ordinals. The rescue has no such table, and that is a
+finding rather than an omission: **none of this narration is a `MISCMSG.DAT`
+record and none of it has a record ordinal.** All nine beats, the verdict's
+opening quote prefix and the two data-file names the cinematic uses are fixed
+NUL-terminated strings compiled into the game's resident data image and
+referenced directly by the cinematic; they sit in the same resident string
+region as the capture cinematic's own fixed lines, which immediately precede
+them. A substring sweep of the shipped `MISCMSG.DAT` finds no narration body,
+with or without its surrounding line feeds, and none of its distinctive words
+either. The analogue of Section 4.1's ordinal table is therefore an ordered
+list of fixed literals with one variable slot in the middle, filled from
+`KARMA.DAT`. An implementation cannot read these strings out of the user's data
+files; it has to carry them.
+
+Below, `\n` is one line-feed byte, which the text layer treats as a combined
+carriage return and line feed (`systems/text-output.md` Section 10.4).
+
+| Beat | Role | Exact string |
+|---:|---|---|
+| 1 | Darkness | `\nAn unending darkness engulfs thee...` |
+| 2 | Refuge, first fragment | `\n\nThou hast found refuge.` |
+| 3 | Refuge, second fragment | `\n\nNo evil lives here, only peace and darkness.` |
+| 4 | Refuge, third fragment | `\n\nBut thy slumber is disturbed!` |
+| 5 | Shout | `\n\nSomeone shouts\n\n"FORTIS FORTUNA\nAVENTARI"` |
+| 6 | Thunder | `\n\nThere is a peal of thunder!\n` |
+| 7 | Verdict frame | `\n"`, then the selected `KARMA.DAT` record, then one `"` |
+| 8 | Intoned | `\n\nStrange words are intoned.` |
+| 8a | *Conditional.* One line per in-party slot whose status is not Dead, in ascending slot order, printed by the restore of step 7 | `Not dead!\n` |
+| 9 | Vertigo | `\n\nVertigo...\n` |
+
+Beat 5 is **one** literal: `Someone shouts` carries no ellipsis, and the two
+quotation marks, the blank row before the phrase and the line break inside it
+all belong to that same string. Beat 6 carries its own trailing line feed; beat
+9 is `Vertigo...` with a leading blank row and a trailing line feed. Beat 8 has
+**no** trailing line feed, so when beat 8a fires the first `Not dead!` runs
+straight on from `intoned.` on the same row.
+
+Beat 8a is unreachable in an unedited shipped save, because the cinematic's own
+entry condition - nobody able to act and nobody asleep - leaves an all-Dead
+roster under the shipped status writers. It is reachable for a roster carrying
+a preserved legacy Ashes status, and it is specified here so that an
+implementation that meets one reproduces the original rather than inventing an
+outcome. Whether a clean engine should instead guard the case is an owner
+question (`OPEN-QUESTIONS.md`).
+
+**The complete print-and-wait order.** Every emission and every BIOS-tick wait
+of a run, in execution order:
+
+1. Wait ten BIOS ticks.
+2. Print beat 1.
+3. Dissolve the map viewport out to black; clear the cinematic scratch state.
+4. Print beat 2.
+5. Wait fourteen BIOS ticks.
+6. Print beat 3.
+7. Wait twenty-eight BIOS ticks.
+8. Print beat 4.
+9. Install the party-on-foot actor at the viewport centre and redraw; run the
+   six-row envelope sequence of Section 7.1.
+10. Print beat 5.
+11. Wait six BIOS ticks.
+12. First Guardian reveal, redraw, wait four BIOS ticks.
+13. Second Guardian reveal, redraw, wait four BIOS ticks.
+14. Print beat 6.
+15. Run the shared viewport flash twice; reveal the crowned spectral figure and
+    redraw.
+16. Print the verdict's opening frame `\n"`.
+17. Load and print the selected `KARMA.DAT` record.
+18. Print one closing `"` character.
+19. Wait for one acknowledgement key.
+20. Print beat 8.
+21. Wait four BIOS ticks.
+22. Run the per-member restoration loop, which prints beat 8a once per non-Dead
+    in-party slot.
+23. Print beat 9.
+24. Wait four BIOS ticks.
+25. Dissolve the black field with the centred party back in, then perform the
+    handoff of contract steps 10 to 12.
+
+Exactly three things vary across runs: which verdict record step 17 prints, how
+much work step 22 does (one pass per in-party slot, none at all for an empty
+roster), and whether step 22 prints any `Not dead!` lines. The text order and
+the wait order themselves are unconditional - they do not vary with moral
+standing, roster size, member status, provisions, the incoming scene value or
+the clock state.
+
+**The acknowledgement key wait.** Step 19 is the cinematic's only blocking key
+read, and it is on none of the narrative beats: it sits between the verdict's
+closing quotation mark and `Strange words are intoned.`, so the player reads
+the verdict, presses a key, and the restoration and the vertigo beat then run
+to completion without further input. Every other beat - the darkness beat, all
+three refuge fragments, the shout, the thunder line and the vertigo beat -
+passes without input. The wait uses the ordinary command reader, so any key
+satisfies it, no typed character is echoed, and the returned key is discarded
+rather than interpreted as a command. The reader's poll is not visually inert:
+it suppresses the cursor-advance flag, writes one animated cursor glyph into
+the current message-window cell on each idle pass and overwrites it with a
+space when a key arrives, so it does write cells but neither advances the
+cursor nor scrolls (`systems/input.md` Section 3). The world keeps running
+while it blocks, and that is established rather than inherited: the cinematic
+has already stamped its cutscene scene value before the first beat, and that
+value is what selects the reader's world-ticking idle arm on this path.
+
+**Party restoration (contract step 7).** For each in-party slot in ascending
+order the cinematic plays one software envelope, dispatches the shared revive
+routine for that slot, copies the member's maximum hit points into their
+current hit points, and repaints the whole stats panel, before moving to the
+next slot. An empty roster produces no notes and no restoration work; the note
+count always equals the party count. The envelope parameters are in Section 7.1
+and `systems/audio.md` Section 8.6.2, and the repaint is the cutscene-style
+immediate repaint of `systems/stats-panel.md` Section 2.2.
+
+The shared revive routine acts **only** on a slot whose stored status is Dead.
+For such a slot it, in order: sets the status to able-bodied; sets current hit
+points to one; restores magic points from the class letter - Avatar and Mage
+receive the full Intelligence value, Bard half of it, every other class
+untouched; **when the moral standing is below ninety-eight**, rewrites
+experience to experience times standing divided by one hundred; then recomputes
+the level from the resulting experience and recomputes maximum hit points as
+thirty times that level. The cinematic's own copy then sets current hit points
+to that newly recomputed maximum. When the standing is ninety-eight or above
+the experience is left alone, but level and maximum are still recomputed from
+it.
+
+**A party wipe therefore costs experience in proportion to the party's karma,
+and a member can come back at a lower level with a lower maximum than they had
+before dying.** Executed for a Dead Avatar holding 800 experience, level 8,
+maximum 240 and Intelligence 40: standing 0 returns 0 experience, level 1 and
+30 hit points; 25 returns 200, level 3 and 90; 50 returns 400, level 4 and 120;
+97 returns 776, level 4 and 120; 98 and 99 leave experience at 800 and still
+recompute to level 5 and 150. In every case current and maximum hit points end
+equal, at thirty times the recomputed level. The level-from-experience curve
+itself is stated only over the values those runs produced; the full curve and
+any top clamp are open (`OPEN-QUESTIONS.md`).
+
+A slot whose status is **not** Dead is left entirely alone by the revive
+routine - status, experience, level and maximum all unchanged - and prints the
+`Not dead!` line of beat 8a instead. The cinematic's own current-equals-maximum
+copy still runs for that slot, so a non-Dead member is healed to full without
+being revived.
+
+> **Retracted.** This step previously read, in full: "Restore every party
+> member: the member's status is reset to able-bodied and their current hit
+> points are set to their maximum." Both halves are withdrawn - the status
+> reset is conditional on the member already being Dead, and the restore is not
+> lossless (`RETRACTIONS.md` R493).
+
+Source provenance for the narration, order, waits, key wait and restoration:
+fresh original cinematic, revive-routine, text-primitive and stats-panel
+execution in `u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, issue #269. The
+literals were checked byte for byte against the shipped resident data image and
+against the whole shipped `MISCMSG.DAT`; 2,243 executed cinematic runs, each
+running the real per-member restore, cover eleven standing values, roster sizes
+zero through eight, four provisions values, seven incoming scene values, both
+clock states and fifteen mixed-status rosters, and each asserts the full ordered
+emission list, the full ordered wait list and the single key wait with its two
+neighbours. Display output and disk I/O were observation boundaries: the driver
+call is intercepted and the verdict read is served from the shipped data file.
 
 ### 7.1 Minimal deterministic rescue/refuge vector
 
@@ -789,6 +974,36 @@ nominally about 2.86 seconds plus viewport-dissolve, text and redraw work.
 Timer phase affects the actual duration of each separate wait. None of
 these multi-tick requests is removed by the shared wait's one-tick
 slow-machine shortcut. There is no fixed 4.8-second tableau delay.
+
+**The complete BIOS-tick schedule.** The cinematic requests **eight** tick
+waits, not six, and seventy-four ticks in total:
+
+| Wait | Where it is requested | Ticks |
+|---:|---|---:|
+| 1 | before the darkness beat | 10 |
+| 2 | between refuge fragments one and two | 14 |
+| 3 | between refuge fragments two and three | 28 |
+| 4 | after the shout beat | 6 |
+| 5 | after the first Guardian redraw | 4 |
+| 6 | after the second Guardian redraw | 4 |
+| 7 | after `Strange words are intoned.` | 4 |
+| 8 | after `Vertigo...` | 4 |
+
+Waits seven and eight are published here for the first time. Earlier revisions
+of this section, and of `systems/audio.md` Section 8.6.2, enumerated only the
+first six, so a schedule built from either document ran the last two beats
+without their pauses. That is an omission rather than a reversal - neither
+document claimed its list was the whole schedule - but the two enumerate the
+same sequence and must be corrected together or they drift apart.
+
+None of the eight can take the shared wait's one-tick slow-machine shortcut,
+and the reason is stronger than a count comparison: that shortcut arm is
+entered only when the requested count is exactly one **and** the slow-machine
+threshold word is at or below its gate value, so it is unreachable for any
+count other than one (`systems/timing.md` Section 4). Scope that statement to
+the cinematic's own eight waits - the acknowledgement key wait's
+blinking-cursor poll does issue one-tick requests of its own while it blocks,
+so "no one-tick request anywhere in the rescue" would be too strong.
 
 1. After the first dissolve-to-black and the refuge narration, install the
    party-on-foot actor at cell `(5,5)` and redraw. Run the six software
@@ -886,7 +1101,121 @@ buffs, no worn regalia aura, and no light.
 the file a numeric karma table. The rescue selector divides a one-byte verdict
 input into five twenty-point bands: `0..19`, `20..39`, `40..59`, `60..79`, and
 `80..99`, selecting records zero through four respectively. The shipped sixth
-record is not selected by this traced rescue/refuge table.
+record is not selected by this traced rescue/refuge table: the five band
+offsets match the shipped records' starts exactly, while the table word that
+would follow the fifth is not a record start.
+
+Two properties of that read matter to an implementation. First, the original
+does not walk the file: each band names a start position directly, and the
+handler issues **one fixed-length request** from it - two thousand bytes from a
+761-byte file - so it reads to end of file and relies on the record's own
+terminator rather than on reading exactly one record. A reader that validates
+the requested length, or that rejects a short read, will diverge
+(`formats/karma-dat.md` Section 2). Second, the band divide is eight-bit and
+cannot overflow, so **a standing of one hundred or more yields a band of five
+through twelve** and indexes past the five-entry table into adjacent resident
+data, issuing the verdict read at a junk position beyond end of file. Nothing
+traps, no beat, order or wait changes, and only the printed verdict body is
+affected. This is recorded as observed behaviour, not endorsed: clamp or reject
+the band rather than reproduce the overrun.
+
+### 7.2 The message window during the rescue
+
+**The window is never cleared, only scrolled.** The cinematic issues no window
+clear at any point. The only character it hands directly to the per-cell
+character primitive is the verdict's closing quotation mark; everything else
+goes through the wrap-aware printer, which forwards each literal's own bytes
+plus the line feeds it inserts at wrap points. Rendering the whole emission
+stream through the shipped printer and the shipped window-aware character
+primitive produces only glyph-cell writes and line scrolls and never reaches
+the window-clear path. The blank rows between beats are therefore real
+scrolled-in blank rows, produced by each literal's leading line feeds, and not
+the top of a freshly cleared window. **An implementation that clears the
+message window before any beat diverges from the second beat onward.**
+
+**Glyph and scroll counts.** Rendered into the gameplay message window of
+sixteen columns by thirteen rows, for an all-Dead roster:
+
+| Verdict band | Glyph cells written | Scrolls, cursor starting on the window's top row | Scrolls, cursor starting on its bottom row |
+|---:|---:|---:|---:|
+| 0 | 349 | 25 | 37 |
+| 1 | 355 | 26 | 38 |
+| 2 | 357 | 26 | 38 |
+| 3 | 353 | 26 | 38 |
+| 4 | 343 | 25 | 37 |
+
+The counts vary with the verdict band and **not** with roster size. The
+bottom-row column is what ordinary play produces, because the message window's
+cursor sits on its bottom row in the steady state; the top-row column is what a
+render from an empty window produces. An earlier private figure of 25 to 26
+scrolls was the top-row case only, and the suggestion that the counts depend on
+roster size was wrong. Each in-party member that is **not** Dead adds a
+`Not dead!` line and raises both: at band zero, one non-Dead member of three
+gives 357 glyphs and 39 scrolls, and three give 375 and 41.
+
+Scope: those are the handler's own text calls into the message window. The
+acknowledgement wait's cursor blink writes two further glyph cells and no
+scroll, and the per-member stats-panel repaints write into the stats window
+through their own path.
+
+**What the window holds at the handoff.** For an all-Dead roster - which the
+cinematic's own entry condition guarantees in an unedited shipped save - the
+message window at the moment control passes to the castle scene holds, from top
+to bottom: the wrapped tail of the verdict record ending in its closing
+quotation mark, one blank row, the two wrapped rows of `Strange words` /
+`are intoned.`, one blank row, `Vertigo...`, and a final blank bottom row. The
+cursor sits at column zero of that bottom row, because the vertigo literal's
+trailing line feed has already scrolled the window one more line. How many
+verdict rows remain visible varies with the band; those last six rows are
+identical in every all-Dead case. Nothing is printed into the message window
+after the vertigo beat: the second dissolve, the standing floor, the
+destination writes, the advance to 06:00, the light-counter clears and the
+provisions repair are all silent there.
+
+One beat earlier, at the acknowledgement key wait, the window instead holds the
+thunder line above the whole quoted verdict, with the verdict's last row ending
+in its closing quotation mark and the cursor left mid-row; the reader's blink
+writes and erases a glyph in that cell and disturbs nothing else.
+
+Two preconditions belong with that frame. The last six rows are identical only
+when every in-party member is Dead - each member that is not adds a `Not dead!`
+line appended directly onto `are intoned.` with no separator, displacing the
+tail of the frame. And the per-member stats-panel repaints cannot disturb it: a
+repaint issues no scroll at all and no command against the message window's
+descriptor, and it ends by reselecting the message window with the message
+cursor untouched (`systems/stats-panel.md` Section 2.1). This describes the
+window at the instant the cinematic returns; whatever the castle location load
+then prints or clears is that load's business.
+
+**Nothing else reaches the message window.** The cinematic prints nothing about
+provisions and nothing about moral standing beyond the verdict record itself,
+and prints no party-member names, no location name and no arrival line there.
+The provisions repair and the raise of the standing selector to its floor are
+silent state writes made after the last text has been emitted. So for an
+all-Dead roster the complete message-window text of a run is the nine narration
+literals plus one `KARMA.DAT` record plus one closing quotation mark, and
+nothing else; a roster containing a non-Dead member adds one `Not dead!` line
+per such member.
+
+**That negative is scoped to the message window**, and as a whole-cinematic
+statement it would be false. Two things do put other text on screen: the
+`Not dead!` lines above, and the per-member stats-panel repaint, which renders
+party-member names, hit points, the provisions label and value, and the gold
+value into the stats window. The cinematic therefore does display a provisions
+figure and does display member names - just never in the message window.
+
+Source provenance: fresh original text-primitive, window-descriptor and
+stats-panel execution in `u5-decomp/functions/BLCKTHRN_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/ZSTATS_OVL/` and
+`u5-decomp/notes/`, issue #269. 53 executed render runs drove the shipped wrap
+printer and the shipped window-aware character primitive with the recorded
+emission streams, asserting that the only display-driver commands issued are
+the glyph blit and the line scroll, across five standing values crossed with
+roster sizes zero, three and six, three mixed-status rosters and both starting
+cursor rows; the window rectangle was re-derived from the game's own
+window-descriptor initialisation rather than taken from a prior note. Replaying
+only the first four beats from the same starting cursor reproduces the stock
+thirteen-row frame reported in issue #269 row for row.
 
 ## 7a. Regime Guard Demands
 

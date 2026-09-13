@@ -1557,6 +1557,52 @@ special rescue-origin gate suppressing those two calls. `blackthorn.md`
 Section 7.1 specifies these boundaries; the reported 4.8-second prelude is
 not a fixed envelope delay.
 
+The six waits this section names are not the whole schedule. The cinematic
+requests **eight**, seventy-four ticks in all: two further four-tick waits
+follow the last two narrative beats, after `Strange words are intoned.` and
+after `Vertigo...`. `blackthorn.md` Section 7.1 tabulates all eight. That is a
+first publication rather than a reversal - neither document claimed six was the
+total - but the two enumerate the same sequence, so correct them together.
+
+**The rescue's second envelope site.** *(Corrected 2026-09-12, issue #269:
+this section and the cue producer census both presented the six-row sequence as
+the cinematic's whole envelope content - `RETRACTIONS.md` R494.)* The six-row
+sequence above is not the cinematic's only software envelope. Its party-restoration step plays **one more
+envelope per in-party slot**, in ascending slot order, immediately before that
+slot's restore dispatch. The phase increment is thirty-six thousand four
+hundred divided by the slot index plus seven, computed through the compiler's
+32-bit unsigned divide helper, so successive members sound a descending figure:
+
+| Restored slot | Phase increment |
+|---:|---:|
+| 0 | 5200 |
+| 1 | 4550 |
+| 2 | 4044 |
+| 3 | 3640 |
+| 4 | 3309 |
+| 5 | 3033 |
+
+Every envelope in that loop uses idle count 1, 30,000 iterations, initial
+comparison 2000 and comparison delta +2. An empty roster produces no notes at
+all; the note count always equals the party count, and the loop is bounded only
+by the party-count byte, so a roster longer than six keeps producing increments
+by the same formula.
+
+The +2 delta is **not** new with this loop. The monster-possession and
+controlled-party faint recipe of Section 8.3 already uses delta 2 with 30,000
+iterations and idle 1, differing only in its initial comparison of 1000 and its
+fixed period; this loop is that recipe's near twin with a per-slot period. No
+pitch or wall-clock figure is claimed for it here - only the exact parameters -
+and reconciling it with the calibrated tables of Section 10 is separate work.
+`blackthorn.md` Section 7 owns the surrounding restoration contract.
+
+Source provenance: fresh original cinematic and revive-routine execution in
+`u5-decomp/functions/BLCKTHRN_OVL/`, `u5-decomp/functions/ULTIMA_EXE/` and
+`u5-decomp/notes/`, issue #269. 2,243 executed runs assert the per-slot
+envelope parameter tuples and the strict per-slot order of envelope, restore
+dispatch, hit-point copy and panel repaint; the divide is performed by the
+original helper rather than modelled.
+
 ### 8.7 Endgame
 
 The absorption-to-tableau sequence has audible steps before any box dialogue:
@@ -1996,7 +2042,7 @@ listed in `RETRACTIONS.md`.
 | Wind-change sequence | The Wind Change spell (variant 2) and the Wind Change scroll (variant 1). See section 7.3. | The autonomous wind drift, which is silent on every path. The wind setter itself, which contains no sound call. |
 | Nothing at all, on a passed direction prompt | Blink and Vanish both return the shared cancelled sentinel, which matches neither epilogue branch. See section 8.3.2. | There is no Blink pass in combat: the scene gate takes an arm that never prompts. |
 | Short two-part movement stinger | Top-down foot/horse movement and accepted combat steps under Section 7.5; Blackthorn VM stinger-pause repetitions and animated steps with per-step pauses enabled; endgame target steps and refusal staging under Section 8.7. This row says what the VM *itself* plays; it is not a claim that a Blackthorn cinematic is otherwise silent — see the open scope note below. | First-person dungeon walking. The final endgame random-jitter loop. Falling through the certificate's infinite loop never reaches the helper, but direct endgame movement calls do. |
-| Blackthorn rescue envelopes | One fixed six-row sequence after the refuge tableau first redraws the party actor. See Section 8.6.2 and `blackthorn.md` Section 7. | The Blackthorn VM movement scripts, which use the random-rumble stinger instead — that is the short two-part sting of Sections 5.3 and 8.6 under its other name, not a third recipe. No visual operation occurs inside the six-row loop. |
+| Blackthorn rescue envelopes | **Two** sites in the one cinematic: the fixed six-row sequence after the refuge tableau first redraws the party actor, and one further envelope per in-party slot inside the party-restoration step, at a per-slot phase increment. See Section 8.6.2 and `blackthorn.md` Section 7. *(Corrected 2026-09-12, issue #269: this row previously named the six-row sequence as the cinematic's whole envelope content - `RETRACTIONS.md` R494.)* | The Blackthorn VM movement scripts, which use the random-rumble stinger instead — that is the short two-part sting of Sections 5.3 and 8.6 under its other name, not a third recipe. No visual operation occurs inside the six-row loop. |
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |
 

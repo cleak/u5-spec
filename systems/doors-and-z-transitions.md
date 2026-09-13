@@ -610,7 +610,9 @@ Three movement events change Z without a Klimb:
   behaviour as a dungeon pit. It is suppressed while the party is on the magic
   carpet. One location overrides it entirely: Stonegate's trapdoor ring runs a
   scripted party-death sequence instead of a floor change
-  (`systems/town-mode.md` Section 3). That ring is also the only
+  (`systems/town-mode.md` Section 10, under Underfoot effects - *corrected
+  2026-09-12, issue #269*: this pointer named Section 3, which describes the
+  ordinary trapdoor and not the scripted-death contract). That ring is also the only
   descend-family cell (trapdoor, grate or descend link) any location places on
   the lowest page it owns, so the floor byte is never driven below a location's
   run by shipped content (`formats/location-dat.md`; established 2026-09-04).

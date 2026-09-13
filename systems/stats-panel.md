@@ -44,7 +44,15 @@ are balanced before return. The stats window's own cursor ends at local
 zero effect code selects the graphics-only plain-band repaint.
 
 The refresh emits no message-window text, death line, or status narration, and
-plays no sound. Its text consists only of the panel fields specified below.
+plays no sound. Its text consists only of the panel fields specified below. It
+also **requests no scroll** and issues no display command against the message
+window's rectangle, which is what lets a caller repaint the panel in the middle
+of an unfinished message-window frame without disturbing it - the rescue
+cinematic of `systems/blackthorn.md` Section 7 does exactly that, once per
+restored member. One executed repaint issued 122 driver commands, all of them
+glyph blits or single-scanline fills and none of them a scroll. *(Added
+2026-09-12, issue #269. Whether a panel fill's coordinates can ever fall inside
+the message-window rectangle is separately open; `OPEN-QUESTIONS.md`.)*
 
 The panel does **not** repaint the sky strip, the wind banner, or the
 game-screen frame. Those have their own owners and their own cadences.
@@ -485,6 +493,8 @@ Common refresh triggers include:
 - active-player selection changes;
 - torch or light-spell counter updates;
 - combat entry/exit and combat action presentation;
+- the total-party-defeat rescue cinematic's restoration step, once per restored
+  member (`systems/blackthorn.md` Section 7);
 - inventory/resource changes that affect food, gold, light, or transport
   display.
 

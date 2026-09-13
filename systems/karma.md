@@ -321,11 +321,17 @@ The live shrine meditation handler does not load `KARMA.DAT` in the traced CAST2
 Ordinary shrine meditation begins with `E`-Enter while standing on the live
 mystic-shrine terrain tile `0x19`. Enter identifies the virtue from the
 coordinate table in `catalogs/gazetteer.md` Section 7 and begins the shrine
-presentation; the meditation handler renders the kneeling avatar, asks for
-the virtue, then asks for its mantra three times as specified below.
-Each input permits up to twelve characters. `M` always selects Mix
+presentation. The presentation - not the meditation handler - runs the
+approach walk that carries the avatar up to the altar, and it is already
+finished before the handler is entered; the handler's own first act is to
+replace the walking pose with the kneeling pose and repaint once. The handler
+then asks for the virtue and asks for its mantra three times as specified
+below. Each input permits up to twelve characters. `M` always selects Mix
 Reagents, including at a shrine. The earlier M-Meditate entry rule is
-withdrawn (`RETRACTIONS.md` R411).
+withdrawn (`RETRACTIONS.md` R411). *Earlier text here said the meditation
+handler "renders the kneeling avatar"; that attribution is retracted
+(`RETRACTIONS.md` R492) - the approach animation belongs to the presentation
+and uses a different pose.*
 
 The match has one deliberate fall-through that an implementation must reproduce.
 Spirituality's row is a `(0, 0)` sentinel rather than a real position - the
@@ -334,7 +340,13 @@ open ocean and supplies no ordinary shrine-entry tile. When the scan of all
 eight rows finds no match, the handler resolves the meditation to
 **Spirituality**. Meditating at a shrine that is not one of the seven mapped
 ones *is* the test for Spirituality, and "no row matched" must not be treated as
-an error.
+an error. Entering at the sentinel row itself is executed and paces exactly
+like the seven mapped shrines. What this paragraph does **not** establish is
+how the party physically reaches that shrine: `E`-Enter needs a live shrine
+tile under it, and the other routes into this same presentation - the
+town/location turn loop's own tile-keyed entry, and the natural-moongate
+midnight hook of `systems/overworld.md` Section 9.2 - have not been run.
+`OPEN-QUESTIONS.md` carries it; do not read the fall-through as the answer.
 
 Source provenance: derived from private analysis under `u5-decomp/notes/`.
 
@@ -354,13 +366,145 @@ The eight expected mantras are fixed:
 **Entry text and input order.** The authored narration comes from
 `MISCMSG.DAT`, using the zero-based record ordinals in its format spec:
 
-| Step | Text source and behavior |
+| Step | Interval before this step | Text source and behavior |
+|---|---|---|
+| Enter prefix | none | `E`-Enter prints `Enter `, then `the shrine of\n`, then the virtue's name from the table above, then one line feed. That line feed is the only individual character the whole entry emits; everything else is a whole stored string |
+| Approach | one world step, while the presentation loads the shrine display grid and suspends the scene | Record `45`, including its leading newline and trailing blank row; the final word is `Shrine...` with three dots |
+| Kneel | **the approach walk: nine animation frames, forty-five world steps and forty-five one-tick delay requests, plus the handler's own repaint step - forty-six world steps in all.** See "Entry pacing" below | Record `28`, the kneeling-at-the-altar narration, followed by its blank row |
+| Virtue question | ten world steps and ten one-tick delay requests | Record `29`: the question asking which virtue, then a blank row and `:`; read up to twelve characters |
+| Mantra questions | six world steps after a nonblank virtue answer, then twelve after each nonblank mantra answer | After a nonblank virtue answer, wait six world ticks and emit a newline. Ask `\nMantra:` three times, reading up to twelve characters each time and waiting twelve world ticks after each nonblank answer |
+| Unfocused result | the third mantra's twelve world steps | If the virtue answer or any of the three mantra answers was wrong, render record `30` after the third nonblank mantra, then return without quest progress |
+
+The Approach row's interval was previously blank, which read as "the two
+records print back to back". That is a gap being filled, not a reversal: the
+ten-tick figure in the Virtue-question row was always right, and it is
+confirmed. What the table never gave was the much longer interval *before* it.
+
+**Entry pacing: the approach walk.** The interval between the Approach and
+Kneel records is an animation, not a wait constant. Before it starts, the
+presentation copies the whole active-object table aside and clears every
+slot's **type** byte - byte zero, the allocated/empty marker of
+`systems/active-objects.md` Section 3, *not* the per-frame tile byte in byte
+one, which it leaves untouched along with every stored position. The
+compositor skips any slot whose type byte is zero, so for the duration of the
+presentation the party and every nearby actor are invisible while their
+records survive intact. The presentation then raises the scene byte to its
+suspended sentinel, loads the shrine's eleven-by-eleven display grid - record
+`1` of `MISCMAPS.DAT`, beside the Codex's record `2`
+(`formats/location-dat.md` Section 11) - builds the display, and runs one
+world step. It prints the Approach record, and only then begins the walk.
+
+The walk is **nine animation frames**, and each frame has the same shape: one
+world step, a two-part speaker sting, then four more world steps. Every one of
+those five world steps is a full viewport rebuild and driver flush, so **one
+animation frame is five viewport repaints** and the walk is forty-five of
+them. Each of the forty-five world steps is paired with one request for a
+one-tick hardware-timer delay (`systems/timing.md` Section 4).
+
+What is drawn changes across the nine frames:
+
+| Frames | What the viewport shows |
 |---|---|
-| Approach | Record `45`, including its leading newline and trailing blank row; the final word is `Shrine...` with three dots |
-| Kneel | Record `28`, the kneeling-at-the-altar narration, followed by its blank row |
-| Virtue question | After ten world ticks, record `29`: the question asking which virtue, then a blank row and `:`; read up to twelve characters |
-| Mantra questions | After a nonblank virtue answer, wait six world ticks and emit a newline. Ask `\nMantra:` three times, reading up to twelve characters each time and waiting twelve world ticks after each nonblank answer |
-| Unfocused result | If the virtue answer or any of the three mantra answers was wrong, render record `30` after the third nonblank mantra, then return without quest progress |
+| 1-4 | No avatar and no other actor at all: twenty repaints of bare shrine backdrop, twenty-one counting the presentation's own opening world step |
+| 5 | The walking-avatar pose appears in the display grid's centre column, bottom row |
+| 6-9 | That pose steps up one grid row per frame, ending one row short of the altar tile, which sits in the same column one row further up |
+
+Only after the ninth frame does the meditation handler run. Its first act is to
+replace the walking pose with a **different** pose, the kneeling one, in the
+same cell, and repaint once - and that repaint is the forty-sixth world step of
+the interval. The Kneel record prints immediately after it.
+
+The two poses behave differently under the per-slot animator of
+`systems/active-objects.md` Section 8. The walking pose's tile class is below
+the animator's eligibility threshold and is never rewritten, so it is static
+for the whole walk. The kneeling pose's class is above it, so during the
+ten-step wait that follows the Kneel record the animator cycles the slot's
+frame byte across a **four-frame kneeling family** behind its ordinary random
+gate. An engine that paints one static kneeling sprite is visibly wrong for
+the eleven repaints between the Kneel record and the virtue prompt.
+
+**What the holds do and do not do.** Every interval in the table above is the
+same primitive: a counted repetition of one world step plus one one-tick
+delay request. The six-, ten- and twelve-step waits later in the table are
+that same primitive at the same place in the sequence as the ones inside the
+walk, and the executed ladder for a completed meditation is exactly **ten,
+six, twelve, twelve, twelve**, with the six steps preceding the newline the
+handler emits itself. All of them are **blocking and non-consuming**:
+
+- **They cannot be skipped.** No hold has an abort-on-key path, and none reads
+  the keyboard at all - no blocking key wait, no cursor-blink poll, no raw key
+  fetch, and no keyboard service call anywhere in a hold's reachable work.
+- **They discard nothing.** The shipped program has no keystroke-discarding
+  path: every keyboard-status service call in the shipped images, drivers
+  included, is non-destructive, and there is no flush-and-read call anywhere.
+  A key typed during the approach walk, or during any later wait, is still
+  queued when the next prompt opens and is consumed by it. **Type-ahead through
+  the whole entry works**, and an engine that drains input at the end of a
+  presentation hold diverges. `systems/input.md` owns the queue.
+- **They print nothing.** The only route from a world step to the text printer
+  is the ambient wind-and-location row, and that row returns immediately while
+  the scene byte is at or above the ordinary-scene threshold - which the
+  presentation's suspended sentinel is. Forcing the row's own 1-in-64 event to
+  fire on every world step of the entry still produces no string, no character
+  and no row draw. Nothing is printed between the Approach record and the
+  virtue prompt's first key wait except the Kneel record and the virtue
+  question themselves, and no panel repaint occurs anywhere in the entry.
+
+**The two gates on the hold's cost.** The counts above are what an engine
+must reproduce; how much *time* they take is machine-dependent, through two
+separate gates, and this is why the table is published in world steps rather
+than in milliseconds.
+
+1. **The master redraw/animation gate** (`systems/animation.md` Section 13.1)
+   gates the whole counted pause. With it clear, the world step returns
+   immediately, **no** one-tick delay is requested, and no repaint happens: the
+   presentation degenerates to nine stings over a frozen screen. The frame
+   count does not change - the nine calls still happen and still play their
+   stings - only their work does.
+2. **The boot calibration threshold** (`systems/timing.md` Section 4) decides
+   whether each requested one-tick delay actually waits. The request count is
+   invariant at **fifty-five per entry** whenever the redraw gate is set -
+   forty-five in the approach walk, ten before the virtue question - at every
+   calibration value. The threshold test is a *signed* comparison of the whole
+   calibration word, so every value with its high bit set skips the wait
+   exactly as a small value does, and an engine that models the word as
+   unsigned diverges across the whole high half of the range.
+
+**Wall clock.** Publish the step counts, not seconds. With the delays real,
+forty-five timer ticks is roughly two and a half seconds at the stock tick
+rate, and each request waits for the *next* timer edge with a full viewport
+rebuild and blit of unbounded cost in between - so the walk is **at least**
+forty-five ticks and can be a multiple of that on a slow display path. With
+the delays skipped it is repaint-bound instead and can be much shorter. If a
+figure in seconds is wanted at all, the honest one is "roughly two to three
+seconds, machine-dependent", with the calibration gate named. Issue #271's
+sampled capture bounded the interval to `(1800, 2400]` ms, about one 600 ms
+sample below the arithmetic floor from the executed counts; which of the three
+candidate explanations holds is recorded in `OPEN-QUESTIONS.md`.
+
+**Random-stream cost.** Each world step in the hold takes the unconditional
+1-in-64 wind draw of `systems/animation.md` Section 13.2 from the shared
+generator. A shrine entry as far as the virtue prompt therefore consumes
+**fifty-seven** draws, and an entry abandoned at that prompt consumes **one
+hundred and eight**. An engine that omits them desynchronises every later roll
+(`systems/prng.md`).
+
+**Exit pacing.** Leaving the shrine mirrors the entry. After the meditation
+handler returns, the presentation re-stamps the walking pose, spends one world
+step, then walks the avatar back down to the bottom grid row one row per
+animation frame - four frames for a shrine - then clears the avatar's type
+byte and cell and runs four more frames with nothing drawn, waits ten world
+steps, restores the saved active-object table and the scene byte, and issues a
+display-mode set and a full redraw. The tail of that exit is **thirty
+consecutive repaints of bare backdrop** (twenty from the four empty frames,
+ten from the closing wait). A shrine entry abandoned at the virtue prompt
+therefore costs seventeen animation frames end to end.
+
+Source provenance for the entry pacing, the approach walk and the hold
+semantics: private analysis under `u5-decomp/notes/`, executed twice in
+independent harnesses - the second with the world step running rather than
+stubbed, sampling what the compositor actually paints on every repaint, and
+exercising the calibration threshold at twelve values on both sides of it.
 
 The location has already selected the shrine's virtue; typing another virtue
 does not redirect the meditation. The virtue answer is tested with the shared
@@ -414,6 +558,22 @@ are zero-based `MISCMSG.DAT` ordinals, not replacement narration:
 | Codex not yet read, whether already ordained or not | Set/retain ordination before record `31`, the altar's quest announcement. Restore the standing Avatar pose and wait for a command key. Print record `32`, then the virtue's record `12` through `19` in the virtue order above, then a closing double quote and one newline. Wait for another command key, then print record `33`, the instruction to return after the quest. Finish with the shrine's sound sequence and ten world ticks. |
 | Ordained and Codex read | Clear ordination before record `36`, the congratulatory response. Play the viewport/sound presentation, including the shared flash/rumble described below, then award standing and the applicable Avatar attributes. Each applicable attribute prints `Strength +1\n`, `Dexterity +1\n`, or `Intelligence +1\n`, in that order; the line still prints when the attribute is already at its cap. Finish with ten world ticks. |
 | Codex read and no longer ordained | Use the offering interaction below. There is no new ordination announcement. |
+
+**Both key waits precede the closing record.** *(Added 2026-09-12, issue
+#270.)* On the arm that ordains a quest, the two blocking key waits sit before
+record `33`, not after it: set or retain ordination, print record `31`, restore
+the standing Avatar pose, wait for a key, print record `32` with the virtue's
+quest phrase and the closing quote, wait for a key again, and only then print
+record `33`. After that record the handler emits no further text and reads no
+further key - the sound sequence and the ten world ticks each print nothing and
+read nothing - so the mode loop's next command prompt follows immediately. The
+finished screen therefore shows a blank row above the closing line (contributed
+by that record's own leading feed), the closing line wrapped across the message
+strip, one blank row, and then the prompt row: the ordinary command-boundary
+blank of `systems/text-output.md` Section 10.4 is spent here like anywhere else.
+Executed for the first shrine on the newly-ordained arm, with the comparison,
+sound and timing endpoints controlled; the already-ordained and unfocused arms
+were not executed.
 
 **Completed-quest offering.** Record `34` asks for a number of hundreds of
 gold pieces. Its authored leading blank row and trailing space belong to the
@@ -547,8 +707,35 @@ display coordinates: the party's surface coordinates and plane remain intact.
 The original scene and active-object state are restored afterward and the world
 is redrawn.
 
+**The Codex approach walk, and how it differs from a shrine's.** The Codex
+uses the same presentation and the same frame shape as the shrine walk in
+Section 7 - one world step, a two-part sting, four more world steps, five
+viewport repaints per frame, with the whole active-object table erased by type
+byte first - but it walks **seven** steps instead of four. That is **twelve**
+animation frames, and **sixty** world steps and sixty one-tick delay requests
+between the Codex's own approach record and the reader, ending three grid rows
+further up than a shrine's rest cell. There is no forty-sixth repaint step:
+unlike the shrine's meditation handler, the reader does not open by stamping a
+pose and repainting, so the Codex interval is a flat sixty. The eight
+ordinary shrines are indistinguishable from each other in every one of these
+counts, including Spirituality entered through its `(0, 0)` sentinel row; the
+virtue only selects the expected key and mantra text later in the handler.
+
+Three further Codex-only differences. Its Enter line reads
+`Enter the Shrine of the Codex!` with its own trailing newline and prints no
+virtue name and no line feed, where a shrine's prefix prints both. It selects
+its own approach record rather than the shrine's. And if any party member
+carries the interred sentinel, the presentation inserts a page naming them - a
+"thou dost see" line, then a singular or plural "urn marked" line, then each
+name upper-cased - which is skipped entirely when nobody is interred. That
+page is emitted **inside** the walk, between the frame that first draws the
+avatar and the stepping frames, not before or after the walk.
+
 Tile `0x41` is not an alternative entry trigger. E-Enter on that tile takes
-the ordinary `Enter What?\n` refusal without starting the Codex interaction.
+the ordinary `Enter what?\n` refusal without starting the Codex interaction.
+*(Capitalisation corrected 2026-09-12 by the issue #269/#270 audit: the
+stored literal has a lower-case `w`, as `systems/commands.md` already
+spells it. A spelling fix, not a behavioural change.)*
 The surface approach gate at `(233, 235)` is a separate event, described in
 `catalogs/gazetteer.md` Section 8.1.
 
@@ -601,6 +788,13 @@ The presentation uses the shared command-key input described in
 `systems/input.md` Section 3. Each accepted key advances the presentation;
 its command value is discarded and produces no ordinary command echo or
 world command. There is no automatic timed advance in place of these waits.
+That holds from the very first one: the reader's opening beat is a blocking
+key wait with no timed pause at all before it, where the shrine's handler
+instead waits ten world steps between its Kneel record and its first prompt
+(Section 7). An entry-order table for the Codex therefore reads "key" in the
+interval column where the shrine's reads "ten world steps". The approach walk
+that precedes this first key is specified in Section 8; it consumes no input
+and cannot be skipped.
 The counts begin after the initial approach record `46`:
 
 | Advance key | Result before the next wait or return |
@@ -724,6 +918,21 @@ profanity/default negative boundary, conversation gold-payment boundary,
 stolen-action warning boundary, combat-exit negative boundary, and shop-pricing
 negative boundary are covered.
 
+This section holds no tables. The shrine's entry-order table - the Approach,
+Kneel and virtue-question rows, now with an interval column - is in **Section
+7** under "Entry text and input order", and the Codex's key-order table is in
+Section 8.2. A reader who arrives here looking for the entry table wants
+Section 7.
+
+- **Shrine entry-pacing boundary.** Section 7 now prices the entry in world
+  steps, one-tick delay requests, stings and viewport repaints, and states that
+  the holds neither read nor discard input and print nothing. What it does not
+  price is wall-clock seconds: that depends on the master redraw gate, on the
+  signed calibration threshold, and on the unmeasured cost of one viewport
+  rebuild and one sting. Do not convert the published counts to a fixed
+  duration, and do not treat a sampled duration as evidence against a count.
+  `OPEN-QUESTIONS.md` carries both the seconds and the second, non-`E` route
+  into the same presentation.
 - **Future action writers.** If later analysis finds another explicit writer,
   add it to Section 4 with its own trigger, sign, magnitude, and clamp/floor
   rule. Do not model untraced manual-facing virtue expectations as runtime
@@ -796,7 +1005,7 @@ The behaviour described here was derived from the private function and format no
   `u5-decomp/functions/TALK_OVL/`, and
   `u5-decomp/formats/`.
 
-- The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and kneeling-tile animation) — derived from `u5-decomp/functions/CAST2_OVL/` and the local CAST2 shrine-handler trace.
+- The shrine meditation flow (mantra prompt, quest-mask state machine, post-completion offering path, Codex-turn-in reward table, standing clamp, and the kneeling pose the handler stamps) — derived from `u5-decomp/functions/CAST2_OVL/` and the local CAST2 shrine-handler trace. The approach walk that precedes the handler, its frame shape and cell path, the entry and exit interval counts, the two gates on their cost, and the non-consuming character of every hold — derived from private analysis under `u5-decomp/notes/`, executed in two independent harnesses.
 - The shared shrine/word presentation effect boundary -- low randomized rumble
   plus turbulent viewport flash, no direct quest-state mutation -- derived from
   `u5-decomp/functions/ULTIMA_EXE/` and cross-checked

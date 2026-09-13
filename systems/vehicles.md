@@ -494,9 +494,15 @@ Underworld destination before control reaches the next overworld loop head.
 That loop head runs the same capability scan, persists the active-object table
 as its defeat preamble, and invokes the ordinary Blackthorn rescue/refuge path
 when no Good, Poisoned, or Sleeping member exists. The rescue contract is in
-`systems/blackthorn.md` Section 7: active members return Good at maximum hit
-points, on foot, in the fixed Castle refuge state. Thus total drowning is not a
-terminal game-over, and caller-local work may occur before rescue begins.
+`systems/blackthorn.md` Section 7: members return Good at maximum hit points,
+on foot, in the fixed Castle refuge state. Read that section for what "at
+maximum" means here - the rescue revives only members whose status is Dead, and
+below a moral standing of ninety-eight it scales each revived member's
+experience by the standing and recomputes their level and maximum hit points
+from the result, so the maximum they return at can be lower than the one they
+drowned with. *(Scoped 2026-09-12, issue #269; `RETRACTIONS.md` R493.)* Thus
+total drowning is not a terminal game-over, and caller-local work may occur
+before rescue begins.
 
 Y-Yell's word-of-power and Shadowlord-name branches are command-system
 features, not vehicle behavior.

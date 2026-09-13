@@ -136,7 +136,7 @@ The "available width on the current line" used by the wrap test is `(bottom_righ
 
 The buffer is sized to hold any window's worth of text (at least 64 characters in the original implementation). A word longer than the row is **not** allowed to overflow the right edge. The collector never gathers more characters than the row can still hold, so nothing is ever written past `bottom_right_x`. When the collected chunk fills the remaining row and contains no break byte to retreat to, the printer keeps the whole chunk, first emits a line feed if the cursor is not already at the window's left edge, and prints the chunk from column 0 of the fresh row; the following chunk then continues on that same row at the column where the first one stopped. The two halves therefore render contiguously and a word that is merely too long for the *remainder* of a row appears whole on the next one — but a word longer than a **full** row is hard-broken at the row edge into successive row-filling pieces, and an implementation that special-cases “restart the whole word on a new line” diverges as soon as that happens. *(Corrected: an earlier revision said the original “overflows that word past the right edge before the next break forces a wrap”. That is withdrawn — nothing is ever written past the right edge. `RETRACTIONS.md` R346.)*
 
-**Line feeds and full rows.** When a chunk exactly fills the row, the per-cell emitter has already wrapped by the time the chunk ends, so an explicit line feed would leave a blank row. The printer suppresses that line feed — but **only** on the arm where the collected chunk overflowed the row, and only for a break byte carried in the *same* source string, which is consumed rather than emitted. A line feed arriving from any **later** call is unconditional and always costs a row, because the per-cell emitter keeps no wrap-state memory. So a row-filling string that carries its own trailing line feed leaves no blank row, while the same text printed and then followed by a separate line-feed emit does leave one. Section 10.4 depends on the second half of this rule.
+**Line feeds and full rows.** When a chunk exactly fills the row, the per-cell emitter has already wrapped by the time the chunk ends, so an explicit line feed would leave a blank row. The printer suppresses that line feed — but **only** on the arm where the collected chunk overflowed the row, and only for a break byte carried in the *same* source string, which is consumed rather than emitted. A line feed arriving from any **later** call is unconditional and always costs a row, because the per-cell emitter keeps no wrap-state memory. So a row-filling string that carries its own trailing line feed leaves no blank row, while the same text printed and then followed by a separate line-feed emit does leave one. Section 10.4 depends on the second half of this rule. *(Confirmed by execution 2026-09-12, issue #270: the suppression condition was read off the printer's own comparison - the flag is armed only when the chunk just placed was strictly shorter than the space left on the row - and both widths were executed. Confidence on this rule is raised from medium to high. Note what the rule does **not** do: a row-filling string still ends at column zero of the following row, so the next command prompt still spends one blank row, exactly as a shorter result does.)*
 
 The shrine approach in issue #239 does not require a narrower message window.
 Its authored record ends in `tranquil Shrine...`, an eighteen-character phrase,
@@ -474,8 +474,9 @@ window descriptor storage, which was not scanned.
 
 ### 10.2 The command-echo cycle
 
-Every gameplay mode loop — overworld, town, and dungeon — runs the same three
-steps in the same order before it reads a command key:
+Every gameplay mode loop — overworld, town, and dungeon — opens a command
+prompt with the same three steps in the same order, subject to the per-mode
+gates below:
 
 1. Emit a line feed into the message window.
 2. Draw the right-pointing bracket end-cap at the window's first column
@@ -492,12 +493,41 @@ spell?` or under an ASK-WHO question is part of the exchange the prompt opened,
 not a new command cycle, so it gets neither the line feed nor the end-cap.
 *(Clarified 2026-09-06, issue #203.)*
 
-The overworld loop gates the newline-and-marker pair on a one-byte flag, and
-sets that flag again immediately after emitting the pair. The flag is cleared
-only on the "already sailing that way" path, where the loop synthesises a repeat
-movement command rather than reading a key, so those synthesised turns do not
-accumulate empty prompt lines. The town and dungeon loops emit the pair
-unconditionally on every polled turn.
+**Where the pair is emitted, and when it is skipped.** The line feed and the
+marker are always adjacent and always emitted as a pair, but they are not
+emitted from one place: seven sites in the shipped program emit them. Each
+mode's shared input helper emits the pair before waiting for a key, each with
+its own gate. In addition, the town loop and the overworld loop each carry a
+second pair site of their own, on the arm where the shared party-capability
+check reports that nobody can act: that arm emits the pair itself, prints the
+sleep line, and skips the input helper and the key read entirely
+(`systems/main-loop.md` Section 6).
+
+| Loop | Gate on the pair at an ordinary command poll |
+|---|---|
+| Dungeon | None. The only conditional between the helper's entry and the feed is the pending stats-panel repaint, so the dungeon emits the pair on every polled turn. |
+| Town | The helper emits the pair on its full-prompt arm only. The loop arms the full-prompt request immediately before calling the helper and clears it immediately after, so every fresh command poll gets the pair. The exception is the town-only re-poll result - produced by keying digits at the harpsichord - which returns to the call site with that request already cleared. It is the one ordinary command path in the mode that emits **neither** feed nor marker (`systems/town-mode.md` Section 7.2). |
+| Overworld | A one-byte flag, which the helper re-arms immediately after emitting the pair. It is cleared by **any direction taken while the party is aboard a ship** - whether the requested direction repeats the heading the ship already carries or turns it to a new one - so exactly one following prompt pair is suppressed. On foot the flag is never touched. |
+
+*Corrected 2026-09-12, issue #270.* This section previously said "the town and
+dungeon loops emit the pair unconditionally on every polled turn", and that the
+overworld flag "is cleared only on the 'already sailing that way' path". The
+dungeon half stands and is now executed; the town half is withdrawn
+(`RETRACTIONS.md` R496), and the overworld condition is wider than published
+(`RETRACTIONS.md` R497).
+
+The overworld gate's published **purpose** is confirmed: suppressing one pair
+after a shipboard direction is what keeps synthesised sailing turns from
+accumulating empty prompt rows, and exactly one is suppressed because the
+helper re-arms the flag as soon as it has tested it. Every read and write of
+that flag lives in the overworld module itself - four sites set it, one clears
+it - so no command handler elsewhere can suppress an overworld prompt. That
+negative rests on a byte-pattern scan rather than a control-flow proof and is
+scoped accordingly in `OPEN-QUESTIONS.md`.
+
+The marker is also drawn on its own, with no adjacent feed, at the places that
+paint fixed screen furniture rather than a command prompt, so "never one
+without the other" is true of prompt paths only.
 
 The newline-first ordering is a rule, not an incidental observation. It is what
 produces the single blank row between command turns, and it is what closes lines
@@ -559,6 +589,89 @@ exactly one blank row after each completed command turn. Verbs whose echo ends
 in a hyphen or a trailing space rely on that same leading line feed to close
 their partially written line, which is why the newline comes first rather than
 last.
+
+**Nothing tests the cursor, and nothing tracks an open row.** *(Executed
+2026-09-12, issue #270.)* The rule above is confirmed as written, and the
+mechanism behind it is simpler than a reader might assume: the per-cell emitter
+dispatches on the byte value alone and has no column-zero suppression, so a
+line feed always advances the row and returns the column to the window's left
+edge, scrolling when it passes the bottom row. Nothing anywhere in the decision
+to emit the leading feed reads the cursor, and the engine keeps no "a row is
+already open" state. A result whose text ends in a line feed therefore leaves
+the cursor at column 0 of a fresh row and the next poll's feed advances again,
+so exactly one blank row separates the last text written from the prompt row -
+for every ordinary completed command turn in town, and on the overworld subject
+to the ship gate of Section 10.2. Executed feed-terminated results behave
+identically in this respect: the ordinary look description, the crystal-sphere
+lines, the get refusal, the unrecognised-key refusal, the hole-up refusal, the
+gem refusal and the combat-entry banner each show one blank row beneath them at
+the moment the next *command* key is awaited. For the two crystal-sphere lines
+that moment is not the next key the game waits for: their producer blocks at a
+modal wait of its own first, and the blank is on screen only once that wait has
+been satisfied and the command has returned. The paragraph on deferral below
+gives that case in full.
+
+**The blank belongs to the next prompt, not to the result.** On a turn whose
+per-turn epilogue prints - a trapdoor, poison, burning or attacked notice - the
+blank falls under that notice rather than under the command's own result,
+because the epilogue runs after the handler returns and before the next poll.
+A separate case is a literal with no trailing feed of its own: the version
+banner has none, and the town loop emits one for it explicitly.
+
+**A result that does not end in a feed.** The next poll's leading feed closes
+the open row and no blank row appears: the prompt marker lands on the row
+directly beneath the partly written line. This is the same mechanism that
+closes a verb echo left open by a hyphen or a trailing space. A substantial
+minority of the command-letter arms leave the row open at a nonzero column,
+the direction-awaiting and operand-awaiting verbs among them; the exact count
+depends on which overlay handlers are resident and on what those handlers
+themselves print, so no fixed number is published here. The stock single-letter
+refusals and the off-overworld enter refusal each end in a feed and close their
+own rows. One arm deserves its own note: the look verb's stored word carries no
+punctuation, the hyphen after it is emitted as a separate character, none of
+the stored tile descriptions contains a line feed or carriage return of any
+kind, and the row a look description lands on is closed by a feed the look path
+emits **only when the cursor column is not already zero** - it reads the column
+first and skips the feed when the row is already closed.
+
+**Full-row suppression is not a counter-rule.** The suppression of Section 6
+removes a double row advance inside one string; it does not remove the blank.
+Executed side by side in the sixteen-cell message strip from column zero, a
+sixteen-character result emits no line feed of its own while a fifteen-character
+one does, yet both end at column zero of the following row, and in both cases
+the next poll's leading feed then spends exactly one blank row. A result
+literal's width is therefore not what distinguishes the beats below.
+
+**What distinguishes a beat that appears to lose its blank.** Neither the
+literal nor the producer class. What separates most such reports is that the
+producer parks at a key wait **inside** the command, so at the moment the
+screen is idle the command has not returned and the next poll's feed and marker
+have not been emitted yet. The crystal-sphere vision is such a producer: after
+printing its line it paints the local view and then loops on the same keyboard
+poll the command reader is built from, animating the input cursor in place with
+cursor advance suppressed until any key arrives - and it discards that key
+(`systems/view.md`). While the vision is on screen the window shows the echo
+row, the result row and the open cursor row, with no blank and no marker; once
+the dismissing keystroke is spent the command returns, the loop polls, and the
+blank and marker appear exactly as for any other result. Ordinary results
+return immediately, so their blank is already on screen when the game is next
+idle, subject only to any epilogue text above. Not every such report is a
+deferral case: the shrine's closing quest record is followed only by a short
+sound sequence and ten world ticks, neither of which prints or waits for a key,
+so the original does spend the blank there - one blank row between the closing
+line and the prompt row, plus one blank row above the closing line contributed
+by the record's own leading feed (`systems/karma.md` Section 7).
+
+Source provenance: fresh original mode-loop, input-helper, dispatcher,
+step-interaction, look-handler, shrine-handler and printer execution in
+`u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/MAINOUT_OVL/`,
+`u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+`u5-decomp/functions/LOOKOBJ_OVL/`, `u5-decomp/functions/CAST2_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, issue #270. 89 cases,
+no failures, with every address re-derived from the shipped images before
+execution and the pair sites enumerated by requiring the instruction before
+each marker call to be a print of the line-feed byte. The combat loop's own
+prompt cadence was not executed and nothing here is claimed about it.
 
 ### 10.5 Scrolling the message window
 

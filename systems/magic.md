@@ -699,9 +699,13 @@ Resurrection is a record-rebuild helper, not just a status toggle. A successful
 spell resurrection changes the selected dead member to Good, sets current HP to
 1, rebuilds mana from Intelligence and class, may apply the resurrection
 experience adjustment described below, recomputes level from the resulting
-experience, and sets maximum HP to thirty times that recomputed level. Avatar,
-Mage, and the default class branch receive mana equal to Intelligence; Bard
-receives half Intelligence. The helper treats only Dead as a valid target:
+experience, and sets maximum HP to thirty times that recomputed level. Avatar and
+Mage receive mana equal to Intelligence and Bard receives half Intelligence;
+every other class letter is left untouched, so a member of any other class
+keeps whatever magic points the record already held. *(Corrected 2026-09-12,
+issue #269: the earlier "and the default class branch receive mana equal to
+Intelligence" is withdrawn - `RETRACTIONS.md` R500. The rule is the same
+three-way one the completed long-camp recovery block uses in Section 11.)* The helper treats only Dead as a valid target:
 Ashes and all other non-Dead statuses fail the dead-status gate. Note the shape
 of that rule - there is no affirmative Ashes test anywhere in the shipped game.
 The gate is a single equality comparison against Dead, so "rejects Ashes" is a
@@ -728,9 +732,15 @@ own the trailing failure narration.
 
 The resurrection experience adjustment is conditional on the shared
 moral-standing selector described in `systems/karma.md`. When that selector is
-below 98, the helper rescales the target's experience by multiplying by 100 and
-dividing by the selector before recomputing level. When the selector is 98 or
-greater, no experience rescale is applied. The level recomputation is
+below 98, the helper rescales the target's experience by multiplying by the
+selector and dividing by 100 before recomputing level - a **penalty**, scaled
+by karma, not a bonus. When the selector is 98 or greater, no experience
+rescale is applied, though the level and maximum-HP recomputation still runs.
+*(Corrected 2026-09-12, issue #269: this sentence previously had the two
+operands the other way round, "multiplying by 100 and dividing by the
+selector", which reverses the sign of the effect and divides by zero at a
+standing of zero - `RETRACTIONS.md` R499. `systems/blackthorn.md` Section 7
+prices the same helper's effect on a rescued party.)* The level recomputation is
 the standard halving ladder over `experience / 100`: start at level 1, halve the
 quotient until it reaches zero, and increment the level once for each halving
 step. Compatibility implementations should preserve the current-HP result of
