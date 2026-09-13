@@ -370,7 +370,7 @@ The eight expected mantras are fixed:
 |---|---|---|
 | Enter prefix | none | `E`-Enter prints `Enter `, then `the shrine of\n`, then the virtue's name from the table above, then one line feed. That line feed is the only individual character the whole entry emits; everything else is a whole stored string |
 | Approach | one world step, while the presentation loads the shrine display grid and suspends the scene | Record `45`, including its leading newline and trailing blank row; the final word is `Shrine...` with three dots |
-| Kneel | **the approach walk: nine animation frames, forty-five world steps and forty-five one-tick delay requests, plus the handler's own repaint step - forty-six world steps in all.** See "Entry pacing" below | Record `28`, the kneeling-at-the-altar narration, followed by its blank row |
+| Kneel | **the approach walk: nine animation frames, forty-five world steps and forty-five one-tick delay requests, plus the handler's own repaint step - forty-six world steps in all.** See "Entry pacing" below | Record `28`, the kneeling-at-the-altar narration, followed by its blank row Record `28` carries **no leading newline** of its own: it begins with its text, so the blank row between the Approach and Kneel lines is record `45`'s trailing blank row alone, and a reader that gives every record a leading feed prints a second blank here. |
 | Virtue question | ten world steps and ten one-tick delay requests | Record `29`: the question asking which virtue, then a blank row and `:`; read up to twelve characters |
 | Mantra questions | six world steps after a nonblank virtue answer, then twelve after each nonblank mantra answer | After a nonblank virtue answer, wait six world ticks and emit a newline. Ask `\nMantra:` three times, reading up to twelve characters each time and waiting twelve world ticks after each nonblank answer |
 | Unfocused result | the third mantra's twelve world steps | If the virtue answer or any of the three mantra answers was wrong, render record `30` after the third nonblank mantra, then return without quest progress |
@@ -566,7 +566,12 @@ the standing Avatar pose, wait for a key, print record `32` with the virtue's
 quest phrase and the closing quote, wait for a key again, and only then print
 record `33`. After that record the handler emits no further text and reads no
 further key - the sound sequence and the ten world ticks each print nothing and
-read nothing - so the mode loop's next command prompt follows immediately. The
+read nothing - and the handler returns to the shrine presentation, whose exit
+pacing (the walk back down, the four empty frames and the ten-step closing
+wait; see "Exit pacing" above) runs before the mode loop's next command prompt.
+*(Clarified 2026-09-12 after issue #271: an earlier wording here said the
+prompt "follows immediately"; nothing else prints or reads a key, but the
+exit pacing sits between the handler's return and the prompt.)* The
 finished screen therefore shows a blank row above the closing line (contributed
 by that record's own leading feed), the closing line wrapped across the message
 strip, one blank row, and then the prompt row: the ordinary command-boundary
