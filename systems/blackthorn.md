@@ -218,7 +218,7 @@ Compatibility rules:
 These are zero-based `MISCMSG.DAT` record ordinals, as defined in
 `formats/miscmsg-dat.md`. Preserve the selected record's wording and spacing.
 In the following table, *virtue* means the selected shrine's virtue name;
-it never means the expected mantra.
+it never means the expected mantra. The rescue and refuge cinematic of Section 7 uses no records from this file; its beats are fixed resident strings, listed under "Rescue narration text" in Section 7.
 
 | Ask | Record | Complete demand, before the input prompt |
 |---|---:|---|
@@ -802,7 +802,7 @@ tick before the first wait when that value is below the top of the town range,
 and one state-flag call at the very end when it is inside the town range.
 Nothing else in the sequence varies with where the wipe happened.
 
-**Rescue narration text.** Section 4.1 tabulates the audience's text as
+**Rescue narration text.** *(Cross-reference: the audience records of Section 4.1 are the only shipped-file text in this document; every other cinematic line, including the nine beats below, is a fixed resident string listed here.)* Section 4.1 tabulates the audience's text as
 `MISCMSG.DAT` record ordinals. The rescue has no such table, and that is a
 finding rather than an omission: **none of this narration is a `MISCMSG.DAT`
 record and none of it has a record ordinal.** All nine beats, the verdict's
