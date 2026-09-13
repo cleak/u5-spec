@@ -495,7 +495,12 @@ step, then walks the avatar back down to the bottom grid row one row per
 animation frame - four frames for a shrine - then clears the avatar's type
 byte and cell and runs four more frames with nothing drawn, waits ten world
 steps, restores the saved active-object table and the scene byte, and issues a
-display-mode set and a full redraw. The tail of that exit is **thirty
+display-mode set and a full redraw. The walk-back frame count is not a
+constant: it is one frame per grid row the approach climbed, plus the four empty
+frames. A shrine climbs four rows, so its walk-back is eight frames and forty
+world steps; the Codex climbs seven (Section 8), so its walk-back is **eleven**
+frames and fifty-five world steps. That rule was derived from the
+presentation's own exit structure rather than executed frame by frame. The tail of that exit is **thirty
 consecutive repaints of bare backdrop** (twenty from the four empty frames,
 ten from the closing wait). A shrine entry abandoned at the virtue prompt
 therefore costs seventeen animation frames end to end.
@@ -555,8 +560,8 @@ are zero-based `MISCMSG.DAT` ordinals, not replacement narration:
 
 | Quest state on arrival | Result presentation |
 |---|---|
-| Codex not yet read, whether already ordained or not | Set/retain ordination before record `31`, the altar's quest announcement. Restore the standing Avatar pose and wait for a command key. Print record `32`, then the virtue's record `12` through `19` in the virtue order above, then a closing double quote and one newline. Wait for another command key, then print record `33`, the instruction to return after the quest. Finish with the shrine's sound sequence and ten world ticks. |
-| Ordained and Codex read | Clear ordination before record `36`, the congratulatory response. Play the viewport/sound presentation, including the shared flash/rumble described below, then award standing and the applicable Avatar attributes. Each applicable attribute prints `Strength +1\n`, `Dexterity +1\n`, or `Intelligence +1\n`, in that order; the line still prints when the attribute is already at its cap. Finish with ten world ticks. |
+| Codex not yet read, whether already ordained or not | Set/retain ordination before record `31`, the altar's quest announcement. Restore the standing Avatar pose and wait for a command key. Print record `32`, then the virtue's record `12` through `19` in the virtue order above, then a closing double quote and one newline. Wait for another command key, then print record `33`, the instruction to return after the quest. Finish with the ordination chime - seven software-envelope notes, about 1.4 seconds, Section 7.2 - and ten world ticks. |
+| Ordained and Codex read | Clear ordination before record `36`, the congratulatory response. Play the turn-in beat of Section 7.2 - one unrestored viewport inversion, then the 920-step envelope swell, then the shared flash/rumble described below - and then award standing and the applicable Avatar attributes. Each applicable attribute prints `Strength +1\n`, `Dexterity +1\n`, or `Intelligence +1\n`, in that order; the line still prints when the attribute is already at its cap. Finish with ten world ticks. |
 | Codex read and no longer ordained | Use the offering interaction below. There is no new ordination announcement. |
 
 **Both key waits precede the closing record.** *(Added 2026-09-12, issue
@@ -565,8 +570,9 @@ record `33`, not after it: set or retain ordination, print record `31`, restore
 the standing Avatar pose, wait for a key, print record `32` with the virtue's
 quest phrase and the closing quote, wait for a key again, and only then print
 record `33`. After that record the handler emits no further text and reads no
-further key - the sound sequence and the ten world ticks each print nothing and
-read nothing - and the handler returns to the shrine presentation, whose exit
+further key - the closing chime and the ten world ticks each print nothing and
+read nothing, and Section 7.2 gives the chime, its length and its gates - and
+the handler returns to the shrine presentation, whose exit
 pacing (the walk back down, the four empty frames and the ten-step closing
 wait; see "Exit pacing" above) runs before the mode loop's next command prompt.
 *(Clarified 2026-09-12 after issue #271: an earlier wording here said the
@@ -591,7 +597,7 @@ keep the chooser open without repeating its question.
 | `0` | After echoing the digit, append ` gp\n` and end the interaction without payment or the ten-tick result pause. |
 | `1` through `9` | After echoing the digit, append `00 gp\n\n`, so the displayed amount is in gold pieces. Check affordability after this echo. |
 | Insufficient gold | Print record `35`, the insufficient-gold response, then repeat record `34` and the single-digit chooser. No payment or standing increase occurs. |
-| Affordable nonzero offering | Deduct the displayed gold amount, refresh the stats display - an immediate full-panel repaint a step after the debit, not a deferred request, and before any of the text below is printed (`systems/stats-panel.md` Section 2.4) - and award the digit's standing increase. Print `ALAKAZAM` using the runic font, restore the normal font and append `!\n`. Play the local viewport/sound effect and finish with ten world ticks. |
+| Affordable nonzero offering | Deduct the displayed gold amount, refresh the stats display - an immediate full-panel repaint a step after the debit, not a deferred request, and before any of the text below is printed (`systems/stats-panel.md` Section 2.4) - and award the digit's standing increase. Print `ALAKAZAM` using the runic font, restore the normal font and append `!\n`. Play the offering beat of Section 7.2 - one unrestored viewport inversion, then the 920-step envelope swell, about 7.9 seconds - and finish with ten world ticks. |
 
 Source provenance for editing, completion and offerings: fresh original
 shrine-handler, shared editor and resource-selection traces under
@@ -628,8 +634,9 @@ reachable: yelling any Word of Power while standing beside a ruined shrine
 enters the CMDS-side mantra prompt for that word's index, as specified in
 `systems/commands.md` Section 11.1. Earlier wording calling it unreachable is
 retracted. In ordinary shrine meditation, the Codex-read turn-in uses this
-shared flash/rumble helper. Ordination and completed-quest offerings use
-their own sound/presentation sequences without calling that shared helper.
+shared flash/rumble helper, after its own envelope swell rather than instead of
+it. Ordination and completed-quest offerings use their own sound/presentation
+sequences without calling that shared helper. Section 7.2 specifies all three.
 
 ### 7.1 Ruined-shrine restoration through Yell
 
@@ -691,6 +698,201 @@ Blackthorn rescue/refuge handling reuses `KARMA.DAT` as verdict text, but
 the Blackthorn overlay does not make the file a numeric karma table and does
 not publish a traced in-overlay virtue-score adjustment before selection. See
 `systems/blackthorn.md`.
+
+### 7.2 The closing sound sequence, and the interval to the next prompt
+
+*(Added 2026-09-12, issue #271 follow-up.)* This fills in the three places above
+that named the closing beat only as "the shrine's sound sequence", "the
+viewport/sound presentation" and "the local viewport/sound effect". Nothing
+earlier in this section is withdrawn; every count it already published stands.
+
+The beat is neither a sting nor a glissando. It is the software envelope
+generator of `systems/audio.md` Section 5.4 - the one that programs a fixed
+ultrasonic carrier once and then gates it on and off from a phase accumulator -
+driven from a stored parameter list, and the completion arms use two different
+recipes. `systems/audio.md` Section 5.4.7 owns both recipes and any later
+correction to their parameters; the rows are repeated here because they are what
+a shrine implementation has to schedule.
+
+**The ordination arm: a seven-note chime.** After record `33` the handler runs
+the generator once per row of a seven-row parameter list, with no pause, no text
+and no input between rows. There are seven rows, not eight, and every row that
+exists is played:
+
+| Note | Phase increment | Idle count | Iterations | Initial comparison | Comparison delta | Approx. gate pitch | Approx. audible length |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 3300 | 1 | 7,000 | 1000 | +9 | 1.17 kHz | 301 ms |
+| 2 | 3925 | 1 | 6,000 | 1000 | +10 | 1.39 kHz | 258 ms |
+| 3 | 3925 | 1 | 3,000 | 1000 | +21 | 1.39 kHz | 129 ms |
+| 4 | 3925 | 1 | 3,000 | 1000 | +21 | 1.39 kHz | 129 ms |
+| 5 | 3925 | 1 | 3,000 | 1000 | +21 | 1.39 kHz | 129 ms |
+| 6 | 3700 | 1 | 3,000 | 1000 | +21 | 1.31 kHz | 129 ms |
+| 7 | 3925 | 1 | 8,000 | 500 | +8 | 1.39 kHz | 344 ms |
+
+The five parameters and the counts are exact. The pitches and the milliseconds
+are calibrated approximations that inherit the modelling band of
+`systems/audio.md` Section 5.4.3 and are not measurements. Thirty-three thousand
+iterations in all: about **1.42 seconds** audible, band 1.33 to 1.59 s, and
+about **1.10 seconds** muted.
+
+Two shape facts matter to a frontend. Each note's comparison value climbs across
+its own length, so its duty cycle falls from about 98 per cent to between about
+2 and 7 per cent; by the amplitude rule of `systems/audio.md` Section 5.4.6 that
+makes every note swell to a peak near its own midpoint and then fade, so these
+are seven bell-like strikes and not seven flat tones. And no note reaches the
+16-bit wrap - the largest comparison value anywhere in the chime is 64,492 - so
+the discontinuity the summon cue of `systems/audio.md` Section 8.3 shows does
+not occur here. The figure is one lower opening note, the same higher note four
+times, one dip in sixth place and a longer final note.
+
+**The offering and Codex-turn-in arms: one viewport inversion and a 920-step
+swell.** Each of these two arms sets the drawing colour and then issues a
+single rectangle fill over the gameplay viewport with the driver's
+exclusive-or mode selected - an **inversion of the whole viewport**, the same
+operation `systems/audio.md` Section 6 names for the shared potion and wind
+sequence. It is not a solid-colour fill, and unlike Section 6's paired
+invert-and-restore it happens **once and is never undone**: the world steps
+that follow simply repaint over it. An engine that restores the rectangle at the end of the beat diverges.
+
+Each arm then runs the envelope generator **920 times** in one sweep. The
+initial comparison rises 2000, 2050 ... 24950 across 460 runs, then resets to
+25000 and falls 25000, 24950 ... 2050 across 460 more. Every run uses comparison
+delta 0, idle count 1 and the arm's single fixed phase increment, so the pitch
+never moves; what sweeps is duty cycle, from about 97 per cent down to about 62
+per cent and back - one slow swell and decay at one pitch.
+
+| Arm | Phase increment | Iterations per run | Total iterations | Approx. pitch | Approx. audible length |
+|---|---:|---:|---:|---:|---:|
+| Accepted offering | 2700 | 200 | 184,000 | about 958 Hz | about 7.91 s |
+| Codex turn-in | 3100 | 150 | 138,000 | about 1.10 kHz | about 5.93 s |
+
+Only the turn-in arm then runs the shared flash-and-rumble helper described at
+the end of Section 7, and it runs **after** the swell rather than instead of it.
+On that arm the attribute lines print after the whole sound, not during it.
+
+On both of these arms the Avatar stays **kneeling** through the inversion, the
+swell and the ten world steps, with the kneeling family still cycling behind the
+per-slot animator of `systems/active-objects.md` Section 8; only the
+presentation's exit restores the standing pose. The ordination arm is the
+exception already stated above: it restores the standing pose before its two key
+waits, so its closing hold shows a standing Avatar.
+
+**What the sequence costs, and what it ignores.**
+
+- **It blocks, and it consumes nothing.** No envelope run reads the keyboard.
+  Keys typed during it are still queued when it ends, and there is no
+  abort-on-key path anywhere in it. It is the same kind of hold as the ten-,
+  six- and twelve-step waits above: blocking and non-consuming.
+- **It costs no timer tick and no repaint.** The generator issues no interrupt
+  of any kind and touches only the speaker channel's data port and the speaker
+  control port - never the timer's counting channel or its mode port. It is not
+  a counted pause: no world step, no one-tick delay request, no wind draw and no
+  viewport rebuild belongs to it. The whole run sits between the closing record
+  and the first counted pause.
+- **The sound toggle never skips it.** Muting selects the generator's silent
+  arm, which runs the identical iteration count, so the hold is never shortened
+  in *count*; the silent arm is not cost-matched, so a muted chime is about 23
+  per cent shorter in wall clock (`systems/audio.md` Sections 3 and 5.4.5). This
+  is not the harpsichord case, where muting removes the call and the hold with
+  it.
+- **The animation gate does not reach it.** The master redraw/animation gate of
+  `systems/animation.md` Section 13.1 gates the counted pause, not the
+  generator. With that gate clear all seven notes still play with identical
+  parameters, and what disappears is **every** counted pause in the window - all
+  sixty-one world steps below, not merely the handler's ten - together with
+  their delay requests, wind draws and repaints, because the counted pause tests
+  the gate before it loops at all. That sharpens the entry-pacing bullet above,
+  which already said the gate removes the delay requests and the repaints; it
+  does not reverse it.
+- **The boot calibration word sizes it, through a different gate.** The
+  generator reads the word once per run and, at 100 or above, uses one
+  twenty-fourth of it as the per-iteration idle factor; below 100 the factor is
+  zero and the idle work is skipped entirely (`systems/audio.md` Section 5.4).
+  The iteration count never changes at any value. This is **not** the one-tick
+  delay's threshold, which is a signed comparison against 240 and governs only
+  whether the world steps that follow really wait (`systems/timing.md`
+  Section 4). An engine that folds the two gates together gets one of them
+  wrong.
+- **The refusal arms never reach it.** An empty mantra line, a wrong mantra and
+  a zero offering each bypass the closing beat entirely: no envelope run, no
+  inversion, no closing ten-step wait, and no gold, standing or quest-flag
+  write. An offering larger than the purse re-prompts without consuming anything
+  and then proceeds normally.
+
+**From the acknowledging key to the next command prompt.** The window opens at
+the key that dismisses the quest-phrase page on the ordination arm, at the
+accepted digit on the offering arm, or at the return that ends the third mantra
+on the turn-in arm, and it closes when the mode loop paints its next command
+row. Everything in it is counted, and none of it is skippable:
+
+| | Ordination | Offering | Turn-in |
+|---|---:|---:|---:|
+| Text prints after the key | 1 | 3 | 2 |
+| Envelope runs | 7 | 920 | 920 |
+| Envelope iterations | 33,000 | 184,000 | 138,000 |
+| Unrestored viewport inversions | 0 | 1 | 1 |
+| Shared flash/rumble | 0 | 0 | 1 |
+| Stats-panel repaints | 0 | 1 | 0 |
+| **World steps** | **61** | **61** | **73** |
+| One-tick delay requests | 61 | 61 | 73 |
+| Viewport repaints | 61 | 61 | 73 |
+| Wind draws | 61 | 61 | 73 |
+| Exit animation frames / stings | 8 / 8 | 8 / 8 | 8 / 8 |
+| Clock advance / full redraw | 1 / 1 | 1 / 1 | 1 / 1 |
+
+The sixty-one world steps decompose as **ten** (the handler's own closing wait)
+**plus one** (the exit's re-stamp step) **plus forty** (eight exit animation
+frames at five steps each) **plus ten** (the exit's closing wait) - the exit
+pacing already described above. The turn-in arm's extra twelve are the
+post-mantra wait, which falls inside this window on that arm alone because no
+key wait separates it from the closing record.
+
+**Arithmetic wall-clock floors.** At the already-published per-unit figures:
+
+| Arm | World steps | Envelope | Stings | Shared flash | Floor |
+|---|---:|---:|---:|---:|---:|
+| Ordination | 3.35 s | 1.42 s | 0.22 s | - | **about 5.0 s** |
+| Offering | 3.35 s | 7.91 s | 0.22 s | - | about 11.5 s |
+| Turn-in | 4.01 s | 5.93 s | 0.22 s | 0.86 s | about 11.0 s |
+
+**Every row is a floor, not an estimate, and all three are arithmetic rather
+than measured.** They price a world step at the 55 ms of one stock timer tick
+(`systems/timing.md` Section 4) and add **nothing** for the full viewport
+rebuild each of those steps also performs, which is unpriced; they take the
+envelope at the per-iteration cost of `systems/audio.md` Section 5.4.3 with its
+band; they take 27 ms for a sting on the assumption that the presentation's
+per-frame sting is the shared short two-part sting priced in
+`systems/audio.md` Section 10.2, an identification this pass assumed rather than
+established; and the 0.86 s for the shared flash is the reported DOSBox figure
+of `systems/audio.md` Section 8.4 rather than a period-hardware measurement.
+`OPEN-QUESTIONS.md` carries all four.
+
+Two consequences are worth stating for an implementation pacing this beat
+against a capture. On the ordination arm the sound is about 28 per cent of the
+interval and the handler's own ten world steps about 11 per cent, so an engine
+that models "closing record, sound, ten ticks, prompt" opens its command row
+roughly three seconds early: the exit pacing, not the closing beat, is the
+larger half of the wait. And being still inside the hold two and a half seconds
+after the acknowledging key is what these counts predict, not evidence of an
+extra wait somewhere.
+
+**The Codex path has no envelope and no counted pause.** Entering a Codex never
+reaches the meditation handler (Section 8), and the urn reader runs no software
+envelope and no counted tick pause at all. Its closing effect is the three
+shared flash-and-rumble cycles of Section 8.1, and they are gated on the
+Codex-read mask becoming complete: below that the whole beat, and the closing
+text after it, are skipped.
+
+Source provenance: private analysis under `u5-decomp/notes/` and
+`u5-decomp/functions/CAST2_OVL/`, executed twice in independent harnesses. The
+second was written from scratch against the shipped images and ran the resident
+generator as shipped with port and interrupt hooks, swept the calibration word
+on both sides of its threshold, and exercised all three completion arms at all
+eight shrines including the sentinel row, the three refusal arms, and both urn
+arms. The whole-window step, repaint and wind-draw counts in the table above
+were re-derived from the presentation's own exit structure rather than
+re-executed against the frame harness in that pass; `OPEN-QUESTIONS.md` records
+that.
 
 ## 8. Codex Urn Reading
 
@@ -778,7 +980,11 @@ unread ordained virtue.
 After the aphorism and its following key wait, inspect the **updated**
 Codex-read mask. If it is incomplete, finish the presentation. If all eight
 bits are set, continue with three shared viewport flash/rumble effects, then
-record `40` once as the page-turn transition. After another key, print
+record `40` once as the page-turn transition. Each of those three cycles
+sets a drawing colour and inverts the gameplay viewport before running the
+shared effect, and no restoring inversion follows them. The reader runs no software
+envelope and no counted tick pause anywhere on this path (Section 7.2).
+After another key, print
 `Thou dost read:\n\n` and the shared runic pages `41`, `42`, `43`, `44`
 in that order, with the waits below. These four pages are common to all
 virtues; record `40` is not repeated between them. This extension occurs both
