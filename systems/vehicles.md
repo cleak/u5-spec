@@ -53,14 +53,17 @@ party/vehicle block of the sprite atlas.
 
 The persistent value set is closed and complete. An exhaustive sweep of every
 shipped binary found no other persistent writer and no reader for any other
-value:
+value, and a second, independently written census (2026-09-13) confirms it: the
+marker has write sites in seven of the twenty-nine shipped code files, all of
+them plain stores or add/subtract adjustments, and no shipped instruction
+anywhere takes the marker's address, so there is no indirect writer either:
 
 | Values | Family | Facing / mode contract |
 |--------|--------|------------------------|
 | `0x00` | Party sprite suppressed | The party is drawn as nothing. As a *persistent* state this is reached only by drowning when a ship is lost with no skiff and no carpet available; see Section 6. |
 | `0x12`, `0x13` | Mounted horse | **Two frames only**, not four: `0x12` when the last announced move was east, `0x13` when it was west. Moving north or south leaves the frame unchanged. Ordinary terrain queries use the horse predicate family in `systems/movement.md`. A mounted directional command is still a single destination-cell step; no separate player rough-terrain stride table is part of the traced baseline. |
 | `0x14`, `0x15` | Magic carpet | **Two frames only**, on the same east/west rule as the horse. Ordinary terrain queries use the carpet predicate family in `systems/movement.md`. The `T` timing tag is *not* carpet identity: it is the Negate Time code of the shared timed-magic-effect byte, and no vehicle path writes that byte (`systems/overworld.md` Section 11). Carpet identity comes from this transport marker only. |
-| `0x1C` | Foot/avatar | The clean seed and default state. The adjacent value `0x1D` is the second frame of the on-foot sprite pair and is accepted by the engine's two "party is on foot" predicates, but nothing ever writes it; treat it as defensive breadth, not a reachable state. |
+| `0x1C` | Foot/avatar | The clean seed and default state. The adjacent value `0x1D` is accepted by the engine's two "party is on foot" predicates, but nothing ever writes it; treat it as defensive breadth, not a reachable state. *Retraction (2026-09-13, issue #273): this row previously called `0x1D` "the second frame of the on-foot sprite pair". The shipped art does not support it - its tile differs from the on-foot sprite in more than half its pixels and shares no non-black colour with it - so an engine must not animate the party on foot between the two. What `0x1D` depicts, and why the predicates accept it, are both unestablished (`OPEN-QUESTIONS.md`, `RETRACTIONS.md` R508).* |
 | `0x20..0x23` | Frigate, sails hoisted | Full four-way facing in the low two bits: `0` north, `1` east, `2` south, `3` west. The ship is under wind control. Ordinary terrain queries use the ship predicate family in `systems/movement.md`. |
 | `0x24..0x27` | Frigate, sails furled | Full four-way facing on the same convention. The ship is aboard but not under wind control. Ordinary terrain queries use the same ship predicate family as the under-sail range. |
 | `0x28..0x2B` | Skiff | Full four-way facing on the same convention. Ordinary terrain queries use the facing-sensitive skiff/water predicate family in `systems/movement.md`. A skiff step costs the ordinary mode increment; it does not carry a timing modifier of its own. |
@@ -69,13 +72,34 @@ Note that `0x10` and `0x11` (a riderless horse) and `0x1B` (a carpet lying on
 the ground) are **object** tiles for parked vehicles, not marker values.
 Boarding converts them; they are never stored in the party's marker.
 
+**What each family is drawn as.** The marker is an actor byte, and an actor byte
+names the catalogue tile `256` above it, so the party on foot draws tile `284`,
+mounted on a horse `274` (east) or `275` (west), on a carpet `276` or `277`,
+in a skiff one of `296..299`, and aboard a frigate one of `288..295` - the lower
+four sails set, the upper four furled. The party is **never** drawn as the
+riderless horse pair `272..273` or as the dropped carpet `283`; those are the
+objects boarding consumes and exiting leaves behind. One caveat that belongs
+with every line of that list: the compositor may substitute an authored
+occupied-fixture tile, or suppress the sprite entirely, according to the terrain
+under the party, before the index is formed - so the marker fixes what the party
+*is*, not unconditionally what is painted (`catalogs/tile-catalog.md`
+Section 10, `systems/visibility.md` Section 8).
+
 **Four further values exist only as one-frame animation overrides.** Each is
 written by a single routine that saves the previous marker on entry and restores
 it before returning, so no save can ever observe them and a byte-compatible
-implementation never has to persist them: a moongate-transit frame while
-stepping onto a moongate tile, the corpse sprite used by the Blackthorn rescue
-cutscene, a whirlpool frame while a whirlpool swallows the party, and a blank
-sprite during the two "you fall through" scenes.
+implementation never has to persist them: the paint-nothing value while stepping
+onto a moongate tile, the corpse sprite used by the Blackthorn rescue cutscene,
+a whirlpool frame while a whirlpool swallows the party, and a blank sprite
+during the two "you fall through" scenes. *Corrected 2026-09-13 (issue #273):
+the first of those was described here as "a moongate-transit frame". It is not a
+frame - it is actor byte `0x16`, which the rasteriser paints as nothing, so the
+party's cell keeps whatever the dissolve has already drawn there
+(`systems/overworld.md` Section 9.2, `RETRACTIONS.md` R507). The last of them is
+the marker value zero, which empties the slot instead; the two suppressions are
+not interchangeable. Both hide-and-restore pairs write their value from a
+cleared register rather than as a literal, which changes nothing observable but
+is worth knowing if an implementation is byte-checking the encodings.*
 
 **There is no balloon and no sixth vehicle family.** This is settled by the
 arithmetic writers rather than by absence of evidence, because arithmetic is the
@@ -87,8 +111,14 @@ the ship-loss fallback either keeps the current facing while switching to a
 skiff, or picks a carpet frame, or blanks the sprite; and the facing compose
 replaces only the low two bits with a direction code that every call site passes
 as a literal zero through three, so it cannot climb out of the run it started in.
-A fourth ship-sprite block exists in the tile atlas and is even accepted by one
-"afloat" range test, but nothing can ever write it. Do not model balloon art as a
+A fourth ship-sprite block exists in the tile atlas - object bytes `0x2C..0x2F`,
+catalogue tiles `300..303`, which the shipped description table also names a
+ship - and is even accepted by one "afloat" range test, but nothing can ever
+write it into the marker. B-Board gates its ship arm on the frigate object run
+and refuses that block with the ordinary rejection line; no shipped location
+roster places it; and the compositor treats it as terrain-blind, like the
+frigate runs. It is world-object art, not a transport state
+(`catalogs/tile-catalog.md` Section 10). Do not model balloon art as a
 transport state.
 
 The stats panel's ship-hull middle counter is selected only by the `0x20..0x27`
@@ -131,8 +161,12 @@ boarded-state transitions are byte-compatible:
 | Ship | `0x24..0x27` | Accepts the ship-boarding precondition below; preserves the selected ship byte as the party ship marker and copies hull/skiff auxiliary state. Only the furled-sail object run is boardable, so **a boarded frigate always starts with its sails furled**; the hoisted state is reachable only afterwards, through Y-Yell. |
 | Skiff | `0x28..0x2B` | Requires the party to be on foot; preserves the selected skiff byte as the party skiff marker. |
 
-These bytes are vehicle object and transport-state values, not tile-sheet art
-indices. Visual tile IDs and sprite-sheet placement remain catalog-owned.
+These bytes are vehicle object and transport-state values. They are also actor
+bytes, so each one names the catalogue tile `256` above it; final visual naming
+of the art frames stays catalog-owned (`catalogs/tile-catalog.md` Section 10).
+*(An earlier revision of this line said these bytes were "not tile-sheet art
+indices"; the narrower true statement is that they are not *terrain-half*
+indices.)*
 No balloon object byte is accepted by the traced B-Board handler; balloon art
 or manual references are not boardable command behavior in the analyzed
 baseline.
@@ -257,6 +291,17 @@ The full terrain predicate for passable neighbours is shared with
 `systems/movement.md`. For v1, preserve the observable requirements: exiting can
 fail when no legal nearby landing support exists, and a vehicle left behind
 must remain boardable through active-object persistence.
+
+**Both dispatchers select a family, not a value, and one of them has no default
+arm.** The movement announcer and this command both branch on the marker's
+*class* - its value with the low two bits masked away - rather than on the value
+itself, and the exit dispatcher has no fall-through arm at all. A marker outside
+the six known classes is therefore left alone and prints nothing, yet still
+reaches the shared tail that parks an object in the world, with an object type
+that was never initialised. No shipped writer can produce such a marker, so this
+is unreachable in stock play; it is a caution for an engine that adds a transport
+family of its own, and an argument for validating the marker at the top of both
+handlers rather than relying on a default that is not there.
 
 The nearby landing-support probe is not a search for a destination to move the
 party into. It checks only the four cardinal cells around the player in the
@@ -654,6 +699,12 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/MAINOUT_OVL/`.
 - Private movement analysis under `u5-decomp/notes/`.
 - Local MAINOUT outer-loop analysis for pending shipwright delivery placement.
+- Source provenance: the re-census of the transport marker's writers, the drawn
+  tile for each transport family, the withdrawal of the "second on-foot frame"
+  reading of `0x1D`, the unreachability of the second ship run, and the
+  class-masked dispatch of the movement and exit handlers are derived from
+  private analysis in `u5-decomp/notes/`, resting on a static census across the
+  shipped code files plus emulator execution of each command branch.
 - Source provenance: the complete sailing-collision and rough-seas trigger
   audit — movement and underfoot predicates, scheduling, narration/sound order,
   separate audio and gameplay random streams, continuation, and reset behavior

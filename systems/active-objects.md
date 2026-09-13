@@ -203,6 +203,19 @@ The table is never compacted or defragmented. Repeated allocate-and-free fragmen
 
 The player occupies slot zero. Every world frame, the compositor refreshes bytes 0..4 of slot zero from the world-state globals (the transport/action marker into **both** byte 0 and byte 1, then the party X, Y and Z). The renderer then walks the table from slot thirty-one down so slot zero paints on top.
 
+**The refresh is gated on the scene being an ordinary one.** It runs only while
+the scene byte is below the presentation/arena threshold (`0x80`); presentation
+scenes and combat arenas skip it and drive slot zero by hand, which is why a
+cutscene can hold a pose there and an arena can seat a class sprite there
+without the next frame overwriting it (`systems/visibility.md` Section 8,
+`systems/karma.md` Section 7). Because one byte supplies both tile bytes, the
+party's drawn sprite **is** its transport marker: the closed value set and what
+each value is drawn as are in `systems/vehicles.md` Section 2 and
+`catalogs/tile-catalog.md` Section 10. No transport-marker value falls in the
+person-art range `0x40..0x4F` at all; those bytes reach a slot only through the
+arena seating pass, which is the one place party members are drawn individually
+(`systems/combat.md` Section 5).
+
 **Bytes 5, 6 and 7 of slot zero are not part of that rebuild.** The per-frame refresh writes bytes 0 through 4 and stops. Within a scene, while the stored byte 6 is either zero or the freeze sentinel, and while the party is on foot, those three bytes round-trip from the save image untouched — that is why the player's record in a shipped town save reads as the marker twice, the coordinates, and then three zero auxiliary bytes. The qualifiers are load-bearing, and this negative is a trace of the routines that own slot zero rather than a census, because dozens of pointer walks index the table:
 
 - A stored low nibble in `1..14` in byte 6 **is** decremented in place by the animator, on slot zero as on any other (Section 3).
@@ -977,13 +990,31 @@ the companion byte and draws tile index `companion_byte + 256`. Actor bytes
 therefore index the upper, actor half of the 512-entry tile space. One value is
 reserved: companion byte `0x16` means "draw nothing", and it is the only
 transparent value this path recognises — an actor that must occupy a slot
-without being drawn carries it. A few tile families are not written through
+without being drawn carries it. The test is on the **plane byte**, not on the
+player's slot, so any actor carrying that byte is suppressed the same way, and
+the cell keeps whatever was already painted there rather than showing terrain.
+That is the difference between the two ways the party's sprite disappears: a
+marker of `0x16` leaves the slot live and merely unpainted, while a marker of
+zero empties the slot, which the walk then skips so the terrain shows through
+(`systems/overworld.md` Section 9.2, `systems/blackthorn.md` Section 6.1). A few tile families are not written through
 verbatim: before the companion write, the compositor inspects the terrain under
 the actor and substitutes a context-dependent actor byte for actors standing on
 chairs, beds, stairs and floor links, so a seated or climbing figure draws a
 different sprite than the same actor standing on open floor. The substitution
 changes only which actor byte is written; the `+256` rule then applies to the
-substituted value exactly as it would to the original. `catalogs/tile-catalog.md` section 3.1 carries the same rule
+substituted value exactly as it would to the original.
+
+**Read those two together as a pipeline, not as a rule with exceptions.** The
+compositor decides which plane the cell is written into and which byte goes
+there; only then does the rasteriser turn an actor-plane byte into an index. So
+"drawn tile = stored byte + 256" is the ordinary *outcome*, and an engine that
+treats it as the rule and paints the stored byte directly will diverge wherever
+the compositor would have substituted. **This applies to the player's own slot
+as much as to anyone else's**: the party's on-foot and mounted markers and every
+skiff facing are in the terrain-aware set, so the party standing on a chair
+draws the occupied chair of that facing, and the party on dense forest (`0x0A`)
+or on the standard of Britannia (`0xEC`) draws nothing at all. Neither ship run is
+terrain-aware. `systems/visibility.md` Section 8 owns the full table. `catalogs/tile-catalog.md` section 3.1 carries the same rule
 from the catalogue side, and `systems/endgame.md` section 4 works it through for
 the endgame tableau.
 

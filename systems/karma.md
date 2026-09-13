@@ -437,8 +437,15 @@ top-left cell - the convention Section 8 already uses for the Codex.
 The walking value is the same one the game holds as the party's sprite while
 the party is on foot: it is what the leave-vehicle command writes back when the
 party dismounts, and the ordinary renderer copies that stored sprite into the
-party's own actor slot every tick, so `0x11C` is also what the overworld paints
-for a party walking on foot. `systems/blackthorn.md` Section 6.1 publishes the
+party's own actor slot every tick, so `0x11C` is also what the overworld
+ordinarily paints for a party walking on foot. *Scoped 2026-09-13 (issue #273):
+"ordinarily" is load-bearing and the earlier text lacked it. The compositor is
+terrain-aware for this value, so on a few terrain ids the party's cell is
+painted as the occupied fixture instead, and on dense forest (`0x0A`) and the standard of
+Britannia (`0xEC`) it is not painted at all - a walking party in dense forest is invisible
+(`systems/visibility.md` Section 8, `RETRACTIONS.md` R509). The grass the shrine
+approach walks over is not one of those ids, so nothing in this section
+changes.* `systems/blackthorn.md` Section 6.1 publishes the
 same index under that name for its own cinematic, which is an independent
 cross-check of the identity. The description table leaves tiles `284..285`
 unnamed, under the actor half's own placeholder string rather than the terrain

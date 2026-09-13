@@ -443,7 +443,13 @@ never depend on the monster count and never consume a placement slot.
   letter, mapping onto the four human combat classes: Avatar to class 3,
   Bard/Shepherd/Tinker to class 1, Fighter/Paladin/Ranger to class 2,
   Druid/Mage to class 0. A class letter outside that set leaves the
-  presentation byte at zero.
+  presentation byte at zero. Those four classes are the person-art families
+  `320..335` of `catalogs/tile-catalog.md` Section 3.1 — the wizard, minstrel,
+  fighter and avatar runs — so nine class letters share four sprite families and
+  the avatar family is reached by the Avatar letter alone. **This is the only
+  place party members are drawn individually.** Outside an arena the whole party
+  is drawn as the single transport marker, which is never a value in this range
+  (`systems/vehicles.md` Section 2).
 - A member whose status byte is `'S'` (asleep) is seated and then immediately
   marked asleep: status stays `'S'`, the descriptor's disabled bit is set, the
   presentation record shows the prone marker, and the active-player sentinel is

@@ -1250,8 +1250,20 @@ The sequence, in order:
    helper. **That comparison is withdrawn** - it rested on a mis-identified
    routine, and the effect it named does not use this helper at all. The
    verified other user of it is the Blackthorn pendulum-blade descent.
-2. **Stage A, the party is swallowed.** The party sprite is switched to tile
-   `0x116`, and the party's view cell is dissolved into the moon-gate tile
+2. **Stage A, the party is swallowed.** The party's transport marker is
+   switched to the **actor byte** `0x16`, the paint-nothing value: the party's
+   slot stays live and the compositor still stamps it, but the rasteriser tests
+   for exactly that byte and paints nothing, leaving whatever is already in the
+   party's cell untouched while the world keeps ticking. That is precisely why
+   this stage uses it rather than emptying the slot - the cell is being
+   dissolved pixel by pixel and the party's slot must not repaint over it.
+   *Retraction (2026-09-13, issue #273): this step previously read "the party
+   sprite is switched to tile `0x116`", which reads a marker byte as an atlas
+   index. `systems/blackthorn.md` Section 6.1 has always published the correct
+   rule for the same byte, and tile `0x116` is a different thing - the scratch
+   tile this same composition builds its frames in, which is exactly why the two
+   must not be conflated. See `RETRACTIONS.md` R507.* The party's view cell is
+   then dissolved into the moon-gate tile
    pixel by pixel: the cell is first cleared to colour zero, then **255** of its
    256 pixels are plotted in a fixed pseudo-random order, one pixel per step.
    The count is 255, not 256 - the shuffle that orders the pixels never reaches
@@ -1261,7 +1273,11 @@ The sequence, in order:
    why its step count is off by one should know the original does not.
    The stage is paced by a world tick every eight steps rather than by a fixed
    wait, so it also advances ambient animation while it runs.
-3. **Stage B, the gate closes.** The party sprite is suppressed entirely, and
+3. **Stage B, the gate closes.** The marker is then set to **zero**, which is a
+   different suppression from Stage A's: zero empties the player's slot, so the
+   compositor skips it altogether and the terrain shows through, where `0x16`
+   left the slot live and merely unpainted. The marker is restored from the
+   saved value at the end (see below), and
    the shared presence counter is driven from `15` down to `1`, one phase per
    step, with a wait of **two BIOS timer ticks** between phases - roughly
    110 ms per phase at the standard 18.2 Hz tick, and about 1.65 seconds for the

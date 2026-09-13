@@ -304,27 +304,30 @@ which are engine-private art.
 | 269 | `0x0D` | item | torch |
 | 270 | `0x0E` | item | sandalwood box |
 | 271 | `0x0F` | item | food |
-| 272..273 | `0x10..0x11` | vehicle | horse |
-| 274..278 | `0x12..0x16` | placeholder | placeholder |
+| 272..273 | `0x10..0x11` | vehicle object | horse, riderless |
+| 274..275 | `0x12..0x13` | party sprite, mounted | *placeholder* — the party on horseback, east and west |
+| 276..277 | `0x14..0x15` | party sprite, mounted | *placeholder* — the party on a magic carpet, east and west |
+| 278 | `0x16` | render scratch | *placeholder* — the moon-gate composition's scratch tile (Section 6) |
 | 279..280 | `0x17..0x18` | object ladder | ladder |
 | 281 | `0x19` | item | moonstone |
 | 282 | `0x1A` | occupied furniture | occupied bed |
-| 283 | `0x1B` | vehicle | magic carpet (as an object) |
-| 284..285 | `0x1C..0x1D` | placeholder | placeholder |
+| 283 | `0x1B` | vehicle object | magic carpet, lying on the ground |
+| 284 | `0x1C` | party sprite, on foot | *placeholder* — the party's own map sprite |
+| 285 | `0x1D` | actor frame, role unestablished | *placeholder* |
 | 286..287 | `0x1E..0x1F` | corpse | corpse |
-| 288..295 | `0x20..0x27` | vehicle | ship |
-| 296..299 | `0x28..0x2B` | vehicle | skiff |
-| 300..303 | `0x2C..0x2F` | vehicle | ship |
+| 288..295 | `0x20..0x27` | vehicle, boardable | ship — the frigate, sails set at `288..291` and furled at `292..295`, one frame per facing |
+| 296..299 | `0x28..0x2B` | vehicle, boardable | skiff, one frame per facing |
+| 300..303 | `0x2C..0x2F` | vehicle art, never boardable | ship — a second, distinct rigged-ship run (Section 10) |
 | 304..315 | `0x30..0x3B` | occupied furniture | occupied chair |
 | 316..319 | `0x3C..0x3F` | trapped soul | trapped soul |
-| 320..323 | `0x40..0x43` | party sprite | mage |
-| 324..327 | `0x44..0x47` | party sprite | bard |
-| 328..331 | `0x48..0x4B` | party sprite | fighter |
-| 332..335 | `0x4C..0x4F` | party sprite | avatar |
+| 320..323 | `0x40..0x43` | person art (per-member) | wizard |
+| 324..327 | `0x44..0x47` | person art (per-member) | minstrel |
+| 328..331 | `0x48..0x4B` | person art (per-member) | fighter |
+| 332..335 | `0x4C..0x4F` | person art (per-member) | avatar |
 | 336..339 | `0x50..0x53` | townsperson | villager |
 | 340..343 | `0x54..0x57` | townsperson | merchant |
 | 344..347 | `0x58..0x5B` | townsperson | jester |
-| 348..351 | `0x5C..0x5F` | townsperson | bard |
+| 348..351 | `0x5C..0x5F` | townsperson | bard *(disputed - `catalogs/npc-roster.md` reads this tag's shipped string as "a minstrel"; Section 3.1)* |
 | 352..359 | `0x60..0x67` | townsperson | prisoner |
 | 360..363 | `0x68..0x6B` | townsperson | child |
 | 364..367 | `0x6C..0x6F` | townsperson | beggar |
@@ -378,12 +381,17 @@ the whirlpool frames. `catalogs/monster-bestiary.md` carries class 29 under its
 resident singular name and marks classes 42 and 43 as gaps; a class-29
 combatant, if the game ever spawned one, would be drawn with regalia art. The
 sixteen placeholder rows of this half include `0x7C..0x7F`, which the shipped
-art shows to be Lord British on his throne, and `0x1C..0x1D`, whose first
-member the shipped art and two executed presentations identify as the party's
-on-foot map sprite (Section 3.1, `systems/karma.md` Section 7). A row
-carrying the actor half's placeholder string means the description table has
-nothing to say about it, which for these rows is unsurprising: the player never
-looks at the party's own sprite.
+art shows to be Lord British on his throne, and the seven rows `0x12..0x16` and
+`0x1C..0x1D`, six of which the shipped art and executed presentations identify
+as the party's own map sprites and the moon-gate scratch tile (Section 3.1,
+`systems/karma.md` Section 7). A row carrying the actor half's placeholder
+string means the description table has nothing to say about it, which for these
+rows is unsurprising: the player never looks at the party's own sprite, because
+Look can never be pointed at the party's own cell. *Corrected 2026-09-13 (issue
+#273): the Class column of those seven rows previously read `placeholder` as
+well, which invited them to be read as unauthored ids. Every one of them is
+authored art or a live engine value; the Label column still carries the shipped
+placeholder string, which is all that was ever established about them there.*
 
 ### 3.1 The upper half is the actor bank, and its nominal names are provisional
 
@@ -396,6 +404,25 @@ renderer adds **256** to it before indexing this catalogue; the sole reserved
 actor byte is `0x16`, which means "draw nothing". `systems/endgame.md` section 4
 publishes that rule in full, and `systems/active-objects.md` owns it for live
 gameplay actors.
+
+**The addition is the second of two stages, not the whole rule.** An actor byte
+does not travel to the screen untouched. The compositor decides first which of
+the two viewport planes the cell is written into and *which byte goes there* —
+usually the actor's own byte, but for several terrain classes an authored
+substitute instead, and in one arm a base-bank id written into the *other* plane
+instead (`systems/visibility.md` Section 8). Only then does the rasteriser
+turn a byte in the actor plane into an index by adding `256`, and it refuses
+that conversion for the single value `0x16`. So "tile = actor byte + 256" is the
+*outcome* of the pipeline in the ordinary case, not a rule with two exceptions,
+and it holds for the party's own sprite exactly as it holds for anyone else's —
+including the substitutions, which do apply to the party's own cell
+(Section 10).
+
+**Actor byte `0x16` and tile `278` are different things and must not be
+conflated.** `0x16` is the byte that makes the rasteriser paint nothing; because
+it paints nothing, it never reaches tile `278` at all. Tile `278` is the scratch
+tile the moon-gate frame composition builds its frames in (Section 6). The two
+are joined only by arithmetic that this path never performs.
 
 That indexing rule resolves a reported contradiction: actor byte `0x44` is not
 the floor tile whose *terrain* index is `0x44`, it is tile 324; actor byte
@@ -423,11 +450,16 @@ which the table now reproduces:
 |---:|---|
 | 264 | A small blue radiant spark — the Orb of the Moons flash used by the endgame |
 | 270 | A red-and-white lidded chest — the sandalwood box as an actor |
+| 274..275 | The riderless-horse frames `272..273` with a rider added on top — fewer than seventy of each frame's 256 pixels differ from the riderless frame of the same facing. The party mounted on a horse, east and west |
+| 276..277 | A seated figure on a carpet, east and west — the party on a magic carpet |
+| 283 | A rug seen from above: exactly symmetric top to bottom, and exactly symmetric left to right across its first fifteen columns, with the sixteenth column blank — so the mirror axis sits half a column left of the tile's true centre. No pixel breaks either symmetry, the alternating fringe included. The dropped magic carpet as a world object |
 | 284 | A helmeted figure in a green tunic with a white-and-grey shield bearing a red device, a raised sword and red leggings — the party's own map sprite while on foot, and the pose the shrine and Codex presentations walk with (`systems/karma.md` Section 7, `systems/blackthorn.md` Section 6.1). It differs from tile 334 only in four boot pixels on one raster row, red here where 334's are brown |
-| 320..323 | A blue-robed figure with a staff, four walk frames — the Mage class sprite |
-| 324..327 | A green-clad figure, four walk frames — the Bard class sprite |
-| 328..331 | A mailed figure with shield and sword, four frames — the Fighter class sprite |
-| 332..335 | A green-tunic figure with sword, four frames — the Avatar class sprite, also used by every class outside the three above |
+| 285 | A hollow figure outline drawn entirely in blues and cyans. It is **not** a second frame of the on-foot sprite `284`: the two differ in more than one hundred and fifty of 256 pixels and their non-black palettes are disjoint. What it depicts is unestablished (`OPEN-QUESTIONS.md`) |
+| 300..303 | A rigged ship, four facings, differing from the frigate frame of the same facing by more than forty of 256 pixels in both the sails-set and the furled run, and carrying more ink than the furled run. A ship in its own right, and never a party sprite (Section 10) |
+| 320..323 | A blue-robed figure with a staff, four walk frames — the description table's wizard |
+| 324..327 | A green-clad figure, four walk frames — the description table's minstrel |
+| 328..331 | A mailed figure with shield and sword, four frames — the description table's fighter |
+| 332..335 | A green-tunic figure with sword, four frames — the description table's avatar |
 | 364..367 | A green-tunic figure with red boots whose head element drops one raster row per frame, the last frame drawing that head in red — the description table's beggar run, and the four-frame family the shrine meditation's kneeling pose animates through (`systems/karma.md` Section 7) |
 | 380..383 | A crowned, bearded figure in a red-and-purple robe seated between two banners — Lord British on his throne |
 
@@ -437,6 +469,47 @@ person sprites), and the earlier nominal "192..255 NPC" band of the terrain half
 was withdrawn because the description table names it as scenery and fixtures -
 stairs, fences, waterfalls, the moon gate, shop signs, the clock. Section 3 now
 publishes the derived tables in their place.
+
+**What the four person-art runs at `320..335` are, and what they are not.**
+They are four four-frame families of person art with exactly two producers,
+neither of them the party's transport marker:
+
+- **Town rosters.** Three of the four families are placed as ordinary
+  townspeople in the shipped location rosters. The avatar family `332..335`
+  appears in no shipped roster at all.
+- **Combat arenas.** When a combat is set up, each living party member is
+  seated and given a sprite chosen from that member's stored character-class
+  letter: the Avatar letter takes `332..335`; Bard, Shepherd and Tinker take
+  the minstrel family `324..327`; Druid and Mage take the wizard family
+  `320..323`; Fighter, Paladin and Ranger take the fighter family `328..331`.
+  Nine class letters therefore share four families, and the avatar family is
+  reached by one letter only. Every other letter gets **no** sprite written at
+  all and is drawn as nothing, which `systems/combat.md` Section 5 already
+  publishes together with the slot-allocation consequence that follows from it.
+
+Outside a combat arena the party is drawn as a **single** transport marker and
+this run is not involved; the party's on-foot sprite is tile `284` and its
+mounted sprites are `274..277` (Section 10). *Retraction (2026-09-13, issue
+#273): the row for `332..335` in the table above previously read "the Avatar
+class sprite, also used by every class outside the three above". That is
+withdrawn — an unmapped class letter is given no sprite, not the avatar's. See
+`RETRACTIONS.md` R506.*
+
+**Naming note for these four runs.** The Section 3 rows above previously named
+`320..323` and `324..327` after party classes, "mage" and "bard". The shipped
+description table calls them a **wizard** and a **minstrel**; the other two runs
+already agreed. The rows now carry the shipped strings, because this section's
+own precedence rule reads the tables off that description table run by run.
+Nothing behavioural changes — the class-letter mapping above is unaffected — but
+it leaves one row of Section 3 looking wrong from two directions: that table
+names `348..351` a **bard**, while `catalogs/npc-roster.md` reads the same
+description table and gives actor tag `5C` the string "a minstrel" (a second
+minstrel class alongside `44`), `systems/visibility.md` Section 8 names that
+family a minstrel too, and Section 2 of this document lists a minstrel rather
+than a bard among the townsperson classes. The `348..351` row was not
+re-decoded in this pass, so it is flagged here rather than rewritten
+(`OPEN-QUESTIONS.md`); an implementation should treat `catalogs/npc-roster.md`
+as the current reading for that tag.
 
 **Precedence rule.** The Section 3 tables are read off the shipped description
 table run by run and are authoritative for both halves; the combat-class bands
@@ -482,7 +555,11 @@ that census covers and why absence from it is weak evidence by itself. The two h
 **different** placeholder strings: the terrain half's is a lone `*` and the
 actor half's is a lone `x`, the latter on the sixteen actor-half rows `0x100`,
 `0x112..0x116`, `0x11C..0x11D`, `0x174..0x177` and `0x17C..0x17F`. A reader
-enumerating either set must not mix them. The telescope appears in both lists because its
+enumerating either set must not mix them. Six of those sixteen are silent for
+a reason that has nothing to do with drawability: `0x112..0x115` and `0x11C` are
+the party's own mounted and on-foot map sprites and `0x116` is the moon-gate
+scratch tile, and Look can never be pointed at the party's own cell, so no
+description record was ever needed for them. The telescope appears in both lists because its
 name is confirmed from its **art**, not from a description record: its row in
 the description table holds only the placeholder, since looking at it runs the
 sky renderer instead of printing a string. Those ids are used as Look predicates in `systems/view.md`
@@ -744,10 +821,13 @@ paragraph said it was. While the shared presence phase is between one and
 fifteen, the renderer composes the cell from `0xDC` and the ground tile rather
 than drawing `0xDC` outright, writing the result into the scratch tile id
 `0x116`. That scratch slot is saved and restored around each composition, so its
-own shipped artwork - which also serves as the party-vanishing sprite during a
-gate transit - is preserved; but an implementation must not treat `0x116` as a
-stable authored tile while a gate is on screen, and must not read the composed
-frames as a separate authored gate family. The phase model is
+own shipped artwork is preserved; but an implementation must not treat `0x116` as
+a stable authored tile while a gate is on screen, and must not read the composed
+frames as a separate authored gate family. *Retraction (2026-09-13, issue
+#273): this paragraph also said that artwork "serves as the party-vanishing
+sprite during a gate transit"; it does not - the party is vanished by the actor
+byte `0x16`, which paints nothing and never reaches tile `0x116` (Section 3.1,
+`RETRACTIONS.md` R507).* The phase model is
 `systems/overworld.md` Section 9.1. General underfoot entry is specified in
 `systems/overworld.md`; this catalog only names storage-domain semantics. The `0x80..0x87` special range is a
 pendulum/restraint/grate/archway fixture range in the LOOK2-backed catalog, not
@@ -927,7 +1007,8 @@ renderer adds `256` to an actor byte before indexing this catalogue
 `0x80..0xFF` and their catalogue indices run `384..511` — Sea Horse (class 16)
 at `384..387` through Shadow Lord (class 47) at `508..511`. The same arithmetic
 reproduces the two ids Section 3.1 confirmed directly from the shipped art:
-the four party classes `0..3` land at `320..335`, and Lord British (class 15)
+the four human combat classes `0..3` land at `320..335` - the person-art
+families of Section 3.1, not the party's own map sprite - and Lord British (class 15)
 lands at `380..383`.
 
 An earlier revision of this section put monsters at `256..383`, matching the
@@ -954,7 +1035,7 @@ Hostile humans (brigands, pirates, hostile guards) sit in the *NPC* range, not t
 
 ## 8. NPC tiles
 
-NPC sprites occupy indices `320..383` - actor bytes `0x40..0x7F`: the four party classes at `320..335`, townspeople at `336..371`, Blackthorn at `376..379` and Lord British at `380..383`. *Retraction (2026-09-04): this section previously said `192..255`, a terrain-half band that holds scenery and fixtures; see `RETRACTIONS.md` R385.* Each NPC type — villager, merchant, jester, child, beggar, guard, wanderer, named NPCs (Lord British, Blackthorn, named ship captains), shadow lords — owns one or more indices, typically two frames per facing for an idle / walk cycle.
+NPC sprites occupy indices `320..383` - actor bytes `0x40..0x7F`: the four person-art families at `320..335` (wizard, minstrel, fighter, avatar - used for townspeople and for party members drawn *individually* in a combat arena, never for the party's own map sprite; Section 3.1), townspeople at `336..371`, Blackthorn at `376..379` and Lord British at `380..383`. *Retraction (2026-09-04): this section previously said `192..255`, a terrain-half band that holds scenery and fixtures; see `RETRACTIONS.md` R385.* Each NPC type — villager, merchant, jester, child, beggar, guard, wanderer, named NPCs (Lord British, Blackthorn, named ship captains), shadow lords — owns one or more indices, typically two frames per facing for an idle / walk cycle.
 
 Cross-reference: `catalogs/npc-roster.md` for per-NPC names, dialogue file links, default schedules, and which location each NPC lives in. The role-name strings ("Avatar", "Villager", "Merchant", "Jester", "Bard", "Child", "Beggar", "Guard", "Wanderer", "Blackthorn", "Lord British") in the resident data anchor the partition.
 
@@ -990,38 +1071,78 @@ Three items — the **sandalwood box**, the **plans for the HMS Cape**, and the 
 
 ## 10. Vehicle tiles
 
-Vehicle sprites live in the actor half: the horse at `272..273` (actor bytes `0x10..0x11`), ships at `288..295` and `300..303`, the skiff at `296..299`, and the magic carpet as a placed object at `283`. *Retraction (2026-09-04): this section previously said `160..191`, a terrain-half band of furnishings and lights; see `RETRACTIONS.md` R387.* Four live vehicle families —
+Vehicle sprites live in the actor half: the riderless horse at `272..273` (actor bytes `0x10..0x11`), the mounted-party frames at `274..277`, ships at `288..295` and `300..303`, the skiff at `296..299`, and the magic carpet as a placed object at `283`. *Retraction (2026-09-04): this section previously said `160..191`, a terrain-half band of furnishings and lights; see `RETRACTIONS.md` R387.* Four live vehicle families —
 **horse** (mounted), **ship**, **skiff**, and **magic carpet** — carry frame
 runs used by the traced command and movement systems. No balloon entry exists in the description table for either half; the earlier
 "adjacent balloon run preserved as art/catalog data" is not attested by it and
 should be treated as absent (R387).
 
-Vehicles appear as active-object entries. Mounting a vehicle moves the avatar's sprite from the party-sprite run (`320..335`; *the earlier "avatar range `496..511`" was the mongbat-to-shadow-lord band and is withdrawn, R387*) to the vehicle run; the original vehicle slot (a dropped horse, a moored ship) clears or remains as a ridable sprite.
+Vehicles appear as active-object entries. **Mounting a vehicle does not move the
+party's sprite into the person-art run `320..335`, and does not draw the party
+as the riderless vehicle object either.** The party is drawn as one sprite that
+changes with the transport:
 
-*Disputed 2026-09-13 (issue #273), the "from the party-sprite run `320..335`"
-half of that sentence only.* The party's own map sprite while on foot is actor
-byte `0x1C`, tile `284`, which is not in that run (`systems/karma.md`
-Section 7; `systems/blackthorn.md` Section 6.1 publishes the same index under
-the same name), and the mounted markers `0x12..0x15` named in the paragraph
-below resolve to tiles `274..277` - inside the band the Section 3 table marks
-placeholder - rather than to the riderless horse pair `272..273` or the
-dropped-carpet object `283`. The coherent reading is that `272..287` is a
-party-vehicle band carrying the riderless and dropped vehicle objects, the
-mounted-party sprites and the on-foot party sprite together, while `320..335`
-is the per-member class art used where party members are drawn individually.
-The on-foot half of that is executed; the mounted half rests on reading the
-vehicle command's writers and the shipped art rather than on mounting anything,
-so the sentence is flagged here rather than rewritten, pending its own audit
-(`OPEN-QUESTIONS.md`).
+| Transport | Tile the party is drawn as |
+|---|---|
+| On foot | `284` |
+| Horse | `274` facing east, `275` facing west — two frames only |
+| Magic carpet | `276` east, `277` west — two frames only |
+| Skiff | `296..299`, one per facing |
+| Frigate | `288..295`, one per facing in each of the two sail states |
+
+`272..287` is therefore a single **party-and-vehicle band**, holding the
+riderless horse pair `272..273` and the dropped carpet `283` as world *objects*,
+the mounted party frames `274..277`, and the party's on-foot sprite `284`, all
+together. The riderless and dropped art is what B-Board consumes and what X-Xit
+leaves behind in the world; it is never what the party is drawn as. Of the two
+ship runs this section lists, only `288..295` is a vehicle the party can board
+or be drawn as — `300..303` is rigged-ship art that no marker writer, no shipped
+roster and no boarding path can ever produce, and boarding an object of that run
+is refused outright (Section 3.1, `systems/vehicles.md` Section 4).
+
+*Retraction (2026-09-13, issue #273).* This paragraph previously said "Mounting
+a vehicle moves the avatar's sprite from the party-sprite run (`320..335`) to
+the vehicle run". Both halves are withdrawn: the sprite leaves `284`, not that
+run, and lands on `274..277`, not on the riderless horse pair or the
+dropped-carpet object. The 2026-09-13 "disputed" flag that stood here is
+resolved by the same evidence. *(The still earlier "avatar range `496..511`"
+was the mongbat-to-shadow-lord band and remains withdrawn, R387.)* See
+`RETRACTIONS.md` R505.
+
+**What the party is drawn as is not always what reaches the screen.** The
+compositor is terrain-aware for the on-foot, mounted-horse, mounted-carpet and
+skiff markers, so the tile under the party can replace the party's own sprite
+before the index is ever formed. The cases the party can actually reach on foot:
+a chair draws the occupied chair of that facing (`304..307`, or one of the
+laden-table variants `308..315` where the neighbouring row qualifies), a bed
+draws the occupied bed (`282`), and the two floor-link tiles draw the
+ladder-with-a-figure tiles (`279`, `280`). On dense forest (`0x0A`, which parts
+of this spec set call tropical forest) and on the standard of Britannia
+(`0xEC`) nothing is drawn at all, so the party disappears into the terrain -
+and dense forest is ordinary walkable overworld ground, not a corner case; a
+bridge suppresses the skiff family only. The remaining arms -
+prisoner frames `352..359` on stocks and manacles, trapped-soul frames
+`316..319` at a mirror - apply to the party's marker in the same way, but the
+movement gate refuses those tiles to the party's own step, so in normal play
+they are reached by other actors rather than by the party (`systems/visibility.md`
+Section 8.3). Neither ship run is terrain-aware. An engine that always paints
+"marker plus 256" at the party's cell draws a standing figure on a chair where
+the original draws a seated one. The full table, its neighbouring-row edge cases
+and its draw accounting are `systems/visibility.md` Section 8.
 
 For B-Board, `systems/vehicles.md` publishes the clean boardable object-byte
 families and transport-state transitions: horse objects `0x10..0x11` become
 mounted horse markers `0x12..0x13`, carpet object `0x1B` becomes carpet marker
 `0x14`, ship objects `0x24..0x27` board as the same ship-facing marker, and
 skiff objects `0x28..0x2B` board as the same skiff-facing marker. Those are
-engine object/transport bytes, not a promise that the sprite-sheet tile indices
-use the same numeric ids. This catalog still owns final visual naming for the
-vehicle art frames and has no promoted balloon boarding path.
+engine object/transport bytes, and the relation to this catalogue's indices is
+now established rather than assumed: an object byte and a marker byte are both
+actor bytes, so each one names the tile `256` above it, which is why the object
+families above and the drawn-tile table earlier in this section are the same
+numbers in two domains. *(An earlier revision of this paragraph declined to
+promise that; it is a promise the `+256` rule of Section 3.1 now supports.)*
+This catalog still owns final visual naming for the vehicle art frames and has
+no promoted balloon boarding path.
 
 Vehicles affect movement and turn timing:
 
@@ -1058,10 +1179,15 @@ The principal effect families:
   each intermediate frame at draw time by combining the moon-gate tile `0xDC`
   with the cell's ground tile, and writes the result into the scratch tile id
   `0x116` for the duration of one blit. Nothing is loaded from an effect plate
-  and no id in the effect range participates. `0x116` is genuinely authored - it
-  is the party-vanishing sprite of a gate transit - but its contents are
-  overwritten and restored around every composed frame, so it must not be
-  catalogued as a gate frame or relied on mid-transition. The phase model,
+  and no id in the effect range participates. `0x116` is genuinely authored, but
+  its contents are overwritten and restored around every composed frame, so it
+  must not be catalogued as a gate frame or relied on mid-transition.
+  *Retraction (2026-09-13, issue #273): both this bullet and the moongate
+  paragraph of Section 6 previously called that artwork "the party-vanishing
+  sprite of a gate transit". It is not. What vanishes the party during the
+  swallow is the **actor byte** `0x16`, which makes the rasteriser paint nothing
+  and therefore never reaches tile `0x116` at all (Section 3.1). See
+  `RETRACTIONS.md` R507.* The phase model,
   including which ground tile is used, is `systems/overworld.md` Section 9.1.
 - **Projectile frames.** Arrow, axe, sling, magic missile sprites in flight. The combat handler walks a projectile from caster to target one cell per render frame.
 - **Splash / explosion / impact.** Multi-frame sprites for fireball impact, lightning hit, explosion clouds, smoke. The effect handler runs through the frames and clears.
@@ -1149,9 +1275,23 @@ The data here is drawn from four sources. Each tile's position in the partition 
   withdrawal of the moongate-animation plate are derived from private analysis
   notes in `u5-decomp/notes/`.
 - Source provenance: that no authored moongate frame family exists but a
-  draw-time sixteen-phase composition does, the identity and dual role of the
-  scratch tile `0x116`, and the scene-dependent choice of ground tile are
-  derived from private analysis in `u5-decomp/notes/`.
+  draw-time sixteen-phase composition does, the identity of the scratch tile
+  `0x116`, and the scene-dependent choice of ground tile are derived from
+  private analysis in `u5-decomp/notes/`. (The "dual role" this bullet used to
+  claim for that tile - that its artwork is also the party-vanishing sprite - is
+  withdrawn, `RETRACTIONS.md` R507.)
+- Source provenance: the party-and-vehicle band of Sections 3, 3.1 and 10 - the
+  drawn tile for each transport family, the separation of the mounted frames
+  from the riderless and dropped objects, the two-stage index pipeline, the
+  separation of actor byte `0x16` from tile `0x116`, the two producers of the
+  person-art runs at `320..335` and the class-letter mapping into them, and the
+  unreachability of the second ship run as a party sprite - is derived from
+  private analysis in `u5-decomp/notes/`, resting on an exhaustive static census
+  of every writer of the party's transport marker across the shipped code files,
+  an independent decode of the shipped description table and of the shipped
+  16-colour tile atlas, a histogram of the shipped location rosters, and
+  emulator execution of the boarding, dismount, movement-announcement and
+  compositor paths for every transport value against each named terrain id.
 
 **From the published Ultima V manual** (`The Book of Lore`, `The Book of Play`):
 

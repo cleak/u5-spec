@@ -445,7 +445,17 @@ render/present the frame that observes both updates.
 ### Overworld
 
 The overworld is the main consumer of ambient animation. Waterfalls, vehicles,
-and random outdoor monsters all use the animation tick. Open water, shoals and
+and random outdoor monsters all use the animation tick. "Vehicles" there means
+placed vehicle *objects* and creature slots: none of the party transport
+marker's **persistent** values is advanced by either animator, so the sprite the
+party is drawn as - on foot, mounted, in a skiff or aboard a ship - changes only
+when a command writes it, and never on a tick of its own (`systems/vehicles.md`
+Section 2, `catalogs/tile-catalog.md` Section 10). The exception is one of the
+*transient* overrides rather than a persistent state: the whirlpool frame raises
+slot zero's tile class high enough to reach the animator's per-class script,
+which is why that one does cycle (`systems/active-objects.md` Section 5). A mounted horse and a carpet have two
+frames, not an animation cycle, and which of the two is showing is decided by
+the last east or west step. Open water, shoals and
 lava do **not** use the frame-selector pass of Section 6 — they have no family
 and no selector — but they are **not static**: they are animated by the
 driver-side pass of Section 12, which scrolls their pixels. *An earlier revision

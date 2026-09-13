@@ -237,14 +237,20 @@ So an actor byte indexes the **upper half of the 512-entry tile space** — the
 creature-and-person bank described in `catalogs/tile-catalog.md` — at an offset
 of 256. One value is reserved: companion byte `0x16` means **draw nothing**,
 and is how a transparent cell is expressed. Nothing else in the actor range is
-special-cased.
+special-cased **by the rasteriser**. Upstream of it the compositor may write a
+*different* actor byte than the one the slot holds - it is terrain-aware for
+several classes, every byte at or above `0x40` included, and substitutes an
+authored occupied-fixture byte or suppresses the stamp outright
+(`systems/visibility.md` Section 8). The `+256` rule then applies to whichever
+byte was written, which is why the two steps have to be read in order
+(`catalogs/tile-catalog.md` Section 3.1).
 
 Applying the `+256` rule, the endgame's actors resolve as follows.
 
 | Actor byte | Drawn tile index | What it depicts |
 |---:|---:|---|
-| `0x40` | 320 | Mage sprite |
-| `0x44` | 324 | Bard sprite |
+| `0x40` | 320 | Wizard sprite (the description table's name for the Mage class family) |
+| `0x44` | 324 | Minstrel sprite (the description table's name for the Bard class family) |
 | `0x48` | 328 | Fighter sprite |
 | `0x4C` | 332 | Avatar sprite |
 | `0x0E` | 270 | Lidded chest — the sandalwood box |
@@ -252,7 +258,7 @@ Applying the `+256` rule, the endgame's actors resolve as follows.
 | `0x7C` | 380 | Crowned, robed, seated figure between two banners — Lord British on his throne |
 | `0x16` | — | Reserved "draw nothing" sentinel |
 
-Note in particular that actor byte `0x44` is the Bard sprite at tile 324, not
+Note in particular that actor byte `0x44` is that person sprite at tile 324, not
 the floor tile whose *terrain* index is also `0x44`; the two live in different
 halves of the tile space and are never confused by the renderer, because a
 terrain byte only ever reaches the renderer through a non-zero grid cell.

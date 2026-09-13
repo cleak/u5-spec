@@ -606,6 +606,23 @@ previously set effect rather than a new producer.
 
 **The slot-zero refresh.** Before the per-slot loop runs, and **only outside combat**, the compositor refreshes slot zero's bytes from live state: the party sprite marker supplies the record's type and sprite bytes, and the party's map position and floor supply its column, row and floor. This ensures the player slot reflects the current frame's truth before anything else is composited; the slot's data may otherwise be stale because the active-object animator runs only on certain ticks. Because that marker lands in **both** the type byte and the sprite byte, the party can never satisfy the type-byte test of the single-sprite-family seated branch above. In combat the refresh does not run — nor does the fog refinement of Section 7 — so in an arena the party record's type, sprite, coordinates and floor are **not** refreshed from the transport marker and the party's map position; the arena setup owns those fields for the duration of the fight. Slot zero's type byte is then whatever the combat subsystem left there; that value was not established here, so the branch's behaviour for the party *in combat* is outside this contract. The walk itself treats slot zero like any other slot in both modes.
 
+**The terrain-substitution table therefore applies to the party's own cell.**
+The party's on-foot marker `0x1C`, its four mounted markers `0x12..0x15` and
+every skiff facing `0x28..0x2B` are all in the terrain-aware set above, so the
+party standing on a chair, on a bed or on one of the two floor links is drawn as
+the occupied-fixture tile rather than as itself, and the party on `0x0A` or
+`0xEC` is not drawn at all - and `0x0A` is ordinary walkable overworld ground,
+so a party walking on foot through it is simply invisible. The stocks, manacle
+and mirror arms apply to the party's marker in exactly the same way, but they
+are unreachable by the party's own step for the reason Section 8.3 gives, so in
+normal play they select for other actors only.
+Both frigate runs are outside the terrain-aware set and are stamped unchanged
+whatever they float over. This is not a special case for the player - slot zero
+reaches the default helper like any other slot - but it is the case an engine is
+most likely to miss, because the party's sprite is the one an implementation is
+tempted to paint directly from the transport marker
+(`catalogs/tile-catalog.md` Section 10).
+
 The end state, after the compositor: the visibility grid contains either real tile bytes resolved by the carve, markers (`0xFF`, `0x1C`, `0xDD`, `0x00`, `0x87`), or direct marker writes from terrain-aware compositor cases. Active-object visual tiles that survive the cell guards normally live in the terrain band behind the `0x00` marker. Both grids are then handed to the renderer.
 
 ### 8.1 When the variant is drawn, and how often

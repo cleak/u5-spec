@@ -1,5 +1,79 @@
 # Ultima V Extraction Inventory
 
+## Issue #273 follow-up - the party-sprite band, audited (2026-09-13 UTC)
+
+The disputed clause flagged by the shrine-pose pass is now answered, and the
+answer is no: **mounting a vehicle does not move the party's sprite into the
+person-art run `320..335`, and does not draw the party as the vehicle object
+either.** The party is drawn as one sprite that changes with the transport -
+tile `284` on foot, `274`/`275` mounted east/west on a horse, `276`/`277` on a
+magic carpet, one of `296..299` in a skiff, one of `288..295` aboard a frigate
+(the lower four sails set, the upper four furled). The riderless horse pair
+`272..273` and the dropped carpet `283` are the world **objects** boarding
+consumes and exiting leaves behind. So `272..287` is one party-and-vehicle band
+carrying objects, mounted frames and the on-foot sprite together, while
+`320..335` is person art with two producers of its own: town rosters, and the
+arena seating pass that draws party members individually.
+
+Four things had to be withdrawn (`RETRACTIONS.md` R505..R508): the catalogue's
+mounting sentence; its claim that the avatar family is "also used by every class
+outside the three above", where in fact nine class letters share four families
+and an unrecognised letter is given no sprite at all; the reading of the
+moon-gate swallow as switching the party sprite "to tile `0x116`", which reads a
+marker byte as an atlas index; and `systems/vehicles.md`'s naming of `0x1D` as
+"the second frame of the on-foot sprite pair", which the shipped art refutes.
+
+Two structural results are worth more than the id corrections. First, **the
+index rule is a two-stage pipeline, not "marker plus 256 with exceptions"**: the
+compositor first chooses which viewport plane the cell goes into and *which*
+byte goes there - often an authored substitute keyed on the terrain under the
+actor - and only then does the rasteriser add `256`, refusing that conversion
+for the single byte `0x16`. Second, **those substitutions apply to the party's
+own cell**: on a chair the party draws the occupied chair of that facing, on a
+bed the occupied bed, on a ladder the ladder-with-a-figure tiles, in stocks or
+manacles a restraint frame, at a mirror a trapped-soul frame, and in tropical
+forest or on the standard of Britannia nothing at all. An engine that paints
+"marker plus 256" at the party cell draws a standing figure on top of a chair
+where the original draws a seated one. `systems/visibility.md` Section 8 already
+published the table; nothing had said it reaches the player's slot.
+
+Also settled: the two suppressions differ and both are needed - actor byte
+`0x16` leaves the slot live and unpainted so the cell keeps its pixels (which is
+why the moon-gate swallow uses it), while a marker of zero empties the slot so
+terrain shows through; neither animator advances any persistent marker value, so
+the party's frame changes only when a command writes it; and the second ship run
+`300..303` is authored, named a ship by the description table, and unreachable
+as a party sprite by every route tested - boarding refuses it, no marker writer
+produces it, no roster places it, and the compositor treats it as terrain-blind.
+
+One naming correction and one flag: the catalogue's rows for `320..323` and
+`324..327` now carry the shipped strings **wizard** and **minstrel** instead of
+the class names "mage" and "bard", and that leaves the row for `348..351`
+("bard") disagreeing with `catalogs/npc-roster.md`, which reads the same table
+as "a minstrel". That row was not re-decoded here and is flagged in place.
+
+One propagation the audit turned up on its own: `systems/karma.md` Section 7
+said flatly that the stored on-foot value "is also what the overworld paints for
+a party walking on foot". Dense forest is ordinary walkable overworld ground and
+is one of the two ids the compositor suppresses on, so that sentence is scoped
+in place and carries its own retraction row (R509) - a party walking on foot
+through dense forest is not drawn at all.
+
+Changed: `catalogs/tile-catalog.md` Sections 3, 3.1, 6, 8, 10 and 11;
+`systems/vehicles.md` Sections 2, 4 and 5; `systems/overworld.md` Section 9.2;
+`systems/active-objects.md` Sections 5 and 12; `systems/visibility.md`
+Section 8; `systems/animation.md` Section 8; `systems/combat.md` Section 5;
+`systems/karma.md` Section 7; `systems/endgame.md` Section 4;
+`RETRACTIONS.md` (R505..R509); `OPEN-QUESTIONS.md`.
+
+Open afterwards, and indexed in `OPEN-QUESTIONS.md`: what produces the second
+ship run; what tile `285` and marker `0x1D` are; the frame distribution inside
+the stocks, manacles and mirror substitution families; where the one
+visibility-plane substitution terrain occurs in shipped maps; a seated party
+member composited rather than only seated; the three unexecuted Blackthorn
+marker writes; the `348..351` naming; and that every art reading here is of the
+EGA atlas with the display driver stubbed.
+
 ## Issue #273 - the shrine approach walk's two pose tiles (2026-09-13 UTC)
 
 `systems/karma.md` Section 7 specified the approach walk in enough detail to
@@ -1962,7 +2036,7 @@ and overlay behavior.
 
 | Catalog | Status | Spec doc |
 |---------|--------|----------|
-| Tile catalog | Complete | `catalogs/tile-catalog.md`; all five hundred and twelve top-down tile indices have class assignments and storage-domain contracts, including the Sceptre-dissolvable `0x70..0x7F` barrier/field family, resident terrain-query model, visibility propagation ownership boundary, LOOK2 surface/town look-string ownership, the separate packed `DUNGEON.DAT` cell-encoding boundary, vehicles, fields, broad sprite families, dynamic moongate frame composition with no authored effect-frame family, the `0xDC` terrain/Dragon active-object storage-domain split, the `0x80..0x87` fixture-range correction, the completed terrain-half sentinel-row roster with the rule that a sentinel row implies nothing about drawability, the actor-byte-plus-`0x100` collision worked through for the Orc/Ettin/Headless runs, and the boundary that special-trigger tile ids alone do not prove outdoor ascent behavior. Natural-moongate entry is specified by the overworld contract. Per-frame visual attribution, marker-label polish, render-only sentinel naming, field-frame duration checks, and pixel/runtime trace cross-checks are presentation/catalog QA rather than gameplay-spec blockers. (**issue #273, 2026-09-13**: tiles 284 and 364..367 gain shipped-art confirmations in Section 3.1 - the party's on-foot map sprite and the beggar run the shrine kneel animates through - the `+256` rule gains the mechanism that produces it, and the vehicle paragraph's "mounting moves the sprite out of `320..335`" clause is flagged as disputed pending its own audit.) |
+| Tile catalog | Complete | `catalogs/tile-catalog.md`; all five hundred and twelve top-down tile indices have class assignments and storage-domain contracts, including the Sceptre-dissolvable `0x70..0x7F` barrier/field family, resident terrain-query model, visibility propagation ownership boundary, LOOK2 surface/town look-string ownership, the separate packed `DUNGEON.DAT` cell-encoding boundary, vehicles, fields, broad sprite families, dynamic moongate frame composition with no authored effect-frame family, the `0xDC` terrain/Dragon active-object storage-domain split, the `0x80..0x87` fixture-range correction, the completed terrain-half sentinel-row roster with the rule that a sentinel row implies nothing about drawability, the actor-byte-plus-`0x100` collision worked through for the Orc/Ettin/Headless runs, and the boundary that special-trigger tile ids alone do not prove outdoor ascent behavior. Natural-moongate entry is specified by the overworld contract. Per-frame visual attribution, marker-label polish, render-only sentinel naming, field-frame duration checks, and pixel/runtime trace cross-checks are presentation/catalog QA rather than gameplay-spec blockers. (**issue #273, 2026-09-13**: tiles 284 and 364..367 gain shipped-art confirmations in Section 3.1 - the party's on-foot map sprite and the beggar run the shrine kneel animates through - the `+256` rule gains the mechanism that produces it, and the vehicle paragraph's "mounting moves the sprite out of `320..335`" clause is flagged as disputed pending its own audit.) (**issue #273 follow-up, 2026-09-13**: that audit is done and the clause is withdrawn - `RETRACTIONS.md` R505..R508. Section 10 now publishes the party's drawn tile per transport family and the `272..287` party-and-vehicle band; Section 3's rows for the band carry real classes instead of `placeholder`; Section 3.1 publishes the two-stage index pipeline, the separation of actor byte `0x16` from tile `0x116`, what the four person-art families at `320..335` are and the nine-letters-to-four-families arena mapping, and shipped-art rows for `274..277`, `283`, `285` and `300..303`; the `320..323` and `324..327` rows take the shipped strings wizard and minstrel, which leaves the `348..351` row flagged against `catalogs/npc-roster.md`. Remaining: the producer of the second ship run, the meaning of tile 285, the substitution families' frame distributions, and non-EGA art parity.) |
 | NPC roster | Complete | `catalogs/npc-roster.md`; location rosters, public scene/place crosswalk, schedule summaries, AI/mode byte meanings, keyword counts, complete occupied tag byte catalogue, major named NPCs, and the intentional punctuation-only `CASTLE:1` display entry are covered at roster-catalog depth. Full keyword graph integration without dialogue dumping remains quest/conversation catalog validation rather than an NPC roster blocker. |
 | Quest graph | Complete | `catalogs/quest-graph.md`; major artifact, word, shard, mantra, shrine/Codex urn, social, utility-item, companion, and endgame dependencies are covered without dialogue text, including the Doom `VERAMOCOR` boundary as mechanically authored Word-of-Power rule data rather than a confirmed NPC-taught clue. The public VM contract covers per-scene branch flags, moral-standing threshold branches, gold-payment gates, global action-letter grants, and label-scoped follow-up prompts; shipped-data reachability comparison and embedded/trailing-record triage are QA/data-authoring aids rather than gameplay-spec blockers. |
 | Gazetteer | Complete | `catalogs/gazetteer.md` |
