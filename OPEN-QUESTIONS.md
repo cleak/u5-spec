@@ -20,7 +20,7 @@ Two rules govern what belongs here:
   file when the owning document is updated, with a `RETRACTIONS.md` row if the
   answer reverses published text.
 
-Last reconciled: 2026-09-12. The 2026-09-05 reconciliation had closed every
+Last reconciled: 2026-09-13. The 2026-09-05 reconciliation had closed every
 `trace` item; the issue #262 Klimb and dungeon-object passes opened nine new
 ones (section 3) and one new capture item (section 2), and the issue #262
 text passes (Blink, moonstone bury/recover, Get/Search/eat, conversation
@@ -38,7 +38,9 @@ four trace items (section 3) and one capture item (section 2), and extended the
 calibration-threshold capture item with a second dependent. The issue #269
 rescue-narration pass opened four trace items and one capture item and moved the
 `Not dead!` branch to section 1 as an owner decision; the issue #270
-prompt-cadence pass opened four trace items and one capture item. What else
+prompt-cadence pass opened four trace items and one capture item, and the issue
+#270 exit-handoff follow-up opened seven more trace items (section 3) and two
+capture items (section 2). What else
 remains needs an owner decision (section 1) or a change of scope (section 4).
 
 ## 1. Owner decisions
@@ -89,6 +91,13 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 | The issue #270 prompt-cadence contract carries no raster validation, no timing reproduction and no stock-save replay; the reporter's capture harness and the point in the frame it sampled were not inspected. Everything published there is executed original code with an intercepted display driver. *(Opened 2026-09-12, issue #270.)* | `systems/text-output.md` Sections 10.2 and 10.4 | A stock save with the exact keystrokes for each reported beat and frames at the idle point, plus the harness's sampling rule. |
 
 Closed 2026-09-05 by live observation under DOSBox: the three suspected NPC pursuit-stepper defects. None has an observable effect; the stepper's real contract (gate below four, east/north/west/south first fit, no move when nothing improves, event on a later invocation after an NPC's own move creates adjacency) is now published in `systems/npc-schedules.md` Section 9.
+
+Opened 2026-09-13 by the issue #270 exit-handoff pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| How often the stats panel repaints while the party is aboard a vessel whose hull reads 100 or more, and therefore how visibly the message history creeps upward in play. The panel behaviour is executed; its cadence in a real session is not measured. | `systems/stats-panel.md` Sections 2.1 and 6 | A session capture with a three-digit hull, recording the message window across a sequence of repaints. |
+| The exit-handoff row accounting is reproduced by mechanism from the reporter's stated screen state, not replayed from their save, and it carries no raster or timing validation. | `systems/doors-and-z-transitions.md` Section 12.1 | A stock save at a dungeon's entrance level with the exact key sequence, plus frames at the climb key and at the first overworld prompt. |
 
 ## 3. Needs a further static trace
 
@@ -218,6 +227,18 @@ Opened 2026-09-12 by the issue #270 prompt-cadence pass:
 | The combat loop's own prompt cadence. Only its single feed-and-marker site was located; nothing is claimed about when combat emits its pair. | `systems/text-output.md` Section 10.2; `systems/combat.md` Section 4.1 | Execute the combat prompt path and record where the pair is emitted and what gates it. |
 | The scan behind the overworld prompt flag's locality negative - that every read and write of it lives in the overworld module - covers byte patterns only. An indirect write through a pointer, a register-indirect write, or a write that is not DS-relative was not searched. | `systems/text-output.md` Section 10.2 | Establish the write-site census for that flag by a means that covers indirect writes. |
 | How many command-letter arms leave the message row open at a nonzero column. The executed sweep's figure is stub- and residency-dependent - every overlay handler was silenced and two letters emitted nothing because their overlays were not loaded - so no number is published. | `systems/text-output.md` Section 10.4; `systems/commands.md` Section 5.2 | Re-run the sweep with the real overlay handlers resident, per mode. |
+
+Opened 2026-09-13 by the issue #270 exit-handoff pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Whether a hull condition of 100 or more is reachable for a vessel the **party** holds. The panel's overflow arm is executed and is a contract at that value, but the delivered Frigate starts at 99 and the published damage rule only lowers the byte, so the arm's reachability in stock play is unestablished. | `systems/stats-panel.md` Section 2.1; `systems/vehicles.md` | Census every writer of a vessel record's hull byte - shop delivery, spawners, boarding, combat and the shipped object tables of both planes - and report the value ranges each can produce for a party-held vessel. |
+| Whether any dungeon mouth's exterior cell has a waterfall in the cell immediately south of it. If one does, the first overworld prompt after that dungeon's exit is suppressed and the beat costs five advances rather than six. The bypass was demonstrated by executing the branch, not by reaching it from a real exit. | `systems/doors-and-z-transitions.md` Section 12.1; `systems/overworld.md` Section 8 | Check the eight exterior entrance coordinates against the waterfall family on both shipped world maps. |
+| What the falls hand-off itself emits when it is entered from the overworld input helper ahead of the prompt gate. It is an endpoint in both probes, so the bypass case shows only that the prompt block is skipped, not what replaces it. | `systems/text-output.md` Section 10.2; `systems/overworld.md` Section 8.1 | Execute the falls chain from that earlier entry point with every emission logged. |
+| On the Underworld plane, whether anything repaints the two screen rows the dungeon's level and facing labels occupied, given that neither the top header band nor the wind banner is painted there. The viewport rasteriser is an endpoint in every probe on this path. | `systems/doors-and-z-transitions.md` Section 12.1; `systems/dungeon-mode.md` Section 4.1 | Execute an underworld arrival with the full-screen window's cells recorded, with the rasteriser live. |
+| The dungeon-entry advance count and the chrome-overwrite reasoning were not re-executed in the verification pass; the covering arithmetic was checked statically only. | `systems/doors-and-z-transitions.md` Section 12.1; `systems/commands.md` Section 5.5 | Re-execute the surface-to-dungeon entry beat and the overworld re-entry chrome in a second harness, as the exit beat was. |
+| The dungeon turn loop's own post-climb break path is still read from the bytes rather than executed, in both passes. It needs an overlay-sharing arrangement neither harness provides. | `systems/dungeon-mode.md` Section 13.4 | An execution harness that can stage the two overlays sharing the loop's base, or a live capture across the break. |
+| Whether the stats panel's ship row can reach the wrapping column through a transport marker outside the ship family that still satisfies the same test. Only the family members and a few non-members were exercised. | `systems/stats-panel.md` Section 6 | Sweep the whole marker byte range against the row's selection test. |
 
 ## 4. Deferred by scope
 

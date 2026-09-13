@@ -1002,6 +1002,17 @@ assume the opposite: the same helper *does* redraw that block on ordinary
 surface turns, and an implementation that repaints it here loses the message
 window's contents at exactly the moment the player needs to read them.
 
+*(Extended 2026-09-13, issue #270.)* That guard is not peculiar to the two
+outdoor chains. The helper runs on **every** entry into overworld mode and
+applies the same two conditions each time, so the same degeneration happens on
+a dungeon exit that lands in the Underworld and on the Ararat boundary exit,
+both of which were executed: no top header band is painted on arrival. The wind
+banner's own routine applies the same signed test to the same byte and is
+skipped alongside it (`systems/weather.md` Section 2.1), which is why an
+underworld arrival shows neither piece of chrome. Neither omission costs a
+message-window line feed or a scroll, so the message history is unaffected
+either way (`systems/doors-and-z-transitions.md` Section 12.1).
+
 Source provenance: derived from private analysis in `u5-decomp/notes/` -
 the falls, whirlpool and plane-change wording pass, which re-read every literal
 from the shipped resident data image, disassembled both handlers whole, walked

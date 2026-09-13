@@ -45,14 +45,42 @@ zero effect code selects the graphics-only plain-band repaint.
 
 The refresh emits no message-window text, death line, or status narration, and
 plays no sound. Its text consists only of the panel fields specified below. It
-also **requests no scroll** and issues no display command against the message
-window's rectangle, which is what lets a caller repaint the panel in the middle
-of an unfinished message-window frame without disturbing it - the rescue
-cinematic of `systems/blackthorn.md` Section 7 does exactly that, once per
-restored member. One executed repaint issued 122 driver commands, all of them
-glyph blits or single-scanline fills and none of them a scroll. *(Added
-2026-09-12, issue #269. Whether a panel fill's coordinates can ever fall inside
-the message-window rectangle is separately open; `OPEN-QUESTIONS.md`.)*
+issues no display command against the message window's *own* rectangle, and on
+every arm but one it requests no scroll at all, which is what lets a caller
+repaint the panel in the middle of an unfinished message-window frame without
+disturbing it - the rescue cinematic of `systems/blackthorn.md` Section 7 does
+exactly that, once per restored member. One executed repaint issued 122 driver
+commands, all of them glyph blits or single-scanline fills and none of them a
+scroll. *(Added 2026-09-12, issue #269. Whether a panel fill's coordinates can
+ever fall inside the message-window rectangle is separately open;
+`OPEN-QUESTIONS.md`.)*
+
+**The one arm that does request a scroll.** *(Published 2026-09-13, issue
+#270.)* The counters row's ship variant of Section 6 is not bounded like the
+rest of the panel. Its label starts mid-row and is followed by the hull number
+at its natural width, so a **three-digit hull** writes the stats window's last
+writable column and carries that window's cursor onto the panel's bottom row.
+The date row's own leading line feed (Section 7) is then emitted from that
+bottom row, overruns it, and requests a scroll under the **stats window's own**
+pixel rectangle. Because the display driver selects its fixed right-strip body by the
+requested left edge alone, and both right-hand windows share that left edge,
+that request lifts the already-painted message pixels by one cell row while the
+message cursor stays exactly where it was - the displacement mechanism of
+`systems/display-driver-abi.md` Section 9.5 and `systems/text-output.md`
+Section 10.5. The conditions are: the panel actually repainting, a non-combat
+scene, a transport marker in the ship family, and a hull of 100 or more.
+
+*This withdraws the earlier flat statement that the full-panel refresh
+"requests no scroll", which rested on a single executed repaint; see
+`RETRACTIONS.md` R502.* The no-scroll property still holds for every hull below
+100, for every non-ship transport marker, and in combat-class scenes, which is
+every case executed before this pass. Whether a hull the **party** holds can
+reach 100 in stock play is a separate question and is **not** settled here: the
+shipwright-delivered Frigate starts at 99 and the published damage rule only
+ever lowers the byte (`systems/vehicles.md`), so the arm may be reachable only
+through a vessel that acquired its hull some other way. That reachability
+question is in `OPEN-QUESTIONS.md`; the panel behaviour itself is executed and
+is a contract wherever the byte does hold 100 or more.
 
 The panel does **not** repaint the sky strip, the wind banner, or the
 game-screen frame. Those have their own owners and their own cadences.
@@ -200,15 +228,18 @@ in `OPEN-QUESTIONS.md`; nothing in this section depends on the answer.
 
 The panel lives in the stats text window, cell columns 24 through 39, rows 1
 through 9 (`text-output.md` section 10.1). Inside that window it writes a
-**fifteen-column** field, absolute columns 24 through 38. Column 39 is never
-written by *this* panel content, because the roster and counter boxes drawn by
-the game-screen frame are fifteen cells wide: their right rule sits at pixel
-`x = 312`, the first pixel of column 39 (`display-driver.md` section 7). That is
-a statement about the resting roster, counters and date rows, not about the
-window: the item picker borrows the same window and a list row whose label ends
-on the window's last writable cell does write column 39
+**fifteen-column** field, absolute columns 24 through 38, in all but the two
+cases below. That is because the roster and counter boxes drawn by the
+game-screen frame are fifteen cells wide: their right rule sits at pixel
+`x = 312`, the first pixel of column 39 (`display-driver.md` section 7). The
+two exceptions: the counters row's ship variant writes column 39 at a
+hull condition of 100 or more and wraps onto the row beneath (Sections 2.1 and
+6), and the item picker, which borrows the same window, writes column 39 for a
+list row whose label ends on the window's last writable cell
 (`inventory.md` Sections 4.4 and 4.5). The earlier unqualified "column 39 is
-never written by the panel" is withdrawn (R485).
+never written by the panel" is withdrawn (R485), and the narrower reading that
+survived it - that the resting roster, counters and date rows never write it -
+is withdrawn with the ship variant (R502).
 
 | Absolute row | Contents |
 |---:|---|
@@ -316,8 +347,9 @@ selector, not from a second presentation cache that can diverge from combat.
 
 ## 6. The Counters Row
 
-Absolute row 8, columns 24..38. It is written left to right in one pass and
-always fills all fifteen cells.
+Absolute row 8, columns 24..38 - with the one exception at the end of this
+section. It is written left to right in one pass and always fills all fifteen
+cells.
 
 **Food.** The literal `F:` occupies columns 24 and 25. The saved food counter
 follows immediately at its natural decimal width, with no field padding. Spaces
@@ -356,6 +388,15 @@ replaced in place by the ship's hull condition: the literal `Ship:` in columns
 32..36, then the hull value at its natural width, then one extra space when the
 hull is below ten. The result fills columns 32..38 for hull values 0..99. This
 variant does not use the gold group's leading-space ladder.
+
+**Three-digit hulls run past the field.** *(Published 2026-09-13, issue #270.)*
+The row has no clamp: at a hull of 100 or more the third digit lands in column
+**39**, the window's last writable cell, and the cursor wraps onto the panel's
+bottom row. The row sequence's next line feed is then emitted from that bottom
+row and overruns it, which requests the strip scroll specified in Section 2.1 -
+so a repaint in this state lifts the message window's painted history by one
+row every time it runs. An implementation that clips this row at column 38, or
+that models the panel as incapable of scrolling, diverges on both counts.
 
 ## 7. The Date Row
 

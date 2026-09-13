@@ -1180,10 +1180,15 @@ writes and erases a glyph in that cell and disturbs nothing else.
 Two preconditions belong with that frame. The last six rows are identical only
 when every in-party member is Dead - each member that is not adds a `Not dead!`
 line appended directly onto `are intoned.` with no separator, displacing the
-tail of the frame. And the per-member stats-panel repaints cannot disturb it: a
-repaint issues no scroll at all and no command against the message window's
-descriptor, and it ends by reselecting the message window with the message
-cursor untouched (`systems/stats-panel.md` Section 2.1). This describes the
+tail of the frame. And the per-member stats-panel repaints do not disturb it in any
+executed state: a repaint issues no command against the message window's
+descriptor, ends by reselecting the message window, and leaves the message
+cursor untouched (`systems/stats-panel.md` Section 2.1). *(Scoped 2026-09-13,
+issue #270: the panel has one arm that does request a scroll - a ship-family
+transport marker with a hull of 100 or more - and it would lift this frame by
+one cell row per repaint while leaving the cursor where it is. The frame's rows
+and their order are unaffected; only their height on screen would be. See
+`RETRACTIONS.md` R502.)* This describes the
 window at the instant the cinematic returns; whatever the castle location load
 then prints or clears is that load's business.
 
