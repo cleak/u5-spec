@@ -146,6 +146,25 @@ dispatcher, no prompt, and no panel. An implementation may simply not generate
 these codes; if it does generate them, it should keep the block distinct so
 nothing mistakes a function key for a direction or a command.
 
+**The rule applies inside prompts, not only to movement.** *(Added 2026-09-13,
+issue #272.)* The direction mark is set by the keyboard layer and the
+translation is done by the shared command reader, so any prompt built on that
+reader sees a direction code rather than a digit whenever the modifier is held.
+The executed case is the reagent mixer's two-digit quantity prompt: with
+NumLock held, `1` and `2` are translated away and produce no echo at all, `5`
+still echoes because it has no direction, and `4` arrives as the west code -
+which that prompt treats as an erase key, so it removes a digit instead of
+adding one (`systems/magic.md` Section 6 step 4). With no modifier held the
+same keys are ordinary digits. An engine that models no modifier state will
+accept quantities the original refuses. The mirror consequence is that a
+prompt's direction-code behaviour cannot be reached by typing the control
+character that shares the code's numeric value: an ordinary typed control byte
+in that range is biased into the high pseudo-code block before any prompt sees
+it, exactly as above, so it produces no direction and no erase. *(Scope:
+executed against a reconstruction of the shipped poll routine's own decisions
+with the reported modifier byte set and clear, not a capture on hardware or in
+an emulator. The dungeon exception below was not re-executed by that pass.)*
+
 The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger. Dungeon mode is the one exception to the whole rule: it does not run the digit-to-direction translation at all, so shifted or NumLock-ed top-row digits stay ordinary digits there and select the solo party member like unshifted ones.
 
 The extended-key translation table accepts all four arrow keys plus Home, End,
@@ -217,6 +236,28 @@ Enter is pressed, and Enter then submits whatever remains, including an empty
 buffer. These prompts may disable the normal
 type-ahead flush while active so a typed word can be drained across repeated
 single-key reads.
+
+**The typed-number reader, as executed.** *(Added 2026-09-13, issue #272.)*
+The numeric reader is parameterised by one thing, the number of digits it will
+accept, and the mixer's quantity prompt sets that to two. It prints nothing of
+its own before or while it waits - no
+line feed, no prompt marker, no cursor repositioning - so the caller's prompt
+text and the animated cursor in the cell after it are the whole of what the
+player sees, and the reader's only output is the echo. Its key rules, all
+executed: digits up to the cap are echoed and advance the column, and a digit
+past the cap is dropped; Backspace erases one echoed digit in place; **the west
+direction code erases one as well**, which is what a left arrow, an unmodified
+numpad west key or a modifier-held top-row `4` delivers (Section 5); Escape
+erases the whole echo and returns the cursor to the first echo cell **without
+cancelling the prompt**; a leading `+` or `-` is accepted only in the first
+position; Return is the only exit, and an empty buffer submits as zero; and
+every other key - space, letter, punctuation - is discarded with no echo and no
+other effect, leaving the prompt waiting. A caller that accepts a signed value
+here is responsible for what it means: the mixer compares it against unsigned
+counters, so a negative quantity is always too large and always retries
+(`systems/magic.md` Section 6 step 4). Two prompts reach this reader directly
+and both cap at two digits; `systems/text-output.md` Section 10.6 scopes that
+census.
 
 Single-character prompts (Y/N, a digit, a target-slot letter) run the loop exactly once. The prompt is responsible for validating the returned byte and looping if it is unacceptable; the wait-for-input routine itself does no validation. Numeric prompts accumulate digits into an integer (multiply by ten, add the digit) and treat backspace as integer division by ten.
 

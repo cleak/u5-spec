@@ -2214,6 +2214,19 @@ nothing-served outcomes end the visit directly (R434).
 The earlier six-record pool and `0..5` quote-selection range are withdrawn;
 all seven records `77..83` are reachable through `0..6` (R432).
 
+**Which reader takes the number.** *(Added 2026-09-13, issue #272.)* The
+provision question is one of the two prompts in the program that reach the
+shared two-digit typed-number reader; the reagent mixer's quantity question is
+the other, and it is the one that was executed. That reader's key rules apply
+here - two digits accepted and a third dropped, Backspace **and the west
+direction code** each erasing one, Escape erasing the whole echo without
+cancelling the prompt, a leading sign only in the first position, Return the
+only exit with an empty entry submitting as zero, and every other key discarded
+in silence - and the reader itself emits nothing but the echo, so the stored
+text above is the whole of what the prompt paints (`systems/input.md`
+Section 8; `systems/magic.md` Section 6 step 4). The rendering of *this*
+prompt was not separately executed (`OPEN-QUESTIONS.md`).
+
 **Zero-quantity transcript and effects.** After the seven-way provision quote
 and quantity prompt, zero prints `\n\n"Hrumph."` and returns immediately;
 there is no dismissal wait or trailing line feed. The caller refreshes stats,

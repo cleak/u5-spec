@@ -1,5 +1,78 @@
 # Next Steps for u5-spec
 
+## Issue #272 - the mixer's quantity prompt, executed (2026-09-13 UTC)
+
+Two captures of the same `How much? ` prompt disagreed about whether a marker
+row sits beneath it. They are the **same prompt sampled one beat apart**, and
+nothing published had to be withdrawn to reconcile them. The capture with
+nothing under the prompt is the prompt *waiting*; the capture with an end-cap
+and a cursor under it is the state after the command returned and the next
+command prompt emitted its own feed-and-marker pair, which scrolled the window
+and put the marker on the new bottom row. There is exactly one occurrence of
+that wording in everything the game installs, so there is no second producer to
+attribute either capture to.
+
+Newly published in `systems/magic.md` Section 6 step 4: the selection-accept
+echo is a stored string of **two line feeds and no text**, so exactly one row
+always separates `Type M to mix:` from the prompt, and that row is **not
+cleared** - it keeps whatever the history left there, which is why one capture
+shows it blank and the other does not. The prompt literal is ten cells
+including its trailing space, with no feed of its own at either end, and fits
+one row only because the message window is sixteen cells wide; the printer
+breaks it like any other text when fewer cells remain. The reader is the shared
+two-digit typed-number reader, which emits **no feed, no marker and no cursor
+move** - only the echo. The animated cursor waits in the cell immediately after
+the trailing space and is erased in place, so the digit lands there and the
+echo reads on the prompt's own row. The full key table is published: the cap of
+two, the discarded third digit, Backspace **and the west direction code** as
+erase keys, Escape as erase-without-cancel, a leading sign accepted only first,
+Return as the only exit, and every other key silently discarded. Digits are
+gated by the keyboard modifier state - with NumLock held `1` and `2` produce no
+echo, `5` still echoes and `4` erases - so a port with no modifier state
+accepts quantities the original refuses. A typed control byte cannot reach the
+west-code arm, because typed control values are biased into the high pseudo-code
+range first. No end-cap is emitted anywhere in the mix command, on any exit. A
+zero quantity, typed or as a bare Return, prints nothing further **and is
+tested before the empty-selection test**, so `Nothing to mix!` needs both an
+empty selection and a positive quantity. A negative quantity is accepted by the
+reader but compared unsigned, so it always takes the shortfall notice and can
+never consume a reagent. `Mixing...` opens the row directly under the echo
+because the wrap printer spends one feed for it.
+
+The general rule the issue asked for is stated in `systems/text-output.md`
+Section 10.5 and `systems/commands.md` Section 5.1: **a prompt's feed-and-marker
+pair does scroll when the cursor is already on the bottom row.** The feed is
+output and is what scrolls; nothing tests whether the marker will fit; the
+marker always appears, is never deferred until something else scrolls, and is
+never itself the thing that scrolls. The contrary rule proposed in the issue is
+refuted by execution from all thirteen message-window rows. Section 10.2 now
+also says that a prompt a command parks at mid-run emits neither feed nor
+end-cap, and that a marker row beneath such a prompt belongs to the next
+command cycle; Section 10.4 states that a feed never erases and that a
+feeds-only string spends one row per feed; Section 10.6 scopes the
+typed-number column to the two prompts that reach that reader; and
+`systems/input.md` Sections 5 and 8 carry the modifier gate inside prompts and
+the reader's executed key rules.
+
+**No retraction row.** Every one of these is a gap filled or a scope made
+explicit, and the sentence the issue asked about - the digit "echoes
+immediately on that same row" - is correct as published and is about where the
+digit lands; it is restated so it cannot be read as a claim that the prompt
+suppresses a row. The step 5 ordering is likewise a clarification: step 4
+already published the zero-quantity exit ahead of step 5, and the order is now
+stated outright rather than left to be inferred from the step numbering.
+
+Open afterwards: the reporter's first capture puts the instruction line one row
+lower than the original can, and that is on the fixture's side - its harness and
+sampling point were not inspected and the shipped images cannot settle it. Also
+open: the tavern's provision question, the one other prompt that reaches the
+same reader, was not itself executed - its key rules are the reader's and its
+stored text was already published, but its rendering was not re-run; which
+reader the other numeric-looking prompts use is unattributed; the modifier gate was executed against a reconstruction of
+the poll routine's decisions rather than a live capture; and whether a mode loop
+can re-poll after the command without emitting the pair is still the town
+re-poll item from issue #270. All are indexed in `OPEN-QUESTIONS.md`.
+
 ## Issue #270 follow-up - what the dungeon exit costs the message window (2026-09-13 UTC)
 
 The reported symptom - after a Klimb out of a dungeon's entrance level the

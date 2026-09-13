@@ -499,6 +499,17 @@ spell?` or under an ASK-WHO question is part of the exchange the prompt opened,
 not a new command cycle, so it gets neither the line feed nor the end-cap.
 *(Clarified 2026-09-06, issue #203.)*
 
+The same holds for a **prompt a command parks at in the middle of its own
+run**. The mixer's `How much? ` quantity prompt is the executed case: the
+command emits no end-cap anywhere, on any of its exits, and the reader it waits
+in emits no feed, no marker and no cursor move of its own, so while that prompt
+waits the window shows the prompt row with the animated cursor on it and
+nothing underneath. A marker-and-cursor row that appears *beneath* such a
+prompt in a capture is the **next** command cycle's pair, emitted after the
+command returned, and a capture that shows one has sampled a later beat rather
+than a different prompt (`systems/magic.md` Section 6 step 4).
+*(Added 2026-09-13, issue #272.)*
+
 **Where the pair is emitted, and when it is skipped.** The line feed and the
 marker are always adjacent and always emitted as a pair, but they are not
 emitted from one place: seven sites in the shipped program emit them. Each
@@ -629,6 +640,27 @@ modal wait of its own first, and the blank is on screen only once that wait has
 been satisfied and the command has returned. The paragraph on deferral below
 gives that case in full.
 
+**A line feed moves the cursor; it never erases.** *(Added 2026-09-13, issue
+#272.)* Neither the row a feed leaves nor the row it lands on is cleared, so a
+row that an advance skips over keeps whatever was already painted there. A
+sequence that steps the cursor down past a row therefore renders as a blank
+separator only when the window's history happens to be empty at that row; with
+a full window the same sequence leaves old text visible between the two new
+rows. Two consequences worth stating for implementers: a gap in a capture is
+evidence about the history above it, not about the producer; and an engine that
+blanks on advance will diverge from the original exactly where the original's
+window is full.
+
+**A string that is only line feeds spends one row per feed.** *(Added
+2026-09-13, issue #272.)* The full-row suppression of Section 6 acts on a
+collected chunk, and a string carrying no visible bytes never collects one, so
+nothing suppresses these feeds; the per-cell emitter's line-feed handling is
+unconditional in any case. The executed case is the reagent mixer's
+selection-accept echo, a stored string of two feeds and no text: it always
+costs two rows, so exactly one row separates the instruction line it closes
+from the prompt printed after it, from every starting cursor row
+(`systems/magic.md` Section 6 step 4).
+
 **The blank belongs to the next prompt, not to the result.** On a turn whose
 per-turn epilogue prints - a trapdoor, poison, burning or attacked notice - the
 blank falls under that notice rather than under the command's own result,
@@ -744,6 +776,27 @@ spends six message-window advances in one beat and therefore scrolls the strip
 six times in a row, so the vacated bottom row inherits the gutter row six times
 running (`systems/doors-and-z-transitions.md` Section 12.1).
 
+**A prompt's feed-and-marker pair does scroll from the bottom row.** *(Added
+2026-09-13, issue #272, answering a rule proposed against this section.)* When
+a command prompt is opened with the cursor already on the message window's
+bottom row, the pair of Section 10.2 scrolls the window and draws its end-cap
+on the new bottom row. The division of labour is the one this section already
+states: the **feed** is output, and it is the feed that carries the cursor past
+the bottom row, requests the scroll and leaves the cursor clamped to the bottom
+row; the marker is then drawn there. Nothing tests whether the marker will fit
+before emitting it, and on prompt paths nothing emits one member of the pair
+without the other. So three things follow, and an engine should implement all
+three: the marker **always** appears; it is never deferred until something else
+scrolls; and it is never itself the thing that scrolls. The contrary rule - that
+the marker is drawn only where it already fits and its placement never causes a
+scroll - is refuted by execution from all thirteen message-window cursor rows:
+every row but the bottom one drew the marker one row lower with no scroll, and
+the bottom row scrolled exactly once and drew the marker on the new bottom row.
+The pair draws the marker alone; the animated cursor beside it belongs to the
+key wait that follows (Section 10.6). The pair was invoked directly rather than
+by running a full turn of a mode loop, and combat's own prompt cadence was not
+executed.
+
 **No cursor is adjusted to compensate.** The emitter's overflow tail takes the
 active window's descriptor from a single read at entry and decrements only that
 descriptor's cursor row before requesting the scroll; it reads and writes no
@@ -797,6 +850,20 @@ Backspace and Escape erase rather than overwrite: the helper repaints the
 editable tail with spaces in place, with cursor advance suppressed, and then
 repositions the cursor, wrapping back to the end of the previous row when it
 passes column 0.
+
+*How widely the typed-number column is used (added 2026-09-13, issue #272).*
+"Numeric prompts" in that column names the reader, not a census of the prompts.
+Two prompts in the shipped program reach it directly - the reagent mixer's
+quantity question (`systems/magic.md` Section 6 step 4) and the tavern's
+provision question (`systems/shops.md` Section 8.5) - and both set a cap of two
+digits, which is what that section already publishes for the tavern. The census
+covered direct call sites across the executable and every overlay plus a search
+for the reader's entry as a stored word, and did not enumerate far or computed
+entries. Which reader the other numeric-looking prompts use, the hours-to-rest
+question among them, is **not** established here, so an implementation should
+not assume this reader's key rules apply to them. Only the mixer's prompt was
+executed in this pass - in full, including the cap, the erase keys and the keys
+it silently discards - so the key rules above are the reader's as run there.
 
 Not every prompt is typed input. The active-player prompt prints `Player: ` and
 then runs a highlight picker — digit keys `1` through `6`, up and down, Return or

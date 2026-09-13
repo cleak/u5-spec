@@ -258,19 +258,157 @@ menus, Return or Space toggles the highlighted reagent, `M` accepts the current
 mask, and Escape cancels before any inventory change. The returned value is an
 eight-bit mask in the reagent order documented in `catalogs/spell-list.md`.
 
-**Step 4 — pick a quantity.** The handler prints `How much? `, including the
-trailing space, and reads a two-digit unsigned quantity. Accepted digits echo
-immediately on that same row, giving e.g. `How much? 1`. Zero cancels through the cleanup path before any
-inventory change. Nonzero quantities are validated against every selected
-reagent counter. If any selected reagent has less than the requested quantity,
-it prints `Insufficient reagents!` and repeats the quantity prompt before any
-inventory change.
+**Step 4 — pick a quantity.** *(Executed end to end 2026-09-13, issue #272.)*
 
-**Step 5 — reject empty selection.** If the selected reagent mask is zero, the handler prints `Nothing to mix!` and exits through the cleanup path.
+*What precedes the prompt.* Accepting the reagent selection with `M` prints a
+stored string that is **two line feeds and nothing else**, and only then does
+the prompt text follow. Both feeds always spend a row: a string of only feeds
+carries no chunk for the printer's full-row suppression to act on, and the
+per-cell emitter's line-feed handling is unconditional
+(`systems/text-output.md` Sections 6 and 10.4). The `Type M to mix:`
+instruction line carries no trailing feed of its own, so the first feed closes
+that line and the second opens the prompt's row. **Exactly one row therefore
+separates the instruction line from the quantity prompt**, from every starting
+cursor row and in every window shape wide enough to hold the prompt on one row.
+That intervening row is **not cleared**: a line feed moves the cursor and never
+erases, so it shows whatever was already on it — old message history in a full
+window, blank in an empty one. Whether it *looks* blank is a property of the
+history above the prompt, not of the prompt.
+
+*The prompt text.* The literal is `How much? ` — nine characters and a trailing
+space, ten cells, with no line feed of its own at either end. That wording
+occurs exactly once across everything the game installs (the executable, every
+overlay, the display drivers and the data files), so there is no second
+producer a capture could be attributed to. Case-insensitively the same phrase
+also appears once in the shipped documentation text file, which no code path
+reads — a scan that reports two hits has found the manual, not a second prompt.
+
+In the sixteen-cell message window the prompt fills columns 0..9 of its row and
+leaves the cursor at column 10. Fitting one row is a **consequence of the
+window's width**, not a special case: the mixer prints through the ordinary
+wrap-aware printer (`systems/text-output.md` Section 6), which breaks this text
+like any other when fewer than ten cells remain. In an eight-cell window the
+first word lands on one row and the rest on the next, and there is no single
+prompt row for a digit to echo onto. No shipped gameplay geometry is narrower
+than sixteen cells, so this bounds how the rule should be worded rather than
+describing anything reachable in play.
+
+*The reader.* The quantity is read by the shared typed-number reader with its
+digit cap set to two (`systems/input.md` Section 8; `systems/text-output.md`
+Section 10.6) — not the free-text line reader, and not a loop of the mixer's
+own. **It prints nothing of its own before or while it waits: no line feed, no
+prompt marker, no cursor repositioning.** Its only output is the echo of what
+is typed. Between the last cell of the prompt text and the first key read the
+original emits nothing at all. The reader is shared, but only just: exactly one
+other prompt in the program reaches it — the tavern's provision question
+(`systems/shops.md` Section 8.5) — and that one also caps at two digits.
+(Direct call sites
+were censused across the executable and every overlay, together with a search
+for the routine's entry as a stored word; far or computed entries were not
+otherwise enumerated.)
+
+*Where the cursor waits.* The animated input cursor is drawn on the prompt's
+own row, in the cell immediately after the trailing space — column 10, two
+cells right of the question mark — with the cursor advance suppressed, and is
+erased with a space in the same cell as soon as a key arrives
+(`systems/text-output.md` Section 10.6). It therefore never moves the column,
+never opens a row of its own, and never overwrites the question mark. An
+accepted digit draws in that same cell and advances one column, so the echo
+reads as the prompt followed by the digits **on the prompt's own row**, giving
+`How much? 1` and then `How much? 12`. *(That is what this section's earlier
+sentence — the digit "echoes immediately on that same row" — was about: which
+row the **digit** lands on. It was never a claim that no row precedes the
+prompt, and it is restated above so it cannot be read as one. Two line feeds do
+precede the prompt, and the prompt still has no marker row of its own while it
+waits.)*
+
+*Key rules at the waiting prompt.*
+
+| Key | Effect |
+|---|---|
+| The first two digits | Echoed in the cursor's cell; the column advances one. |
+| A third digit | Discarded. The cap is two digits. |
+| Backspace | Erases one echoed digit in place. |
+| The west direction code | Also erases one echoed digit — see below. |
+| Escape | Erases the whole echo and leaves the cursor back at the first echo cell. It does **not** cancel the prompt, which keeps waiting. |
+| A leading `+` or `-` | Accepted only in the first position. |
+| Return | The only exit. An empty buffer submits as zero. |
+| Anything else — space, letter, punctuation | Discarded: no echo, no other effect, prompt still waiting. |
+
+*The second erase key.* The west direction code erases a digit exactly as
+backspace does, and that code is what the left-arrow key, the unmodified numpad
+west key and the modifier-held top-row `4` all deliver (`systems/input.md`
+Section 5). A control byte **typed** at the console cannot reach that arm: the
+input layer biases typed control values below the direction block into its high
+pseudo-code range before the prompt sees them, so typing the control character
+that shares the west code's numeric value leaves the echo untouched and the
+prompt waiting. An engine that maps the erase behaviour onto the raw byte
+rather than onto the direction request will erase on a keystroke the original
+ignores.
+
+*Digits are gated by the keyboard modifier state.* Digits reach this prompt only
+while the modifier state is clear. The keyboard layer marks a key byte `1`
+through `9` as a direction request whenever either shift key or NumLock is
+held, and the command reader then translates it into a direction code, which
+this prompt discards (`systems/input.md` Section 5). With NumLock held, `1` and
+`2` produce **no echo at all** and the prompt keeps waiting; `5`, which has no
+direction, still echoes; and `4` arrives as the west code and **erases** a
+digit instead of adding one. With no modifier held the same keys are ordinary
+digits. This is the published digit-to-direction rule biting inside a numeric
+prompt, and a port that omits the modifier state will accept quantities the
+original refuses. *(Scope: executed against a reconstruction of the shipped
+poll routine's own decisions with the reported modifier byte set and clear, not
+a hardware or emulator capture. Nothing here bears on the dungeon-mode
+exception to the digit rule: the mixer reads through the shared command reader,
+and no mode loop's own reader was run.)*
+
+*No marker row under the waiting prompt.* No command end-cap marker glyph is
+emitted anywhere in the mix command, on any of its exits. The prompt is a
+continuation of the exchange the command opened, not a new command cycle, so
+nothing in it emits the command cycle's feed-and-marker pair
+(`systems/text-output.md` Section 10.2); the two feeds above are the selection
+echo's own text, not that pair. Any marker-and-cursor row a capture shows **beneath** the prompt
+belongs to the **next** command prompt, emitted after the mix command has
+returned — and when the prompt sits on the window's bottom row, that following
+pair scrolls the window and puts its marker on the new bottom row
+(`systems/text-output.md` Section 10.5).
+
+*What Return does.* A quantity of **zero** — typed as a digit or given as a bare
+Return — exits through the cleanup path before any inventory change, and the
+handler prints **nothing further at all**: the prompt text is the last thing
+written. That exit is taken **before** the empty-selection test of step 5. A
+positive quantity is validated against every selected reagent counter; if any
+selected reagent holds less than the requested quantity, `Insufficient
+reagents!` prints followed by two line feeds and the prompt is asked again, so
+the re-asked prompt again sits one row below the notice's last row, with the
+intervening row again carrying whatever was on it. A leading minus is accepted
+by the reader but never survives validation: the comparison against the
+counters is unsigned, so a negative quantity is larger than any counter, always
+takes the shortfall notice, and can never be accepted or consume a reagent.
+Reading the quantity as a plain unsigned two-digit number is right in effect,
+but only because that comparison disposes of the signed case.
+
+**Step 5 — reject empty selection.** If the selected reagent mask is zero **and
+the quantity was positive**, the handler prints `Nothing to mix!` and exits
+through the cleanup path. The order matters: step 4's zero-quantity exit is
+tested first, so a player who selects nothing and answers the prompt with zero
+or a bare Return sees nothing printed after the prompt at all. Step 1's exit is
+earlier still — with every reagent counter at zero the command prints
+`No reagents owned!` and returns before the spell prompt, so the quantity
+prompt is never reached.
 
 **Step 6 — debit selected reagents.** The handler prints `Mixing...`, pauses
 briefly, then subtracts the requested quantity from each selected raw reagent
-counter. The pause is presentation only: outside combat and dungeon scenes it
+counter. *Where that word lands (added 2026-09-13, issue #272):* the cursor is
+mid-row after the quantity echo and `Mixing...` does not fit the remainder of
+that row, so the wrap-aware printer spends exactly one line feed before it —
+its feed is suppressed only when the column is already zero, which it is not
+after an echoed digit (`systems/text-output.md` Section 6). `Mixing...`
+therefore opens the row **directly beneath the echo, with no blank row between
+them**, and the completion text below then leaves exactly one row between
+`Mixing...` and `Done!`.
+
+The pause is presentation only: outside combat and dungeon scenes it
 runs the animated-tile delay when tile animation is enabled, and elsewhere it
 runs a plain timer delay. Neither branch advances the clock.
 
@@ -287,6 +425,25 @@ the resulting charge stock. Source provenance: the quantity prompt and its
 digit-echo reader, the recipe-success print site and the stored interface
 strings were traced in private analysis under `u5-decomp/notes/`,
 `u5-decomp/functions/CMDS_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
+
+Source provenance for step 4 as it now stands: fresh original execution of the
+mixer, its quantity helper, the wrap-aware printer, the per-cell emitter, the
+typed-number reader, the shared key wait, the blink-cursor helper and the
+keyboard poll, under `u5-decomp/functions/CMDS_OVL/`,
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/SHOPPES2_OVL/`,
+`u5-decomp/functions/EGA_DRV/`, `u5-decomp/functions/INTRO_OVL/` and
+`u5-decomp/notes/`, issue #272. The literals were read from the shipped data
+image and the occurrence counts taken by scanning every file the installation
+writes, not a subset; the window geometry the probes installed was checked
+against the shipped start-up code's own window setup rather than assumed. 157
+asserted cases, no failures, across five starting cursor rows and seven window
+shapes, in the accepted-quantity, zero-quantity, bare-Return, empty-mask,
+no-reagents, insufficient-reagents and signed-entry paths. Limits: the raster
+models glyph cells rather than pixels, so row and column positions are the
+claim and glyph appearance is not; the following command prompt's
+feed-and-marker pair was invoked directly rather than by running a full turn of
+a mode loop; and the combat and dungeon loops' own prompt cadence was not
+executed.
 
 Every exploration mode performs the same capability scan before accepting a
 command. A sleepers-only party receives its sleep pass, while a party with no

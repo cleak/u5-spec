@@ -222,6 +222,12 @@ reproduce:
   (`systems/doors-and-z-transitions.md` Section 12.1). The one thing that can
   still take it away is the falls hand-off tested ahead of the gate
   (`systems/text-output.md` Section 10.2). *(Added 2026-09-13, issue #270.)*
+- **A full window does not cost the marker.** When the pair is emitted with the
+  cursor already on the message window's bottom row, the feed scrolls the
+  window and the triangle is drawn on the new bottom row. Nothing tests whether
+  the marker will fit first, so it always appears; it is never deferred until
+  something else scrolls, and it is never itself the thing that scrolls
+  (`systems/text-output.md` Section 10.5). *(Added 2026-09-13, issue #272.)*
 - Where it is emitted at all, it is emitted exactly once per input line, so it
   persists in the message-window scrollback exactly where it was drawn. It is
   never emitted twice for one line, and a line whose prompt the gates above
