@@ -1,5 +1,88 @@
 # Next Steps for u5-spec
 
+## Issue #273 - the shrine approach walk's two pose tiles (2026-09-13 UTC)
+
+`systems/karma.md` Section 7 specified the approach walk in enough detail to
+implement everything except what to draw. Both pose identities are now
+published, in the form `systems/blackthorn.md` Section 6.1 uses for its
+cutscene actors, together with the altar's absolute cell and the slot mechanics
+behind the walk.
+
+The **walking pose** is actor byte `0x1C`, full atlas index `0x11C` (tile 284),
+upper bank: the party's own on-foot map sprite, which the leave-vehicle command
+writes back on dismount and which `systems/blackthorn.md` Section 6.1 already
+published under that name for its own cinematic. The shipped art is the
+Avatar-class walk run's third frame but for four boot pixels on one raster row.
+The **kneeling pose** is actor byte `0x6C`, atlas `0x16C` (tile 364), the base
+of the four-member family `0x16C..0x16F` - the description table's beggar run.
+The animator emits the three successors in ascending order and from the third
+either returns to the base on a one-in-four roll and holds it for six ticks, or
+rewinds to the first and climbs again, every decision additionally behind an
+exact fair coin. One amendment an implementer needs: the stamped base is not
+necessarily the first frame the player sees, because the handler stamps it and
+immediately runs the world step that repaints, and the animator runs ahead of
+the compositor inside that step. The family, the order, the re-base and the
+gate are the contract; a per-repaint pattern is not.
+
+The **altar** is tile `0xB2`, the description table's hot brazier, at
+`(5, 5)` of `MISCMAPS.DAT` record 1 and the only such cell in the record; the
+walk's last cell `(5, 6)` is directly beneath it and the whole walked stretch
+of the centre column is grass. **The avatar is a real slot** - slot zero, the
+party's own. The suspension clears only each slot's type byte, the compositor
+skips on that byte alone, and the presentation re-marks slot zero with five
+values: type and displayed frame, both the walking value, the column, the row,
+and a layer copied from the scene that is never read on this path. Everything
+is drawn through the ordinary compositor and rasteriser; the presentation makes
+no direct cell reveal or blit anywhere, unlike the Blackthorn cinematic. The
+upper bank is selected by which of the compositor's two viewport planes the
+byte came out of and by nothing else, which is where
+`catalogs/tile-catalog.md` Section 3.1's "add 256" rule happens; the slot's
+layer value is not a bank selector, and forcing it to disagree with the scene's
+for a whole presentation paints a byte-identical sequence.
+
+Three further results. A **third pose stamp** exists and fires only when the
+meditation succeeds: the walking pose is restored while the figure is still in
+the altar cell, so the avatar stands up in place and is held for the handler's
+closing ten repaints - eleven with the presentation's own repaint-in-place -
+while the blank-virtue and wrong-answer arms exit ahead of it and keep the
+kneeling pose until the walk-back. The **exit walk-back** begins by repainting
+the walking pose in the cell the figure knelt in for exactly one repaint, not
+the five a stepping frame gets, and its closing clear leaves the
+displayed-frame byte at the walking value rather than clearing it with the type
+byte. And the **Codex arm** was run end to end rather than to its first key
+wait: same pose, same cell path one row per frame from `(5, 10)` to `(5, 3)`,
+no kneeling pose anywhere on the arm, and the same shared exit block - 127
+viewport repaints across 23 animation frames.
+
+Changed: `systems/karma.md` Sections 7 and 8; `systems/animation.md` Sections
+3, 5 and 13.5; `catalogs/tile-catalog.md` Sections 3, 3.1 and 10;
+`systems/active-objects.md` Section 5; `formats/location-dat.md` Section 11;
+`OPEN-QUESTIONS.md`.
+
+**No retraction row.** Every result is a gap filled or a quantification of
+text that already stood: the catalogue's `284..285` and `364..367` rows keep
+the description table's own labels and gain shipped-art confirmations beside
+Lord British's, exactly as Section 3.1 already handles such a row; the
+"placeholder" reading of those rows is unchanged, since it only ever meant the
+description table has nothing to say. The one ordering difference - the
+ordination arm's pose restore is executed between the quest-bit write and the
+announcement record, ahead of where the result table lists it - has no
+observable consequence, because nothing repaints between the two placements,
+and is noted in place rather than rewritten.
+
+Open afterwards, and indexed in `OPEN-QUESTIONS.md`: the Codex's interred-party
+page, emitted inside the walk, was never exercised; ten of the eleven per-class
+frame-script rows remain unattributed, so no second family can be named; and
+`catalogs/tile-catalog.md`'s vehicle paragraph is flagged as disputed where it
+says mounting moves the party's sprite out of the `320..335` run, because the
+on-foot value is executed and is not in that run - that one needs its own
+audit, not an edit on this issue's evidence. The display driver was stubbed at
+its entry throughout, so what is executed is the atlas index and the cell the
+presentation hands it; the art identities come from decoding the shipped atlas.
+All runs entered through the overworld Enter handler, so the automatic
+town/location entry and the natural-moongate route remain the standing issue
+#271 item.
+
 ## Issue #272 - the mixer's quantity prompt, executed (2026-09-13 UTC)
 
 Two captures of the same `How much? ` prompt disagreed about whether a marker

@@ -378,7 +378,12 @@ the whirlpool frames. `catalogs/monster-bestiary.md` carries class 29 under its
 resident singular name and marks classes 42 and 43 as gaps; a class-29
 combatant, if the game ever spawned one, would be drawn with regalia art. The
 sixteen placeholder rows of this half include `0x7C..0x7F`, which the shipped
-art shows to be Lord British on his throne (Section 3.1).
+art shows to be Lord British on his throne, and `0x1C..0x1D`, whose first
+member the shipped art and two executed presentations identify as the party's
+on-foot map sprite (Section 3.1, `systems/karma.md` Section 7). A row
+carrying the actor half's placeholder string means the description table has
+nothing to say about it, which for these rows is unsurprising: the player never
+looks at the party's own sprite.
 
 ### 3.1 The upper half is the actor bank, and its nominal names are provisional
 
@@ -418,10 +423,12 @@ which the table now reproduces:
 |---:|---|
 | 264 | A small blue radiant spark — the Orb of the Moons flash used by the endgame |
 | 270 | A red-and-white lidded chest — the sandalwood box as an actor |
+| 284 | A helmeted figure in a green tunic with a white-and-grey shield bearing a red device, a raised sword and red leggings — the party's own map sprite while on foot, and the pose the shrine and Codex presentations walk with (`systems/karma.md` Section 7, `systems/blackthorn.md` Section 6.1). It differs from tile 334 only in four boot pixels on one raster row, red here where 334's are brown |
 | 320..323 | A blue-robed figure with a staff, four walk frames — the Mage class sprite |
 | 324..327 | A green-clad figure, four walk frames — the Bard class sprite |
 | 328..331 | A mailed figure with shield and sword, four frames — the Fighter class sprite |
 | 332..335 | A green-tunic figure with sword, four frames — the Avatar class sprite, also used by every class outside the three above |
+| 364..367 | A green-tunic figure with red boots whose head element drops one raster row per frame, the last frame drawing that head in red — the description table's beggar run, and the four-frame family the shrine meditation's kneeling pose animates through (`systems/karma.md` Section 7) |
 | 380..383 | A crowned, bearded figure in a red-and-purple robe seated between two banners — Lord British on his throne |
 
 The earlier nominal rows "320..335 Daemon, dragon (greater)" and "368..383
@@ -990,6 +997,22 @@ runs used by the traced command and movement systems. No balloon entry exists in
 should be treated as absent (R387).
 
 Vehicles appear as active-object entries. Mounting a vehicle moves the avatar's sprite from the party-sprite run (`320..335`; *the earlier "avatar range `496..511`" was the mongbat-to-shadow-lord band and is withdrawn, R387*) to the vehicle run; the original vehicle slot (a dropped horse, a moored ship) clears or remains as a ridable sprite.
+
+*Disputed 2026-09-13 (issue #273), the "from the party-sprite run `320..335`"
+half of that sentence only.* The party's own map sprite while on foot is actor
+byte `0x1C`, tile `284`, which is not in that run (`systems/karma.md`
+Section 7; `systems/blackthorn.md` Section 6.1 publishes the same index under
+the same name), and the mounted markers `0x12..0x15` named in the paragraph
+below resolve to tiles `274..277` - inside the band the Section 3 table marks
+placeholder - rather than to the riderless horse pair `272..273` or the
+dropped-carpet object `283`. The coherent reading is that `272..287` is a
+party-vehicle band carrying the riderless and dropped vehicle objects, the
+mounted-party sprites and the on-foot party sprite together, while `320..335`
+is the per-member class art used where party members are drawn individually.
+The on-foot half of that is executed; the mounted half rests on reading the
+vehicle command's writers and the shipped art rather than on mounting anything,
+so the sentence is flagged here rather than rewritten, pending its own audit
+(`OPEN-QUESTIONS.md`).
 
 For B-Board, `systems/vehicles.md` publishes the clean boardable object-byte
 families and transport-state transitions: horse objects `0x10..0x11` become

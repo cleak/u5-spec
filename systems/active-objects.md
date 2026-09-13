@@ -210,6 +210,12 @@ The player occupies slot zero. Every world frame, the compositor refreshes bytes
 - Every return to the overworld replaces all eight bytes of all thirty-two slots from the per-plane object list (Section 11).
 - The trace covers the party **on foot**. A transport/action marker that raises slot zero's tile class to or above the animator's class threshold — the whirlpool marker is the traced case — lets the walk reach its *second* byte-6 write even from a zero low nibble. That path is traced as reachable and its script has now been read (Section 8, "The scripts themselves"): the marker cycles its second, third and fourth frames with an occasional snap back to the first.
 
+On foot that marker is the party's on-foot sprite value, which the renderer
+resolves into the actor half of the tile atlas; `systems/karma.md` Section 7
+identifies it and `catalogs/tile-catalog.md` Section 3.1 carries the art. The
+shrine and Codex presentations stamp that same value into slot zero by hand
+while the ordinary refresh is suspended.
+
 The world-state globals are the *authoritative* source for player position; slot zero is a *derived* view that other systems read — NPCs computing distance to the player, the visibility producer determining what the player blocks. Slot zero is never freed, compacted, or reallocated; mode entries preserve it; the combat backup-and-restore preserves it.
 
 **Retraction — the player has no second representation.** Earlier revisions of

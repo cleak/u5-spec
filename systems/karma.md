@@ -423,6 +423,112 @@ frame byte across a **four-frame kneeling family** behind its ordinary random
 gate. An engine that paints one static kneeling sprite is visibly wrong for
 the eleven repaints between the Kneel record and the virtue prompt.
 
+**The two poses, exactly.** Both poses are actor values resolved out of the
+upper half of the 512-tile atlas, given here in the form
+`systems/blackthorn.md` Section 6.1 uses for its cutscene actors. Cells are
+`(column, row)` in the eleven-by-eleven display grid, zero-based from its
+top-left cell - the convention Section 8 already uses for the Codex.
+
+| Value or index | Storage context | Exact visual | Cell in the shrine display grid |
+|---:|---|---|---|
+| `0x1C` / `0x11C` | Party actor byte / full atlas index | The party's own on-foot map sprite: a helmeted figure in a green tunic with a white-and-grey shield bearing a red device, a raised sword, and red leggings. It is the third frame of the Avatar-class walk run (tile `334`) but for four boot pixels on one raster row, red here where that frame's are brown. | Stamped at `(5, 10)` on frame 5, stepping to `(5, 9)`, `(5, 8)`, `(5, 7)` and `(5, 6)`. |
+| `0x6C` / `0x16C` | Party actor byte / full atlas index | A kneeling figure in a green tunic with red boots, the base member of a four-frame family whose head element drops one raster row per frame and whose last frame draws that head in red rather than brown. The family is the tile catalogue's beggar run, `0x16C..0x16F` (tiles `364..367`), which the shipped description table names on all four rows. | `(5, 6)`, the walk's last cell. |
+
+The walking value is the same one the game holds as the party's sprite while
+the party is on foot: it is what the leave-vehicle command writes back when the
+party dismounts, and the ordinary renderer copies that stored sprite into the
+party's own actor slot every tick, so `0x11C` is also what the overworld paints
+for a party walking on foot. `systems/blackthorn.md` Section 6.1 publishes the
+same index under that name for its own cinematic, which is an independent
+cross-check of the identity. The description table leaves tiles `284..285`
+unnamed, under the actor half's own placeholder string rather than the terrain
+half's; `catalogs/tile-catalog.md` Section 3.1 carries both that distinction
+and the shipped-art confirmations for these two ids.
+
+**Why the upper half, and what the slot's layer value is not.** An actor byte
+reaches the atlas as byte plus 256 (`catalogs/tile-catalog.md` Section 3.1).
+What selects that bank is which of the compositor's two parallel viewport
+planes the byte came out of, and nothing else: walking the view cell by cell,
+the rasteriser draws from the lower half where the visibility plane carries the
+cell, and from the upper half - the byte plus 256 - where the visibility plane
+is empty for that cell and the overlay plane supplies it, with the reserved
+actor byte `0x16` still meaning "draw nothing". The active-object compositor is
+the only producer of that empty marker, and the presentation's own world step
+refills the visibility plane wholesale before every composite pass, so exactly
+the cells the compositor stamped are the cells drawn as actors. The **layer**
+value the presentation writes into the slot beside the pose is not a bank
+selector and plays no part here: it is a floor-match gate on the ordinary path,
+and the compositor's presentation branch skips it together with the
+local-coordinate transform and both viewport bounds tests. Forcing the slot's
+layer value to disagree with the scene's for a whole presentation paints a
+byte-identical sequence - the same cells, the same indices, the same repaint
+count.
+
+**The kneeling family's cycle.** The handler stamps the base member; the
+per-slot animator (`systems/animation.md` Sections 3, 4 and 5) then emits the
+three successors in ascending order, and from the third successor either
+returns to the base - on a one-in-four roll - and holds it for six animation
+ticks, or rewinds to the first successor and climbs again. Every one of those
+decision points is additionally behind an exact fair coin, so the displayed
+frame changes on roughly half of the eligible repaints, and across ten
+thousand observed animator ticks the base was only ever re-entered from the
+third successor (`systems/animation.md` Section 5 carries the arithmetic). Only the slot's **displayed-frame**
+value moves: its type value reads the base for the whole meditation.
+**The stamped base is not necessarily the first frame the player sees.** The
+handler stamps it and immediately runs the world step that repaints; the
+animator runs ahead of the compositor inside that step, so whether the first
+painted kneel frame is the base or its first successor is itself that step's
+coin flip, and independent harness runs have produced both. What an engine must
+reproduce is the family, its ascending order, the one-in-four return to the
+base and the fair-coin gate - not a fixed per-repaint pattern, which the
+original does not have either.
+
+**The altar's own cell.** In the shrine display record - record `1` of the four
+cutscene maps, whose eleven-by-eleven grid is stored in sixteen-byte rows
+(`formats/location-dat.md` Section 11) - the altar is tile `0xB2`, the
+description table's hot brazier: a grey three-legged stand under a
+red-and-yellow flame, and the only cell of the record holding that tile. It
+sits at `(5, 5)`. The walk's last cell, `(5, 6)`, is the cell directly below
+it, and every cell of the centre column from row 6 down to row 10 is grass
+(`0x05`), so the whole walked stretch is open ground. The Codex record's
+feature and rest cell are `(5, 2)` and `(5, 3)` (Section 8), so "one row short
+of the feature" is exact for both records. The altar tile's flame is animated
+by the driver-side tile-asset pass like every other fire fixture
+(`systems/animation.md` Section 12.4); nothing in the presentation rewrites
+that cell.
+
+**The avatar is a real active-object slot - slot zero, the party's own.** The
+suspension copies the whole table aside and zeroes only each slot's type byte,
+and the compositor's slot loop skips a slot on that byte alone, which is why
+nothing is drawn for the first four animation frames. The presentation then
+re-marks slot zero by writing **five** values: the type byte and the
+displayed-frame byte, both the walking value; the column, `5`; the row, `10`,
+decremented once per walk frame to `9`, `8`, `7` and `6`; and the layer, copied
+from the scene and never read on this path. Setting the type byte non-zero is
+what un-skips the slot; the displayed-frame byte is the value the compositor
+actually draws, which is why the kneeling family's cycling is visible while the
+type byte sits still. Every pixel of both poses reaches the screen through the
+ordinary path - the world step's compositor pass into the overlay plane, then
+the ordinary rasteriser. The presentation makes **no** direct single-cell
+reveal and no direct blit anywhere - a sweep of the overlay that runs it finds
+no call to either direct-draw wrapper - which is the opposite of the Blackthorn
+cinematic's habit (`systems/blackthorn.md` Section 6.2), and an engine that
+implements the walk as a direct cell draw will paint it outside the compositor
+the original paints it inside. Only slot zero is re-marked, so no other actor
+is drawn for the whole presentation, and at most one actor cell appears in any
+repaint of either arm.
+
+Source provenance for the two pose identities, the kneeling family, the altar
+cell and the slot mechanics: private analysis under `u5-decomp/notes/`,
+re-derived independently of the pacing pass above and executed over
+ninety-three recorded cases - all eight shrines, including the sentinel shrine,
+and the Codex - with the shipped tile atlas decoded directly for the art. The
+executed scope is the atlas index and the cell the presentation hands the
+display driver: the driver itself is stubbed at its entry throughout, so no
+rasterised pixels are claimed, and the art is EGA. Every run entered through
+the overworld Enter handler. The shrine offering and karma steps beyond the
+ordination text were run through but only their pose behaviour is claimed here.
+
 **What the holds do and do not do.** Every interval in the table above is the
 same primitive: a counted repetition of one world step plus one one-tick
 delay request. The six-, ten- and twelve-step waits later in the table are
@@ -490,12 +596,20 @@ hundred and eight**. An engine that omits them desynchronises every later roll
 (`systems/prng.md`).
 
 **Exit pacing.** Leaving the shrine mirrors the entry. After the meditation
-handler returns, the presentation re-stamps the walking pose, spends one world
-step, then walks the avatar back down to the bottom grid row one row per
-animation frame - four frames for a shrine - then clears the avatar's type
-byte and cell and runs four more frames with nothing drawn, waits ten world
+handler returns, the presentation re-stamps the walking pose - the same value
+`0x1C` / `0x11C` above, into both the type byte and the displayed-frame byte -
+**in the cell the figure knelt in**, and spends one world step there. That
+repaint-in-place is **exactly one** viewport repaint, not the five a stepping
+frame gets. It then walks the avatar back down to the bottom grid row one row
+per animation frame - four frames for a shrine, centre-column rows 7, 8, 9 and
+10, five repaints each - then clears the avatar's type byte and both position
+values and runs four more frames with nothing drawn, waits ten world
 steps, restores the saved active-object table and the scene byte, and issues a
-display-mode set and a full redraw. The walk-back frame count is not a
+display-mode set and a full redraw. That closing clear leaves the
+displayed-frame byte at the walking value: an engine that clears the tile byte
+along with the type byte has cleared the wrong field, and the restore that
+follows the four blank frames puts slot zero back at exactly its pre-entry
+record either way. The walk-back frame count is not a
 constant: it is one frame per grid row the approach climbed, plus the four empty
 frames. A shrine climbs four rows, so its walk-back is eight frames and forty
 world steps; the Codex climbs seven (Section 8), so its walk-back is **eleven**
@@ -585,6 +699,27 @@ blank of `systems/text-output.md` Section 10.4 is spent here like anywhere else.
 Executed for the first shrine on the newly-ordained arm, with the comparison,
 sound and timing endpoints controlled; the already-ordained and unfocused arms
 were not executed.
+
+**What "restore the standing Avatar pose" means, and the two arms that never
+do it.** The pose restored on the ordaining arm is the walking pose above - the
+party's on-foot sprite, `0x1C` / `0x11C` - stamped back into the slot while the
+figure is still in the altar cell `(5, 6)`. It is a third pose stamp, distinct
+from the presentation's entry stamp and its exit re-stamp. In execution the
+stamp sits between the quest-bit write and record `31`, earlier than the result
+table above lists it; nothing repaints between the two placements, so no engine
+can observe the difference, and the table's ordering is left as written. What
+*is* observable is the handler's closing ten world ticks: nothing repaints
+between the stamp and them, so the avatar **stands up in place and is held
+there for ten viewport repaints** at the end of a successful meditation, and
+the presentation's own repaint-in-place before the walk-back (see "Exit pacing"
+above) makes **eleven**. The blank-answer and wrong-answer arms take their
+early exit ahead of both the stamp and that ten-tick hold, so they hold the
+kneeling pose right up to the walk-back and their altar cell gets exactly
+**one** walking repaint. An engine that treats the kneeling pose as
+held until the presentation resumes is wrong for eleven repaints at the end of
+every successful meditation. Executed on all three shrine outcomes -
+ordination, wrong answers and a blank virtue answer; a blank mantra leaves by
+the same early exit as a blank virtue and was not separately distinguished.
 
 **Completed-quest offering.** Record `34` asks for a number of hundreds of
 gold pieces. Its authored leading blank row and trailing space belong to the
@@ -927,6 +1062,26 @@ pose and repainting, so the Codex interval is a flat sixty. The eight
 ordinary shrines are indistinguishable from each other in every one of these
 counts, including Spirituality entered through its `(0, 0)` sentinel row; the
 virtue only selects the expected key and mantra text later in the handler.
+
+**What the Codex walk draws.** The same walking pose as a shrine's, by value,
+atlas index and bank: `0x1C` / `0x11C`, the party's on-foot sprite, specified
+with the shrine's poses in Section 7. It is stamped in the centre column's
+bottom cell, `(5, 10)`, and stepped up one row per frame through `(5, 9)`,
+`(5, 8)`, `(5, 7)`, `(5, 6)`, `(5, 5)`, `(5, 4)` and `(5, 3)` - eight painted
+cells at five repaints each, ending one row below the Codex at `(5, 2)`. **The
+kneeling pose never appears on this arm**: across a complete Codex run, the
+only atlas index painted anywhere is the walking one, and at most one actor
+cell is painted in any repaint. The Codex **does** have an exit walk-back, and
+it is the shrine's - the same block, reached unconditionally after either
+handler returns, with no branch on which arm ran: the walking pose is
+re-stamped and repainted once in place at `(5, 3)`, then stepped back down rows
+4 through 10 at five repaints each, then the four blank frames and the closing
+ten-step wait of Section 7's "Exit pacing". The whole Codex arm is 127 viewport
+repaints across 23 animation frames, with 121 cells blitted in every one of
+them. Executed end to end on a fresh quest state with the reader's key waits
+satisfied, nobody interred, and the display driver stubbed at its entry; the
+interred-party page inside the walk was therefore not exercised
+(`OPEN-QUESTIONS.md`).
 
 Three further Codex-only differences. Its Enter line reads
 `Enter the Shrine of the Codex!` with its own trailing newline and prints no

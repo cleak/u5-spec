@@ -131,6 +131,13 @@ with a finite phase; each tick reduces that phase until the slot reaches a
 decision point. The steady marker is the opt-out value used for slots that are
 visible but not currently animating.
 
+The high half's role is class-dependent, and "direction" is the common case
+rather than the only one. For the animated class the shrine presentation's
+kneeling pose belongs to, it is not a facing at all but a cursor into that
+class's own frame script (Section 5). The low half is still read first either
+way: a slot holding the steady marker opts out before either reading is
+reached, which is what keeps a suspended or static actor still.
+
 The phase counter itself does not encode pixels. It is a small state value that
 the renderer and class-specific logic combine with the slot's tile or class to
 choose a frame. Modern engines may represent this as explicit `phase` and
@@ -202,6 +209,28 @@ tables:
   directions or retains the current one. This claim is carried forward
   unchanged from the earlier revision of this section and is not affected by the
   correction above, which concerns position only.
+
+**One family, named, with its gate arithmetic.** *(Added 2026-09-13, issue
+#273.)* The first frame family this repository can name end to end is the
+four-member run `catalogs/tile-catalog.md` Section 3 gives as the beggar
+sprites, atlas `364..367` - the family the shrine presentation's kneeling pose
+belongs to (`systems/karma.md` Section 7). Driven directly on one slot for ten
+thousand ticks, the displayed frame takes only those four values and the
+complete transition set is base to first, first to second, second to third,
+third to base and third to first: the successors are emitted in ascending
+order, and from the third the slot either returns to the base - on a one-in-four
+roll - and holds it for six ticks, or rewinds to the first and climbs again.
+Across those ticks the base was never entered from anywhere but the third
+successor. Each decision
+point is additionally behind an exact fair coin, so a frame changes on roughly
+half the eligible passes. The gate arithmetic is exact rather than
+approximate: both rolls reduce a fifteen-bit generator value modulo 256, so the
+coin is a true one-in-two and the re-base a true one-in-four, with none of the
+modulo bias a narrower reduction would introduce. Throughout, only the displayed-frame
+byte moves - the slot's type byte still reads the base at the end of every run -
+which is the Section 4 contract seen from the outside. The per-class script
+table this row comes from has **eleven** rows; only this one has been traced to
+its consumers (`OPEN-QUESTIONS.md`).
 
 *Scope of the negative.* The animator was read end to end and every one of its
 record writes enumerated; the eight arms of its class decision all stay inside
@@ -1053,7 +1082,7 @@ traced cases are:
   succession of absolute cells between blocking cell-reveal beats, despawning
   and respawning the record rather than walking it;
 - the **shrine/urn entry sequence**, which places the avatar's record at a fixed
-  cell and then walks it north and back south one cell per blocking beat. Two
+  cell and then walks it north and back south one cell per blocking beat. Three
   details of it matter here and are specified in `systems/karma.md` Section 7.
   First, the sequence begins by clearing the **type** byte of all thirty-two
   slots and re-stamping only slot zero, so the rest of the cast is unpainted
@@ -1062,7 +1091,12 @@ traced cases are:
   Second, the walk is longer than it looks: nine frames for a shrine and twelve
   for the Codex, four of them before the avatar is drawn at all, and each frame
   is one world step, a two-part sting and four more world steps - **five
-  viewport repaints per frame**, forty-five for a shrine walk;
+  viewport repaints per frame**, forty-five for a shrine walk. Third, the
+  per-slot pass of Sections 3 to 5 keeps running on the one re-stamped slot
+  while the presentation holds: the walking pose is left alone, but the
+  kneeling pose the meditation handler stamps is the base of an animated family
+  and cycles under the ordinary gate for as long as it is on screen. A
+  presentation suspends the *simulation*, not the animator;
 - the **endgame entry sequence**, which walks a record the same way between its
   paced beats;
 - the **waterfall/falls sequence**, which displaces the *party* between its
