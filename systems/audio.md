@@ -280,6 +280,20 @@ Common recipes are:
 | Shared potion/wind lead, variant `v` | 800 | `8000 + 1600v` | 100..700 Hz | 10 through 26 for variants 0 through 8 |
 | Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; movement uses are in Section 7.5, Blackthorn in Section 8.6, and endgame in Section 8.7 |
 
+**The short two-part sting.** *(Clarified 2026-10-12, issue #275.)* The last row
+above is the cue the rest of this document calls "the short two-part sting": two
+random rumbles, each with step 1 and target 25 (25 updates), the first drawing
+its pitch from the inclusive range 100..1000 Hz and the second from 100..1500 Hz,
+each ending by silencing the speaker, with a calibrated silent hold of 20 units
+between them. It uses only the private sound jitter state, never the gameplay
+generator, and mute keeps both loops, all fifty jitter advances, the hold and the
+final silences. Under the Section 4 anchor it lasts about 4.6 ms per part and
+17.6 ms for the hold, about 27 ms end to end (Section 10.2). It is one shared
+cue: the ordinary movement stings of Section 7.5, the Blackthorn cinematic
+movement and stinger pause of Section 8.6 and the endgame tableau movement of
+Section 8.7 all play exactly this cue and differ only in the pauses wrapped
+around it.
+
 ### 5.4 Software envelope
 
 The envelope generator does not interpret one argument as a frequency in
@@ -1115,7 +1129,7 @@ Source provenance: fresh movement dispatch and accepted-position traces in
 |---|---|
 | Trapped surface chest, trapped dungeon chest, or failed reagent mix | On entry to the shared trap resolver, before trap-class selection, play the 75-update 100..500 Hz rumble. A refusal or cancellation that never enters the resolver is silent. |
 | Ordinary damage presentation | The shared damage presentation runs the 160-update 100..2000 Hz rumble. Preserve the caller's own damage/narration order; this is not a global sound for every HP write. |
-| Stonegate trapdoor scripted death | After the black viewport fill, play every integer frequency from 1000 down through 251 Hz, 750 tones total, holding each for 40 calibrated units. Stop, then play one 75-update 100..500 Hz rumble for each party member as that member is killed and the stats panel is repainted. The tone count and the loop bound are exact; under the section 4 anchor the sweep alone runs about **26.5 seconds**, which is far longer than the effect intuitively sounds. Section 10 marks that figure as derived and unverified. |
+| Stonegate trapdoor scripted death | After the black viewport fill, play every integer frequency from 1000 down through 251 Hz, 750 tones total, holding each for 40 calibrated units. Stop, then play one 75-update 100..500 Hz rumble for each party member as that member is killed and the stats panel is repainted. The tone count and the loop bound are exact; under the section 4 anchor the sweep alone runs about **26.5 seconds**, which is far longer than the effect intuitively sounds. Section 10.5 records it as confirmed by two independent emulator captures. |
 
 ### 8.3 Spells, projectiles, and supernatural actors
 
@@ -1624,18 +1638,22 @@ remains blocking but contracts from approximately 11.18 seconds audible to
 8.66 seconds muted on the reference machine. `blackthorn.md` Section 7 owns
 the surrounding visual, narration, restoration, and scene-handoff order.
 
-These totals are static timing estimates, not measured rescue durations.
-**Capture reconciliation remains open (#220):** a DOSBox report gives an
-8.491-second audible burst beginning at 32.82 seconds in an approximately
-forty-second recording. The exact file length and completion of the final
-rows are not supplied. The last reported pitch sample is near the fourth
-row's pitch, so the samples alone do not establish completion of all six.
-An interpretation assigning 8.491 seconds to all 260,000 iterations would
-also predict a first-row gate pitch near 2.06 kHz, whereas the report gives
-about 1.50 kHz. A uniform shortening of this or every software-envelope
-recipe is therefore not established. A full recording through thunder and
-the castle handoff, with CPU/core/cycle settings and row boundaries, is
-needed to reconcile the observation with the model.
+These totals are static estimates for the reference 4.77 MHz machine, where
+the boot calibration is below 100 and the envelope's idle spin is zero
+(`timing.md` Section 7.3). They are not universal: on any machine whose
+calibration is at least 100, each iteration also pays idle count times
+floor(calibration / 24) cheap spin passes, so the duration depends on the host.
+**Reconciled (issue #220, 2026-10-12):** a capture of the whole sequence in an
+emulator at a fixed 3000-cycle setting measured **11.56 s** (about 44.5
+microseconds per iteration, 3.4 percent above the static figure and inside its
+band), with row pitches uniformly 3.4 percent below the table, which is the same
+ratio. The same sequence took 13.4 s at 1500 cycles and 3.6 s at 10000. The six
+rows and the 260,000 iterations stand and no other envelope caller needs a
+different model. An earlier report of an 8.49-second burst is best read as a
+recording that ended before the sequence did: its first-row pitch implies the
+same cost class, a full sequence of about 11.6 s, and the burst ends where the
+recording ends (inferred - the file length was not supplied). Pitch times
+duration per row is machine-independent.
 
 The surrounding silent work is separate: three BIOS waits totaling 52 ticks
 precede the sequence, alongside the first viewport dissolve and tableau
@@ -1644,7 +1662,12 @@ Guardian reveals; each reveal has a redraw and four-tick wait. Only then
 does the thunder line introduce two consecutive major flashes. There is no
 special rescue-origin gate suppressing those two calls. `blackthorn.md`
 Section 7.1 specifies these boundaries; the reported 4.8-second prelude is
-not a fixed envelope delay.
+not a fixed envelope delay. At the 3000-cycle setting the prelude measured
+4.83 s (52 requested ticks, 2.86 s minimum, plus about 2 s of blocking work),
+2.76 s of silence separated the sequence from the first major flash, and the two
+flashes then sounded back to back for 1.71 s (about 0.86 s each, low-pitched and
+easy to miss under a coarse activity threshold). These are machine-dependent
+sums, not parameters; only the tick counts are contract.
 
 The six waits this section names are not the whole schedule. The cinematic
 requests **eight**, seventy-four ticks in all: two further four-tick waits
@@ -1704,8 +1727,11 @@ The absorption-to-tableau sequence has audible steps before any box dialogue:
    Absorption can also follow another committed action, in which case the
    preceding successful-step sting is absent.
 3. Each actual one-cell movement toward an endgame tableau target runs two
-   shared world-animation ticks, the short two-part sting from Section 5.3,
-   then three more shared world-animation ticks. An empty slot or an actor
+   shared world-animation ticks, the short two-part sting (recipe in Section 5.3,
+   described in full in Section 7.5 and played identically by the Blackthorn
+   cinematic, Section 8.6), then three more shared world-animation ticks. The
+   two ticks before and three after are the shared world-animation tick pause,
+   not the Blackthorn cinematic's own quiet pause. An empty slot or an actor
    already at its target emits no movement sting and requests none of these
    five ticks. The animation-enable gate suppresses those tick pauses, not
    the intervening sound call. Sound mute retains the sting's holds.
@@ -1713,7 +1739,10 @@ The absorption-to-tableau sequence has audible steps before any box dialogue:
 Lord British's initial walk has five steps. The active party members then
 walk 4, 4, 4, 4, 2 and 4 steps respectively, in party order, for as many
 members as are present. Thus the introductory train contains **9, 13, 17,
-21, 23 or 27 stings for party sizes 1 through 6**. These cues do not depend
+21, 23 or 27 stings for party sizes 1 through 6**. The train's stepping time is
+the sting count times five BIOS ticks (about 274.6 ms), so about 2.5 to 7.4 s for
+party sizes 1 to 6, plus one tick per member and the fixed 40-tick pause after
+Lord British appears; it is not itself a published fixed duration. These cues do not depend
 on anyone being Dead. Each member also has a separate one-tick placement
 pause before walking. Later target-directed walks use the same cue; the
 refusal branch additionally runs this two-tick/sting/three-tick beat once
@@ -1724,7 +1753,11 @@ The reported nine-burst train is consistent with a one-member tableau. Its
 roughly 275 ms spacing and occasional roughly 55 ms extension are consistent
 with five tick pauses per step and the extra member-placement tick. These
 are comparisons with the issue's capture, not a new wall-clock measurement
-or a universal fixed interval. The approximately 24 ms movement burst and
+or a universal fixed interval. An independent emulator capture (issue #288, 10 ms
+analysis windows, sting halves clustered) measured a median sting-to-sting spacing
+of 280 ms against the nominal 274.6 ms and a 17-sting train for a three-member
+party, matching the table above; it corroborates the tick count and is not a
+fixed-interval contract. The approximately 24 ms movement burst and
 39 ms absorption burst likewise fit the existing short-sting/action-snap
 models; neither requires a new software-envelope recipe.
 
@@ -1961,7 +1994,7 @@ figure and it sits on the anchor.*
 | Return-to-View strip 3 blip, each phase (section 8.6) | 3 | **2.6 ms** | 2.5 to 2.8 ms |
 | Projectile flight animation, per step | 40 | **35.3 ms** | 33 to 37 ms |
 | Stonegate trapdoor descending sweep, per tone (section 8.2) | 40 | **35.3 ms** | 33 to 37 ms |
-| Stonegate trapdoor descending sweep, all 750 tones | 30,000 | **about 26.5 s** | see 10.5 |
+| Stonegate trapdoor descending sweep, all 750 tones | 30,000 | **about 26.5 s** (captured: 26.4 to 26.5 s) | emulator-confirmed, see 10.5 |
 | Title-sequence publication wait, sounded branch (section 7.1) | 45 driver-local | **41.3 ms** | 38 to 45 ms |
 | Title-sequence publication wait, silent branch (section 7.1) | 50 driver-local | **45.9 ms** | 42 to 50 ms |
 | Title-sequence ignition burst, all 25 pitch holds | 25 at the rumble scale | **about 3.7 ms** total | 3.4 to 4.0 ms |
@@ -2006,7 +2039,7 @@ duration cannot jump (`timing.md` section 7.3).
 
 ### 10.3 Software envelopes
 
-An audible envelope costs about `iterations x 43.0 microseconds`; muted, about
+Every figure in this subsection is the reference-machine value and scales with the host as Section 8.6.2 describes (the rescue sequence measured 11.56 s at a fixed 3000-cycle emulator setting). An audible envelope costs about `iterations x 43.0 microseconds`; muted, about
 `iterations x 33.3 microseconds`. At baseline the idle gate always fires, so an
 envelope's idle count does not affect its baseline duration.
 
@@ -2063,14 +2096,21 @@ step counts, which are exact.
 
 ### 10.5 Two long durations that deserve a second look
 
-Two derived figures are much longer than the effects intuitively sound. Both
-follow unambiguously from loop bounds that are themselves exact, so they are
-published, but both are explicitly flagged as **derived and unverified** and are
-the two figures most worth an emulator run:
+Two figures are much longer than the effects intuitively sound. Both follow
+unambiguously from loop bounds that are themselves exact. The first has since
+been captured; the second is still **derived and unverified** and is the figure
+most worth an emulator run:
 
 - **The Stonegate trapdoor descending sweep runs about 26.5 seconds.** It plays
   750 discrete tones, every integer frequency from 1000 Hz down through 251 Hz,
-  holding each for 40 outer units including the retune.
+  holding each for 40 outer units including the retune. *(Confirmed 2026-10-12,
+  issues #274 and #220 follow-up: two independent emulator captures measured
+  26.5 s and about 26.4 s, the latter at a fixed 3000-cycle emulator setting with
+  a pitch slope of 28.4 Hz per second, one 1 Hz step per 35.2 ms, 1000 Hz down to
+  251 Hz. The arithmetic - 750 tones x 40 units x 0.88 ms, plus the per-tone
+  retune cost - gives 26.4 to 26.5 s. The slope and endpoints support the tone
+  count and the 251 Hz end only to within about one tone. These are emulator
+  measurements, not period hardware.)*
 - **The long descent runs about 6.86 seconds** across 195 updates: 660 Hz
   falling toward a nominal 150 Hz, span 7800, per-update delay 40, realised
   endpoint **272 Hz** rather than 150 Hz (section 5.2). It is no longer

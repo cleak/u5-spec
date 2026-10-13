@@ -475,7 +475,7 @@ Therefore, on any stock reference-class machine:
 - **A random-rumble step unit costs about 60 microseconds** — five inner units
   plus the per-outer-pass overhead.
 - **A title-sequence ignition burst pitch hold costs about 60 microseconds.**
-- **The software envelope's idle work is exactly zero.** The gate never fails to
+- **On the reference machine the software envelope's idle work is exactly zero** (a reference-machine statement: on faster hosts the spin is present, `audio.md` Section 8.6.2). The gate never fails to
   fire at baseline, so the envelope's iteration cost at baseline is instruction
   time only.
 
@@ -504,7 +504,7 @@ plus-or-minus-10-percent tolerance of section 7.1 unless stated otherwise.
 | Random-rumble per-iteration fixed cost | About **0.125 ms**, that is 12.5 inner units | Jitter advance, pitch mapping, retune core, shift setup, bookkeeping, loop test. Section 7.4.2 |
 | Random-rumble per outer pass | About 0.0596 ms | Five inner units plus the per-outer-pass overhead; an iteration performs `step` of these, so the per-iteration cost is **linear in the step**. Section 7.4.2 |
 | Title-sequence (driver-local) unit | About 0.92 ms, roughly 4 percent slower than the resident unit | The driver's copy of the wait is marginally more expensive per pass |
-| Software-envelope iteration, audible | About 43.0 microseconds, band 40.4 to 48.2 | See `audio.md` section 5.4 |
+| Software-envelope iteration, audible | About 43.0 microseconds, band 40.4 to 48.2 (reference machine; on hosts with calibration at least 100 add idle count x floor(calibration / 24) inner passes - measured 44.5 microseconds at a fixed 3000-cycle emulator setting) | See `audio.md` section 5.4 and 8.6.2 |
 | Software-envelope iteration, muted | About 33.3 microseconds | About 23 percent faster than the audible arm; see `audio.md` section 3 |
 
 `audio.md` section 10 applies this table to every named effect and publishes the
