@@ -1222,9 +1222,10 @@ markers have no countdown or implicit removal path and persist until combat
 exit restores the pre-combat active-object table.
 
 Dispel Field uses a separate removal helper rather than the four-spell
-placement helper above. In dungeon scenes, it checks the cell in front of the
-party using the party's facing direction and the current dungeon layer. If that
-live cell is in the field family, the spell rewrites the live cell to preserve
+placement helper above. In dungeon scenes, it checks the party's own cell first and, only if that is not
+a field, the cell one step ahead in the party's facing direction on the current
+dungeon layer (*corrected 2026-10-12, issue #287; `RETRACTIONS.md` R513* - the
+earlier text tested only the cell in front). If the chosen live cell is in the field family, the spell rewrites the live cell to preserve
 only the visit-marker bit, prints the field-destroyed success message, and
 returns success. This is a visit-local map-image mutation; it does not rewrite
 `DUNGEON.DAT`. In combat/non-dungeon spell scenes, it uses the shared direction

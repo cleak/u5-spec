@@ -797,8 +797,8 @@ conversation, not an actor and not the conversation payment code of
 Not established: the real-time length of the pauses (they run through the
 world-tick pause helper) and any sound the dots make.
 
-Provenance: derived from private analysis note
-`../u5-decomp/notes/2026-10-12_issue-290_troll-bridge-toll.md`.
+Source provenance: derived from private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/`.
 
 ## 8. Special tiles
 

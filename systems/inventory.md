@@ -345,6 +345,22 @@ Four consequences an implementation has to get right:
   wraps onto a second display line costs a row: an overflowing page shows six
   entries, or five if two of them wrap, and the picker's own count of entries
   shown falls with it (Section 4.5 gives which entries can wrap).
+- **Rows that wrap leave residue, and an overrun row replaces the border.**
+  *(Added 2026-10-12, issue #286; confirmed by running the original game with
+  counted regalia and shards.)* A wrapping entry that begins on window row 7
+  puts its label on row 8, so a page can show eight rows of text and **no bottom
+  border**; the border stays destroyed until the frame is next redrawn, and the
+  line feed that closes that row is the one scroll described below. The first
+  display line of a wrapped counted entry (quantity and selector only) is not
+  padded, so whatever an earlier pass drew to its right survives: a quantity-one
+  Sceptre line can appear twice on consecutive rows, and a shard label can appear
+  twice, because the second copy is stale pixels rather than a second entry. A
+  twelve-cell label that begins at window column 4 ends exactly on window column
+  15; the printer then wraps, the row's padding stops at window column 13, and
+  window columns 14 and 15 of the following line are never rewritten, so a stray
+  fragment such as the tail of `Shard/Hatred` sits there until some pass writes
+  those cells. None of these are part of the page's contents; an implementation
+  that clears each row per pass will not match the original.
 - **Every key that is not accept or cancel causes a full re-render**, including a
   key the picker does not recognise at all. An unrecognised code redraws the list
   exactly as an arrow key does, while leaving the page-top index and the
@@ -1265,7 +1281,7 @@ Confirmed U-Use families:
 | Potions | Eight colour-coded potion counters dispatch through a party-member target path. Display order is Blue, Yellow, Red, Green, Orange, Purple, Black, White, with normal effects wake, heal, cure poison, poison, sleep, combat-only "Poof" presentation, combat invisibility, and a surface/town visibility repaint sequence. A consumed potion normally applies the selected colour's effect, but a variation roll gives one chance in sixteen to force the Orange sleep effect and one chance in sixteen to replace the effect with a random potion row. Before that roll, the selected colour drives a blocking EGA/Tandy full-playfield invert/sound/restore presentation, so a substituted effect retains the selected bottle's presentation. All eight selected-colour timing rows use the same rumble and paired-sweep structure; the complete numeric table is in `catalogs/item-list.md` Section 7.2. Orange uses an ordinary persistent sleep tile with a one-in-seventeen scheduled wake check; Purple rewrites the combat record to ordinary tile `0x90` without a timer; White reveals the whole eleven-by-eleven viewport window straight from the map, with no distance or line-of-sight test, and repaints that unchanged grid twenty times (**corrected, R318**: the earlier "inclusive squared-distance-threshold-32 visibility grid" wording is withdrawn). Exact rasters, timing, restoration, and no-extra-turn rules are normative in that catalog section. |
 | Magic Carpet | Usable in scene ids `0x00..0x20` when the party has exact on-foot transport marker `0x1C` and the current map tile is anything except mountains `0x0C`. This boarding test is independent of movement passability; Section 7.1 gives its precedence and outcomes. On success it chooses carpet marker `0x14` or `0x15` with equal probability and consumes one carried carpet. |
 | Skull Key | Decrements the skull-key/special-key counter, then asks for a cardinal target and runs the lock helper in town/overworld or combat. Dungeon exploration refuses through this path. This is separate from `J` Jimmy's ordinary key use. The earlier non-combat-only scope is withdrawn (R415). |
-| Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise reports no effect or the alternate helper result. |
+| Regalia | The Amulet of Lord British, the Crown of Lord British, and the Black Badge all behave identically, and all three occupy the single shared timed-effect slot specified in `systems/magic.md` with the permanent duration. Using one of them while its own code already occupies the slot prints a short removal acknowledgement and vacates the slot; otherwise the handler prints the wearing message and installs that item's code. Their only difference is presentational: donning the Amulet or the Crown plays a sound cue, donning the Badge does not. Because the slot is shared and holds one effect at a time, donning any of them cancels an active buff spell, and every path that clears the slot — camping, entering an innkeeper menu, the Blackthorn rescue restoration — silently strips the worn aura until the item is used again. The Sceptre of Lord British is not worn through that state; in eligible non-dungeon scenes it scans the party-centered nearby square for the top-down `0x70..0x7F` barrier/field family, rewrites accepted cells to ordinary open ground with redraw/effect presentation, counts dissolved cells, and otherwise calls the Dispel Field helper of `systems/magic.md` Section 5.1 with its silent argument (see Section 7.1, "The Sceptre's fallback"). |
 | Shards | A shard row is present exactly when that shard's carried flag is nonzero, and normal acquisition sets the flag to the no-quantity marker 255, so the ordinary row is uncounted (Section 4.5). The three Shadowlord shard rows dispatch to the Shadowlord-destruction handler with shard index `0..2`; the handler succeeds only at the matching interior destruction position and only when the matching Shadowlord is the active named encounter, as specified in `catalogs/quest-graph.md`. The U-Use dispatch itself does not decrement or clear anything, so a refused attempt keeps the shard. **A successful destruction consumes the shard**: the destruction handler clears that shard's carried flag as part of the same success step that retires the Shadowlord and sets the quest bit. |
 | Moonstones | Rows `1..8` record the current valid location into the matching saved Moonstone slot. Burying is accepted only when the scene byte is `0x00` through `0x20` inclusive - the overworld and the town family, so dungeon and combat scenes are outside the band - and only on the accepted tile ids; **no transport test exists anywhere in the branch**, so a party afloat is refused by the tile alone. Search/Get recovery later invalidates the slot. |
 | Spyglass | Night utility, surface plane only. It permits a look when all three of these hold: the party is on the surface plane, the scene is the outdoor world or a town-class scene (dungeon-class and combat-class scenes are excluded), and the hour is in the night window `19..23` or `0..5`. The Underworld fails the plane condition, exactly as the Sextant does. A scene or plane failure prints the "not here" refusal; a daytime hour prints the no-stars refusal; the successful path prints the looking message and enters the same LOOKOBJ sky renderer specified in `systems/view.md` section 4.2. |
@@ -1313,6 +1329,38 @@ six. The accepted family starts at that retained cursor, subject to ordinary
 wrapping. This is a cursor-position contract, not a guarantee that the
 already-painted `Item:` is still on that screen row. The earlier unconditional
 same-row wording here and in the first issue answer is withdrawn (R467).
+
+**The Sceptre's fallback.** *(Added 2026-10-12, issue #287.)* The "alternate
+helper" is the same field-removal helper An Grav uses (`systems/magic.md`
+Section 5.1), called silently (no shrine sound). It runs only when the Sceptre's
+nearby scan dissolved nothing; the scan is the 3x3 square centred on the party
+(own cell included) and is skipped in first-person dungeon exploration, where the
+helper runs unconditionally. Any scan success ends the command without calling
+the helper. The helper returns one of three results. In dungeon-class scenes it
+tests the party's own cell and then the cell one step ahead; a field cell is
+cleared to its visit-marker bit, the helper itself prints `Field destroyed!`, and
+the Sceptre adds nothing; otherwise it returns 0 and the Sceptre prints
+`No effect!`. In arena scenes it shows the ordinary direction prompt: a cancelled
+prompt returns silently, a chosen cell holding a field marker has that marker
+removed and returns 1 so the Sceptre prints `Field dissolved!`, and otherwise it
+returns 0 (`No effect!`). In overworld and town scenes treat the helper as finding
+no field. `Field destroyed!` and `Field dissolved!` are therefore two print sites,
+the helper's and the Sceptre's, not two wordings of one beat.
+
+**The prompt has no marker row.** *(Added 2026-10-12, issue #278.)* `Item: ` is
+printed with no line feed after it, the single-key reader prints nothing of its
+own, and no end-cap glyph is emitted: the animated input cell waits inline in the
+cell after the trailing space, the same shape as the mixer's quantity prompt
+(`systems/magic.md` Section 6). While the picker is browsing nothing is appended
+to the prompt row and no candidate name is drawn anywhere in the message
+window. The name appears only after acceptance, written at the retained cursor
+column. A row beneath a waiting prompt is the scroll gap below, not a marker: a
+page that caused no scroll leaves the prompt on the window's last row with the
+cursor inline; after one scroll the cursor cell sits directly beneath `Item:`;
+after two there is one blank row between (blank rows equal the accumulated
+scrolls minus one). On acceptance the name is therefore inline (no scrolls),
+directly under `Item:` (one) or one blank row below (two), always at column six.
+Those rows decode empty because they are empty.
 
 **EGA panel-overflow side effect.** Both the inventory panel and the message
 window begin at screen column 24. EGA selects its fixed right-side scroll
@@ -1452,9 +1500,9 @@ Utility results follow those completions:
 | Amulet, Crown or Badge removed | `Removed!\n` |
 | Sceptre, every accepted selection | `Wielding the Sceptre of Lord British...\n`, before its sound and field checks |
 | Sceptre clears one or more nearby top-down fields | No additional result; no count is printed |
-| Sceptre fallback reports a dissolved field | `Field dissolved!\n` |
-| Sceptre fallback reports no effect | `No effect!\n` |
-| Sceptre fallback returns its other result | No additional result |
+| Sceptre fallback reports a dissolved field (the helper returned 1: arena field marker removed) | `Field dissolved!\n` |
+| Sceptre fallback reports no effect (the helper returned 0) | `No effect!\n` |
+| Sceptre fallback returns its other result (dungeon-cell success, where the helper itself printed `Field destroyed!\n`, or a cancelled arena direction prompt) | No additional result |
 | Moonstone buried | `buried!\n`, completing `Moonstone_` |
 | Moonstone refusal | `cannot be buried here!\n`, completing `Moonstone_` |
 | Spyglass accepted | `Looking...\n`, then the sky view |

@@ -387,8 +387,8 @@ the category line only, never the specific item. The `a chest!`, `a shield!` and
 `a helm!` lines are unreachable from Search (`hidden-treasures.md`) but reachable
 here.
 
-Provenance: derived from private analysis note
-`../u5-decomp/notes/2026-10-12_issue-292_surface-chest-transcript.md`.
+Source provenance: derived from private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/`.
 
 ## 5. Fixed Search Tables
 
