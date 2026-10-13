@@ -1,5 +1,27 @@
 # Next Steps for u5-spec
 
+## The issue backlog sweep (2026-10-12 Pacific)
+
+Twenty-four of the twenty-nine issues open since 2026-09-07 were answered and
+closed in this pass (#220, #259, #264, #274-#288 and #290-#295). Twelve of the answers withdrew or scoped published text
+(`RETRACTIONS.md` R510-R521); the ones an implementation is most likely to have
+built on are the dungeon class-6 rising paint and the bomb cell rewrite (R511,
+R512), the local view overlay's colour model (R514-R517), the morale draw's 257
+values (R519), the timed PAUSE code with no cancel key (R520), and the captive-cell
+floor (R521). New contracts: the troll bridge ambush and toll
+(`systems/overworld.md` Section 7.1), the surface/town chest transcript
+(`systems/containers.md` Section 4.1), the deferred panel-refresh census
+(`systems/stats-panel.md` Section 2.2.1), the combat entry-mode table
+(`systems/combat.md` Section 4), and the envelope cost model's host dependence
+(`systems/audio.md` Section 8.6.2).
+
+**Still open, each blocked on clean-side data** (the issue comment names exactly
+what to supply): #210 (the two extra scrolled rows - reporter's save, cell and
+frames), #216 (why that guard's live dialogue word was zero), #231 (the empty-arena
+armour pick and the invisibility silence), #289 (the arena `Enter what` beats:
+frame sequence and arena type). #249 (the removed screenshot) is waiting on an
+owner decision about rewriting public history.
+
 ## Issue #273 follow-up - the party-sprite band, audited (2026-09-13 UTC)
 
 The disputed clause flagged by the shrine-pose pass is now answered, and the
