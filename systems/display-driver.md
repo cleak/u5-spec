@@ -103,7 +103,7 @@ panel titles — `u4-transfer.md` section 6.1), the character-creation panels
 (slots 2 and 1 — `chargen.md`), several intro surfaces (slots 2 and 1 —
 `intro.md`), the dungeon view's band pens, which take the same slots biased into
 the bright half of the palette by adding eight (`dungeon-mode.md` section 12),
-and the Look command's sky renderer, which uses **slot 0** for its Shadowlord
+the local view overlay (`view.md` section 4: slot 0 for frame-fill classes and the road body and stubs, slot 1 for the line classes and the party marker's XOR, slot 2 + 8 for water and class `0xF`, slot 3 + 8 for terrain classes, slot 4 on CGA and Hercules for the water alternate, slot 5 for class `8`; slot 6 unused), and the Look command's sky renderer, which uses **slot 0** for its Shadowlord
 markers, slot 1 for the celestial bodies, and slot 2 biased bright for the
 starfield (`view.md` section 4.2.6).
 

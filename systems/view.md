@@ -324,7 +324,7 @@ all three correct earlier wording:
 The local 32-by-32 raster renders at a four-pixel cell scale, centered inside
 the main gameplay viewport. It is the shared absolute geometry for surface
 View and for the Peer/X-Ray-style local-view callers; mode changes affect
-source/palette selection, not placement. A cell anchor is:
+nothing in placement; the only colour selector is the display adapter (below). A cell anchor is:
 
 ```text
 anchor_x = 32 + column * 4
@@ -342,26 +342,26 @@ of the class renderers below. The tile-id ranges are the tile catalog ids after
 active-object/terrain lookup has selected the cell to draw. Coordinates in the
 renderer table are relative to the cell anchor and use `(x,y)` order.
 
-| View class | Source family | Clean pixel/stroke contract |
+| View class | Pen colour (EGA / Tandy) | Clean pixel/stroke contract |
 |---:|---|---|
 | `0` | none | No-op; leaves the cell unornamented. |
-| `1` | secondary terrain bank | Four 8-by-8 micro-blits rooted at `(1,0)`, `(1,2)`, `(3,1)`, `(3,3)`, forming the sparse checker/corner pattern. |
-| `2` | secondary terrain bank | Filled rectangle from `(0,0)` through `(3,3)`. |
-| `3` | frame-fill bank | Filled rectangle from `(0,0)` through `(3,3)`. This uses the frame-fill source family rather than the class-2 terrain source. |
-| `4` | frame-line bank | Horizontal line `(0,0)..(3,0)` and horizontal line `(0,3)..(3,3)`. |
-| `5` | frame-line bank | Horizontal line `(1,1)..(2,1)` and horizontal line `(1,2)..(2,2)`, forming a centered two-by-two marker. |
-| `6` | frame-line bank | Hollow rectangle: top `(0,0)..(3,0)`, bottom `(0,3)..(3,3)`, left `(0,1)..(0,2)`, right `(3,1)..(3,2)`. |
-| `7` | frame-line bank | Direct frame-chain variant. It selects the same frame-line source family used by class `0x5A`, then draws the ordinary filled cell frame. |
-| `8` | dedicated rough-terrain bank | Upper-left two-by-two block plus lower-right two-by-two block: `(0,0)..(1,0)`, `(0,1)..(1,1)`, `(2,2)..(3,2)`, `(2,3)..(3,3)`. |
-| `9` | secondary terrain bank | Hybrid pattern: horizontal line `(0,0)..(3,0)`, horizontal line `(0,2)..(3,2)`, plus two lower-half micro-blits rooted at `(1,2)` and `(0,3)`. |
-| `0xA` | modal terrain banks | The water class: shoals, fourteen of the sixteen river/shoreline variants, and open water. Four micro-blits rooted at `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)`. Source selection is per corner. A corner takes the secondary terrain family only when the cell is one of the river ids **and** that corner's bit is clear in the cell's four-bit low-nibble shoreline mask; in every other case it takes the peer/blue family under peer/gem view and the normal terrain family otherwise. |
-| `0xB` | modal terrain banks | Two diagonal micro-blits rooted at `(0,0)` and `(2,2)`. Normal and peer/gem-view modes select different source families. |
-| `0xC` | modal terrain banks | Deep water (tile id `0x01`) is the sole member. A single micro-blit at `(2,2)` and nothing else. The source is the peer/blue family under peer/gem view and the normal terrain family otherwise. *Corrected:* an earlier revision published this class as a table-mapped no-op with no renderer. It does render. |
-| `0xD` | fixed plus modal terrain banks | Four micro-blits. The top pair `(1,0)` and `(3,1)` always use the fixed secondary terrain source; the bottom pair `(0,2)` and `(2,3)` use the modal normal/peer source. |
-| `0xE` | frame-line bank | Vertical line `(1,0)..(1,3)` and vertical line `(2,0)..(2,3)`. |
-| `0xF` | normal terrain bank | Direct peer/gem-view variant using the normal terrain source with the ordinary cell-frame chain. |
-| `0x10` | secondary terrain, frame-fill and frame-line banks | The road class; its seven tile ids are the whole road family and nothing else maps here. The cell opens with the class-`1` sparse checker, then a centre fill `(1,1)..(2,2)` — the road body. A per-tile four-bit connection mask then adds a stub out to each connected cell edge: top `(1,0)..(2,0)`, right `(3,1)..(3,2)`, bottom `(1,3)..(2,3)`, left `(0,1)..(0,2)`. The shipped masks are north-south for `0x20`, east-west for `0x21`, the four single elbows for `0x22`, `0x23`, `0x24` and `0x25`, and all four edges for `0x26`. For the four elbow ids only, one further micro-cell is stamped with the blank source over the quarter of the centre fill diagonally opposite the elbow — `(1,2)`, `(1,1)`, `(2,1)` and `(2,2)` respectively — which rounds the unused corner off the road body. *Corrected:* an earlier revision called this a fence/wall renderer whose last stamp was an interior orientation marker. It is neither. |
-| `0x5A` | frame-line bank | Compatibility/direct-call class. It uses the same source family and filled-cell frame chain as class `7`; no shipped tile-id table entry maps here. |
+| `1` | slot 3 + 8, light green (10) | Four single-pixel plots at `(1,0)`, `(1,2)`, `(3,1)`, `(3,3)`, forming the sparse checker/corner pattern. |
+| `2` | slot 3 + 8, light green (10) | Filled rectangle from `(0,0)` through `(3,3)`. |
+| `3` | slot 0, dark red (4) | Filled rectangle from `(0,0)` through `(3,3)`. This uses colour slot 0 rather than class 2's slot 3 + 8. |
+| `4` | slot 1, white (15) | Horizontal line `(0,0)..(3,0)` and horizontal line `(0,3)..(3,3)`. |
+| `5` | slot 1, white (15) | Horizontal line `(1,1)..(2,1)` and horizontal line `(1,2)..(2,2)`, forming a centered two-by-two marker. |
+| `6` | slot 1, white (15) | Hollow rectangle: top `(0,0)..(3,0)`, bottom `(0,3)..(3,3)`, left `(0,1)..(0,2)`, right `(3,1)..(3,2)`. |
+| `7` | slot 1, white (15) | Direct frame-chain variant. It selects the same pen as class `0x5A`, then draws the ordinary filled cell frame. |
+| `8` | slot 5, yellow (14) | Upper-left two-by-two block plus lower-right two-by-two block: `(0,0)..(1,0)`, `(0,1)..(1,1)`, `(2,2)..(3,2)`, `(2,3)..(3,3)`. |
+| `9` | slot 3 + 8, light green (10) | Hybrid pattern: horizontal line `(0,0)..(3,0)`, horizontal line `(0,2)..(3,2)`, plus two single-pixel plots at `(2,1)` and `(0,3)`. *(Corrected 2026-10-12, issue #283: the first plot was published at `(1,2)`; `RETRACTIONS.md` R515.)* |
+| `0xA` | per corner, see below | The water class: shoals, fourteen of the sixteen river/shoreline variants, and open water. Four single-pixel plots at `(1,0)`, `(3,1)`, `(1,2)`, `(3,3)`, in that corner order. A corner is light green (10) only when the cell is one of the river ids **and** that corner's bit is clear in the cell's four-bit low-nibble shoreline mask; every other corner takes the water pen, slot 2 + 8, light blue (9) on EGA and Tandy. The per-tile result is tabulated after the class table. |
+| `0xB` | water pen, light blue (9) | Two diagonal single-pixel plots at `(0,0)` and `(2,2)`. |
+| `0xC` | water pen, light blue (9) | Deep water (tile id `0x01`) is the sole member. A single-pixel plot at `(2,2)` and nothing else. *Corrected:* an earlier revision published this class as a table-mapped no-op with no renderer. It does render. |
+| `0xD` | top pair light green (10); bottom pair light blue (9) | Four single-pixel plots. The top pair `(1,0)` and `(3,1)` always use slot 3 + 8; the bottom pair `(0,2)` and `(2,3)` use the water pen. |
+| `0xE` | slot 1, white (15) | Vertical line `(1,0)..(1,3)` and vertical line `(2,0)..(2,3)`. |
+| `0xF` | slot 2 + 8, light blue (9) | Filled cell using the normal terrain pen with the ordinary cell-frame chain; this class has no adapter-dependent arm. |
+| `0x10` | light green (10) checker; dark red (4) body and stubs; colour 0 for the elbow stamp | The road class; its seven tile ids are the whole road family and nothing else maps here. The cell opens with the class-`1` sparse checker, then a centre fill `(1,1)..(2,2)` in slot 0, dark red — the road body. A per-tile four-bit connection mask then adds a stub, also in slot 0 (no frame-line white is used), out to each connected cell edge: top `(1,0)..(2,0)`, right `(3,1)..(3,2)`, bottom `(1,3)..(2,3)`, left `(0,1)..(0,2)`. The shipped masks are north-south for `0x20`, east-west for `0x21`, the four single elbows for `0x22`, `0x23`, `0x24` and `0x25`, and all four edges for `0x26`. For the four elbow ids only, one further pixel is plotted in colour 0 (black) over the quarter of the centre fill diagonally opposite the elbow — `(1,2)`, `(1,1)`, `(2,1)` and `(2,2)` respectively — which rounds the unused corner off the road body. *(Corrected 2026-10-12, issue #283: the stubs were published as frame-line; `RETRACTIONS.md` R516.)* *Corrected:* an earlier revision called this a fence/wall renderer whose last stamp was an interior orientation marker. It is neither. |
+| `0x5A` | slot 1, white (15) | Compatibility/direct-call class. It uses the same pen and filled-cell frame chain as class `7`; no shipped tile-id table entry maps here. |
 
 The resident view-class table maps tile ids to these classes as compact ranges.
 **Every id below is a terrain-half tile id in `0x00..0xFF`** — the values that
@@ -394,20 +394,63 @@ renderer, which is consistent with those four being placed, drawable terrain.
 | `0xF` | `0xD8..0xDC` |
 | `0x10` | `0x20..0x26` |
 
-Classes that switch banks under peer/gem-view mode affect presentation only.
-They do not change terrain, active objects, or visibility state.
+**There are no source banks and no tile art.** *(Corrected 2026-10-12, issue
+#283; `RETRACTIONS.md` R514.)* Earlier revisions described these classes as
+"micro-blits" copied from named banks (frame-fill, frame-line, normal and
+secondary terrain, rough terrain, peer/blue). That reading is withdrawn. Every
+draw is "select a pen colour, then plot pixels, draw lines or fill a box in that
+colour"; a micro-blit is one plotted pixel. The tile bitmaps are never read by
+this renderer and nothing needs extracting from the shipped assets beyond the
+seven user-interface colour slots of `systems/display-driver.md` Section 2. The
+overlay first fills the whole main viewport rectangle with colour 0, so unpainted
+pixels of a cell stay black. The former "families" are those slots, some biased
+into the bright half of the palette by adding eight:
 
-The source-family names above are public renderer roles, not raw asset
-addresses. The renderer uses these families consistently:
+| Former family name | Colour slot | EGA / Tandy index | CGA / Hercules pen |
+|---|---|---|---:|
+| Frame fill | slot 0 | 4, dark red | 2 |
+| Frame line | slot 1 | 15, white | 3 |
+| Normal terrain (water) | slot 2 + 8 | 9, light blue | 1 |
+| Secondary terrain | slot 3 + 8 | 10, light green | 1 |
+| Peer/blue | slot 4 | 5, magenta - never drawn on EGA or Tandy | 2 |
+| Dedicated rough terrain | slot 5 | 14, yellow | 3 |
+| Blank | literal colour 0 | 0, black | 0 |
 
-| Source family | Used by |
-|---|---|
-| Frame fill | Class `3` and the center fill in class `0x10`. |
-| Frame line / structure outline | Classes `4`, `5`, `6`, `7`, `0xE`, and compatibility class `0x5A`. |
-| Normal terrain | Class `0xF` and the normal-mode branches of `0xA`, `0xB`, `0xC`, and `0xD`. |
-| Secondary terrain | Classes `1`, `2`, `9`, the fixed top layer of class `0xD`, the opening checker of class `0x10`, and the river-shoreline branch of class `0xA`. |
-| Peer/blue terrain | Peer/gem-view branches of classes `0xA`, `0xB`, `0xC`, and `0xD`. |
-| Dedicated rough terrain | Class `8` only. |
+Slot 6 is not used by any view class. On CGA the driver masks a pen to two bits,
+so adding eight lands on the same value as the unbiased slot; Hercules passes the
+same pens through the driver's four-entry dither table (its rendered appearance
+is not established).
+
+**The adapter, not a view mode, selects the modal arm.** *(Corrected 2026-10-12; `RETRACTIONS.md` R517: the earlier text selected the peer/blue family "under peer/gem view".)* The modal test of classes
+`0xA`, `0xB`, `0xC` and `0xD` reads the display adapter identifier (CGA 0, EGA 1,
+Tandy 2, Hercules 3), the same word the withdrawn dungeon "peer tint branch"
+turned out to be (Section 6). It is set once at startup. On EGA and Tandy those
+classes always take the water pen (slot 2 + 8); on CGA and Hercules they always
+take the slot-4 pen. There is no Peer, gem or X-Ray colour variant of the local
+view: every caller draws the same colours, and none of this changes terrain,
+active objects or visibility state. While the overlay waits for a key, a 4-by-4
+box at the party's own cell is XOR-drawn with the slot-1 pen on every fourth idle
+poll, so each pixel's colour index is inverted against white rather than set to a
+fixed colour.
+
+River-family corner colours on EGA and Tandy, in the corner order `(1,0)`,
+`(3,1)`, `(1,2)`, `(3,3)`; G is light green, B is light blue. Tile ids `0x03` and
+`0xE4..0xE7` are B B B B.
+
+| Tile | Corners | Tile | Corners |
+|---|---|---|---|
+| `0x60` | G B G B | `0x68` | G B B B |
+| `0x61` | G B B G | `0x69` | B B B G |
+| `0x62` | G B G G | `0x6C` | G G G B |
+| `0x63` | G G G B | `0x6D` | G G B G |
+| `0x64` | G G B B | `0x6E` | B G G G |
+| `0x65` | G B B G | `0x6F` | G B G G |
+| `0x66` | G B G B | | |
+| `0x67` | G B B B | | |
+
+The shoreline-mask rule stated in the `0xA` row reproduces this table. The
+earlier table of which class used which "source family" is superseded by the pen
+column of the class table above.
 
 ### 4.2 The Sky Renderer
 

@@ -1675,9 +1675,11 @@ turn, and town's quick-poll arm does not read it at all.)*
 
 The request is raised in twenty-three places
 across the game, every one of them a routine that has just changed a number the
-panel shows - spell mana, food, gold, HP from a hazard, or the active-player
-marker - so an engine should model it as a shared display latch owned by the
-stats panel, not as combat state and certainly not as a contact-record field.
+panel shows - HP, status, food, gold, vehicle marker and hull, marching order,
+the active-player marker, the timed-effect letter or a found-item counter (no
+raise site changes spell mana; the full enumeration is `stats-panel.md` Section
+2.2.1) - so an engine should model it as a shared display latch owned by the
+stats panel, not as combat state and certainly not as a contact-record field. *(Corrected 2026-10-12, issue #291, R518: the list of changes previously began with "spell mana".)*
 *(Scope: the reader census is every read of that byte in any absolute form
 across the executable, all twenty-four overlays and all four display drivers -
 four reads, one per mode loop, each followed by the same redraw-and-clear. A

@@ -113,7 +113,7 @@ Census of the shipped program. The full-panel refresh has eighty direct call
 sites: seventy-four immediate repaints inside a command, a shop or inn
 sub-screen, a cutscene or a shared helper; the four mode-loop consumers of
 Section 2.3; the boot-time first paint; and the day-rollover repaint of
-Section 2.4. Twenty-three further sites raise the deferred request instead of
+Section 2.4. Twenty-three further sites (enumerated in Section 2.2.1) raise the deferred request instead of
 painting. Nine of the eighty painting sites are resident and the rest live in
 overlays; five code overlays never paint the panel at all.
 
@@ -146,6 +146,104 @@ raises the request before it tests whether the party can afford the toll, and
 does not lower it when an unaffordable debit is rolled back. (Only a `Y` answer debits and raises; a plain refusal raises nothing.) A raise can
 therefore outlive the change that prompted it; the only consequence is one
 redundant repaint of an unchanged panel.
+
+### 2.2.1 The census, enumerated
+
+*(Added 2026-10-12, issue #291.)* The count was rebuilt independently: eighty
+sites paint the whole panel, twenty-three raise the deferred request and four
+clear it. The eighty painters are seventy-four immediate repaints, the four
+mode-loop consumers of Section 2.3, the boot paint and the day-rollover repaint;
+no other route reaches either primitive. The mechanism column below is exact for
+every site; the counter column for the immediate sites is the routine's evident
+purpose rather than a counter traced site by site.
+
+**The twenty-three deferred sites.** Each raises the request and leaves the panel
+stale until the next command prompt.
+
+| # | Command or event | Counter(s) changed |
+|--:|---|---|
+| 1 | H Hole up on a ship tile, repair branch (the ordinary rest path does not raise) | vessel hull |
+| 2 | Ring of Regeneration pass: after the world turn's damage step, once per camp step inside Hole up, and in combat's ring effect | member HP (+1 on a one-in-eight roll per eligible member) |
+| 3 | Awaken (An Zu) | member status Sleeping to Good |
+| 4 | Cure (An Nox) | member status Poisoned to Good |
+| 5 | Create Food (In Xen Mani) | food (+1..3, cap 9999) |
+| 6 | Great Heal (Vas Mani) | member HP to maximum |
+| 7 | U-Use of the Amulet, Crown or Black Badge while already worn (the shared toggle's removal arm) | timed-effect letter cleared |
+| 8 | U-Use of the Black Badge, install arm (the Amulet and Crown install arms repaint inline) | timed-effect letter |
+| 9 | The Heal helper: the Heal spell (Mani) and the Yellow potion (the potion also repaints inline afterwards) | member HP |
+| 10 | The Resurrect helper: In Mani Corp, a Resurrection scroll, healer resurrection, the Blackthorn rescue restoration (all four repaint inline straight after, so this raise is always redundant) | member status, HP, maximum HP, level |
+| 11 | B Board | vehicle marker, hull, skiff and carpet counts |
+| 12 | N New order | marching order |
+| 13 | The Escape key in combat, on both the refused and the accepted outcome | nothing the panel shows changes on a refusal |
+| 14 | The Sword of Chaos compulsion on a party actor's turn | active-player marker cleared |
+| 15 | Combat poisoning of a Good party member (poison attack, poison field, swamp tier); the non-combat poison helper repaints inline | member status Good to Poisoned |
+| 16 | Combat fire hazard (lava, fireplace, Fire Field), damage `0..10`, raised for any actor | HP of the stepping actor |
+| 17 | Dungeon sleep field, per member that falls asleep | member status Good to Sleeping |
+| 18 | A ship destroyed while the party continues on a skiff or magic carpet | vehicle marker, skiff or carpet count |
+| 19 | The troll bridge toll (`systems/overworld.md` Section 7.1) | gold |
+| 20 | Search of a moldy corpse, plague arm (one in thirty-two); its food and gold arms request nothing | member status Good to Poisoned |
+| 21 | Any successful grant from Search, Get, chest opening or hidden-treasure collection (every arm except the two refusals `Open it first!` and `Nothing to get!`); one shared tail | whichever found-item counter is granted |
+| 22 | G Get on a crop | food (+1) |
+| 23 | The end of every completed combat action, when a timed-effect countdown reaches zero (the world turn's same countdown repaints inline) | timed-effect letter cleared |
+
+**The seventy-four immediate sites** repaint the whole panel inline, before the
+routine returns. Grouped by command or event (the number is how many sites):
+
+| Command or event | Counter(s) | Sites |
+|---|---|--:|
+| The shared party-damage path, as its last act | member HP, Dead status, active-player marker | 1 |
+| World per-turn timed-effect countdown reaching zero | timed-effect letter | 1 |
+| The shared non-combat poison helper | member status | 1 |
+| Active-player digit keys (`0` clears; `1`..`6` select a living, awake member) | active-player marker | 1 |
+| Combat entry and exit | whole panel | 1 |
+| The shared wake-from-sleep and put-to-sleep helpers | member status, active-player marker | 2 |
+| Town: total-party defeat (per member), hazard poisoning, town entry setup | HP, status; whole panel | 3 |
+| Ship damage: survive arm; total-loss arm (no skiff or carpet) | hull; vehicle marker | 2 |
+| Dungeon: sleepers waking, end of tile-effect dispatch, post-action redraw | status, tile-effect HP and status, whole panel | 3 |
+| Combat: Gremlin steals food; set-active-player clear; first paint at combat start; a party member killed in the damage resolver; monster special-ability tick; attack narration after a party-side hit | food; active-player marker; whole panel; HP, status; HP | 6 |
+| Blackthorn: companion execution, each wrong mantra answer, rescue restoration | party size, whole panel | 3 |
+| Look and View making the viewer the active player when none is | active-player marker | 2 |
+| Camp apparition level-up | each member's mana | 1 |
+| Shops: guild purchase, arms purchase, shared purchase confirm; shop entry, arms sale, healer fee and post-heal repaint | gold, HP, status | 7 |
+| Endgame: entry paint and paint after the closing sound | whole panel | 2 |
+| Leaving the arena (two sites) and the combat select-active-player command | active-player marker | 3 |
+| H Hole up in the open (entry, ambush or poison arm, exit); town bed Hole up (sleep, wake, end) | status, HP, mana, clock | 6 |
+| X-it from a vehicle | vehicle marker, hull | 1 |
+| Mix reagents, at its end | reagent counts | 1 |
+| Charm, party-member arm; Negate Time | member status; timed-effect letter | 2 |
+| In Mani Corp and the Resurrection scroll, after the helper; the Yellow potion, after the heal helper | status, HP | 3 |
+| U-Use, right after the item is picked and before its effect runs | whole panel | 1 |
+| Conversation: service payment, gold debit, action grant (food then gold), an NPC joining, the final gold fallback | gold, food, party size | 5 |
+| The shared set-timed-effect helper (Amulet and Crown install, Protection and Negate-Magic installs) | timed-effect letter | 1 |
+| Shrine offering | gold | 1 |
+| Stats browser exit; R Ready at its end | whole panel; equipment | 2 |
+| Sage; tavern (food purchase and its gold) | gold, food | 3 |
+| Inn: rest for the night (four sites), a companion leaving, inn main (three sites), innkeeper menu entry (timed effect cleared) | gold, HP, mana, status, food, party size, timed-effect letter | 9 |
+
+**Facts an implementation needs.**
+
+1. The same counter goes both ways inside one subsystem. Timed-effect expiry is
+   immediate in the world turn and deferred in combat's per-action cleanup;
+   installing the Amulet or Crown repaints inline while installing the Black Badge
+   is deferred, and removal is deferred for all three; ship damage has three
+   outcomes - survive (immediate), sink onto a skiff or carpet (deferred), total
+   loss (immediate).
+2. An immediate repaint neither tests nor clears the pending request; only the
+   four mode-loop consumers clear it. A request raised earlier in the same command
+   (the Ring of Regeneration pass during camp is the usual case) survives an inline
+   repaint and costs one redundant repaint at the next prompt.
+3. No deferred site changes spell mana; mana changes only in routines that
+   repaint inline. What a raise follows is HP, member status, food, gold, vehicle
+   marker and hull, marching order, the active-player marker, the timed-effect
+   letter, or a found-item counter.
+4. Gold is deferred only for the troll toll; every other shop, inn, shrine and
+   conversation payment paints inline. HP is deferred for the Ring of Regeneration
+   pass, Great Heal, the Heal helper and the combat fire hazard.
+5. Where an engine defaults every command to immediate and carries exceptions,
+   rows 1 to 23 above are the complete exception set.
+
+Source provenance: derived from private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/`.
 
 ### 2.3 Where the deferred request is consumed
 
