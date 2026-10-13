@@ -961,7 +961,7 @@ remain unchanged.
 
 ## Issue #253 follow-up - Sacrifice/Honor page labels (2026-09-10 UTC)
 
-R454 corrects the two labels transposed in ad46c06's karma8.1: Sacrifice uses
+R454 corrects the two labels transposed in b307799's karma8.1: Sacrifice uses
 record24 and Honor uses record25, matching the existing virtue/save-bit order.
 Fresh original name/mantra-table inspection and added name-to-record assertions
 in the 1,047-case probe verify the mapping. All cases pass. The completion
@@ -1215,7 +1215,7 @@ R429 removes an invented embedded line feed from the ammunition refusal.
 Issue #238 can close; its capture row is removed from OPEN-QUESTIONS.
 
 **2026-09-08 UTC, #243 saved NPC band follow-up.** The requested map and
-dialogue field were already published for #217 in 3a03fb7. Saved-gam Section
+dialogue field were already published for #217 in bada27e. Saved-gam Section
 12.1 now also states the byte accounting explicitly: 2,208 bytes of NPC
 tables plus twelve other bytes. The source dialogue array is represented by
 runtime words, not an additional saved array. All fourteen published ranges
@@ -2014,7 +2014,7 @@ in `combat.md` section 11 runs the other way.
 
 **Addendum — 2026-09-02, issue #180: the per-turn wander gate and the
 blocking-presentation contract.** The two halves of #180 that spec commit
-`4e570c2` left open are now published, and six reversals came out with them.
+`c56733e` left open are now published, and six reversals came out with them.
 
 *The wander gate.* `systems/npc-schedules.md` Section 9.1 gives the whole
 per-turn contract for a wandering town NPC: exactly one attempt per player turn,
