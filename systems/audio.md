@@ -1572,7 +1572,7 @@ broadband noise, independently of the band-edge growth. This paragraph is
 - **Wall-clock retune cadence and total duration are not established.** A
   hand-built cycle model gives roughly **0.5 to 1.0 ms per retune** (about a 1
   to 2 kHz retune rate) and a total run of roughly **8 to 14 s** for the
-  32,320-pixel logo rectangle. Those figures omit display-memory wait states on
+  32,320-pixel logo rectangle (the first, gated dissolve only; the rescue's `(8,8)..(183,183)` dissolve is ungated and has no wait at all, `systems/blackthorn.md` Section 6.3). Those figures omit display-memory wait states on
   the read-modify-write plane accesses (not modelled at all), bus wait states on
   the fourteen port writes per pixel, memory-refresh steal, and the firmware
   keyboard-poll handler cost. **Treat them as unverified.** The structure above

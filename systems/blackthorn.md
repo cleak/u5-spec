@@ -157,9 +157,17 @@ conditional, and Section 4.2 says exactly when it is reached: only the punishing
 wrong-answer branches reach it, because every other branch has already cleared
 the tableau slot its test reads. The handoff itself prints nothing. The traced handoff uses scene
 byte eighteen, the gazetteer's `CASTLE:1` location associated with Lord
-Blackthorn's Castle, with local position `(10, 7)`.
-Entering that location does not create a captivity timer or context field; the
-scene and position are the complete persistent handoff.
+Blackthorn's Castle, with local position `(10, 7)` **on floor -1, the castle's
+basement** - the cell block, a row of window, barred-door and window cells one row
+south of the party under a row of wall torches. Floor 0 at the same local
+position is the courtyard. Entering that location does not create a captivity
+timer or context field. The handoff writes the scene byte, the floor (the same
+signed value the basement uses in saves and in `systems/npc-schedules.md`), the
+local position, and zeroes the carried-key counter (Section 8); town entry setup
+does not choose the floor, it only loads the map page for the floor the handoff
+left. *(Corrected 2026-10-12, issue #281; `RETRACTIONS.md` R521: the earlier text
+called the scene and position the complete persistent handoff, which lands the
+party in the courtyard.)*
 
 ## 4. Challenge Loop
 
@@ -358,8 +366,8 @@ The call counts do not depend on the host. The **duration** does, in two ways:
   key wait and the 36 stings remain in both cases.
 
 **The handoff.** When the script returns, the audience performs the captive-cell
-handoff described in Section 3 — the cutscene presentation flag, the scene byte
-and the local position — and it prints nothing at all. Two shared service calls
+handoff described in Section 3 — the cutscene presentation flag, the scene byte,
+the floor (-1) and the local position — and it prints nothing at all. Two shared service calls
 sit inside it, the same moon-phase-row and scene-announce pair the audience
 setup called; on this path the scene byte is still the cutscene value the setup
 left behind, so both return without drawing. That is a property of the state the
@@ -368,8 +376,11 @@ town value, the same pair does blank the two panel rows (Section 3). The
 captive-cell entry setup the arrest handler runs next prints nothing either.
 
 The handoff leaves the cutscene presentation flag **raised**, and nothing in
-this overlay lowers it again. Whether the town entry setup that follows clears
-it was not established; that gap is recorded in `OPEN-QUESTIONS.md`.
+this overlay lowers it again. The flag is the shared current-actor selector with
+its none value (identification inferred: it is the only selector the audience
+raises at setup and never restores). Nothing in town entry setup reads or writes
+it and every other reader is gated to combat-range scenes, so it has no
+observable effect outside combat; its next writer is combat entry.
 
 **What the player sees next.** The first output after the handoff belongs to the
 town loop, not to Blackthorn: its input helper emits a single line feed, the
@@ -669,12 +680,21 @@ changes behave the same way. By contrast, each caller-level single-cell reveal
 draws directly to the visible page: exactly 256 pixel writes in the shared EGA
 LFSR order, with one world tick after each eight completed pixels except the
 last group—31 checkpoints in all. These Blackthorn reveals are blocking and
-cannot be skipped. There is no final flush. The caller commits the same terrain
+cannot be skipped, and each costs 256 single-pixel driver calls plus 31 bare world
+redraws with **no BIOS-tick wait**, so its duration is CPU-bound too; the three
+reveals are 768 pixel calls and 93 redraws. There is no final flush. The caller commits the same terrain
 or actor identity afterward so the next ordinary redraw preserves the revealed
 image.
 
 The rescue's two whole-viewport transitions are the shared blocking rectangle
-dissolve over inclusive pixels `(8,8)..(183,183)`. The thunder beat also runs
+dissolve over inclusive pixels `(8,8)..(183,183)`. This is the **ungated**
+dissolve - the speaker-and-keyboard gate has been cleared by the earlier glyph
+drawing - so it makes 32,767 loop iterations (30,976 pixel copies, the rest land
+outside the rectangle) with no wait, tick, poll or checkpoint of any kind; its
+duration is CPU-bound and the program defines no wall clock for it. The "roughly
+8 to 14 s" estimate of `systems/audio.md` Section 8.6.1 and `systems/timing.md`
+belongs to the first, gated start-menu dissolve only and must not be applied here
+(*scope note 2026-10-12, issue #282*). The thunder beat also runs
 the shared full-viewport flash/low-rumble operation from `systems/audio.md`
 Section 8.4 twice back-to-back. Those are direct-screen operations; none is a
 text-window clear.
@@ -1295,17 +1315,19 @@ shared-conversation behavior/waypoint cases. Presentation, clock progression,
 alarm, combat and scene entry use controlled boundaries; this is isolated
 execution, not a new complete walk-in capture.
 
-**Capture discrepancy, issue #216.** The earlier live report in issue #206
-used entry from the overworld at 16:00, a stock Quit-and-Save, relocation of
-the party south of the guard, Journey Onward, then explicit Talk north; it
-reports the charity question and gold changing from 150 to 75 on Yes. Exact
-coordinates and that save were not retained in the report. The later walk-in
-capture reports a bare `No response!` and an all-7 engine schedule. Fresh
-canonical-file and dispatcher traces establish the routes above but do not
-identify the state difference in that capture. A stock-written save immediately
-before the failing Talk, with the resolved NPC/object linkage and live dialogue,
-is needed to reconcile it. The bare line is not an alternate meaning of the
-reserved index established by this evidence.
+**Reconciliation of issue #216** *(2026-10-12)*. The two observations are the
+two states of one dispatcher, not two behaviours. Executed on the original with
+the canonical Minoc roster at 16:00: a walk-in produces the charity demand on the
+first orthogonal adjacency (the guard's live word is `0xFF`); the same save with
+**only the guard's live dialogue word set to zero** produces the reported
+transcript exactly - `a guard` for Look, `Nothing to open!` for Open, the bare
+`No response!` for Talk, no automatic demand at any time, and the behaviour-4
+guard walking up to block the party instead of raising the demand. A guard whose
+linked-object index points at another object also gives the bare line on Talk.
+Setting the state word or the link to zero did not reproduce it. What zeroed or
+broke the word in the reporter's session is **not established**; the state to
+capture is listed in `OPEN-QUESTIONS.md`. The bare line is not an alternate
+meaning of the reserved index.
 
 Source provenance: canonical roster, byte-to-runtime-word loading, and both
 Talk callers freshly checked in `u5-decomp/functions/NPC_OVL/`,

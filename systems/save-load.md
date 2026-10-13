@@ -119,11 +119,17 @@ scrolled by the feeds the transition spends
 re-anchors the message cursor on every scene change is modelling the load path
 in a place the original does not.
 
-**Capture discrepancy, issue #210.** The reported first echo on screen row
-14 does not match this traced normal-load path. Its cause remains open; a
-stock save and frames at the first prompt, immediately after the first
-command, and after room entry, with the exact command sequence, would
-distinguish initial placement from subsequent scrolling or another load path.
+**The start row is the bottom row, and "row 14" is not a start offset.**
+*(Executed on the original 2026-10-12, issue #210.)* After a load into any scene
+the message window's cursor is on its bottom row (window-local row 12, column 0;
+screen row 23) and the window is empty; nothing of the intro's full-screen window
+is inherited. A one-line command such as Pass then ends with its echo on screen
+row **21**: its own result feed and the next poll's leading feed each scroll once.
+Text anchored at the bottom always shows the *end* of the output, so a long chain
+puts the first echo high: the ten-row chain from `>Ignite torch!` through `>Pass`
+leaves about nine rows after the echo and the echo lands on row 14 with no start
+offset at all. An engine that starts the cursor at row 14 reproduces that one
+chain and sits too high for every shorter one.
 
 Source provenance: fresh Journey cursor and load-tail traces in
 `u5-decomp/functions/INTRO_OVL/`, descriptor selection/cursor and stats calls

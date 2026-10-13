@@ -1329,9 +1329,14 @@ another before reading the command. These separate emissions still cost a
 row when the preceding text has exactly filled a row; banner wrapping also
 depends on the actor name and equipment.
 
-The two-row excess scrolling reported in issue #210 remains unreconciled;
-the exact banner, command sequence and intermediate captures are needed to
-attribute it. Source provenance: fresh fall/room and combat prompt traces in
+Verified on the original (2026-10-12, issue #210) for the Doom level-6 fall into
+the level-7 room cell: the published lines plus combat's two separate feeds
+account for every row, and the arena may add its own announcement line (for
+example `Wisp teleports!`) between `Entering room...` and the blank row before
+the banner. The two-row excess scrolling reported in issue #210 was **not
+reproduced**; it remains unreconciled and needs the reporter's save, the
+dungeon, level and cell, the banner text and frames at the first prompt, after
+the first command and after room entry. Source provenance: fresh fall/room and combat prompt traces in
 `u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/functions/COMBAT_OVL/`, plus
 isolated execution of the resident string printer with modeled glyph/cursor
 output in `u5-decomp/functions/ULTIMA_EXE/`. This was not a live game capture.

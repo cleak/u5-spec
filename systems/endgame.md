@@ -331,12 +331,25 @@ ordinal. The file holds **eleven NUL-terminated records** with these roles:
 
 | Record | Role |
 |---:|---|
-| 0 | Lord British's greeting, ending mid-sentence so the party leader's name and the literal `!"` plus a blank line can be appended |
+| 0 | Lord British's greeting. The record begins with one line feed, then the lead-in `Lord British says:` (part of the record, not a program literal), two line feeds, `"Well met,` and a final line feed; the program then prints the party leader's name and the stored text `!"` followed by two line feeds |
 | 1 | The first box question, ending with the literal reply lead-in `You reply: ` |
 | 2 | The second, explicit sandalwood-box question, likewise ending with `You reply: ` |
 | 3 | The first rite message, describing Lord British opening the box |
 | 4..9 | The remaining six rite messages |
 | 10 | The refusal branch's "pull up a chair" exchange |
+
+**Framing of the greeting** *(added 2026-10-12, issue #280)*. The absorption line
+printed by the final-room effect ends with its own line feed, which closes its
+row. Record 0's leading line feed is therefore the **only** feed between the two
+prints and derives exactly one blank row (`systems/text-output.md` Section 10.4);
+nothing else prints between them (the screen reset, bitmap loads, palette steps
+and the party tableau walk emit no text). The window then reads, in order, the
+absorption line, one blank row, `Lord British` / `says:`, a blank row, `"Well met,`
+/ the leader's name with `!"`, and a blank row. If a party member is dead, the
+revival arm runs between the two prints; each revival line carries its own leading
+and trailing line feed, and record 0's leading feed again yields one blank row.
+This differs from Section 7's `He says:` lead-in, which is a stored program
+literal.
 
 Each yes/no prompt is a **blocking single-key read** that accepts only `Y` or
 `N` and re-reads on anything else. The accepted answer is echoed into the
