@@ -74,7 +74,9 @@ The edge helper applies these rules in order:
    zero. In an encounter whose mode has the high bit set, a later party actor
    choosing a different direction is refused with a leading newline,
    `All must use the same exit!`, a trailing newline, and the same 165 Hz bump
-   tone. Ordinary modes permit a different later direction. Monster-side
+   tone. Ordinary modes permit a different later direction. Only dungeon room
+   encounters carry the high bit (Section 4), so this refusal is reachable only
+   there. Monster-side
    actors neither seed nor test it.
 3. On acceptance, count live unmarked actors before removing anybody. With no
    foes, print `Leave!`; with one or more foes, print `Escape!`. These two
@@ -124,6 +126,27 @@ The framing function bridges the world-mode loop and the combat round loop. It m
   and falls straight through to the common tail. The rest/camp helper returns a
   predicate: a **zero** return skips the round loop entirely, while a nonzero
   return continues into combat.
+- **The entry-mode values** *(added 2026-10-12, issue #276)*. The mode is
+  written once, by the entry path, and read for the rest of the fight. The
+  framer has five callers and no other writer of the byte exists in any shipped
+  program:
+
+  | Entry path | Mode | High bit |
+  |---|---:|---|
+  | Overworld encounter (random or hostile contact, including ship and water arenas) | 0 | clear |
+  | Town, castle, keep or dwelling attack or NPC conflict | 0 (the same terrain entry) | clear |
+  | Dungeon wandering-monster or contact encounter | 2 | clear |
+  | Dungeon A-Attack on a monster in front | 2 | clear |
+  | **Dungeon room trigger** (trigger cell or cleared-room helper cell) | 2 with the high bit added | **set** |
+  | `H` Hole up camp ambush outside dungeons | 4 | clear |
+  | `H` Hole up camp ambush inside a dungeon | 6 | clear |
+
+  **Only the dungeon room trigger sets the high bit.** The room path performs its
+  own setup and calls the round loop directly instead of running the shared
+  entry routine. Bit value 2 marks a dungeon context (it refuses the In Por-style
+  and Klimb arena actions already described) and bit value 4 the camp alternate
+  entry (it suppresses the sleep application's one world tick). Shrine, Codex,
+  endgame and every other scripted scene have no combat entry.
 - The **ambush** branch loads no arena of its own. It calls the same room-combat
   setup helper the dungeon room path uses, with an entry mode that passes that
   helper's placement gate and a zero tile argument, and it **discards** the slot
@@ -2037,11 +2060,16 @@ the newline and plays a two-tone refusal beep. The tails contain no newline of
 their own: `" what?"` (including its leading space), `"-Not here"` (no
 exclamation point), and `"-Funny, no response!"`. Twelve letters use it: `B`
 Board and `X` X-it take the first tail and therefore produce exactly
-`Board what?` and `X-it what?`; `E` Enter, `F` Fire, `H` Hole up, `I` Ignite,
+`Board what?` and `X-it what?`; `E` Enter, `F` Fire, `H` Hole up, `I` Ignite (printed as `Ignite torch`),
 `L` Look, `M` Mix, `N` New order, `Q` Quit and `V` View take the second; `T`
 Talk takes the third. The responder always re-prompts without cost. `D` and
 `W` bypass it and print their own `D-What?` / `W-What?`, with the same no-cost
 re-prompt.
+Every such refusal is followed by the same actor's turn banner and a fresh
+prompt. `Enter what?` is the **world** command's answer for `E` with nothing to
+enter; the arena parser never prints it, and its choice of tail does not read the
+entry mode. Checked 2026-10-12 (issue #289) by pressing every letter in a live
+overworld arena; a dungeon-room arena has not been run.
 
 The remaining letters call their targets directly, as the table below records.
 
@@ -2557,6 +2585,17 @@ and the full/short retry distinction remain as specified in Section 8.1.
 | Digit 0 | `Set active plr:\nNone!\n` |
 | Valid digit 1–6 selection | `Set active plr:\n`, selected actor name, `\n` |
 | Invalid digit selection | `Set active plr:\nInvalid!\n` |
+| Digits `7` to `9` and any other unmapped key | `What?\n` |
+
+These are the combat parser's own lower-case literals and are **not** the world
+command's title-case `Set Active Plr:` (`systems/commands.md`); the shipped data
+holds both and an engine must keep both. The label prints before the eligibility
+test, so the invalid case is two lines. Digit `0` is one literal that already
+contains `None!`. A member is eligible when it is a party-side actor in the arena
+with that roster slot and none of the disabled, asleep or dead-marked bits; after
+a valid selection the chosen actor's turn banner follows on the next line.
+*(Confirmed 2026-10-12, issue #293.)*
+
 | Escape refused by context | `Escape-Not here!\n` |
 | Escape refused while fight remains undecided | `Escape-Not yet!\n` |
 | Escape accepted | `Escape!`, with no trailing line feed from this handler |
@@ -2993,12 +3032,14 @@ accepted actor has its combat HP counter driven to one *and* its fleeing bit set
 directly by the spell, so the flag is already up before the classifier next runs,
 and the critical HP keeps the classifier re-asserting it. The classifier compares the acting monster's current HP against its
 class maximum: below one quarter sets fleeing, one-quarter through just under
-one-half rolls a morale check that sets fleeing on only 4 of 256 possible
-random-byte results (a roll of 252 or more) and otherwise clears it, and
+one-half rolls a morale check that sets fleeing on only five of 257 possible
+results (a roll of 252 through 256; the draw is over the inclusive range `0..256`,
+not a byte) and otherwise clears it, and
 one-half or higher clears fleeing. *Corrected (issue #263): this sentence
 previously said the morale check sets fleeing on 252 of 256 results; the
 branch was read backwards, and the correct odds are 4 of 256. See
-`RETRACTIONS.md` row R483.* It also returns a
+`RETRACTIONS.md` row R483. Corrected again 2026-10-12 (issue #285, R519): the
+draw has 257 values, so the odds are five of 257.* It also returns a
 four-bucket wound score for other AI consumers.
 
 Cause Fear sweeps all thirty-two combat slots and accepts every monster-side
@@ -3104,8 +3145,19 @@ consequently load-bearing rather than cosmetic.
 fleeing actor moves, the driver runs the morale classifier described above over
 that actor's current health, and the classifier both sets **and clears** the
 bit: a fleeing actor healed back above the classifier's clear threshold stops
-fleeing and can no longer leave the arena. The same pre-step block also rolls a
-one-in-four chance to restore one point of that actor's health. An engine that
+fleeing and can no longer leave the arena. The same pre-step block, for a
+monster-side fleeing actor, **first** takes one draw over the four values zero
+through three on every fleeing turn - no health, bucket or randomness
+precondition - and on a three adds exactly one to the actor's current health with
+**no ceiling** (a plain increment; the classifier clears the bit once health
+reaches twice one-quarter of the class maximum, but a bit raised without lowering
+health lets a full-health actor reach one above its maximum, and an engine must
+not clamp). That draw precedes the classifier's own conditional draw, and both
+precede the movement primitive's draws. A party-side fleeing actor takes neither
+(and is unreachable in the shipped game). When the primitive reports that it did
+not move and the bit is still set, the dispatch into the attack/target routine is
+draw-free, tick-free and silent from the driver's side. *(Clarified 2026-10-12,
+issue #285.)* An engine that
 latches the flag once raised will let monsters escape that the original keeps in
 the fight, and will never show the slow self-healing of a cornered fleeing
 monster.
@@ -4643,7 +4695,9 @@ look for foes. It looks for any party-side descriptor whose marked-dead bit is
 clear. Its exact branches are:
 
 - If such a party-side descriptor exists and the encounter mode's high bit is
-  set, append `-Not here!` plus a newline and re-prompt the same actor at no
+  set (only the dungeon room trigger sets it, Section 4; the refusal is then
+  unconditional, even after victory, because a room fight is left only by walking
+  out edge by edge), append `-Not here!` plus a newline and re-prompt the same actor at no
   cost. The complete line is `Escape-Not here!`.
 - If such a descriptor exists in an ordinary mode and the one-shot exit
   announcement has not yet happened, append `-Not yet!` plus a newline and

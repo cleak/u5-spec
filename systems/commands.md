@@ -297,7 +297,7 @@ plain block of text rather than as a table addressed by the key code.
 | `X` | `X-it_` | |
 | `Y` | `Yell_` | |
 | `Z` | `Z-stats...\n` | |
-| `0` | `Set_Active_Plr:\n` | Cancelled: `None!\n`; rejected: `Invalid!\n` |
+| `0` | `Set_Active_Plr:\n` | Cancelled: `None!\n`; rejected: `Invalid!\n`. Digits `1` upward (up to the party size) use the same routine, print the member's name and a line feed, and reject Dead or Asleep members with `Invalid!`; the label is title case here and combat uses a separate lower-case label (`systems/combat.md` Section 8.4). |
 | buffer toggle | `Buffer_O` followed by `ff\n` or `n\n` | Prefix and suffix are separate literals. |
 | any unmapped key | `What?\n` | The same text answers a key that is recognised but meaningless in the current mode. |
 

@@ -168,6 +168,8 @@ Both cases print `Absorbed!` and abort before charge or mana consumption.
 
 *Corrected 2026-09-10 (R460): the earlier claim that level rejection also prints `M.P. too low!` is withdrawn.*
 
+**Charge and mana are already spent when a handler prompts.** *(Clarified 2026-10-12, issue #277.)* Steps 4 to 6 precede the handler, so a handler's own prompt (`On who: `, a direction, an arena target cursor) is reached with the charge - and, for any spell that passed the mana gate, the mana - already spent. Cancelling the prompt returns neither; it only skips the handler's effect and, for most handlers, its completion word. Measured: with exactly one Heal charge, Escape at `On who: ` and a second cast gives `None mixed!`. The complete gate order is: resolve the acting member (silent abort); spell-name prompt (Escape or empty gives `None!`, no match gives `No effect!`, nothing spent); scene gates (the Absorbed cases first, then the allow-mask `Not here!`, nothing spent); charge counter zero gives `None mixed!` (nothing spent); decrement the charge; mana below the circle gives `M.P. too low!`, `Failed!` and the failure sound (charge spent, mana not debited); debit mana; caster level below the circle gives `Failed!` and the failure sound (charge and mana spent); dispatch. No later gate can fail after a prompt opens, and nothing in any cast, cancel or combat path adds a charge back except M-Mix.
+
 **Step 7 — dispatch to the effect handler.** The dispatcher computes the spell's index (0..47) into a forty-eight-entry dispatch table and calls the matching handler. Handlers fall into a small set of families described in Section 8.
 
 **Step 8 — narrate the result.** Completion has three distinct outcomes:
