@@ -281,7 +281,7 @@ The non-dungeon Open handler always begins with one piece of bookkeeping: the do
 - **Locked door / chest / lockable NPC** — "Locked!" and return. Open does not pick.
 - **Closed-and-unlocked door / closeable chest** — open path: snapshot the previous tile id, X, and Y into the door-close-tracker, set the tracker countdown to four, rewrite the cell to the open-container byte, set the tile-changed bit, and print "Opened!".
 - **Magic-locked door** — treated as locked.
-- **Anything else** — route to the chest-on-floor helper, which scans the location's per-map object table for a chest at the target cell and grants its contents, invokes the shared trap-effect resolver when a trap outcome is selected, prints "Trapped!", "Nothing to open!", or another container line.
+- **Anything else** — route to the chest-on-floor helper, which scans the location's per-map object table for a chest at the target cell and grants its contents, invokes the shared trap-effect resolver when a trap outcome is selected, prints `Trapped!\n` (before the resolver's own word), `Nothing to open!\n`, `Chest empty!\n`, or another container line; the surface/town chest's full transcript is `systems/containers.md` Section 4.1.
 
 Open writes the same open-container tile for both doors and closeable
 chest-like tiles, so a freshly opened door and a freshly opened closeable

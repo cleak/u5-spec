@@ -126,7 +126,7 @@ derive it. Four worked cases:
 |---|---|
 | Damage applied to a party slot through the shared party-damage path | immediate repaint, as that path's last act |
 | The shared healing helper's hit-point gain | deferred request |
-| The troll-bridge toll's gold debit | deferred request |
+| The troll-bridge toll's gold debit (`systems/overworld.md` Section 7.1) | deferred request |
 | The shop, healer, guild, inn, resurrection and conversation-payment gold debits | immediate repaint, a few steps after the debit |
 
 There is a tendency, useful as a sanity check and not as a rule: a flow that
@@ -143,7 +143,7 @@ Do not model it as a queue of regions or as a count of pending refreshes.
 
 **A raise does not depend on the change surviving.** The troll-bridge toll
 raises the request before it tests whether the party can afford the toll, and
-does not lower it when an unaffordable debit is rolled back. A raise can
+does not lower it when an unaffordable debit is rolled back. (Only a `Y` answer debits and raises; a plain refusal raises nothing.) A raise can
 therefore outlive the change that prompted it; the only consequence is one
 redundant repaint of an unchanged panel.
 

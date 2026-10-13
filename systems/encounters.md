@@ -394,8 +394,9 @@ rather than the class-1 plural name". The selecting condition is the broader
 equivalent, because that command's own gate forwards only masked `0x2C` or
 masked values at or above `0x40`. Of the four other entry paths into
 terrain-combat entry, two force a fixed sprite at or above `0x40` before
-calling (the entrance-attack path forces the Shadow Lord family, the refused
-bridge toll forces the Troll family), and two - a world hostile reaching the
+calling (the entrance-attack path forces the Shadow Lord family, the refused or
+unaffordable bridge toll of `systems/overworld.md` Section 7.1 forces the Troll
+family), and two - a world hostile reaching the
 party, and the town entry path - apply no lower-bound test at all. Whether any
 sub-`0x40` sprite other than the ship family can occupy a slot those two reach
 depends on the world spawn tables and the town trigger table, neither of which

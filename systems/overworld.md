@@ -179,6 +179,7 @@ Every iteration walks the same sequence:
    e. Fixed narrative gate branch if on its surface-world coordinate.
    f. Per-turn party-status and provisions work through the outdoor status helper.
    g. Run the remaining ordinary environment and transport hooks.
+      The underfoot tile arms form one exclusive chain, so no two fire on the same turn: the bridge ambush of Section 7.1 (tiles `0x6A`/`0x6B`) comes first, then the on-foot swamp poisoning, then the **lava arm**: when the tile is `0x8F` (molten lava) and the scene byte is zero, rebuild the view, print `Burning!\n`, and apply an independently rolled `1..8` to every non-Dead slot below the party count. It fires on every turn-consuming action, including a Pass or an answered Search, so standing on lava burns every turn. It tests only the tile, never the transport; who can stand there is decided by passability alone (`catalogs/tile-catalog.md` Section 6). *(Added 2026-10-12, issue #294.)*
    h. Run the outdoor object epilogue: after its ordinary scene/transport
       pendulum gates, roll for a random encounter, then animate/move and prune
       eligible non-player active objects as specified in Section 6.
@@ -740,6 +741,64 @@ night-time boost. The same encounter spec owns the spawn-coordinate retry loop,
 terrain bucket selection, and weighted monster-class picker.
 
 A handful of *scripted* encounters bypass the random system. Pirate ships, for example, are placed on specific Britannia coordinates by the seed `.OOL` and follow their wandering AI from there.
+
+### 7.1 The troll bridge ambush and toll
+
+*(Added 2026-10-12, issue #290.)* This is an overworld event on the two bridge
+tiles `0x6A` and `0x6B`, which occur only on Britannia. It is not a
+conversation, not an actor and not the conversation payment code of
+`conversation.md`.
+
+1. **Trigger.** After a turn-consuming overworld action (scene byte zero), if the
+   tile under the party is `0x6A` or `0x6B`, this is the first arm of the
+   per-turn underfoot chain (Section 5, step 6g), so no other underfoot arm fires
+   that turn. Draw `0..7` on every such turn, whatever the transport; any nonzero
+   result ends the check, so one turn in eight proceeds. Then the transport must
+   be on foot; a mounted, carpet, skiff or frigate party ends the check silently.
+2. **Announcement and sneak rolls.** Rebuild the view, print
+   `\nThou spieth trolls under the bridge!\n\n`, and pause ten world-tick
+   units. Walk the roster in slot order below the party count. A Dead or Asleep
+   member is skipped with no line and no roll. For every other member print the
+   member's name, ` sneaks across`, three dots each preceded by a five-unit pause,
+   then `\n\n`, and roll `1..30`: a Dexterity at or above the roll gets across
+   and the walk continues; a lower Dexterity means that member is caught and the
+   walk stops at once. If nobody is caught - including an empty or all-Dead/Asleep
+   roster - print `Trolls evaded!\n`; there is no toll and no fight.
+3. **The demand.** Print `Caught!\n\nThe trolls demand a `, the toll as a decimal
+   right-justified in a two-column space-padded field, then ` gp toll!\n\nDost
+   thou pay?` with no trailing feed. Wait for a key, upper-cased: only `Y` and
+   `N` are accepted and every other key is ignored (there is no abort). Echo the
+   accepted letter and a line feed.
+4. **The toll** is `99 - 3 x Strength`, using the Strength of the **first member
+   able to act** (the first slot whose status is Good or Poisoned, found by
+   re-running the party-capability scan at this moment), not of the member who was
+   caught. Strength 15 gives 54; with the shrine cap of 30 the toll is never
+   below 9. The arithmetic is signed sixteen-bit: Strength 33 gives a free toll,
+   and a larger Strength (not reachable by shrine increments) would give a
+   negative toll that prints with a minus sign and credits gold on payment.
+5. **Pay (`Y`).** Reduce party gold by the toll and raise the deferred panel
+   request at once, **before** the affordability test. If gold is still
+   non-negative the toll is paid: nothing more prints, the event ends with no
+   fight, and the panel repaints at the next command prompt. Exactly affording the
+   toll pays. If gold went negative, the debit is rolled back but the request
+   stays raised (`systems/stats-panel.md` Section 2.2), and the event continues
+   exactly as a refusal.
+6. **Refuse (`N`) or unaffordable.** Acquire a free active-object slot (no
+   failure test), initialise it as the first of the four Troll sprites (tile
+   `0xE4`, bestiary class 41), frame zero, on the party's own tile at z 0, and
+   enter terrain combat with it. The terrain under the troll is a bridge, so the
+   bridge arena applies (`systems/encounters.md`); troll count and placement come
+   from ordinary terrain-combat entry. There is no flee option and no further
+   message. A plain `N` never debits and never raises the panel request.
+7. **Routes.** Refusal and an unaffordable payment are the only routes into this
+   fight; paying, evading, being mounted or missing the one-in-eight draw never
+   reach it. The Troll family is forced regardless of any spawn table.
+
+Not established: the real-time length of the pauses (they run through the
+world-tick pause helper) and any sound the dots make.
+
+Provenance: derived from private analysis note
+`../u5-decomp/notes/2026-10-12_issue-290_troll-bridge-toll.md`.
 
 ## 8. Special tiles
 

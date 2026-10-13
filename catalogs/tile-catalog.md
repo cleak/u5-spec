@@ -758,20 +758,29 @@ turn-consuming action, after that turn's clock advance, and re-reads the tile
 the party currently occupies, so the effect re-rolls for every turn spent
 standing on the tile.
 
-Two further town underfoot tile families are damage tiles rather than cosmetic
+Two further underfoot tile families are damage tiles rather than cosmetic
 ones: live tile `0x8C` (shipped description "a loose brick"; it also changes
 floor outside the Stonegate scene) and live tiles `0xBC` and `0x8F` — **the
 burning family**, whose shipped descriptions are "a fireplace" and "molten lava"
 and whose handler prints the stored line `Burning!`. Both apply an independently
-rolled `1..8` hit points to every non-Dead party slot. Their behavior is
-specified in `systems/town-mode.md`.
+rolled `1..8` hit points to every non-Dead party slot. In town both ids burn
+(`systems/town-mode.md`). **On the world planes `0x8F` burns too**, with the same
+view rebuild, the same line and the same damage, on every turn-consuming action
+spent standing on it; `0xBC` is not tested outdoors and occurs in neither world
+grid. Lava occurs on both planes (sixteen cells on Britannia, 101 on the
+Underworld). The town and world arms are separate routines with identical
+behavior; model them as one underfoot behavior. Neither arm tests the transport:
+the on-foot and magic-carpet limit is a passability rule (`systems/movement.md`)
+that keeps horses, skiffs and frigates from stepping onto the tile, not part of
+the reaction. *(Re-scoped 2026-10-12, issue #294; `RETRACTIONS.md` R510.)*
 
 **Correction.** Earlier revisions of this catalog, and `systems/town-mode.md`,
 called `0xBC`/`0x8F` "the rune/lever family". That name is **withdrawn**. It came
 from a working guess in an early overlay note, not from the data: the description
 table names the two ids a fireplace and molten lava, the string the handler
 prints is `Burning!` — sitting in the shipped string pool immediately beside
-`A TRAPDOOR!` and `Poisoned!`, the other two town underfoot lines — and `0xBC`
+`A TRAPDOOR!` and `Poisoned!`, the other two town underfoot lines, all three stored
+with a single trailing line feed and no leading one — and `0xBC`
 is independently confirmed as a light source by the local-light source list in
 `systems/visibility.md` Section 12.3. This document already named `0x8F` molten
 lava in Section 5, so the two sections contradicted each other.

@@ -220,7 +220,8 @@ four effect families above apply and the flavour is chosen here.
 The two container sites are not otherwise identical. Three differences are
 confirmed:
 
-- The surface/town site prints its own "trapped" notice before the resolver
+- The surface/town site prints its own "trapped" notice - exactly `Trapped!\n`,
+  with no leading feed (`systems/containers.md` Section 4.1) - before the resolver
   runs; the dungeon chest site prints no trap line of its own and lets the
   resolver's effect message stand alone.
 - The surface/town site alone performs a combat-scene cleanup after the resolver

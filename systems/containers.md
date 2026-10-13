@@ -328,6 +328,68 @@ class.
 | 46 | Amulet | 15 |
 | 47 | Amulet | Disabled |
 
+### 4.1 The surface/town chest transcript
+
+*(Added 2026-10-12, issue #292.)* The "content pools below" in the paragraph
+above are the two tables printed directly under it - the primary pool and the
+equipment pool - keyed by the chest object's low seven-bit class. They are not
+Section 6: the dungeon chest is a different generator (depth-scaled gate, seven
+rows, its own quantities) and shares neither the rows nor the counts. Both pool
+tables are correct as published; what follows is what the surface/town chest
+**prints**, which they do not say.
+
+The surface/town chest never prints a count, colour, rune word or equipment
+name. Each successful grant prints one fixed line that names only the family;
+the quantity or subtype is carried silently in the floor object the grant
+stages. An opened chest therefore never produces text of the form "2 food,
+3 torches". Each line below ends with exactly one line feed.
+
+| Grant family | Line |
+|---|---|
+| Food | `some food!` |
+| Torches | `some torches!` |
+| Gems | `a gem!` |
+| Keys | `a ring of keys!` |
+| Scroll | `a scroll!` |
+| Potion | `a potion!` |
+| Gold | `a sack of gold!` |
+| Chest marker | `a chest!` |
+| Helm | `a helm!` |
+| Shield | `a shield!` |
+| Armour | `some armour!` |
+| Weapon | `a weapon!` |
+| Ring | `a ring!` |
+| Amulet | `an amulet!` |
+
+Transcript order, once the acting member has been chosen and the chest's object
+record cleared (nothing at all prints on the `None!` path above):
+
+1. If the chest's trap bit was set, print `Trapped!` plus one line feed - no
+   leading feed, no member name, no trap-kind word - and then run the shared trap
+   resolver, which prints its own word (`ACID!\n`, `POISON!\n`, `BOMB!\n` or
+   `GAS!\n`). The dungeon chest site has no equivalent notice.
+2. Evaluate the primary pool and then the equipment pool. Before the first
+   successful grant print the heading `Found:` plus a line feed, once per opening;
+   each grant then prints just its row. A grant that cannot be staged because no
+   active-object slot is free is dropped and prints nothing.
+3. If no grant succeeded - nothing rolled, or every success was dropped - print
+   `Chest empty!` plus a line feed. It prints even after a trapped opening.
+
+Draw-order details the pool tables omit. The primary pool makes one quantity draw
+for every row that passes its gate; for the Chest-marker and Gold rows that first
+draw (`1..10` and `1..90`) is **discarded** and the family's own roll (`1..class`,
+`1..3 x class`) is made afterwards. Potion and Scroll use their `1..8` draw (less
+one for the subtype); the other rows use their `1..2` draw. The quantity draw is
+taken before slot allocation, so a full active-object table still consumes it. In
+the equipment pool an index whose threshold exceeds the class is skipped
+**without** its `1..30` draw; only eligible indices draw it. Equipment rows print
+the category line only, never the specific item. The `a chest!`, `a shield!` and
+`a helm!` lines are unreachable from Search (`hidden-treasures.md`) but reachable
+here.
+
+Provenance: derived from private analysis note
+`../u5-decomp/notes/2026-10-12_issue-292_surface-chest-transcript.md`.
+
 ## 5. Fixed Search Tables
 
 Search has a resident fixed-treasure database separate from the map object

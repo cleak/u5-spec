@@ -719,15 +719,21 @@ Cell class selects the family and the drawing mode:
 | `0x3?` both ladders | ladder | ladder |
 | `0x4?` closed chest | - | chest |
 | `0x5?` fountain | - | fountain, plus the water animation of Section 6.7 |
-| `0x6?` pit | pit when the low three bits are zero | pit |
+| `0x6?` pit | - | pit, only when the low three bits are zero |
 | `0x7?` open chest | - | open chest |
 
 Closed and open chests are visually distinct sprites, and the bidirectional
 ladder genuinely draws both a rising and a descending sprite in the same cell.
-The normal class-6 rising-pit paint is eligible only when the cell's low three
-bits are zero. Separately, after ordinary object/field painting, any raw cell
+There is no ordinary class-6 rising paint: the low-three-bits-zero condition
+gates the class-6 *floor* pit, and a class-6 cell with any of its low three bits
+set (a bare `0x62`, for instance) draws no pit sprite at all. *(Corrected
+2026-10-12, issue #295; `RETRACTIONS.md` R511.)* Separately, after ordinary object/field painting, any raw cell
 below class 9 whose bit `0x08` is set receives another rising overlay from the
-pit family. This static cell overlay is separate from the coordinate-driven
+pit family. The overlay has no other condition - no sub-type, low-bit or family
+test beyond "normalised class below 9 and raw bit `0x08` set" - and it applies at
+every band, including the party's own cell; raw bytes such as `0x08`, `0x18`,
+`0x48`, `0x58`, `0x68`, `0x69`, `0x6A`, `0x78` and `0x88` all take it. The shipped
+data holds 25 plain `0x08` cells. This static cell overlay is separate from the coordinate-driven
 wandering-monster record described in Section 6.9.
 
 Placement follows three rules, all of which reproduce exactly from the
@@ -1168,7 +1174,7 @@ prints the three-line pit/fall group of Section 8.1, clears the fired marker bit
 cell in the loaded dungeon image, increments dungeon level by one, and lands
 the party at the same X/Y on the next level. If the destination cell is below
 the wall/door band (`< 0x90`), the engine marks bit `0x08` in that destination
-cell before continuing. If the destination cell is another `0x61` or `0x69`,
+cell before continuing (the same bit the static overlay of Section 6.6 draws). If the destination cell is another `0x61` or `0x69`,
 the handler repeats, so the practical drop depth is the length of the vertical
 trap chain at that X/Y, not a direct low-nibble-to-distance table. If the chain
 increments the level past seven, the dungeon scene byte is cleared and the mode
@@ -1188,8 +1194,13 @@ six trap at `(5, 7)`, is the only way into the final room
 custom or mutated dungeon data in the analyzed baseline, not a route produced
 by the shipped static dungeon records.
 Exact bytes `0x62` and `0x6A` are bomb traps: they print the two bomb lines of
-Section 8.1, clear the current trap cell to its fired marker form, and do not
-change Z.
+Section 8.1, replace the cell byte with itself masked to bit `0x08` only (so `0x62`
+becomes `0x00`, plain passage that draws nothing, and `0x6A` becomes `0x08`,
+which draws the rising overlay of Section 6.6; there is no other fired-marker
+form), and do not change Z. The two lines print first, then the rewrite, then the
+damage sweep. All six bomb cells in the shipped dungeon data are plain `0x62`, so
+a fired bomb leaves an unmarked passage cell. *(Corrected 2026-10-12, issue
+#295; `RETRACTIONS.md` R512.)*
 
 Dungeon Search handles the pit/trap family as an inspectable feature as well.
 It first prints its unconditional preamble `You find:\n`, then applies
