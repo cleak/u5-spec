@@ -2068,8 +2068,11 @@ re-prompt.
 Every such refusal is followed by the same actor's turn banner and a fresh
 prompt. `Enter what?` is the **world** command's answer for `E` with nothing to
 enter; the arena parser never prints it, and its choice of tail does not read the
-entry mode. Checked 2026-10-12 (issue #289) by pressing every letter in a live
-overworld arena; a dungeon-room arena has not been run.
+entry mode. Checked 2026-10-12 (issue #289) by pressing every letter in live
+arenas of four kinds - overworld terrain, dungeon room trigger, dungeon contact and
+a dwelling attack - with identical results in all four. Not run: the dungeon
+A-Attack-forward arena (it shares the contact arena's mode), separate town and
+castle attacks, and `E` after victory or after the party has left the arena.
 
 The remaining letters call their targets directly, as the table below records.
 
