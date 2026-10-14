@@ -19,8 +19,9 @@ floor (R521). New contracts: the troll bridge ambush and toll
 what to supply): #210 (the two extra scrolled rows - reporter's save, cell and
 frames), #216 (why that guard's live dialogue word was zero), #231 (the empty-arena
 armour pick and the invisibility silence), #289 (the arena `Enter what` beats:
-frame sequence and arena type). #249 (the removed screenshot) is waiting on an
-owner decision about rewriting public history.
+frame sequence and arena type). #249 (the removed screenshot) is closed: the
+screenshot was purged from every commit on 2026-10-13 and the owner accepted that
+GitHub still serves the old objects by their old ids.
 
 ## Issue #273 follow-up - the party-sprite band, audited (2026-09-13 UTC)
 
