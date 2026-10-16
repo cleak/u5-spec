@@ -55,7 +55,12 @@ also affect those cached fields: `0xFB` clears centre-output, `0xFC` sets
 centre-output, `0xFD` toggles inverse video, `0xFE` toggles underline, and
 `0xFF` clears the active text window's rectangle through the display-driver
 fill path. A separate clear/reset helper clears underline, centre, and inverse
-together. These control bytes are not rendered as glyphs.
+together - but only in the cached runtime flags. The `0xFD` toggle flips both the
+cache and the active window's own inverse bit, and selecting a window reloads the
+cache from that window, so an inverse state left set in a window survives the
+reset helper and returns the next time that window is selected
+(`systems/inventory.md` Section 4.4 has the case where this is visible).
+*(Clarified 2026-10-16, issue #296.)* These control bytes are not rendered as glyphs.
 
 The rectangle has a hard invariant: `top_left_x ≤ bottom_right_x` and `top_left_y ≤ bottom_right_y`, both within the screen extent. Operations that mutate the rectangle (see Section 8) enforce this invariant by clamping out-of-range arguments and swapping inverted pairs. Operations that read the rectangle (wrap, scroll, conversion to pixel coordinates) assume the invariant holds.
 

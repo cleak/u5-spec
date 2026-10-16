@@ -389,6 +389,29 @@ beginning. When all carried entries fit in the panel, the list stays fixed and
 the highlight moves among them. Movement skips absent entries and stops at the
 first or last selectable item. Left behaves as Up and Right as Down.
 
+**The highlight can leak into the panel.** *(Added 2026-10-16, issue #296;
+confirmed by running the original with crafted saves.)* The highlight is drawn
+with the inverse-video toggle (`systems/text-output.md`, control bytes). During
+each list pass the picker emits the toggle before any entry that begins on the
+highlight row, and again after any entry whose rendering leaves the cursor exactly
+one row below the highlight row; each toggle flips the panel window's own,
+persistent inverse state. An ordinary one-line highlighted entry gets an on and
+an off. A highlighted entry that takes two display lines - a counted shard row,
+or a regalia row at a wrapping quantity (Section 4.5) - gets an on with no
+matching off, and a pass whose highlight sits on such an entry's continuation line
+gets an off with no on, so the state's parity at the end of a command decides
+what happens next. If it ends set: every entry the same pass renders after the
+leak is already drawn inverted; the full stats-panel repaint that U-Use performs
+after the picker returns (also on cancel) draws the roster and the food, gold and
+date boxes inverted; and so does every later panel repaint. Turns, movement and
+messages do not clear it, and the style-reset helper does not either. It flips
+back only when a later picker session leaves odd parity again, after which the
+next repaint is normal. Worked cases on a stock with counted regalia and a counted
+Shard of Falsehood: two Downs then accept leaves the panel inverted; three Downs
+leaves it normal; a game-written shard (the no-quantity marker) lists as one line
+and never leaks. Whether the separator band between the panel's boxes shows
+inverted cells is not established.
+
 Home selects the first item, with the highlight on the first visible row; End
 selects the last, showing the last page with the highlight walked down toward
 row seven. Page Up and Page Down are the ordinary up and down handlers applied

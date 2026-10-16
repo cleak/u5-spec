@@ -544,7 +544,7 @@ strikes.
 |---|---:|---:|---:|---:|---:|
 | Shrine offering accepted (`systems/karma.md` Section 7.2) | 2700 | 200 | 184,000 | about 958 Hz | 7.91 s / 6.13 s |
 | Shrine Codex turn-in (`systems/karma.md` Section 7.2) | 3100 | 150 | 138,000 | about 1.10 kHz | 5.93 s / 4.60 s |
-| Shadowlord destruction | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
+| Shard use (every U-Use of a Shadowlord shard, before the position gate; `catalogs/quest-graph.md` Section 5) | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
 | One Blackthorn cutscene beat | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
 
 Increment 3100 is the one section 5.4.4 already prices at about 1,101 Hz; the
@@ -557,8 +557,15 @@ so four is a floor on the family rather than a proven total.
 Both shrine callers precede their sweep with a single **unrestored**
 inversion of the gameplay viewport - the operation of section 6, issued as one
 exclusive-or rectangle fill and never undone, so the following redraws simply
-paint over it. Whether the
-Shadowlord and Blackthorn callers do the same was not established here.
+paint over it. The shard-use caller issues no inversion and no other draw before
+or during its sweep: its initial comparison value runs 2000 to 24950 in steps of
+50 over 460 runs (the rising limb), then 25000 down to 2050 over 460 more (the
+falling limb), 92,000 iterations and about 3.96 s audible per limb, with nothing
+between the limbs. Whether the Blackthorn caller precedes its sweep with an
+inversion was not established. *(Scope corrected 2026-10-16, issue #296;
+`RETRACTIONS.md` R523: the shard-use row was labelled "Shadowlord destruction",
+but it plays on every shard use, before any gate, and a successful destruction is
+only one possible outcome after it.)*
 
 Neither recipe is skipped by the sound toggle: muting takes the generator's
 silent arm in the usual way (sections 3 and 5.4.5), which is not cost-matched
@@ -1291,8 +1298,8 @@ glissando. **There is therefore no such thing as a Blink pass in combat.**
 
 ### 8.4 Shrines, Words of Power, and major flashes
 
-Shrine restoration, a recognized Word of Power, Shadowlord destruction, and
-several other momentous presentation callers share a turbulent full-viewport
+Shrine restoration, a recognized Word of Power, and several other momentous
+presentation callers share a turbulent full-viewport
 flash with a continuous low rumble.
 
 The routine performs eight rounds of four 58-band sweeps, for 1856 band draws
@@ -1320,17 +1327,22 @@ an observed target for that emulator setup. Dividing by 1856 gives about
 spacing of individual bands. The report does not specify CPU/core/cycle
 settings, and this is not a measurement on period reference hardware.
 
-Two callers wrap this effect in an envelope beat that belongs to them rather
-than to it: Shadowlord destruction and the shrine's Codex-turn-in arm each play
-the 920-step envelope swell of section 5.4.7, the shrine's immediately before
-this flash. The shrine's other two meditation arms never invoke this effect at
+The shrine's Codex-turn-in arm wraps this effect in an envelope beat that belongs
+to it rather than to the flash: the 920-step envelope swell of section 5.4.7,
+immediately before this flash. The shard-use swell of the same family is not
+followed by this flash on the no-effect arm, and whether a successful Shadowlord
+destruction invokes this flash at all is **not established** (the destruction
+arm's presentation has not been traced; static reading shows a per-cell effect
+repeated seven times and no call identified as this flash). *(Corrected
+2026-10-16, issue #296, R523: this paragraph previously named Shadowlord
+destruction as a second caller wrapping the flash in the swell.)* The shrine's other two meditation arms never invoke this effect at
 all (`systems/karma.md` Section 7.2), and the Codex urn's completion beat
 invokes it three times (`systems/karma.md` Section 8.1).
 
 Every caller uses the same fixed sweep geometry and band count, without a
 caller-selected delay. Under the same display driver and execution settings,
-the measurement is applicable to the shared effect at shrine restoration,
-Shadowlord destruction and the other callers too; their surrounding narration,
+the measurement is applicable to the shared effect at shrine restoration and the
+other callers too; their surrounding narration,
 redraws and waits are additional. Equal duration across EGA, CGA, Hercules and
 Tandy is **not established**: drawing work controls the timing and uses the
 selected driver. The calibrated audio-wait unit does not determine this

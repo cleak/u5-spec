@@ -233,11 +233,19 @@ misfired shard use is still visibly a shard use:
    describing the party holding the evil shard aloft, completed by the shard's
    own virtue word (Falsehood, Hatred, or Cowardice). This happens before any
    gate is evaluated.
-2. It then plays a rising pitch sweep, followed by a falling one, again
-   unconditionally.
+2. It then plays the 920-step envelope swell of `systems/audio.md` Section
+   5.4.7, again unconditionally: one held pitch (about 937 Hz) whose duty cycle,
+   heard as brightness and loudness, rises over one limb and falls over an equal
+   second limb with no gap between them, about 7.9 seconds audible in all. It
+   draws nothing, reads no key and runs no world tick or animation pass.
+   *(Corrected 2026-10-16, issue #296; `RETRACTIONS.md` R522: this step was
+   published as "a rising pitch sweep, followed by a falling one". The pitch does
+   not move.)*
 3. Only the **position** gate produces the shared no-effect result. If the
    party's cell, floor, or scene is wrong, the handler prints that result and
-   returns with no state change.
+   returns with no state change. On that arm the result line prints first and
+   the 50-update cast-failure glissando of `systems/audio.md` Section 5.2 (about
+   52 ms) plays after it.
 4. Once the position matches, it pauses, prints a line describing the shard
    being cast into the Eternal Flame completed by the opposed principle's word
    (Truth, Love, or Courage), and pauses again — **before** testing whether a
