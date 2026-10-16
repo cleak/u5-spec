@@ -527,9 +527,15 @@ from the visual state it had before combat began.
 ### Intro and Endgame Scenes
 
 Cutscenes and endgame sequences may use dedicated animation helpers or display
-driver commands outside the world-tick path. Those effects share the same
-presentation layer but are scripted scene animation, not the general
-active-object/tile animation system described here.
+driver commands outside the world-tick path. Their scripted moves and effects
+share the same presentation layer but are scene script, not the general
+active-object/tile animation system described here. The endgame's tableau
+**sprites**, however, are animated by that general system: the per-slot
+animator keeps running inside every world tick of the endgame, so Lord British
+and the party sprites cycle their script-A frames through every hold, key wait
+and the terminal loop (`systems/endgame.md` Section 4). *Corrected 2026-10-16
+(issue #298 Q43, `RETRACTIONS.md` R559): this paragraph previously put all
+endgame animation outside the general system, which draws Lord British frozen.*
 
 ## 9. Persistence
 

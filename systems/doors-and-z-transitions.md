@@ -316,6 +316,9 @@ Three observations:
   reproducing deliberately or not at all. (`systems/combat.md` Section 7; the
   same byte was previously mis-published there as an "any spell cast this round"
   flag - `RETRACTIONS.md` R363.)
+  In town the post-fight town-map reload clears the same byte again, so after
+  a town arena fight the epilogue's countdown step always finds nothing pending
+  (`systems/town-mode.md` Section 7; added 2026-10-16, issue #298 Q40).
 
 The four tracker bytes fall inside the serialized save window, but an active
 tracker does **not** resume after Journey Onward. The load first restores all

@@ -255,8 +255,31 @@ Applying the `+256` rule, the endgame's actors resolve as follows.
 | `0x4C` | 332 | Avatar sprite |
 | `0x0E` | 270 | Lidded chest — the sandalwood box |
 | `0x08` | 264 | Radiant spark — the Orb of the Moons |
-| `0x7C` | 380 | Crowned, robed, seated figure between two banners — Lord British on his throne |
+| `0x7C` | 380 | Crowned, robed, seated figure between two banners — Lord British on his throne (the base frame; he animates through 381..383, below) |
 | `0x16` | — | Reserved "draw nothing" sentinel |
+
+**The tableau actors animate** *(added 2026-10-16, issue #298 Q43)*. They are
+ordinary animated active objects. The shared per-slot animator of
+`systems/active-objects.md` Section 8 runs inside every world tick of the
+endgame - every paced pause, every key wait (the ordinary reader's idle arm
+ticks the world) and every jitter call - and the endgame does not suspend it.
+Lord British (`0x7C`) and the four party sprites (`0x40`, `0x44`, `0x48`,
+`0x4C`) all select script A of that section: frame 2, frame 3, frame 4, then
+the snap step, then restart, one script step per eligible tick on the ordinary
+one-in-two eligibility coin, so on average one frame step every two world
+ticks. For Lord British the four frames are tiles 380 to 383: 380 is the
+seated throne figure above, and 381 to 383 show him standing, crowned and
+robed, in different arm poses (identified from rendered pixels). A refused snap
+(three times in four) restarts the cycle at 381 in the same tick; an accepted
+one (one time in four) returns him to 380 and holds it for the six-tick delay
+plus coin waits - about half a second was observed. He therefore keeps
+animating for as long as the scene runs: forever on the waiting branch, and on
+the victory branch until he enters the gate. The box (`0x0E`) and the Orb
+(`0x08`) lie below the animator's class floor and stay static. Source: an
+emulator capture tracking the cell images during the greeting and yes/no key
+waits, plus the published script table. The Blackthorn rescue's crowned
+spectral figure (`0x74`, also script A) likewise animates during its verdict
+key wait.
 
 Note in particular that actor byte `0x44` is that person sprite at tile 324, not
 the floor tile whose *terrain* index is also `0x44`; the two live in different
@@ -295,7 +318,7 @@ actors from their class byte.
 After setup, Lord British greets the party leader and asks whether the player
 brought his box. The explicit sandalwood-box clarification is conditional.
 
-1. Print the greeting and first box question; accept and echo Yes or No.
+1. Print the greeting, wait for any key, print the first box question; accept and echo Yes or No. *(The key wait added 2026-10-16, issue #298 Q41.)*
 2. **Only a first No** asks the second question, explicitly naming the
    sandalwood box. Accept and echo its answer, which replaces the first one
    for the final decision. A first Yes skips this question whether the party
@@ -317,7 +340,7 @@ tested for the final outcome, not to decide whether the second question is
 shown. An initial No therefore does not prevent victory if the clarification
 is answered Yes and the box is owned.
 
-The confirmation is a blocking prompt. While it waits, normal gameplay turns, world ticks, NPC schedules, and time advancement do not run.
+The confirmation is a blocking prompt. While it waits, normal gameplay turns, NPC schedules and time advancement do not run, but **world-animation ticks do**: every key wait in this dialogue - the greeting's any-key read and both yes/no reads - goes through the ordinary command reader, whose idle arm ticks the world, so the tableau sprites keep animating (Section 4). *Corrected 2026-10-16 (issue #298 Q41-43, `RETRACTIONS.md` R558): this sentence previously listed world ticks among the things that do not run.*
 
 ### 5.1 Message source and pacing
 
@@ -351,6 +374,13 @@ and trailing line feed, and record 0's leading feed again yields one blank row.
 This differs from Section 7's `He says:` lead-in, which is a stored program
 literal.
 
+**The greeting's key wait** *(added 2026-10-16, issue #298 Q41)*. After the
+greeting's closing `!"` and its two line feeds, the program blocks on **one
+any-key read**, through the ordinary command reader, before record 1 prints.
+The key is discarded. The reader ticks the world while it waits and draws its
+animated cursor glyph. In a capture the first key only dismissed this wait and
+the question then printed.
+
 Each yes/no prompt is a **blocking single-key read** that accepts only `Y` or
 `N` and re-reads on anything else. The accepted answer is echoed into the
 message window as the literal `Yes` or `No` followed by a blank line, and only
@@ -375,11 +405,80 @@ The seven rite messages are printed as **seven discrete pages**. After the
 first of them the sequence pauses for **forty shared world-animation ticks**
 and then prints a fixed `He says:` lead-in with exactly one blank row before it
 and one after. Each tick carries the shared one-BIOS-timer-tick delay, making
-the pause approximately 2.20 seconds when world animation is enabled. If the
+the pause approximately 2.20 seconds when world animation is enabled.
+*(Qualified 2026-10-16, issue #298 Q41.)* That figure holds only on a host
+above the slow-CPU gate of `systems/timing.md` Sections 4 and 5.2, such as the
+measured emulator settings below; at or below the gate every one-tick wait
+request is skipped and the pause costs only its forty renders. Above the gate
+each paced iteration - one world tick, then a wait for the **next** BIOS tick -
+lasts at least one whole BIOS tick, and more when the world-tick render itself
+takes longer than a tick: at a fixed 1500-cycle emulator setting every
+iteration took two ticks and all of the endgame's pacing doubled. If the
 world-animation gate is disabled, the pause helper skips the forty-tick loop
 entirely. From there every remaining rite message is separated from the next
 by a blocking key read, so the player advances each page. Nothing in this
 stretch is timed out or auto-advanced.
+
+### 5.2 The absorption-to-tableau and settle-to-greeting holds
+
+*(Added 2026-10-16, issue #298 Q41.)* "Paced iteration" below is the shared
+world-tick pause of Section 5.1 - one world-animation tick, then a one-BIOS-tick
+wait - with the animation-gate and slow-CPU qualifications given there. Every
+measured time in this section is an **emulator timing** (DOSBox 0.74-3, EGA,
+normal core) at the stated **fixed cycle setting**, not a period-hardware
+figure.
+
+**Absorption snap to Lord British's first sting.** The hold has no fixed
+duration of its own. In order, after the absorption snap:
+
+1. Untimed, CPU-bound work: the absorbed actor is removed, with a full
+   stats-panel redraw and one bare world tick that draws the room without it;
+   the combat round ends with no text and the combat framer restores its state
+   and redraws the panel again; the endgame overlay loads; the endgame's entry
+   redraws the panel once more (Section 3 step 2); it runs the whole-tileset
+   colour remap of Section 3 step 4; it reads the tableau record and the
+   message file, rebuilds the tableau terrain, clears the thirty-two slots and
+   places Lord British at (5,8). No tick wait or key poll runs anywhere in this
+   block. The remap dominates it: two full passes over the display driver's
+   64 KB tile store (one into packed form and one back) plus the recolour of the
+   twenty-two listed tiles, roughly five million instructions depending on the
+   data.
+2. **Forty paced iterations**; the first of them is what first draws the
+   tableau.
+3. Lord British's first one-cell step, whose beat begins with **two paced
+   iterations** and then the sting (Section 7).
+
+So the timed content is **forty-two paced iterations**; everything before them
+is machine-dependent work, not a tick count. At a fixed 3000-cycle setting the
+snap-to-first-sting interval measured **4.08 s** in both of two runs, measured
+from the **start** of the absorption snap. It divides into about 0.03 s for the
+snap's own frequency sweep, **1.77 s** of untimed work measured from the end of
+the snap to the first iteration, and 2.28 s for the forty-two iterations. The
+last figure is about 41.4 tick periods rather than 42 because the first
+iteration starts part-way through a tick and its wait ends at the next edge. At
+a fixed 1500-cycle setting the same interval measured 8.04 s - about 3.5 s of
+untimed work, almost exactly double and so CPU-bound, plus about 4.5 s of
+iterations, each of which rounded up to two ticks. A frontend that stands a
+fixed hold in for the untimed block should treat it as a host-dependent cost:
+at the 3000-cycle setting it is about 1.8 s, roughly thirty-three BIOS ticks,
+and the forty-two paced iterations follow it.
+
+**Last party step to the greeting.** The last party member's final step ends
+with its own tail of **three paced iterations** (Section 7); the walk's next
+call finds the member arrived and adds nothing. Then come **forty paced
+iterations**, and the greeting prints. The last movement sting is therefore
+followed by forty-three paced iterations, about 2.36 s nominal above the gate;
+measured 2.38 s and 2.39 s at a fixed 3000-cycle setting and 4.74 s at 1500.
+Each earlier member's extra one-iteration pause at placement, before it walks,
+is as already published in `systems/audio.md` Section 8.7. A reported
+settle-to-greeting range of 1.9 to 2.4 s is matched at its upper end only; the
+original at fixed cycles does not reproduce the 1.9 s lower bound
+(`OPEN-QUESTIONS.md`).
+
+Source provenance: static reading of the endgame overlay, the final-room
+absorption helper, the combat exit and the display driver in private analysis
+under `u5-decomp/functions/` and `u5-decomp/notes/`; emulator captures at fixed
+3000 cycles (two runs) and 1500 cycles (one run).
 
 ## 6. Refusal or missing-box branch
 
@@ -390,11 +489,21 @@ This branch is terminal in practice. It does not restore the previous map, re-en
 The refusal/missing-box branch uses the same initial party tableau setup, then
 changes the scene as follows:
 
+0. Print the lead-in `"I see...` and one line feed, pause forty paced
+   iterations, then print record 10 (Section 5.1). **Nothing in the tableau
+   moves before record 10 has printed**; the first visible change after it is
+   the leader's one-row step below. *(Added 2026-10-16, issue #298 Q42.)* At a
+   fixed 3000-cycle emulator setting record 10 printed 2.22 s after the lead-in
+   and the first sting followed 0.20 s later.
 1. Slot 0's Y coordinate is decremented once.
    Then run two world-animation ticks, the short two-part movement sting (`systems/audio.md` Sections 5.3 and 7.5),
    and three world-animation ticks (`systems/audio.md` Section 8.7).
 2. The script repeatedly steps slot 2 toward (8,6), slot 31 — Lord British —
-   toward (4,1), and slot 0 toward (8,4) until all three have arrived.
+   toward (4,1), and slot 0 toward (8,4) until all three have arrived. Each
+   round is one call per actor in exactly that order (slot 2, slot 31, slot 0),
+   and every actual one-cell step carries its own two-iteration, sting,
+   three-iteration beat; an actor already arrived, or an empty slot, adds
+   nothing. *(Added 2026-10-16, issue #298 Q42.)*
 3. The terminal loop then jitters only slots 1, 3, 4, and 5. Slot 0, slot 2 and
    Lord British's slot 31 do not participate in that jitter loop, and slot 6 is
    never created on this branch at all.
@@ -414,7 +523,14 @@ The first candidate whose local scene-buffer cell is the authored walkable
 marker `0x44` is committed. Other cell values are blocked. The helper does
 not check active-object occupancy, so actor-to-actor collision is not part of
 this terminal wander rule. Each call advances the display tick once whether
-or not movement is committed.
+or not movement is committed. *(Added 2026-10-16, issue #298 Q42.)* That
+advance is exactly **one paced iteration** - a world tick plus a one-tick wait
+request - and it is paid by every call, for an empty slot and on a refused coin
+alike, so a terminal round of four calls always costs four paced iterations
+whatever the party size. In ticks that is four per round only on a host above
+the slow-CPU gate whose render fits inside a tick (the 3000-cycle emulator
+setting); it was eight at 1500 cycles, and at or below the gate the waits are
+skipped (`systems/timing.md` Sections 4 and 5.2).
 
 ## 7. Victory rite and visual animation
 
@@ -436,7 +552,7 @@ The visible sequence has these functional parts:
 
 The movement predicate used by the endgame is grid based: each call examines one active-object slot and moves it one cell toward a target, preferring the axis with the greater remaining distance. The caller repeats this until the slot reaches the target.
 
-The separate tableau animation helper is a random local wander, not an animation-frame table. When the selected active-object slot is occupied, the helper first throttles the step with a two-outcome random roll. On an allowed step it samples up to eight four-direction candidates around the current cell, in random direction order, and commits the first candidate whose scene cell is marked as part of the endgame tableau's walkable region. If no candidate qualifies, the slot remains where it is for that call. The helper then advances the display/palette tick once before returning.
+The separate tableau animation helper is a random local wander, not an animation-frame table. When the selected active-object slot is occupied, the helper first throttles the step with a two-outcome random roll. On an allowed step it samples up to eight four-direction candidates around the current cell, in random direction order, and commits the first candidate whose scene cell is marked as part of the endgame tableau's walkable region. If no candidate qualifies, the slot remains where it is for that call. The helper then advances the display/palette tick once before returning - one paced iteration, paid on every call (Section 6; added 2026-10-16, issue #298 Q42).
 
 This helper is used by the terminal "wait here a while" tableau for party-member slots rather than by ordinary gameplay movement. It should be modeled as cinematic jitter within the authored endgame scene, not as a reusable NPC pathfinder, not as a direction-facing animation switch, and not as evidence for an unresolved party-sprite facing map.
 
@@ -445,16 +561,22 @@ actor identities of section 4, is:
 
 1. Place **Lord British** in slot 31 with actor byte `0x7C` at cell (5, 8), let
    the display settle, then step slot 31 to (5, 3) — he walks up to the throne
-   row before anyone else is on stage.
+   row before anyone else is on stage. "Let the display settle" is forty paced
+   iterations, after the untimed entry work; Section 5.2 gives the whole
+   absorption-to-first-sting composition *(added 2026-10-16, issue #298 Q41)*.
 2. For each live party index in ascending order: place that party member's class
    actor byte in the slot of the same index at cell (5, 9), then step it to its
    fixed target. The targets are (5,5), (4,6), (6,6), (3,7), (5,7) and (7,7) —
    a wedge fanning out below the throne.
 3. Print the greeting and run the conditional box-delivery exchange of Section 5.
 4. Step slot 0 from its settled position to (5, 4), then back to (5, 5) — the
-   player's actor walks up to hand the box over and steps back.
-5. Create the **sandalwood box** in slot 6 with actor byte `0x0E` at (5, 4).
-6. Print the seven rite messages with the pacing of section 5.1.
+   player's actor walks up to hand the box over and steps back. Eight paced
+   iterations precede the first step.
+5. After four more paced iterations, create the **sandalwood box** in slot 6
+   with actor byte `0x0E` at (5, 4).
+6. Print the seven rite messages with the pacing of section 5.1 (record 3, forty
+   paced iterations, `He says:`, then the key-paced pages). *(Pause counts in
+   steps 4 to 6 added 2026-10-16, issue #298 Q41, from static reading only.)*
 7. Change slot 6's actor byte to `0x08`, the **Orb spark** — the box opens.
    A blocking key read and a speaker sting follow.
 8. Clear slot 6, and write the moongate terrain tile into the scene grid at

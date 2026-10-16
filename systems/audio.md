@@ -1245,6 +1245,11 @@ the flash tile, then set the actor's tile to the real creature sprite.
   sparkle; if the renderer composes into a back page, it does not. **The
   renderer's draw target was not traced, and an implementation must not be told
   which of the two it is** until someone traces it or captures the effect.
+  *Partial capture (2026-10-16, issue #298 Q44):* the same single-cell
+  converge used by the three Blackthorn rescue reveals was captured in an
+  emulator, and none of them showed any revealed pixel wiped by an intervening
+  world tick - a smooth, monotone build-up (`systems/blackthorn.md` Section 6.2).
+  The summon site itself was not captured, so this bullet stays open for it.
 - **Wall-clock length**, per the unpriced world ticks above.
 - **What the placeholder tile depicts** - identified from rendered pixels, not
   from any stored name.
@@ -1806,7 +1811,13 @@ members as are present. Thus the introductory train contains **9, 13, 17,
 21, 23 or 27 stings for party sizes 1 through 6**. The train's stepping time is
 the sting count times five BIOS ticks (about 274.6 ms), so about 2.5 to 7.4 s for
 party sizes 1 to 6, plus one tick per member and the fixed 40-tick pause after
-Lord British appears; it is not itself a published fixed duration. These cues do not depend
+Lord British appears; it is not itself a published fixed duration. Two more
+pieces bracket the train *(added 2026-10-16, issue #298 Q41)*: the untimed,
+CPU-bound entry block - dominated by the whole-tileset colour remap - that
+precedes that first 40-tick pause, and a second 40-iteration pause after the
+last member's final step, before the greeting. `systems/endgame.md` Section 5.2
+gives both, with emulator timings; the tick figures here hold on a host above
+the slow-CPU gate of `systems/timing.md` Sections 4 and 5.2. These cues do not depend
 on anyone being Dead. Each member also has a separate one-tick placement
 pause before walking. Later target-directed walks use the same cue; the
 refusal branch additionally runs this two-tick/sting/three-tick beat once

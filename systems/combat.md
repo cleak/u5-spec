@@ -206,6 +206,8 @@ The framing function bridges the world-mode loop and the combat round loop. It m
 
 The overall effect is "combat is a function call." From the calling mode loop's perspective, control left for combat and came back with the world unchanged except for damage, deaths, and clock advance.
 
+The exit work does call the shared per-turn clock helper, but with a **zero** increment, alongside its light-radius refresh: that call recomputes daylight and the dirty flag and adds no minute, so the only time a fight adds is its round-wrap minutes (Section 15). In town the whole call is nested inside the A-Attack command: the calling loop's per-turn epilogue (clock minute, underfoot pass, door auto-close countdown, object walker, schedule pass) runs once, after the framer and the town chain have returned, and never before the arena; the restore phase itself runs none of those passes (`systems/town-mode.md` Section 7). *(Added 2026-10-16, issue #298 Q40.)*
+
 One resident terrain-target wrapper performs additional caller-side
 reconciliation after the framer returns. That wrapper runs the framer with the
 ordinary terrain setup, then calls a shared post-combat object reconciler with

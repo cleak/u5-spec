@@ -761,7 +761,20 @@ LFSR order, with one world tick after each eight completed pixels except the
 last group—31 checkpoints in all. These Blackthorn reveals are blocking and
 cannot be skipped, and each costs 256 single-pixel driver calls plus 31 bare world
 redraws with **no BIOS-tick wait**, so its duration is CPU-bound too; the three
-reveals are 768 pixel calls and 93 redraws. There is no final flush. The caller commits the same terrain
+reveals are 768 pixel calls and 93 redraws. *(Measurement added 2026-10-16,
+issue #298 Q44.)* In an emulator at a fixed 3000-cycle setting the three
+reveals took 0.90 s, 0.935 s and 0.935 s - about 29 to 30 ms per eight-pixel
+group plus its bare world tick, in thirty-two visible steps - and the cost
+should scale with the emulated CPU rate (not measured at another setting). All
+three built up monotonically: no revealed pixel was wiped by an intervening
+world tick over about a hundred frames each, so on this path the converge reads
+as a smooth build-up, not a sparkle. The surrounding gaps at the same setting
+were 0.38 s from the shout to the first reveal (its six-tick wait), 0.22 to
+0.25 s between reveals and from the second reveal to the thunder text (a redraw
+plus four ticks), 1.67 to 1.72 s for the two flashes together, and 0.03 s from
+the end of the third reveal to the verdict text. The count and placement of the
+reveals are unchanged: two Guardians before the thunder line and the crowned
+figure after the second flash. There is no final flush. The caller commits the same terrain
 or actor identity afterward so the next ordinary redraw preserves the revealed
 image.
 
@@ -1214,9 +1227,19 @@ comparison and speaker-control traffic, so it remains blocking but is about
 23 percent faster. The full six-row sequence is approximately 11.18 seconds
 audible or 8.66 seconds muted on the reference machine.
 
-Those are static model estimates. The shorter audible burst reported in
-issue #220 remains unreconciled with the recording boundary and pitch
-samples; see `audio.md` Section 8.6.2. The full scene has two Guardian
+Those are static model estimates for the reference 4.77 MHz machine. *(Status
+updated 2026-10-16, issue #298 Q44.)* The shorter audible burst reported in
+issue #220 is reconciled in `audio.md` Section 8.6.2: an emulator capture at a
+fixed 3000-cycle setting measured the whole sequence at 11.56 s, and the
+8.49-second burst is best read as a recording that ended before the sequence
+did. Between the slumber line and the shout there is nothing but the
+party-actor install with one redraw, the six envelopes and the shout's own
+print - no wait, tick or other work. At the same emulator setting the slumber
+text appeared at 7.31 s, the envelope audio ran from 7.35 s to 18.93 s and the
+shout appeared at 18.96 s, so slumber to shout measured 11.65 s, 11.58 s of it
+envelopes, against the 11.18 s static figure. The envelope cost depends on the
+host through its idle-spin term, so a reported 12.0 s fits an emulator about 3
+percent slower than this setting (inferred). The full scene has two Guardian
 reveals and fourteen requested BIOS ticks between the last envelope and
 the thunder flashes, in addition to text/redraw work. A recording must
 continue through that interval to test whether the flashes are audible.

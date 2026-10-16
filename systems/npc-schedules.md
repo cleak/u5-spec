@@ -120,7 +120,7 @@ and "any tile changed" redraw booleans is withdrawn (issue #217).
 
 The earlier byte-width wording for runtime state in this section is withdrawn; state is a word (Section 4, R396).
 
-The schedule processor — the per-tick walker — runs once per player-turn from the town turn loop, with the current hour byte as its only input. It also runs from the H-Hole-Up hours path outside the normal mode loop, in one burst of up to sixteen passes at the current hour before the party sleeps and before any rest time elapses (`systems/town-mode.md` Section 12; clarified 2026-10-16, issue #298 Q30). The overworld and dungeon mode loops do not invoke this scheduler.
+The schedule processor — the per-tick walker — runs once per player-turn from the town turn loop, with the current hour byte as its only input. It also runs from the H-Hole-Up hours path outside the normal mode loop, in one burst of up to sixteen passes at the current hour before the party sleeps and before any rest time elapses (`systems/town-mode.md` Section 12; clarified 2026-10-16, issue #298 Q30). The overworld and dungeon mode loops do not invoke this scheduler. A town A-Attack that fights in the arena still gets that command's single schedule pass, after the fight; a total-party defeat in that fight skips it along with the rest of the epilogue (`systems/town-mode.md` Section 7; added 2026-10-16, issue #298 Q40).
 
 Per call, the processor:
 
