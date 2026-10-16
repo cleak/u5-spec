@@ -746,6 +746,11 @@ fast as the CPU, bus, adapter, and selected driver permit; period scanout may
 therefore reveal partial states, but the program defines no frame boundaries
 among them. The first gated dissolve also performs its alternating speaker and
 keyboard-status work, so even equal-sized calls need not take equal time.
+*(added 2026-10-16, issue #298 Q35)* For reference only, the first gated
+dissolve measured 2.90 s under DOSBox 0.74-3 at fixed 3000 cycles and 4.55 s at
+fixed 1500 cycles; these are emulator timings, not period timings, the cost
+split is in `timing.md` section 5.1, and the figures are informative, not a
+compatibility requirement.
 
 The normative modern baseline is consequently **atomic presentation at the
 blocking-call boundary**: preserve the required visit order internally where

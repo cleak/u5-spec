@@ -1617,15 +1617,31 @@ broadband noise, independently of the band-edge growth. This paragraph is
 
 **Unresolved, and stated so the engine stops treating any of it as pending:**
 
-- **Wall-clock retune cadence and total duration are not established.** A
-  hand-built cycle model gives roughly **0.5 to 1.0 ms per retune** (about a 1
-  to 2 kHz retune rate) and a total run of roughly **8 to 14 s** for the
-  32,320-pixel logo rectangle (the first, gated dissolve only; the rescue's `(8,8)..(183,183)` dissolve is ungated and has no wait at all, `systems/blackthorn.md` Section 6.3). Those figures omit display-memory wait states on
-  the read-modify-write plane accesses (not modelled at all), bus wait states on
-  the fourteen port writes per pixel, memory-refresh steal, and the firmware
-  keyboard-poll handler cost. **Treat them as unverified.** The structure above
-  is exact; only the wall clock is not. One cycle-accurate emulator run with an
-  audio capture is the only thing that will settle it.
+- **Retune cadence and total duration: emulator cost model established,
+  period hardware not** *(added/corrected 2026-10-16, issue #298 Q35)*. The
+  32,320-pixel logo rectangle (the first, gated dissolve only; the rescue's
+  `(8,8)..(183,183)` dissolve is ungated and has no wait at all,
+  `systems/blackthorn.md` Section 6.2) makes 16,160 checked visits, one retune
+  each. Each checked visit covers two pixel copies and pays about 300
+  instructions of CPU-bound work - the two four-plane copies at sixteen
+  display-adapter port writes per copied pixel, the retune with its four
+  speaker-port accesses, and one keyboard-status call - plus one calibrated
+  hold of about 55 microseconds. Measured as **emulator timings** under DOSBox
+  0.74-3 (`machine=ega`, normal core), the dissolve takes **2.90 s at fixed
+  3000 cycles** (one retune about every 180 microseconds) and **4.55 s at fixed
+  1500 cycles** (about every 280 microseconds); the speaker carrier's audible
+  span equals the dissolve, the last logo pixel and the end of the carrier
+  agreeing to within 20 ms. These are not period timings. The earlier
+  hand-built 4.77 MHz cycle model (roughly 0.5 to 1.0 ms per retune, roughly 8
+  to 14 s in total) stays an **unverified period-hardware estimate** that a
+  later static recount does not contradict; it omits display-memory and bus
+  wait states, memory-refresh steal and the firmware keyboard-poll cost, and
+  it is **not** the duration under emulator settings comparable to the DOSBox
+  default. *Scope correction: this bullet previously gave those figures as the
+  effect's wall clock without that scope, and counted fourteen port writes per
+  pixel where there are sixteen; `RETRACTIONS.md` R554.* The period-hardware
+  cadence is still not established; a cycle-accurate run or real hardware would
+  settle it.
 - **The actual audible waveform**, and with it the timbre paragraph above,
   follows from the same run.
 - **Timer mode and access latch are assumed, not verified.** The driver never

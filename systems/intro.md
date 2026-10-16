@@ -75,7 +75,7 @@ the two-surface discussion later in this section.
 | 2 | `Presents` | `15` (white), over the still-blue mark | the blue publisher mark **plus** the white `Presents` wordmark at `(108, 140)` | eighteen timer ticks, then a bounded poll of up to twenty more |
 | 3 | The `a` ornament | `15` | a black screen carrying only the `16 x 15` ornament at `(152, 0)` | bounded poll of up to twenty ticks |
 | 4 | Signature stroking | `15` | the ornament plus the `Lord British` signature being pen-drawn stroke by stroke | one timer tick per thirty-two path bytes, with the slow-CPU skip suppressed |
-| 5 | Finished composition | `15` | the ornament at `(152, 0)`, the finished signature at `(24, 66)`, `Production` at `(104, 160)` | two publishes, then a bounded poll of up to twenty ticks |
+| 5 | Finished composition | `15` | the ornament at `(152, 0)`, the finished signature at `(24, 66)`, `Production` at `(104, 160)` | two publishes, then - only if no key was pressed during the `Presents` hold, the ornament hold or the strokes - a bounded poll of up to twenty ticks (*corrected 2026-10-16, issue #298 Q38: this cell previously gave the poll unconditionally; `RETRACTIONS.md` R556*) |
 | 6 | Start screen and menu | artwork palette | the `Ultima V` logo on rows `0..60`, the burning subtitle band on rows `65..113`, the menu window on rows `120..199` | see "Start/menu screen composition" below and section 5 |
 
 Four properties of that list are load-bearing and were previously mis-stated:
@@ -348,6 +348,20 @@ abandons the remaining stroke segments but still draws `BRITISH.BIT` and slot
 `9`. In every case the destination is the start/menu screen, and any skip
 suppresses the Return-to-View preview.
 
+*(added 2026-10-16, issue #298 Q38)* Every one of those later keys is
+**consumed** where it is seen (the holds' bounded polls use the ordinary
+consuming keyboard reader), and each sets the same title-skip flag. A key during the ornament hold skips every stroke; a stroke key
+abandons the remaining strokes. A key during the ornament hold, the strokes or
+the finished-composition hold skips every later hold: after an ornament-hold or
+stroke key the finished signature and slot `9` are still published, but the
+finished-composition hold does not run, so the composition stays up only for the
+start/menu archive load (see "Start/menu screen composition" below). In all of
+these cases the start/menu loader takes its plain path (logo copied in one step,
+no dissolve, no ignition) and the automatic Return-to-View preview is
+suppressed. Keyed emulator captures confirm each case: a key in the composition
+hold gives the instant logo and the window, captions and labels within about
+0.2 s of the visible clear, with no carrier, ignition or preview.
+
 The EGA baseline is not a normal white-on-black foreground blit. The helper
 stamps 1-bit source pixels into the hidden driver surface, where they set every
 colour plane; the animation player then reads a single plane of that surface
@@ -419,7 +433,9 @@ picture. The precise sequence is:
    painted **directly onto the visible page**, over the slot-8 ornament, and are
    not stamped into the hidden surface. A key during the hold, or during any
    segment, abandons the remaining segments — but steps 5 and 6 still run, so
-   the finished signature and the slot-9 line still appear.
+   the finished signature and the slot-9 line still appear. The
+   finished-composition hold after step 6 is then skipped (*added 2026-10-16,
+   issue #298 Q38*).
 5. Stamp `BRITISH.BIT` slot `0` at `(24, 66)` into the hidden surface and
    publish the whole surface. Because the hidden surface still holds only the
    slot-8 ornament plus the freshly stamped signature bitmap, this publish
@@ -510,6 +526,21 @@ The loader runs the following sequence:
    clear. Section 6.1 owns the full three-pass construction, including which
    pass clears the interior.
 
+*(added 2026-10-16, issue #298 Q36)* **How long the last title image stays
+up.** After the second whole-page publish of the title sequence, the intro runs
+the finished-composition hold (when no earlier key was pressed), releases the
+two title bitmap archives, forces the intro scene state, clears the hidden
+surface, selects the visible page and enters this loader. None of those steps
+waits. The finished composition (or, on a skipped run, the last title image)
+therefore stays on the visible page through the hold and then through step 1's
+archive load and unpack; the visible clear of step 2 is the first change. As
+emulator timings under DOSBox 0.74-3, that load-and-unpack span is about 1.07 s
+at fixed 3000 cycles and 2.09 s at fixed 1500 (it scales with CPU speed, so it
+is inferred to be unpack-dominated rather than disk-bound), and an unskipped
+composition is visible about 2.15 s in total (3.17 s at 1500): twenty tick
+waits of about 1.08 s, the first one partial, plus the load. The period-hardware
+load time is not established.
+
 Whether the loader takes the animated or the plain path is decided by the same
 "player skipped the title sequence" flag described in section 3: an unskipped
 title sequence gets the animated path, and any earlier keystroke gets the plain
@@ -524,6 +555,28 @@ phase is different: it changes the caller's flag, enters this loader plain, and
 suppresses the automatic preview. Only this first automatic showing is
 conditional — the two-hundred-pass idle timeout in section 6 and the explicit
 `R` command are unaffected.
+
+*(added 2026-10-16, issue #298 Q39)* **A key first seen inside subtitle
+ignition.** The ignition's keyboard test does not consume the key, and the
+loader's only consuming read follows the logo dissolve, not the ignition, so the
+key is still queued when the loader returns. It does not change the caller's
+skip flag, so the caller starts the automatic Return-to-View preview. On its
+first entry from the title page the preview blanks the (not yet drawn) caption
+area, loads its script data, snapshots the screen, loads and converts the tile
+archive (not resident during the intro), restores the snapshot and starts its
+script. Its first tick's consuming keyboard read then takes the queued key, and
+the preview exits having drawn nothing visible; only then are the menu's
+captions and labels drawn. For that whole start-up the lower window frame is up
+with no captions or labels over a static flame band. This is not a published
+wait: it is the preview's start-up cost, measured as an emulator timing under
+DOSBox 0.74-3 at about 1.70 s at fixed 3000 cycles and 3.40 s at fixed 1500,
+from the window frame to the first caption or label pixels (an exact doubling,
+so it is CPU-bound with no tick wait). The same start-up cost precedes the
+preview's first visible output on an unskipped start: 1.70 s at fixed 3000
+cycles to its first visible caption. A key in an earlier title phase sets the
+flag, so there is no preview and no gap; a key inside the logo dissolve is
+consumed by the loader, so the preview runs in full after the same start-up
+cost. The period-hardware start-up time is not established.
 
 The finished start/menu screen is therefore the `ULTIMA` record-0 logo occupying
 rows `0..60`, the animated subtitle band at rows `65..113`, and the intro menu
@@ -806,10 +859,32 @@ calibration shifted right four bits. The speaker is disabled after pitch 25.
 Audio output may be omitted by a silent implementation; the gate still defines
 which publication takes the 45-unit rather than 50-unit pacing branch.
 
+*(added/corrected 2026-10-16, issue #298 Q37)* **Duration.** A fresh
+uninterrupted run at the normal cadence makes 220 publications (counted in
+captures at both settings below): 101 sounded at 45 calibrated outer units and
+119 silent at 50, which is 10,495 outer units. That calibrated waiting is not
+the whole ignition. On top of it come the 101 bursts' own 25 pitch holds each,
+and host-speed-dependent work: 32,766 sequence states, each with a
+keyboard-status test and, when in range, a four-band restore, plus 220 band
+publications. Measured uninterrupted, from the last logo pixel to the loader's
+following title tick, as emulator timings under DOSBox 0.74-3: **12.03 s at
+fixed 3000 cycles** and **14.67 s at fixed 1500 cycles**. Per publication about
+42.8 ms does not depend on the cycle setting, consistent with the 0.88 ms
+calibrated unit of `timing.md` section 7 plus the burst holds; the CPU-bound
+remainder is about 11.6 ms per publication at 3000 cycles (about 2.6 s in all,
+about 5.1 s at 1500). The calibrated part alone is about 9.2 s at 0.88 ms per
+unit (about 9.66 s at the driver-local 0.92 ms reference figure) and must not be
+used as the total. The period-hardware total is not established; it is
+certainly longer than the calibrated part.
+
 The reveal covers only the band footprint. It is a different effect from the
-logo dissolve in section 3's loader step 4, which is an ordinary pseudo-random
-rectangle transfer over `(0, 0)..(319, 100)` with no timing gate, no mask and no
-second pass. The logo does not stipple in at band cadence, and the band is not
+logo dissolve in section 3's loader step 4, which is a pseudo-random
+rectangle transfer over `(0, 0)..(319, 100)` with no mask and no second pass;
+on the first, gated call it does pay a calibrated hold and a speaker retune on
+every second visited pixel (`timing.md` section 5.1). *Correction 2026-10-16,
+issue #298 Q35: this sentence previously called that dissolve "an ordinary
+pseudo-random rectangle transfer ... with no timing gate"; `RETRACTIONS.md`
+R555.* The logo does not stipple in at band cadence, and the band is not
 revealed by the rectangle-dissolve entry.
 
 The menu and message timing rules are:
@@ -1966,6 +2041,14 @@ Private analysis directories consulted:
 | Proportional-font paragraph renderer, character creation, Return-to-View preview runtime and its map-strip loader | `u5-decomp/functions/FONT_OVL/` |
 | Cross-cutting retraces: the visible phase order and per-phase ink, the flourish's presentation script and its verification, the four `BRITISH.PTH` pen origins, the free-running band-frame counter, the two-pass masked subtitle reveal, the menu window's drawing passes, the dissolve-entry caller census, the Return-to-View pixel geometry and command schedule, and the paragraph-box retrace | `u5-decomp/notes/` |
 | Container and data-file formats: the paired graphics archives, the one-bit bitmap family, `BRITISH.PTH` as a title-screen path stream rather than an NPC schedule, the EGA driver's own layout, and the shared data overlay's string tables | `u5-decomp/formats/` |
+
+The intro pacing passages marked "issue #298" (the finished-composition hold
+and archive-load span of section 3, the keyed-hold behaviour, the
+aborted-ignition preview start-up, and the ignition duration of section 5) come
+from a 2026-10-16 static re-reading of the original confirmed by DOSBox 0.74-3
+video and speaker-audio captures at fixed 3000 and 1500 cycles, independently
+re-analysed by a verifier; the durations are emulator timings, not period
+timings. Source provenance: derived from private analysis in `u5-decomp/notes/`.
 
 Two conclusions in this document rest on a caller census rather than on a single
 note, and are recorded as such: the rectangle-dissolve entry has exactly two

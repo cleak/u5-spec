@@ -770,10 +770,11 @@ dissolve over inclusive pixels `(8,8)..(183,183)`. This is the **ungated**
 dissolve - the speaker-and-keyboard gate has been cleared by the earlier glyph
 drawing - so it makes 32,767 loop iterations (30,976 pixel copies, the rest land
 outside the rectangle) with no wait, tick, poll or checkpoint of any kind; its
-duration is CPU-bound and the program defines no wall clock for it. The "roughly
-8 to 14 s" estimate of `systems/audio.md` Section 8.6.1 and `systems/timing.md`
-belongs to the first, gated start-menu dissolve only and must not be applied here
-(*scope note 2026-10-12, issue #282*). The thunder beat also runs
+duration is CPU-bound and the program defines no wall clock for it. The calibrated
+per-visit hold and the cost model of `systems/timing.md` Section 5.1 (and
+`systems/audio.md` Section 8.6.1) belong to the first, gated start-menu dissolve
+only and must not be applied here (*scope note 2026-10-12, issue #282; reworded
+2026-10-16, issue #298 Q35, `RETRACTIONS.md` R554*). The thunder beat also runs
 the shared full-viewport flash/low-rumble operation from `systems/audio.md`
 Section 8.4 twice back-to-back. Those are direct-screen operations; none is a
 text-window clear.
