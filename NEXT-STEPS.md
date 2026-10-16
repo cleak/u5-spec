@@ -15,13 +15,19 @@ floor (R521). New contracts: the troll bridge ambush and toll
 (`systems/combat.md` Section 4), and the envelope cost model's host dependence
 (`systems/audio.md` Section 8.6.2).
 
+**Follow-up (2026-10-16).** Live captures closed #231 (the armour refusal
+and Sanct Lor both behave as published once a capture runs past the flash) and
+#289 (`E` takes the second tail in every arena state reached; `Enter what?` is
+the world prompt after the party leaves). #296, filed later, was answered: the
+shard-use cue is the 920-step envelope swell, not a pitch sweep (R522, R523), and
+the inverted panel is a picker highlight leak (`systems/inventory.md` 4.4).
+#249 is closed: the screenshot was purged from every commit on 2026-10-13 and the
+owner accepted that GitHub still serves the old objects by their old ids.
+
 **Still open, each blocked on clean-side data** (the issue comment names exactly
-what to supply): #210 (the two extra scrolled rows - reporter's save, cell and
-frames), #216 (why that guard's live dialogue word was zero), #231 (the empty-arena
-armour pick and the invisibility silence), #289 (the arena `Enter what` beats:
-frame sequence and arena type). #249 (the removed screenshot) is closed: the
-screenshot was purged from every commit on 2026-10-13 and the owner accepted that
-GitHub still serves the old objects by their old ids.
+what to supply): #210 (the engine's frames at the first combat prompt, to find
+where its two-row lag begins) and #216 (the seed save, the tool that wrote it,
+and the asset version).
 
 ## Issue #273 follow-up - the party-sprite band, audited (2026-09-13 UTC)
 
