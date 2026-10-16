@@ -116,7 +116,7 @@ inside a routed record rather than on a path every conversation takes:
   when a fifty-gold request for keys is declined, plus one each for two other
   declined requests, one of which is a five-crown request), two sit at the head
   of `"y"` answer records where "yes" is the boastful answer to a virtue
-  question, and one follows the curse-check code in a caught-stealing line.
+  question, and one follows the `0x8B` alarm code in a caught-stealing line (`systems/conversation.md` Section 7.5; *corrected 2026-10-16, issue #298 Q14*).
 
 Two consequences an implementation should carry. First, **declining** a
 conversation gold request can lower standing even though accepting it never
@@ -1093,12 +1093,37 @@ interred-party page inside the walk was therefore not exercised
 Three further Codex-only differences. Its Enter line reads
 `Enter the Shrine of the Codex!` with its own trailing newline and prints no
 virtue name and no line feed, where a shrine's prefix prints both. It selects
-its own approach record rather than the shrine's. And if any party member
-carries the interred sentinel, the presentation inserts a page naming them - a
-"thou dost see" line, then a singular or plural "urn marked" line, then each
-name upper-cased - which is skipped entirely when nobody is interred. That
+its own approach record rather than the shrine's. And if any roster record in
+slots 1 through 15 - any record but the Avatar's, whether travelling or not; the
+scan tests neither party membership nor the party count - holds whereabouts
+value `0x7F` (the save record's byte `0x1F`, `formats/saved-gam.md` Section 3.1),
+the value Blackthorn's execution writes (`systems/blackthorn.md` Section 5),
+the presentation prints `\n\nThou_dost_see\n`, then `an_urn_marked:\n\n` when
+exactly one record matches or `urns_marked:\n\n` for two or more, then each
+matching record's name in roster-slot order, upper-cased byte by byte, each
+followed by one line feed. The name is copied up to its first zero byte with no
+nine-character limit, so a name that fills all nine bytes runs on into the
+record bytes after the name field until a zero byte is met, and a matching
+record whose name starts with a zero byte prints only the line feed. The page
+has no key wait and no pause of its own, and is skipped entirely when the count
+is zero *(corrected 2026-10-16, issue #298 Q5: the earlier text said the page
+names "any party member" carrying the sentinel; the scan covers roster records
+whether travelling or not, see `RETRACTIONS.md` R545)*. That
 page is emitted **inside** the walk, between the frame that first draws the
 avatar and the stepping frames, not before or after the walk.
+
+On both the shrine and the Codex arms, the same count also drives an object
+placement before the approach record: the presentation places one temporary
+active object per matching record, in active-object slots 1 through the count
+in order, each with actor tile `0x03` (actor-half row 259 of
+`catalogs/tile-catalog.md`), at fixed per-count positions on the 11-by-11
+presentation map. What that art is meant to represent was not checked, and the
+per-count positions are not published. The issue #271 pacing probe ran the
+presentation at counts 0, 1 and 3 and found no pacing effect from it *(added
+2026-10-16, issue #298 Q5)*. Source provenance: the literals from the shipped
+data; the sentinel, slot range, singular/plural split, upper-casing and name
+copy by static reading, with the count scan executed at counts 0, 1 and 3;
+private analysis in `u5-decomp/notes/`.
 
 Tile `0x41` is not an alternative entry trigger. E-Enter on that tile takes
 the ordinary `Enter what?\n` refusal without starting the Codex interaction.

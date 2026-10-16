@@ -157,8 +157,11 @@ poison hit. Terrain's extra clock/object-update work does not repeat this
 upkeep pass. The acquisition gate and Dexterity roll are specified in
 `systems/movement.md` Section 8.2.
 
-*Hour-gated part.* The pass keeps its own previous-hour snapshot and compares it
-with the current hour. The two branches below are mutually exclusive, and
+*Hour-gated part.* The pass compares the shared pre-cascade hour snapshot
+(Section 2; save byte `0x02DA`, Section 11) with the current hour; it has no
+snapshot of its own *(corrected 2026-10-16, issue #298 Q27: this sentence said
+the pass "keeps its own previous-hour snapshot"; that is retracted, see
+`RETRACTIONS.md` R548)*. The two branches below are mutually exclusive, and
 neither runs when the hour has not changed:
 
 - **Provision counter already zero.** The party receives the starvation
@@ -174,8 +177,21 @@ neither runs when the hour has not changed:
   unconditional walk, and the counter floors at zero rather than wrapping. No
   food is spent at other hour changes.
 
-After the branch is handled, the pass updates its previous-hour snapshot so the
-branch cannot repeat until the clock crosses another hour. Because the pass runs
+After the branch is handled, the pass writes the current hour into that shared
+snapshot, so neither this branch nor a following mode-zero cleanup refires until
+the clock crosses another hour. A census of every access to the byte across the
+executable and all overlays finds only three users: the time-advancing path
+writes it at its head (after the Quickness halving, before the minute
+increment; a zero-minute call returns before that write), the cleanup reads it
+for the post-cascade comparison, and this pass reads it and then writes the
+hour. Because the time-advancing path also rewrites the snapshot at its head, an
+implementation must keep one byte for both uses; separate snapshots change which
+hour crossings the upkeep pass sees. It follows, by inference from the sharing
+rather than from a traced call order, that two time-advancing calls between an
+hour crossing and the next upkeep pass would erase the mismatch and skip that
+hour's starvation or meal branch; whether any shipped turn sequence does this
+was not traced (`OPEN-QUESTIONS.md`) *(added 2026-10-16, issue #298 Q27; static
+reading, private analysis in `u5-decomp/functions/ULTIMA_EXE/`)*. Because the pass runs
 once per action, repeated rest or wait steps naturally apply the branch once for
 each crossed hour, while several ordinary turns inside the same hour spend food
 only once.
@@ -447,7 +463,7 @@ Only `0x02CE`, `0x02D7`, `0x02D8`, `0x02D9`, and `0x02DB` are the canonical cale
   - The counter advances on **every** call, including calls that decrement nothing because the countdown byte is already zero. It is free-running and is never resynchronised to the countdown, so the decrement pattern does not restart when a new countdown is written.
   - The counter lives **outside the save image**, and its initial value in the shared data overlay is zero. Its phase origin is therefore **program start** — not save load, not scene entry, and not the hour crossing that wrote the countdown. Loading a save does not reset it. An implementation that restarts the counter on load, or that ties its phase to the countdown byte, decays the same save on a different schedule than the original.
 
-  The same two residues also pick the loud envelope in the tick's own lava/shrine effect branch, so one counter drives both behaviours and an implementation should not give them separate phases. Within a reference census over the shipped executable, all twenty-three code overlays, all four display drivers and the shared data overlay, the counter byte has exactly one writer pair — the advance and the wrap — and every other reference is a read inside the same routine. The byte also serves as the base of a small table of tone periods whose live entries begin past it, so the table-base uses never read or write the counter itself. That census does not cover an access built from a nearby pointer base held in a register; none of the references found has that form.
+  The same two residues also pick the loud envelope in the tick's grandfather-clock branch (`systems/audio.md` Section 8.10): the non-zero countdown is the hour chime, so while a grandfather clock is the nearest ambient source each decrementing call plays one chime. *(Corrected 2026-10-16, issue #298 Q16: earlier text called this the tick's "lava/shrine effect branch"; no lava or shrine tile is tested, see `RETRACTIONS.md` R540.)* One counter drives both behaviours and an implementation should not give them separate phases. Within a reference census over the shipped executable, all twenty-three code overlays, all four display drivers and the shared data overlay, the counter byte has exactly one writer pair — the advance and the wrap — and every other reference is a read inside the same routine. The byte also serves as the base of a small table of tone periods whose live entries begin past it, so the table-base uses never read or write the counter itself. That census does not cover an access built from a nearby pointer base held in a register; none of the references found has that form.
 - **Cadence.** The audio tick runs once per idle world tick, and only while the master redraw-enable byte at `0x02FE` is non-zero; when that byte is clear the world tick skips its whole body and no decrement happens. The world tick is *not* one call per keyboard poll — the idle key-wait loop reaches it on one iteration in four, and many other sites drive it besides (`systems/main-loop.md` Section 9).
 - **Consequence for a save.** A save taken any appreciable time after the last hour crossing reads zero here. An engine that stores a live twelve-hour value and never decays it diverges from the original on essentially every daylight save. The byte-compatible behaviour is: write on a snapshot mismatch, then decay on the audio cadence above.
 - **Confidence.** The write rule, the single-consumer finding, the two-in-eight decrement, the identification of the two residues as zero and four, the test-before-advance order, the free-running counter's location outside the save image and its program-start phase origin, and the cadence gates are all **established** for the scan scope in `formats/saved-gam.md` Section 15 — the shipped executable, all twenty-three code overlays and all four display drivers, searched for direct and indexed references to the byte, with the hit list enumerated in the private note. **How long the byte takes to reach zero in wall-clock terms is inferred, not measured**: no timing run was made and the world-tick rate itself is unmeasured. Do not publish a seconds figure.
@@ -476,7 +492,10 @@ boundaries that are already fixed for engine behavior.
   save/OOL reads and mirror writes, then returns to top-level mode dispatch; it
   does not own a separate mode-zero cleanup. The current direct caller census
   adds the ordinary town arrest wait-to-morning loop as a twenty-minute
-  advancing caller, not as a zero-minute recompute caller.
+  advancing caller, not as a zero-minute recompute caller. The Blackthorn
+  interrogation is a two-minute advancing caller: each wrong answer after the
+  first, with at least two nondead members, makes one two-minute cleanup call
+  (`systems/blackthorn.md` Section 5) *(added 2026-10-16, issue #298 Q8)*.
 
 - **Party status pass caller census.** The status/provision pass of Section 5 is
   invoked from exactly four places: the overworld per-turn epilogue, the town

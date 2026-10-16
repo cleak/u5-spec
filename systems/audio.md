@@ -277,6 +277,7 @@ Common recipes are:
 |---|---:|---:|---:|---:|
 | Trap or failed reagent mix | 40 | 3000 | 100..500 Hz | 75 |
 | Ordinary damage presentation | 10 | 1600 | 100..2000 Hz | 160 |
+| Dungeon sleep or poison field hit, once per affected member (added 2026-10-16, issue #298 Q7; `dungeon-mode.md` Section 8.1) | 1 | 50 | 100..3500 Hz | 50, about 9 ms under the Section 4 anchor (model value, not a capture) |
 | Shared potion/wind lead, variant `v` | 800 | `8000 + 1600v` | 100..700 Hz | 10 through 26 for variants 0 through 8 |
 | Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; movement uses are in Section 7.5, Blackthorn in Section 8.6, and endgame in Section 8.7 |
 
@@ -545,7 +546,7 @@ strikes.
 | Shrine offering accepted (`systems/karma.md` Section 7.2) | 2700 | 200 | 184,000 | about 958 Hz | 7.91 s / 6.13 s |
 | Shrine Codex turn-in (`systems/karma.md` Section 7.2) | 3100 | 150 | 138,000 | about 1.10 kHz | 5.93 s / 4.60 s |
 | Shard use (every U-Use of a Shadowlord shard, before the position gate; `catalogs/quest-graph.md` Section 5) | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
-| One Blackthorn cutscene beat | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
+| Blackthorn execution (fourth wrong answer or merciful death; `systems/blackthorn.md` Section 5) | 2640 | 200 | 184,000 | about 937 Hz | 7.91 s / 6.13 s |
 
 Increment 3100 is the one section 5.4.4 already prices at about 1,101 Hz; the
 turn-in swell and that entry are the same pitch. The four rows come from a
@@ -561,8 +562,11 @@ paint over it. The shard-use caller issues no inversion and no other draw before
 or during its sweep: its initial comparison value runs 2000 to 24950 in steps of
 50 over 460 runs (the rising limb), then 25000 down to 2050 over 460 more (the
 falling limb), 92,000 iterations and about 3.96 s audible per limb, with nothing
-between the limbs. Whether the Blackthorn caller precedes its sweep with an
-inversion was not established. *(Scope corrected 2026-10-16, issue #296;
+between the limbs. The Blackthorn caller - the
+execution of `systems/blackthorn.md` Section 5 - issues no inversion and no
+other direct draw either: between its narration record and its sweep there is
+only a quiet 10-tick redraw pause's ordinary world-tick redraws *(added
+2026-10-16, issue #298 Q24, by static reading)*. *(Scope corrected 2026-10-16, issue #296;
 `RETRACTIONS.md` R523: the shard-use row was labelled "Shadowlord destruction",
 but it plays on every shard use, before any gate, and a successful destruction is
 only one possible outcome after it.)*
@@ -671,10 +675,10 @@ every row.
 | 38 | In Quas Xen | Clone | 7 | After the creature cursor is accepted. |
 | 39 | In Quas Wis | Peer | 7 | Unconditional, then the look helper. **Both look helpers are silent.** |
 | 41 | In Quas Corp | Cause Fear | 7 | Unconditional at helper entry. |
-| 42 | In Mani Corp | Resurrect | 8 | Only if the target is dead. Cancel, or a living target, is **fully silent** - the spell path's caller tag also suppresses the refusal message. |
+| 42 | In Mani Corp | Resurrect | 8 | Only if the target is dead. A living target plays no variant, and the spell's silent caller mode suppresses `Not dead!`, but the helper reports failure, so the dispatcher prints `Failed!` and plays the shared failure glissando. Only a cancelled member prompt (`None!`) is fully silent. *(Corrected 2026-10-16, issue #298 Q23: this row previously said a living target was "fully silent"; that is retracted, see `RETRACTIONS.md` R542.)* |
 | 43 | Kal Xen Corp | Summon | 8 | **Unconditional at placement-helper entry, before the eight-try cell probe**, so a failed placement still plays it. An accepted placement additionally runs the summon envelope of section 8.3. |
 | 46 | Vas Rel Por | Gate Travel | 8 | Only after the player types a digit `1`..`8` at the moongate prompt; any other key is silent. |
-| 47 | An Tym | Negate Time | 8 | Unconditional at helper entry; if an absorbing actor takes it, adds `Magic absorbed!` plus a manual envelope cue. |
+| 47 | An Tym | Negate Time | 8 | Unconditional at helper entry; if any active-object record's base tile is the Shadow Lord actor tile `0xFC` (`systems/magic.md` Section 8), adds `Magic absorbed!` plus a manual envelope cue, then the shared `Failed!` and failure glissando *(added 2026-10-16, issue #298 Q15)*. |
 
 **The seven spell ids that play no shared variant at all.** These do not reach
 the dispatcher on any path.
@@ -714,10 +718,24 @@ runs and the projectile branch (a 400-to-750 Hz glissando) never does.
    Poison Wind, and 20800 for Death Wind and Flame Wind. Those are again
    `8000 + 1600 x circle` - the rumble lead of the id's own circle's variant,
    without the inversion or the envelope pair; then
-2. a 21-by-21 cell raster in which **every drawn cell retunes the speaker to a
-   fresh pseudorandom pitch in 100..10,000 Hz and leaves it running**. A single
-   tone stop fires once after the whole raster. There is no programmed delay
-   between retunes, so the audible rate is the cell-draw rate.
+2. the 21-lane cone raster of `systems/magic.md` Section 8, in which **every
+   lane step drawn inside the viewport's pixel bounds retunes the speaker to a
+   fresh pitch drawn from the gameplay generator (`systems/prng.md`) over the
+   inclusive range 100..10,000 Hz and leaves it running**. Each such step draws
+   its dot, then draws the pitch, then retunes; a step that leaves the pixel
+   bounds ends its lane with no dot, no draw and no retune, and an in-bounds
+   step can still end its lane after its dot and draw. The pitch draw comes
+   before the speaker call, so it is made with sound off too, and it
+   interleaves with the lanes' own per-pass burst-length draws from the same
+   generator: a frontend must advance the gameplay generator once per in-bounds
+   lane step even if it plays nothing. The bare rumble lead of item 1 uses the
+   private jitter stream and touches no gameplay randomness. A single tone stop
+   fires once after the whole raster. There is no programmed delay between
+   retunes, so the audible rate is the lane-step rate. *(Corrected 2026-10-16,
+   issue #298 Q17: this item previously described "a 21-by-21 cell raster in
+   which every drawn cell retunes the speaker" with no stream named; the raster
+   is pixel lanes, retuning once per lane pixel step, and the stream is the
+   gameplay generator - see `RETRACTIONS.md` R541.)*
 
 **Scroll use is a separate presentation with its own variant.** Each scroll
 decrements its own count, prints its banner, then:
@@ -903,7 +921,12 @@ lost. The drift passes the **raw** direction index to the setter, whereas the
 spell applies a direction transform before committing (`weather.md` section 3),
 so the two paths are not interchangeable. And the drift is **not a timer at
 sea**: it reads no clock and tests no transport. It is a per-redraw-tick 1-in-64
-roll gated only on the master-redraw flag and a first-tick handshake flag.
+roll gated only on the master-redraw flag and the world tick's ambient/animation
+gate byte (Section 8.10), so like the ambient scenery tick it is also skipped on
+the first world tick after program start and on every world tick while Negate
+Time is active. *(Corrected 2026-10-16, issue #298 Q16: this sentence previously
+called that byte "a first-tick handshake flag", which read the gate backwards; see
+`RETRACTIONS.md` R539.)*
 
 > **Unresolved.** The drift's **cadence** is not established. The world tick
 > that hosts the roll has roughly 68 entry points across the build, and whether
@@ -996,7 +1019,7 @@ frequency and a hold in outer calibrated units. Every user in the shipped game:
 | Combat exit refused, `All must use the same exit!` | 165 Hz, 200 units |
 | Combat command refused as inapplicable, two-tone pair (section 8.8) | 220 Hz for 150 units, then 150 Hz for 150 units |
 | A Return-to-View presentation strip (strip 3) | 3000 Hz for 3 units at its local phase 0, 2000 Hz for 3 units at phase 4 |
-| The ambient shrine/flame tick | 3000 Hz for 3 units on residue 0 of its eight-phase counter, 2000 Hz for 3 units on residue 4 |
+| The ambient clock tick (grandfather clock in range; Section 8.10) | 3000 Hz for 3 units on residue 0 of its eight-phase counter, 2000 Hz for 3 units on residue 4, only while a grandfather clock is the nearest ambient source and the hour-chime countdown is zero *(renamed and scoped 2026-10-16, issue #298 Q16; earlier text called it the "ambient shrine/flame tick" - no shrine, flame or lava tile is tested, see `RETRACTIONS.md` R540)* |
 
 The narration census corroborates the mode scope independently: the game
 contains exactly five copies of the `Blocked!` string and exactly five pieces of
@@ -1086,7 +1109,7 @@ matters:
 - **The two three-unit blips in the census** are settled (2026-09-05): there
   are **two sites, and each emits both pitches** on its own eight-phase counter
   - Return-to-View strip 3 at local phases 0 and 4, and the ambient
-  shrine/flame tick at residues 0 and 4 of the free-running ambient counter
+  scenery tick's clock branch (Section 8.10) at residues 0 and 4 of the free-running ambient counter
   (`systems/time.md` Section 11). The census rows above now say so; the earlier
   rows had split the two pitches between the two sites.
 
@@ -1156,6 +1179,7 @@ may subsequently invoke the damage rumble.
 | Monster summon success | After successful placement and narration, run `(15, 1000, 5000, 1, 2760)`, then perform the summon tile flash. Failed chance, coordinate, legality, or allocation gates are silent. |
 | Player Summon | The committed cast uses its shared spell variant. An accepted placement additionally runs `(5, 500, 12000, 1, 2760)` before actor finalization. Cancellation before commit is silent. |
 | Moongate transit | During an accepted transit, run `(2, 2000, 30000, 1, 5900)`. No destination handoff means no transit envelope. |
+| Shadowlord summoned by Yell | After `\nA_shadowlord_appears\n` prints, run the blocking envelope `(2, 2000, 30000, 1, 10400)`, then the single-cell converge on tile `0x1FC` at the summoned actor's cell (Section 8.3.1; `systems/commands.md` Section 11). The steps run in that order, not together. *(Added 2026-10-16, issue #298 Q11.)* |
 
 
 #### 8.3.1 The summon tile flash is the shared single-cell converge
@@ -1164,9 +1188,14 @@ The flash that accompanies both summon cues is **neither the shared
 full-viewport flash nor a bespoke effect**. It is one invocation of the engine's
 shared single-cell pseudorandom pixel converge - the same primitive, the same
 driver path, as the moongate tile shimmer, the Conjure and Swarm placement
-flashes, the camp apparition and level-up, the Blackthorn audience appearances,
-the Return-to-View and character-creation tile previews, and one command-layer
-site: fourteen sites in all. **If a "single-cell tile converge" or "moongate
+flashes, the camp apparition's appearance and departure, the Blackthorn
+audience appearances, the Return-to-View and character-creation tile previews,
+and one command-layer site, the Shadowlord summoned by Yell
+(`systems/commands.md` Section 11): fourteen sites in all. *(Corrected
+2026-10-16, issue #298 Q10 and Q11: the two camp sites are the old man's
+appearance and departure; the per-member level-up uses a viewport inversion,
+not the converge, and the earlier "camp apparition and level-up" label is
+retracted, see `RETRACTIONS.md` R547.)* **If a "single-cell tile converge" or "moongate
 shimmer" contract already exists elsewhere in this specification, the summon
 flash is that contract instantiated with the flash tile named below.** It needs
 no separate implementation.
@@ -1276,16 +1305,20 @@ an arm that never prompts. That arm plays its effect cue unconditionally unless 
 refusal bit is set, in which case it reports failure and plays the failure
 glissando. **There is therefore no such thing as a Blink pass in combat.**
 
+**Ambient audio during any prompt (settled 2026-10-16, issue #298 Q16).** The
+world tick, which any prompt that pumps it runs, reaches the speaker through the
+ambient scenery tick of Section 8.10. That tick runs at the tail of every
+rendering world tick; it is suppressed only while the redraw-enable byte is
+clear, on the first world tick after program start, and while Negate Time is
+active, and it has no other caller. So during any keyboard prompt that pumps the
+world tick, a nearby grandfather clock, waterfall, fountain or drawn minstrel is
+audible. This is scenery audio, not a Blink or pass behaviour. *Earlier text here
+said the tick ran only while a mode-entry handshake flag was clear, "once after
+entering a mode"; that inverted the gate and is retracted (`RETRACTIONS.md` R539).*
+
 **Unresolved, and scoped so it is not read as a Blink behaviour:**
 
-- **Ambient audio during any prompt.** The world tick, which runs on every key
-  poll, *can* reach the speaker through the ambient shrine/flame tick. That tick
-  is reached from the world tick only while a mode-entry handshake flag is
-  clear - once after entering a mode, after which the same tick sets the flag.
-  This is ambient audio reachable during **any** keyboard prompt and is not
-  attributable to Blink or to a pass. How often the handshake flag is re-cleared
-  in practice was **not determined**, and the tick's other entry points were not
-  traced.
+
 - **Depth of the negative search.** The world tick's callees were enumerated at
   depth 1 (nine targets) with their callees listed at depth 2, and only the
   ambient tick reaches a sound primitive. This does **not** cover depth 3 and
@@ -1412,6 +1445,9 @@ stage; that event owns the sound, not the movement command.
 | Return-to-View strip 2 | Each scheduled inner tick runs rumble `(20, 60, 10000)`, exactly three random pitches in 100..10000 Hz. The enclosing tick is BIOS-clock paced. |
 | Return-to-View strip 3 | At local phase 0 play a 3000 Hz blocking tone for 3 calibrated units; at phase 4 play 2000 Hz for 3. The enclosing tick remains BIOS-clock paced. |
 | Harpsichord digit puzzle | Each accepted digit plays its digit-specific note through the software envelope generator, only while sound is enabled. The note **blocks** for its full 4,000 iterations, about 172 ms, and ends in a hard silence. Muting skips the generator call outright and therefore removes the hold as well as the sound - the one caller-level exception to section 3. `town-mode.md` section 13.1 owns the ten-note table, the ascending scale, and the plucked amplitude contour. Ordinary name or text typing does not reuse this behavior. |
+| Camp apparition opening | After `An_apparition!\n` prints, run `(6, 2500, 10000, 1, 2620)` (`systems/rest-and-camp.md` Section 7). *(Added 2026-10-16, issue #298 Q10.)* |
+| Camp apparition six-note figure | Six envelopes `(13, 200, 5000, 1, P)` with P = 2620, 2620, 2620, 3700, 3900, 4160, in that order, before the old man's converge appearance. *(Added 2026-10-16, issue #298 Q10.)* |
+| Camp apparition per-member pair | For each living member: `(13, 200, 5000, 1, 5500)`, then the whole-viewport inversion, then `(1, 2500, 60000, 1, 5500)`. This pair is the "two-tone sting": both at period 5500, a short one of 5,000 iterations and a long one of 60,000. *(Added 2026-10-16, issue #298 Q10.)* |
 | Blackthorn cinematic movement or stinger pause | Run the Section 5.3 short two-part sting: 25 sound-LFSR updates at `100..1000 Hz`, hard silence, a 20-unit calibrated silent hold, 25 updates at `100..1500 Hz`, then hard silence. The cinematic VM then requests its separate two-tick quiet redraw pause. Sound mute preserves both rumble loops, all fifty sound-state advances and timer writes, the silent hold, and the cinematic pause. **This is the same cue Section 11's rescue-envelope row calls "the random-rumble stinger"**: the two-part sting is built from two random-rumble calls around the calibrated hold, so the two rows describe one sound, not two. `blackthorn.md` Section 4.2 counts the 36 repetitions the audience exit beat plays. |
 
 #### 8.6.1 The intro rectangle-dissolve click
@@ -1908,6 +1944,100 @@ contract. The equivalent question for section 8.8 **is** settled. Nothing in
 either row was verified at run time; sailing into a whirlpool would settle the
 whole of this section in one sitting.
 
+### 8.10 Ambient scenery audio
+
+*(Added 2026-10-16, issue #298 Q16.)* The world tick ends with one call to an
+**ambient scenery tick** that plays the sound of the nearest clock, waterfall,
+fountain or minstrel. Earlier revisions called it the "ambient shrine/flame
+tick"; that name is withdrawn, because no shrine, flame or lava tile is among
+its sources (`RETRACTIONS.md` R540).
+
+**Gate.** The tick runs once at the tail of **every** world tick that renders.
+It is skipped in exactly three cases:
+
+- the master redraw-enable byte is clear, so the world tick skips its whole
+  body (`formats/saved-gam.md`, the animation/redraw scratch row);
+- the world tick's ambient/animation gate byte is zero. Its shipped initial
+  value is zero, so the **first world tick after program start** skips the
+  ambient tick (and the object animator and the wind drift with it). The world
+  tick sets the byte back to one at its own tail;
+- **Negate Time** is active: while its `T` tag is set, the world tick forces the
+  gate byte to zero at its head on every call, so the ambient tick, the object
+  animator and the wind drift are all skipped for the effect's whole duration.
+
+The town-entry hint that the input routine writes into the same byte
+(`systems/input.md` Section 12) is a third value that suppresses only the
+active-object animator for one tick. It does **not** suppress the ambient tick.
+A census of every reference to the gate byte across the executable, all code
+overlays and all display drivers found three writers - the Negate Time zeroing,
+the tail re-set and the town-entry hint - and no overlay references. The
+ambient tick has no caller other than the world tick. *(Earlier text in Section
+8.3.2 and in `systems/input.md` Section 12 read this gate backwards, as a
+mode-entry handshake that let the tick run only once after entering a mode; that
+is retracted, `RETRACTIONS.md` R539.)*
+
+**Window and radius.** The tick scans the 11-by-11 window centred on the
+party's map cell. In combat-class scenes the centre is the arena centre cell
+(5,5), so the window is exactly the arena. Cells are scanned column by column,
+west to east, and north to south within each column. Each cell is ranked by its
+squared Euclidean distance from the centre, and a cell is considered only if it
+is **strictly nearer** than the best match so far. The starting bound admits
+every cell of the window, corners included. So the whole 11-by-11 window is in
+range, the **nearest** matching cell wins, and ties go to the cell met first in
+that scan order (west before east; within a column, north before south). Exactly
+one source sounds per call, or none. Nothing outside the window counts.
+
+**Sources.** Each cell is tested against the four classes in this order, and the
+first match is that cell's class:
+
+| Class | Matches | What plays on a call that selects it |
+|---|---|---|
+| Grandfather clock | live tile `0xFA` or `0xFB` | **Tick-tock:** a blocking tone of 3000 Hz for 3 units when the eight-phase sub-counter reads 0, 2000 Hz for 3 units when it reads 4, and silence on the other six residues. **Chime:** while the hour-chime countdown (save byte `0x02DE`) is non-zero, residues 0 and 4 instead play a software envelope (delta -10, initial comparison 20000, 2000 iterations, idle 1, period 3116). |
+| Waterfall | live tile `0xD4..0xD7` | A random rumble (step 20, target 60, pitch 100..10000 Hz) on **every** call, with no residue gate. |
+| Fountain | live tile `0xD8..0xDB` | A random rumble (step 10, target 30, pitch 100..25000 Hz) on every call. |
+| Minstrel | the viewport cell is drawing an actor whose sprite is in the band `348..351` (actor-half `0x5C..0x5F`) | **Melody:** one step of a fixed 53-step tune per call. A note step plays a software envelope (delta -10, initial comparison 20000, 2000 iterations, idle 1) whose period is one of nine values: 3497, 3926, 4406, 4668, 5240, 5882, 6231, 6602 or 6995. A rest step is silent. |
+
+The three terrain classes read the live tile; the minstrel class reads the
+viewport's per-cell actor draw, so only a minstrel actually drawn in the
+viewport plays. Terrain is tested first within a cell, so a clock under a
+minstrel wins that cell. The actor band is the one `catalogs/npc-roster.md`
+Section 4 gives the tag "a minstrel"; `catalogs/tile-catalog.md` names the same
+band "bard", and that naming dispute is still open (`OPEN-QUESTIONS.md`). The
+rule here depends only on the band, not on the name.
+
+Of the tune's 53 steps, 40 are notes and 13 are rests. The step sequence itself
+is shipped data and is **not** published here; see `OPEN-QUESTIONS.md` section 1.
+
+**Counters.**
+
+- **Eight-phase sub-counter.** Free-running over `0..7`, advanced by one at the
+  end of every ambient-tick call whatever was selected; its residue is read
+  before the advance. It is not in the save image and starts at zero at program
+  start (`systems/time.md` Section 11).
+- **Hour-chime countdown, save byte `0x02DE`.** Written by the clock with the
+  twelve-hour hour (`systems/time.md` Section 11). It drops by one on every call
+  at residue 0 or 4, whether or not a clock is in range. Near a clock the hour
+  therefore strikes as one chime per remaining count, two chimes per eight
+  ambient calls.
+- **Melody step counter.** Separate from both. It advances only on calls that
+  select the minstrel, rest steps included, wraps after the 53rd step, is not in
+  the save image and starts at zero.
+
+The waterfall and fountain rumbles draw from the private sound jitter stream,
+never from the gameplay generator, so the ambient tick makes no gameplay draw.
+
+**Evidence and limits.** The window, centre rule, scan order, strict-nearer
+rule, tie-break, the four classifiers, every per-class recipe, the residue
+gating, the countdown decay and the melody stepping and wrap were established by
+executing the shipped tick across thirty-nine cases with the tile lookup and the
+speaker primitives recorded, backed by a static reading of the whole routine;
+the gate, and the envelope and rumble argument roles, are static readings. The
+clock, waterfall and fountain identifications come from
+`catalogs/tile-catalog.md`. The wall-clock rate - world ticks per second, and so
+the tick-tock tempo and chime spacing - is unmeasured, as `systems/time.md`
+Section 11 already says. Source provenance: derived from private analysis in
+`u5-decomp/notes/`.
+
 ## 9. Explicit silence boundaries
 
 The following actions have no universal acknowledgement sound in the analyzed
@@ -2189,18 +2319,22 @@ listed in `RETRACTIONS.md`.
 | Blackthorn rescue envelopes | **Two** sites in the one cinematic: the fixed six-row sequence after the refuge tableau first redraws the party actor, and one further envelope per in-party slot inside the party-restoration step, at a per-slot phase increment. See Section 8.6.2 and `blackthorn.md` Section 7. *(Corrected 2026-09-12, issue #269: this row previously named the six-row sequence as the cinematic's whole envelope content - `RETRACTIONS.md` R494.)* | The Blackthorn VM movement scripts, which use the random-rumble stinger instead — that is the short two-part sting of Sections 5.3 and 8.6 under its other name, not a third recipe. No visual operation occurs inside the six-row loop. |
 | Intro dissolve retune | The first gated rectangle dissolve only, on every second visited pixel, as a continuously running retuned carrier. See section 8.6.1. | Every later dissolve in the run, the gate having been cleared by the first glyph draw. It is not a per-pixel click and not a discrete click train. |
 | Harpsichord note | The castle harpsichord handler, one note per accepted digit, only while sound is on. See `town-mode.md` section 13.1. | Ordinary name or text typing. Any other digit-key context. |
-| Shrine meditation closing recipes | The meditation handler only, one recipe per completed arm: the seven-note ordination chime after the quest-instruction record, and the 920-step swell on the accepted-offering and Codex-turn-in arms. The swell's geometry is shared with Shadowlord destruction and one Blackthorn cutscene beat at their own phase increments. See section 5.4.7 and `systems/karma.md` Section 7.2. | The Codex urn reader, which runs no software envelope at all - its closing beat is three shared flash/rumble cycles (`systems/karma.md` Section 8.1). The three refusal arms - a blank mantra line, a wrong mantra and a zero offering - which reach no sound. The shared flash of section 8.4, which the ordination and offering arms never invoke. |
+| Shrine meditation closing recipes | The meditation handler only, one recipe per completed arm: the seven-note ordination chime after the quest-instruction record, and the 920-step swell on the accepted-offering and Codex-turn-in arms. The swell's geometry is shared with Shadowlord destruction and the Blackthorn execution at their own phase increments. See section 5.4.7 and `systems/karma.md` Section 7.2. | The Codex urn reader, which runs no software envelope at all - its closing beat is three shared flash/rumble cycles (`systems/karma.md` Section 8.1). The three refusal arms - a blank mantra line, a wrong mantra and a zero offering - which reach no sound. The shared flash of section 8.4, which the ordination and offering arms never invoke. |
 
 Two scope questions in this table are **open** rather than answered, and are
-flagged at their own sections rather than resolved here. The first is whether
-the ambient shrine/flame tick can sound during an arbitrary keyboard prompt
-(section 8.3.2). The second is what that same tick contributes **inside a
-Blackthorn cinematic**: the VM's pause and movement forms each run a world tick,
-the world tick runs the ambient tick, and the ambient tick's reachable work
-includes the software envelope generator, driven by the loaded cutscene terrain
-rather than by the live map. The audience exit beat of `blackthorn.md` Section
-4.2 runs 73 world ticks by itself. Until that tick is exercised against a loaded
-Blackthorn cutscene grid, no statement of the form "the Blackthorn VM scripts
+flagged at their own sections rather than resolved here. The first - whether
+the ambient scenery tick (Section 8.10) can sound during an arbitrary keyboard
+prompt - is now answered yes (section 8.3.2; *added 2026-10-16, issue #298
+Q16*). The second is what that same tick contributes **inside a Blackthorn
+cinematic**: the VM's pause and movement forms each run a world tick, the world
+tick runs the ambient tick, and the ambient tick's reachable work includes the
+software envelope generator, driven by the loaded cutscene terrain rather than
+by the live map. The audience exit beat of `blackthorn.md` Section 4.2 runs 73
+world ticks by itself. That question is now narrowed: the tick can sound in a
+cutscene only if the loaded cutscene grid places a grandfather clock, waterfall,
+fountain or drawn minstrel inside the 11-by-11 window around the scan centre
+(within five cells on each axis). Until the loaded Blackthorn cutscene grid is
+checked for those sources, no statement of the form "the Blackthorn VM scripts
 play only stingers" is in scope, and the rows above should be read as what the
 VM plays rather than as a complete inventory of the scene.
 

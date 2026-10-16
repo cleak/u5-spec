@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Ultima V's NPC conversations are driven by a small interpreter that runs a per-NPC byte-code stream. Each NPC carries a "blob" of interleaved obfuscated text and one-byte control codes; the engine prints the text with substitutions for common words and the player's name, prompts the user for a keyword, checks a fixed engine keyword table, then scans the NPC blob's ordinary keyword pairs and runs the selected response through the same interpreter. The interpreter also handles flag-driven branches, party-recruitment prompts, gold transactions, NPC-curse checks, GOTO labels, and two ways of asking the player a name.
+Ultima V's NPC conversations are driven by a small interpreter that runs a per-NPC byte-code stream. Each NPC carries a "blob" of interleaved obfuscated text and one-byte control codes; the engine prints the text with substitutions for common words and the player's name, prompts the user for a keyword, checks a fixed engine keyword table, then scans the NPC blob's ordinary keyword pairs and runs the selected response through the same interpreter. The interpreter also handles flag-driven branches, party-recruitment prompts, gold transactions, the town alarm sweep, GOTO labels, and two ways of asking the player a name.
 
 Almost all observable conversation behaviour — the questions an NPC will ask, the gold they want, who joins the party, which quest flags get set — is encoded in the blob, not the engine. The engine itself is small and re-entrant: a single byte runner, a single keyword loop, a single loader. Anything richer than "speak text and accept keywords" is built up by combining the dozen or so control codes the runner recognises.
 
@@ -431,7 +431,7 @@ path every conversation takes:
 - All eight shipped `0x8A` bytes are reaction records. Five head the "no" arm of
   a scoped prompt that asks the party for something (including two gold
   requests), two head `"y"` answer records where "yes" is the boastful answer to
-  a virtue question, and one follows the `0x8B` curse-check inside a
+  a virtue question, and one follows the `0x8B` alarm code inside a
   caught-stealing line.
 
 The practical rule for an implementation: standing movement from dialogue is a
@@ -447,14 +447,14 @@ literal-newline code is `0x8D` and only `0x8D`; the value `0x8A` acquires its
 newline meaning only *inside* the word buffer, because the printable-text path
 rewrites a `0x8D` to `0x8A` after control-code dispatch has already been passed.
 
-### 7.5. Print-mask and curse codes
+### 7.5. Print-mask and alarm codes
 
 | Code  | Mnemonic        | Effect                                                                                                                          |
 |-------|-----------------|---------------------------------------------------------------------------------------------------------------------------------|
-| 0x8B  | CURSE-CHECK     | Run the resident curse-check routine. Used in dialog with cursed-item NPCs (e.g. the snake in Despise) to tick the curse state. |
+| 0x8B  | ALARM           | Run the town alarm sweep of `systems/town-mode.md` Section 14: forced pursuit for every occupied guard, lich/death-mage and Shadowlord slot, and one fair inclusive `0..255` draw for every other occupied slot, below 128 calling the forced-flight rewrite. Every shipped use sits at a beat where the speaker calls the guards or turns on the party; in two records the code comes just before that line. *(Corrected 2026-10-16, issue #298 Q14.)* |
 | 0x8E  | ALTERNATE-FONT  | Toggle the print mask's high bit, switching queued printable bytes between the ordinary font and the alternate (runic) font and, as a side effect, suppressing word-buffer breaks inside the run. Used in matched pairs around mantras and Words of Power. |
 
-`0x8B` does not directly affect the stream; it is a side-effect-only code that ensures the player's curse state is updated at a specific narrative beat. `0x8E` is the only code that mutates the byte runner's print-mask state, and is used in matched pairs (one to enter the alternate font, one to leave it). Every occurrence in shipped dialogue wraps a mantra or a Word of Power.
+`0x8B` does not affect the stream; its only effects are the alarm sweep's persisted schedule rewrites and its random draws. The sweep takes no arguments, prints nothing, reseeds nothing and leaves the text stream alone. The speaking NPC is in the roster too, so its own line can rewrite it: a guard speaker then pursues, and another speaker may answer the next Talk with the cowering line. No curse or per-character state is involved. Source provenance: derived from private analysis in `u5-decomp/notes/` - the conversation code's call was read through the resident overlay thunk into the town overlay's alarm sweep, whose own analysis independently lists conversation as a caller - plus a scan of the shipped `.TLK` files. In the shipped dialogue the code occurs 14 times in 9 NPC records across the castle, town and keep conversation files, and none in the dwelling file; none of those records belongs to a cursed-item NPC. Earlier revisions called `0x8B` a curse check that ticked per-character counters; it is the town alarm sweep, and that reading is retracted (R531). *(Added 2026-10-16, issue #298 Q14.)* `0x8E` is the only code that mutates the byte runner's print-mask state, and is used in matched pairs (one to enter the alternate font, one to leave it). Every occurrence in shipped dialogue wraps a mantra or a Word of Power.
 
 ### 7.6. Branching, recruitment, and transactional codes
 
@@ -865,6 +865,39 @@ labelled records, and the final label value also participates as an internal
 sub-record separator. This is how an NPC can ask a follow-up question and route
 the answer without returning to the top-level keyword list.
 
+**What a GOTO runs first.** *(Added 2026-10-16, issue #298 Q20.)* The labelled
+block's head is the stream from the byte after the first declaration of the
+label (searching from the start of the NPC's blob) up to the first NUL, run by
+the ordinary byte runner. It ends early only if a control code stops the stream;
+the NUL that ends it hands over to the scoped-prompt handling described above. A
+repeated label is not a boundary. Inside the head every byte keeps its ordinary
+meaning: a label byte in `0x91..0x9F` met as a code is a live GOTO at that
+point, including one to the block's own label, which restarts the block; a
+label byte that is the operand of the IF-ELSE code `0x8C` (or the target operand
+of the `0xFE` threshold code) is consumed as that operand and is neither a GOTO
+nor a boundary. A self-GOTO re-enters the label handler as a nested call, and
+the outer call returns as soon as the inner one stops, so a retry loop never
+opens a second scoped prompt for the outer level. The declaration search also
+accepts the final-marker value `0x9F` in place of the declaration marker before
+the label; no shipped record contains that pairing, so shipped content behaves
+as if only the declaration marker counts.
+
+Shipped census: 448 declared blocks, and no label is declared twice in any blob.
+Seventeen heads contain label bytes (GOTOs to other blocks or IF-ELSE operands).
+Exactly one head contains its own label: a castle NPC's name-challenge block,
+whose head asks the player's name (ASK-WHO), branches to another block if the
+name was right, and otherwise prints a retry line and ends with a GOTO to its
+own label, so a wrong name re-asks the challenge rather than opening the scoped
+prompt. A rule that ended each head at its first repeated label would cut that
+head before the self-GOTO, drop the loop, and send a wrong answer to the scoped
+prompt; in the other 447 heads the first NUL comes first, so such a rule happens
+to give the same split. Labels do repeat after the head in 28 blocks - in nearly
+all of them the label is the whole of the first record after the head, the "ask
+again" arm of a yes/no question - so "a block whose label never repeats" and "a
+block whose head contains its own label" are different counts. What the scoped
+prompt does with the records after the head is described above from static
+reading only; `OPEN-QUESTIONS.md` carries it. Source provenance: derived from private analysis in `u5-decomp/notes/` (static reading of the label handler and the byte runner) and a scan of the shipped `.TLK` files.
+
 The scoped prompt is not a second copy of the top-level conversation loop.
 Before reading its inner answer, it marks the reserved-word handler as already
 inside a BYE-like prompt state. As a result, top-level reserved words such as
@@ -1113,7 +1146,7 @@ sound are not a virtue-standing write, and none of this is karma-driven; it is
 purely a consequence of the resident Shadowlord. `quest-flags.md` owns the
 ordering summary and `systems/shops.md` owns the paired overcharge.
 
-**Curse state.** The CURSE-CHECK code (`0x8B`) ticks the resident curse logic. The conversation engine simply prods the routine; the curse logic itself owns the per-character byte counters.
+**Town alarm.** The ALARM code (`0x8B`) runs the town alarm sweep owned by `systems/town-mode.md` Section 14; conversation passes no arguments and reads no result. Earlier revisions said this code ticked a resident curse logic that owned per-character byte counters; no such counters exist on this path, and that reading is retracted (R531). *(Corrected 2026-10-16, issue #298 Q14.)*
 
 ## 11. Boundaries and variations
 

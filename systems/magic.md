@@ -783,6 +783,28 @@ fixed budget of seven candidate steps - print `Failed!\n` with the shared
 failure sound. The meaning of that refusal state is named here only by its
 effect.
 
+*(Added 2026-10-16, issue #298 Q3.)* The refusal state is tested first; when it
+is set the cast fails at once and nothing is drawn. Otherwise spell variant 3
+plays, and the seven candidate steps are a budget of seven attempts of the
+shared random arena probe (see *The shared random arena probe* below). Each
+attempt draws a candidate X and then a candidate Y uniformly from the inclusive
+range `0..15` on the gameplay generator, spends the attempt when either exceeds
+10, and otherwise puts the cell to the shared combat spawn-cell validator, with
+the caster's own active-object base tile as the movement family whose terrain
+question is asked. The at-most-10 pre-test is not redundant: the validator
+itself accepts out-of-arena coordinates, so the pre-test is what keeps Blink
+inside the arena. Range rejections and validator rejections count against the
+same budget. The first accepted cell receives the caster at once - both the
+combat descriptor's arena position and the linked active object's position take
+it - and the cast reports `Success!`. The destination is uniform over the
+arena, not a step adjacent to the caster, and the caster's own current cell is
+always rejected because the live caster occupies it. Every attempt makes
+exactly two gameplay-generator advances whatever its outcome, and the validator
+makes none, so a failed combat Blink consumes exactly fourteen advances and a
+success on attempt *k* (counting from 1) consumes *2k*. Which other occupied
+cells the validator admits is the validator's own contract, not restated here
+(`OPEN-QUESTIONS.md` section 3 carries a follow-up on its occupancy wording).
+
 Refusals before dispatch are the shared cast gate's, not the spell's, and Blink
 shows the whole cascade. `catalogs/spell-list.md` gives the allow-mask as
 combat plus the overworld scene, so an ordinary town or dungeon scene prints
@@ -890,10 +912,15 @@ be relied on. The class-versus-status finding does not depend on it.) No shipped
 new-game or gameplay path produces Ashes. This refusal is therefore observable
 only when an external, edited, or legacy U5 save already contains that status.
 Preserve and honour such a byte, but do not invent a death, spell, or
-resurrection path that creates it. Some callers use a verbose mode that prints
-the `Not dead!` refusal for a non-Dead target;
-the ordinary spell/scroll path records a failed result and lets the dispatcher
-own the trailing failure narration.
+resurrection path that creates it. The spell uses the helper's silent mode: a non-Dead target prints nothing of
+its own and plays no variant, and the cast epilogue prints `Failed!` with the
+failure glissando. The Resurrection scroll uses the verbose mode: it prints its
+`Resurrection!` banner, refuses in combat-class scenes with `Not here!`, and
+elsewhere, for a non-Dead target, prints `Not dead!`, after which the U-Use tail
+adds `Failed!` with the same glissando. A cancelled member prompt ends either
+path after `None!` with no further line or sound. *(Corrected 2026-10-16, issue
+#298 Q23: this passage previously grouped the scroll with the spell as a silent
+"spell/scroll path"; the scroll is the verbose caller, see `RETRACTIONS.md` R542.)*
 
 The resurrection experience adjustment is conditional on the shared
 moral-standing selector described in `systems/karma.md`. When that selector is
@@ -1153,7 +1180,7 @@ For a caster at `(cx, cy)`, the un-capped selected cells are:
 
 Every row or column span is clipped to arena coordinates `0..10`. The caster's own cell is not part of the normal cone because enumeration starts one cell forward. The first band is three cells wide, the next band five cells wide, then seven, and so on until the arena edge or the output cap is reached. Example: from `(5,5)` west, the cone covers `x=4, y=4..6`; `x=3, y=3..7`; `x=2, y=2..8`; `x=1, y=1..9`; and `x=0, y=0..10`, for 35 cells.
 
-The original raster path has twenty-one pixel lanes and a 63-coordinate output buffer. Cones whose clipped mathematical shape would exceed 63 cells stop after the first 63 de-duplicated coordinates emitted by that raster. The lane stepping uses the combat PRNG only to slice work into short bursts; for cones that fit within 63 cells the affected cell set is the clipped cone above, independent of burst order. For over-cap cones, only the tail beyond the first 63 raster-emitted cells is unstable, so clean engines may either reproduce the lane-raster order for presentation parity or use the clipped cone with a deterministic 63-cell cap as a compatibility simplification.
+The original raster path has twenty-one pixel lanes and a 63-coordinate output buffer. Cones whose clipped mathematical shape would exceed 63 cells stop after the first 63 de-duplicated coordinates emitted by that raster. The lane stepping uses the gameplay PRNG to slice work into short bursts - each pass, every unfinished lane draws a burst length from `0..15`, and zero skips that lane for the pass - and, in addition, every in-bounds lane step draws one pitch from the same generator for the raster tone (`systems/audio.md` Section 6.1), with sound on or off. For cones that fit within 63 cells the affected cell set is the clipped cone above, independent of burst order. For over-cap cones, only the tail beyond the first 63 raster-emitted cells is unstable. The affected cells may be computed as the clipped cone with a deterministic 63-cell cap, but that shortcut does **not** preserve gameplay-PRNG parity: the original consumes one burst draw per unfinished lane per pass and one pitch draw per in-bounds lane step, so an implementation that wants the generator to stay in step with the original must reproduce the lane raster's draw sequence. *(Corrected 2026-10-16, issue #298 Q17: this paragraph previously said the stepping used the PRNG "only to slice work into short bursts" and offered the clipped-cone simplification without that caveat; see `RETRACTIONS.md` R541.)*
 
 After the cone is built, the application layer scans combat actors whose arena coordinates match selected cells. It skips empty actors, actors masked by disqualifying status flags, and actors already processed by this same spell pass. It marks each considered actor with a temporary processed bit, so overlapping target cells cannot apply the same spell twice to one actor, and clears that bit across the actor table before returning. Neither the common wind-cone layer nor the per-effect branches run the friend/foe faction lookup used by creature prompts and monster AI. Same-faction actors are eligible if their cells are in the cone and they pass the non-faction gates. In Zu runs the shared resistance predicate before its sleep-status branch. In Nox Hur accepts when a skewed `1..30` roll is at least the target's combat weight, then applies poison status. In Vas Grav Corp runs the shared resistance predicate before using the decimal `99` instant-kill sentinel through the shared damage/status path. In Flam Hur rolls raw `[1, 30]` damage through that same damage/status path without either resistance gate.
 
@@ -1246,8 +1273,8 @@ own active-effect path and is not a field-removal spell.
 **Summoning and conjuration.** Conjure, Swarm, Clone, and Summon use distinct
 helper families rather than one shared spell effect.
 
-*The shared random arena probe.* Conjure, Swarm, and Summon all place through
-one common probe, and its exact shape matters for compatibility. A single probe
+*The shared random arena probe.* Conjure, Swarm, Summon and combat Blink all
+place through one common probe *(Blink added 2026-10-16, issue #298 Q3)*, and its exact shape matters for compatibility. A single probe
 draws a candidate X and a candidate Y **independently and uniformly from the
 inclusive range `0..15`** — a four-bit draw, not a draw over the arena's
 `0..10` range — and then rejects the whole candidate unless *both* coordinates
@@ -1410,7 +1437,7 @@ then reports the ordinary `Failed!`; the nightly live-terrain pass stops
 stamping the gate tile at that cell, so that moongate no longer appears; and a
 moon-phase arrival that selects the slot plays the gate animation, leaves the
 cell as grass, moves nobody and prints nothing. `systems/commands.md` Section
-5.8 owns the two-command, directional recovery itself. Negate Time scans for a magic-absorption sentinel before starting; if one is present it prints `Magic absorbed!` and does not set the effect. Otherwise it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
+5.8 owns the two-command, directional recovery itself. Negate Time first plays its circle-8 spell variant, unconditionally, then scans all thirty-two active-object records in slot order for one whose **base tile is exactly the Shadow Lord actor tile `0xFC`**; this presence is the whole of the "magic-absorption sentinel" - it is not a flag or a timed state. The other Shadow Lord frames `0xFD..0xFF` do not match, and the displayed tile is not consulted, so animation or a sleeping display does not hide a Shadow Lord. There is no scene, distance, visibility, class or liveness test: a matching record anywhere in the loaded object table, on the map or in the arena, absorbs the spell. On the first match the spell prints `Magic absorbed!`, plays the manual absorption envelope (the Negate Magic absorption recipe of `systems/audio.md`), and fails, so the shared epilogue of Section 5 adds `Failed!` and the failure glissando; the effect is not set. The known placements of that tile are the town-entry Shadowlord install (`systems/town-mode.md` Section 5), the Stonegate roster slots that carry it (`formats/npc.md`), and a Shadow Lord combatant's object record; no exhaustive census of writers of that value into the object table was made. *(Added 2026-10-16, issue #298 Q15.)* When nothing matches it writes the shared runtime tag as `T`, writes a countdown value of 10, and redraws. The same nonzero/non-255 aging rule decrements this countdown at command-dispatch cleanup and combat active-player/selection cleanup; when the countdown expires the tag is cleared and stats are marked for redraw. The ordinary per-turn clock cleanup does not age this counter. Instead, while the tag is `T`, that cleanup skips minute advancement, which is the stopped-time effect.
 
 ### Handler-family map
 
@@ -1432,7 +1459,7 @@ The cast dispatcher has one entry per spell id, but many entries are short wrapp
 | Active-caster invisibility | Sanct Lor | Applies only to the current actor. It marks that combat actor hidden/phase-shifted and updates the linked visual actor state; no separate creature prompt runs. |
 | Table-wide fear sweeps | In Quas Corp, An Xen Corp | Not a prompt-driven target family. Sweeps all thirty-two combat actor slots and accepts every monster-side actor that is not one of the three protected special classes (14 Blackthorn, 15 Lord British, 47 Shadow Lord) and that fails the shared resistance check. For each accepted actor **the spell itself** drives the combat HP counter to one and ORs in the fleeing bit `0x02`. The combat wound-score morale classifier does **not** perform that write; it only keeps re-asserting the flag from the resulting critical-HP state on later turns. Repel Undead (An Xen Corp) runs the identical sweep with one added condition, the undead class-flag bit, and writes the same two values. Neither spell places, re-types, tames, or repurposes an actor, and neither touches the controlled/charmed bit `0x01`. |
 | Gate travel | Vas Rel Por | Refuses while the party is aboard a frigate or a skiff **before** printing anything, so that transcript is a bare `Failed!` with no `To phase:_` row. Otherwise prompts `To phase:_`, echoes the typed key and a line feed, accepts a digit `1`..`8`, maps that digit to the corresponding persisted moonstone slot, and teleports only if that slot has a valid saved scene/X/Y/Z destination. A key outside `1`..`8`, and a slot whose stone has been recovered, both report the ordinary `Failed!`. Moonstone bury/recovery owns the slot contents; see `formats/saved-gam.md`. |
-| Negate Time | An Tym | If a magic-absorption sentinel is active, prints `Magic absorbed!` and fails. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
+| Negate Time | An Tym | Plays variant 8; if any active-object record's base tile is the Shadow Lord actor tile `0xFC`, prints `Magic absorbed!`, plays the absorption envelope and fails (`Failed!` plus glissando) *(added 2026-10-16, issue #298 Q15)*. Otherwise stores the shared runtime tag `T` with countdown 10 and redraws. Command-dispatch cleanup and combat active-player/selection cleanup age nonzero/non-255 countdowns, clearing the tag on expiry; the clock cleanup only observes `T` to skip minute advancement. |
 
 This closes the dispatcher-level target-family mapping for the major combat spells and several formerly unique high-circle handlers. The common directed-spell layer is also bounded through the per-effect branches: it de-duplicates actors, applies only status/common-scratch prefilters, applies each wind/sleep result without a faction gate, and clears its temporary processed marks before returning. Tremor's table-wide damage/reward path, the active-target attack-wrapper damage path, Protection's inert active-effect tag, Quickness's automatic-actor-driver gate, Mass Charm's class-threshold target-selection remap, Clone's paired-slot allocation and capacity failure, Negate Magic's party-cast absorption and three enemy-side action boundaries, and the combat post-dispatch contact boundary plus active-object marker storage, placement gate, non-consuming contact, status-helper gates, and combat-exit lifetime for arena fields are now bounded separately.
 

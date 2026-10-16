@@ -97,9 +97,24 @@ The setup contract is:
 6. Place the party, two guards, and the initially suppressed seated-Blackthorn
    tableau into cutscene actor slots.
 7. Run the scripted throne approach and Blackthorn presentation beats.
-8. Greet the addressed member by name, **wait for an acknowledgement key**,
-   then print the gendered release lines and run the guard-release route
-   script of Section 6.3.
+8. After the quiet 8-tick pause that follows the throne reveal, print
+   `\n\nBlackthorn says:\n\n"Ah, `, then the name in **roster record 0** (the
+   Avatar's record, never a member chosen any other way), then
+   `!\n'Tis indeed an honour to meet thee at last! ` (one trailing space, no
+   line feed). **Wait for an acknowledgement key.** Print
+   `\n\nGUARD! Release this good`, then pick a piece by record 0's gender byte
+   (`formats/saved-gam.md`): ` lady ` (a space on each side) if it is female
+   (`0x0C`), `man ` (no leading space) if it is male (`0x0B`), or nothing for
+   any other value; then print `at once!"` (closing quote, no trailing space,
+   no line feed). The three resulting lines are
+   `GUARD! Release this good lady at once!"`,
+   `GUARD! Release this goodman at once!"` and
+   `GUARD! Release this goodat once!"`. The male form really joins into
+   `goodman`; do not add a space. Then run the guard-release route script of
+   Section 6.3. *(Added 2026-10-16, issue #298 Q8: the literals were previously
+   unpublished, and "the addressed member" is narrowed to roster record 0. These
+   lines are authored speech, published under the same practice as the records
+   quoted in Sections 4.1 and 5 because an implementation must reproduce them.)*
 9. Print the preamble record of Section 4.1, wait for a second acknowledgement
    key, and enter the challenge loop.
 
@@ -303,8 +318,8 @@ it.
 | Correct answer with only one nondead member (record `9`) | Yes, immediately after the record is printed |
 | Correct answer with at least two nondead members (record `5`), on **any** of the four asks | Yes, immediately after the Section 5 execution |
 | First wrong answer with at least two nondead members | **No.** The failure reaction of Section 5 runs instead and the loop asks again |
-| Second or third wrong answer with at least two nondead members | **No.** The clock advance, repaint and hourglass stamp of Section 6.1, then the loop asks again |
-| Fourth wrong answer with at least two nondead members | **No.** The pendulum execution of Section 5, then the loop's own exit. This branch ends the audience without the exit beat |
+| Second or third wrong answer with at least two nondead members | **No.** A two-minute per-turn cleanup (`systems/time.md` Sections 3 and 4), the stats repaint and the hourglass stamp of Section 6.1, then the loop asks again *(added 2026-10-16, issue #298 Q8)* |
+| Fourth wrong answer with at least two nondead members | **No.** The same two-minute cleanup and stats repaint, then the pendulum execution (no cutscene script; added 2026-10-16, issue #298 Q8 and Q24) of Section 5, then the loop's own exit. This branch ends the audience without the exit beat |
 
 Every path that ends the interrogation *well* — the two solo records and the
 merciful-death execution — runs the beat; no wrong-answer path with a companion
@@ -405,9 +420,13 @@ else of the beat's own. There is no thunder and no full-viewport flash here —
 those belong to the rescue family of Section 7 — and the rescue envelope
 sequence is not reached. What is **not** established is that the beat contains
 nothing but those 36 stings: each of its 73 world ticks also runs the shared
-ambient shrine/flame audio tick, whose reachable work includes the software
-envelope generator and which is driven by the loaded cutscene terrain. That
-scope question is recorded in `systems/audio.md` Section 11 and in
+ambient scenery tick (`systems/audio.md` Section 8.10), whose reachable work
+includes the software envelope generator and which is driven by the loaded
+cutscene terrain. It can sound only if the loaded cutscene grid places a
+grandfather clock, waterfall, fountain or drawn minstrel within five cells of
+the scan centre on each axis *(narrowed 2026-10-16, issue #298 Q16; the tick was
+previously called the "ambient shrine/flame audio tick", `RETRACTIONS.md` R540)*. That scope question
+is recorded in `systems/audio.md` Section 11 and in
 `OPEN-QUESTIONS.md`.
 
 The two solo branches differ only in durable state taken *before* the beat: the
@@ -431,38 +450,63 @@ wall-clock capture; `OPEN-QUESTIONS.md` carries that gap.
 
 ## 5. Failure Reaction
 
-When the interrogation fails on a branch that can punish a companion, Blackthorn
-prints a reaction, runs the punishment animation, and names the party's second
-living member as the victim.
+Section 4.2's punishing branches run two different routines, and neither is
+the other's cutscene. *(Corrected 2026-10-16, issue #298 Q24; source provenance: static reading of the interrogation loop, the execution routine and the first-wrong-answer reaction in `u5-decomp/notes/`, with the impact cells simulated from the decoded failed-challenge script.)*
 
-The visible sequence is:
+**First wrong answer (at least two nondead members): the failed-challenge
+reaction.** Print record `7`; run the failed-challenge script of Section 6.3
+(the acting guard walks the second member onto the pendulum and the hourglass
+starts); print record `8`, the second roster entry's name and ` die!" `; wait
+for acknowledgement; print `\n\n`. Nobody is removed, and the loop asks again.
 
-1. Build and print the failure reaction text.
-2. Play the failed-demand cutscene beat.
-3. Move one of the two guards and the victim through the audience scene.
-4. Apply the roster change - erase the victim's on-screen actor, lift the
-   record, decrement the party count - and repaint the stats panel
-   **immediately afterwards**.
-5. Print the static punishment fragments around the named victim.
-6. Wait for player acknowledgement before returning to the caller branch.
+**Execution (fourth wrong answer, or a correct answer, with at least two nondead
+members).** No cutscene script runs and no guard moves. In order:
 
-**This five-step sequence is not the audience's exit.** It is the punishing
-branches' own cutscene, and those branches never run the audience exit beat of
-Section 4.2: after the first wrong answer's reaction the loop asks the next
-question, and the later wrong answers, the fourth ask's execution included,
-leave through the loop's own tail. The exit beat is reached by the
-two solo records and by the *correct*-answer execution below, and by nothing
+1. Print record `4` (fourth wrong answer) or record `5` (correct answer).
+2. A quiet 10-tick redraw pause. Nothing else happens between the record and
+   the swell: only that pause's ordinary world-tick redraws, with no viewport
+   inversion or other direct draw.
+3. The 920-run swell, the Blackthorn execution row of
+   `systems/audio.md` Section 5.4.7 (the blade).
+4. The shared impact presentation (`systems/overworld.md` Section 6.2.4, stage
+   one) at the cell where the second-member actor (slot 1) currently stands.
+   After a first wrong answer that is the pendulum cell `(5,7)`; on a correct
+   answer with no earlier wrong answer it is that actor's starting cell
+   `(7,5)`. The scene is the cutscene, so the cell is used as given with no
+   viewport translation: the impact figure is drawn, the 300-update impact
+   rumble plays, and one world tick follows. The second-member actor is not
+   necessarily the member removed in step 7 when a Dead entry precedes it.
+5. Clear the second-member actor's sprite. On the fourth wrong answer that
+   sprite has been invisible since the first wrong answer cleared it.
+6. Reset the pendulum cell `(5,7)` to the fixture's unoccupied member `0x80`.
+   The write is buffered and shows on the next redraw.
+7. Apply the roster change - lift the second nondead member's record, decrement
+   the party count - and repaint the stats panel **immediately afterwards**.
+8. On the wrong-answer arm only: print `\n\n`, the removed member's name and
+   ` is sliced in half! `, wait for an acknowledgement key, and print record
+   `6`.
+9. Finish with one line feed.
+
+Earlier revisions listed the failed-demand cutscene beat and the guard-and-victim
+walk as part of the execution; they run only in the first wrong answer's
+reaction, and that reading is retracted (R532).
+
+**Neither routine is the audience's exit.** The punishing branches never run the
+audience exit beat of Section 4.2: after the first wrong answer's reaction the
+loop asks the next question, and the later wrong answers, the fourth ask's
+execution included, leave through the loop's own tail. The exit beat is reached
+by the two solo records and by the *correct*-answer execution, and by nothing
 else. That is also why only the punishing branches ever reach the conditional
-Blackthorn-tableau cleanup vector of Section 6.3 — the exit beat clears the
+Blackthorn-tableau cleanup vector of Section 6.3 - the exit beat clears the
 tableau slot that cleanup's test reads, so every branch that plays the beat
 skips it.
 
 **The roster edit and its repaint both precede the held page.** The panel is
 repainted as the step immediately after the party count is decremented, and the
-acknowledgement wait of step 6 comes after that repaint and gates nothing; no
+acknowledgement wait of execution step 8 comes after that repaint and gates nothing; no
 key wait anywhere in this routine suppresses a refresh. What makes the roster
-look frozen is step order alone: for the whole reaction page and the two-phase
-blade animation, nothing has been removed yet, so the panel correctly still
+look frozen is step order alone: for the whole narration page and the swell and
+impact presentation, nothing has been removed yet, so the panel correctly still
 lists the full party. On the wrong-answer branch the victim therefore leaves
 the panel **between** the pendulum-narration page and the page that names them,
 and it is that later page which waits for the key. An implementation that
@@ -472,8 +516,12 @@ presentation reason; the edit belongs after the narration and animation and
 before the acknowledgement, and the refresh needs no deferral at all. The
 correct-answer branch's punishment has no key wait of its own — the key that
 follows it belongs to the exit beat of Section 4.2, not to the punishment.
-Wrong answers past the first advance the clock and then repaint
-unconditionally with the roster intact; the fourth wrong answer is the one that runs the punishment, and
+Wrong answers past the first advance the clock by two minutes (the per-turn
+cleanup's two-minute increment of `systems/time.md` Section 3; Quickness halves
+it and Negate Time suppresses it, Section 4) and then repaint
+unconditionally with the roster intact; the first wrong answer makes no cleanup
+call, so the interrogation itself adds six minutes on an all-wrong run, and none
+on the first ask or on any solo branch *(added 2026-10-16, issue #298 Q8)*; the fourth wrong answer is the one that runs the punishment, and
 its key wait, too, comes after that punishment's repaint. The lone-survivor arms
 execute nobody and repaint nothing.
 `systems/stats-panel.md` Section 2.4.
@@ -484,7 +532,8 @@ omitted the consequence entirely. The victim is the second nondead party
 member, counting from the beginning of the travelling roster and skipping
 Dead entries, and the routine:
 
-- erases that companion's on-screen actor;
+- clears the second-member actor's sprite (step 5 above; that actor is not
+  necessarily the removed companion when a Dead entry precedes it);
 - lifts their roster record out of the party, compacts the remaining records
   up, and decrements the party count;
 - parks the lifted record in the last roster slot with a **whereabouts value
@@ -492,7 +541,12 @@ Dead entries, and the routine:
 
 That whereabouts field is the same one the innkeeper uses when a companion is
 left at an inn; the value written here matches no inn and no scene, so no inn
-can ever retrieve them, and nothing else in the game reads it back. The refuge/
+can ever retrieve them. The value is `0x7F`; a static census found this execution
+to be the only code that stores it into that field. One other reader exists: the shrine and Codex presentation counts
+roster records holding it, places one presentation object per record, and on
+the Codex names them on its interred-party page (`systems/karma.md` Section 8)
+*(corrected 2026-10-16, issue #298 Q5: this paragraph said nothing else in the
+game reads the value back; that is retracted, see `RETRACTIONS.md` R546)*. The refuge/
 rescue sequence does not restore them either. **The companion is dead and gone,
 and the effect survives saving and reloading.**
 
@@ -717,10 +771,62 @@ and 72 one-BIOS-tick delay requests, and no text output of any kind. Earlier
 revisions named this row "per-question intermission" and so placed it between
 questions; that name and placement are withdrawn (R490).
 
-These vectors deliberately test visible checkpoints rather than duplicating the
-already-published movement byte stream. A conforming renderer must additionally
-preserve the actor order, repeat counts, paired movement, and final coordinates
-described above.
+**Audience exit vector, full command list.** *(Added 2026-10-16, issue #298
+Q9.)* Every movement repetition is animated: per-step pauses are enabled at
+script start and the script never disables them. Each repetition of a movement,
+single or paired, costs one shared sting plus a two-tick quiet redraw; in a
+paired repetition both actors step once before that one redraw, so a pair costs
+one sting, not two. Slots are those of Section 6 (0 Avatar, 6 acting guard, 7
+second guard, 8 seated-Blackthorn tableau). The actors start from the same cells
+on every branch that reaches the beat - slot 0 `(3,5)`, slot 6 `(1,5)`, slot 7
+`(9,9)`, slot 8 `(5,5)` - because the failed-challenge script returns both
+guards to these cells, so an earlier wrong answer does not change the start.
+
+| # | Command | Repeats | Stings | Positions after the step |
+|---:|---|---:|---:|---|
+| 1 | Slot 6 west | 1 | 1 | 6 `(0,5)` |
+| 2 | Terrain write cobble `0x44` at `(0,4)` | - | 0 | (buffered) |
+| 3 | Explicit world tick | - | 0 | cobble shown |
+| 4 | Slot 6 east | 1 | 1 | 6 `(1,5)` |
+| 5 | Slot 6 east | 1 | 1 | 6 `(2,5)` |
+| 6 | Paired: slot 6 west + slot 0 west | 2 | 2 | 6 `(0,5)`, 0 `(1,5)` |
+| 7 | Slot 6 south | 1 | 1 | 6 `(0,6)` |
+| 8 | Slot 6 east | 1 | 1 | 6 `(1,6)` |
+| 9 | Slot 6 east | 1 | 1 | 6 `(2,6)` |
+| 10 | Slot 6 north | 1 | 1 | 6 `(2,5)` |
+| 11 | Paired: slot 6 west + slot 0 west | 1 | 1 | 6 `(1,5)`, 0 `(0,5)` |
+| 12 | Paired: slot 6 west + slot 0 north | 1 | 1 | 6 `(0,5)`, 0 `(0,4)` |
+| 13 | Paired: slot 6 north + slot 0 north | 1 | 1 | 6 `(0,4)`, 0 `(0,3)` |
+| 14 | Slot 0 north | 1 | 1 | 0 `(0,2)` |
+| 15 | Slot 6 south | 1 | 1 | 6 `(0,5)` |
+| 16 | Terrain write door `0xBB` at `(0,4)` | - | 0 | (buffered) |
+| 17 | Stinger pause | 1 | 1 | door shown |
+| 18 | Slot 8 east | 1 | 1 | 8 `(6,5)` |
+| 19 | Paired: slot 8 south + slot 6 south | 4 | 4 | 8 `(6,9)`, 6 `(0,9)` |
+| 20 | Slot 8 south | 1 | 1 | 8 `(6,10)` |
+| 21 | Slot 6 east | 1 | 1 | 6 `(1,9)` |
+| 22 | Clear slot 8 | - | 0 | gone at next redraw |
+| 23 | Slot 6 east | 3 | 3 | 6 `(4,9)` |
+| 24 | Slot 6 south | 1 | 1 | 6 `(4,10)` |
+| 25 | Clear slot 6 | - | 0 | |
+| 26 | Slot 7 west | 3 | 3 | 7 `(6,9)` |
+| 27 | Slot 7 south | 1 | 1 | 7 `(6,10)` |
+| 28 | Clear slot 7 | - | 0 | |
+| 29 | Stinger pause | 6 | 6 | empty tableau held |
+
+Steps 1 to 15, everything before the door write, contain 14 stings; steps 17 to
+29 add 22 more, for the published **36**. World ticks are two per sting (72) plus the explicit tick of
+step 3, for **73**, with **72** one-BIOS-tick delay requests. At the end the
+Avatar actor stands at `(0,2)`, beyond the door cell, and the other three actors
+are cleared. The command list, repeat counts and pairing were decoded from the
+shipped script by the interpreter rules of Section 6, and the per-repetition
+sting rule is confirmed by the decoded list reproducing the executed 36 / 73 / 72
+profile; the start and end cells are simulated from the decoded approach,
+release, failed-challenge and exit scripts, not captured live.
+
+The other rows give checkpoints; the exit vector is listed in full above. A
+conforming renderer must additionally preserve the actor order, repeat counts,
+paired movement, and final coordinates described above.
 
 ## 7. Rescue / Refuge Sequence
 

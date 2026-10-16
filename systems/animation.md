@@ -229,8 +229,9 @@ coin is a true one-in-two and the re-base a true one-in-four, with none of the
 modulo bias a narrower reduction would introduce. Throughout, only the displayed-frame
 byte moves - the slot's type byte still reads the base at the end of every run -
 which is the Section 4 contract seen from the outside. The per-class script
-table this row comes from has **eleven** rows; only this one has been traced to
-its consumers (`OPEN-QUESTIONS.md`).
+table this row comes from has **eleven** rows. All eleven, with the classes
+that select each, are now published in `systems/active-objects.md` Section 3;
+this family is that table's script A. *(Added 2026-10-16, issue #298 Q29.)*
 
 *Scope of the negative.* The animator was read end to end and every one of its
 record writes enumerated; the eight arms of its class decision all stay inside
@@ -923,7 +924,10 @@ run as the unconditional tail of the **active-object animation step** of Section
 **three** callers:
 
 1. **The world tick.** The call sits behind a master redraw/animation gate and a
-   mode-handshake byte that must be in neither of its two skip states. The world
+   mode-handshake byte that must be in neither of its two skip states - zero
+   (the first world tick after program start, and every tick while Negate Time
+   is active) and the town-entry hint value, which skips only the animator
+   (`systems/audio.md` Section 8.10; *added 2026-10-16, issue #298 Q16*). The world
    tick is itself invoked from far more than the idle loop: a near-call census
    finds seven distinct sites in the resident image and sixty-one across sixteen
    of the twenty-three code overlays, and one resident site calls it repeatedly
@@ -954,7 +958,9 @@ through a run-time function-pointer table. None was observed at any site read.
   spell-effect sweep carries the same test. For the effect's full duration
   nothing advances: no water rotation, no fire flicker, no fountain, no banner,
   no clock or bellows, no object animation, no AI roll, no wind check, no
-  moongate refresh, no beacon step, and no shrine/lava ambience tick. The
+  moongate refresh, no beacon step, and no ambient scenery tick (clock,
+  waterfall, fountain or minstrel audio; `systems/audio.md` Section 8.10,
+  *renamed 2026-10-16, issue #298 Q16, `RETRACTIONS.md` R540*). The
   Return-to-View path carries no such test. An engine that keeps animating
   during Negate Time is visibly wrong. *The identification of the effect code as
   Negate Time rests on this repository's separate state map rather than on the

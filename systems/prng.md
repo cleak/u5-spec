@@ -149,7 +149,11 @@ This separation does not apply to every randomized sound. The major-event
 full-viewport flash/rumble consumes one gameplay-PRNG draw for each of its
 1,856 drawing bands, including when sound is muted. Those draws are part of
 gameplay RNG parity and must be preserved even by a silent frontend. See
-`audio.md` for the event and mute contract.
+`audio.md` for the event and mute contract. The mass-target wind/sleep cone
+raster is a second such case: on top of its lane burst-length draws, it makes
+one gameplay draw per in-bounds lane step for that step's pitch, with sound on
+or off (`audio.md` Section 6.1) *(added 2026-10-16, issue #298 Q17)*. Only the
+random-rumble primitive uses the private sound jitter stream.
 
 Conversely, the clock-sampling helper described in section 3 is not an audio
 helper at all: every one of its uses feeds the game PRNG's seed primitive. A
@@ -201,6 +205,12 @@ changes the stream position of the next combat roll. Any engine aiming at
 deterministic replay must either reproduce those idle draws exactly, with the
 same idle cadence, or accept that its stream will diverge from the original's;
 it cannot get parity by seeding alone.
+
+*Dungeon rendering is a consumer too.* *(Added 2026-10-16, issue #298 Q12.)*
+In the flavour-3 dungeons, every first-person render whose forward test meets
+a `0xC?` flavour wall one cell ahead takes one gameplay draw over `0..64` for
+the decorative flourish, hit or miss (`systems/dungeon-mode.md` Section 6.4).
+This note is not claimed to be a complete census of dungeon-render draws.
 
 The generator is entirely integer arithmetic. No floating point, heap allocation,
 or formatted I/O is involved.

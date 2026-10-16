@@ -660,7 +660,10 @@ The confirmed rest loop is:
    advances through repeated ten-minute cleanup calls.
 4. After each interruption/refusal check, the handler stops immediately if the
    rest path has been interrupted and branches to the ambush or thrown-out path;
-   elapsed time and any completed per-tick side effects are not rewound.
+   elapsed time and any completed per-tick side effects are not rewound. In the
+   town-hours path an arrest/conflict contact during the burst ends the command
+   before any sleep or time, and the town epilogue handles the contact
+   (`systems/town-mode.md` Section 12; added 2026-10-16, issue #298 Q30).
 5. If the loop completes without interruption, the command prints the rested
    result, restores sleeping members to good status, applies capped HP recovery
    to eligible living party members, and stamps the current rest/camp marker.

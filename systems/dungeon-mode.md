@@ -54,7 +54,7 @@ Each cell byte packs two four-bit fields. The high nibble selects the tile class
 | `0x4`       | Wooden chest                   | Open / Search interaction. |
 | `0x5`       | Fountain                       | L-Look triggers drink Y/N (§ 8). |
 | `0x6`       | Pit / trap family              | Exact bytes drive fall traps versus bomb traps. |
-| `0x7`       | Open chest                     | Produced at runtime by dungeon Open on a wooden chest; Get loots it and consumes it. Renders as passage, but L-Look, Search, Open, and Get all treat it as an open chest, not as floor. It never occurs in the shipped dungeon file. |
+| `0x7`       | Open chest                     | Produced at runtime by dungeon Open on a wooden chest; Get loots it and consumes it. Renders as passage, but L-Look, Search, Open, and Get all treat it as an open chest, not as floor; L-Look prints `an open chest.` (Section 12; added 2026-10-16, issue #298 Q6). It never occurs in the shipped dungeon file. |
 | `0x8`       | Energy field                   | Sub-types: sleep, poison gas, fire, electric (§ 8). |
 | `0x9`       | Energy field (secondary)       | Generic energy field. |
 | `0xA`       | Room-helper / cleared-room state | Routed through the same underfoot helper as room triggers (§ 5). Reloaded cleared rooms use this high nibble. |
@@ -641,7 +641,45 @@ Two flavour-conditional extras hang off the forward test:
   LOST SOULS, THE PRISON WRONG, THE CRYPT, UPPER CRYPTS, LOWER CRYPTS, DEBTERS
   ALLY, DEEP, DEEPER, DEEPEST, MOTHER LODE MAZE - each a multi-line block
   positioned at its own origin, and only Deceit, Despise, Wrong, Covetous,
-  Shame and Hythloth have any; Destard and Doom have none. *Corrected:* an
+  Shame and Hythloth have any; Destard and Doom have none.
+  *(Added 2026-10-16, issue #298 Q12.)* Each dungeon has a banner count (zero
+  for Destard and Doom), and the banner draws only when the wall's low nibble
+  `n` is no greater than that count; otherwise nothing is drawn. The text
+  window runs from the banner's origin cell (column, row on the 40-by-25 grid
+  of 8-by-8-pixel cells) to the bottom-right of the screen; the cursor is
+  homed at the origin, the runic font selected, inverse video turned on, the
+  banner printed, and inverse video turned off before the font and windows are
+  restored. Each banner is stored space-padded to a rectangle, one stored line
+  per screen row, and because inverse video paints the spaces too it appears
+  as a **solid white block with black runes** exactly its rows high and its
+  width in cells wide. One digraph glyph (`TH`, `ST`, `NG`, `EE`) occupies one
+  cell. The origin cell's pixel corner is (8 x column, 8 x row).
+
+  | Dungeon | `n` | Banner | Origin (column, row) | Rows x cells |
+  |---|---:|---|---|---|
+  | Deceit | 1 | BOTTOMLESS PIT | (7, 10) | 2 x 10 |
+  | Despise | 1 | THE MAZE OF LOST SOULS | (8, 9) | 3 x 7 |
+  | Wrong | 1 | THE PRISON WRONG | (8, 10) | 2 x 9 |
+  | Covetous | 1 | THE CRYPT | (8, 11) | 1 x 8 |
+  | Covetous | 2 | UPPER CRYPTS | (9, 10) | 2 x 6 |
+  | Covetous | 3 | LOWER CRYPTS | (9, 10) | 2 x 6 |
+  | Covetous | 4 | DEBTERS ALLY | (9, 10) | 2 x 7 |
+  | Shame | 1 | DEEP | (10, 11) | 1 x 3 |
+  | Shame | 2 | DEEPER | (9, 11) | 1 x 5 |
+  | Shame | 3 | DEEPEST | (9, 11) | 1 x 5 |
+  | Hythloth | 1 | MOTHER LODE MAZE | (7, 10) | 2 x 10 |
+
+  The multi-row banners split as BOTTOMLESS / PIT, THE MAZE / OF LOST / SOULS,
+  THE PRISON / WRONG, UPPER / CRYPTS, LOWER / CRYPTS, DEBTERS / ALLY and
+  MOTHER LODE / MAZE. The padding is fixed in the stored text and is **not**
+  centring, so rune placement depends on it. The shorter lines carry these
+  leading spaces, with the rest of the block width as trailing spaces: PIT 3,
+  OF LOST 1 (so it is right-aligned), SOULS 1, WRONG 3, UPPER 0 and LOWER 0
+  (one trailing space each, so left-aligned), ALLY 1, and Hythloth's MAZE 3.
+  The banner is drawn on every render of the view that has such a wall one
+  cell ahead. Confirmed on the original in EGA: facing Deceit's first-level
+  banner wall showed a solid white block with black runes covering exactly
+  x 56..135, y 80..95. *Corrected:* an
   earlier revision said this handler "is what prints the dripping-stalactite
   family of ambient lines". It prints no ambient line at all; `a dripping
   stalactite.` is an L-Look flavour description of the `0xC?` class and never
@@ -656,10 +694,27 @@ Two flavour-conditional extras hang off the forward test:
   banner clears itself: the handler restores the window and font but does not
   repaint the viewport region it wrote into, so presumably the next
   first-person repaint covers it.
-- A `0xC?` flavour wall one cell ahead in a **flavour-3** dungeon has a rare
-  decorative flourish: on roughly a one-in-sixteen roll it draws four short
-  strokes near the vanishing point in a bright accent pen. It is visual only,
-  and it is the visual half of the flavour-3 easter egg noted in Section 2.
+- A `0xC?` flavour wall one cell ahead (band 1) in a **flavour-3** dungeon
+  (Deceit, Wrong, Covetous) has a rare decorative flourish. *(Corrected
+  2026-10-16, issue #298 Q12: earlier text gave only "roughly a
+  one-in-sixteen roll" and "four short strokes near the vanishing point in a
+  bright accent pen"; this is a refinement, not a reversal.)* The forward test
+  takes one draw from the **gameplay** generator over the inclusive range
+  `0..64` and draws the flourish when the result is below 4, so 4 in 65 per
+  such forward test. The draw is consumed on every render that tests such a
+  wall, hit or miss, which makes this render path a gameplay-stream consumer
+  (`systems/prng.md` Section 4). The 4-in-65 rate is static; a live run saw
+  one hit in about fifteen usable frames, which is consistent with it but does
+  not measure it. The pen is UI pen slot 0 biased by 8 - palette index 12,
+  bright red, on the 16-colour adapters; the pen select masks it to two bits
+  on CGA. It draws four horizontal pixel runs, inclusive, in screen
+  coordinates: y 87 at x 92..93 and x 97..98, and y 88 at x 91..93 and
+  x 97..99. They fill the two eye sockets of the chained skeleton on the
+  flavour-3 wall image, so the skeleton's eyes glow red. Confirmed on the
+  original in EGA: one flourish frame in Deceit showed exactly those ten
+  pixels in bright red. It is visual only, and it is the visual half of the
+  flavour-3 easter egg noted in Section 2. The banner and flourish colours on
+  CGA, Hercules and Tandy were not captured.
 
 ### 6.5 Sweep order
 
@@ -1061,6 +1116,10 @@ sleep field therefore behaves as a one-shot contact hazard for the current
 dungeon visit. Poison fields set status to `'P'` and draw the status-effect
 presentation, but do not rewrite the field cell, so standing on or re-entering
 the same poison field can trigger it again.
+The handler does not test the current status, only Dead: sleep replaces
+Poisoned with Sleeping, poison replaces Sleeping with Poisoned, and a member
+already in the field's status is hit again, presentation and all (Section 8.1).
+*(Added 2026-10-16, issue #298 Q7.)*
 
 Electric-field contact first commits the requested adjacent field cell for the
 flash presentation, then reverses that exact one-cell displacement. An advance
@@ -1174,7 +1233,7 @@ prints the three-line pit/fall group of Section 8.1, clears the fired marker bit
 cell in the loaded dungeon image, increments dungeon level by one, and lands
 the party at the same X/Y on the next level. If the destination cell is below
 the wall/door band (`< 0x90`), the engine marks bit `0x08` in that destination
-cell before continuing (the same bit the static overlay of Section 6.6 draws). If the destination cell is another `0x61` or `0x69`,
+cell before continuing (the same bit the static overlay of Section 6.6 draws). That bit is also the climbable-with-gear mark of Section 13.1, so with the Grapple the party can K back up from where it landed *(added 2026-10-16, issue #298 Q26)*. If the destination cell is another `0x61` or `0x69`,
 the handler repeats, so the practical drop depth is the length of the vertical
 trap chain at that X/Y, not a direct low-nibble-to-distance table. If the chain
 increments the level past seven, the dungeon scene byte is cleared and the mode
@@ -1305,8 +1364,8 @@ one per message will double the spacing.
 | Underfoot event | Exact lines, in order | Sound |
 |---|---|---|
 | Room trigger or room-helper cell | `Entering room...\n`, printed by the room-entry helper as its first act | none |
-| Sleep field `0x80` / `0x88` | `Sleep spell!\n` | one short rumble per member whose status actually changes |
-| Poison field `0x81` / `0x89` | `Poison!\n` | one short rumble per member whose status actually changes |
+| Sleep field `0x80` / `0x88` | `Sleep spell!\n` | for each member, in slot order, whose save fails (inclusive `1..30` roll at or above Dexterity, not Dead): that member's stats-panel row is inverted (highlighted), then the short status rumble (step 1, target 50, 100..3500 Hz, `systems/audio.md` Section 5.3), then a full stats-panel repaint is requested, which presumably removes the highlight; a member already asleep is hit again *(corrected 2026-10-16, issue #298 Q7; earlier text said "one short rumble per member whose status actually changes", which is retracted, `RETRACTIONS.md` R529)* |
+| Poison field `0x81` / `0x89` | `Poison!\n` | for each member whose save fails: the same short status rumble only, with no row highlight; a member already poisoned is hit again *(corrected 2026-10-16, issue #298 Q7; R529)* |
 | Fire field `0x82` / `0x8A` | `Fire!!\n` - two exclamation marks | only the damage helper's flash and rumble, per damaged member |
 | Fall trap `0x61` / `0x69`, **once per descent step** | `Pit Trap!\n`, then `Falling...\n`, then the level change and view repaint, then `      ...splat!\n` - **six leading spaces** | after `...splat!`, a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots; repeats per descent (Section 8) |
 | Bomb trap `0x62` / `0x6A` | `Bomb Trap!\n`, then `KABOOM!!\n` | one sweep: a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots (Section 8) |
@@ -1502,9 +1561,12 @@ routines - the dispatcher that chooses the prompt form and the apply helper -
 and rests on the fact that the apply helper's edge test precedes every cell
 lookup it makes.
 
-Whether `Klimb-\nWith What?\n` is specifically the *no-grapple* refusal is
-**probable, not established**: the byte gating the climb-with-equipment arm is
-almost certainly the grapple count, but that identification was not confirmed.
+`Klimb-\nWith What?\n` is the *no-grapple* refusal: it is given exactly for a
+cell carrying the climb-with-equipment mark when the Grapple byte - the same
+byte the overworld Klimb reads - is zero. Confirmed on the original: the same
+marked cell gives `Klimb-Up!` with the Grapple and `Klimb-` / `With What?`
+without it. *(Corrected 2026-10-16, issue #298 Q26: this upgrades the earlier
+"probable, not established" hedge and reverses nothing.)*
 
 **Who acts.** Dungeon L-Look, Search, Jimmy and Open all run the shared
 acting-member prompt before anything else; dungeon Get does not. That prompt is
@@ -1595,7 +1657,11 @@ When the dungeon command handler receives a printable letter, it forwards the le
 - **T** — Talk; always prints "Funny, no response!" (no NPCs in dungeons).
 
 Letters that are no-ops in dungeons print "What?" or a stock refusal: **B**
-Board, **D**, **E** Enter, **F** Fire, **P** Push, **X** X-it. P is the
+Board, **D**, **E** Enter, **F** Fire, **P** Push, **X** X-it. X on foot
+prints `X-it what?\n` (the `X-it` echo, then the shared `what?` tail) and,
+by static reading, reports acted, so the dungeon post-action pass runs
+*(added 2026-10-16, issue #298 Q28; confirmed on the original on foot in
+Deceit)*. P is the
 combined literal `Push\nNot here!\n`: it replaces the normal `Push-` echo,
 does not ask for a direction or run Push's door cleanup, and reports no action.
 The loop-head minute has already advanced, but the dungeon post-action pass is
@@ -1616,7 +1682,7 @@ arena and its metadata band in the room buffer, and calls the combat framer on
 its ambush entry mode with the active monster's class byte. Section 14.1 owns
 that contract in full; note in particular that no `DUNGEON.CBT` record is read
 on this path and that the monster's class byte is used directly rather than
-being derived from a sprite id. After combat returns, result code five moves the
+being derived from a sprite id. After combat returns, result code five (the first-party-exit record; Section 14.1 says who writes it and how the contact and room paths use codes 1-4; added 2026-10-16, issue #298 Q1) moves the
 party one level **up** — it decrements the level byte, and when the party is
 already on the topmost level it instead takes the surface-exit path out to
 Britannia; result code six moves the party one level **down** — it increments
@@ -1709,7 +1775,25 @@ Two letter commands give the player visibility into the dungeon beyond the first
    read. Space/Pass returns no focus, so L-Look aborts before printing "You
    see:".
 4. Reads the dungeon tile byte at `(Z, focus_y, focus_x)` from the loaded dungeon image. For description only, byte `0x61` is treated as `0x00`.
-5. Prints `You see:\n` followed by a class-specific message. The sighted form also breaks after the colon. Energy-field bytes `0x80..0x83` have distinct sleep, poison-gas, fire, and electric descriptions, while other `0x8?` values share a generic energy-field description. Class `0xC?` is a flavour-presentation class whose text depends on the active dungeon flavour. The remaining high nibbles collapse to passage, ladder, chest, fountain, pit, open chest, nothing-of-note, wall, or heavy-door descriptions.
+5. Prints `You see:\n` followed by a class-specific message. The sighted form also breaks after the colon. Energy-field bytes `0x80..0x83` have distinct sleep, poison-gas, fire, and electric descriptions, while other `0x8?` values share a generic energy-field description. Class `0xC?` is a flavour-presentation class whose text depends on the active dungeon flavour (Section 2). The remaining classes print exactly the following line after `You see:\n`, each ending in one line feed *(added 2026-10-16, issue #298 Q6; the open-chest line was confirmed on the original by a live Look at an open-chest cell, which printed `Player: AVATAR`, `Dir-Left`, `You see:`, `an open chest.`)*:
+
+   | Class | Line |
+   |---|---|
+   | `0x0?` | `a passage.` |
+   | `0x1?` | `an up ladder.` |
+   | `0x2?` | `a down ladder.` |
+   | `0x3?` | `a ladder.` |
+   | `0x4?` | `a wooden chest.` |
+   | `0x5?` | `a fountain.`, then the drink prompt of step 6 |
+   | `0x6?` | `a pit.` (the exact byte `0x61` reads as passage, step 4) |
+   | `0x7?` | `an open chest.` |
+   | `0x8?` | the field descriptions above |
+   | `0x9?` | `nothing of note.` |
+   | `0xA?`, `0xE?`, `0xF?` | `a heavy door.` |
+   | `0xB?`, `0xD?` | `a wall.` |
+   | `0xC?` | the flavour descriptions of Section 2 |
+
+   The handler's line table holds two further entries, an energy-field line and a wall error line, that no class can select; they are not part of the contract.
 6. For the fountain class, runs the drink Y/N flow described in Section 8.
 
 The shared relative chooser used by dungeon Look and Search prints `Dir-`
@@ -1937,12 +2021,17 @@ directions that cell provides:
 
 - **Up** is offered when the cell's **class** is the up-ladder class or the
   two-way class, **or** when the cell carries the climbable-with-equipment mark
-  and the party is carrying the climbing gear.
+  and the party's Grapple byte (`formats/saved-gam.md` Section 7, offset
+  `0x0209`) is non-zero *(added 2026-10-16, issue #298 Q26)*.
 - **Down** is offered when the class is the down-ladder class, the two-way
   class, or the pit class.
 - **The two halves read the cell differently.** The class is the cell's high
   half. The climbable-with-equipment mark is a bit of the **stored cell byte,
-  read raw**, so it is honoured at *any* class rather than only in the high
+  read raw** - bit `0x08`, the same bit a pit fall sets on its landing cell
+  (Section 8) and V-View shows as an up arrow on a passage cell (Section 12.4)
+  *(added 2026-10-16, issue #298 Q26; confirmed on the original, where a
+  passage cell set to `0x08` gave `Klimb-Up!` then the surface exit line with
+  the Grapple and `Klimb-` / `With What?` without it)* - so it is honoured at *any* class rather than only in the high
   ones, and it can never reach the class test because the high-half mask
   discards it. Two consequences follow that a class-only reading misses: a
   gear-marked cell of any class takes the gear route, and a gear-marked **pit**
@@ -2039,7 +2128,9 @@ same helper, which reports "passable" before reading anything.
 Two further routes change the level without being asked to: automatic pit falls
 (Section 8 and `systems/doors-and-z-transitions.md` Section 10), and the
 post-combat result codes described in Section 10, which move the party one level
-up or down through the same machinery. An up-or-down movement request raised
+up or down through the same machinery (codes 1-4 of the same record step the
+party one cell instead on the contact and room paths; Section 14.1, added
+2026-10-16, issue #298 Q1). An up-or-down movement request raised
 inside a dungeon **room** is handled identically: it is queued as the same
 movement intent and applied by the same code.
 
@@ -2194,7 +2285,7 @@ that then resets the scene runs.
 
 Dungeon mode enters combat through fixed room triggers and through ordinary hostile-object contact or attack:
 
-**Room cells (high nibble `0xF` sub-types, plus runtime `0xA` state).** Walking onto a room cell triggers the load of a `DUNGEON.CBT` arena. The arena is selected by the active dungeon scene and the room cell's low nibble. The combat framer (cf. the combat spec) takes over; on resolution the party returns to the room cell with whatever damage and status changes the fight produced.
+**Room cells (high nibble `0xF` sub-types, plus runtime `0xA` state).** Walking onto a room cell triggers the load of a `DUNGEON.CBT` arena. The arena is selected by the active dungeon scene and the room cell's low nibble. The combat framer (cf. the combat spec) takes over; on resolution the party is put back on the room cell with whatever damage and status changes the fight produced, and then the movement applier of Section 14.1 runs on the first-party-exit record. A room fight cannot be ended by Escape, so apart from the final Doom room's absorption outcome (below), a surviving party always leaves by an edge or a ladder: it ends one cell beyond the room cell in the first leaver's direction, facing that way, or one level up or down from the room cell. *(Corrected 2026-10-16, issue #298 Q1: earlier text ended at the party returning to the room cell; that is retracted, `RETRACTIONS.md` R528.)*
 
 Room entry also snapshots the dungeon-local active-object state before the
 combat scene marker is installed. The helper prints the entering-room feedback,
@@ -2365,13 +2456,40 @@ monster it skips that rotation narration. Neither caller prints the outdoor
 conflict banner, and the framer's ambush arm adds no replacement banner.
 
 1. **Set the combat kind byte to the ambush value.** The contact path also
-   clears the combat result code first.
+   clears the combat result code (the first-party-exit record of the
+   post-combat bracket below) first.
 2. **Tear down the first-person view resources.**
 3. **Synthesise the arena in the room buffer.** The dungeon room painter is
-   called with the combat kind byte already set to the ambush value. It fills the
-   eleven-by-eleven terrain grid with the current corridor fill byte, stamps the
-   outline, corner markers, the underfoot-class centre icon, and one per-side
-   treatment for each of the four sides, and then writes the same metadata band
+   called with the combat kind byte already set to the ambush value. On the
+   eleven-by-eleven terrain grid (X and Y `0..10`) it writes, in order
+   *(added 2026-10-16, issue #298 Q13; static reading of the outline routine,
+   read in full, and of the painter's fill; not captured live)*:
+
+   1. **Fill.** Every cell gets the room floor byte: `0x45` (cobbles) in the
+      flavour-3 dungeons Deceit, Wrong and Covetous, `0x05` in the other five.
+   2. **Wall lines.** The outline byte - `0x4F` (wall) in the flavour-3
+      dungeons, `0x4D` (stone wall) elsewhere - goes on rows Y = 1 and Y = 9
+      across all eleven columns and on columns X = 1 and X = 9 down all eleven
+      rows. The lines cross like a `#` and run out to the grid edge, so where
+      they meet rows 0 and 10 and columns 0 and 10 they leave one-cell wall
+      stubs in the outer strip.
+   3. **Corner markers.** `0xFF`, the darkness byte, goes in the four outer
+      corners (0,0), (10,0), (0,10) and (10,10).
+   4. **Centre.** Cell (5,5) gets the underfoot icon, keyed by the class of the
+      party's dungeon cell: up ladder `0xC8`; down ladder `0xC9`; two-way
+      ladder `0xC8` plus the two-way flag behind the arena `U/D-` prompt (see
+      the post-combat bracket below); chest `0xDC`; fountain `0xD8`. Passage,
+      pit and open chest, and every class from `0x8?` up, leave the floor
+      byte.
+   5. **Per-side treatment**, one for each of the four sides, as in the
+      correction box below: a passable neighbour carves the seven-cell opening
+      in that side's wall line, a door-family neighbour carves five cells, and
+      a wall neighbour fills that side's outer strip (row 0 or 10, or column 0
+      or 10) with `0xFF`, including that side's two wall stubs.
+
+   These are the same terrain bytes the shipped `DUNGEON.CBT` rooms use: `0xFF`,
+   `0x05`, `0x4D`, `0x44`, `0x4F` and `0x45` are that file's six commonest.
+   The painter then writes the same metadata band
    that the room-combat setup helper reads (see `formats/cbt.md` Section 5 for the row/column layout):
 
    > *Corrected (2026-08-23).* An earlier revision called the per-side step "the
@@ -2391,9 +2509,9 @@ conflict banner, and the framer's ambush arm adds no replacement banner.
    > sealed rather than stroked. Two limits on this re-derivation: the room
    > painter was read only through about half its length, so a later pass in its
    > unread tail could in principle overwrite edge cells (not verified either
-   > way); and the filler byte is identified as "outside/void" by inference from
-   > the corner cells, the shipped arena record's edge row and one other
-   > overlay's use of it - the renderer's handling of that byte was not traced.
+   > way); and the filler byte is the same `0xFF` the corner markers use,
+   > which the tile catalogue names darkness (clarified 2026-10-16, issue #298
+   > Q13) - the renderer's handling of that byte was not traced.
 
    - **Party-entry rows.** Metadata rows one through four receive fixed
      six-entry X and Y sequences. On this path the entry-facing seed the setup
@@ -2470,9 +2588,36 @@ monster the party fought is always replaced by a freshly rolled random one after
 a wandering-monster fight, whatever the outcome, rather than being preserved or
 specifically removed.
 
-**Post-combat bracket.** The two triggers differ here. Only the **A-Attack** path
-applies the combat result code, and it applies it in the same polarity K-Klimb
-uses (Section 13): a smaller level byte is nearer the surface.
+**Post-combat bracket.** *(Corrected 2026-10-16, issue #298 Q1.)* The value
+read after combat is the arena's **first-party-exit record**, not an
+end-of-fight result. It is cleared when the round loop starts (and by the room
+and contact launchers before the fight), and the arena departure helper - shared
+by stepping off an arena edge and by an in-arena K climb - writes it: when a
+**party-side** actor's departure is accepted, its code is stored only if the
+record is still empty, so later departures leave it alone (in a dungeon room
+they must match it or are refused with `All must use the same exit!`).
+Monster-side actors never write it, and a ship arena refuses with
+`Stay with ship!` before anything is stored (`systems/combat.md` Section 3).
+An edge departure stores its direction: 1 west, 2 east, 3 north, 4 south. An
+in-arena K stores 5 on an up ladder (`0xC8`, `Up!` then the ordinary `Leave!`
+or `Escape!` departure line) and 6 on a down ladder (`0xC9`) or, only in a
+dungeon-room encounter, on a metal grate (`0x86`), with `Down!` then the
+departure line. In an ambush arena built on a two-way-ladder dungeon cell, the
+centre `0xC8` instead raises `U/D-` and waits for up or down, down counting as
+the `0xC9` case; that is the only place the two-way prompt can appear in
+combat. If nobody leaves - for example a fight ended by the Escape cleanup
+after victory - the record stays empty. The one other writer is the final
+Doom absorption hook, which replaces whatever is there with the absorption
+marker (Section 14); the movement applier ignores that marker. Shipped
+`DUNGEON.CBT` rooms contain up ladders in 12 records, down ladders in 18 and
+grates in 10, so the room path is the common source of codes 5 and 6. All of
+this is static reading of the departure helper, the arena step and Klimb
+routines and the three launchers; no live run walked an actor onto an arena
+ladder.
+
+The **A-Attack** path reads only codes 5 and 6, in the same polarity K-Klimb
+uses (Section 13): a smaller level byte is nearer the surface. Codes 1-4 are
+ignored there, so the party stays where it was.
 An earlier revision of this document had result codes five and six the other way
 round — five down and six up; that is retracted.
 
@@ -2488,9 +2633,17 @@ round — five down and six up; that is retracted.
   two cases by whether the level byte was zero when it was entered.
 - **Any other result code** leaves the level byte alone.
 
-The **contact** path clears the combat result code *before* launching the fight
-and never reads it afterwards, so a wandering-monster fight that begins by being
-walked into can never change the party's level.
+The **contact** path clears the record before the fight and afterwards runs the
+shared dungeon **movement applier** on it, as the room path does after putting
+the party back on its room cell (Section 14). Codes 1-4 move the party one cell
+in that direction, wrapping on the eight-by-eight grid with **no passability
+test**, and set the facing to that direction. Codes 5 and 6 change the level
+exactly as above, including both surface exits, and leave the facing alone.
+Zero, and the absorption marker, do nothing. A walked-into fight can therefore
+move the party or change its level. *Retracted:* this paragraph previously said
+the contact path "never reads it afterwards, so a wandering-monster fight that
+begins by being walked into can never change the party's level"
+(`RETRACTIONS.md` R527).
 
 Both paths then re-initialise the dungeon view and roll the replacement active
 monster. The A-Attack path gates both the replacement roll and the viewport
@@ -2602,6 +2755,8 @@ specified, and stock data cannot produce that edge.
 The behaviour described here was derived by reading the private function notes listed below. None of those notes' assembly excerpts, file offsets, or implementation-specific identifiers appear in this spec; the spec is a re-derivation from observed behaviour.
 
 - The withdrawal of the per-hour "HP regeneration" step in Section 11, and the confirmation that the dungeon H path converges on the same shared hole-up handler as the overworld, derived from private analysis under `u5-decomp/notes/`.
+
+- The issue #298 answers of 2026-10-16 - the first-party-exit record and its three consumers (Sections 10, 13.1, 14, 14.1), the L-Look per-class lines (Sections 3 and 12), the sleep and poison per-member presentation (Sections 8 and 8.1), the chamber-name banner layout and the flavour-3 flourish (Section 6.4), the ambush arena outline (Section 14.1), the climbable-with-gear bit and the Grapple gate (Sections 8, 8.1 and 13.1), and dungeon X-it (Section 10) - derived from a static reading of the shipped executable, overlays and data overlay, a `DUNGEON.CBT` terrain census, and short live runs of the original in DOSBox (EGA) from saves placed in Deceit, recorded in private analysis under `u5-decomp/notes/`. The live runs covered the Look, banner, flourish, Klimb and X-it results; the rest is static.
 
 - The dungeon turn loop's structure -- initialisation, flavour selection, underfoot reaction, render-and-poll, dispatch, the status-gated post-action helper, the ungated party-capability check, and the epilogue -- derived from `u5-decomp/functions/DUNGEON_OVL/`.
 - The wandering-monster combat contract in Section 14.1 -- ambush entry mode,

@@ -630,10 +630,17 @@ and is specified in `systems/combat.md`; it is not a dungeon ladder or spell
 escape path.
 
 **Vehicle dismount.** When the party is on a horse, in a skiff, on a carpet, or
-aboard a ship, X-Xit dismounts or transfers to a carried craft. It refuses in
-dungeon/combat-class scenes before testing vehicle state. If the party is
-already walking, the command prints the no-vehicle continuation after the X-it
-prefix and returns.
+aboard a ship, X-Xit dismounts or transfers to a carried craft. It has no
+working scene refusal: its dungeon-range test is dead code, so its own
+`Not here!` never prints (`systems/active-objects.md` Section 10), and combat
+`X` never reaches it (`systems/combat.md` Section 8). If the party is walking
+(the normal dungeon state; see `systems/active-objects.md` Section 10 for the
+stated dependency), it prints `what?` after the `X-it` prefix and returns;
+by static reading the dispatcher reports the command as acted. Confirmed on
+the original: on foot in a dungeon, `X` prints `X-it what?`. *(Corrected
+2026-10-16, issue #298 Q28: this paragraph previously said X-Xit "refuses in
+dungeon/combat-class scenes before testing vehicle state"; that is retracted,
+`RETRACTIONS.md` R530.)*
 
 The handler validates nearby landing support but does not move the party to a
 different coordinate. Successful exits park the abandoned vehicle as an

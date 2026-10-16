@@ -108,7 +108,7 @@ each transcript:
 
 For every accepted-edge vector, a later framer exit restores the exact saved
 world X, Y and Z and the complete pre-combat active-object snapshot. Changing
-the arena edge or direction in the vector changes no restored world coordinate.
+the arena edge or direction in the vector changes no restored world coordinate. The dungeon callers apply the first party-side departure's direction afterwards, outside the framer (`systems/dungeon-mode.md` Section 14.1; added 2026-10-16, issue #298 Q1).
 
 ## 4. Combat enter/exit framing
 
@@ -1268,14 +1268,21 @@ Sleep, Sleep Field contact, and any other combat path that marks a non-party
 actor asleep set descriptor byte 2 bit `0x08`; they do not seed a separate
 per-slot countdown for that descriptor state.
 
-Wake timing is owned by the acting slot's dispatch. When a slot whose descriptor
-still has bit `0x08` set reaches its own action dispatch, the driver rolls a
+For a **self-acting** slot (the self-acting test of Section 6.1a: monsters,
+and party members compelled by the Sword of Chaos), wake timing is owned by the
+driver's dispatch *(scoped 2026-10-16, issue #298 Q25)*. When such a slot whose
+descriptor still has bit `0x08` set reaches its own action dispatch, after the
+Negate Time and Quickness gates, the driver rolls a
 uniform inclusive `0..16` value. Any result other than `16` consumes that
 dispatch and leaves the bit set. On result `16`, the wake helper clears bit
 `0x08`, refreshes the linked presentation/status state, and still returns
 without continuing into the normal action parser or monster action path. The
 actor becomes eligible for later predicates after the bit is cleared, but the
-dispatch that performed the wake check is spent.
+dispatch that performed the wake check is spent. The driver prints nothing on
+either outcome. Slots routed to the command handler - every uncompelled party
+member, and controlled creatures routed to the prompt - use the command
+handler's own asleep arm instead: a `0..255` draw below 16, followed in every
+case by `Zzzzz...` (Section 8.1) *(added 2026-10-16, issue #298 Q25)*.
 
 While bit `0x08` remains set, the actor remains present in the descriptor table
 and still occupies its arena cell; the bit does not imply death, slot removal,
@@ -2099,7 +2106,7 @@ The remaining letters call their targets directly, as the table below records.
 | **H** | Hole up — shared refusal responder, second tail. World-mode rest is not available inside an arena. No cost. |
 | **I** | Ignite — shared refusal responder, second tail. No torch counter is touched on this branch. No cost. |
 | **J** | Jimmy. Labelled prompt with the party-side gate, then the shared Jimmy handler. The combat scene takes Jimmy's high-range restraint tail: a successful Dexterity pick on stocks `0x84` or manacles `0x85` clears that arena tile to cobble `0x44` and reports "Unlocked" without resolving or persisting an NPC release. Other Jimmy target families retain their shared behavior. |
-| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
+| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. In a dungeon arena, `Up!` on an up ladder (`0xC8`) departs with exit code 5 and `Down!` on a down ladder (`0xC9`), or on a metal grate (`0x86`) in a dungeon-room encounter, departs with exit code 6; the first party-side departure's code is what the dungeon callers read afterwards (`systems/dungeon-mode.md` Section 14.1). The `U/D-` form appears only on the ambush arena's centre cell when the dungeon cell was a two-way ladder. *(Added 2026-10-16, issue #298 Q1.)* A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
 | **L** | Look — shared refusal responder, second tail. This dispatcher does not run the world/town look flow. No cost. |
 | **M** | Mix — shared refusal responder, second tail. It does not open the reagent mixer. No cost. |
 | **N** | New order — shared refusal responder, second tail. No cost. |
@@ -2262,8 +2269,18 @@ is printed followed by ` regurgitated!`, a longer rumble plays, the
 dragged-under bit clears and the blanked sprite byte is restored from the
 record's primary tile byte - otherwise it stays held. Either way the turn ends
 there with no command read, so a party victim is released on any given turn
-with probability `(Dexterity - 1) / 30`. The asleep arm is independent: a
-`1`-in-`256` draw below sixteen wakes the sleeper before `Zzzzz...` prints. A free re-prompt then takes one of **two** shapes, not
+with probability `(Dexterity - 1) / 30`. The asleep arm is independent: it draws one value from the inclusive range
+`0..255` on the gameplay generator, and a value below 16 (probability
+`16/256 = 1/16`) wakes the sleeper - roster status back to Good, displayed
+sprite restored, asleep bit cleared, stats redrawn, no message. `Zzzzz...` then
+prints whether or not the draw woke it, and the turn ends with no key read, so a
+waking sleeper first acts on its next turn, when it gets a normal prompt. This
+rule belongs to the command handler; self-acting actors use the Section 6.2 draw
+instead, and a party member under the Sword of Chaos never reaches this arm
+because the Chaos gate comes first (that routing is a single static reading).
+*(Corrected 2026-10-16, issue #298 Q25: the earlier wording "a `1`-in-`256`
+draw below sixteen" read as a 1/256 chance; the chance is 1/16, see
+`RETRACTIONS.md` R543.)* A free re-prompt then takes one of **two** shapes, not
 one:
 
 - **Short re-prompt, banner not reprinted:** an unrecognised key (`What?`), the
@@ -2627,7 +2644,12 @@ cleanup result (Section 14).
 
 K prints `Klimb-` and resolves its current-cell ladder cases first. Up/Down
 ladder results are `Up!\n` / `Down!\n`; a dual ladder adds `U/D-` before
-its choice. The ordinary adjacent-climb branch waits for the cardinal input
+its choice. *(Added 2026-10-16, issue #298 Q1.)* `Up!` on `0xC8` stores exit
+code 5 and `Down!` on `0xC9` (or on `0x86` in a dungeon-room encounter) stores
+6 in the first-party-exit record, followed by the ordinary `Leave!` or
+`Escape!` departure; the dual-ladder `U/D-` form appears only on the ambush
+arena's centre cell when the dungeon cell was a two-way ladder
+(`systems/dungeon-mode.md` Section 14.1). The ordinary adjacent-climb branch waits for the cardinal input
 described in `systems/commands.md` Section 5.4: direction name and newline,
 or Space's `Pass\n`; Escape is ignored. A rejected adjacent target then
 adds `What?\n`. It does not immediately complete every K as `Klimb-What?`.
@@ -4731,7 +4753,10 @@ The `X` letter does not reach this handler at all — the combat parser produces
 
 The framer's restore phase is independent of which terminal table state caused
 the round loop to return. It restores the exact pre-combat X, Y and Z; no arena
-edge coordinate or chosen exit direction becomes a world coordinate. It also
+edge coordinate or chosen exit direction becomes a world coordinate inside the
+framer. The dungeon callers then apply the first recorded exit direction or
+ladder to the dungeon position (`systems/dungeon-mode.md` Section 14.1; added
+2026-10-16, issue #298 Q1). It also
 restores the complete pre-combat active-object snapshot, so individual actor
 departures are combat-local. Any persistent ordinary encounter-trigger rewrite
 is the caller-side reconciliation after the framer. Combat time advances from

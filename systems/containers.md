@@ -361,6 +361,22 @@ stages. An opened chest therefore never produces text of the form "2 food,
 | Ring | `a ring!` |
 | Amulet | `an amulet!` |
 
+*(Added 2026-10-16, issue #298 Q18.)* The floor object a grant stages is drawn
+with the family's own item tile: both tile bytes of the new active-object record
+hold the family id, so it renders as the actor-half tile at atlas index
+`0x100 + id` (`catalogs/tile-catalog.md` Section 3, the actor-half table, and
+Section 9, Item tiles). The ids are chest marker 1 (257), gold 2 (258), potion
+3 (259), scroll 4 (260), weapon 5 (261), shield 6 (262), keys 7 (263), gems 8
+(264), helm 9 (265), ring 10 (266), armour 11 (267), amulet 12 (268), torches
+13 (269) and food 15 (271). The quantity or subtype rides in the record's fifth
+byte, not in the tile, so it is not visible: two potions of different colours
+look the same. The object stands on the chest's own cell. Each successful grant
+from one chest takes its own slot, the highest free slot searching down from
+slot 31 (reaching slot 0 counts as no free slot, the dropped-grant case of step
+2 below), all on that same cell. The record's last byte is cleared outside
+combat and set to `0x20` when the scene byte is `0x80` or above. Static reading
+of the grant routine; the id-to-name pairing from the shipped data.
+
 Transcript order, once the acting member has been chosen and the chest's object
 record cleared (nothing at all prints on the `None!` path above):
 

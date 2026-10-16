@@ -47,7 +47,7 @@ then closed nothing and opened three trace items (section 3), and narrowed the
 issue #271 item about what the compositor draws under the avatar. The issue #273
 party-sprite band audit then **closed** one of those three - whether mounting
 moves the party's sprite out of the `320..335` run, answered no - and opened
-eight trace items (section 3) in its place. What else
+eight trace items (section 3) in its place. The issue #298 dungeon pass (2026-10-16) opened two capture items (section 2), and the issue #298 Blackthorn and conversation pass opened one more and narrowed a section 3 swell item. The issue #298 objects and NPC pass (2026-10-16) closed the issue #273 item on the other ten frame-script rows, and opened one capture item (section 2) and one trace item (section 3). The issue #298 magic and combat pass (2026-10-16) opened one owner item (section 1) and two trace items (section 3), narrowed the Blackthorn ambient-tick item and extended the world-tick-rate capture item. The issue #298 commands-misc pass (2026-10-16) opened one owner item (section 1), one capture item (section 2) and four trace items (section 3), and narrowed the Codex interred-party item. What else
 remains needs an owner decision (section 1) or a change of scope (section 4).
 
 ## 1. Owner decisions
@@ -56,6 +56,8 @@ remains needs an owner decision (section 1) or a change of scope (section 4).
 |---|---|---|
 | Whether to rewrite shared history to purge the removed original-game screenshot, and whether to include historical provenance/author metadata cleanup. | Issue #249; `NEXT-STEPS.md` | Explicit owner scope decision and approval before rewriting and force-pushing shared history. Current-tree cleanup is already published; earlier commits still contain the image. |
 | Whether a clean engine should reproduce the rescue cinematic's `Not dead!` branch or guard against reaching it. The branch is specified as executed - one line per in-party slot whose status is not Dead, between the intoned and vertigo beats - but it is unreachable in an unedited shipped save under the status-writer census, and reachable only for a roster carrying a preserved legacy Ashes status. *(Opened 2026-09-12, issue #269.)* | `systems/blackthorn.md` Section 7 | An owner decision about scope, not a byte-level question. The behaviour itself is settled. |
+| Whether the two short narrative lines of the camp apparition - the level-up address `For thy valiant deeds, I shall reward thee!` and the closing `The strangely familiar old man vanishes...` - stay published. They are cinematic narrative, not interface text, though comparable fixed cinematic literals (Blackthorn, the karma walk) are already published and both are short. *(Opened 2026-10-16, issue #298 Q10.)* | `systems/rest-and-camp.md` Section 7.1 | An owner confirmation under the shipped-text policy; the alternative is a layout description with the text read from the user's own data. |
+| Whether to publish the ambient minstrel tune's 53-step sequence (53 small indices into the published nine-value period palette, 40 notes and 13 rests) as numeric data, or to tell implementers to read it from the user's own shared data overlay; and to confirm that the nine-value period palette itself counts as a numeric audio recipe like the other published envelope parameters rather than as a shipped data table. *(Opened 2026-10-16, issue #298 Q16.)* | `systems/audio.md` Section 8.10 | An owner decision about shipped data, not a byte-level question. The mechanism, counts and palette are published; only the sequence is withheld. |
 
 The shipped-text policy (how much of the game's own text this
 specification reproduces) was decided on 2026-09-04: the four items outside
@@ -78,7 +80,7 @@ reasons recorded in `EXTRACTION.md`, "Shipped-Text Policy".
 | The per-tone install cost used by the calibrated-wait model (17.4 inner units derived, against a fitted 12). | `systems/timing.md` Section 7.6, item 9 | A measured tone on the reference machine class. |
 | The per-step wall clock of the publisher flourish, published as a calibration-derived target rather than a measurement. | `systems/timing.md`; `systems/intro.md` | Frame-timed capture of the intro. |
 | The intro title ink reported as "pale yellow" by observation, where both the code path and the shipped palette say white. | `systems/intro.md` | Capture on period hardware or a palette-faithful emulator. |
-| The world-tick rate, and therefore every wall-clock statement derived from per-tick cadence: the autonomous wind-drift interval and the decay time of the twelve-hour save byte. | `systems/weather.md` Section 2.1; `formats/saved-gam.md` Section 5 | Time the idle loop once. |
+| The world-tick rate, and therefore every wall-clock statement derived from per-tick cadence: the autonomous wind-drift interval and the decay time of the twelve-hour save byte. *Extended 2026-10-16 (issue #298 Q16): the ambient scenery tick's clock tick-tock tempo and hour-chime spacing (`systems/audio.md` Section 8.10) are per-call too, so a timed capture beside a town grandfather clock would settle them with the rest.* | `systems/weather.md` Section 2.1; `formats/saved-gam.md` Section 5 | Time the idle loop once. |
 | Whether the active-object animator runs during dungeon and combat *play* (it runs on dungeon entry). Matters because the dungeon overlay reuses two table records as scratch. | `systems/active-objects.md` Section 13; `systems/npc-schedules.md` Section 12 | Observe frame changes in a dungeon and an arena. |
 | What the compositor's neighbouring-row probe reads at arena rows 0 and 10, where it reaches outside the arena record. Published as residue with a recommended engine behaviour of *no match*. | `systems/visibility.md` Section 8.5 | Read the byte in a running game; no shipped arena can act on it. |
 | The visual appearance of the ship broadside burst and the dragon-breath spark cloud along a projectile line. | `systems/overworld.md` Section 6.2.6 | Screen capture during either attack. |
@@ -103,6 +105,31 @@ Opened 2026-09-13 by the issue #270 exit-handoff pass:
 |---|---|---|
 | How often the stats panel repaints while the party is aboard a vessel whose hull reads 100 or more, and therefore how visibly the message history creeps upward in play. The panel behaviour is executed; its cadence in a real session is not measured. | `systems/stats-panel.md` Sections 2.1 and 6 | A session capture with a three-digit hull, recording the message window across a sequence of repaints. |
 | The exit-handoff row accounting is reproduced by mechanism from the reporter's stated screen state, not replayed from their save, and it carries no raster or timing validation. | `systems/doors-and-z-transitions.md` Section 12.1 | A stock save at a dungeon's entrance level with the exact key sequence, plus frames at the climb key and at the first overworld prompt. |
+
+Opened 2026-10-16 by the issue #298 dungeon pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| The first-party-exit record's dungeon consequences - that an in-arena K on a ladder or room grate, or the first party edge departure, steps the party a cell or changes its level once a room or walked-into fight ends - are static only; no live run walked an actor onto an arena ladder or off an arena edge and checked the dungeon position afterwards. | `systems/dungeon-mode.md` Sections 14 and 14.1 | One room fight in which a party member climbs an arena ladder, and one contact fight left by an edge, with the dungeon level, cell and facing read afterwards. |
+| The chamber-name banner and flavour-3 flourish colours on CGA, Hercules and Tandy, and the flourish's 4-in-65 rate, which is static (one hit in about fifteen live EGA frames is consistent with it but does not measure it). | `systems/dungeon-mode.md` Section 6.4 | A capture on each non-EGA driver facing a banner wall and a flavour-3 `0xC?` wall, and a longer EGA run counting flourish frames. |
+
+Opened 2026-10-16 by the issue #298 Blackthorn and conversation pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| What a label block's scoped prompt does with the records after the head - which arm is the default and when it falls back to the top-level keyword loop. The head's extent (to the first NUL, with label bytes inside it live) is settled; the post-head state machine was not traced for issue #298 Q20 and rests on earlier static reading only. | `systems/conversation.md` Section 7.7 | An emulator capture of one yes/no label block answered yes, no and with an unmatched word. |
+
+Opened 2026-10-16 by the issue #298 objects and NPC pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| What the pathfinding search reads and stamps when a probe reaches row 32, the bytes just past the 32-by-32 workspace. The bounds test that admits the index is settled; the bytes' contents are not, and they matter only for byte-level parity on a map whose south edge is open. | `systems/npc-schedules.md` Section 8.4 | A runtime memory map of the area immediately after the workspace, read while an NPC routes along an open south edge. |
+
+Opened 2026-10-16 by the issue #298 commands-misc pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| The camp apparition as drawn: the old man's art at row 372, the converge fade-in and fade-out, the per-member viewport inversions and the class-tile restamping of the party sprite are static only. | `systems/rest-and-camp.md` Sections 7.1 and 7.2 | A capture of a camp event in which at least one member gains a level, from a save with enough experience for a level change. |
 
 ## 3. Needs a further static trace
 
@@ -192,7 +219,7 @@ Opened 2026-09-12 by the issue #268 audience-exit pass:
 
 | Item | Where | What settles it |
 |---|---|---|
-| What the ambient shrine/flame audio tick contributes inside a Blackthorn cinematic. It runs once per world tick, so 73 times inside the audience exit beat alone, and its reachable work includes the software envelope generator; it is driven by the loaded cutscene terrain rather than by the live map, and the probes that established the beat's profile did not load that terrain. Until this is run, "the Blackthorn VM scripts play only stingers" is out of scope as a statement about the scene. | `systems/audio.md` Section 11; `systems/blackthorn.md` Section 4.2 | Execute the world tick's ambient arm against the loaded Blackthorn cutscene grid and inventory what it plays. |
+| What the ambient scenery tick (formerly called the shrine/flame tick) contributes inside a Blackthorn cinematic. It runs once per world tick, so 73 times inside the audience exit beat alone, and it is driven by the loaded cutscene terrain rather than by the live map. *Narrowed 2026-10-16 (issue #298 Q16): its four sources and its 11-by-11 window are now published (`systems/audio.md` Section 8.10), so it can sound only if the loaded cutscene grid places a grandfather clock, waterfall, fountain or drawn minstrel within five cells of the scan centre on each axis.* Until that grid is checked, "the Blackthorn VM scripts play only stingers" is out of scope as a statement about the scene. | `systems/audio.md` Sections 8.10 and 11; `systems/blackthorn.md` Section 4.2 | Inventory the loaded Blackthorn cutscene grid's cells inside that window for the four source classes. |
 | What the glyph byte the town loop's command-row opener emits before drawing its chrome renders as. It was observed as the first output after the Blackthorn handoff, but its appearance on screen was not identified, so the published "one line feed, then one glyph byte, then the key wait" order names a byte it does not describe. | `systems/blackthorn.md` Section 4.2 | Resolve that byte through the text primitive's glyph handling, or capture the first town prompt after the handoff. |
 | The arrest handler's palace arm between the audience's return and the captive-cell entry setup was not re-executed as one continuous run. The chain was driven as three separately entered shipped segments after a single-stack run hit emulator stack drift; the palace arm itself rests on the issue #244 arrest cases and on reading rather than on a fresh continuous execution. | `systems/blackthorn.md` Sections 2 and 4.2 | One continuous run from the terminating record through the handoff, the arrest handler's palace arm, entry setup and the first town prompt. |
 
@@ -221,7 +248,7 @@ Opened 2026-09-12 by the issue #271 closing-sequence pass:
 | Whether the whole-window counts of the closing beat hold when executed rather than derived. The handler's own contribution - the envelope runs, the inversion, the ten-step wait and the absence of any tick cost in the sound - was executed; the sixty-one and seventy-three world steps, and the matching delay requests, repaints and wind draws, were re-derived from the presentation's exit structure in the same pass rather than re-run on the frame harness. The exit's eleven-frame Codex variant is derived the same way. | `systems/karma.md` Sections 7 and 7.2 | Run all three completion arms and the Codex exit on the frame harness with the world step, the compositor and the real one-tick delay live, and count the steps. |
 | Whether the shrine presentation's per-frame sting is the shared short two-part sting. `systems/karma.md` Section 7.2's wall-clock floors price it at that recipe's 27 ms, and `systems/timing.md` Section 7.6 item 10 still records the sting as unpriced; the identification was assumed in this pass, not established. | `systems/karma.md` Section 7.2; `systems/audio.md` Sections 7.5 and 10.2; `systems/timing.md` Section 7.6 | Read the presentation's per-frame sound call through to its recipe and compare its parameters with the shared two-part sting's. |
 | What the offering and turn-in arms' viewport inversion looks like on screen. That a single exclusive-or rectangle fill covers the gameplay viewport, and that nothing restores it, is established; the drawing colour it sets was captured as an argument and the result was never rendered, so how legible the viewport is during the swell that follows is unknown. | `systems/karma.md` Section 7.2; `systems/audio.md` Section 5.4.7 | Render the dispatch against the shrine display grid with the real driver, or capture an accepted offering. |
-| Whether the Blackthorn cutscene's 920-step swell is preceded by a viewport inversion, and whether the shrine overlay's remaining envelope call sites form further named recipes (the shard-use caller was traced 2026-10-16: no inversion, no draw). | `systems/audio.md` Sections 5.4.7 and 11 | Trace the Blackthorn call site's surrounding beat and the shrine overlay's other envelope call sites. |
+| Whether the shrine overlay's remaining envelope call sites form further named recipes. The shard-use caller (traced 2026-10-16, issue #296) and the Blackthorn execution caller (traced 2026-10-16, issue #298 Q24) both issue no inversion and no draw before their swell. | `systems/audio.md` Sections 5.4.7 and 11 | Trace the shrine overlay's other envelope call sites. |
 | What a successful Shadowlord destruction plays and draws after the shard-use swell (the flame-cell effect, its sound and its world ticks), and whether it invokes the shared full-viewport flash at all. | `catalogs/quest-graph.md` Section 5; `systems/audio.md` Section 8.4 | Trace the shard handler's success arm. |
 
 Opened 2026-09-12 by the issue #270 prompt-cadence pass:
@@ -256,8 +283,7 @@ Opened 2026-09-13 by the issue #273 shrine-pose pass:
 
 | Item | Where | What settles it |
 |---|---|---|
-| Whether the Codex's interred-party page disturbs the approach walk. The page is emitted inside the walk, between the frame that first draws the avatar and the stepping frames, and every run of this pass had nobody interred, so the walk's pose sequence and repaint counts are executed only for the skipped case. | `systems/karma.md` Section 8 | Run the Codex arm with at least one interred member and compare the painted sequence and the frame counts against the published ones. |
-| What the other ten rows of the per-class frame-script table drive. The table has eleven rows; only the row the shrine's kneeling family uses was traced to its consumers, and the rest are decoded but unattributed, so no second family can be named and the published "some classes rewrite their displayed frame" stays a shape rather than a roster. | `systems/animation.md` Section 5; `catalogs/tile-catalog.md` Section 3 | Trace each remaining script row to the classes that select it and to the sprite runs it walks, and publish the families. |
+| Whether the Codex's interred-party page disturbs the approach walk. The page is emitted inside the walk, between the frame that first draws the avatar and the stepping frames, and every run of this pass had nobody interred, so the walk's pose sequence and repaint counts are executed only for the skipped case. *Narrowed 2026-10-16 (issue #298 Q5): the page's literals, sentinel and name copy are now statically traced and published, it has no key wait or pause of its own, and the count scan and object placement were executed at counts 0, 1 and 3 by the issue #271 probe with no pacing effect; a rendered capture of the page needs a save with a Blackthorn execution.* | `systems/karma.md` Section 8 | Run the Codex arm with at least one interred member and compare the painted sequence and the frame counts against the published ones. |
 
 Opened 2026-09-13 by the issue #273 party-sprite band audit (which closed the
 mounting question above; see `RETRACTIONS.md` R505..R508):
@@ -272,6 +298,28 @@ mounting question above; see `RETRACTIONS.md` R505..R508):
 | Whether the three Blackthorn-overlay transport-marker writes behave as read. They are the only marker writers in the shipped set that were never executed; the claim that one of them reaches the screen as the description table's corpse tile rests on a byte read plus the established slot path. | `systems/blackthorn.md` Section 6.1; `systems/vehicles.md` Section 2 | Execute the Blackthorn cutscene arms that write the marker and record the painted cell. |
 | Whether `catalogs/tile-catalog.md`'s actor-half row for `348..351` ("bard") is the shipped string. `catalogs/npc-roster.md` reads the same description table and gives that tag "a minstrel" (a second minstrel class beside `0x44`), `systems/visibility.md` Section 8 names the family a minstrel, and this catalogue's own Section 2 class list says minstrel too, so the row is the outlier. It was not re-decoded in the pass that corrected the `320..335` names, so it is flagged rather than rewritten. | `catalogs/tile-catalog.md` Sections 3 and 3.1; `catalogs/npc-roster.md` Section 4 | Re-decode that run's description record and reconcile the two documents in one pass. |
 | Whether the tile identities in this audit hold outside EGA. Every art reading behind the party-and-vehicle band - the rider added to the horse frames, the figure on the carpet, the rug's symmetry, the sail-state ink counts, the disjoint palettes of `284` and `285` - is a decode of the shipped 16-colour EGA atlas, and the display driver was stubbed throughout, so indices and viewport cells are executed but no pixels were rasterised. | `catalogs/tile-catalog.md` Sections 3.1 and 10 | Decode the CGA, Tandy and Hercules atlases for the same ids, or rasterise the executed frames through a live driver. |
+
+Opened 2026-10-16 by the issue #298 objects and NPC pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Whether the mimic's and the corpser's scripts ever run past their pause-15 freeze. Both show frame 1 and freeze; if gameplay releases the slot by clearing only the delay nibble, the position sits at step 2 and the later steps run, and if it resets the whole phase byte the script restarts and freezes again. The release writer was not traced. | `systems/active-objects.md` Section 3 | Trace every gameplay writer that releases a frozen slot of either class and record what it writes; optionally, a capture of a mimic or corpser slot staying on frame 1. |
+
+Opened 2026-10-16 by the issue #298 magic and combat pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Which occupied cells the shared combat spawn-cell validator really admits. `systems/magic.md` Section 8 (the shared random arena probe) says it rejects "any cell already holding a combat actor or a dynamic object"; the issue #298 Q3 review found that absolute overstated - some object tiles, objects with a blank displayed tile and descriptors carrying certain absent or dead flags appear to pass - but the exceptions were not enumerated precisely enough to publish. The combat Blink text defers to the validator by name instead of repeating the absolute. A live caster's own cell is rejected either way. | `systems/magic.md` Section 8 | A dedicated pass over the validator that lists every occupant class it admits and rejects, then a correction of the shared probe paragraph. |
+| That a party member under the Sword of Chaos is routed past the command handler's asleep arm to the self-acting driver's `0..16` wake draw. The two draws themselves are verified twice; this routing rests on one static reading. *(Issue #298 Q25.)* | `systems/combat.md` Sections 6.2 and 8.1 | Re-trace the Chaos gate's hand-off to the driver for an asleep compelled member. |
+
+Opened 2026-10-16 by the issue #298 commands-misc pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Where the camp event's class tile lands after a combat. The record-0 (party sprite) outcome holds when every descriptor linked to a member has a zeroed object index; the actor-clear helper preserves the member/class link byte, so the table is not all-zero after combat, and a descriptor whose object index survives combat teardown would redirect the stamp. *(Issue #298 Q10.)* | `systems/rest-and-camp.md` Section 7.2 | Trace the combat-end descriptor teardown and record what remains in each descriptor's object index. |
+| The camp inversion's highlight pen at event time, and whether the world-tick pauses after each member's unrestored inversion repaint the viewport. *(Issue #298 Q10.)* | `systems/rest-and-camp.md` Section 7.1 | Trace the pen slot's writers before the event and the world tick's repaint behaviour inside it. |
+| The shrine/Codex presentation's per-count object positions on the 11-by-11 map, and what actor tile `0x03`'s art is meant to represent there. *(Issue #298 Q5.)* | `systems/karma.md` Section 8 | Read the position table and check the drawn art. |
+| Whether any shipped turn runs two time-advancing calls between an hour crossing and the next party-upkeep pass, which would erase the shared snapshot's mismatch and skip that hour's starvation or meal branch (for example terrain's extra clock work). *(Issue #298 Q27.)* | `systems/time.md` Section 5 | Trace the per-mode turn sequence for the order of time-advancing calls and the upkeep pass. |
 
 ## 4. Deferred by scope
 

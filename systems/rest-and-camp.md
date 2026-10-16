@@ -95,11 +95,20 @@ Compatibility rules:
   the rest handler owns how often those increments are applied.
 - The traced town-hours path runs one bounded scheduler/world-tick burst after
   a nonzero digit is accepted: up to sixteen NPC schedule passes, each followed
-  by a world tick, before the elapsed-time loop begins.
+  by a world tick, before the elapsed-time loop begins. The burst runs at the
+  current hour with no clock advance and before any member is put to sleep;
+  an arrest/conflict contact during the burst ends the command before any
+  sleep or time *(added 2026-10-16, issue #298 Q30)*.
 - The same town path then advances elapsed rest through repeated ten-minute
   time-cleanup calls until the target hour or thrown-out branch.
-- After each interruption check, already-applied time, schedule, and world side
-  effects remain; the command does not roll the clock back.
+- In the town path, an arrest/conflict contact event during the burst ends the
+  command before any sleep status or time: only the burst's schedule and
+  world-tick effects remain, and the ordinary town epilogue then re-evaluates
+  contact (`systems/town-mode.md` Section 12). Once the elapsed-time loop has
+  begun, already-applied time, schedule, and world side effects remain at any
+  later stop; the command does not roll the clock back. *(Corrected 2026-10-16,
+  issue #298 Q30: this previously said time already applied remains after every
+  interruption check, including the burst's - `RETRACTIONS.md` R538.)*
 - Ordinary prompts do not pass time while waiting for input. Time changes only
   after a duration has been accepted and the rest loop runs.
 - Dungeon dangerous rest hands the accepted duration and watcher selection to
@@ -397,11 +406,16 @@ The event's public contract:
   the sixth record. This differs from Blackthorn rescue/refuge, whose top band
   selects record four.
 - **Each living member's turn in the pass is presented, not just the ones who
-  gain a level.** Before the level check, the handler restamps that member's
-  map sprite from a class-keyed tile and plays a short two-tone sting with a
-  brief flashing pause. This runs for every living member on every occurrence
-  of the event. *Added 2026-08-23; an implementation built from the previous
-  text would have played the sting only on a level-up.*
+  gain a level.** Before the level line, the handler stamps a class-keyed tile
+  into an active-object record chosen as Section 7.2 describes - in an ordinary
+  outdoor camp, by static reading, the party's own map record every time, not a
+  per-member sprite - and plays a two-envelope sting around a whole-viewport
+  inversion with world-tick pauses (Section 7.1). This runs for every living
+  member on every occurrence of the event. *Added 2026-08-23; an implementation
+  built from the previous text would have played the sting only on a level-up.*
+  *(Corrected 2026-10-16, issue #298 Q10: this bullet said the handler
+  "restamps that member's map sprite"; that is retracted, see `RETRACTIONS.md`
+  R547.)*
 - It refreshes the party/status display before returning to the caller.
 - The old man's on-screen figure is an ordinary temporary entry in the world's
   active-object table, placed at the centre cell of the viewport — the party's
@@ -412,6 +426,85 @@ The event's public contract:
 
 Implementations should keep the event outdoor-camp-only and separate from Lord
 British's castle services.
+
+### 7.1 Event order and presentation
+
+*(Added 2026-10-16, issue #298 Q10.)* Software envelopes are written in the
+`systems/audio.md` tuple order `(delta, initial comparison, iterations, idle,
+period)`; `\n` is a line feed and `_` a space. Once the event runs, in order:
+
+1. Print `An_apparition!\n`, then run the envelope `(6, 2500, 10000, 1, 2620)`.
+2. A six-note figure: the envelope `(13, 200, 5000, 1, P)` for P = 2620, 2620,
+   2620, 3700, 3900, 4160, in that order.
+3. **The old man appears.** His active-object record is first given the
+   draw-nothing actor byte `0x16` at the viewport centre `(5, 5)`; the shared
+   single-cell converge (`systems/audio.md` Section 8.3.1) then runs on atlas
+   tile `0x174` (`catalogs/tile-catalog.md` actor-half row 372) at `(5, 5)`;
+   then the record's actor byte becomes `0x74`, which draws that tile.
+4. **Per member, in party order.** A living member is silently healed and cured
+   (above), the class tile is stamped (Section 7.2), then one world-tick pause,
+   the envelope `(13, 200, 5000, 1, 5500)`, one inversion of the whole gameplay
+   viewport (the square from pixel 8 to pixel 183 on both axes) in the current
+   highlight pen, the envelope `(1, 2500, 60000, 1, 5500)`, and three one-tick
+   world pauses. The published "two-tone sting" is that pair of envelopes, both
+   at period 5500, a short one of 5,000 iterations and a long one of 60,000. No
+   paired restoring inversion is issued: each later living member's inversion
+   toggles the viewport back. Whether the following world-tick pauses repaint
+   the viewport was not established, and the highlight pen's value at this point
+   is not published here.
+5. **Level line**, only when that member's level changed: `\n"Hail,_`, the
+   member's name, `!\nFor_thy_valiant_deeds,_I_shall_reward_thee!\n`,
+   `Thou_art_now_level_`, the new level as a plain decimal number, `,_and\n`,
+   then exactly one of `stronger!`, `quicker!` or `wiser!` (the `random(1, 3)`
+   roll: Strength, Dexterity, Intelligence), then `"_` (the closing quote and a
+   space, on the stat word's own row). Then a blocking key wait, then one line
+   feed.
+6. The class-keyed magic-point refresh and the stats redraw. This step is not
+   living-only: a dead member skips steps 4 and 5 and comes straight here, as
+   the bullets above already state.
+7. **After the pass**: `\n"`, the `KARMA.DAT` verdict record, `"`, a key wait,
+   then `\n\nThe_strangely_familiar_old_man_vanishes...\n`. **The old man
+   leaves**: his actor byte goes back to `0x16`, the single-cell converge runs
+   at `(5, 5)` on the terrain tile under the viewport centre (inferred from
+   where it reads in the viewport's tile buffer; the figure fades back into
+   the ground), the
+   record is cleared to actor byte 0, then one world tick, then the turn-clock
+   advance.
+
+### 7.2 The class tile and where it is written
+
+*(Added 2026-10-16, issue #298 Q10.)* The class tile, as actor byte with the
+atlas index (`catalogs/tile-catalog.md` Section 3) in parentheses:
+
+| Class | Actor byte | Atlas | Art |
+|---|---|---|---|
+| Avatar | `0x4C` | 332 | avatar |
+| Mage | `0x40` | 320 | wizard |
+| Bard | `0x44` | 324 | minstrel |
+| Fighter | `0x48` | 328 | fighter |
+| Druid, Tinker, Paladin, Ranger, Shepherd | `0x4C` | 332 | avatar |
+
+The handler looks in the combat-instance descriptor table for an entry linked
+to the member's party index. On a hit it writes the tile into that entry's
+linked active-object record. On a miss it reuses the previous member's target,
+and before the first hit that target is the old man's own record. When every
+matching entry's object index is zero, member 0 resolves to active-object
+record 0, the party's own map record, and every later member reuses that same
+record, so the party's map sprite is re-stamped once per living member and is
+left showing the last living member's class art. Reproduce this pointer
+behaviour rather than stamping a per-member sprite.
+
+This outcome is **not fully established**. The descriptor table is not
+all-zero after a combat: the actor-clear helper zeroes every descriptor byte
+except the member/class link byte, which it preserves (an executed issue #263
+probe). Record 0 still results when every matching entry's object index is
+zero, but a descriptor whose object index was not scrubbed at combat end would
+redirect the stamp, and that teardown was not traced (`OPEN-QUESTIONS.md`).
+
+Source provenance: literals, the class-tile table and the note periods from the
+shipped data; the event order, envelope arguments, converge and inversion calls
+and the pointer rule by static reading of the whole routine; private analysis in
+`u5-decomp/functions/OUTSUBS_OVL/` and `u5-decomp/notes/`.
 
 ## 8. Relationship To Other Systems
 

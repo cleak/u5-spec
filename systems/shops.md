@@ -1209,9 +1209,9 @@ without reprinting. Earlier invalid-key menu-redraw claims are retracted
 | Paid Heal introduction | `\n\n"I can heal thee ` |
 | Paid Resurrect introduction | `\n\n"I can raise this unfortunate person from `, then `the dead ` |
 | Fee and confirmation, after an introduction | Token-expanded `for % gold.\n\nWilt thou\npay?" `; accept Y/N only and echo bare `Yes` or `No` |
-| Ordinary short funds | Record `173`; the existing low-fee charity exception in Section 6.1 still applies |
+| Ordinary short funds | Record `173`, then the continuation question below, exactly as after a declined fee; no gold, status or HP changes. The low-fee charity exception is not a short-funds outcome: in Skara Brae (scene `7`, The Spirit Healers) only, when the fee is at most 100 and party gold is below it, record `173` is not printed, the treatment is applied with no gold deducted, the post-payment surcharge step does not run, and the continuation follows the treatment *(clarified 2026-10-16, issue #298 Q19; the earlier pointer to Section 6.1 named no such exception)* |
 | Minoc free Cure/Heal | `\n\n"Receive now the Light!"`, followed by treatment effects |
-| Continuation after treatment, refusal, or member cancellation | `\n\n"Is there any other way in which I may\n`, then `aid thee?" ` |
+| Continuation after treatment, untreatable refusal, member cancellation, a declined fee or short funds *(added 2026-10-16, issue #298 Q19)* | `\n\n"Is there any other way in which I may\n`, then `aid thee?" ` |
 
 The continuation accepts Y/N, with the same entry echoes as Section 8.B.
 Yes repeats the service question; No ends the visit. It is not an immediate
@@ -1936,7 +1936,13 @@ return and invalid-key prompt-redraw claims are retracted (R419).
 On the ordinary paid branch, the healer quotes the selected treatment's local
 price, runs the standard affordability check against the party gold word,
 deducts gold, applies the treatment, refreshes the visible character status,
-and asks the continuation Y/N question. Paid resurrection uses the shared resurrection
+and asks the continuation Y/N question. A declined fee or short funds skips the
+treatment: short funds print record `173`, and both then redraw the stats panel
+and ask the same continuation question, so the visit continues - Yes returns to
+the service question and No ends the visit through the ordinary farewell - with
+no gold, status or HP changed (Section 8.C) *(added 2026-10-16, issue #298 Q19;
+static reading of the payment helper and the healer service loop, private
+analysis in `u5-decomp/functions/SHOPPES_OVL/`)*. Paid resurrection uses the shared resurrection
 side effects from `systems/magic.md` -- status restoration, mana rebuild, any
 experience/level adjustment, and maximum-HP recomputation -- but the healer
 then restores current HP to maximum instead of leaving the member at the spell

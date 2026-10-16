@@ -120,7 +120,7 @@ and "any tile changed" redraw booleans is withdrawn (issue #217).
 
 The earlier byte-width wording for runtime state in this section is withdrawn; state is a word (Section 4, R396).
 
-The schedule processor — the per-tick walker — runs once per player-turn from the town turn loop, with the current hour byte as its only input. It also runs from the H-Hole-Up hours path while rest time is being simulated outside the normal mode loop. The overworld and dungeon mode loops do not invoke this scheduler.
+The schedule processor — the per-tick walker — runs once per player-turn from the town turn loop, with the current hour byte as its only input. It also runs from the H-Hole-Up hours path outside the normal mode loop, in one burst of up to sixteen passes at the current hour before the party sleeps and before any rest time elapses (`systems/town-mode.md` Section 12; clarified 2026-10-16, issue #298 Q30). The overworld and dungeon mode loops do not invoke this scheduler.
 
 Per call, the processor:
 
@@ -423,12 +423,17 @@ for them; it does guarantee that a goal cell is a goal even if a future map or
 tile-set change made it an obstacle.
 
 **Phase 4: dynamic-obstacle overlay.** The builder walks the active-object
-table and, for each occupied slot whose Manhattan distance from the NPC's
-runtime destination is strictly less than four, stamps the object's cell as an
-obstacle. The player's position is included through the same distance rule.
-This radius is a compatibility constant, not a derived tuning knob: objects at
-Manhattan distance four or greater from the destination are ignored by this
-overlay even if a different implementation could search farther.
+table from record 31 down to record 1 and, for each record whose type byte is
+above `0x3F` and whose Manhattan distance from the NPC's current (x, y) is
+strictly less than four, stamps the object's cell as an obstacle. Only person
+and creature art is stamped; items, vehicles, horses and furniture below that
+type value are not. The player's position is then included through the same
+distance rule. This radius is a compatibility constant, not a derived tuning
+knob: objects at Manhattan distance four or greater from the NPC are ignored by
+this overlay even if a different implementation could search farther.
+*(Corrected 2026-10-16, issue #298 Q22: this phase previously stamped every
+occupied slot within four of the NPC's runtime destination; the type filter and
+the current-position origin replace that - `RETRACTIONS.md` R536.)*
 
 **Phase 5: goal stamp and start stamp.** When the mode flag was "coordinate goal", the supplied cell is stamped with the goal sentinel. For all modes, the start cell is stamped with high nibble 4 (seed direction "north"); BFS reads the seed as its initial direction.
 
@@ -437,7 +442,7 @@ overlay even if a different implementation could search farther.
 A textbook breadth-first search over a small queue. Each iteration:
 
 1. **Dequeue a cell.** The cell's high nibble is the "current direction" — the direction the BFS arrived from.
-2. **For each of four cardinal directions in cyclic order:** try the corresponding neighbour cell. If in-bounds and passing the visit gate:
+2. **For four directions, starting with the dequeued cell's own high-nibble code** (its inbound direction, or north for the start cell) **and continuing in the cycle west → south → east → north → west**, try the corresponding neighbour cell, always taken relative to the dequeued cell. The codes are west 1, south 2, east 3 and north 4, and each next direction adds one, wrapping 4 back to 1; a cell entered moving east therefore tries east, north, west and south. *(Clarified 2026-10-16, issue #298 Q22.)* If in-bounds and passing the visit gate:
    - Capture the neighbour's low nibble *before* writing.
    - Stamp the neighbour with `direction << 4`.
    - If the captured low nibble was the goal sentinel, the search has found the goal: write the cell coordinates to the pathfinding-output globals and return success.
@@ -445,6 +450,8 @@ A textbook breadth-first search over a small queue. Each iteration:
 3. **If the queue runs dry**, return failure.
 
 The queue is a small circular FIFO of `(x, y)` byte pairs with capacity thirty-two. On a sufficiently open map the queue can exhaust before reaching a distant goal; the caller accepts that as "no route in budget" and falls back (state stays unchanged, NPC stays put, next tick retries). The destructive overwrite during the visit-mark phase is fine because the goal value is captured *before* the write.
+
+*(Added 2026-10-16, issue #298 Q22.)* When the queue is full, an accepted neighbour is still stamped as visited but is not enqueued. The search's bounds test rejects only negative coordinates on the west and north edges and admits index 32 on the south and east edges: the test is "at most 32", not "below 32". A column of 32 therefore addresses the first cell of the next row of the 32-wide workspace, and a row of 32 reads and stamps the 32 bytes just past the workspace. What those bytes hold when a probe reads them is not established (`OPEN-QUESTIONS.md`). Reproduce this edge only for byte-level parity; it matters only on a map whose south or east edge is open.
 
 Once BFS succeeds, the walker traces the high-nibble trail from goal back to start, reverses the sequence, and writes the resulting direction codes into the NPC's move queue. State is set to 3, and subsequent ticks dequeue and apply.
 
@@ -487,10 +494,14 @@ is, so the NPC hunts the link that leads there.
 **How each pair of states uses the result.** The two halves of the table do
 different things with the cell the search returns.
 
-*States 4 and 5 — the NPC is off the displayed floor.* The search runs first;
-if no link cell is reachable within the search budget the NPC does nothing this
-tick. On success the walker plans a route from that link cell toward the
-waypoint, records one step of it, and then re-reads the live tile at the link
+*States 4 and 5 — the NPC is off the displayed floor.* The search runs first,
+starting from the active waypoint's (x, y) on the displayed floor. The NPC's
+own coordinates belong to another floor and are not used, so the link chosen is
+the one the search reaches first from the waypoint. If no link cell is
+reachable within the search budget the NPC does nothing this tick. On success
+the walker runs a second search starting at that link cell with the waypoint as
+its goal, so the recorded route runs from the link to the waypoint. *(Clarified
+2026-10-16, issue #298 Q22.)* It records one step of that route, and then re-reads the live tile at the link
 cell. If that tile is the state's own marker, or any tile in the stairway family
 `0xC4..0xC7`, the NPC is placed on the displayed floor at that cell and switched
 to the ordinary in-plane movement state. This is the moment an off-floor NPC
@@ -505,7 +516,8 @@ accepts, the walker writes the NPC's position directly to the active waypoint's
 own `(x, y, z)`, caches the waypoint, deactivates the move queue and returns the
 state to idle; the NPC leaves the displayed floor and its sprite is released.
 When the gate refuses, the walker falls back to the tile-ID search for the
-matching marker, routes toward it and enters the queue-replay state, so the NPC
+matching marker, starting from the NPC's current (x, y) with the found link as
+its goal *(clarified 2026-10-16, issue #298 Q22)*, routes toward it and enters the queue-replay state, so the NPC
 walks onto the link and passes the gate on a later tick.
 
 Two consequences worth stating explicitly, because they are easy to get wrong:
@@ -518,6 +530,9 @@ Two consequences worth stating explicitly, because they are easy to get wrong:
   "nearest reachable cell carrying the selected marker", measured by the same
   breadth-first search used for ordinary movement, so an authored map with
   several links routes the NPC through whichever one the search reaches first.
+  For states 4 and 5 that is the link nearest the active waypoint; for states 6
+  and 7 it is the link nearest the NPC. *(Clarified 2026-10-16, issue #298
+  Q22.)*
 
 **Stairway acceptance.** Both halves also accept the visible stairway family in
 place of a link marker, which is what lets NPCs use a stairwell where the map
@@ -797,6 +812,25 @@ produces one during the pass, the last producer visited supplies the event
 that town mode handles. Other state-machine early exits remain as specified
 in Section 7.
 
+**Event lifetime (added 2026-10-16, issue #298 Q30).** The schedule pass takes
+no minute input: in town the ordinary epilogue always advances the clock by
+exactly one minute, and its only other caller is the town-bed Hole-up. The
+only consumer of the event bytes is the town loop's step immediately after its
+own schedule pass, or after a result-2 turn that skips the pass; a turn whose
+walkers are skipped by the transport, Negate Time or Quickness gate skips the
+consumer too. An event left in the bytes therefore survives only until the
+next schedule pass clears it. On gate-skipped turns it can stay in the bytes,
+which are saved state, across several turns, and that is harmless only because
+no consumer runs on those turns. The town-bed Hole-up burst
+(`systems/town-mode.md` Section 12) never hands its events to the consumer: it
+inspects only the arrest/conflict kind `0x61`, and only to abort the rest, so
+every burst-recorded event is dropped and must be re-raised by a later ordinary
+pass. Because contact is a current-state adjacency test, a still-adjacent
+eligible NPC re-raises it in the epilogue pass that follows. The one route by
+which a retained event reaches the consumer without a fresh pass is the
+result-2 turn, published as retained-event precedence in
+`systems/town-mode.md` Section 14.
+
 | Producer | Dialogue requirement at adjacency | Town outcome on an ordinary acted turn |
 |---|---|---|
 | AI 4 or 5 | Nonzero live dialogue | Enter the shared conversation dispatcher for that NPC. Ordinary dialogue starts its conversation; shop triggers enter their shop gate; reserved/canned dialogue follows its own dispatcher case. |
@@ -963,12 +997,16 @@ Two consequences fall straight out of that split and are easy to get backwards:
   mode additionally stamps them as goals.
 
 **Active-object collisions.** Other NPCs and the player occupy cells in the
-active-object table. Occupied cells are reported as "blocked" only when the
-occupant is within the dynamic-obstacle scan radius: Manhattan distance less
-than four from the NPC's runtime destination. Outside that radius, the cell is
-treated as walkable by the pathfinding workspace.
+active-object table. In the pathfinding workspace, an occupied cell is reported
+as "blocked" only when the occupant's type byte is above `0x3F` (person and
+creature art) and it is within the dynamic-obstacle scan radius: Manhattan
+distance less than four from the NPC's current (x, y). Outside that radius, or
+for a lower type byte, the cell is treated as walkable by the pathfinding
+workspace. *(Corrected 2026-10-16, issue #298 Q22: this previously measured the
+radius from the NPC's runtime destination and applied no type filter -
+`RETRACTIONS.md` R536.)*
 
-**Player collision.** The player is an entry in the active-object table and is blocked by the dynamic-obstacle overlay. NPCs never step into the player's cell, even if the schedule's waypoint coordinate happens to match.
+**Player collision.** The player is an entry in the active-object table and is stamped by the dynamic-obstacle overlay only when within Manhattan distance four of the NPC's current position; a route can be planned through a more distant player's cell, and whether a step into it is then refused rests on the per-step gate's occupancy test above. *(Corrected 2026-10-16, issue #298 Q22: this previously said NPCs never step into the player's cell, which the overlay alone does not guarantee - `RETRACTIONS.md` R536.)*
 
 **Z-level transitions.** Floor changes happen through the two authored
 floor-link markers `0xC8` and `0xC9`, or through a visible stairway tile.
@@ -978,9 +1016,15 @@ requiring it to stand on the direction-matching link and then writing its
 position to the schedule waypoint's own coordinates. The world-mutation
 primitive is what releases or allocates the sprite as the NPC leaves or arrives.
 The schedule does not encode "which link"; the pathfinder picks whichever
-carrying cell is nearest and reachable. Section 8.5 has the full contract.
+carrying cell is nearest and reachable - nearest the active waypoint for states
+4 and 5, nearest the NPC for states 6 and 7 *(clarified 2026-10-16, issue #298
+Q22)*. Section 8.5 has the full contract.
 
-**Out-of-bounds.** The 32×32 cell grid is hard-bounded.
+**Out-of-bounds.** The 32×32 cell grid is not hard-bounded at its high edges.
+The walkability predicate resolves an out-of-bounds probe as item 2 above
+describes, and the search's own bounds test admits index 32 on the south and
+east edges (Section 8.4). *(Corrected 2026-10-16, issue #298 Q22: this sentence
+previously said the grid is hard-bounded - `RETRACTIONS.md` R537.)*
 
 ## 11. The world-mutation primitive
 

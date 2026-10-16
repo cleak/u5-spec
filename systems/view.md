@@ -296,9 +296,12 @@ The local view overlay is modal:
 The right-side chrome begins at `x=192`. The local modal neither clears nor
 draws into that region, so it does not replace the stats, counters, or message
 content. Its close path does not request a View-specific side-panel repaint.
-The ordinary world redraw has its own independent first-mode-tick handshake
-that can repaint the full panel when already pending; that conditional behavior
-is not set or required by this modal.
+The ordinary world tick's gate byte governs the active-object animator, the
+wind drift and the ambient scenery tick, not a panel repaint
+(`systems/audio.md` Section 8.10; `systems/main-loop.md` Section 9); this modal
+neither sets nor requires it. *(Corrected 2026-10-16, issue #298 Q16: this
+sentence previously described a "first-mode-tick handshake that can repaint the
+full panel"; no world-tick path repaints the panel, see `RETRACTIONS.md` R539.)*
 
 LOOKOBJ also contains a second, completely separate renderer, described in
 Section 4.2. Earlier revisions of this document called it "the full Britannia

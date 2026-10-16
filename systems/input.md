@@ -391,7 +391,7 @@ The internals of the tick belong in a separate spec. From the input system's per
 - The tick can take long enough to be perceptible — a full viewport rebuild or
   active-object animation frames — and the input system trusts it to return
   promptly enough that the cursor blink remains responsive.
-- The wait-for-input routine, on entry, also sets a one-shot "first-tick after mode entry" hint when it detects entry to town mode; the world tick's tail reads that hint to decide whether to run the ambient-audio tick, and normalises it afterwards. The hint write is the only piece of world-tick state the input system touches directly.
+- The wait-for-input routine, on entry, also sets a one-shot "first-tick after mode entry" hint when it detects entry to town mode; the world tick reads that hint to skip the active-object animator for that one tick, and normalises it afterwards; the ambient-audio tick still runs (the world tick zeroes the gate itself only during Negate Time and it starts at zero at program start; `systems/audio.md` Section 8.10). *(Corrected 2026-10-16, issue #298 Q16: this bullet previously said the hint decided "whether to run the ambient-audio tick"; that is retracted, see `RETRACTIONS.md` R539.)* The hint write is the only piece of world-tick state the input system touches directly.
 
 > **Corrected 2026-09-12 (R488).** The bullet above previously said the world tick uses that hint "to do a fuller initial re-paint", and the bullet before it listed "a first-frame panel repaint" among what the tick can take long enough to do. Both are withdrawn: no world-tick path repaints the stats panel (`systems/stats-panel.md` Section 2.2, `systems/main-loop.md` Section 9).
 

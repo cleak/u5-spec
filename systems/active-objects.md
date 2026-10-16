@@ -45,7 +45,7 @@ Each record's eight bytes are interpreted as follows. Different systems read dif
 |   2  | `x`          | World (or arena) X coordinate, in cells.                                                                          |
 |   3  | `y`          | World (or arena) Y coordinate, in cells.                                                                          |
 |   4  | `z`          | World floor (or vertical layer). For the overworld, this is the surface/underworld marker.                        |
-|   5  | `dep1`       | Auxiliary state byte. For ship/frigate objects this is hull condition; otherwise class-specific.                  |
+|   5  | `dep1`       | Auxiliary state byte. For ship/frigate objects this is hull condition; otherwise class-specific. For the whirlpool family, bit 0 is the movement parity bit; for the Shadow Lord class it is a proximity counter (Section 8; added 2026-10-16, issue #298 Q2/Q21). |
 |   6  | `phase`      | Packed animation byte: frame-delay countdown (low nibble) and animation-script step (high nibble). Carries **no facing**. Advanced by the animator. |
 |   7  | `dep3`       | Auxiliary flag/aux byte. For ship/frigate objects this is skiffs aboard; otherwise class-specific.                |
 
@@ -76,8 +76,14 @@ restarts the script; a value of five snaps the sprite back to its base frame on
 a one-in-four draw (holding the position and, for every class but one, pausing
 six ticks) and otherwise just advances; six restarts the script three times in
 four and otherwise advances; seven jumps to position two; and any value of
-eight or more sets the frame-delay nibble to that value less eight and
-advances. Before the script runs, the eligibility gates require a non-zero
+eight or more sets the frame-delay nibble to that value less 128 and advances.
+The shipped delay values give delays of 2, 4, 7 and 15, and 15 is the freeze
+sentinel, so a pause-15 step freezes the slot until gameplay releases it.
+*Corrected 2026-10-16 (issue #298 Q29):* this sentence previously said the
+delay is the value less eight, which is retracted (`RETRACTIONS.md` R535).
+Frame and pause steps end the slot's pass; restart, jump-to-two, both outcomes
+of the six step and the advancing outcome of the five step continue with the
+next step in the same pass. Before the script runs, the eligibility gates require a non-zero
 frame byte that is not the reserved transparent value, a tile class at or above
 the animator's threshold, a class that is neither the field family nor the
 regalia band, and - for every class except the two that animate unconditionally
@@ -86,6 +92,62 @@ the same script as the party-sprite family: it steps through frames two, three
 and four on successive eligible ticks and then, at the fifth position, either
 snaps to frame one with a six-tick pause (one in four) or restarts the two-
 three-four cycle. Source provenance: private analysis in
+`u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
+
+**The per-class scripts (added 2026-10-16, issue #298 Q29).** There are eleven
+scripts. The table gives each one's steps in the notation below, with the
+classes (type byte with its low two bits cleared) that select it.
+
+- **f*n*** - set the displayed-frame byte to the class's base value plus *n*
+  minus one (so f1 is the base frame and f4 the last of the four), advance,
+  and end the slot's pass.
+- **p*n*** - set the frame-delay nibble to *n*, advance, and end the pass; the
+  frame is unchanged. The next *n* passes only decrement the delay, after
+  which the slot is eligible again. p15 is the freeze sentinel: the slot then
+  stays on its current frame until gameplay releases it.
+- **snap** (the five step) - one draw, accepted one time in four. On
+  acceptance the displayed frame is set to the slot's own type byte; for every
+  class but `0x5C` the delay is set to six and the position is held, so the
+  pass ends and the snap step is retried after the pause; for class `0x5C` the
+  position advances instead of pausing and the pass still ends. Otherwise the
+  position advances and the pass continues with the next step.
+- **6-step** - one draw, accepted three times in four: restart and continue;
+  otherwise advance and continue.
+- **restart** - go to step 0 and continue. **goto 2** - go to step 2 and
+  continue.
+
+| Script | Steps | Classes using it |
+|---|---|---|
+| A | f2, f3, f4, snap, restart | The default for every animated class not listed in another row: occupied chair `0x34`, `0x38`; trapped soul `0x3C`; person art `0x40..0x4C`; villager `0x50`, merchant `0x54`, jester `0x58`, `0x5C`, prisoner `0x60`, `0x64`, child `0x68`, beggar `0x6C`; `0x74`; Blackthorn `0x78`; `0x7C`; sea horse `0x80`; squid `0x84`; sea serpent `0x88`; giant rat `0x90`; gremlin `0xA4`; reaper `0xAC`; insect swarm `0xBC`; skeleton `0xC4`; ettin `0xCC`; wisp `0xD4`; sand trap `0xE0`; whirlpool `0xEC`; rot worm `0xF8`; Shadow Lord `0xFC` |
+| B | f1, f2, f3, f4, restart | bat `0x94`, ghost `0x9C`, slime `0xA0`, orc `0xC0`, python `0xC8`, headless `0xD0`, daemon `0xD8` |
+| C | f1, f2, f3, f4, f3, f4, f1, f2, restart | mongbat `0xF0` |
+| D | f1, f2, f3, f4, p7, restart | gazer `0xB0` |
+| E | f1, p15, f2, f3, f4, restart | mimic `0xA8` |
+| F | f2, p4, f3, p4, f4, p4, snap, restart | guard `0x70` |
+| G | f1, f2, f1, f2, f3, f4, f2, f3, f4, restart | giant spider `0x98` |
+| H | f2, f3, f4, f3, f2, snap, restart | dragon `0xDC`, troll `0xE4` |
+| I | f1, p15, f2, f3, f4, goto 2 | corpser `0xF4` |
+| J | f2, p2, f3, p2, f4, p2, 6-step, f1, restart | shark `0x8C` |
+| K | f1, f2, f3, snap, restart | gargoyle `0xB8` |
+
+Classes below `0x34`, the field band `0xE8` and the regalia band `0xB4` never
+reach a script. The two classes that animate unconditionally, skipping the
+eligibility coin, are `0x5C` and the mimic `0xA8`; for every other class the
+coin is an inclusive `0..255` draw accepted at 128 or above. Each snap step and
+each 6-step takes exactly one draw: these are the "two random script steps" of
+the random-stream accounting in Section 8. The whirlpool description above is
+script A. The beggar family traced in `systems/animation.md` Section 5 is also
+script A.
+
+The mimic and the corpser show frame 1 and then freeze on their p15 step. Whether
+their later steps ever run is **not established**: it depends on how gameplay
+releases the slot. If a release clears only the delay nibble, the position is
+left at step 2 and the remaining steps run; if it resets the whole phase byte,
+the script restarts at frame 1 and freezes again (`OPEN-QUESTIONS.md`).
+
+Source provenance: script steps and the class-to-script map read from the
+shipped data overlay and written here in the notation above; step semantics and
+gates from a static reading of the resident animator, private analysis in
 `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`.
 
 The tile-class gate is therefore *downstream* of the decrement, not upstream of it: a low nibble in `1..14` is decremented on any slot regardless of what class the record holds. An earlier reading of this section had the two gates the other way round and concluded that the player's tile class protects slot zero's byte 6 from the animator. It does not — what protects it in a shipped save is the stored **value** zero, which routes past the decrement into a class gate the player's class fails.
@@ -477,9 +539,11 @@ nominal rate as one two cells away — there is no distance band and no
 fallback walker and the reaction pass were each read end to end, and the only
 distance-shaped tests in them are the ones this section already publishes (the
 orthogonal adjacency test, the breath/broadside proximity tests, the Shadow Lord
-proximity mask, and the off-screen prune). The three class special cases named
-in the third bullet were not re-derived, so a distance test inside one of those
-is not excluded.
+proximity mask, and the off-screen prune). The whirlpool branch and the Shadow
+Lord branch have now been read: the whirlpool branch has no distance test, and
+the Shadow Lord branch's only one is the proximity mask below. The ship-like
+frames' wind cadence was not re-derived, so a distance test inside it is not
+excluded. *(Added 2026-10-16, issue #298 Q2/Q21.)*
 
 The adjacency reaction is likewise ungated: it is evaluated before any class
 test and behind no roll. That is why an adjacent hostile engages on the *first*
@@ -620,9 +684,21 @@ The ranged reactions, reached only when no adjacency reaction fired:
   adjacent-engagement path, not to this one.
 
 If no immediate reaction has fired **so far this turn**, the movement-dispatch
-phase decides ordinary movement for the slot. Whirlpool-class slots flip a
-stored parity bit and move only on the turns where it clears, choosing between a
-random cardinal step and the directed step planner. Ship-like water-creature and
+phase decides ordinary movement for the slot. Whirlpool-family slots (type
+byte `0xEC..0xEF`, a masked family test) toggle bit 0 of record byte 5 on every
+dispatch and move only on the turns where the byte is non-zero after the
+toggle; on the turn it becomes zero they take no draw and do not move. A
+spawned whirlpool starts with byte 5 at zero, so it moves on its first
+dispatched turn and then on every second one; a whirlpool restored from the
+per-plane object list resumes from its saved byte. On a move turn one inclusive
+`0..1` draw from the shared generator picks the step: 1 runs the directed step
+planner below, including its own random-walker fallback, and 0 runs the random
+four-direction walker directly. The branch has no distance test. In practice
+the byte holds only 0 or 1; the only other writer found is the F-Fire broadside
+depletion (Section 3), which from either value clears the slot or leaves the
+byte at 0. *(Corrected 2026-10-16, issue #298 Q2: this sentence previously said
+the slot moves on the turns where the bit clears; it moves on the turns where
+it is set - `RETRACTIONS.md` R533.)* Ship-like water-creature and
 pirate frames first pass through the wind cadence table owned by `weather.md`;
 once that cadence permits movement, they use the same directed step planner as
 land monsters.
@@ -648,10 +724,11 @@ land monsters.
 >
 > Two limits on the re-read, recorded so this is not over-read: the helpers that
 > validate a candidate cell and commit the step were **not** examined, so "the
-> step is committed" is inferred from the callers' structure; and one branch's
-> two exits were found to reach the same movement call with a dead argument, so
-> no behavioural difference should be modelled between them beyond the counter
-> byte one of them increments.
+> step is committed" is inferred from the callers' structure; and the Shadow
+> Lord (`0xFC`) branch's two exits were found to reach the same movement call
+> with a dead argument, so no behavioural difference should be modelled between
+> them beyond the counter byte the mask hit increments. *(Branch named
+> 2026-10-16, issue #298 Q21.)*
 
 A special `0xFC` sprite class has an additional proximity-mask branch. That
 sprite value is the Shadow Lord actor class (`catalogs/monster-bestiary.md`,
@@ -670,9 +747,20 @@ absolute distance to the player and consults a fixed mask:
 | 5 | none |
 
 Cells outside the six-by-six half-window, and cells not listed above, fall
-through to ordinary directed movement. Listed cells increment the slot's first
-auxiliary byte as an age counter; while that counter remains below twenty, the
-slot requests a directed step toward the player through the same step planner.
+through to ordinary directed movement. The mask test itself takes no draw and
+makes no write. On a listed cell the slot increments record byte 5 (unsigned,
+wrapping at 256) and then takes the same directed step it would take anyway.
+The increment is the branch's only effect: whether or not the cell is listed,
+and whatever the counter's value, the slot runs the ordinary directed step
+planner, so a Shadow Lord moves exactly like a default land monster. The branch
+is taken only for type byte exactly `0xFC`, an exact-byte comparison rather
+than a masked family; `0xFD..0xFF` take the default arm. The increment is
+observable because the F-Fire broadside subtracts `1..20` from the same byte
+and clears the slot when the result is above 127 (Section 3); the counter's
+value therefore changes which hits clear a Shadow Lord - up to 127 it gives more
+headroom, and at 148 and above any hit clears it. *(Corrected 2026-10-16, issue
+#298 Q21: the earlier "while that counter remains below twenty" gate is
+withdrawn; the comparison has no behavioural effect - `RETRACTIONS.md` R534.)*
 
 The directed step planner is deliberately small, and it is smaller than it looks.
 It reduces each axis offset from the player to a **sign** -- move one cell toward

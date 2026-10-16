@@ -629,22 +629,37 @@ nothing at all, even when something is present at the cell.
 | Corpse at the cell, emptied | `[blank]` ⏎ `Thou dost find` ⏎ one of `nothing!`, `worms!`, `guts!`, `a bloody pulp!` |
 | Corpse at the cell, disease | `[blank]` ⏎ `Thou dost find` ⏎ `Plague!`, with a tone, and the acting member becomes Poisoned |
 | Corpse at the cell, contents | `[blank]` ⏎ `Thou dost find` ⏎ `food!` or `gold!`, staging an object of one to three units on the cell for a following Get |
-| Furniture or fixture cell | the cell's own prefix in place of the blank row and `Thou dost find` — see below — then whichever result row below applies, or `nothing of note.` |
+| Furniture or fixture cell | `[blank]` ⏎ the location phrase (for example `In the stump`) ⏎ `thou dost find` (lower-case `t`) — see below — then whichever result row below applies, or `nothing of note.` *(corrected 2026-10-16, issue #298 Q4)* |
 | Hidden door | `[blank]` ⏎ `Thou dost find` ⏎ `a hidden door!`, and the live cell is rewritten |
 | Buried Moonstone | `[blank]` ⏎ `Thou dost find` ⏎ `a strange rock!`, staging the stone on the cell |
 | Rare reagent at the harvest hour | `[blank]` ⏎ `Thou dost find` ⏎ the rolled count, then `_sprigs_of` ⏎ `mandrake root!` or `nightshade!` |
 | Fixed hidden treasure | `[blank]` ⏎ `Thou dost find` ⏎ the staged object's name from the found-object vocabulary in `systems/hidden-treasures.md` |
 
 The furniture prefixes replace the whole preamble: the stored pieces are
-`\nIn_the_stump`, `\nIn_the_wall`, `\nOn_the_shelf`, `\nIn_the_bookshelf`,
-`\nNear_the_well`, `\nIn_the_desk`, `\nIn_the_barrel`, `\nIn_the_vanity`,
-`\nUnder_the_bed`, `\nIn_the_dresser`, `\nIn_the_trunk`, `\nIn_the_brazier`
-and `\nIn_the_fireplace`, each of which ends in the lower-case `t` that opens
-the next word, and a shared tail supplies `hou_dost_find\n`. Every other tile,
-the cask included, uses the two-byte default prefix that splices with the same
-tail to give the ordinary `\nThou_dost_find\n`. The prefix is chosen before the
-Moonstone, reagent and treasure tables run, so it precedes both a find and
-`nothing_of_note.\n`.
+`\nIn_the_stump\nt`, `\nIn_the_wall\nt`, `\nOn_the_shelf\nt`,
+`\nIn_the_bookshelf\nt`, `\nNear_the_well\nt`, `\nIn_the_desk\nt`,
+`\nIn_the_barrel\nt`, `\nIn_the_vanity\nt`, `\nUnder_the_bed\nt`,
+`\nIn_the_dresser\nt`, `\nIn_the_trunk\nt`, `\nIn_the_brazier\nt` and
+`\nIn_the_fireplace\nt`: the noun, one line feed, then the lower-case `t` that
+opens the next word. The shared tail supplies `hou_dost_find\n`, so the
+transcript is, for example, `\nIn_the_stump\nthou_dost_find\n`: the same
+leading line feed as the ordinary preamble, a row with the location phrase, then
+a row reading `thou dost find` with a lower-case `t`. *(Corrected 2026-10-16,
+issue #298 Q4: the earlier list ended each piece directly in `t`, joining the
+noun and the tail on one row; that is retracted, see `RETRACTIONS.md` R544.)*
+Every other tile, the cask included, uses the two-byte default prefix (a line
+feed, then `T`) that splices with the same tail to give the ordinary
+`\nThou_dost_find\n`. The classification reads only the searched cell's live
+tile and never tests the scene, so the prefixes apply to every non-dungeon
+Search: the overworld on both planes, the town family, and combat, whose S
+reaches the same routine. Dungeon Search (scenes 33..40) is diverted before the
+prefix choice to its own routine (`systems/dungeon-mode.md` Section 8.1) and
+never reaches these pieces *(added 2026-10-16, issue #298 Q4)*. The prefix is
+chosen before the Moonstone, reagent and treasure tables run, so it precedes
+both a find and `nothing_of_note.\n`. Source provenance: the piece bytes were
+re-read from the shipped data overlay, the rendered rows were confirmed by the
+executed issue #262 probe, and the absence of a scene gate by static reading of
+the whole Search routine; private analysis in `u5-decomp/notes/`.
 
 There are **two** near-identical no-result lines and they are different strings.
 The treasure scan's own miss is the lower-case `nothing_of_note.\n`; the
@@ -1190,8 +1205,11 @@ The town hours path advances elapsed rest with a caller-owned loop rather than
 by handing the clock one large "N hours" value. It accepts one nonzero digit,
 runs one bounded burst of up to sixteen schedule/world-tick passes, then
 advances elapsed rest in repeated ten-minute cleanup calls until the target hour
-is reached or the rest surface rejects the party. If an interruption or refusal
-fires, the command stops early and hands control to the ambush/refusal path;
+is reached or the rest surface rejects the party. An arrest/conflict contact
+during the burst ends the command before any sleep status or time, returning
+the ordinary acted result so the town epilogue handles the contact
+(`systems/town-mode.md` Section 12; added 2026-10-16, issue #298 Q30). If an
+interruption or refusal fires later, the command stops early and hands control to the ambush/refusal path;
 elapsed time already applied is not rolled back. If the duration completes, the
 command prints the normal rested result and stamps the current camp/rest marker.
 
@@ -1245,8 +1263,19 @@ scene context:
   On success the handler records which Shadowlord is now active (the handshake
   the destruction path checks), installs the Shadowlord as an active object
   **exactly two cells north of the party** in the party's current floor and
-  region, and plays the appearance line together with the long warble and the
-  fade-in effect. The actor takes the highest free active-object slot, searching
+  region, and then runs three steps one after another, not together
+  *(added 2026-10-16, issue #298 Q11)*: it prints `\nA_shadowlord_appears\n`
+  (lower-case `s` in `shadowlord`); it runs the blocking software envelope
+  `(2, 2000, 30000, 1, 10400)` in the `systems/audio.md` tuple order, the same
+  shape as the moongate-transit and possession envelopes at a higher period; and
+  it fades the actor in by setting the new record's actor byte to the
+  draw-nothing value `0x16`, running the shared single-cell converge
+  (`systems/audio.md` Section 8.3.1) on tile `0x1FC`, the Shadow Lord's first
+  frame, at viewport column 5, row 3 (the cell two rows above the party, where
+  the record stands), and then restoring actor byte `0xFC`. The converge costs
+  what Section 8.3.1 publishes. The handler then reports its normal success.
+  Source provenance: static reading, private analysis in
+  `u5-decomp/functions/CMDS_OVL/`. The actor takes the highest free active-object slot, searching
   downward from the last slot.
   Any of the three names works in any of the three keeps; the pairing is enforced
   later by the destruction position, not here. Wrong names, any other scene, a

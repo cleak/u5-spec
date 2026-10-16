@@ -541,9 +541,11 @@ Next work on this thread, in priority order:
 1. Capture the beat end to end and pin its real duration; the published five
    seconds is a floor computed from executed counts and excludes 73 viewport
    rebuild passes.
-2. Run the ambient audio tick against a loaded Blackthorn cutscene grid. Until
-   then no "the VM plays only stingers" statement is in scope
-   (`systems/audio.md` Section 11).
+2. Check the loaded Blackthorn cutscene grid for the ambient scenery tick's
+   four sources (grandfather clock, waterfall, fountain, drawn minstrel) inside
+   its 11-by-11 window; the tick itself is now published (`systems/audio.md`
+   Section 8.10, issue #298 Q16, 2026-10-16). Until then no "the VM plays only
+   stingers" statement is in scope (`systems/audio.md` Section 11).
 3. Establish whether town entry setup clears the cutscene flag the handoff
    leaves raised; if it does not, the moon/date and wind rows stay blank in the
    captive cell.

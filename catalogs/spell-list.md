@@ -261,7 +261,9 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
   shared `Failed!`, and Space prints only the prompt's own `Pass`. All three
   outcomes have already spent the charge and the mana. The combat arm asks for
   no direction and prints `Success!` or `Failed!` through the shared epilogue;
-  it gives up after seven candidate steps.
+  it gives up after seven attempts of the shared random arena probe
+  (`systems/magic.md` Section 8), each a uniform arena cell rather than a step
+  beside the caster *(added 2026-10-16, issue #298 Q3)*.
 - `AY`, `AS`, `AEP` and `EIP` form one directed-tile family. Each prompts for a
   direction, resolves the single orthogonally adjacent cell, tests that cell's
   live tile and rewrites it. The prompt origin is the party's map cell outside

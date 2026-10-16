@@ -332,7 +332,8 @@ which are engine-private art.
 | 360..363 | `0x68..0x6B` | townsperson | child |
 | 364..367 | `0x6C..0x6F` | townsperson | beggar |
 | 368..371 | `0x70..0x73` | townsperson | guard |
-| 372..375 | `0x74..0x77` | placeholder | placeholder |
+| 372 | `0x74` | named person | the camp apparition (the old man), drawn by the camp event of `systems/rest-and-camp.md` Section 7.1 *(added 2026-10-16, issue #298 Q10; the description table's own label stays a placeholder)* |
+| 373..375 | `0x75..0x77` | placeholder | placeholder |
 | 376..379 | `0x78..0x7B` | named person | Blackthorn |
 | 380..383 | `0x7C..0x7F` | placeholder | placeholder |
 | 384..387 | `0x80..0x83` | combat class band | sea horse |

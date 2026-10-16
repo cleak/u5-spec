@@ -444,10 +444,12 @@ Successful movement commits the avatar coordinate, marks the view dirty, and the
 The schedule tick is unconditional on consumed turns — every action that costs a turn advances NPCs by one tick — so an NPC walks at most one cell per player action.
 
 The Hole-up command (Section 12) is the one path that bypasses this cadence. It
-runs the schedule walker directly inside the rest handler while the requested
-hours are simulated. In the traced town-hours path, each requested rest hour can
-run up to sixteen walker/world-tick passes, so NPCs can move substantially more
-than once per requested hour if the rest is not interrupted.
+runs the schedule walker directly inside the rest handler. In the traced
+town-hours path it runs one burst of up to sixteen walker/world-tick passes at
+the current hour, with no clock advance, before anyone sleeps; the elapsed-time
+loop that follows runs no walker. *(Corrected 2026-10-16, issue #298 Q30: this
+previously said each requested rest hour can run up to sixteen passes -
+`RETRACTIONS.md` R538.)*
 
 ## 8. The player in town mode: one representation, not two
 
@@ -751,10 +753,18 @@ H-Hole-up is gated by terrain: in town mode it runs only when the player is stan
 
 When the rest is accepted, control hands off to the rest handler in a shared
 overlay. The handler prompts for hours, walks the party status records, and
-advances simulated rest through a caller-owned loop. For each requested hour the
-town-hours path can run up to sixteen schedule/world-tick passes, checking after
-each pass for a rest-interruption event. If an interruption fires, rest stops
-without rolling back elapsed side effects. If the requested duration completes,
+advances simulated rest through a caller-owned loop. After the duration digit
+is accepted and echoed with a line feed, the town-hours path runs one burst of
+up to sixteen schedule/world-tick passes at the current hour, with no clock
+advance, before anyone sleeps. If any pass leaves an arrest/conflict contact
+event (kind `0x61`), the command ends at once: no sleep status, no time passed,
+no further message; it returns the ordinary acted result, so the normal town
+epilogue follows and re-evaluates contact. A conversation-contact event (kind
+`0x74`) does not interrupt; the next burst pass clears it. Otherwise the party
+sleeps and time advances in ten-minute steps with no further schedule passes.
+*(Corrected 2026-10-16, issue #298 Q30: this previously described a burst per
+requested hour and an interruption after elapsed time - `RETRACTIONS.md`
+R538.)* If the requested duration completes,
 sleeping members are restored to good status before control returns to the town
 loop. The town-bed path does not contain its own HP/MP recovery block; recovery
 claims belong in `systems/rest-and-camp.md` and time-driven effects such as the
@@ -1104,7 +1114,10 @@ A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). 
 
 NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an engagement event, town post-action cleanup can open ordinary conversation or a shop, handle a regime demand, or take the arrest, frighten, conflict or slot-clear paths described below; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
 
-Town alarms are one-shot sweeps over the NPC roster. They examine all 32 slots
+Town alarms are one-shot sweeps over the NPC roster. The sweep is reached by
+refusing arrest, by attacking in town, and by the conversation control code
+`0x8B` (`systems/conversation.md` Section 7.5), which runs it with no arguments
+in the middle of an NPC's line *(added 2026-10-16, issue #298 Q14)*. They examine all 32 slots
 and skip only a slot whose runtime occupancy word is zero. Occupied actors use
 nonzero states even when assigned to a floor other than the player's current
 floor, so the alarm reaches the entire occupied roster across all floors.
@@ -1362,8 +1375,10 @@ at slot fifteen after.
 **NPC schedules.** Town mode invokes the schedule processor once per ordinary
 consumed turn. The explicit-T arrest-cleanup result is the one exception: it
 skips the processor and enters arrest cleanup after the common time and
-underfoot work. The H-Hole-Up hours path invokes the same scheduler from inside
-its rest simulation loop, up to sixteen times per requested rest hour.
+underfoot work. The H-Hole-Up hours path invokes the same scheduler in one
+burst of up to sixteen passes before the party sleeps, not per requested rest
+hour (Section 12). *(Corrected 2026-10-16, issue #298 Q30 - `RETRACTIONS.md`
+R538.)*
 
 **Conversation.** The Talk command hands the dialogue engine the NPC's dialogue index; the engine runs a self-contained per-NPC loop until the player exits.
 
