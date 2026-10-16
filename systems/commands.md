@@ -254,7 +254,13 @@ specified in `text-output.md` section 10.2, and the end-cap composite itself in
 
 ### 5.2 Verb echo literals
 
-Outdoor movement prints its compass word followed by a newline. An accepted
+Outdoor movement prints its compass word followed by a newline, with vehicle
+exceptions: a horse, carpet or skiff prefixes it (`systems/vehicles.md` Section
+6); a frigate key that changes the ship's facing prints `Head <Dir>` instead and
+does not move; a frigate with sails hoisted never prints the compass word, for a
+pressed or a synthesised step; and a furled frigate prints the compass word and
+then `Rowing!` on the next line. *(Corrected 2026-10-16, issue #297;
+`RETRACTIONS.md` R524: the sentence previously had no ship exception.)* An accepted
 step onto difficult terrain can then print `Slow progress!\n` or
 `Very slow!\n` directly beneath it, without a leading blank row. The complete
 tile sets, extra time/object updates, transport behavior and hostile-interaction

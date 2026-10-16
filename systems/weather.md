@@ -233,12 +233,23 @@ Wind-driven sailing should be treated as discrete turn cadence, not continuous
 velocity. The intended cleanroom model is a state-and-counter decision made by
 the overworld turn loop, not a physics vector.
 
-When sails are hoisted, a movement command first establishes or changes the
-ship's heading. If the requested heading differs from the current cached sail
-direction, the ship turns and clears the sailing counter; that action does not
-also move the ship. Once the requested direction matches the cached heading,
-the input helper can synthesize repeated movement commands from the cached
-direction until the cache is cleared or replaced.
+When sails are hoisted, a movement command stores the requested heading in the
+cached sail direction, zeroing the sailing counter if it differs from the cached
+one. Whether the ship turns or moves is decided against the ship's **facing**,
+not the cache. If the key changes the facing, the ship turns in place, prints
+`Head <Dir>` (plus `Hull weak!` below hull 50) and does not move. If the facing
+is unchanged, the step is attempted on that same command in any non-calm wind,
+even upwind, and in calm wind the command is consumed silently. That
+same-command step is reachable only while the cache is empty - just after
+hoisting, after an under-sail refusal, or after Sheets in irons - because in
+steady sailing the cache equals the facing and a pressed key equal to it is
+swallowed by the input helper's auto-advance loop (`systems/timing.md` Section
+8.2), where the cadence table below decides the move. The input helper then
+synthesises repeated movement commands from the cached direction until the cache
+is cleared or replaced. A wait pass prints nothing from the sailing logic.
+*(Corrected 2026-10-16, issue #297; `RETRACTIONS.md` R525: this paragraph said a
+heading differing from the cache turns the ship and movement follows once the
+key matches the cache.)*
 
 Wind labels are source-direction labels. A "West" wind is wind coming from the
 west and pushing east. The hoisted-sail player ship uses that push vector as

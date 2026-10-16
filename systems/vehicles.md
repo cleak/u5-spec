@@ -382,7 +382,15 @@ the direction word:
 | Mounted horse | "Ride" |
 | Magic carpet | "Fly" |
 | Skiff | "Row" |
-| Frigate (either sail state) | No prefix in town-family scenes; on the overworld a frigate turning in place announces with "Head". |
+| Frigate (either sail state) | No prefix in town-family scenes. On the overworld a key that changes the facing prints `Head ` plus the direction word and a line feed (for example `Head West`), turns the ship in place without moving it, and consumes a full turn, in calm wind too. A key that keeps the facing prints nothing under hoisted sail. Furled, it prints the plain compass word followed by a `Rowing!` line, and a refused furled step takes the ordinary on-foot refusal (normally `Blocked!` with the beep). |
+
+**Hull warning.** Immediately after a `Head <Dir>` line, if the hull condition is
+below 50 (0 to 49), the game prints `Hull weak!`. It prints on every frigate
+facing change in either sail state, and on nothing else. Under hoisted sail a
+step prints nothing on open water, `BREAKING UP!` and the hull roll on shoal,
+`Docked!` (and the sails furl) at a pier, and `COLLISION!` and the hull roll for
+any other refusal; a wait pass for the wind prints nothing from the sailing logic.
+*(Added 2026-10-16, issue #297.)*
 
 The same step updates the marker's facing. Horse and carpet carry only two
 sprite frames each, so only an east or a west step rewrites the frame; a north
