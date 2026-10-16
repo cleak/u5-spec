@@ -1601,8 +1601,14 @@ followed by `Falsehood...`, `Hatred...` or `Cowardice...`. A wrong destruction
 position adds `\n\nNo effect!\n`. At the matching position, the next text is
 `\n\n...and cast it into the Flame of_` followed by `Truth!\n`, `Love!\n`
 or `Courage!\n` respectively. The later actual Shadowlord destruction adds
-`\nThe doom of the Shadowlord_`, the matching name Faulinei, Astaroth or
-Nosfentor, then `_is wrought!\n`. The flame sentence precedes the
+`\nThe doom of the Shadowlord_`, the matching name `Faulinei`, `Astaroth` or
+`Nosfentor`, then `_is wrought!\n`. The name is printed exactly as stored -
+capital first letter, the rest lower case - and comes from its own three-entry
+set chosen directly by the shard index. It is **not** the Yell keyword table
+(`catalogs/quest-graph.md` Section 5), which holds the same names in capitals and
+is never read here; the ordinary message printer wraps the sentence like any
+other text (that the printer keeps the case and wraps is static reading).
+*(Clarified 2026-10-16, issue #298 Q34.)* The flame sentence precedes the
 Shadowlord-presence test; it alone does not establish successful destruction.
 
 The Resurrection scroll and non-combat potion share **`On who:_`**. The

@@ -153,6 +153,12 @@ saved story-item flag checked by the terminal overlay's victory branch.
 The three evil shards are a separate but intertwined chain. Conversation
 identifies both the shards and the Shadowlord names needed to destroy them.
 
+The Name column gives the **Yell keywords**, stored in capitals and compared
+with the shared case-folding matcher of `systems/commands.md` Section 11.3. The
+destruction doom line prints a separate mixed-case set (`Faulinei`, `Astaroth`,
+`Nosfentor`; `systems/inventory.md` Section 7.1). *(Clarified 2026-10-16, issue
+#298 Q34.)*
+
 | Shadowlord | Name | Name or shard clue sources | Opposed principle | Destruction target |
 |---|---|---|---|---|
 | Falsehood | `FAULINEI` | Lord Shalineth, Ava, Leona, Lady Janell | Truth | Flame of Truth |

@@ -518,7 +518,8 @@ The `0x88` match rule is worth stating exactly, because it is looser than the
 top-level keyword match. For each party slot below the current party-count byte,
 in order, the engine takes the **first four characters** of that member's name
 and searches for them as a substring of the typed line, folding case on both
-sides. Only the **first** occurrence found is tested. It is accepted at the start
+sides, through the shared matcher of `systems/commands.md` Section 11.3, whose
+restart rule decides which occurrence is found first. Only the **first** occurrence found is tested. It is accepted at the start
 of the line or immediately after a literal space; when it is rejected - a hit in
 the middle of a longer word - the engine abandons that member and moves on to the
 next slot rather than looking for a later, qualifying occurrence of the same name

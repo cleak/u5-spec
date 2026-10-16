@@ -634,7 +634,8 @@ exercising the calibration threshold at twelve values on both sides of it.
 
 The location has already selected the shrine's virtue; typing another virtue
 does not redirect the meditation. The virtue answer is tested with the shared
-case-insensitive substring matcher against the shrine's four-letter key:
+case-insensitive substring matcher (`systems/commands.md` Section 11.3, including
+its restart quirk) against the shrine's four-letter key:
 `hone`, `comp`, `valo`, `just`, `sacr`, `hono`, `spir`, or `humi` in the table's
 virtue order. Each mantra answer uses that same matcher against the shrine's
 expected mantra. A wrong nonblank answer does not end the prompts early.
@@ -812,8 +813,12 @@ answer:
 3. Print the same mantra prompt and read a second time.
 4. Print it and read a third time.
 
-Matching is case-insensitive substring matching: the required virtue or mantra
-may occur anywhere in a longer response. The virtue response and **all three**
+Matching is case-insensitive substring matching through the shared matcher of
+`systems/commands.md` Section 11.3: the required virtue or mantra may occur
+anywhere in a longer response, **except** where it starts inside a failed partial
+match of itself (`hhone` fails against `hone`; `honesty` and `I seek honesty`
+match). *(Corrected 2026-10-16, issue #298 Q34; `RETRACTIONS.md` R553: the
+sentence previously had no exception.)* The virtue response and **all three**
 mantra responses must match. Any wrong or empty response permanently fails the
 interaction, although all remaining prompts are still shown. Escape is not a
 cancel result: it erases the current field and leaves that field active until

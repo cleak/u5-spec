@@ -1301,7 +1301,10 @@ combat follows the prompt, never the sail toggle.
 ### 11.1 The Word-of-Power seal predicate
 
 The command scans the eight dungeon Words of Power in their fixed order and
-takes the first prefix match. A recognised word immediately prints the
+takes the first one the shared text matcher of Section 11.3 finds anywhere in
+the typed line - a substring match, not a prefix match. *(Corrected 2026-10-16,
+issue #298 Q34; `RETRACTIONS.md` R552: this sentence said "the first prefix
+match".)* A recognised word immediately prints the
 uttered-word result and plays the shared low-rumble / full-viewport flash
 presentation effect, before any location test. An unrecognised word prints the
 no-effect result and nothing else happens.
@@ -1385,6 +1388,29 @@ Two consequences an implementation must honour:
   dungeon when the region reloads.
 - The mutation is a genuine toggle. Speaking the same word again while standing
   beside an already-open entrance clears the flag and re-seals the entrance.
+
+### 11.3 The shared text matcher
+
+*(Added 2026-10-16, issue #298 Q34; executed on the original's matcher.)* Yell's
+Shadowlord branch, the Word-of-Power scan of Section 11.1 and the shrine
+meditation answers (`systems/karma.md` Section 7) all compare the typed line
+with a keyword through one shared matcher, and the conversation code calls the
+same matcher (`systems/conversation.md` Section 7.6). Its contract:
+
+- Bit 7 is stripped and letter case is ignored on both sides.
+- It searches for the keyword **anywhere** in the line, so `SAY FAULINEI NOW` and
+  `XFAULINEI` match `FAULINEI`, while `FAULINE` does not.
+- **Restart quirk.** When a partial match of k characters starting at position p
+  fails, the next attempt starts at p + k + 1, never trying the positions in
+  between. A keyword whose start overlaps such a failed partial match is
+  therefore missed: `FFAULINEI`, `FAFAULINEI` and `FAULFAULINEI` fail, while
+  `AFAULINEI` and `FAXFAULINEI` match; against the shrine key `hone`, `hhone`
+  and `hohone` fail while `honesty` and `I seek honesty` match. An
+  implementation that uses an ordinary substring search accepts inputs the
+  original rejects.
+
+Yell's Shadowlord branch tests its three capitalised names in index order and
+the first match wins.
 
 ## 12. Cross-References
 
