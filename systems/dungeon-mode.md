@@ -2406,24 +2406,88 @@ epilogue and no spawner that writes monsters into adjacent cells
 **single active dungeon monster** of Section 4.1, rolled by dungeon view
 initialisation — on entry and again after every wandering-monster fight — and
 placed by that helper's up-to-eight random attempts on the current level.
-The per-turn epilogue only *steps* that one monster toward the party. Combat
+The per-turn epilogue only *steps* that one monster (a random walk, see below). Combat
 begins on A-Attack or on the contact/auto-face path below. An earlier revision
 of this paragraph described a per-turn encounter roll spawning monsters in
 adjacent cells; that is withdrawn.
 
-After a successful dungeon action, the active monster can step toward the
-party. If that step makes it adjacent, the dungeon post-action hook can rotate
-the party to face the threat and launch combat without waiting for an explicit
-A-Attack.
+After a successful dungeon action, the active monster takes one step (below).
+If the step reports contact - which happens only when the monster's current
+cell at the end of the step is the party's own cell - the dungeon post-action hook
+can rotate the party to face the threat and launch combat without waiting for an
+explicit A-Attack. The step itself has no adjacency test. *(Corrected 2026-10-16,
+issue #298 Q33: earlier text had the monster step "toward the party" and fire
+when the step "makes it adjacent"; that is retracted, `RETRACTIONS.md` R551.)*
 
-The active monster step is a wrapped, randomized greedy move over the current
-8-by-8 level. Stationary monster presentation ids skip movement. Otherwise the
-helper tests a small randomized set of cardinal step candidates, rejects pit
-cells, sleep-field cells, and wall/door-class cells, and prefers a candidate
-that reduces distance to the party. A committed step updates the paired
-dungeon active-object slots so the renderer sees the old and new positions
-consistently. If the chosen candidate is the party's cell, the helper returns a
-contact flag instead of merely moving the object.
+**The active monster step is a random walk, not a pursuit.** *(Added/corrected
+2026-10-16, issue #298 Q33.)* It runs over the current 8-by-8 level and never
+compares distances; the party's position matters only in the final contact test.
+The monster has two stored positions, its **current** cell and its **previous**
+cell (where it stood before its last accepted step); these are the paired dungeon
+active-object positions the renderer reads, so it sees the old and new positions
+consistently.
+
+- **No active monster.** When the active monster slot holds the empty marker
+  (a presentation byte of all ones), the step makes no draws, does not move and
+  reports no contact.
+- **Stationary presentation.** Exactly one presentation value is treated as
+  stationary. For it the step makes no draws and does not move, but it still
+  runs the contact test below. Which of the eight Section 4.1 families carries
+  that value is not yet published (`OPEN-QUESTIONS.md` section 3), so an
+  implementation cannot yet name the stationary family. Earlier text spoke of
+  stationary presentation ids in the plural; there is only one.
+- **Otherwise, up to eight attempts,** stopping at the first one accepted:
+  1. Draw `random_range(0, 3)` from the shared gameplay generator. The value is
+     a cardinal in the party-facing convention of Section 3: 0 north (Y - 1),
+     1 east (X + 1), 2 south (Y + 1), 3 west (X - 1).
+  2. The candidate is the cell one step that way from the current cell, wrapping
+     on the 8-by-8 level (7 + 1 becomes 0, 0 - 1 becomes 7). Its class is read
+     from the party's current level.
+  3. Reject the candidate, with no further draw, if its class (Section 3 table)
+     is the pit/trap family `0x6?`, the energy field `0x8?` (all four
+     sub-types, not only sleep), or anything from `0xA?` up (room-helper state,
+     walls, doors and room triggers). Nothing else is rejected: `0x9?`, chests,
+     open chests, fountains, ladders and passage are all acceptable.
+  4. If the candidate is the stored previous cell, draw `random_range(0, 7)` and
+     accept only on a result of exactly 1; any other result rejects it. Any
+     other candidate is accepted at once, with no second draw.
+  5. On acceptance the current cell becomes the stored previous cell, the
+     candidate becomes the current cell, and the attempts end.
+
+  Attempts are independent draws with replacement: a direction can repeat, and
+  nothing guarantees that all four get tried. After eight rejections the
+  monster stays put, its stored previous cell is unchanged, and no further
+  draw is made.
+- **Draw count.** The empty and stationary cases make no draws. Otherwise a
+  step makes one `0..3` draw per attempt plus one `0..7` draw for each attempt
+  whose candidate passed the class test and was the previous cell: at least 1,
+  at most 16, and exactly 8 when all four neighbours are rejected classes.
+- **Contact.** After the attempts (or after the stationary skip), if the
+  current cell is the party's cell, the step reports contact and copies the
+  stored previous cell into the current cell; the previous cell is not changed.
+  When the contact comes from an accepted step onto the party, both stored
+  positions therefore hold the cell the monster started from, and the monster
+  never occupies the party's cell. If the party were on the monster's cell
+  without an accepted step (after eight rejections, or in the stationary case),
+  the same rule moves the monster to its older previous cell rather than
+  leaving it in place; that case is inferred, not executed, to be unreachable
+  in normal play, because the party cannot normally stand on the monster's
+  cell. Apart from this test the party's cell is an ordinary candidate: it
+  passes or fails the class test like any other, and if it is the previous
+  cell it also needs the 1-in-8 roll.
+
+*Evidence:* the draw ranges, direction mapping, rejection classes, backtrack
+roll, eight-attempt cap and contact rule were established by executing the
+shipped step routine under emulation against the shipped direction table and
+the resident generator, in 3000 randomized scenarios that matched this model in
+every draw, its range and value, the final generator state, the contact result
+and both stored positions; a full static reading confirms the routine has no
+distance or party comparison other than the contact test. All executed
+scenarios used level 0, so reading the candidate's class from the party's
+current level is static reading only. Earlier text called this "a wrapped,
+randomized greedy move" that "prefers a candidate that reduces distance to the
+party", tested "a small randomized set" of candidates and rejected only
+sleep-field cells among fields; that is retracted, `RETRACTIONS.md` R551.
 
 When that contact flag is set, dungeon mode determines the cardinal direction
 from the party to the active monster using wrapped adjacency, prints the
@@ -2837,6 +2901,10 @@ The behaviour described here was derived by reading the private function notes l
 - The dungeon active-monster step, auto-facing contact path, and automatic
   dungeon-combat launch bracket -- derived from
   `u5-decomp/functions/DUNGEON_OVL/`.
+- The active-monster step's random-walk contract in Section 14 (issue #298 Q33,
+  2026-10-16) - derived from emulated execution of the shipped step routine
+  over 3000 randomized scenarios and a full static reading, recorded in private
+  analysis under `u5-decomp/notes/`.
 - The destination passability test shared by the dungeon level-change routes,
   which Section 13.1 records as enforced for the level-change spells and skipped
   by K-Klimb, is derived from

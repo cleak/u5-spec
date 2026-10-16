@@ -47,7 +47,7 @@ Each record's eight bytes are interpreted as follows. Different systems read dif
 |   4  | `z`          | World floor (or vertical layer). For the overworld, this is the surface/underworld marker.                        |
 |   5  | `dep1`       | Auxiliary state byte. For ship/frigate objects this is hull condition; otherwise class-specific. For the whirlpool family, bit 0 is the movement parity bit; for the Shadow Lord class it is a proximity counter (Section 8; added 2026-10-16, issue #298 Q2/Q21). |
 |   6  | `phase`      | Packed animation byte: frame-delay countdown (low nibble) and animation-script step (high nibble). Carries **no facing**. Advanced by the animator. |
-|   7  | `dep3`       | Auxiliary flag/aux byte. For ship/frigate objects this is skiffs aboard; otherwise class-specific.                |
+|   7  | `dep3`       | Auxiliary flag/aux byte. For player frigate objects (`0x20..0x27`) this is skiffs aboard, written by the board and X-it paths. For the pirate-ship family `0x2C..0x2F` it is the wind cadence counter (`systems/weather.md` Section 7). Otherwise class-specific. Spawning does not write it (see "Auxiliary bytes 5 and 7" below). *(Corrected 2026-10-16, issue #298 Q32: this row previously gave skiffs aboard for all ship objects, which is withdrawn for `0x2C..0x2F` - `RETRACTIONS.md` R549.)* |
 
 Dungeon first-person mode is a deliberate exception to the generic empty-slot
 test. It reuses one eight-byte record in this table for its wandering monster,
@@ -155,9 +155,21 @@ The tile-class gate is therefore *downstream* of the decrement, not upstream of 
 *Corrected (issue #184).* This paragraph previously said the high nibble "holds a direction-step counter that AI movement uses". That reading is withdrawn: the high nibble is an animation-script step, byte 6 carries no facing anywhere, and a producer that writes a facing into it is not byte-compatible. In particular the freeze sentinel is **not** the player's stored value: the shipped player record carries zero in byte 6. See `RETRACTIONS.md` row R340.
 
 **Auxiliary bytes 5 and 7.** Different systems use these slots differently. For
-ship/frigate objects, byte 5 is hull condition and byte 7 is the carried-skiff
-count; boarding copies both into the active vehicle state, X-it writes them
-back to the parked ship object, and broadsides decrement byte 5 on hit. The
+player frigate objects (`0x20..0x27`), byte 5 is hull condition and byte 7 is
+the carried-skiff count; boarding copies both into the active vehicle state,
+X-it writes them back to the parked ship object, and broadsides decrement byte 5
+on hit. For the pirate-ship family `0x2C..0x2F`, byte 5 is hull condition (100
+at spawn) and byte 7 is the wind cadence counter (`systems/weather.md`
+Section 7). A spawned pirate ship always starts on the north frame `0x2C`. The
+record write used at spawn covers only bytes 0 through 5, and the off-screen
+prune also clears only bytes 0 through 5, while slot allocation writes nothing
+to the record; so byte 7 of a new object keeps whatever its slot last held,
+whether the slot was freed, pruned, or taken by evicting a live low-priority
+occupant. In particular a slot that last held a frigate hands its skiff count
+to a new pirate ship as that ship's starting cadence counter. *(Corrected
+2026-10-16, issue #298 Q32: this paragraph previously gave byte 7 as the
+carried-skiff count for all ship objects; for `0x2C..0x2F` that is withdrawn -
+`RETRACTIONS.md` R549.)* The
 F-Fire broadside path also treats byte 5 as an unsigned depletion counter for
 any struck active object: a hit subtracts `1..20`, and if the subtraction wraps
 into the high-bit range the command clears the hit slot. This hit-resolution
@@ -541,9 +553,10 @@ distance-shaped tests in them are the ones this section already publishes (the
 orthogonal adjacency test, the breath/broadside proximity tests, the Shadow Lord
 proximity mask, and the off-screen prune). The whirlpool branch and the Shadow
 Lord branch have now been read: the whirlpool branch has no distance test, and
-the Shadow Lord branch's only one is the proximity mask below. The ship-like
-frames' wind cadence was not re-derived, so a distance test inside it is not
-excluded. *(Added 2026-10-16, issue #298 Q2/Q21.)*
+the Shadow Lord branch's only one is the proximity mask below. *(Added
+2026-10-16, issue #298 Q2/Q21.)* The ship-like frames' wind cadence branch has
+now been read and has no distance test. *(Corrected 2026-10-16, issue #298
+Q32; this narrows the earlier hedge and withdraws nothing.)*
 
 The adjacency reaction is likewise ungated: it is evaluated before any class
 test and behind no roll. That is why an adjacent hostile engages on the *first*
@@ -701,7 +714,10 @@ the slot moves on the turns where the bit clears; it moves on the turns where
 it is set - `RETRACTIONS.md` R533.)* Ship-like water-creature and
 pirate frames first pass through the wind cadence table owned by `weather.md`;
 once that cadence permits movement, they use the same directed step planner as
-land monsters.
+land monsters. On this dispatch, each committed step rewrites the ship's type
+and displayed-tile bytes to the step's heading (`0x2C` north, `0x2D` east,
+`0x2E` south, `0x2F` west); ship moves reached from other paths were not
+examined. *(Added 2026-10-16, issue #298 Q32.)*
 
 > *Corrected (2026-08-23).* Two things this section said are withdrawn.
 >
@@ -1226,6 +1242,14 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/COMSUBS_OVL/`.
 - The F-Fire and ship-broadside projectile traces -
   `u5-decomp/functions/CMDS_OVL/`.
+- Source provenance (issue #298 Q32, 2026-10-16): the pirate-ship family's use
+  of byte 7 as the wind cadence counter, the per-step heading rewrite on the
+  overworld movement dispatch, the north-facing spawn with hull 100, the spawn's
+  and the prune's six-byte record write, and the allocator writing nothing to the
+  record are derived from private analysis in `u5-decomp/notes/`, by static
+  reading of the movement dispatch, the step committer, the encounter spawner,
+  the shared record writer and the allocator. The byte-7 census counts direct
+  references only.
 - Vehicle byte interpretation for ship boarding, X-it parking, and broadside
   damage -- `u5-decomp/functions/CMDS_OVL/`, and
   `u5-decomp/functions/CMDS_OVL/`.

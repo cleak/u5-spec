@@ -526,6 +526,31 @@ its key wait, too, comes after that punishment's repaint. The lone-survivor arms
 execute nobody and repaint nothing.
 `systems/stats-panel.md` Section 2.4.
 
+**The blade hold is not a key wait, and a capture must not be driven through
+it.** Steps 2-4 keep the reaction record on screen for several seconds with
+the full party listed, no text moving and no key-wait cursor, so they look
+like a held page; they are not one. Re-checked live on the stock game (party
+of three, both branches): on a correct answer the companion leaves the stats
+panel at the end of the blade-and-impact hold, in the same screenshot sample
+(about half a second) in which the exit beat's key-wait cursor first appears,
+and the panel stays reduced for the whole of that held page; on the fourth
+wrong answer the panel lists the whole party through the pendulum-narration
+page and the blade, and the reduced party first appears in the same
+screenshot sample as the `... is sliced in half!` page, which then waits for
+the key. The capture interval cannot order events inside that half second;
+the finer order - repaint, then the name text, then the key wait - is from
+static reading. On the correct-answer branch a key pressed during the blade
+hold is buffered and satisfies the exit beat's acknowledgement as soon as
+that wait begins, so the held page does not visibly hold, while the panel
+drop still lands at the end of the impact presentation and not at the key
+(executed once). Whether a buffered key likewise cuts short the wrong-answer
+branch's `sliced in half` wait was not tested (`OPEN-QUESTIONS.md` Section 2). A
+conformance capture of this beat must send no input until the key-wait cursor
+is shown, and then read the panel. *(Added 2026-10-16, issue #298 Q31; no
+published claim changes. Source provenance: live DOSBox runs on the stock
+unpatched game at the Honesty shrine and static reading, recorded in
+`u5-decomp/notes/`.)*
+
 **The punishment is an execution, and it is durable.** Earlier revisions of this
 section described only "a punishment animation" and "a dragged-away victim" and
 omitted the consequence entirely. The victim is the second nondead party

@@ -222,8 +222,13 @@ On success, the spawner acquires or evicts an active-object slot and initializes
 it as a monster record with tile, tile mirror, X, Y, current Z plane, and a
 zero auxiliary byte. The picked base frame is written into **both** the type byte
 and the frame byte. Only the ship/pirate water-creature family `0x2C..0x2F`
-receives the auxiliary value of one hundred that seeds the outdoor
-animation/wander counter. (*Corrected:* an earlier revision of this paragraph
+receives the auxiliary value of one hundred, and it lands in record byte 5, the
+ship's hull condition; the spawner always picks that family's north frame
+`0x2C`. The ship's wind cadence counter is record byte 7, which the spawn's
+record write (bytes 0 through 5) does not touch (`systems/weather.md` Section 7,
+`systems/active-objects.md` Section 3). *(Corrected 2026-10-16, issue #298 Q32:
+this sentence previously said the hundred "seeds the outdoor animation/wander
+counter"; that is withdrawn - `RETRACTIONS.md` R550.)* (*Corrected:* an earlier revision of this paragraph
 said "sea-creature class spawns" receive it, which reads as covering the squid,
 shark and sea-serpent runs as well. That is withdrawn; the payload-family table
 below already stated the narrower rule correctly.)
@@ -316,7 +321,7 @@ The currently named payload families are:
 
 | Payload family | Public interpretation |
 |---|---|
-| `0x2C..0x2F` | Pirate-ship / water-creature facing frames. The spawner seeds the auxiliary wander counter for this family and rejects its first frame on shore/harbor high-nibble terrain. |
+| `0x2C..0x2F` | Pirate-ship / water-creature facing frames. The spawner sets this family's hull byte (byte 5) to 100, leaves its cadence counter (byte 7) as the slot held it, and rejects its first frame on shore/harbor high-nibble terrain. *(Corrected 2026-10-16, issue #298 Q32: previously "seeds the auxiliary wander counter" - `RETRACTIONS.md` R550.)* |
 | `0x80..0x83` | Sea Horse sprite run. |
 | `0x84..0x87` | Squid sprite run. |
 | `0x88..0x8B` | Sea Serpent sprite run. Its **first frame only**, `0x88`, is one of the two classes that fire the outdoor breath attack; see `systems/overworld.md` Section 6.2. |

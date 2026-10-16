@@ -404,6 +404,44 @@ cadence counter is persisted with the object, so it survives save and reload.
 "Every turn" bypasses the counter and immediately allows the slot's movement
 helper to run.
 
+**Frames, headings and the counter byte (added 2026-10-16, issue #298 Q32).**
+The four frames are the ship family's four headings, in the frigate
+convention: the low two bits of the type byte are `0` north (`0x2C`), `1` east
+(`0x2D`), `2` south (`0x2E`), `3` west (`0x2F`). The table rows above are
+correct as labelled, and the table itself was re-read from the shipped data
+and matches cell for cell, with wind values 1 to 4 as North, South, East and
+West. The row is selected by the type byte (record byte 0), not by the
+displayed-tile byte. On the overworld movement dispatch, every step a ship
+commits rewrites both the type byte and the displayed-tile byte to the family
+base plus that step's heading (a step one row up is north, one column right
+east, one row down south, one column left west), before the position changes;
+ship moves made by any other path were not examined. A newly spawned pirate
+ship always starts on the north frame.
+
+The cadence counter is the whole of active-object record byte 7, read as one
+unsigned byte; byte 6 and every other byte play no part. Each pass of the ship
+branch runs in this order:
+
+1. Calm wind: no move, and the counter is not touched.
+2. An "every turn" entry: the slot moves, and the counter is not touched.
+3. Any other entry: the counter is incremented first, with byte wrap (255
+   becomes 0). If the new value is no greater than the cap (2 for "2 of 3", 3
+   for "3 of 4") the slot moves; otherwise the counter is set to zero and the
+   slot does not move on that pass.
+
+A change of facing or of wind does not reset the counter, and the ship branch
+contains no distance test. Because byte 7 is part of the eight-byte record, and
+both the saved active-object table and the per-plane object lists store whole
+records, the counter survives save and reload. Spawning does not initialise it:
+a new ship inherits whatever byte 7 its slot last held, which can be a carried
+skiff count left by a frigate or another family's auxiliary value
+(`systems/active-objects.md` Section 3). An inherited value at or above the cap
+makes the first capped pass skip and reset; an inherited 255 wraps to 0, so the
+ship moves on that pass. A byte-compatible implementation keeps byte 7 as the
+slot left it; one that does not need byte compatibility can start the counter
+at zero. What the branch does with a wind value outside `0..4` (Section 2 keeps
+such values on round-trip) is not established.
+
 After the cadence allows a movement attempt, `active-objects.md` owns the
 actual step-selection and validation behavior. Weather owns only the wind-state
 gate and cadence table.
@@ -498,3 +536,12 @@ The behavior described here was derived from cleanroom reading of the following 
   census scope is the shipped executable, all twenty-three code overlays and all
   four display drivers. No wall-clock timing was measured, so every interval
   statement in Section 2.1's drift subsection is inferred from per-tick cadence.
+- Source provenance (issue #298 Q32, 2026-10-16): the ship frames' heading
+  convention, the per-step rewrite of both tile bytes, the north-facing spawn,
+  the identification of record byte 7 as the cadence counter with its
+  increment-compare-reset order, and the spawn's failure to write byte 7 are
+  derived from private analysis in `u5-decomp/notes/`, by static reading of the
+  overworld movement dispatch, the step committer, the encounter spawner and the
+  shared record writer. The cadence table was re-read from the shipped data
+  overlay. The census of byte 7's users counts direct references only, so an
+  access made through a pointer is not excluded.

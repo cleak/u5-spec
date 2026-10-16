@@ -3554,7 +3554,8 @@ helpers into clean prose: sleep fields are per-member one-shot contact hazards
 that rewrite the live field cell to its visit marker, poison fields are
 per-member repeat hazards, pit chains can immediately enter a room trigger
 after landing, and the active dungeon monster uses wrapped randomized greedy
-movement before the auto-facing dungeon-combat launch bracket. Exact direction
+movement before the auto-facing dungeon-combat launch bracket. *(Superseded 2026-10-16, issue #298 Q33: the step is a
+random walk with no distance test; see `RETRACTIONS.md` R551.)* Exact direction
 strings and distance-threshold parity remain verification-only items; the later
 pit-chain handoff cleanup covers the off-bottom state mutation.
 

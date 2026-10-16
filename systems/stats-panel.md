@@ -291,7 +291,11 @@ the cause is the order of that routine's own work:
   narration-and-animation hold, and on the wrong-answer branch the victim leaves
   the panel **between** the pendulum-narration page and the page that names
   them, which is the page that waits for the key. `systems/blackthorn.md`
-  Section 5.
+  Section 5. Confirmed live on the stock game for both branches; a capture
+  that appears to show the drop only after a key is most likely one in which a
+  key was pressed during the blade hold, which is not a key wait, or sent as
+  type-ahead *(added 2026-10-16, issue #298 Q31; the cause of that capture is
+  inferred, see `OPEN-QUESTIONS.md` Section 2)*.
 - **The shrine offering** repaints inline immediately after the gold debit and
   before the announcement page is printed, and raises no request at all; its key
   waits are all earlier. `systems/karma.md` Section 7.
