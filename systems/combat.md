@@ -2070,9 +2070,20 @@ prompt. `Enter what?` is the **world** command's answer for `E` with nothing to
 enter; the arena parser never prints it, and its choice of tail does not read the
 entry mode. Checked 2026-10-12 (issue #289) by pressing every letter in live
 arenas of four kinds - overworld terrain, dungeon room trigger, dungeon contact and
-a dwelling attack - with identical results in all four. Not run: the dungeon
-A-Attack-forward arena (it shares the contact arena's mode), separate town and
-castle attacks, and `E` after victory or after the party has left the arena.
+a dwelling attack - with identical results in all four - and on 2026-10-16 in the
+dungeon attack-forward arena, a town attack arena, a camp-ambush arena, an arena
+with no foes from the start, and after the victory announcement while members
+remain in the arena (also with one member left): all print `Enter-Not here`
+followed by the banner. Once the last party member has walked off the arena's
+edge the next prompt is the world's, so `E` there prints `Enter what?` with no
+banner, while the arena's closing lines are still in the message pane above it;
+the same holds after an attack that kills a sleeping townsperson outright
+(`Murdered!`, observed once), which enters no arena. That the first prompt after
+an accepted Escape is also the world's is inferred from the exit path, not
+observed. A blocked arena move (`Blocked!`) re-prompts without the banner, so "no
+banner" marks the world only for refused letters. Not run: a separate castle
+attack arena, walking out of a dungeon room, `E` after a party wipe, and `E`
+typed during the victory or exit transition.
 
 The remaining letters call their targets directly, as the table below records.
 

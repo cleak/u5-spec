@@ -1184,10 +1184,20 @@ and `u5-decomp/notes/`, issue #225.
 Issue #231 reports a silent arena armour refusal. The traced body-armour
 gate above is explicitly voiced while combat remains undecided. An arena
 that starts empty already has its announcement guard set (combat Section 7),
-so that gate is lifted and ordinary equip/unequip rules apply. The reported
-unchanged equipment still needs the selected item, equipped-slot before/after
-state and initial foe census to distinguish it from another outcome. The
-published voiced refusal is retained pending that reconciliation.
+so that gate is lifted and ordinary equip/unequip rules apply. Full-game
+captures of the original (2026-10-16) confirm both states. In an arena whose
+initial census held a foe, picking the worn body armour, and picking a different
+carried body armour, each printed `Thou canst not change armour in heated
+battle!` in the ordinary refusal framing, left the slot unchanged and stayed on
+screen at the next prompt. In an arena that started with no foes, unequipping the
+worn body armour and readying a carried one into the empty slot were both silent
+and both took effect; a second body armour over a worn one gave the ordinary
+`Thou must first remove thine other armour!`. In every captured case a silent
+body-armour pick was a successful change, not a refusal; the reported "silent and
+unchanged" did not reproduce. Readying a carried body armour into an empty slot
+in a foe arena, and the after-victory arena, were not captured (static reading
+says the latter behaves like an initially empty one). Slot state was read from
+the picker's worn marker and pack counts.
 
 ## 6. R-Ready Eligibility And Writes
 

@@ -1333,10 +1333,24 @@ Verified on the original (2026-10-12, issue #210) for the Doom level-6 fall into
 the level-7 room cell: the published lines plus combat's two separate feeds
 account for every row, and the arena may add its own announcement line (for
 example `Wisp teleports!`) between `Entering room...` and the blank row before
-the banner. The two-row excess scrolling reported in issue #210 was **not
-reproduced**; it remains unreconciled and needs the reporter's save, the
-dungeon, level and cell, the banner text and frames at the first prompt, after
-the first command and after room entry. Source provenance: fresh fall/room and combat prompt traces in
+the banner. A second live pass (2026-10-16, the Deceit level-6 fall into a room
+cell, party of three) gives the same ten rows from `>Ignite torch!` to the combat
+prompt: the echo, the three pit lines, `Entering room...`, combat's blank row, a
+word-wrapped banner (`Shamino, armed` / `with Short` / `Sword:`) and the prompt. A
+party member's banner always contains `, armed with ` and so always takes at least
+two rows of the 16-column window; longer names or more readied items take more.
+Other sources of rows in this stretch, all observed on the original: a banner
+whose last row exactly fills the window leaves a blank row before the prompt
+(combat's separate pre-command feed), while an exact fill at a word break inside
+the banner costs nothing extra; each extra level of a chained fall repeats the
+three pit lines (+3, no blank row between groups); `None owned!` when no torch is
+held (+1); each turn between landing and a later room-entering step adds a blank
+row and that step's echo (+2); monster actions printed before the first party
+actor add a variable number. The two-row excess reported in issue #210 is engine
+side and **not reconciled**: the likely cause - an engine banner that takes fewer
+rows than the original's word-wrapped one - is inferred only, and locating where
+the lag begins needs the engine's own frames at the first combat prompt and the
+next beat. Source provenance: fresh fall/room and combat prompt traces in
 `u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/functions/COMBAT_OVL/`, plus
 isolated execution of the resident string printer with modeled glyph/cursor
 output in `u5-decomp/functions/ULTIMA_EXE/`. This was not a live game capture.

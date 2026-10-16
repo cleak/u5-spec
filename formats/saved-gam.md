@@ -611,7 +611,12 @@ NPC family and several other fields. Preserve this band together with the
 active-object table. Journey Onward restores it as part of the single
 4,192-byte image; it does not reload the location's `.NPC` source records or
 reconstruct the saved route state. An active-object-only writer cannot restore
-a working town cast.
+a working town cast. A save made inside a location must also keep the NPC records
+and the active-object table consistent: every object that represents an NPC must
+be linked from that NPC's record, and that record must have a nonzero type and
+state. The original restores both verbatim and repairs neither; an unowned person
+object answers Talk with the bare `No response!` and never moves or makes contact
+(`systems/blackthorn.md` Section 7a). *(Added 2026-10-16, issue #216.)*
 
 The earlier permission to rebuild the NPC family on load remains withdrawn
 (issue #184, `RETRACTIONS.md` R341). The later claim that the world-tile render

@@ -1325,7 +1325,22 @@ transcript exactly - `a guard` for Look, `Nothing to open!` for Open, the bare
 guard walking up to block the party instead of raising the demand. A guard whose
 linked-object index points at another object also gives the bare line on Talk.
 Setting the state word or the link to zero did not reproduce it. What zeroed or
-broke the word in the reporter's session is **not established**; the state to
+broke the word in the reporter's session is **not established**. A census of the
+original found no ordinary-play writer that leaves a present gate guard in either
+state (absolute references were checked in the executable and every overlay,
+indirect field access only in the town, NPC and conversation overlays), and none
+of these routes, executed at Minoc at 16:00, produce the bare line: paying and
+talking again, paying then Quit-and-reload, leaving and re-entering, refusing then
+surrendering, crossing the 21:00 boundary beside the guard, and arriving before
+the 13:00 schedule change. Each repeats the demand or transfers the party to jail;
+refusing the surrender starts combat, after which (static reading) the guard's
+record is removed. Entering a location from outside rebuilds the active-object
+table and every NPC-to-object link. The reported transcript does reproduce exactly
+when a save made inside Minoc is loaded whose NPC records do not own the guard's
+on-screen object, or whose guard word is zero: several `Blocked!`, `a guard`,
+`Nothing to open!`, the bare line, no demand, and a guard that never moves. A
+non-canonical `TOWNE.NPC` with a zero dialogue byte for that guard would also give
+the bare line through an ordinary walk-in (*added 2026-10-16*); the state to
 capture is listed in `OPEN-QUESTIONS.md`. The bare line is not an alternate
 meaning of the reserved index.
 

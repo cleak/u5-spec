@@ -827,8 +827,14 @@ Issue #231 reports no completion line for the invisibility spell. A fresh
 trace and isolated execution of the original spell effect through its shared
 completion produce effect 7 followed by `Success!\n`. The effect helper has
 no separate invisibility banner; that does not suppress the shared success
-line. The full-game capture mismatch remains open pending the original save,
-asset identity, typed spell and frames through the next input wait. Source
+line. Full-game captures of the original (2026-10-16), four arena casts with and
+without foes and with the caster visible or already hidden, agree: while the
+spell's whole-view flash effect plays, the message window holds only the cast,
+spell-name and spell rows; then `Success!` and a newline print, followed by the
+next actor's prompt, and the line stays visible at that input wait. The flash's
+duration depends on CPU or emulator speed (about five seconds at the fixed
+emulator setting used); only the order - flash, then `Success!` - is the
+contract. A frame taken mid-flash shows the three rows alone. Source
 provenance: `u5-decomp/functions/CAST_OVL/` and `u5-decomp/notes/`; the probe
 stubs presentation calls and is not a live DOSBox capture.
 
