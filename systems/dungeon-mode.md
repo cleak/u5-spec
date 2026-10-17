@@ -276,6 +276,42 @@ an already-active dungeon dispatch. Reuse preserves the whole active record,
 does not roll coordinates, and does not run placement; it only ensures that
 the selected family's sprite bank is loaded when the record is active.
 
+*(added/corrected 2026-10-17, issue #299 Q3)* **Reuse validates nothing
+except activity.** The record counts as active exactly when its combat-class
+byte is not the inactive marker `0xFF`; nothing else is checked, and family and
+class are never cross-checked - the family selects the sprite bank and the
+class selects the fight, each independently. The stamped level is never
+compared with the party's level on reuse, and no dungeon-mode behaviour depends
+on it. The corridor painter, the per-turn monster step, contact, the
+move-blocking test and A-Attack all match the record's X/Y alone, on the
+party's current level, and the monster step takes its destination cell from
+the party's current level, not from the record's. The one routine that does
+compare a slot's level underground is the generic object-at-cell search, which
+includes this record and compares levels in every dungeon scene; it cannot
+change any outcome, because its only caller that stays live underground (a
+spell/item path that probes the cell north of the party) looks for one specific
+object tile that a family value of 0..7 can never equal, and the other commands
+that share the search (Jimmy, Search, Push, Talk) branch away or refuse in a
+dungeon scene before reaching it. A reused record whose stamped level differs
+from the party's level therefore behaves exactly as if it stood on the current
+level. A record of all zeros is an active, floor-placed monster at cell
+(0, 0) that shows the Giant Rat sprite bank, attempts its random step each turn
+(the destination-cell filter can reject the step), and on contact or A-Attack
+fights as combat class 0, because contact and Attack hand the class byte to
+combat unchanged. It is drawn with its stored sprite-state byte of zero, except
+under one display-mode condition in which the painter reloads that byte from the
+family's presentation record; which condition that is, is not published here
+(`OPEN-QUESTIONS.md`). Stock never writes an all-zero record: its own inactive
+form (placement failure, below) keeps `0xFF` in the class byte and writes
+off-grid X/Y. A-Attack does not test the inactive marker at all; it relies on
+those off-grid coordinates never matching a cell. Stock fresh-rolls on every
+level change and reuses only on resume and on return from the character
+screen, so on a stock-written save the stamped level always equals the party's
+level; a mismatched level or an all-zero record comes only from a save image
+the original did not write. This is static reading; the all-zero case agrees
+with the stock capture reported in issue #299 (a rat sprite, a fight against
+Mages).
+
 A fresh roll selects one of
 eight dungeon monster presentation records with a uniform inclusive draw from
 0 through 7, so each family has probability 1/8. It installs that record's
@@ -286,7 +322,14 @@ class the wandering-monster combat path consumes directly (§ 14.1). The eight
 classes are Giant Rat, Bat, Giant Spider, Ghost, Slime, Gremlin, Gazer, and
 Reaper. An earlier revision of this section described this record as a general
 registry covering the Codex, Shadowlords and quest-scene sprites; that is
-retracted, and class zero is Giant Rat rather than an empty marker. Placement makes up
+retracted, and **family** zero (Giant Rat, combat class 20) is a valid family
+rather than an empty marker. Do not read this as combat class zero: combat
+class zero is the class Druid and Mage party members fight as
+(`systems/combat.md` Section 5), and no family maps to it; the eight families'
+classes are 20, 21, 22, 23, 24, 25, 28 and 27 in family order. *(Corrected
+2026-10-17, issue #299 Q3: this sentence said "class zero is Giant Rat", which
+named the family byte as the class; retracted, `RETRACTIONS.md` R567.)*
+Placement makes up
 to eight random attempts on the current 8-by-8 level, accepting only cells in
 the pit and open-chest spawn families (`0x6?` or `0x7?`) — both of which the
 renderer paints as passage — and rejecting the party's
@@ -308,7 +351,8 @@ dungeon; the correct behaviour is silence, because the event such a message
 would describe cannot be caused by the player underground.
 `systems/active-objects.md` Section 10 states the same negative from the table's
 side, including the qualification that the block is the party's transport state
-rather than command reachability.
+rather than command reachability; dungeon entry requires the on-foot state, and
+nothing reachable underground changes it *(added 2026-10-17, issue #299 Q7)*.
 
 ## 5. Special underfoot reactions
 
@@ -964,7 +1008,7 @@ the following dungeon-specific meanings:
 | `type` | Monster family and `MONn` resource selector, inclusive `0..7`. Zero is Giant Rat and is valid. |
 | `tile` | A mirror of `type` written by fresh setup. The corridor painter does not use it as a separate animation tile. |
 | `x`, `y` | Wrapped dungeon cell coordinates, each `0..7`. |
-| `z` | Dungeon level. |
+| `z` | Dungeon level, stamped by fresh setup (its only writer). No dungeon-mode behaviour depends on it; the one generic search that compares it cannot match this record (Section 4.1). *(added 2026-10-17, issue #299 Q3)* |
 | `dep1` | Combat class id. `0xFF` means this dungeon record is inactive. |
 | `phase` | Packed sprite state: symmetry, animation mode and phase. |
 | `dep3` | Placement selector: `0` for floor placement, `0xFF` for upper/ceiling placement. |
@@ -2669,7 +2713,13 @@ dungeon-room encounter, on a metal grate (`0x86`), with `Down!` then the
 departure line. In an ambush arena built on a two-way-ladder dungeon cell, the
 centre `0xC8` instead raises `U/D-` and waits for up or down, down counting as
 the `0xC9` case; that is the only place the two-way prompt can appear in
-combat. If nobody leaves - for example a fight ended by the Escape cleanup
+combat. *(added/corrected 2026-10-17, issue #299 Q4)* The combat-arena `U/D-`
+prompt, unlike the dungeon-mode Klimb prompt (Sections 8.1 and 13.1), ignores
+Space: it accepts only up or North and down or South, prints nothing for any
+other key and spends no action (`systems/combat.md` Section 8.4). The arena
+handler's own test is the encounter-mode bit that dungeon contact and dungeon
+camp-attack fights share, plus the painter's two-way flag; whether a dungeon
+camp-attack fight can ever carry that flag was not traced (`OPEN-QUESTIONS.md`). If nobody leaves - for example a fight ended by the Escape cleanup
 after victory - the record stays empty. The one other writer is the final
 Doom absorption hook, which replaces whatever is there with the absorption
 marker (Section 14); the movement applier ignores that marker. Shipped
@@ -2970,3 +3020,16 @@ The behaviour described here was derived by reading the private function notes l
   `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
   `u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
   the word, gate and quantity tables read back from the shipped data file.
+
+- **Issue #299 Q3, active-record reuse (2026-10-17).** That reuse checks only
+  the inactive marker, that the stamped level is written only by fresh setup and
+  that no dungeon-mode behaviour depends on it (the generic object-at-cell
+  search being the one reader, unable to match), the X/Y-only matching of the
+  painter, monster step, move blocking, contact and A-Attack, the class
+  pass-through to combat and the family-to-class mapping were established by
+  static reading of private analysis in `u5-decomp/notes/`, re-read by an
+  independent verifier against the shipped binaries. Sources:
+  `u5-decomp/notes/`, `u5-decomp/functions/DUNGEON_OVL/`,
+  `u5-decomp/functions/DNGLOOK_OVL/`, `u5-decomp/functions/CAST_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`. The all-zero record's fight agrees with
+  the reporter's stock capture. No execution.

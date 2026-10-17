@@ -164,7 +164,7 @@ printable text (after bit-7 strip). The full dispatch table:
 |--------|---------------------|--------------------------------------------------------------------------------------------------------------------------|
 | `0x80` | DICTIONARY-TOKEN    | Not a control code. `0x80` is the highest common-word dictionary token (index one hundred twenty-eight). The entry terminator is the NUL byte `0x00`. |
 | `0x81` | PRINT-AVATAR-NAME   | Emit the player's saved name (the name chosen during character creation) into the output stream.                         |
-| `0x82` | END-STREAM          | Stop the current stream and signal the caller "this stream is finished". Used to terminate the fixed leading entries.   |
+| `0x82` | END-STREAM          | Stop the current stream without flushing the pending word. A stop ends the whole conversation (`systems/conversation.md` Section 7.2). Shipped only as the last byte of labelled-block heads, scoped answers and four Bye entries. *(Corrected 2026-10-17, issue #299 Q1: "used to terminate the fixed leading entries" is retracted, R560.)* |
 | `0x83` | PAUSE               | A timed pause of up to 28 passes (world redraw, non-blocking key poll, one BIOS tick); any key ends it early; type-ahead is discarded; never terminates the stream, no cancel key (`systems/conversation.md` Section 7.3). |
 | `0x84` | RECRUIT-SPEAKER     | Recruit the speaking NPC into the active party. No player prompt: the engine reads the speaker's own name out of the blob's Name entry and matches it against the reserve portion of the character roster. The historical mnemonic "ASK-PARTY-NAME" is wrong; `0x84` reads no player input. |
 | `0x85` | GOLD-PAYMENT        | Multi-byte introducer (three argument bytes follow): collect a gold amount and run the automatic affordability test. It reads no player confirmation. |
@@ -174,14 +174,14 @@ printable text (after bit-7 strip). The full dispatch table:
 | `0x89` | STANDING-UP         | Raise the shared moral-standing selector by one, clamped at ninety-nine. Emits no text. |
 | `0x8A` | STANDING-DOWN       | Lower the shared moral-standing selector by one, floored at zero. Emits no text. Earlier drafts described this code as a newline/panel-flush; that was a misreading of the printable path, which rewrites `0x8D` to the value `0x8A` *after* control-code dispatch is already past. |
 | `0x8B` | ALARM               | Run the town alarm sweep (`systems/town-mode.md` Section 14; `systems/conversation.md` Section 7.5). No argument byte, no output. Earlier revisions called this a curse check used with cursed-item NPCs; that reading is retracted (R531). *(Corrected 2026-10-16, issue #298 Q14.)* |
-| `0x8C` | IF-ELSE             | Multi-byte introducer (one argument byte follows). The argument is the branch **target label**. Test the active scene's branch-flag bit for the NPC currently speaking; if clear, fall through in-stream; if set, transfer to that label (or, for the argument `0xFF`, end the response and return to the keyword prompt). |
+| `0x8C` | IF-ELSE             | Multi-byte introducer (one argument byte follows). The argument is the branch **target label**. Test the active scene's branch-flag bit for the NPC currently speaking; if clear, fall through in-stream; if set, transfer to that label (or, for the argument `0xFF`, open a nested keyword prompt without flushing the pending word; leaving it ends the conversation, `systems/conversation.md` Section 7.2). *(Corrected 2026-10-17, issue #299 Q1: "end the response and return to the keyword prompt" is retracted, R562.)* |
 | `0x8D` | LITERAL-NEWLINE     | Force-emit a literal newline through the text-output system.                                                              |
 | `0x8E` | ALTERNATE-FONT      | Toggle the print mask's high bit. While flipped, printable bytes are queued without their high bit, which selects the alternate (runic) font at flush time and also stops the run's internal spaces and newlines from forcing word-buffer breaks. Used in matched pairs around mantras and Words of Power. |
 | `0x8F` | WAIT-KEY            | Block for one command keystroke, discarded; no redraw; the stream continues. |
 | `0x90` | LABEL-RECORD        | Structural separator used by label search. The ordinary byte runner has no dedicated case for it: if reached sequentially, it takes the printable fall-through, queues a value that flushes as glyph codepoint `0x10`, and continues to the next byte. |
 | `0x91`-`0x9F` | LABEL / scoped prompt | Up to fifteen label bytes per blob. Encountered in a response stream, they enter the label handler; inside labelled blocks, repeated label bytes mark records and sub-records. Empty input inside the scoped prompt is local to that prompt, and top-level reserved words are suppressed there before label-scoped keyword matching. |
 | `0xFE` | IF-ELSE-ALT         | Multi-byte introducer (two argument bytes follow): moral-standing threshold branch with a target label byte.              |
-| `0xFF` | END-OF-RESPONSE     | Flush the word buffer and return control to the keyword input loop.                                                      |
+| `0xFF` | END-OF-RESPONSE     | Flush the word buffer and open a nested keyword prompt; leaving it ends the conversation (`systems/conversation.md` Section 7.2). *(Corrected 2026-10-17, issue #299 Q1: "return control to the keyword input loop" is retracted, R561.)* |
 
 Multi-byte introducers (`0x85`, `0x86`, `0x8C`, `0xFE`) consume one or more bytes following the introducer as arguments, not as ordinary stream bytes. The number of argument bytes is fixed per introducer (Section 9.1 below). Argument bytes themselves are passed through to the introducer's handler as literal argument values; they are not subject to bit-7 strip or dictionary expansion.
 
@@ -221,7 +221,7 @@ conventionally the blob's final record marker.
 |------------|----------------|-------------------------------------------------------------------------------------------------|
 | `0x85`     | 3              | Three ASCII digit bytes encoding a decimal gold demand. The command itself reads no confirmation. |
 | `0x86`     | 1              | Letter `A..K` selecting a global fixed-slot action, or a small numeric generic flag index.       |
-| `0x8C`     | 1              | Branch **target label** taken when the tested flag is set, or `0xFF` meaning "end the response and return to the keyword prompt". It is *not* a flag identifier: the bit tested is chosen by the engine (the speaking NPC's roster slot), never by the script. |
+| `0x8C`     | 1              | Branch **target label** taken when the tested flag is set, or `0xFF` meaning "open a nested keyword prompt here" (`systems/conversation.md` Section 7.2; the earlier "end the response and return to the keyword prompt" is retracted, R562, 2026-10-17, issue #299 Q1). It is *not* a flag identifier: the bit tested is chosen by the engine (the speaking NPC's roster slot), never by the script. |
 | `0xFE`     | 2              | Moral-standing threshold byte and target-label byte for a karma-conditional branch.             |
 
 
@@ -335,7 +335,7 @@ The next four bytes are the first header entry: the NPC id `0x0001` followed by 
 
 After the header — at the offset given by the first entry — the first NPC's blob begins. The first byte is an obfuscated text byte encoding the first letter of the NPC's name. `TOWNE.TLK`'s id-1 blob is "Zachariah", so its first byte is `0xDA` (obfuscated `'Z'`); `KEEP.TLK`'s "Mariah" blob starts with `0xCD` (obfuscated `'M'`). Subsequent bytes encode the rest of the name, terminated by NUL.
 
-After the Name entry's NUL comes Description, then Greeting, then Job, then Bye, each NUL-terminated. Greetings typically carry control bytes such as PRINT-AVATAR-NAME or END-STREAM. After the five leading entries comes the keyword body: a keyword string such as `JOIN`, a NUL, the response stream, an END-OF-RESPONSE marker, and so on for additional pairs.
+After the Name entry's NUL comes Description, then Greeting, then Job, then Bye, each NUL-terminated. Greetings may carry PRINT-AVATAR-NAME; no shipped Greeting contains END-STREAM, and eleven end in a GOTO (`systems/conversation.md` Section 9 step 3). *(Corrected 2026-10-17, issue #299 Q1: "typically carry ... END-STREAM" is retracted, R563.)* After the five leading entries comes the keyword body: a keyword string such as `JOIN`, a NUL, the response stream, an END-OF-RESPONSE marker, and so on for additional pairs.
 
 A reader can sanity-check a `.TLK` decoder by:
 

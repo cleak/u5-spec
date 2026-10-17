@@ -1044,7 +1044,7 @@ fragments remain as specified above and in Section 8.C.
 | Ordinary Frigate offer body | `117` | Record `126` |
 | Ordinary Skiff offer body | `118` | Record `126` |
 | Shipwright F/S selection menu | `119` | Menu choice precedes either ordinary offer |
-| Shared ship take-it confirmation | `126` | Y/N input; no added `(Y/N)` legend |
+| Shared ship take-it confirmation | `126` | Y/N input; no added `(Y/N)` legend. The record ends without a line feed, so the echo stays on its last row *(added/corrected 2026-10-17, issue #299 Q2)* |
 | Wayfarer Inn room offer | `186` | Resident inn take-it question, Section 8.C |
 | Warrior's Stead room offer | `187` | Same inn question |
 | Haunting Inn / Hotel Brittany room offer | `188` | Same inn question |
@@ -1393,8 +1393,8 @@ invalid initial Y/N keys, which wait silently.
 
 | Shipwright result | Resource and resident envelope |
 |---|---|
-| Ordinary offer | Record `117` for Frigate or `118` for Skiff, then record `126`; confirmation Y/N only |
-| Decline / accept | `No` or `Yes\n\n` |
+| Ordinary offer | Record `117` for Frigate or `118` for Skiff, then record `126`; confirmation Y/N only. *(added/corrected 2026-10-17, issue #299 Q2)* Record `126` ends with its closing quote and one space and no line feed, and the Y/N wait prints nothing (other keys are ignored silently), so the accepted echo is appended to the record's last row. Stock shows one row ending in the quote, a space and `No`. The same holds for the Frigate and the Skiff offer. |
+| Decline / accept | `No` or `Yes\n\n`. After `No` the F/S menu (record `119`) returns; that record begins with its own two line feeds, so the menu starts below the `No` row *(added/corrected 2026-10-17, issue #299 Q2; the return to record `119` is a single static reading not independently re-traced)* |
 | Affordability failure | Record `122`, then token-expanded `yells $.\n`; suppress ordinary farewell |
 | Pending delivery, another Frigate requested | Record `125`; Y/N only, bare `Yes` or `No` echo. Yes tests the fixed unaffordable special-delivery amount; No reopens the F/S menu. |
 | Standalone delivery newly queued | Record `123`, before payment/refresh and continuation |
@@ -1413,7 +1413,10 @@ Source provenance: fresh complete purchase and outcome traces in
 `u5-decomp/functions/SHOPPES_OVL/`, `u5-decomp/functions/SHOPPES2_OVL/`,
 `u5-decomp/functions/SHOPPES3_OVL/` and `u5-decomp/notes/` (#238). Resource
 selectors were independently resolved to record boundaries. These are static
-traces; no new full-game capture was taken for this table.
+traces; no new full-game capture was taken for this table. The take-it
+row placement (issue #299 Q2) rests on the record's terminal content in the
+data file and a static reading of both offer paths, re-checked by a second
+reader, and agrees with the stock capture reported in the issue.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 

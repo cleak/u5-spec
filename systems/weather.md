@@ -247,6 +247,12 @@ swallowed by the input helper's auto-advance loop (`systems/timing.md` Section
 8.2), where the cadence table below decides the move. The input helper then
 synthesises repeated movement commands from the cached direction until the cache
 is cleared or replaced. A wait pass prints nothing from the sailing logic.
+It also emits no command-prompt pair and leaves the overworld prompt gate
+alone, so a held voyage adds no empty marker rows. Output during the hold
+starts at the cursor on the pending marker row, or wherever an earlier print
+during the hold left it, and moves down only if its own literal begins with a
+line feed (`systems/text-output.md` Section 10.2). *(added/corrected
+2026-10-17, issue #299 Q8)*
 *(Corrected 2026-10-16, issue #297; `RETRACTIONS.md` R525: this paragraph said a
 heading differing from the cache turns the ship and movement follows once the
 key matches the cache.)*

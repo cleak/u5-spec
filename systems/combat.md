@@ -1318,7 +1318,7 @@ general terrain/drop path.
 | Vanish-on-death class | Monster whose class-flag word has the vanish bit set — Wanderer, Blackthorn, Lord British, Shadow Lord | `0x16` (temporary vanish marker) | Prints `<name> vanishes!`, sets shared action-result bit `0x02`, restores the underlying terrain through the single-cell pixel reveal, releases the slot, then runs the party control/faint scan described below | **Yes** |
 | Incorporeal class | Monster whose class-flag word has the low bit set but **not** the vanish bit — Sea Horse, Squid, Sea Serpent, Shark, Bat, Ghost, Slime, Insect Swarm, Wisp, Daemon | **none** | none | **Yes** |
 | Gazer | Monster of the Gazer class | `0x1F` (eye-burst special) | **Places a live Insect Swarm combatant (class 31) at the death coordinate** through the ordinary monster-placement primitive, then redraws the arena. See "The Gazer death spawns a real combatant" below | No |
-| Gargoyle | Monster of the Gargoyle class | **none** | Writes `0x4C` (lava pool) into the combat-arena **terrain** cell under the actor; that terrain edit persists for the rest of the combat instance | **Yes** |
+| Gargoyle | Monster of the Gargoyle class | **none** | Writes `0x4C` (pile of rocks, `catalogs/tile-catalog.md`) into the combat-arena **terrain** cell under the actor; that terrain edit persists for the rest of the combat instance, and the cell is a valid arena K-Klimb target (Section 8.4). *Correction 2026-10-17 (issue #299 Q4): this cell called `0x4C` a lava pool; it is the pile of rocks, `RETRACTIONS.md` R565.* | **Yes** |
 | Ordinary monster, terrain rejects | Any other monster whose underlying arena terrain byte is `0x87`, or is numerically below `4` | **none** | none | **Yes** |
 | Ordinary monster, drop roll rejected | Terrain accepted, and the first roll exceeds the class drop-cap byte | `0x1F` | none — byte 5 keeps whatever the per-encounter reset left there | No |
 | Ordinary monster, drop roll accepted | Terrain accepted, and the first roll is less than or equal to the class drop-cap byte | `0x01` (dead-monster / drop marker) | Byte 5 of the active-object record receives **the class drop-cap byte itself**. A second independent roll strictly below the same drop cap ORs bit `0x80` into byte 5 as the special-drop marker | No |
@@ -1527,7 +1527,7 @@ Notes that an implementation must not get wrong:
   rejected branch calls the slot-clear helper; the marker and its descriptor
   stay in place for the rest of the combat instance.
 - **Gargoyle does not fall through to the ordinary path.** After stamping the
-  lava terrain byte it goes directly to the slot-clear helper, so a Gargoyle
+  rock-pile terrain byte (`0x4C`) it goes directly to the slot-clear helper, so a Gargoyle
   death produces no corpse marker and no drop.
   An earlier revision of this section routed Gargoyle death through the default
   monster-killed path and left a lava pool under a corpse; that is retracted.
@@ -2108,7 +2108,7 @@ The remaining letters call their targets directly, as the table below records.
 | **H** | Hole up — shared refusal responder, second tail. World-mode rest is not available inside an arena. No cost. |
 | **I** | Ignite — shared refusal responder, second tail. No torch counter is touched on this branch. No cost. |
 | **J** | Jimmy. Labelled prompt with the party-side gate, then the shared Jimmy handler. The combat scene takes Jimmy's high-range restraint tail: a successful Dexterity pick on stocks `0x84` or manacles `0x85` clears that arena tile to cobble `0x44` and reports "Unlocked" without resolving or persisting an NPC release. Other Jimmy target families retain their shared behavior. |
-| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. In a dungeon arena, `Up!` on an up ladder (`0xC8`) departs with exit code 5 and `Down!` on a down ladder (`0xC9`), or on a metal grate (`0x86`) in a dungeon-room encounter, departs with exit code 6; the first party-side departure's code is what the dungeon callers read afterwards (`systems/dungeon-mode.md` Section 14.1). The `U/D-` form appears only on the ambush arena's centre cell when the dungeon cell was a two-way ladder. *(Added 2026-10-16, issue #298 Q1.)* A blocked climb re-prompts at no cost; an applied climb ends the actor's action. |
+| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. In a dungeon arena, `Up!` on an up ladder (`0xC8`) departs with exit code 5 and `Down!` on a down ladder (`0xC9`), or on a metal grate (`0x86`) in a dungeon-room encounter, departs with exit code 6; the first party-side departure's code is what the dungeon callers read afterwards (`systems/dungeon-mode.md` Section 14.1). The `U/D-` form appears only on the ambush arena's centre cell when the dungeon cell was a two-way ladder. *(Added 2026-10-16, issue #298 Q1.)* A blocked climb re-prompts at no cost; an applied climb ends the actor's action. *(added/corrected 2026-10-17, issue #299 Q4)* A blocked climb is a `What?` at the adjacent prompt; an applied rock climb, an accepted Up/Down departure, and Space's `Pass` at the adjacent prompt end the actor's action. The combat-arena `U/D-` prompt ignores Space. Whether a refused Up/Down departure is free is not established (Section 8.4). |
 | **L** | Look — shared refusal responder, second tail. This dispatcher does not run the world/town look flow. No cost. |
 | **M** | Mix — shared refusal responder, second tail. It does not open the reagent mixer. No cost. |
 | **N** | New order — shared refusal responder, second tail. No cost. |
@@ -2655,6 +2655,62 @@ arena's centre cell when the dungeon cell was a two-way ladder
 described in `systems/commands.md` Section 5.4: direction name and newline,
 or Space's `Pass\n`; Escape is ignored. A rejected adjacent target then
 adds `What?\n`. It does not immediately complete every K as `Klimb-What?`.
+
+*(added/corrected 2026-10-17, issue #299 Q4)* **Current-cell cases, in
+order, in every arena kind.**
+
+1. The two-way `U/D-` form needs the encounter-mode bit shared by dungeon
+   contact fights and dungeon camp-attack fights, plus the two-way-ladder
+   flag that the dungeon room painter sets (`systems/dungeon-mode.md`
+   Section 14.1). Town and overworld arenas never carry that mode bit.
+2. `0xC8` gives `Up!` and `0xC9` gives `Down!`. Neither case tests the arena
+   kind or the scene.
+3. `0x86` (metal grate) counts as `Down!` only in a dungeon-room encounter.
+   In any other arena it falls through to step 4.
+4. Otherwise K goes to the adjacent-climb direction prompt.
+
+**The combat-arena `U/D-` prompt** accepts only four keys: `U` or the North
+direction key for up, `D` or the South direction key for down. Space, Escape
+and every other key are ignored with no output, and the prompt keeps waiting:
+no `Pass` is printed and no action is spent. This differs from the
+dungeon-mode Klimb `U/D-` prompt, which does accept the pass key
+(`systems/dungeon-mode.md` Sections 8.1 and 13.1). A chosen direction then resolves as
+the plain ladder case: `Up!\n` and exit code 5, or `Down!\n` and exit code 6.
+
+**Adjacent-climb prompt.** Space's `Pass\n` spends the actor's action. The
+only climbable adjacent target is a pile of rocks (`0x4C`) with no object on
+it. The town command's wooden-fence targets (`0xCA`/`0xCB`) are not climbable
+in an arena. A direction toward any other cell prints `What?\n` and
+re-prompts at no cost. An applied climb moves the actor onto the rock cell
+and prints nothing after the direction name. It also runs the ordinary
+step-on ambush/camp reveal check (Section 5, "Ambush and camp reveal
+slots"), which prints nothing but may redraw the arena.
+
+**Turn cost.** The combat parser marks the turn done before dispatching K,
+re-prompts when K reports no action, and ends the turn otherwise. Spent:
+`Pass`, an applied rock climb, an accepted Up/Down departure. Free: `What?`.
+A refused Up/Down departure returns whatever the out-of-arena helper
+(Section 3) reports, unchanged. It is therefore a free re-prompt only if that
+helper reports no action for a refusal. That return value was not observed,
+so this case is open.
+
+**Stock arenas.** None of the sixteen `BRIT.CBT` arenas has a `0xC8` or
+`0xC9` cell. Four of them have `0x86` cells (five cells in all), and none of
+those is a dungeon-room arena, so those grates are not ladders. In a stock
+town or overworld arena K therefore always reaches the adjacent-climb
+prompt. Rock cells are present in several `BRIT.CBT` arenas, and they can
+also appear at runtime in any arena, because a Gargoyle's death writes
+`0x4C` into the terrain under it (Section 6.3). What a
+town or overworld caller does with an Up/Down departure code was not traced;
+no stock arena can produce one.
+
+Source provenance for the issue #299 Q4 additions: private analysis in
+`u5-decomp/notes/`. The arena K handler ran under emulation with the real
+shared direction prompt, and all twelve probe rows were reproduced by a
+second reader. The combat parser's handling of K's result is a static
+reading. The tile census is read from the `BRIT.CBT` and `DUNGEON.CBT`
+terrain grids. The exit helper was stubbed in the executed runs, which is
+why the refused-departure cost stays open.
 
 For ordinary arena scene ids above `0x80`, C-Cast's acting-member lookup
 takes the current actor's party owner without printing `Player: `. The

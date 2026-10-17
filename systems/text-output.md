@@ -542,6 +542,52 @@ The overworld gate's published **purpose** is confirmed: suppressing one pair
 after a shipboard direction is what keeps synthesised sailing turns from
 accumulating empty prompt rows, and exactly one is suppressed because the
 helper re-arms the flag as soon as it has tested it. *(Added 2026-09-13, issue #270.)*
+
+**Held passes and where the next line lands.** *(added/corrected 2026-10-17,
+issue #299 Q8)* The overworld helper tests the gate once, on entry, emits the
+pair only if the gate is set, and then sets the gate unconditionally before it
+enters its sailing wait loop. The wait loop returns to the cadence test, never
+to the gate test, so a held pass, whether it is waiting on calm wind or for the
+cadence to release (`systems/weather.md` Section 5), emits no pair and leaves
+the gate alone. One helper call therefore emits at most one pair, and only on
+entry. Only a hoisted direction going through the movement dispatcher clears
+the gate; nothing a wait pass runs reaches that clear. The one gate write a wait
+pass can reach is the whirlpool's forced re-entry into outdoor mode, and that
+write sets the gate. When the helper was entered with the gate clear (after an
+accepted step or a calm-wind silent consume), a non-sailing key typed during
+the hold comes back from the helper with no fresh pair; its echo is written on
+the pending marker row unless a wait pass printed in the meantime (a wait pass
+runs the outdoor epilogue, which can print a pirate's broadside or an
+engagement line and move the cursor), and the prompt after that command gets
+an ordinary pair because the helper set the gate on entry. Keys equal to the
+cached heading are swallowed during the hold, as published in
+`systems/timing.md` Section 8.2.
+
+After a hoisted direction that prints no echo, the cursor stays at column 25 of
+the pending marker row, and the next printed text starts there. Where it lands
+is decided by the literal itself, printed at the cursor with its own feeds: a
+literal that begins with a line feed, such as `Attacked!` (both copies) or
+`WHIRLPOOL!`, moves to the row below and leaves the marker row holding only the
+marker, which is the stock capture reported in issue #299; a literal with no
+leading line feed, such as `BREAKING UP!`, `COLLISION!`, `Docked!` or a
+pirate's `* BOOOM! *`, is written on the marker row itself, matching the two
+issue #297 captures. There is no special placement rule beyond that.
+
+Evidence: the single test of the gate on entry, the unconditional set, the wait
+loop's return to the cadence test, and a key typed during a hold returning with
+no pair when the gate was clear on entry are **executed original code** (the
+shipped helper run under emulation in calm and upwind wind, with the gate clear
+and set on entry). That the gate has four setters and one clearer, all in the
+overworld module, is a re-run **static census** across the executable, every
+overlay and every driver. Which literals begin with a line feed is read from
+the shipped **data file**. That the shared cleanup, the world step, the outdoor
+epilogue and the turn tail emit no line feed of their own is **inferred and not
+verified**: the executed run replaced those steps with stubs, and the census
+covered the gate, not line feeds. The row placement of `Attacked!` and the
+other lines is inferred from the points above and agrees with the three
+captures; no new live run was made. Both inferred points are indexed in
+`OPEN-QUESTIONS.md`. Source provenance: derived from private analysis in
+`u5-decomp/notes/`.
 Two further facts about that gate matter at a mode change. The overworld's
 per-entry initialiser sets the flag **unconditionally**, before the turn loop
 runs, so after any entry into overworld mode - a dungeon exit, a town boundary

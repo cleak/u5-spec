@@ -797,7 +797,7 @@ text-window clear.
 | Beat | Observable sequence |
 |------|---------------------|
 | Audience exit (formerly "per-question intermission"; see R490 and Section 4.2) | The acting guard first steps west with one animated stinger pause. Cobble `0x44` is buffered at `(0,4)` and the next explicit world tick exposes it. The subsequent guard/Avatar repositioning remains animated one step at a time. Door `0xBB` replaces the cobble and the following one-repetition stinger pause exposes the door. The seated-Blackthorn tableau and both guards then continue moving or are cleared with per-step redraws; each cleared actor disappears on the next movement or pause redraw. The first repetition of the final six-repetition stinger pause exposes the empty tableau and the remaining five hold it. |
-| Failed challenge | Quiet pause 22; the acting guard moves to and with the second member; quiet pause 3; buffer pendulum `0x82` at `(5,7)` and clear that member; one explicit world tick exposes both changes together. The acting guard returns with animated steps; quiet pause 12; the secondary guard walks west three animated steps; hourglass `0xE9` is buffered at `(5,9)`; the first of that guard's three animated east steps exposes it. |
+| Failed challenge | Quiet pause 22; the acting guard moves to and with the second member; quiet pause 3; buffer pendulum `0x82` at `(5,7)` and clear that member; one explicit world tick exposes both changes together. The acting guard returns with animated steps; quiet pause 12; the secondary guard walks west three animated steps; hourglass `0xE9` is buffered at `(5,9)`; the first of that guard's three animated east steps exposes it. The full command list follows the exit vector below. |
 | Guard approach | One stinger-pause repetition; both guards move north together one animated step; then slot 6 moves west while slot 7 moves east for three animated paired steps, opening the centre; quiet pause 8. The caller then hides slot 8 at `(5,5)`, reveals seated Blackthorn `0x178` there with the 256-pixel transition, assigns actor byte `0x78` to preserve it, and performs another quiet pause 8 before Blackthorn's speech. |
 | Guard release route | After Blackthorn orders the guard to release the captive: quiet pause 11; the acting guard moves west once, north four times, and east once, with a stinger-plus-two-tick redraw after every step. Blackthorn remains seated in slot 8. |
 | Conditional Blackthorn-tableau cleanup | Quiet pause 4; seated Blackthorn and the throne move east once and south five times with an animated redraw after every step; slot 8 is cleared; one explicit world tick repaints the resulting tableau. It does not clear the screen. |
@@ -863,7 +863,66 @@ sting rule is confirmed by the decoded list reproducing the executed 36 / 73 / 7
 profile; the start and end cells are simulated from the decoded approach,
 release, failed-challenge and exit scripts, not captured live.
 
-The other rows give checkpoints; the exit vector is listed in full above. A
+**Failed-challenge vector, full command list.** *(Added 2026-10-17, issue
+#299 Q6.)* Every movement step is animated: the script never turns off the
+per-step pauses. Each repetition, single or paired, costs one shared sting plus
+a two-tick quiet redraw, as in the exit vector. Slots are those of Section 6:
+1 is the second member, 6 the acting guard, 7 the second guard. The actors
+always start from the same cells: slot 1 `(7,5)`, slot 6 `(1,5)` and slot 7
+`(9,9)`. These are where the approach and release scripts leave them, and slot
+1's cell is the same for any party of two or more.
+
+| # | Command | Repeats | Stings | Positions after the step |
+|---:|---|---:|---:|---|
+| 1 | Quiet pause 22 | - | 0 | |
+| 2 | Slot 6 south | 1 | 1 | 6 `(1,6)` |
+| 3 | Slot 6 east | 7 | 7 | 6 `(8,6)` |
+| 4 | Slot 1 south | 1 | 1 | 1 `(7,6)` |
+| 5 | Paired: slot 6 west + slot 1 west | 2 | 2 | 6 `(6,6)`, 1 `(5,6)` |
+| 6 | Slot 1 south | 1 | 1 | 1 `(5,7)` |
+| 7 | Quiet pause 3 | - | 0 | |
+| 8 | Terrain write pendulum `0x82` at `(5,7)` | - | 0 | (buffered) |
+| 9 | Clear slot 1 | - | 0 | (coordinates kept at `(5,7)`) |
+| 10 | Explicit world tick | - | 0 | pendulum shown, member gone |
+| 11 | Slot 6 west | 5 | 5 | 6 `(1,6)` |
+| 12 | Slot 6 north | 1 | 1 | 6 `(1,5)` |
+| 13 | Quiet pause 12 | - | 0 | |
+| 14 | Slot 7 west | 3 | 3 | 7 `(6,9)` |
+| 15 | Terrain write hourglass `0xE9` at `(5,9)` | - | 0 | (buffered) |
+| 16 | Slot 7 east | 3 | 3 | 7 `(9,9)`; the first step shows the hourglass |
+
+Totals:
+- **24** stings.
+- **86** world ticks: 37 from the three quiet pauses, 48 from the stings'
+  two-tick redraws, and the one explicit tick of step 10.
+- **85** one-BIOS-tick delay requests. Each quiet-pause tick and each sting
+  tick asks for one; the explicit tick does not.
+- No text output of any kind.
+
+At the end, slot 6 is back at `(1,5)` and slot 7 at `(9,9)`. This is why the
+exit vector's start cells do not depend on an earlier wrong answer. Slot 1 is
+cleared at the pendulum cell. The duration rules of Section 4.2 apply
+unchanged: the slow-CPU gate decides whether the delays are real waits, and the
+cinematic-animation setting decides whether the quiet pauses run at all. The
+checkpoints in the "Failed challenge" row above agree with this list.
+
+Source provenance: private analysis in `u5-decomp/notes/`. The original
+Blackthorn script interpreter, its direction decoder and the shipped script
+were executed under emulation, with resident services counted rather than
+drawn. The only other resident service the vector calls is the explicit world
+tick. The same probe reproduces the exit vector's 36 / 73 / 72 profile. Three
+parts are not direct observation:
+- The 85 delay requests come from a stand-in pause routine that follows the
+  published quiet-pause rule (one tick plus one delay per pass). The original
+  resident pause code was not executed.
+- That the hourglass appears on slot 7's first east step is inferred from the
+  published rule that a buffered terrain write shows on a later tick. It was
+  not observed on screen.
+- The start cells are simulated from the decoded approach and release
+  scripts, not captured live. Slot 1's simulated cell matches the published
+  `(7,5)`.
+
+The other rows give checkpoints; the exit and failed-challenge vectors are listed in full above. A
 conforming renderer must additionally preserve the actor order, repeat counts,
 paired movement, and final coordinates described above.
 

@@ -444,14 +444,42 @@ period)`; `\n` is a line feed and `_` a space. Once the event runs, in order:
 4. **Per member, in party order.** A living member is silently healed and cured
    (above), the class tile is stamped (Section 7.2), then one world-tick pause,
    the envelope `(13, 200, 5000, 1, 5500)`, one inversion of the whole gameplay
-   viewport (the square from pixel 8 to pixel 183 on both axes) in the current
-   highlight pen, the envelope `(1, 2500, 60000, 1, 5500)`, and three one-tick
+   viewport (the square from pixel 8 to pixel 183 on both axes) in the accent
+   pen (slot 1), the envelope `(1, 2500, 60000, 1, 5500)`, and three one-tick
    world pauses. The published "two-tone sting" is that pair of envelopes, both
-   at period 5500, a short one of 5,000 iterations and a long one of 60,000. No
-   paired restoring inversion is issued: each later living member's inversion
-   toggles the viewport back. Whether the following world-tick pauses repaint
-   the viewport was not established, and the highlight pen's value at this point
-   is not published here.
+   at period 5500, a short one of 5,000 iterations and a long one of 60,000.
+   *(added/corrected 2026-10-17, issue #299 Q5)* The inversion is an
+   exclusive-or rectangle in user-interface colour slot 1, the accent pen:
+   palette index 15 on the sixteen-colour drivers and table value 3 on the
+   low-colour pair (`display-driver.md` section 2). Nothing changes that slot
+   after start-up. On the sixteen-colour drivers 15 is the all-ones colour, so
+   every pixel of the square inverts; that the low-colour value 3 inverts every
+   pixel too (in particular on the one-bit Hercules mode) is inferred, because
+   the driver's mapping of that value was not traced. No paired restoring
+   inversion is issued, and none is needed: in an ordinary outdoor camp the
+   redraw gate is always set, so each world-tick pause runs a world tick that
+   rebuilds the viewport and repaints every cell with ordinary replacing tile
+   draws. The first of the three following pauses therefore erases the
+   inversion, and the other two repaint again. The pause before the short
+   envelope likewise repaints, so the newly stamped class tile is visible
+   before the flash. Each living member gets one separate flash that lasts for
+   the long envelope; flashes do not accumulate, and a later member's
+   inversion restores nothing. One exception is carried by the repaint
+   itself: a cell whose companion terrain byte is the paint-nothing sentinel
+   (`combat.md` section 7) is not redrawn and would keep its inverted pixels.
+   Whether any viewport cell holds that sentinel during the member pass was
+   not established. The old man's record is switched from the draw-nothing
+   byte to `0x74` before the pass begins, which makes his cell an unlikely
+   case, but that was not shown. Earlier text said each later living member's
+   inversion toggles the viewport back; that is retracted (`RETRACTIONS.md`
+   R566). Evidence: static reading of the pause helper, the world tick and
+   the viewport rasterizer, plus a store census over every shipped code file
+   for the redraw gate and the slot-1 pen. The pen's only writer is the
+   start-up rewrite, and the gate's only writers (the outdoor per-tick set-up
+   and town) set it; nothing clears it. The reading assumes each gated world tick reaches the
+   rasterizer. No live capture was taken; the apparition is a random event
+   behind camp conditions. Source provenance: private analysis in
+   `u5-decomp/notes/`.
 5. **Level line**, only when that member's level changed: `\n"Hail,_`, the
    member's name, `!\nFor_thy_valiant_deeds,_I_shall_reward_thee!\n`,
    `Thou_art_now_level_`, the new level as a plain decimal number, `,_and\n`,

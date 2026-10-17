@@ -118,7 +118,7 @@ Opened 2026-10-16 by the issue #298 Blackthorn and conversation pass:
 
 | Item | Where | Notes |
 |---|---|---|
-| What a label block's scoped prompt does with the records after the head - which arm is the default and when it falls back to the top-level keyword loop. The head's extent (to the first NUL, with label bytes inside it live) is settled; the post-head state machine was not traced for issue #298 Q20 and rests on earlier static reading only. | `systems/conversation.md` Section 7.7 | An emulator capture of one yes/no label block answered yes, no and with an unmatched word. |
+| What a label block's scoped prompt does with the records after the head - which arm is the default and when it falls back to the top-level keyword loop. The head's extent (to the first NUL, with label bytes inside it live) is settled; the post-head state machine was not traced for issue #298 Q20 and rests on earlier static reading only. *Narrowed 2026-10-17 (issue #299 Q1): the handler's return value is settled - every way out of a block reports a stop (`systems/conversation.md` Section 7.7), executed on the original for a scoped answer ending in `0x82` and for GOTO-ended Descriptions and Greetings; which arm is the default remains open.* | `systems/conversation.md` Section 7.7 | An emulator capture of one yes/no label block answered yes, no and with an unmatched word. |
 
 Opened 2026-10-16 by the issue #298 objects and NPC pass:
 
@@ -148,6 +148,31 @@ Opened 2026-10-16 by the issue #298 Q40 town-attack pass and the Q41-44 endgame 
 | The reported 1.9 s lower bound for the endgame's settle-to-greeting hold. The original at fixed emulator cycles measures 2.38 to 2.39 s at 3000 cycles and matches only the reported upper bound. *(Issue #298 Q41.)* | `systems/endgame.md` Section 5.2 | The reporter's definition of "settle" and their emulator cycle setting. |
 | Period-hardware durations of the endgame's untimed entry block (dominated by the tileset remap) and of the Blackthorn rescue's three single-cell reveals. Both are CPU-bound; only emulator timings at fixed cycle settings exist, and disk time for the overlay and file reads is zero in the emulator. *(Issue #298 Q41, Q44.)* | `systems/endgame.md` Section 5.2; `systems/blackthorn.md` Section 6.2 | A measurement on a 4.77 MHz machine, or an emulator configuration validated against one. |
 
+Opened 2026-10-17 by the issue #299 Q1 conversation stop-code pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| Three stop-code paths rest on static reading only: a passing IF-ELSE with argument `0xFF` opens a nested keyword prompt without flushing the pending word; a stopped reserved `NAME` or `JOB` response ends the conversation; inside the Bye entry a stop skips only the closing quote and the two row breaks. No executed probe took any of them. No shipped content depends on the flush difference or on a stopped `NAME`/`JOB`, because every shipped IF-ELSE `0xFF` follows a row break or key wait and no shipped Name or Job entry contains `0x82`. | `systems/conversation.md` Section 7.2 | Execute the original on a synthetic IF-ELSE `0xFF` with a pending word, a Name entry ending in `0x82`, and a Bye entry ending in `0x82`. |
+
+Opened 2026-10-17 by the issue #299 Q5 camp-apparition pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| The one-flash-per-member camp apparition rests on static reading only: each world-tick pause is read as repainting the whole viewport, erasing the inversion. No live capture; the apparition is a random event behind camp conditions. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | A paired capture of a camp apparition with two or more living members. |
+
+Opened 2026-10-17 by the issue #299 Q3 dungeon active-record pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| That a reused dungeon record whose stamped level differs from the party's level behaves as if it stood on the current level rests on static reading only; no save image with a mismatched level was resumed. *(Issue #299 Q3.)* | `systems/dungeon-mode.md` Section 4.1 | Resume a dungeon save edited so the record's stamped level differs from the party's, and observe the corridor, the monster's steps and contact. |
+
+Opened 2026-10-17 by the issue #299 Q8 sailing-prompt pass:
+
+| Item | Where | Notes |
+|---|---|---|
+| That the shared cleanup, the world step, the outdoor per-turn epilogue and the turn tail emit no line feed of their own after a no-echo hoisted direction. Inferred only: the executed run of the overworld helper replaced those steps with stubs, and the static census covered the prompt gate, not line feeds. The claim rests on the issue's stock capture and the two issue #297 captures agreeing. *(Issue #299 Q8.)* | `systems/text-output.md` Section 10.2 | A static pass over those steps for line-feed output, or an unstubbed emulator run of a held voyage. |
+| Where `Attacked!` and the other under-sail lines land relative to the pending marker row. Inferred from the gate behaviour, the literals' leading feeds and the point above; no new live run. *(Issue #299 Q8.)* | `systems/text-output.md` Section 10.2 | A DOSBox capture of an engagement during a held voyage after an accepted hoisted step. |
+
 ## 3. Needs a further static trace
 
 The corridor mirror derivation was completed 2026-09-07: original EGA
@@ -159,9 +184,8 @@ Opened 2026-09-12 by the issue #262 Klimb and dungeon-object passes:
 
 | Item | Where | What settles it |
 |---|---|---|
-| Combat's own K-Klimb contract. The pass established only that combat is a fourth prefix owner - its handler prints its own `Klimb-`, then a separate two-way marker and one of the climb or refusal words, and tests the same two ladder tile identities the town handler uses. | `systems/doors-and-z-transitions.md` Section 9; `systems/combat.md` Section 8.4 | A dedicated pass over the combat climb handler and its combat-side caller, including the arena-exit path the published combat text mentions. |
+| Combat's own K-Klimb contract. The pass established only that combat is a fourth prefix owner - its handler prints its own `Klimb-`, then a separate two-way marker and one of the climb or refusal words, and tests the same two ladder tile identities the town handler uses. *Narrowed 2026-10-17 (issue #299 Q4): the current-cell order, the `U/D-` and adjacent-prompt keys, the adjacent targets and the turn costs are now published from an executed run of the handler plus a static reading of the parser (`systems/combat.md` Section 8.4); only the refused-departure cost and the non-dungeon callers' use of codes 5 and 6 remain, indexed below.* | `systems/doors-and-z-transitions.md` Section 9; `systems/combat.md` Section 8.4 | A dedicated pass over the combat climb handler and its combat-side caller, including the arena-exit path the published combat text mentions. |
 | What reads the resident tile-restoration flag besides the combat framer. The census still counts two reads; the Klimb handler is no longer one of them (R471), so the second is unattributed. Whether the rest of that flag's published contract - its setter, its clears, the framer's restore - survives is untested. | `systems/dungeon-mode.md` Section 14.1; `systems/combat.md` Section 4 | A fresh reader census of the flag byte, separate from the retraction. |
-| Whether the dungeon entry path forces the on-foot transport state. The "no player-driven dungeon object placement" contract rests on it, because X-it executed with a mounted transport value in a dungeon scene does place an object. | `systems/active-objects.md` Section 10 | Trace the dungeon entry seed's writes to the transport marker. |
 | Whether dungeon-mouth entry caches the party's outdoor position. "Entry caches nothing" is established for the location-entry helper only; the dungeon-entry seed is a separate routine that was not opened. | `catalogs/gazetteer.md` Section 5.1 | Read the dungeon-entry seed path. |
 | Whether a "no action taken" result really skips the post-action pass on each Klimb route. The published per-arm turn costs are the handlers' own return values, executed per arm; the callers' use of them was not re-executed. | `systems/doors-and-z-transitions.md` Sections 9 and 13 | Execute each caller's post-action selection against the returned status. |
 | Eight dispatcher letters (`C`, `H`, `O`, `Q`, `R`, `U`, `Y`, `Z`) faulted part-way through the dungeon-scene object-write sweep on state the harness does not build. They were clean up to the fault only. | `systems/active-objects.md` Section 10 | A fuller harness that can run those letters to completion in a dungeon scene. |
@@ -358,6 +382,24 @@ Opened 2026-10-16 by the issue #298 Q40 town-attack pass:
 | Item | Where | What settles it |
 |---|---|---|
 | Whether the overworld and dungeon loops also re-run the party-capability check after an acted command, as town does ahead of its epilogue. Only the town loop was read for the recheck. *(Issue #298 Q40.)* | `systems/main-loop.md` Section 6; `systems/town-mode.md` Section 7 | Read the overworld and dungeon per-turn loops between dispatch and their clock calls. |
+
+Opened 2026-10-17 by the issue #299 Q2, Q4 and Q5 pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| What the out-of-arena helper reports to the combat parser when it refuses a K Up/Down departure (`Stay with ship!`, `All must use the same exit!`). K passes that value through, so the refusal is a free re-prompt only if the helper reports no action. The executed runs stubbed the helper. *(Issue #299 Q4.)* | `systems/combat.md` Section 8.4 | Read the helper's return on each refusal arm, or execute K with the real helper on a refused departure. |
+| Whether a dungeon camp-attack fight can carry the two-way-ladder flag. The arena `U/D-` test accepts the mode bit that dungeon contact and dungeon camp-attack fights share; the published "only place the two-way prompt can appear" rests on the flag being set only by the contact room painter. *(Issue #299 Q4.)* | `systems/dungeon-mode.md` Section 14.1; `systems/combat.md` Section 8.4 | Trace the flag's writers and clears against the dungeon camp-attack entry. |
+| What a town or overworld combat caller does with an Up/Down departure code (5 or 6). No stock `BRIT.CBT` arena can produce one; a custom arena with ladder tiles would. *(Issue #299 Q4.)* | `systems/combat.md` Section 8.4 | Read the town and overworld post-combat paths for exit codes 5 and 6. |
+| Whether any viewport cell holds the companion band's paint-nothing sentinel during the camp member pass. Such a cell is not repainted by the world-tick pause and would keep its inverted pixels. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | Trace the viewport buffers' contents from the old man's appearance through the member pass. |
+| Whether the low-colour accent-pen value 3 inverts every pixel on the CGA and Hercules drivers, in particular on the one-bit Hercules mode. On the sixteen-colour drivers 15 is all ones; the low-colour drivers' mapping of 3 for an exclusive-or rectangle was not traced. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | Read the CGA and Hercules rectangle routines' colour mapping in exclusive-or mode. |
+| Whether the shipwright's ordinary-offer `No` returns to the F/S menu (record `119`). This rests on one static reading; the second reader confirmed the row placement but did not trace that jump. *(Issue #299 Q2.)* | `systems/shops.md` Section 8.C | Trace the ordinary-offer decline arm to its next print. |
+
+Opened 2026-10-17 by the issue #299 Q3 and Q7 dungeon passes:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The display-mode condition under which the dungeon corridor painter reloads the active monster's sprite-state byte from the family's presentation record instead of using the stored byte. Its existence is established; the condition is not published. *(Issue #299 Q3.)* | `systems/dungeon-mode.md` Section 4.1 | A trace of the painter's sprite-state source, naming the condition in mode terms. |
+| That no block or indirect write changes the transport state underground, and that loading does not normalize it. The underground-writer census counted direct writes only; the no-normalization claim rests on the earlier save-load analysis, and no direct write was found in the load path. *(Issue #299 Q7.)* | `systems/active-objects.md` Section 10 | A census of block and indirect writes covering the transport byte, including the save-load path. |
 
 ## 4. Deferred by scope
 

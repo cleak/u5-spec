@@ -1052,10 +1052,27 @@ both of its comparisons branching to the same place, so the dungeon-specific
 refusal line it appears to own can never print. An implementation that blocks
 placement by scene rather than by transport state will agree with the original
 on shipped play and disagree on the reasoning; one that reproduces neither gate
-will place objects in dungeon corridors. Two dependencies are stated rather than
-proved: that the dungeon entry path forces the on-foot transport state, and the
-combat backup and restore, which is carried from Section 9 rather than
-re-derived here.
+will place objects in dungeon corridors. *(added/corrected 2026-10-17, issue
+#299 Q7)* The transport dependency is now established. Dungeon entry does not
+force the on-foot state; it **requires** it. Walk-in entry tests the transport
+state right after the coordinate match, refuses any other value with
+`On foot!` (`systems/commands.md` Section 5.5, the E-Enter row "Dungeon row
+matches, but the party is not on foot") and never writes the state itself. No
+handler reachable underground changes it: Board refuses in every dungeon scene
+before any write, the carpet arm of Use is gated to scenes below the dungeon
+band, X-it on foot refuses and writes nothing, the sail toggle needs a frigate,
+and the dungeon, dungeon-look and combat code contain no write to it. Every
+other write to the transport state belongs to overworld-mode code or restores
+the saved value itself before returning. That census covers direct writes
+only; block or indirect writes are not visible to it. That loading a save
+restores the state exactly as saved, with no normalization when resuming into
+a dungeon, rests on the earlier save-load analysis rather than on this census
+(no direct write was found in the load path). So a stock-written dungeon save
+always resumes on foot, and a save image carrying another transport value into
+a dungeon scene resumes with it, where X-it would take its mounted arm and place
+an object underground; that case is unreachable in stock play. Static reading
+only. One dependency remains stated rather than proved: the combat backup and
+restore, which is carried from Section 9 rather than re-derived here.
 
 **Combat entry.** Section 9.
 
@@ -1275,3 +1292,15 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/SJOG_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
   `u5-decomp/functions/CAST_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`, with
   the word, gate and quantity tables read back from the shipped data file.
+
+- **Issue #299 Q7, dungeon entry and the transport state (2026-10-17).** The
+  entry gate's require-not-force behaviour and the absence of any underground
+  writer of the transport state were established by static reading, with a
+  verifier's direct-write scan of every code file showing that the remaining
+  writes are overworld-mode code or restore the value themselves. Block and
+  indirect writes are outside that scan; the load path's verbatim restore rests
+  on the earlier save-load analysis. Source provenance: derived from private
+  analysis in `u5-decomp/notes/`, `u5-decomp/functions/MAINOUT_OVL/`,
+  `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/functions/ULTIMA_EXE/`.

@@ -263,7 +263,7 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 
 5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword is compared against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
 
-6. **Match found.** When an ordinary keyword matches, the engine runs the selected response stream through the byte runner. After the response finishes, the loop returns to step 1 to prompt for the next keyword.
+6. **Match found.** When an ordinary keyword matches, the engine runs the selected response stream through the byte runner. After the response finishes, the loop returns to step 1 to prompt for the next keyword. *(Clarified 2026-10-17, issue #299 Q1.)* "Finishes" means the response reaches its NUL. If it reports a stop, the loop returns that stop at once and the conversation ends without a `BYE` (Section 7.2).
 
 7. **No match.** When both scans complete without a match, the engine prints `I cannot help thee with that.\n\n` and returns to step 1.
 
@@ -352,7 +352,7 @@ The dispatcher's classification, in order:
   structural to the label scanners but is an accidental printable fall-through
   if the ordinary runner receives it.
 - **Byte `0xFE`.** A multi-byte command introducer that behaves as an alias for `0x8C` (IF/ELSE).
-- **Byte `0xFF`.** End-of-response. The byte runner flushes any pending word buffer and signals the keyword input loop to start a new iteration.
+- **Byte `0xFF`.** End-of-response. The byte runner flushes any pending word and opens a fresh keyword prompt nested where the stream stands; leaving that prompt ends the conversation. See Section 7.2. *(Corrected 2026-10-17, issue #299 Q1: this bullet said `0xFF` signals the existing keyword loop to start a new iteration; that is retracted, R561.)*
 
 The byte runner has a small amount of per-conversation state: a "multi-byte command in progress" flag (set by `0x85`, `0x86`, `0x8C`, and `0xFE`), an argument-collection buffer for the multi-byte arguments, a print mask that may be toggled mid-stream, a record of the last printable byte emitted (used to suppress a doubled double-quote), and a pending-space flag armed by successful dictionary expansions. All of this state is reset at the start of each conversation.
 
@@ -382,7 +382,7 @@ runic script.
 | Code  | Mnemonic           | Effect                                                                                                                          |
 |-------|--------------------|---------------------------------------------------------------------------------------------------------------------------------|
 | 0x81  | PRINT-AVATAR-NAME  | Emit the player's saved name (the name chosen during character creation) into the output stream. Used in greetings like "Hail, ${name}!". |
-| 0x82  | END-STREAM         | Stop the current stream and signal the caller "this stream is finished". Used to terminate the fixed leading entries (Name, Description, Greeting, Job, Bye) without ending the whole conversation. |
+| 0x82  | END-STREAM         | Stop the current stream and report a **stop** to whatever ran it, without flushing the pending word. Every caller treats a stop as the end of the whole conversation (see the paragraph below). In shipped content it is always the last byte of its record and never appears in a Name, Description, Greeting or Job entry. *(Corrected 2026-10-17, issue #299 Q1: this row said `0x82` terminates the leading entries "without ending the whole conversation"; that is retracted, R560.)* |
 
 `0x81` interpolates the avatar's name as if it were a literal text run, including word-boundary handling. **It occurs sixty times across the four shipped
 dialogue files** - sixteen, thirty-five, seven and two - and always in a vocative
@@ -392,7 +392,74 @@ simply missing ("Greetings, , nice"), which is visible to the player but
 produces no error, no crash and no failing assertion unless a test compares
 rendered output against a shipped blob. That count is a usable regression
 target: a correct implementation substitutes a name sixty times over a full
-sweep of the shipped dialogue. `0x82` is distinct from `0xFF` (end-of-response): `0x82` is what the engine reads at the end of a leading entry that runs as a unit (e.g. when the engine emits the greeting at conversation start), while `0xFF` returns control to the keyword input loop after a keyword response completes.
+sweep of the shipped dialogue.
+
+**Stops, `0x82` and `0xFF`** *(corrected 2026-10-17, issue #299 Q1)*. A
+stream ends in one of two ways: it runs to its NUL, or the byte runner reports
+a stop. The level that ran the stream decides what a stop means, and every
+level of the conversation treats it the same way: the conversation is over.
+
+- **`0x82` is the plain stop.** It does not flush the pending word first.
+  - On the opener path (the Description, the Greeting and the
+    self-introduction's Name run of Section 9) a stop makes the opener return
+    at once. No keyword prompt, `BYE` or Bye entry follows. Only the final
+    cleanup of Section 10 runs.
+  - In a keyword answer or a scoped-prompt answer (Section 7.7), a stop ends
+    the conversation with no `BYE` and no Bye entry. For example, if a scoped
+    yes/no question's "no" answer ends in `0x82`, answering "no" puts the
+    player straight back in the command loop.
+  - A stopped reserved `NAME` or `JOB` response has the same effect (static
+    reading only).
+  - Inside the Bye entry, a stop only skips the closing quote and the two row
+    breaks (static reading only).
+- **`0xFF` is not a stop.** It flushes the pending word, then opens a fresh
+  keyword prompt (Section 6) right where the stream stands, nested inside it.
+  - Nothing is printed between the flush and `Your interest?`. The closing
+    quote and the two row breaks that normally come before the prompt are
+    added only when a response ends at its NUL, so a stream ending in `0xFF`
+    must carry its own. Shipped streams do.
+  - When the player leaves the nested prompt, that prompt prints `BYE` and
+    runs the Bye entry, then reports a stop. Every outer level passes the stop
+    up and does nothing else, so a conversation prints `BYE` once however deep
+    the nesting goes.
+  - This is the same stop propagation that the unaffordable-payment prompt
+    already follows (Section 7.6, "On an unaffordable payment").
+- **A response that ends at its NUL** goes back to the prompt that ran it,
+  with the closing quote and two row breaks.
+- **An IF-ELSE that passes with the reserved argument `0xFF`** also opens a
+  fresh nested keyword prompt, with one difference: it does **not** flush the
+  pending word first (static reading only; no executed probe took this path).
+  All fourteen shipped uses come right after a row break (thirteen) or a key
+  wait (one), so no word is pending and shipped play shows no difference.
+
+*(The earlier text said `0x82` is read at the end of a leading entry that runs
+as a unit and that `0xFF` "returns control to the keyword input loop"; both
+are retracted, R560 and R561.)*
+
+Why it matters: an implementation that treats `0xFF` as "return to the
+existing prompt" looks the same in most of play, because a prompt opens either
+way. On the opener path it goes wrong. It runs the rest of the opener (the
+blank rows, the acquaintance test, the reseed and coin flip, the greeting),
+then opens a second prompt, which prints a second `BYE` when it ends.
+
+Shipped census:
+- Seven Descriptions, two Name entries and one Job entry contain the `0xFF`
+  code.
+- Thirty-three Descriptions contain a path that can stop or nest: a GOTO, the
+  `0xFF` code, or a label byte that is an IF-ELSE operand.
+- `0x82` occurs 93 times, always as the last byte of its record. Eighty-six of
+  those come right after a line break, so shipped content never loses a
+  pending word to it.
+- Among the leading entries, `0x82` appears only in four Bye entries. Every
+  other occurrence ends a labelled-block head or a scoped answer.
+
+Source provenance: private analysis in `u5-decomp/notes/`. The opener, the
+label handler, the keyword loop and the byte runner's return values were read
+statically. The original conversation code was then executed under emulation
+on the shipped blobs: a wizard with the party unknown and known, a dwelling
+rat, an ordinary control NPC, a scoped answer ending in `0x82`, and a
+synthetic greeting with `0x82` appended. The census was read from the four
+shipped `.TLK` files.
 
 ### 7.3. Pause and key-wait codes
 
@@ -467,7 +534,7 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 | 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
 | 0x87  | KEYWORD-ALIAS   | none                    | Save the current stream position; skip forward past the remainder of the current record, past any run of terminators, and past the whole record that follows; run the record after that as a nested stream. If the nested stream signals stop, the outer stream stops too; otherwise the saved position is restored and the outer stream continues where it left off. No keyword matching, no player input, no flag write. |
 | 0x88  | ASK-WHO         | none                    | Prompt the player for a name and read a typed line. Every visible byte of the exchange is the engine's own stored text; the code consumes no text from the stream. In order: an opening double quote the handler emits itself, the question `What is thy name?` with its own closing quote, a blank row, `You respond-`, and a `:` row that the typed answer echoes onto. On a match against a roster slot within the current party count, **set the active scene's branch-flag bit for the NPC currently speaking** and print the affirmative acknowledgement; on empty input, and again on a completed scan that matched nothing, print the dismissive one. Section 7.6 "What ASK-WHO prints" gives both acknowledgements, their leading feeds, their missing closing quote, and which quotes the stream supplies. This is the in-stream setter for the bank that `0x8C` tests. *(Corrected 2026-09-12, issue #266: the earlier "four-row literal" count, the claim that "the stream around it carries only the closing and opening quotes", and the qualifier "live party member" are withdrawn - R486 and R487.)* |
-| 0x8C  | IF-ELSE         | one                     | Collect one argument byte, which is the **branch target label**, then test the active scene's branch-flag bit for the NPC currently speaking. If the bit is clear, fall through in-stream with the byte after the argument. If it is set, transfer to the labelled record named by the argument — or, for the reserved argument `0xFF`, end the response and return to the keyword prompt. The tested bit is chosen by the engine, never by the script. |
+| 0x8C  | IF-ELSE         | one                     | Collect one argument byte, which is the **branch target label**, then test the active scene's branch-flag bit for the NPC currently speaking. If the bit is clear, fall through in-stream with the byte after the argument. If it is set, transfer to the labelled record named by the argument — or, for the reserved argument `0xFF`, open a fresh keyword prompt nested at that point without flushing the pending word; leaving that prompt ends the conversation (Section 7.2). The tested bit is chosen by the engine, never by the script. *(Corrected 2026-10-17, issue #299 Q1: the `0xFF` arm was given as "end the response and return to the keyword prompt"; retracted, R562.)* |
 | 0xFE  | IF-ELSE-ALT     | two                     | Multi-byte alternative branch form. Collects a moral-standing threshold byte and a target-label byte; if the shared moral-standing selector is at or above the threshold, the runner branches to the target label. |
 
 #### The keyword-alias idiom (`0x87`)
@@ -557,9 +624,11 @@ bit zero (`systems/quest-flags.md` section 3).
 
 The shipped idiom guards the `0x88` with an IF-ELSE carrying the reserved `0xFF`
 argument, usually in the NPC's Name or Greeting entry: if the NPC already knows
-the party, the `0x8C 0xFF` ends the entry and drops straight to the keyword
-prompt; if not, execution falls through to the `0x88` prompt, which asks and then
-remembers. Forty-six of the one hundred thirty-five shipped blobs contain an
+the party, the `0x8C 0xFF` opens the keyword prompt right there, nested in the
+entry, and leaving it ends the conversation (Section 7.2); if not, execution
+falls through to the `0x88` prompt, which asks and then remembers. *(Corrected
+2026-10-17, issue #299 Q1: this said the guard "ends the entry and drops
+straight to the keyword prompt"; retracted, R562.)* Forty-six of the one hundred thirty-five shipped blobs contain an
 ASK-WHO, and forty-three of those also contain an IF-ELSE. Of the forty-eight
 ASK-WHO occurrences, **twenty** are immediately preceded by an IF-ELSE and its
 argument byte, and in **nine** of those twenty the argument is the reserved
@@ -878,7 +947,15 @@ label byte that is the operand of the IF-ELSE code `0x8C` (or the target operand
 of the `0xFE` threshold code) is consumed as that operand and is neither a GOTO
 nor a boundary. A self-GOTO re-enters the label handler as a nested call, and
 the outer call returns as soon as the inner one stops, so a retry loop never
-opens a second scoped prompt for the outer level. The declaration search also
+opens a second scoped prompt for the outer level.
+*(Added 2026-10-17, issue #299 Q1.)* The label handler reports a stop to
+whatever ran the GOTO on every way out of a labelled block: when the head
+stops, when the head reaches its NUL and the scoped prompt then finishes, and
+when the scoped prompt falls back to the ordinary keyword prompt and that
+prompt ends. So a GOTO is always the last thing its calling stream does. A GOTO
+in the Description or the Greeting ends the conversation once its block is done
+(Section 9).
+The declaration search also
 accepts the final-marker value `0x9F` in place of the declaration marker before
 the label; no shipped record contains that pairing, so shipped content behaves
 as if only the declaration marker counts.
@@ -921,7 +998,9 @@ path rather than treating the scoped prompt as a permanent terminal state.
 IF/ELSE branches reuse the same machinery. The IF-ELSE introducer falls through
 in-stream when the tested flag is clear, and transfers to the labelled record
 named by its argument byte when the flag is set; the reserved argument `0xFF`
-ends the response instead of transferring. The fall-through arm can end with its
+opens a nested keyword prompt instead of transferring (Section 7.2). *(Corrected
+2026-10-17, issue #299 Q1: this said `0xFF` "ends the response instead of
+transferring"; retracted, R562.)* The fall-through arm can end with its
 own label transfer past the taken arm so that the runner does not also execute
 it. The fifteen-label range is per blob, but labels are byte-level flow markers,
 not globally unique names.
@@ -987,6 +1066,35 @@ Putting the pieces together, a single conversation runs through a fixed envelope
    seest"; the stored literal is `You see `.* If the Description entry signals a
    stop, the opener returns and nothing further is printed.
 
+   *(Added 2026-10-17, issue #299 Q1.)* After an opener stop:
+   - the conversation skips the keyword prompt, `BYE` and the Bye entry, and
+     runs only the final cleanup (step 6);
+   - the blank rows after the description are not printed;
+   - the acquaintance test, the host-clock reseed and the coin flip of step 3
+     do not happen.
+
+   The same holds when the Greeting or the self-introduction's Name run of
+   step 3 reports a stop. A Description reports a stop when it reaches `0x82`,
+   when a GOTO it runs finishes (Section 7.7), or when the player leaves a
+   keyword prompt opened by `0xFF` or by an IF-ELSE with argument `0xFF`
+   (Section 7.2).
+
+   Two shipped examples:
+   - **The Britain wizard** (`TOWNE.TLK` id 12), party unknown. The
+     Description's GOTO block asks the name, misses its IF-ELSE, prints
+     `Good day!"` and one line break, and stops. The conversation is over,
+     with the cursor at the start of the next row, and the next key is a
+     command. With the party known, the IF-ELSE jumps to a block whose head
+     prints the known-party greeting and ends in `0xFF`, so the keyword prompt
+     opens there.
+   - **The dwelling rat** (`DWELLING.TLK` id 12). The Description ends in
+     `0xFF` after its ASK-WHO and more text. The keyword prompt opens inside
+     the Description and play goes on normally. Leaving the prompt ends the
+     conversation with one `BYE`, and the greeting never runs.
+
+   Both cases were executed on the original under emulation, and no clock
+   read or coin flip happened on the stop paths.
+
 3. **Opening: acquaintance test, then greeting or introduction.** After the
    description, the engine consults the same per-scene "this NPC has been told
    the party's name" bit that the ASK-WHO / IF-ELSE pair uses (Section 7 and
@@ -995,9 +1103,19 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
    - **Bit set (the NPC knows the party).** The engine opens the quote wrapper
      and runs the Greeting entry (entry 3 of the five mandatory leading
-     entries) through the byte runner. Most greetings end with `0x82`
-     (END-STREAM) so the runner returns control without proceeding into the Job
-     entry.
+     entries) through the byte runner. No shipped Greeting contains `0x82`,
+     and the stream driver never runs on from the Greeting into the next
+     entry. Most Greetings run to their NUL.
+
+     Eleven shipped Greetings end in a GOTO instead: `CASTLE.TLK` ids 3 and
+     18, `TOWNE.TLK` ids 3, 5, 8, 9, 16, 19, 22 and 34, and `KEEP.TLK` id 29.
+     A GOTO always comes back as a stop (Section 7.7), so for these NPCs the
+     labelled block's scoped prompt, or the keyword prompt it falls back to,
+     is the conversation's only prompt. The opener opens no second prompt
+     afterwards, and one `BYE` is printed. This was executed on the original
+     for `TOWNE.TLK` ids 34 and 8 and `CASTLE.TLK` id 3 with the bit set.
+     *(Corrected 2026-10-17, issue #299 Q1: this bullet said most greetings
+     end with `0x82`; retracted, R563.)*
    - **Bit clear (a stranger).** After the description has completed and this
      bit test has found the bit clear, the engine makes one fresh host-clock
      read, assigns the transformed value as the shared random-generator state,
@@ -1024,7 +1142,7 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
 4. **Keyword loop.** Section 6's loop runs until the player exits.
 
-5. **Bye sequence.** When the player exits (typed empty input, or a keyword response that ends the stream), the engine emits `BYE\n\n` and runs the Bye entry (entry 5 of the five mandatory leading entries).
+5. **Bye sequence.** When the player leaves the keyword prompt (empty input, or the `BYE`/`THANK` reserved words), the engine emits `BYE\n\n` and runs the Bye entry (entry 5 of the five mandatory leading entries). A keyword or scoped answer that stops (`0x82`) ends the conversation without `BYE` and without the Bye entry. The same is true of any prompt nested by `0xFF`: it runs the farewell itself, and no outer level repeats it (Section 7.2). *(Corrected 2026-10-17, issue #299 Q1: this step said a keyword response that ends the stream leads to `BYE` and the Bye entry; retracted, R564.)*
 
 **The complete shape of an ordinary entry** *(added 2026-09-12, issue #262)* is
 therefore: a blank row, `You see ` plus the description, a blank row, the
