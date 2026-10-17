@@ -179,6 +179,29 @@ Opened 2026-10-17 by the issue #299 Q12 divider-band pass:
 | That the timed-effect slot keeps drawing inverted on every later panel repaint while the leak is set, and that installing, changing or expiring an effect during the leak redraws the slot, or restores the plain band, under the same rule. Inferred from the leak's lifetime; no run installed, changed or expired an effect with the leak set. *(Issue #299 Q12.)* | `systems/inventory.md` Section 4.4 | A DOSBox capture that sets the leak, then casts or expires a timed effect and compares the row-7 frames. |
 | How the arms sell browser's page-status badge, which also draws end caps in the slot, renders under the leak, and therefore whether a capture showing inverted caps on row 7 must have had a timed effect running. Untested. *(Issue #299 Q12.)* | `systems/inventory.md` Section 4.4 | A DOSBox capture of the arms sell browser entered with the leak set. |
 
+Opened 2026-10-17 by the issue #299 Q14-Q16 inn and tavern pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| How Leave adjusts the active-player index when it moves the leaving record to slot 15. Leave is known to adjust it; the rule is not published. *(Issue #299 Q14.)* | `systems/shops.md` Section 8.4; `formats/saved-gam.md` Section 4 | Execute Leave with the active-player byte set before, on and after the leaving slot, and record the byte afterwards. |
+| Whether an ordinary (not poisoned) Pickup sets the returned companion's current HP to maximum and refills MP (Avatar and Mage to Intelligence, Bard to half), as Rest does. Reported as a side observation, not checked against the spec or verified; the `P` bullet says nothing either way. *(Issue #299 Q14.)* | `systems/shops.md` Section 8.4 | Execute paid Pickup of a healthy guest with reduced HP and MP, per class, and compare the returned record. |
+| The Guest Register's highlight bar and the afford-only line after `-1` were observed at the print and key-wait call boundary only; their pixel layout is not captured, and the register's physical-key mapping is inferred from `systems/input.md` Section 5 rather than executed at the register. *(Issue #299 Q15, Q16.)* | `systems/shops.md` Sections 8.C and 8.5 | A DOSBox capture of a three-guest register driven by arrows, numpad and Shift-held top-row digits, and of a `-1` provision purchase that runs out of gold. |
+
+Opened 2026-10-17 by the issue #299 Q13 and Q19 combat-refusal pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The combat refusal row layouts (controlled-monster R and U with a blank row before `Can't!`, the K `What?` and refused-departure rows) are emission-order results, not screen captures; the blank rows are derived from the published newline rendering rule. *(Issue #299 Q13, Q19.)* | `systems/combat.md` Section 8.4 | A DOSBox capture of a charmed monster pressing R in an arena, and of a refused K target, from a stock save. |
+| That a K target on a rock pile holding an object gives the same `What?` rows rests on static reading; no run took that case. *(Issue #299 Q13.)* | `systems/combat.md` Section 8.4 | Execute the arena K handler toward a rock cell with an object on it. |
+
+Opened 2026-10-17 by the issue #299 Q17 and Q18 clock and hours-prompt pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Which ordinary panel refresh first shows the repaired food value after a rescue clock spin that crossed midnight. That it is the next ordinary refresh is inferred; it was not traced. *(Issue #299 Q17.)* | `systems/blackthorn.md` Section 7, step 12 | Trace or capture the first panel repaint after the castle handoff from a wipe at hour 7 or later with zero food. |
+| That a midnight-crossing rescue spin runs the ordinary midnight events (Shadowlord relocation roll) and, at a month boundary, the month-boundary events rests on static reading; the executed runs passed through them without checking their outputs. *(Issue #299 Q17.)* | `systems/blackthorn.md` Section 7, step 11 | Execute the rescue tail from a 23:55 clock on day 28 and compare the Shadowlord slots, random state and month-event state with an ordinary midnight crossing. |
+| That modifier-held top-row `1`-`4` and `6`-`9`, the arrow keys and Home/End/PgUp/PgDn are silently discarded at the dungeon hours prompt (and that `5`, `0` and Space are still accepted) rests on static reading of the shared resident reader; the same mechanism is executed only at the mixer prompt. *(Issue #299 Q18.)* | `systems/dungeon-mode.md` Section 11; `systems/input.md` Section 5 | A stock capture typing a shifted digit and a NumLock digit at the dungeon hours prompt. |
+
 ## 3. Needs a further static trace
 
 The corridor mirror derivation was completed 2026-09-07: original EGA
@@ -190,7 +213,7 @@ Opened 2026-09-12 by the issue #262 Klimb and dungeon-object passes:
 
 | Item | Where | What settles it |
 |---|---|---|
-| Combat's own K-Klimb contract. The pass established only that combat is a fourth prefix owner - its handler prints its own `Klimb-`, then a separate two-way marker and one of the climb or refusal words, and tests the same two ladder tile identities the town handler uses. *Narrowed 2026-10-17 (issue #299 Q4): the current-cell order, the `U/D-` and adjacent-prompt keys, the adjacent targets and the turn costs are now published from an executed run of the handler plus a static reading of the parser (`systems/combat.md` Section 8.4); only the refused-departure cost and the non-dungeon callers' use of codes 5 and 6 remain, indexed below.* | `systems/doors-and-z-transitions.md` Section 9; `systems/combat.md` Section 8.4 | A dedicated pass over the combat climb handler and its combat-side caller, including the arena-exit path the published combat text mentions. |
+| Combat's own K-Klimb contract. The pass established only that combat is a fourth prefix owner - its handler prints its own `Klimb-`, then a separate two-way marker and one of the climb or refusal words, and tests the same two ladder tile identities the town handler uses. *Narrowed 2026-10-17 (issue #299 Q4): the current-cell order, the `U/D-` and adjacent-prompt keys, the adjacent targets and the turn costs are now published from an executed run of the handler plus a static reading of the parser (`systems/combat.md` Section 8.4); only the non-dungeon callers' use of codes 5 and 6 remains, indexed below.* *Narrowed 2026-10-17 (issue #299 Q13): the refused-departure cost (free, short re-prompt) and the refusal rows are published from an executed run with the real edge helper.* | `systems/doors-and-z-transitions.md` Section 9; `systems/combat.md` Section 8.4 | A dedicated pass over the combat climb handler and its combat-side caller, including the arena-exit path the published combat text mentions. |
 | What reads the resident tile-restoration flag besides the combat framer. The census still counts two reads; the Klimb handler is no longer one of them (R471), so the second is unattributed. Whether the rest of that flag's published contract - its setter, its clears, the framer's restore - survives is untested. | `systems/dungeon-mode.md` Section 14.1; `systems/combat.md` Section 4 | A fresh reader census of the flag byte, separate from the retraction. |
 | Whether dungeon-mouth entry caches the party's outdoor position. "Entry caches nothing" is established for the location-entry helper only; the dungeon-entry seed is a separate routine that was not opened. | `catalogs/gazetteer.md` Section 5.1 | Read the dungeon-entry seed path. |
 | Whether a "no action taken" result really skips the post-action pass on each Klimb route. The published per-arm turn costs are the handlers' own return values, executed per arm; the callers' use of them was not re-executed. | `systems/doors-and-z-transitions.md` Sections 9 and 13 | Execute each caller's post-action selection against the returned status. |
@@ -323,7 +346,6 @@ Opened 2026-09-13 by the issue #272 mixer-prompt pass:
 
 | Item | Where | What settles it |
 |---|---|---|
-| The tavern's provision question, the one other prompt that reaches the two-digit typed-number reader, was not executed by this pass. Its key rules are the reader's and are settled by inheritance, and its stored text is already published; what is untested is that its rendering behaves as the mixer's does, in particular that the reader adds nothing of its own there either. | `systems/text-output.md` Section 10.6; `systems/shops.md` Section 8.5 | Execute the tavern provision question from its own handler and compare the emitted character stream around the prompt with the mixer's. |
 | Which reader the other numeric-looking prompts use - the hours-to-rest question above all. Two direct call sites of the two-digit reader were censused across the executable and every overlay, plus a search for its entry as a stored word; far and computed entries were not enumerated, so "only two prompts" is a census result and the remaining numeric prompts are unattributed rather than known to use something else. | `systems/text-output.md` Section 10.6; `systems/input.md` Section 8 | Trace the hours-to-rest prompt and any other numeric prompt to whichever reader it calls, and record its cap and key rules. |
 
 Opened 2026-09-13 by the issue #273 shrine-pose pass:
@@ -393,7 +415,6 @@ Opened 2026-10-17 by the issue #299 Q2, Q4 and Q5 pass:
 
 | Item | Where | What settles it |
 |---|---|---|
-| What the out-of-arena helper reports to the combat parser when it refuses a K Up/Down departure (`Stay with ship!`, `All must use the same exit!`). K passes that value through, so the refusal is a free re-prompt only if the helper reports no action. The executed runs stubbed the helper. *(Issue #299 Q4.)* | `systems/combat.md` Section 8.4 | Read the helper's return on each refusal arm, or execute K with the real helper on a refused departure. |
 | Whether a dungeon camp-attack fight can carry the two-way-ladder flag. The arena `U/D-` test accepts the mode bit that dungeon contact and dungeon camp-attack fights share; the published "only place the two-way prompt can appear" rests on the flag being set only by the contact room painter. *(Issue #299 Q4.)* | `systems/dungeon-mode.md` Section 14.1; `systems/combat.md` Section 8.4 | Trace the flag's writers and clears against the dungeon camp-attack entry. |
 | What a town or overworld combat caller does with an Up/Down departure code (5 or 6). No stock `BRIT.CBT` arena can produce one; a custom arena with ladder tiles would. *(Issue #299 Q4.)* | `systems/combat.md` Section 8.4 | Read the town and overworld post-combat paths for exit codes 5 and 6. |
 | Whether any viewport cell holds the companion band's paint-nothing sentinel during the camp member pass. Such a cell is not repainted by the world-tick pause and would keep its inverted pixels. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | Trace the viewport buffers' contents from the old man's appearance through the member pass. |

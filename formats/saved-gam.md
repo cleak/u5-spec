@@ -15,16 +15,17 @@ All offsets in this spec are file-relative, given as hexadecimal addresses from 
 ## 2. Top-level layout
 
 The four-thousand-one-hundred-ninety-two-byte file contains a set of persistent
-regions and save-backed resident views. Most rows below are contiguous regions;
-the inn-guest registry is a legacy view with character-record stride that
-overlaps adjacent save bytes and should not be treated as an independent block
-after the roster.
+regions and save-backed resident views. Most rows below are contiguous regions.
+The inn-guest registry has no region of its own: it is the roster's per-record
+marker byte (Section 3.3). *(added/corrected 2026-10-17, issue #299 Q14: this
+paragraph earlier called the registry a legacy view overlapping adjacent save
+bytes; that is retracted, R569.)*
 
 | Region                              | Offset range          | Size        | Section |
 |-------------------------------------|-----------------------|-------------|---------|
 | Leading save-image bytes            | `0x0000` – `0x0001`   | 2 bytes     | 2       |
 | Character roster (16 × 32 bytes)    | `0x0002` – `0x0201`   | 512 bytes   | 3       |
-| Inn-guest registry (16 × 32 bytes)  | `0x0021` – `0x0220`   | 512 bytes   | 3.3     |
+| — of which: inn-lodging markers (last byte of each record) | `+0x1F` of each roster record | 16 × 1 byte | 3.3 |
 | Inventory and consumables           | `0x0202` – `0x02A9`   | ~168 bytes  | 7       |
 | Moonstone gate slots                | `0x028A` – `0x02A9`   | 32 bytes    | 7.2     |
 | Reagents (8 bytes)                  | `0x02AA` – `0x02B1`   | 8 bytes     | 7       |
@@ -51,7 +52,7 @@ after the roster.
 The two leading bytes precede the roster in the resident save image. They are
 zero in the factory seed and should be preserved by byte-compatible tools.
 
-The inn-guest registry is a save-backed resident view with the same thirty-two-byte stride as character records. Its overlap with the canonical roster and adjacent inventory range is intentional: the inn helper reads this shifted view as a sixteen-slot guest table, not as ordinary padding. Treat the range as owned by the inn helper when reproducing inn behaviour, and preserve it byte-for-byte in compatible save tools unless intentionally implementing the inn flow. The factory-seed `INIT.GAM` is zero in every region whose value depends on play; only the roster records, starting inventory, starting date/location, weather, and a small set of control bytes carry non-zero values out of the box.
+The inn-guest registry is the roster itself: each record's last byte is its inn-lodging marker (Section 3.3). No inventory byte belongs to it. Preserve the marker byte-for-byte in compatible save tools. *(added/corrected 2026-10-17, issue #299 Q14: the table above earlier listed a separate "Inn-guest registry (16 × 32 bytes)" region at `0x0021` – `0x0220`, reaching into the inventory, and this paragraph called that overlap an intentional shifted guest-table view; both are retracted, R570 and R569.)* The factory-seed `INIT.GAM` is zero in every region whose value depends on play; only the roster records, starting inventory, starting date/location, weather, and a small set of control bytes carry non-zero values out of the box.
 
 The next several sections describe each region in detail. The byte-offset
 tables are exhaustive for the regions whose contents have been verified
@@ -83,7 +84,7 @@ Each thirty-two-byte record is laid out as follows.
 | `0x17`       | 1 byte   | Per-character month counter. The time system increments every character-record slot at the 28-day month rollover, capped at 25. The traced gameplay consumer is inn billing for lodged guest records; no separate active-party consumer is identified. |
 | `0x18`       | 1 byte   | Party-member combat defense byte used by the combat damage path's random defense subtraction. Factory-seed records carry value `7`; no traced writer currently recomputes this byte from readied equipment. |
 | `0x19`       | 6 bytes  | Equipment slot bytes: helm, body armour, weapon hand, shield/off hand, ring, and amulet/neck item. Each non-empty slot byte is an equipment item id (see Section 7). The live empty-slot sentinel is `0xFF`. |
-| `0x1F`       | 1 byte   | Inn-registry marker byte when this record is viewed through the shifted inn guest table; zero for an empty/cleared guest marker. Opaque padding for ordinary active-character behaviour. Value `0x7F` marks a companion executed by Blackthorn (`systems/blackthorn.md` Section 5); the shrine/Codex presentation reads it (`systems/karma.md` Section 8). *(Added 2026-10-16, issue #298 Q5.)* |
+| `0x1F`       | 1 byte   | This record's own inn-lodging marker: the scene number of the inn where the character is lodged, or zero when it is not lodged. It travels with the record whenever New Order, Leave or Pickup moves records, and it has no meaning for a travelling member (Section 3.3). *(added/corrected 2026-10-17, issue #299 Q14: this row earlier described the byte as the marker of a shifted inn guest table and is retracted, R569.)* Value `0x7F` marks a companion executed by Blackthorn (`systems/blackthorn.md` Section 5); the shrine/Codex presentation reads it (`systems/karma.md` Section 8). *(Added 2026-10-16, issue #298 Q5.)* |
 
 The name is NUL-padded rather than NUL-terminated. A nine-byte slot can hold a nine-character name with no terminator at all, and shorter names are padded with zero bytes. Players who entered an empty name will see all nine bytes of zero. The engine's empty-save guard (see `systems/save-load.md`) tests the first byte of record zero's name field. In file-relative terms that byte is `0x0002`, because the roster begins after the two leading save-image bytes.
 
@@ -145,7 +146,7 @@ transfer is specifically not an import route for Ashes because it forces Good.
 
 ### 3.3 The inn-guest registry
 
-A second sixteen-by-thirty-two-byte guest-table view sits in the resident save image. The inn-guest registry stores a copy of each character record that is currently checked into one of the in-world inns. Each guest entry uses the same stride and record-shaped payload as a character record, but it is not a second ordinary roster: the leading byte of each registry slot is an inn-scene marker used to decide whether the guest belongs to the inn currently being visited. The registry interpretation is opaque to other gameplay systems; only the inn helper is known to read or write the scene marker as guest state. It survives saves because it lives inside the resident state region. Leave initializes the guest's stored stay counter to zero; the time system increments that shared character counter on each 28-day month rollover, capped at 25; pickup treats a zero counter as one billable unit and clears the returned slot's marker to zero after moving the guest back into the active roster. Active and non-lodged records age the same byte, but current traced readers do not give those aged values a separate effect.
+*(added/corrected 2026-10-17, issue #299 Q14)* There is no separate guest table. A companion lodged at an inn is an ordinary roster record outside the travelling party. What marks it as lodged is the record's own last byte, `+0x1F`, which holds the scene number of the inn where it was left; zero means not lodged. Leave writes that marker and zeroes the stay counter `+0x17` in the leaving member's own record. It then moves every later roster record, travelling or not, down one slot and puts the leaving record in the last slot, slot 15. Pickup moves the guest's record into the first slot after the travelling party, shifts the records in between up by one slot, and then clears the returned record's marker. Both moves are whole-record moves, so every byte stays with its character: the defense byte `+0x18`, the equipment, the stay counter and the marker. No byte stays with a slot, and other lodged guests whose records shift keep their markers and stay lodged at their inns. Neither path reads or rewrites `+0x18`. The inn's capacity and guest-count test reads the marker of all sixteen records. The Guest Register and its previous/next steps scan records 1 through 15 and show the name of the same record whose marker matched. The Avatar's marker is never set. The last record's marker is the final byte of the roster, so no inventory byte is ever read as a marker. The earlier text here described a second, shifted sixteen-slot guest-table view whose slots began with a scene marker followed by a copied character payload; that is retracted (R569). Only the inn helper is known to read or write the marker as guest state. It survives saves because it lives inside the resident state region. The time system increments the shared stay counter on each 28-day month rollover, capped at 25; pickup treats a zero counter as one billable unit. Active and non-lodged records age the same byte, but current traced readers do not give those aged values a separate effect.
 
 ## 4. Active player and party
 
@@ -230,7 +231,7 @@ The scene byte is the most-cited field in the entire save image: every gameplay 
 
 ## 7. Inventory and consumables
 
-A long band of bytes after the inn-guest registry holds the party's shared inventory. Most fields are single bytes; a few are little-endian words for counters that exceed two hundred fifty-five.
+A long band of bytes after the character roster holds the party's shared inventory. Most fields are single bytes; a few are little-endian words for counters that exceed two hundred fifty-five. *(added/corrected 2026-10-17, issue #299 Q14: this lead earlier placed the band "after the inn-guest registry"; no registry overlaps it, R570.)*
 
 | Offset   | Width   | Field              | Meaning                                                                                                       |
 |----------|---------|--------------------|---------------------------------------------------------------------------------------------------------------|
@@ -565,7 +566,7 @@ The first record is the Avatar:
 - Byte `17`: month counter / inn stay counter.
 - Byte `18`: cached party combat-defense byte.
 - Bytes `19..1E`: equipment fields.
-- Byte `1F`: inn-registry marker / padding.
+- Byte `1F`: this record's inn-lodging marker (zero when not lodged; Section 3.3). *(added/corrected 2026-10-17, issue #299 Q14: earlier "inn-registry marker / padding" of a shifted view, retracted R569.)*
 
 For a questionnaire-created Avatar, chargen overwrites the entered name,
 gender, STR, DEX, INT, and MP. The class remains Avatar and the status remains

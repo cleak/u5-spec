@@ -914,7 +914,10 @@ entries. Which reader the other numeric-looking prompts use, the hours-to-rest
 question among them, is **not** established here, so an implementation should
 not assume this reader's key rules apply to them. Only the mixer's prompt was
 executed in this pass - in full, including the cap, the erase keys and the keys
-it silently discards - so the key rules above are the reader's as run there.
+it silently discards - so the key rules above are the reader's as run there. *(added 2026-10-17, issue #299 Q16)* The tavern's
+provision question has since been executed from its own handler, and the
+reader emits only its echo and erasures there too (`systems/shops.md`
+Section 8.5); that run was observed at the print-call boundary.
 
 Not every prompt is typed input. The active-player prompt prints `Player: ` and
 then runs a highlight picker — digit keys `1` through `6`, up and down, Return or

@@ -165,7 +165,7 @@ executed against a reconstruction of the shipped poll routine's own decisions
 with the reported modifier byte set and clear, not a capture on hardware or in
 an emulator. The dungeon exception below was not re-executed by that pass.)*
 
-The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger. Dungeon mode is the one exception to the whole rule: it does not run the digit-to-direction translation at all, so shifted or NumLock-ed top-row digits stay ordinary digits there and select the solo party member like unshifted ones.
+The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger. Dungeon mode's own command reader is the one exception to the whole rule: that reader polls the keyboard itself, bypassing the shared command reader, so shifted or NumLock-ed top-row digits stay ordinary digits at the dungeon command prompt and select the solo party member like unshifted ones. A resident prompt reached from a dungeon, such as the hole-up hours prompt, reads through the shared reader, whose translation has no scene gate, so modifier-held `1`-`4` and `6`-`9` arrive there as direction codes (`systems/dungeon-mode.md` Section 11; static reading only). *(Corrected 2026-10-17, issue #299 Q18: this sentence previously said dungeon mode "does not run the digit-to-direction translation at all"; that is retracted for resident prompts, see `RETRACTIONS.md` R572.)*
 
 The extended-key translation table accepts all four arrow keys plus Home, End,
 PgUp, and PgDn. Left and right arrows reach the same West/East cardinal path as
@@ -250,12 +250,16 @@ direction code erases one as well**, which is what a left arrow, an unmodified
 numpad west key or a modifier-held top-row `4` delivers (Section 5); Escape
 erases the whole echo and returns the cursor to the first echo cell **without
 cancelling the prompt**; a leading `+` or `-` is accepted only in the first
-position; Return is the only exit, and an empty buffer submits as zero; and
+position and counts toward the cap, so at a cap of two `-99` echoes `-9`; a
+leading `+` is ignored, and `-0` or a bare `-` submits zero *(added 2026-10-17,
+issue #299 Q16)*; Return is the only exit, and an empty buffer submits as zero; and
 every other key - space, letter, punctuation - is discarded with no echo and no
 other effect, leaving the prompt waiting. A caller that accepts a signed value
 here is responsible for what it means: the mixer compares it against unsigned
 counters, so a negative quantity is always too large and always retries
-(`systems/magic.md` Section 6 step 4). Two prompts reach this reader directly
+(`systems/magic.md` Section 6 step 4). The tavern's provision branch instead
+counts the value down one pack at a time, so a negative entry buys until gold
+or the food ceiling stops it (`systems/shops.md` Section 8.5). Two prompts reach this reader directly
 and both cap at two digits; `systems/text-output.md` Section 10.6 scopes that
 census.
 
@@ -471,3 +475,13 @@ The behaviour described here was derived from the private function notes listed 
   `../u5-decomp/notes/`, with
   `../u5-decomp/functions/ULTIMA_EXE/` and
   `../u5-decomp/functions/COMSUBS_OVL/`.
+
+- The scoping of the dungeon exception of Section 5 to the dungeon command
+  reader (issue #299 Q18, 2026-10-17): the shared resident reader's
+  digit-to-direction translation is gated only on the keyboard layer's
+  modifier/extended-key mark, with no scene test, and the dungeon exception
+  comes from the dungeon overlay's own poll, which bypasses that reader. Static
+  reading by an independent verifier, not executed; the same mechanism was
+  executed at the mixer prompt for issue #272. Source provenance: derived from
+  private analysis under `../u5-decomp/notes/` and
+  `../u5-decomp/functions/ULTIMA_EXE/`.

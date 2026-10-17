@@ -788,7 +788,7 @@ For frame-oriented rendering, the live transcript contract is:
 | Horse-trader entry and quote | Shared non-arms entry-greeting row, deterministic local horse quote, resident confirmation/refusal literals | Appends; no shop-local clear | Natural text advance only | Outer `N` or Space echoes the resident `No` literal and exits through the nothing-bought closing bark, not silently. Outer `Y` prints the quote and enters an inner `Y`/`N` wait; ignored inner keys leave the quote visible |
 | Shipwright entry and branch | One uniformly selected `SHOPPE.DAT` greeting from `105..108`, resident Yes/No echo, then menu record `119` and deterministic quote records | Appends throughout entry and the initial menu; no shop-local clear | Natural text advance only | Entry accepts `Y`, `N`, or Space; ignored entry keys do not redraw. After Yes, the Frigate/Skiff menu follows Section 8.7 |
 | Inn main menu | Inn preamble/greeting rows, resident room/leave/pickup prompts, deterministic inn record table | Ordinary inn prompts append in the inherited conversation window | Natural text advance only | Each branch retains its Section 8.C continuation or exit rule. Declining Rest ends the visit through the ordinary farewell; solo Leave and dead-companion Leave end without that farewell |
-| Inn multi-guest pickup register | Resident register frame/list text and guest names copied from the inn registry | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
+| Inn multi-guest pickup register | Resident register frame/list text and guest names read from the lodged roster records | Temporarily selects and clears window `1`, draws the register panel, then restores window `2` | Uses the fixed register cursor positions in Section 8.4 only for the register panel | After the register is drawn, selection continues in the ordinary inn prompt path |
 
 The earlier table's shipwright-entry clear/resident-menu claim and its additional arms exit key are withdrawn; entry appends, the ship menu comes from record `119`, and only Space exits the arms prompt (R405).
 The blanket claim that inn eligibility refusals return to the inn prompt is withdrawn; some end the visit as specified in Section 8.C (R437).
@@ -1256,6 +1256,24 @@ the inn continuation question. Thus `P` with one local guest needs neither
 a picker nor a confirmation key. The register only offers guests at this
 inn, so it has no separate arbitrary-member/not-in-party refusal.
 
+**Guest Register keys.** *(added 2026-10-17, issue #299 Q15)* The highlight
+starts on the topmost listed guest. West or North moves it up one listed guest
+and East or South moves it down one. There is no wrap: at either end the key
+does nothing. Return or Space commits the highlighted guest. Escape prints
+`No one\n\n` and picks no one, leaving the party, the inn markers and gold
+unchanged. Every other key is ignored without a redraw: the digits `0`-`9`,
+letters, the four diagonal codes and line feed. Digits never move the
+highlight and never commit. In physical keys (Section 5 of `systems/input.md`),
+the arrow keys, numpad 8/2/4/6 and the top-row 8/2/4/6 held with Shift or
+NumLock move the highlight; plain top-row digits, numpad 5 and
+Home/End/PgUp/PgDn (diagonals) do nothing. That key mapping is inferred from
+the published translation, not executed at the register. This register is not
+the shared party-member selector that Leave uses, where digits do move the
+highlight (`systems/input.md` Section 9). Source provenance: the original
+Pickup register loop executed with three local guests and one foreign guest
+over sixteen scripted key sequences, display and key wait stubbed at the call
+boundary, in private analysis under `u5-decomp/notes/`.
+
 The poisoned-Pickup body above follows the opening quote already printed
 with the bill, then receives the vendor attribution. The status conversion
 to Dead and zero HP occurs during paid Pickup, not through a separate
@@ -1348,7 +1366,7 @@ The original honorific helper also clears the active-member override.
 | Enough-drink answer | Y prints `Yes\n\n` and returns to continuation. N prints `No!` and proceeds with the purchase and existing drinking effects. Other keys wait. |
 | Blue Boar wine selection accepted | Uppercase selected letter, then `\n\n"Ah, a fine\nchoice, `, honorific and `.`; short funds uses the same CAN'T PAY envelope; paid purchase adds `\nEnjoy!"`, then `\n\n` |
 | Blue Boar wine list cancelled | Space prints `\n\n`, then record `89`, then returns to continuation without establishing a purchase; other non-A..F keys silently wait |
-| Provision offer | Opening quote, one uniform record from `77..83`, then `\n\nHow many wouldst\nthou like?" `; typed number allows two digits |
+| Provision offer | Opening quote, one uniform record from `77..83`, then `\n\nHow many wouldst\nthou like?" `; typed number allows two positions, and a leading sign uses one (Section 8.5) *(added 2026-10-17, issue #299 Q16)* |
 | Zero provisions requested | `\n\n"Hrumph."`, then ordinary continuation |
 | No packs affordable, fewer than three food servings | `\n\n`, then record `90`; the small food gift and visit end follow Section 8.5 |
 | No packs affordable, at least three food servings | `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `, vendor name, `.\n`; ends visit |
@@ -1973,8 +1991,9 @@ The resident cost table also has an eighth unmatched row (`Cure 1`, `Heal 70`,
 ### 8.4 Innkeeper
 
 The inn is the most stateful shop in the system. On entry, it first scans the
-save-backed inn registry for guests whose leading per-slot scene marker matches
-the current inn scene. With no matching guests, Pickup refuses with the
+roster for lodged guests whose own inn marker (each record's last byte) matches
+the current inn scene. *(added/corrected 2026-10-17, issue #299 Q14: earlier
+"leading per-slot scene marker" of a registry view, retracted R569.)* With no matching guests, Pickup refuses with the
 "No one here is from thy party!" line. With exactly one matching guest, the
 guest-selection display can be skipped because there is only one candidate.
 With multiple guests, the inn renders a full-screen "Guest Register" list before
@@ -2026,8 +2045,8 @@ The main menu accepts three actions:
   `adjusted(base_rate * travelling_party_size, speaker_intelligence)`. This is
   a paid, safe town rest rather than a wilderness ambush-risk camp. Finishing
   Rest ends the inn visit without asking its continuation question.
-- `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) is moved into the inn registry view, that guest slot's leading marker is set to the current inn scene, the stored stay counter is cleared to zero, the active roster is compacted, and the party-size byte is decremented. The quoted monthly rate is `adjusted(base_rate * 10, speaker_intelligence)`, due at Pickup; Leave performs no affordability check or gold debit. The earlier prepaid-deposit claim is retracted (R420).
-- `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill first computes `adjusted(base_rate * 10, speaker_intelligence)`, then multiplies that adjusted local lodging charge by the selected guest's stored stay counter, treating zero as one billable unit. The guest's record is copied into the next active roster slot, the party-size byte is incremented, the registry view is compacted as needed, and the returned slot's former guest marker is cleared to zero.
+- `L` (Leave a companion) — the player picks a party member to leave. The chosen member's 32-byte slot record (name, gender, class, status, stats, hit points, experience, level, equipment) has its own inn marker (`+0x1F`) set to the current inn scene and its stay counter cleared to zero. The record is then moved, whole, to the last roster slot (slot 15), every record after it moves down one slot, and the party-size byte is decremented. *(added/corrected 2026-10-17, issue #299 Q14: this bullet earlier said the record moved into a registry view whose guest slot's leading marker was set; retracted, R569.)* Leave also adjusts the active-player index; how is not published here (`OPEN-QUESTIONS.md`). The quoted monthly rate is `adjusted(base_rate * 10, speaker_intelligence)`, due at Pickup; Leave performs no affordability check or gold debit. The earlier prepaid-deposit claim is retracted (R420).
+- `P` (Pick up a companion) — the inn's registry is rendered as a guest list when more than one guest at this inn can be chosen. The pickup bill first computes `adjusted(base_rate * 10, speaker_intelligence)`, then multiplies that adjusted local lodging charge by the selected guest's stored stay counter, treating zero as one billable unit. The guest's whole record moves into the first slot after the travelling party, and the records that lay between shift up one slot each. The party-size byte is incremented and the returned record's marker is cleared to zero. Every byte of every moved record travels with its record, the defense byte and the markers of other lodged guests included. *(added/corrected 2026-10-17, issue #299 Q14: this bullet earlier said the record was copied and the "registry view is compacted"; retracted, R569.)*
 
 **Per-inn bed cells.** The bed the party is moved to is a **per-inn lookup, not
 a derivation from the shop's registered cell and not a fixed offset from
@@ -2086,15 +2105,17 @@ handler writes, which is what an implementation needs; if a consumer wants to
 validate them against terrain it should do so itself rather than assume this
 section did.
 
-The inn registry is the inn's persistent state: a 16-slot, save-backed resident
-view with the same 32-byte stride as party records. It is a shifted legacy view
-over the save image rather than an independent post-roster block. Each registry
-slot begins with a scene marker indicating *which* inn the guest is at, followed
-by the copied character payload used by pickup. To enumerate guests at the
-current inn, the engine walks the 16 slots and compares each slot's leading
-scene marker with the current scene. Pickup clears a returned slot by writing a
+The inn registry is the inn's persistent state: the roster's own sixteen
+records, each carrying an inn marker in its last byte (`formats/saved-gam.md`
+Section 3.3). To count guests at the current inn, for capacity and for
+Pickup's none/one/many split, the engine compares all sixteen markers with the
+current scene. The Guest Register and its selection steps scan records 1
+through 15 and show the name of the record whose marker matched.
+*(added/corrected 2026-10-17, issue #299 Q14: this paragraph earlier described
+a shifted 16-slot view whose slots began with a scene marker followed by a
+copied payload; retracted, R569.)* Pickup clears a returned record by writing a
 zero marker; guest enumeration treats any nonmatching marker as "not a guest at
-this inn", so compatible writers should use zero for empty or cleared slots.
+this inn", so compatible writers should use zero for records that are not lodged. Source provenance (issue #299 Q14): the original Leave and Pickup executed end to end with seeded per-record defense and stay-counter values traced through the moves, plus a static reading of the guest count, the previous/next steps and the register list, in private analysis under `u5-decomp/notes/`.
 
 Because the registry is part of the save image, a player can leave a companion at an inn, save, reload weeks later, and pick up the companion. Each 28-day month rollover advances the stored stay counter, capped at 25, so a long-lodged guest can produce a larger bill.
 
@@ -2233,8 +2254,66 @@ cancelling the prompt, a leading sign only in the first position, Return the
 only exit with an empty entry submitting as zero, and every other key discarded
 in silence - and the reader itself emits nothing but the echo, so the stored
 text above is the whole of what the prompt paints (`systems/input.md`
-Section 8; `systems/magic.md` Section 6 step 4). The rendering of *this*
-prompt was not separately executed (`OPEN-QUESTIONS.md`).
+Section 8; `systems/magic.md` Section 6 step 4). *(added/corrected
+2026-10-17, issue #299 Q16)* The prompt has now been executed from its own
+handler. After the provision letter's echo come two line feeds, the opening
+quote and the quote record, then `\n\nHow many wouldst\nthou like?" `, and the
+reader adds nothing but its echo and erasures before the outcome text, as in
+the mixer. This was observed at the print-call boundary, not as a screen
+capture.
+
+**A negative quantity.** *(added 2026-10-17, issue #299 Q16)* The reader keeps
+a leading `-`, and the sign uses one of its two positions, so `-1` is the only
+practical negative entry: `-99` echoes `-9` and drops the last key, and `-0`
+or a bare `-` reads as zero (the `Hrumph.` path). A leading `+` is accepted and
+ignored, so `+5` buys five. The provision branch tests the value only for zero
+and then counts the request down one pack at a time; a negative value cannot
+reach zero before one of the loop's other stops. In effect the value is
+unsigned, as in the mixer, but here the result is a purchase rather than a
+retry: a negative entry asks for as many packs as gold and the food ceiling
+allow. The quantity echo shows `-1`, and then:
+
+- Each pass pays for one pack and adds its 25 servings **before** the loop
+  tests the 9999 food stop. So whenever one pack is affordable, at least one is
+  charged, even when food is already 9999 and the pack adds nothing. This holds
+  for any positive quantity too.
+- **Food reaches 9999** (including on the very first pack): the loop stops and
+  takes the completed-purchase tail, `\n\n` with no extra sentence, then the
+  ordinary post-transaction surcharge chance. Continuation is set and no
+  afford-only line prints. This stop takes precedence over running out of
+  gold: if the same pack both exhausts the affordable gold and brings food to
+  9999, the result is the completed tail with its surcharge chance, not the
+  afford-only line.
+- **Gold runs out first** (at least one pack bought, food still below 9999):
+  the shop prints `"Thou canst\nafford only `, the number of packs actually
+  bought, then `!"\n\n`. No surcharge runs, the party stays in the tavern and
+  continuation is set.
+- **Not one pack affordable** (gold below the unit price): the two
+  nothing-served rows above apply unchanged, and the visit ends.
+
+So the number of packs charged is the smaller of gold divided by the unit
+price (rounded down) and the larger of one and the number of 25-serving packs
+needed to bring food to 9999 (rounded up); the last pack is clipped at the
+ceiling. Worked vectors at a unit price of 14 (a base-10 tavern, speaker
+Intelligence 20):
+
+| Before (gold / food) | Packs | After (gold / food) | Text |
+|---|---:|---|---|
+| 100 / 100 | 7 | 2 / 275 | afford only 7 |
+| 9999 / 100 | 396 | 4455 / 9999 | completed tail, surcharge chance |
+| 9999 / 9990 | 1 | 9985 / 9999 | completed tail, surcharge chance |
+| 100 / 9999 | 1 | 86 / 9999 | completed tail, surcharge chance |
+| 14 / 9990 | 1 | 0 / 9999 | completed tail, surcharge chance |
+| 13 / 9999 | 0 | 13 / 9999 | neither gold nor need; visit ends |
+| 0 / 100 | 0 | 0 / 100 | neither gold nor need; visit ends |
+| 0 / 2 | 0 | 0 / 3 or 4 | table scraps; visit ends |
+
+Buy one pack at a time under these stops; never charge for 65535 packs up
+front. Source provenance: the original provision helper executed with the real
+typed-number reader, saturating arithmetic, PRNG and 32-bit arithmetic, with
+printing, record render and surcharge stubbed, over about fifteen key and
+gold/food cases and a second independent re-run, in private analysis under
+`u5-decomp/notes/`.
 
 **Zero-quantity transcript and effects.** After the seven-way provision quote
 and quantity prompt, zero prints `\n\n"Hrumph."` and returns immediately;
@@ -2627,7 +2706,7 @@ Three pieces of shop state are part of the save image:
   and reload and is placed by the next overworld entry. An earlier revision of
   this section counted only two saved pieces and omitted it, which contradicted
   Section 6.1.
-- **The inn registry** lives in the resident save image and is included in save/load. A player can leave a companion, save, reload, and pick the companion up — the registry's per-slot inn marker tells the inn-pickup logic which guest belongs to which inn. Leave clears the guest's stored stay counter to zero; pickup clears the returned slot's marker to zero after moving the guest back into the active roster.
+- **The inn registry** lives in the resident save image and is included in save/load. A player can leave a companion, save, reload, and pick the companion up — each record's own inn marker tells the inn-pickup logic which guest belongs to which inn. Leave clears the guest's stored stay counter to zero; pickup clears the returned record's marker to zero after moving the guest back into the travelling party. *(added/corrected 2026-10-17, issue #299 Q14: earlier "per-slot inn marker" and "returned slot's marker", retracted R569.)*
 
 Per-shop inventory tables, per-treatment cost tables, and `SHOPPE.DAT` itself are read-only resources baked into the resident data and the disk file. They do not change between save cycles.
 
@@ -2647,8 +2726,8 @@ armourer write weapon and armour counters; guildmaster writes keys / gems /
 torches; healer writes the chosen member's status byte, current HP, and for
 resurrection the related mana/experience/level/maximum-HP fields owned by the
 shared resurrection helper; herbalist
-writes one of the eight reagent counters; innkeeper copies 32-byte party records
-between the active table and the inn registry; sage-style rumour flows debit
+writes one of the eight reagent counters; innkeeper moves whole 32-byte records
+within the roster and sets or clears their inn markers (Section 8.4); sage-style rumour flows debit
 gold for paid rumours; horse traders write a horse active object through the
 Talk-entered vehicle-sale helper; ship brokers write a pending vehicle
 acquisition state consumed by overworld entry to place a frigate or skiff active

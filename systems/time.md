@@ -362,7 +362,7 @@ new month. `formats/saved-gam.md` Section 10 carries the field offsets.
 **Per-character month counter.** Each of the sixteen character record slots
 carries a one-byte counter. The month rollover increments it, capped at 25.
 This is the same field the inn uses as a lodged guest's stay counter: leaving a
-companion at an inn zeroes the field in the copied guest record; each later
+companion at an inn zeroes the field in the leaving member's own record; each later
 28-day rollover adds one billable unit up to the cap; pickup treats zero as one
 billable unit. The traced baseline has no separate active-party or non-lodged
 consumer for this byte. Implementations should still preserve and age it on all

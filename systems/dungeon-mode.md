@@ -1749,10 +1749,14 @@ reaching the resident dispatcher is the ordinary save-game route. This is why
 ordinary shared commands such as M-Mix still work in dungeons: they are not
 handled by the local parser and fall through to the resident command dispatcher.
 
-Dungeon mode is also the one mode that does not run the shifted-digit-to-
-direction translation of `input.md` Section 5. Shifted or NumLock-ed top-row
-digits stay ordinary digits underground and select a solo party member like any
-other digit.
+Dungeon mode is also the one mode whose own command reader does not run the
+shifted-digit-to-direction translation of `input.md` Section 5. Shifted or
+NumLock-ed top-row digits stay ordinary digits at the dungeon command prompt and
+select a solo party member like any other digit. Resident prompts reached from
+a dungeon read keys through the shared resident reader and do translate them
+(Section 11's hours prompt). *(Corrected 2026-10-17, issue #299 Q18: this
+paragraph previously said dungeon mode does not run the translation at all;
+that is retracted for resident prompts, see `RETRACTIONS.md` R572.)*
 
 ## 11. Camp / sleep (H-Hole-up)
 
@@ -1787,10 +1791,24 @@ party's coordinates do not change.
 The prompts on this path are **resident**, not dungeon-overlay, and they are
 three more places a dungeon keystroke can block on a key than Section 8.1's
 count of five. In order: `Hole up & ` then `camp!\n\n`; then
-`For how many hours? (1-9) `, which loops until a digit or Space and echoes the
-key plus a line feed - Space or `0` aborts with no further output; then, when
-two or more members are eligible, `\nWilt thou set a watch? `, answered
-`No\n\n` or `Yes\n\n`; and after `Yes`, `Who will stand guard? `, where a
+`For how many hours? (1-9) `, printed once, after which the reader waits in
+the cell just after the prompt's trailing space. Every key other than a digit
+or Space is discarded silently - no echo, no reprint, no line feed, no message,
+no cursor movement - and Escape does not cancel. The digit test sees the shared
+resident command reader's output, so with Shift or NumLock held the top-row
+`1`-`4` and `6`-`9` arrive as direction codes and are discarded the same way,
+while `5`, `0` and Space are still accepted; arrow, Home, End, PgUp and PgDn
+keys are likewise discarded (`systems/input.md` Section 5; static reading
+only, not executed). The accepted key is echoed in that cell followed by one
+line feed; Space (echoed as a blank) or `0` (echoed) then aborts with no
+further output. The rows are therefore `Hole up & camp!`, a blank row, then
+`For how many hours? (1-9) N` with N the accepted key. The wait never advances
+the clock in any scene, and in a dungeon it also skips the idle redraw tick
+(`systems/input.md` Section 12). *(Added 2026-10-17, issue #299 Q18.)* Then,
+when two or more members are Good or Poisoned, `\nWilt thou set a watch? `,
+answered `No\n\n` or `Yes\n\n` (every other key at that prompt is
+discarded the same silent way; with only one eligible member the question is
+skipped and camp starts directly after the hours row's line feed); and after `Yes`, `Who will stand guard? `, where a
 cancel or an ineligible pick prints `None posted!\n\n` and re-asks the watch
 question. The two shipboard/on-land refusals that share this handler cannot
 fire in a dungeon. `systems/commands.md` Section 5.5 publishes the same
@@ -3033,3 +3051,13 @@ The behaviour described here was derived by reading the private function notes l
   `u5-decomp/functions/DNGLOOK_OVL/`, `u5-decomp/functions/CAST_OVL/` and
   `u5-decomp/functions/ULTIMA_EXE/`. The all-zero record's fight agrees with
   the reporter's stock capture. No execution.
+
+- **Issue #299 Q18, the hours prompt (2026-10-17).** The single print, the
+  silent discard of every other key, the non-cancelling Escape, the echo plus
+  line feed, the Space and `0` abort and the watch-question gate with its
+  silent Y/N discard were established by executing the shipped resident
+  hole-up wrapper in a dungeon scene with scripted keys, re-run by an
+  independent verifier. The modifier-held digit, arrow and paging-key discard
+  and the absence of the idle redraw tick rest on static reading of the shared
+  resident command reader only. Sources: `u5-decomp/notes/` and
+  `u5-decomp/functions/ULTIMA_EXE/`.

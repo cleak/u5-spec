@@ -1146,10 +1146,43 @@ The rescue contract:
    printed in step 5 is chosen from the standing *before* this raise.
 11. Hand control to scene byte seventeen, the gazetteer's
    `CASTLE:0` location associated with Lord British's Castle, on logical floor
-   one at local position `(10, 10)`, with the clock spun forward until the hour
-   reads 06:00.
+   one at local position `(10, 10)`, with the clock then spun forward by the
+   ordinary clock advance in nine-minute steps until the hour is 6. The hour is
+   checked before each step and the minute is never reset. The timed-effect
+   slot has already been cleared, so Quickness and Negate Time never alter a
+   step: every step is exactly nine minutes and the spin always ends. An entry
+   hour of 0 to 5 ends the same day at 06:00 to 06:08; an entry hour of 6 makes
+   no step and keeps its date and minute unchanged; an entry hour of 7 to 23
+   crosses midnight and ends the next day at 06:00 to 06:08, carrying month and
+   year by the ordinary cascade of `systems/time.md` Section 5 (so 4-28-139
+   23:55 becomes 5-1-139 06:04, and 13-28-139 13:10 becomes 1-1-140 06:07).
+   The final minute is the entry minute plus nine per step, modulo sixty. A
+   midnight crossing runs the ordinary day rollover once, which repaints the
+   whole stats panel straight away, so the date row shows the new date
+   (`systems/time.md` Section 7, `systems/stats-panel.md` Section 7); a spin
+   that stays on the same day does not repaint the panel, which keeps the
+   restoration loop's per-member repaints and already shows the unchanged date.
+   The crossing also runs the ordinary midnight events of `systems/time.md`
+   Section 7, including the Shadowlord relocation roll and its use of the
+   random generator, and a month crossing runs the ordinary month-boundary
+   events of Section 8 there; these side events rest on static reading only.
+   Each hour crossed also runs the ordinary hour-change bundle for the castle
+   scene, so the sky strip of `systems/moons.md` (moon phases and time of day)
+   refreshes once per hour crossed; it reads the day of the month, so after a
+   midnight spin its moon glyphs follow the new day too. Each nine-minute step
+   in the castle scene also makes the ordinary presentation-only display-driver
+   clock call; what that call shows is outside this contract. Nothing is
+   printed to the message window. *(Corrected 2026-10-17, issue #299 Q17: this
+   step previously said the clock is "spun forward until the hour reads 06:00",
+   which implies minute zero and no date change; that is retracted, see
+   `RETRACTIONS.md` R571.)*
 12. Clear both light counters. If and only if the full two-byte food word is
-    zero, replace it with 63; preserve every nonzero value unchanged.
+    zero, replace it with 63; preserve every nonzero value unchanged. This
+    comes after the spin of step 11, so a midnight repaint during the spin
+    still shows the unrepaired food value. That the repaired value first
+    appears at the next ordinary panel refresh is inferred; which refresh
+    that is was not traced (`OPEN-QUESTIONS.md`). *(Added 2026-10-17, issue
+    #299 Q17.)*
 
 Two non-text steps are conditional on the saved incoming scene value: a world
 tick before the first wait when that value is below the top of the town range,
@@ -1447,7 +1480,7 @@ only colour zero, so it is a dissolve-out to black. The second hidden rectangle
 contains colour zero plus exactly one centred party tile, so it is a
 dissolve-in to the restored party against black—not a redraw of Lord British's
 Castle. The moral-standing floor, destination scene/floor/position writes,
-timed-effect clear, advance to 06:00, and light-counter clears all occur only
+timed-effect clear, clock spin to hour 6 (step 11), and light-counter clears all occur only
 after the second dissolve has completed. The ordinary castle viewport is
 therefore a later handoff result, not the hidden source of this transition.
 
@@ -1533,8 +1566,9 @@ trailing line feed has already scrolled the window one more line. How many
 verdict rows remain visible varies with the band; those last six rows are
 identical in every all-Dead case. Nothing is printed into the message window
 after the vertigo beat: the second dissolve, the standing floor, the
-destination writes, the advance to 06:00, the light-counter clears and the
-provisions repair are all silent there.
+destination writes, the clock spin to hour 6, the light-counter clears and the
+provisions repair are all silent there (a spin that crosses midnight repaints
+the stats panel, not the message window; added 2026-10-17, issue #299 Q17).
 
 One beat earlier, at the acknowledgement key wait, the window instead holds the
 thunder line above the whole quoted verdict, with the verdict's last row ending
@@ -1818,7 +1852,7 @@ fields:
 | Capture context | **No field** | — | — | Audience entry is selected by the town arrest path and current location; rescue entry is selected by the shared party-capability result. Neither path reads a saved capture tag. |
 
 “Initialized if empty” therefore means one literal food safety grant at the end
-of rescue, after the wait to 06:00 and after both light counters are cleared:
+of rescue, after the clock spin to hour 6 and after both light counters are cleared:
 test the full food word, store 63 only when it equals zero, and return to the
 ordinary handoff. There is no later Blackthorn-owned update cadence. All
 subsequent food reads and changes belong to the ordinary provision, inventory,
@@ -1984,3 +2018,15 @@ The movement-stinger identity, mute boundary, and ordered six-row rescue audio
 table were derived from private analysis in
 `u5-decomp/functions/BLCKTHRN_OVL/`,
 `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
+
+The rescue clock spin of Section 7 step 11 (issue #299 Q17, 2026-10-17) - the
+nine-minute step, the hour check before each step, the unreset minute, the
+hour-6 no-op, the next-day crossing for entry hours 7 to 23 with month and year
+carry, and the single full-panel repaint at midnight only - was established by
+executing the shipped rescue handoff tail with the real resident clock advance
+across twelve starting clocks, with the panel, sky-strip and driver calls
+counted rather than drawn, and re-run by an independent verifier. The midnight
+and month-boundary side events, the food repair's position after the spin and
+the absence of any message-window output rest on static reading. Source
+provenance: private analysis in `u5-decomp/notes/`,
+`u5-decomp/functions/BLCKTHRN_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.

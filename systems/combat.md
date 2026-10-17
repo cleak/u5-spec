@@ -2059,7 +2059,7 @@ per actor, not per round (`systems/stats-panel.md` Section 2.3).
 
 The combat command set consists of letter keys A-Z plus a small set of control codes (Escape, Ctrl-S, Ctrl-B, Space, digits, direction codes). Every letter and every special input is now pinned, and recognition is not the same as world-mode success. The parser routes its letters through two shared shapes plus a handful of direct calls.
 
-**Shape A — the labelled prompt with a party-side gate.** The helper prints the verb label, then requires that the acting combatant is a **party-side** descriptor. An actor that is not gets the short `Can't!` refusal, the banner is reprinted (Section 8.1) and the prompt is re-issued at no cost. In practice the refusal has exactly one live population: a **monster acting under player control** (Section 6.1a), because the round walker filters marked-dead slots before dispatch and never sends one to this handler at all. A party-side actor's command is handed to one shared world-mode delegate chosen by the letter, and the combatant's action ends. Six letters use this shape: `G` Get, `J` Jimmy, `O` Open, `R` Ready, `S` Search and `U` Use. Their delegates are the same handlers the world modes use — the shared tile-interaction overlay for Get/Jimmy/Open/Search, the status/equipment overlay for Ready, and the item-use handler for Use. `C`-Cast carries its own copy of the same party-side test and refuses the same way, after printing `Cast...`; so **seven** letters in total are unusable by a controlled monster.
+**Shape A — the labelled prompt with a party-side gate.** The helper prints the verb label, then requires that the acting combatant is a **party-side** descriptor. An actor that is not gets the short `Can't!` refusal, printed after the verb label (Section 8.4 has the rows, issue #299 Q19), the banner is reprinted (Section 8.1) and the prompt is re-issued at no cost. In practice the refusal has exactly one live population: a **monster acting under player control** (Section 6.1a), because the round walker filters marked-dead slots before dispatch and never sends one to this handler at all. A party-side actor's command is handed to one shared world-mode delegate chosen by the letter, and the combatant's action ends. Six letters use this shape: `G` Get, `J` Jimmy, `O` Open, `R` Ready, `S` Search and `U` Use. Their delegates are the same handlers the world modes use — the shared tile-interaction overlay for Get/Jimmy/Open/Search, the status/equipment overlay for Ready, and the item-use handler for Use. `C`-Cast carries its own copy of the same party-side test and refuses the same way, after printing `Cast...`; so **seven** letters in total are unusable by a controlled monster.
 
 *(**Corrected.** This paragraph previously read "the labelled prompt with a **live-actor gate** ... then requires that the acting combatant is still **alive**. A **dead** actor gets the short "Can't!" refusal". **That test is withdrawn**: the gate reads the party-side bit, not liveness, and the dead-actor case it describes is unreachable. The transcript is unchanged for party members, which is why the error was invisible there — but it inverts the outcome for a controlled monster, which the old text would have let Get, Jimmy, Open, Ready, Search and Use freely. The `Z` row of the table below is corrected in the same pass and for the same reason. See `RETRACTIONS.md` R381.)*
 
@@ -2108,7 +2108,7 @@ The remaining letters call their targets directly, as the table below records.
 | **H** | Hole up — shared refusal responder, second tail. World-mode rest is not available inside an arena. No cost. |
 | **I** | Ignite — shared refusal responder, second tail. No torch counter is touched on this branch. No cost. |
 | **J** | Jimmy. Labelled prompt with the party-side gate, then the shared Jimmy handler. The combat scene takes Jimmy's high-range restraint tail: a successful Dexterity pick on stocks `0x84` or manacles `0x85` clears that arena tile to cobble `0x44` and reports "Unlocked" without resolving or persisting an NPC release. Other Jimmy target families retain their shared behavior. |
-| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. In a dungeon arena, `Up!` on an up ladder (`0xC8`) departs with exit code 5 and `Down!` on a down ladder (`0xC9`), or on a metal grate (`0x86`) in a dungeon-room encounter, departs with exit code 6; the first party-side departure's code is what the dungeon callers read afterwards (`systems/dungeon-mode.md` Section 14.1). The `U/D-` form appears only on the ambush arena's centre cell when the dungeon cell was a two-way ladder. *(Added 2026-10-16, issue #298 Q1.)* A blocked climb re-prompts at no cost; an applied climb ends the actor's action. *(added/corrected 2026-10-17, issue #299 Q4)* A blocked climb is a `What?` at the adjacent prompt; an applied rock climb, an accepted Up/Down departure, and Space's `Pass` at the adjacent prompt end the actor's action. The combat-arena `U/D-` prompt ignores Space. Whether a refused Up/Down departure is free is not established (Section 8.4). |
+| **K** | Klimb. Dispatches to the arena climb helper. It handles ladder up/down prompts, upward/downward combat exit attempts, and a limited in-arena climb/move case that mutates the active combat record; otherwise it prints a refusal. Its upward exit attempt hands off to the same out-of-arena helper the direction keys use, so it inherits that helper's party-side-only direction-sharing constraint (Section 3): a monster acting under player control is never refused with `All must use the same exit!`. In a dungeon arena, `Up!` on an up ladder (`0xC8`) departs with exit code 5 and `Down!` on a down ladder (`0xC9`), or on a metal grate (`0x86`) in a dungeon-room encounter, departs with exit code 6; the first party-side departure's code is what the dungeon callers read afterwards (`systems/dungeon-mode.md` Section 14.1). The `U/D-` form appears only on the ambush arena's centre cell when the dungeon cell was a two-way ladder. *(Added 2026-10-16, issue #298 Q1.)* A blocked climb re-prompts at no cost; an applied climb ends the actor's action. *(added/corrected 2026-10-17, issue #299 Q4)* A blocked climb is a `What?` at the adjacent prompt; an applied rock climb, an accepted Up/Down departure, and Space's `Pass` at the adjacent prompt end the actor's action. The combat-arena `U/D-` prompt ignores Space. A refused Up/Down departure (`Stay with ship!`, or `All must use the same exit!` in a dungeon room) is free, with the short re-prompt (Section 8.4). *(added/corrected 2026-10-17, issue #299 Q13)* |
 | **L** | Look — shared refusal responder, second tail. This dispatcher does not run the world/town look flow. No cost. |
 | **M** | Mix — shared refusal responder, second tail. It does not open the reagent mixer. No cost. |
 | **N** | New order — shared refusal responder, second tail. No cost. |
@@ -2636,6 +2636,34 @@ a valid selection the chosen actor's turn banner follows on the next line.
 | Party Search | `Search-`, then the shared cardinal-direction input; an ordinary target with nothing to discover adds `\nThou dost find\nnothing of note.\n` |
 | X-it | `X-it what?\n`, followed by the refusal tones and a full retry |
 | Party Cast | `Cast...\n`, then the spell-name exchange if prerequisite gates pass |
+| Controlled monster R | `Ready...\n\n` then `Can't!\n`; no tone; full retry (banner reprinted after a blank row) |
+| Controlled monster U | `Use item\n\n` then `Can't!\n`; no tone; full retry |
+| Controlled monster G / J / O / S | `Get-`, `Jimmy-`, `Open-` or `Search-`, then `Can't!\n` on the same row; no tone; full retry |
+| Controlled monster C | `Cast...\n` then `Can't!\n` on the next row, no blank row between; no tone; full retry |
+| K adjacent target refused | direction name and `\n`, then `What?\n`; no tone; short retry (one `\n`, no banner) |
+
+*(added 2026-10-17, issue #299 Q19)* For a monster acting under player
+control, the Shape-A helper prints the letter's label **before** the
+party-side test, exactly as for a party member, and the refusal follows it.
+R's and U's labels each end in two newlines, so a blank row separates them
+from `Can't!`; they are the same label texts the world command prints
+(`systems/commands.md` Section 4). The parser then takes the full re-prompt
+of Section 8.1: the banner's leading newline leaves a blank row, then the
+monster's name and a colon (no armament clause) and a newline. Starting from
+the turn banner, R gives `Orc:`, `Ready...`, a blank row, `Can't!`, a blank
+row, `Orc:`; U is the same with `Use item`. The refusal is free and skips
+the committed-action tail. The status/equipment overlay and the item-use
+handler are never entered, so no `Player:` or `Item:` prompt appears. The
+dash labels of G, J, O and S carry no newline, so the refusal shares their
+row (`Get-Can't!`, `Jimmy-Can't!`, `Open-Can't!`, `Search-Can't!`). Cast's
+own copy of the test prints `Cast...` and its newline, then `Can't!` on the
+next row. Source provenance: private analysis in `u5-decomp/notes/`. R, U
+and G ran under emulation with party-side and non-party-side acting
+descriptors (label, refusal, refusal result, no tone), and a second reader
+reproduced the runs. J, O and S share the same call site; their labels and
+the R/U literals are read from the shipped data file. Cast's layout and the
+parser's re-prompt choice are static reading. These are emission-order
+results, not screen captures.
 
 Digit selection remains subject to the input remapping in Section 8.3.
 There is no `Active player selected.` sentence, `Music toggled.` sentence,
@@ -2663,6 +2691,9 @@ order, in every arena kind.**
    contact fights and dungeon camp-attack fights, plus the two-way-ladder
    flag that the dungeon room painter sets (`systems/dungeon-mode.md`
    Section 14.1). Town and overworld arenas never carry that mode bit.
+   The actor's own cell must also be the up ladder `0xC8`, which is what the
+   centre-cell wording above implies. *(added 2026-10-17, issue #299 Q13;
+   static reading)*
 2. `0xC8` gives `Up!` and `0xC9` gives `Down!`. Neither case tests the arena
    kind or the scene.
 3. `0x86` (metal grate) counts as `Down!` only in a dungeon-room encounter.
@@ -2685,14 +2716,45 @@ re-prompts at no cost. An applied climb moves the actor onto the rock cell
 and prints nothing after the direction name. It also runs the ordinary
 step-on ambush/camp reveal check (Section 5, "Ambush and camp reveal
 slots"), which prints nothing but may redraw the arena.
+The refusal's rows are the `Klimb-` row completed by the direction name and
+its newline, then `What?` on its own row with its newline. No tone plays. The
+parser then takes the short re-prompt of Section 8.1: one newline, so a
+blank row follows `What?`, then a prompt-window refresh and another key read,
+with no banner. On screen: `Klimb-North`, `What?`, a blank row, and the next
+keystroke's echo on the row after it. The same actor is still to act, and the
+committed-action tail (worn-ring hook, timed-magic aging) does not run. A
+rock pile that holds an object reaches the same refusal branch and gives the
+same rows; that case is static reading, not executed. *(added 2026-10-17,
+issue #299 Q13)*
 
 **Turn cost.** The combat parser marks the turn done before dispatching K,
 re-prompts when K reports no action, and ends the turn otherwise. Spent:
-`Pass`, an applied rock climb, an accepted Up/Down departure. Free: `What?`.
-A refused Up/Down departure returns whatever the out-of-arena helper
-(Section 3) reports, unchanged. It is therefore a free re-prompt only if that
-helper reports no action for a refusal. That return value was not observed,
-so this case is open.
+`Pass`, an applied rock climb, an accepted Up/Down departure. Free: `What?`
+and a refused Up/Down departure. *(added/corrected 2026-10-17, issue #299
+Q13)* After printing `Up!` or `Down!`, K hands the departure to the same
+out-of-arena edge helper the direction keys use (Section 3), with exit code 5
+for up and 6 for down, and returns that helper's result unchanged. The
+direction keys use codes 1 to 4, so up and down are exit directions distinct
+from each other and from the four edges. The helper reports no action on both
+of its refusals, so the parser takes the short re-prompt with no banner:
+
+- **Shared-exit refusal.** In a dungeon-room encounter (the mode's high bit),
+  a party-side actor whose ladder direction differs from the party's first
+  stored departure prints the ladder line, a blank row, then
+  `All must use the same exit!` with its newline, and plays the 165 Hz /
+  200-unit bump tone. The short re-prompt's newline then leaves a blank row:
+  `Klimb-Up!` (or `Klimb-Down!`), blank, `All must use the same exit!`,
+  blank. A monster acting under player control never seeds or tests the
+  stored direction and is never refused this way.
+- **Ship refusal.** With a ship-family transport marker the rows are
+  `Klimb-Up!` (or `Klimb-Down!`), a blank row and `Stay with ship!` with its
+  newline, with no tone, then the short re-prompt. The ladder arms do not
+  test the arena kind, so this is reachable in principle, but not from stock
+  data: no `BRIT.CBT` arena has a `0xC8` or `0xC9` cell (below).
+
+The accepted departure is unchanged: `Leave!` or `Escape!`, and the action
+is spent. The earlier text of this paragraph listed the refused-departure cost
+as open; it is now established, and no published behaviour changes.
 
 **Stock arenas.** None of the sixteen `BRIT.CBT` arenas has a `0xC8` or
 `0xC9` cell. Four of them have `0x86` cells (five cells in all), and none of
@@ -2709,8 +2771,14 @@ Source provenance for the issue #299 Q4 additions: private analysis in
 shared direction prompt, and all twelve probe rows were reproduced by a
 second reader. The combat parser's handling of K's result is a static
 reading. The tile census is read from the `BRIT.CBT` and `DUNGEON.CBT`
-terrain grids. The exit helper was stubbed in the executed runs, which is
-why the refused-departure cost stays open.
+terrain grids. The exit helper was stubbed in the Q4 runs. For the issue
+#299 Q13 additions, the arena K handler ran under emulation with the real
+edge helper on its ship and shared-exit refusal paths, and a second reader
+reproduced the output, tone and "no action" result. The `What?` branch's
+rows and the absence of a tone come from the same kind of run plus static
+reading; the short-versus-full re-prompt choice is a static reading of the
+parser, agreeing with Section 8.1. Source provenance: private analysis in
+`u5-decomp/notes/`.
 
 For ordinary arena scene ids above `0x80`, C-Cast's acting-member lookup
 takes the current actor's party owner without printing `Player: `. The

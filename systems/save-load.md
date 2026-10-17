@@ -343,10 +343,13 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
 
 - **Chargen.** New games and U4 transfers both produce the first `SAVED.GAM` of a fresh playthrough. See `chargen.md`.
 
-- **Inn registry.** Lodged companions are persisted in the shifted inn-guest
-  view documented by `formats/saved-gam.md`. Save/load does not special-case
-  that view; the marker byte, month/stay counter, and copied character payload
-  round-trip as ordinary save-image bytes.
+- **Inn registry.** Lodged companions are ordinary roster records outside the
+  travelling party, each marked by its own last byte (`formats/saved-gam.md`
+  Section 3.3). Save/load does not special-case them; the marker byte, the
+  month/stay counter and the rest of the record round-trip as ordinary
+  save-image bytes. *(added/corrected 2026-10-17, issue #299 Q14: this bullet
+  earlier described a shifted inn-guest view holding a copied character
+  payload; retracted, R569.)*
 
 - **Bitmap and resource loading.** The same I/O layer is used by the endgame cinematic loader and the U4 transfer's character comparison preview. The disk-prompt and retry contracts apply uniformly across all reads.
 
