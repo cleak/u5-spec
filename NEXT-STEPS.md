@@ -528,7 +528,7 @@ The reported two-row offset is answered as timing rather than text. One key
 leaves the threat page; the animation after it consumes no input and cannot be
 skipped; nothing selects, clears, scrolls or writes either text window between
 the record and the end of the handoff; and the hold has a floor of about five
-seconds. An engine that performs the handoff and opens the command row on that
+seconds (retracted 2026-10-17 in R568: about 72 tick periods, about 4 s). An engine that performs the handoff and opens the command row on that
 key produces identical message-window bytes, just early.
 
 Two withdrawals matter to an engine already built: **R490** (the vector is not a

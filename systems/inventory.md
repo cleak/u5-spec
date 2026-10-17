@@ -409,8 +409,34 @@ back only when a later picker session leaves odd parity again, after which the
 next repaint is normal. Worked cases on a stock with counted regalia and a counted
 Shard of Falsehood: two Downs then accept leaves the panel inverted; three Downs
 leaves it normal; a game-written shard (the no-quantity marker) lists as one line
-and never leaks. Whether the separator band between the panel's boxes shows
-inverted cells is not established.
+and never leaks.
+
+*(Added 2026-10-17, issue #299 Q12; confirmed by running the original under
+DOSBox with crafted saves that reproduce the leak, comparing frames before and
+after it; no timings were measured.)* The upper divider band between the roster
+and the counters (screen row 7) is affected only through the timed-effect slot
+(`systems/stats-panel.md` Section 8), and the lower divider band below the counters
+(screen row 10) and the top border row (row 0) are not affected at all. With no
+effect running, row 7 is a graphics repaint and looks exactly as it does without
+the leak. With an effect running, all three slot cells (columns 30 to 32) are
+text glyphs and are drawn inverted. In each end cap the source triangle comes
+out black and the rest of the cell, its top and bottom scanlines included, comes
+out in chrome; the cap's two accent strokes are line draws and stay exactly as
+they are, endpoints included. The caps therefore read as solid dark arrows
+pointing at the glyph. The effect letter or pictogram comes out black on an
+accent-coloured cell (white on the sixteen-colour drivers), observed for
+Protection and the Black Badge. Nothing else on row 7 changes, across all eight
+scanlines: the band's fill, its rules and every other ornament do not invert.
+A frame showing inverted caps on row 7 therefore had something drawing in the
+slot - an effect running, or another slot user such as the arms sell browser's
+page-status badge (`systems/display-driver.md`, "Bracket end-caps") - but that is
+inferred; how the badge renders under the leak has not been tested. Also
+inferred rather than observed: that every later panel repaint while the leak is
+set draws the slot the same way, and that installing, changing or expiring an
+effect during the leak redraws the slot, or restores the plain band, under the
+same rule. No run did any of those things with the leak set. The earlier text
+of this paragraph said this band's behaviour was not established; that gap is
+now filled.
 
 Home selects the first item, with the highlight on the first visible row; End
 selects the last, showing the last page with the highlight walked down toward
@@ -429,7 +455,13 @@ from fresh integrated original executions of the whole `U`-Use command in
 `u5-decomp/functions/ULTIMA_EXE/` and `u5-decomp/notes/`, with the keyboard
 driven through emulated firmware so the original scancode handling runs, and
 with the picker's page-top, highlight-row and entries-shown loop variables read
-out at every key wait; issue #259.
+out at every key wait; issue #259. The divider-band result (issue #299 Q12)
+is from a static reading of the original panel refresh and end-cap routines,
+for which draws are text glyphs and which are line strokes or fills, and from
+DOSBox executions of the original with crafted leak-reproducing saves, one with
+a letter effect and one with a pictogram effect, whose before-and-after frames
+were diffed pixel by pixel and independently re-diffed, together with the issue
+#296 no-effect frames; private analysis in `u5-decomp/notes/`.
 
 ### 4.5 Picker row format
 

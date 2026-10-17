@@ -404,7 +404,14 @@ cursor cell:
 
 The cursor advances one cell, exactly as for an ordinary glyph.
 
-Two consequences are worth stating because they are visible and easy to get
+*(Added 2026-10-17, issue #299 Q12.)* Step 2's glyph is an ordinary text emission
+and is subject to the active window's inverse and underline styles; step 3's
+strokes are line draws and are not. Under the stats panel's leaked inverse state
+(`systems/inventory.md` Section 4.4) the cap's chrome pixels are therefore the
+complement of the triangle, its top and bottom rows included, while the triangle
+itself comes out black and the accent strokes are unchanged.
+
+Two consequences of ordinary (non-inverted) emission are worth stating because they are visible and easy to get
 wrong. First, the union of the cap's chrome-coloured pixels and its
 accent-coloured pixels is exactly the source triangle glyph, and the
 chrome-coloured component alone is that triangle with its diagonal traced away
@@ -415,6 +422,9 @@ rule therefore appears to run continuously into the cap, and the measurable gap
 in the rule stops one pixel short of the cap cell at each end. For the two
 viewport-ribbon labels that produces the rule gaps `y = 7` broken over
 `x = 41..150` and `y = 184` broken over `x = 49..150`.
+Both consequences hold only for non-inverted emission: an inverted cap's chrome
+component is the complement of the triangle and its top and bottom rows turn
+chrome rather than black (issue #299 Q12).
 
 #### Repaintable chrome regions
 

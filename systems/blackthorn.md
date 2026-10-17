@@ -95,7 +95,8 @@ The setup contract is:
 4. Load the Blackthorn audience map from `MISCMAPS.DAT`.
 5. Load the Blackthorn message cluster from `MISCMSG.DAT`.
 6. Place the party, two guards, and the initially suppressed seated-Blackthorn
-   tableau into cutscene actor slots.
+   tableau into cutscene actor slots. The party placement is described in
+   "Party placement" below.
 7. Run the scripted throne approach and Blackthorn presentation beats.
 8. After the quiet 8-tick pause that follows the throne reveal, print
    `\n\nBlackthorn says:\n\n"Ah, `, then the name in **roster record 0** (the
@@ -117,6 +118,60 @@ The setup contract is:
    quoted in Sections 4.1 and 5 because an implementation must reproduce them.)*
 9. Print the preamble record of Section 4.1, wait for a second acknowledgement
    key, and enter the challenge loop.
+
+**Party placement (step 6).** Let *n* be the nondead count of Section 4, the
+number of travelling roster records that are not Dead. Setup places the first
+*n* roster records, in roster order, into cutscene actor slots 0 to *n*-1. The
+bound is a count, not a filter: a Dead record that falls inside the first *n*
+is placed like any other, and the last nondead record is then left out. Slot 0
+is roster record 0 (the Avatar's record). Slot 1 is the second roster record,
+which may be Dead; it is the "second-member actor" of Section 5, and Section 5's
+caveat applies: it is not necessarily the companion an execution removes. Each
+placed actor gets the member's class tile, taken from the same class-letter
+table as `systems/rest-and-camp.md` Section 7.2. The cell for each slot depends
+only on *n*:
+
+| *n* | Slot 0 | Slot 1 | Slot 2 | Slot 3 | Slot 4 | Slot 5 |
+|---|---|---|---|---|---|---|
+| 1 | (3,5) | | | | | |
+| 2 | (3,5) | (7,5) | | | | |
+| 3 | (3,5) | (7,5) | (0,1) | | | |
+| 4 | (3,5) | (7,5) | (10,1) | (0,1) | | |
+| 5 | (3,5) | (7,5) | (9,1) | (1,1) | (0,1) | |
+| 6 | (3,5) | (7,5) | (10,1) | (9,1) | (1,1) | (0,1) |
+
+In the shipped cutscene map all six of these cells are manacles (terrain
+`0x85`, Section 6.1), and they are the map's only manacle cells. The ordinary
+active-object compositor rule of `systems/visibility.md` Section 8 therefore
+applies: an actor standing on manacles is drawn as one of the prisoner frames
+`0x64..0x67`, chosen again on each redraw, whatever the member's class. Every
+placed member, the Avatar included, therefore appears as a manacled prisoner.
+A member's own class art shows only once it steps off the manacles, as the
+Avatar does in the exit vector of Section 6.3.
+
+Slots 2 to 5 are never moved or cleared by any audience script: the vectors of
+Section 6.3 move or clear only slots 0, 1, 6, 7 and 8, the execution of
+Section 5 clears only slot 1, and the roster compaction does not touch actor
+slots. Those prisoners therefore stay in place through the interrogation, the
+failed-challenge reaction, the execution, the exit beat and the tableau cleanup.
+They go at the captive-cell handoff, because the town entry it triggers clears
+actor slots 1 to 31 before the location's own objects are placed; that clearing
+is a static reading of town entry. (The cell block is a different map, so its
+frames cannot show the clearing on their own.)
+
+Placement happens after the map and message loads of steps 4 and 5 and before
+the quiet pause and narration that lead into the guard approach (step 7); that
+order is a static reading. In an emulator capture (DOSBox, fixed 3000 cycles)
+the prisoner frames first appear between the screenshot samples at about 2.07 s
+and 7.11 s, while the capture narration's dragged-away line is still on screen
+and before its chained-and-manacled line appears at about 8.01 s, which fits
+that order; the exact first frame was not captured. *(Added 2026-10-17, issue
+#299 Q11. Source provenance: static reading of the audience setup and of town
+entry, the shipped cutscene map and the overlay's placement tables, and DOSBox
+frames of the stock game, recorded in `u5-decomp/notes/`. In a three-member
+capture of the stock game the prisoners at (3,5), (7,5) and (0,1) cycled through
+the same four prisoner frames although the classes differed, and the (0,1)
+prisoner, slot 2, survived the exit beat.)*
 
 The acknowledgement in step 8 is easy to miss: the audience takes **two**
 blocking key presses before the first demand is ever asked, one after the
@@ -358,16 +413,61 @@ carries the record that was just printed into the captive cell unchanged.
 double quote followed by one trailing space, and neither contains a line feed.
 The cursor is therefore left mid-row, one cell past that trailing space, and it
 stays there through the beat, through the handoff, and into the next scene.
+That paragraph covers records `9` and `10` only. On the record `5` arm the
+cursor reaches the beat at column 0, two rows below the record's last row
+(Section 5, after step 9). *(Added 2026-10-17, issue #299 Q9.)*
 
 **How long it holds.** The beat is simultaneously a timed hold. Across the
 script it runs 36 repetitions of the shared stinger pause of Section 6, which is
 36 two-part stings, 72 one-BIOS-tick delay requests, and 73 world ticks in all
-(72 from the pauses, plus the script's one explicit redraw). At the published
-sting length and the standard BIOS tick rate that is about 3.95 s of timer waits
-and about 0.97 s of stings, so the hold has a **floor of roughly five seconds**
-before the handoff begins — and that floor excludes the cost of the 73 full
-viewport rebuild and render passes, which has not been measured. Treat five
-seconds as a lower bound, not as the duration.
+(72 from the pauses, plus the script's one explicit redraw).
+
+Above the slow-CPU gate, with cinematic animation enabled, each one-tick request
+waits for the next timer edge (`systems/timing.md` Section 4); it does not wait
+a fixed tick length from the moment it is issued. Each stinger repetition is a
+sting, a redraw, a wait, a second redraw and a second wait, so the sting and the
+first redraw run inside the tick period the first wait closes, and the second
+redraw inside the period the second wait closes. While each part fits inside its
+tick, a repetition costs exactly two tick periods and the stings add no time;
+each overflow adds one whole tick. The script's explicit redraw has no wait of
+its own and is absorbed the same way. The floor is therefore about 72 tick
+periods, **about 3.95 s**, and the exit beat runs for **about 4 s** from the key
+to the end of the script on a fast enough host, growing in whole-tick steps on a
+slower one. *Correction: this paragraph previously added about 0.97 s of stings
+to about 3.95 s of tick waits and gave a floor of roughly five seconds; that is
+retracted (`RETRACTIONS.md` R568).*
+
+Measured as emulator timings (DOSBox 0.74, `machine=ega`, normal core, fixed
+cycles), from the PC-speaker capture, which runs on emulated time, and from
+screenshots sampled about every 0.3 s:
+
+| Cycle setting | Stings detected | Median sting spacing | First to last sting | Key to first captive-cell frame |
+|---|---|---|---|---|
+| 10000 | 32 of 36 (the sting is about 6 ms here and four were missed) | 110 ms (2 ticks) | 3.835 s | 4.2 to 4.5 s |
+| 3000 | 36 | 110 ms (2 ticks) | 3.922 s | 4.55 to 4.85 s |
+| 1500 | 36 | 220 ms (4 ticks) | 7.740 s | 8.7 to 9.0 s |
+
+- The cadence comes in whole ticks at all three settings, so the one-tick
+  delays were real waits in every run.
+- At 3000 cycles the margin is thin: a sting is about 21 ms and a redraw about
+  30 ms against a 54.9 ms tick. That split is inferred from the phase of the
+  first gaps. The first repetitions overflow (gaps of about 163 and 134 ms,
+  which also take in the explicit redraw), and one further 129/91 ms pair
+  appears. Taking the capture's key-to-first-sting offset as about 0.1 to
+  0.15 s, the key to the end of the script came to about 4.05 to 4.2 s, a
+  little over the floor. That end point is computed from the capture, not
+  observed directly.
+- The key-to-cell-frame column also includes the handoff, the captive-cell
+  entry setup and the sampling interval. At 3000 cycles the message window held
+  unchanged for about 4.5 s after the key.
+
+The last visible change in the vector comes on the first redraw of the first of
+the final six stinger repetitions (Section 6.3). The rest of that repetition
+and the other five hold the empty tableau, so the animation looks finished about
+0.6 to 0.66 s (about 12 ticks) before the script ends. That may be why the exit
+can look shorter than it is. Linking it to any particular "under 4 s" report is
+an inference, because the reporter's cycle setting is not known.
+*(Added and corrected 2026-10-17, issue #299 Q10.)*
 
 The call counts do not depend on the host. The **duration** does, in two ways:
 
@@ -378,7 +478,10 @@ The call counts do not depend on the host. The **duration** does, in two ways:
   exactly as a small value does; see R491.
 - With the cinematic-animation setting disabled, all of the pause work
   disappears and only the script's own single explicit world tick survives. The
-  key wait and the 36 stings remain in both cases.
+  key wait and the 36 stings remain in both cases. With no pauses to absorb
+  them, the sting time does count here: the beat lasts about the 36 stings plus
+  that one tick. The tick-period floor above applies only above the gate with
+  animation enabled. *(Added 2026-10-17, issue #299 Q10.)*
 
 **The handoff.** When the script returns, the audience performs the captive-cell
 handoff described in Section 3 — the cutscene presentation flag, the scene byte,
@@ -408,7 +511,9 @@ original starts a multi-second animation with the message window untouched, does
 the handoff, and only the *following* town-loop iteration emits the prompt line
 feed and opens the command row. An implementation that performs the handoff and
 opens the command row on the key itself ends up with the same message-window
-bytes about five seconds earlier. A frame captured a couple of seconds after the
+bytes about four seconds earlier (longer on a slow host; *corrected 2026-10-17,
+issue #299 Q10: this said about five seconds, retracted in `RETRACTIONS.md`
+R568*). A frame captured a couple of seconds after the
 key therefore shows the original still holding the threat page while the faster
 implementation is already two rows further on — the derived blank plus the open
 command row. The difference is timing, not text.
@@ -444,9 +549,10 @@ patterns, the companion branches across two- and three-survivor patterns, all
 four asks, all eight shrines, and a calibration sweep across the slow-CPU gate —
 reproduce one identical profile: one key wait, 36 stings, 73 world ticks, 72
 one-tick delay requests, and no print, character, window or input event between
-the record and the end of the handoff. The millisecond figures are arithmetic
-over those executed counts and the already-published sting length, not a
-wall-clock capture; `OPEN-QUESTIONS.md` carries that gap.
+the record and the end of the handoff. The edge-waiting delay and the
+per-repetition structure are from static reading. The duration figures are
+DOSBox speaker-capture and screenshot timings at the stated cycle settings
+(issue #299 Q10), not period-hardware timings.
 
 ## 5. Failure Reaction
 
@@ -486,6 +592,28 @@ members).** No cutscene script runs and no guard moves. In order:
    ` is sliced in half! `, wait for an acknowledgement key, and print record
    `6`.
 9. Finish with one line feed.
+
+**Rows on the correct-answer arm.** The cursor has already moved before step 2.
+The `\n\n` that ends the answer's echo leaves record `5` starting at column 0.
+Wrapped to the sixteen-cell message window, the record's last row,
+`merciful death!"`, fills all sixteen cells, so the printer's own wrap leaves the
+cursor at column 0 of the next row as the record finishes, scrolling the window
+if the cursor was on the bottom row (`systems/text-output.md` Section 6, "Line
+feeds and full rows"). That empty row under the record is the advance a capture
+sees through the whole blade hold, while the panel still lists the full party.
+Step 9's line feed is a separate emit, so it always costs one more row. It
+appears together with the reduced panel and leaves one blank row between the
+record's last row and the exit beat's key-wait cursor, which sits two rows below
+that last row. Do not move it ahead of the roster edit: with a correct
+row-filling wrap that would show the blank row and the extra scroll during the
+hold, which the stock game does not. In an emulator capture (DOSBox, fixed 3000
+cycles) the frame at about 26.64 s showed the full panel with no extra scroll
+and no cursor, and the next sample, about 0.3 s later, showed the reduced panel,
+the one-row scroll and the key-wait cursor together. That sample cannot order
+the repaint before the line feed; that order is from static reading. *(Added
+2026-10-17, issue #299 Q9; no published claim changes. Source provenance: the
+record length from the shipped message file, the published printer rule, static
+reading in `u5-decomp/notes/`, and DOSBox frames of the stock game.)*
 
 Earlier revisions listed the failed-demand cutscene beat and the guard-and-victim
 walk as part of the execution; they run only in the first wrong answer's
@@ -684,7 +812,8 @@ The public actor roles identified so far are:
 | Slot | Role |
 |------|------|
 | 0 | Avatar / party leader presentation actor |
-| 1 | Second party member, used by the failure punishment beat |
+| 1 | Second roster record (which may be Dead), used by the failure punishment beat |
+| 2-5 | Further party members, placed by the Section 3 placement table; no script moves or clears them *(added 2026-10-17, issue #299 Q11)* |
 | 6 | Left/acting guard; actor byte `0x70` |
 | 7 | Right/secondary guard; actor byte `0x70` |
 | 8 | Seated Blackthorn and throne tableau; initially suppressed, then actor byte `0x78` |
@@ -723,6 +852,7 @@ index.
 | `0xBB` | VM terrain byte | A locked wooden door with a window, drawn as a grey frame with yellow bars. | Replaces `0x44` at `(0,4)`, pixels `(8,72)`. |
 | `0x82` | VM terrain byte | The top-down pendulum fixture. This is not the dungeon first-person fire-field interpretation of the same low byte. | `(5,7)`, pixels `(88,120)`. |
 | `0xE9` | VM terrain byte | An hourglass. | `(5,9)`, pixels `(88,152)`. |
+| `0x85` | Shipped cutscene terrain | Manacles. An actor standing on one is drawn as a prisoner frame `0x64..0x67` (full atlas `0x164..0x167`), whatever its own tile (`systems/visibility.md` Section 8). | The six party cells of Section 3: `(0,1)`, `(1,1)`, `(9,1)`, `(10,1)`, `(3,5)` and `(7,5)`. *(Added 2026-10-17, issue #299 Q11.)* |
 | `0x70` / `0x170` | Guard actor byte / full atlas index | A silver-armoured guard in a blue surcoat, carrying a polearm or sword-and-shield silhouette depending on frame. Both slots 6 and 7 start in this family. | Slots begin at `(4,10)` and `(6,10)`. |
 | `0x16` | Actor byte sentinel | Draw nothing. In actor storage this must not be interpreted as full atlas tile `0x116`. | Used to suppress slots before direct reveals. |
 | `0x178` | Full atlas index; then actor byte `0x78` | The Dark King Blackthorn seated on his red throne. | `(5,5)`, pixels `(88,88)`. |

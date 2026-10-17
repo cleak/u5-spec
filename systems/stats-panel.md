@@ -551,6 +551,15 @@ fixed-cell font (`IBM.CH`), because the only routine that switches to the runic
 font restores the main font before it returns. An implementation that renders
 this slot through a tile path, or in the runic font, will draw the wrong shape.
 
+*(Added 2026-10-17, issue #299 Q12.)* The slot's three cells are emitted through
+the stats window and honour its inverse state; the caps' accent strokes are line
+draws and do not. Under the picker's inverse leak (`systems/inventory.md`
+Section 4.4), confirmed by running the original under DOSBox, each cap therefore
+renders as a black triangle on an otherwise chrome cell (top and bottom
+scanlines included) under unchanged accent strokes, and the glyph renders black
+on accent. The plain-band repaint used when the code is zero is graphics only and
+is unaffected, so with no effect running the band looks normal under the leak.
+
 The byte driving the slot is the game's **single global timed-magic-effect
 code**, paired with a single remaining-duration counter in turns. A reserved
 duration value means "permanent" and never decays. The slot does **not** stack:

@@ -528,13 +528,15 @@ window carries the record into the cell unchanged and the cursor stays one cell
 past the record's single trailing space. **The hold is long.** 36 stings, 73
 world ticks and 72 one-BIOS-tick delay requests give a floor of roughly five
 seconds before the handoff even begins, and that floor excludes 73 full viewport
-rebuild passes.
+rebuild passes. *(Retracted 2026-10-17, issue #299 Q10, `RETRACTIONS.md` R568:
+the stings run inside the tick waits, so the floor is about 72 tick periods,
+about 4 s.)*
 
 That settles the reported two-row offset as **timing, not text**: the original
 spends those seconds holding the threat page and only the following town-loop
 iteration emits the prompt line feed and opens the command row, so an engine
 that does the handoff and opens the command row on the key itself reaches the
-same bytes about five seconds early.
+same bytes about five seconds early (about four seconds; R568).
 
 Two withdrawals. **R490:** the vector is not a "per-question intermission" and
 never plays between questions - it has one reference in the overlay, from a
