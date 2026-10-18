@@ -47,7 +47,7 @@ then closed nothing and opened three trace items (section 3), and narrowed the
 issue #271 item about what the compositor draws under the avatar. The issue #273
 party-sprite band audit then **closed** one of those three - whether mounting
 moves the party's sprite out of the `320..335` run, answered no - and opened
-eight trace items (section 3) in its place. The issue #298 dungeon pass (2026-10-16) opened two capture items (section 2), and the issue #298 Blackthorn and conversation pass opened one more and narrowed a section 3 swell item. The issue #298 objects and NPC pass (2026-10-16) closed the issue #273 item on the other ten frame-script rows, and opened one capture item (section 2) and one trace item (section 3). The issue #298 magic and combat pass (2026-10-16) opened one owner item (section 1) and two trace items (section 3), narrowed the Blackthorn ambient-tick item and extended the world-tick-rate capture item. The issue #298 commands-misc pass (2026-10-16) opened one owner item (section 1), one capture item (section 2) and four trace items (section 3), and narrowed the Codex interred-party item. The issue #298 Q31 Blackthorn panel-drop pass (2026-10-16) opened three capture items (section 2). The issue #298 Q32 ship-cadence pass (2026-10-16) opened three trace items (section 3) and narrowed the section 3 item on what produces the second ship run. The issue #298 Q33 dungeon monster-step pass (2026-10-16) opened two trace items (section 3). The issue #298 Q40 town-attack pass (2026-10-16) opened one capture item (section 2) and one trace item (section 3); the issue #298 Q41-44 endgame and rescue pacing pass opened two capture items (section 2). What else
+eight trace items (section 3) in its place. The issue #298 dungeon pass (2026-10-16) opened two capture items (section 2), and the issue #298 Blackthorn and conversation pass opened one more and narrowed a section 3 swell item. The issue #298 objects and NPC pass (2026-10-16) closed the issue #273 item on the other ten frame-script rows, and opened one capture item (section 2) and one trace item (section 3). The issue #298 magic and combat pass (2026-10-16) opened one owner item (section 1) and two trace items (section 3), narrowed the Blackthorn ambient-tick item and extended the world-tick-rate capture item. The issue #298 commands-misc pass (2026-10-16) opened one owner item (section 1), one capture item (section 2) and four trace items (section 3), and narrowed the Codex interred-party item. The issue #298 Q31 Blackthorn panel-drop pass (2026-10-16) opened three capture items (section 2). The issue #298 Q32 ship-cadence pass (2026-10-16) opened three trace items (section 3) and narrowed the section 3 item on what produces the second ship run. The issue #298 Q33 dungeon monster-step pass (2026-10-16) opened two trace items (section 3). The issue #298 Q40 town-attack pass (2026-10-16) opened one capture item (section 2) and one trace item (section 3); the issue #298 Q41-44 endgame and rescue pacing pass opened two capture items (section 2). The issue #299 Q20 and Q21 scoped-prompt pass (2026-10-18) closed the issue #298 scoped sub-prompt capture item (section 2) and the issue #266 reserved-scan trace item (section 3), and opened one trace item (section 3). What else
 remains needs an owner decision (section 1) or a change of scope (section 4).
 
 ## 1. Owner decisions
@@ -112,12 +112,6 @@ Opened 2026-10-16 by the issue #298 dungeon pass:
 |---|---|---|
 | The first-party-exit record's dungeon consequences - that an in-arena K on a ladder or room grate, or the first party edge departure, steps the party a cell or changes its level once a room or walked-into fight ends - are static only; no live run walked an actor onto an arena ladder or off an arena edge and checked the dungeon position afterwards. | `systems/dungeon-mode.md` Sections 14 and 14.1 | One room fight in which a party member climbs an arena ladder, and one contact fight left by an edge, with the dungeon level, cell and facing read afterwards. |
 | The chamber-name banner and flavour-3 flourish colours on CGA, Hercules and Tandy, and the flourish's 4-in-65 rate, which is static (one hit in about fifteen live EGA frames is consistent with it but does not measure it). | `systems/dungeon-mode.md` Section 6.4 | A capture on each non-EGA driver facing a banner wall and a flavour-3 `0xC?` wall, and a longer EGA run counting flourish frames. |
-
-Opened 2026-10-16 by the issue #298 Blackthorn and conversation pass:
-
-| Item | Where | Notes |
-|---|---|---|
-| What a label block's scoped prompt does with the records after the head - which arm is the default and when it falls back to the top-level keyword loop. The head's extent (to the first NUL, with label bytes inside it live) is settled; the post-head state machine was not traced for issue #298 Q20 and rests on earlier static reading only. *Narrowed 2026-10-17 (issue #299 Q1): the handler's return value is settled - every way out of a block reports a stop (`systems/conversation.md` Section 7.7), executed on the original for a scoped answer ending in `0x82` and for GOTO-ended Descriptions and Greetings; which arm is the default remains open.* | `systems/conversation.md` Section 7.7 | An emulator capture of one yes/no label block answered yes, no and with an unmatched word. |
 
 Opened 2026-10-16 by the issue #298 objects and NPC pass:
 
@@ -257,12 +251,6 @@ Opened 2026-09-12 by the issue #259 picker-overflow pass:
 |---|---|---|
 | The general body of the vertical-scroll entry - every requested left edge except the message strip's - was read but not executed, because it needs driver initialisation state a bare harness cannot supply. Only its path selection is executed. Its signed-distance walk, its blanking of the vacated band and its separate hidden-surface body are therefore static readings. | `systems/display-driver-abi.md` Section 9.5 | A harness that can initialise the driver far enough to run the general path, or an equivalent live capture with a non-192 left edge. |
 | The Z-stats list page's key dispatch appears, read from the shipped bytes, to send left and right out of the page and to move the selection with up and down - the reverse of the published navigation sentence for that page. Only the down, End, Page Down, right and cancel keys were executed. Flagged rather than concluded; it belongs to the shared-picker navigation question, not to issue #259. | `systems/inventory.md` Section 4.7 | Execute every key of the Z-stats list page's dispatch and re-derive the navigation sentence before publishing either reading. |
-
-Opened 2026-09-12 by the issue #266 ASK-WHO acknowledgement pass:
-
-| Item | Where | What settles it |
-|---|---|---|
-| Whether the fixed reserved-keyword scan accepts a reserved word that begins a **later** typed word. Section 6 step 4 publishes the acceptance as exact end-of-input or a literal space immediately after the reserved word, which implies the reserved word must begin the typed line; a reading taken while tracing ASK-WHO suggests the scan reaches the same substring search and word-start acceptance that Section 7.6's name match uses, which would also accept `PLEASE BYE`. The reading is static only and nothing was changed on it. | `systems/conversation.md` Section 6 step 4 | Execute the reserved scan against a typed line whose reserved word is not the first word, and against one where it is a mid-word substring. |
 
 Otherwise none open. The twenty-four items this section listed on 2026-09-04 were all
 closed on 2026-09-04 and 2026-09-05 once the shipped files became available:
@@ -427,6 +415,12 @@ Opened 2026-10-17 by the issue #299 Q3 and Q7 dungeon passes:
 |---|---|---|
 | The display-mode condition under which the dungeon corridor painter reloads the active monster's sprite-state byte from the family's presentation record instead of using the stored byte. Its existence is established; the condition is not published. *(Issue #299 Q3.)* | `systems/dungeon-mode.md` Section 4.1 | A trace of the painter's sprite-state source, naming the condition in mode terms. |
 | That no block or indirect write changes the transport state underground, and that loading does not normalize it. The underground-writer census counted direct writes only; the no-normalization claim rests on the earlier save-load analysis, and no direct write was found in the load path. *(Issue #299 Q7.)* | `systems/active-objects.md` Section 10 | A census of block and indirect writes covering the transport byte, including the save-load path. |
+
+Opened 2026-10-18 by the issue #299 Q20 and Q21 scoped-prompt pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Two labelled-block census details. (a) An independent recount finds 27 blocks in which the label repeats after the head, where the earlier census said 28; 22 of the 27 are self-GOTO default arms, and neither the other five placements nor the one-block difference is itemised. (b) The splits of the 259 prompt-opening blocks by default-arm ending (168 / 35 / 22 / 31 / 2 / 1), the 54 heads that stop first, the 191 single-keyword and 29 keyword-less blocks and the 27 alias answers come from one census pass; only the block, final-marker, self-GOTO and `y`/`n` counts were recounted. No behaviour depends on either. *(Issue #299 Q20.)* | `systems/conversation.md` Section 7.7 | A second census of the four shipped `.TLK` files that lists each block whose label repeats after the head, with the record position, and recounts the default-arm splits. |
 
 ## 4. Deferred by scope
 

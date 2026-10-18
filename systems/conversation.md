@@ -259,15 +259,15 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 
 3. **Empty-input shortcut.** If the player pressed Enter on an empty line, the engine prints `BYE\n\n`, runs the NPC's `Bye` entry through the byte runner, and returns to the caller. This is the most common way conversations end. **The shortcut belongs to this prompt alone.** The ASK-WHO name prompt of Section 7.6 applies its own empty test to the same shared buffer and never reaches the farewell path: an empty line there prints the dismissive acknowledgement and returns to the stream, exactly as a non-matching word does. *(Settled 2026-09-12, issue #266.)*
 
-4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, table keywords are compared by their NUL-terminated length, and a match accepts either exact end-of-input or a literal space immediately after the reserved word. `NAME` runs the Name entry with the fixed `My name is ` prefix and framing specified below, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below. *(Open, 2026-09-12: a reading taken during the issue #266 pass suggests this scan reaches the same substring search and word-start acceptance that Section 7.6's ASK-WHO match uses, which would also accept a reserved word beginning a later typed word rather than only the first. That reading was not measured and nothing here is changed on it; see `OPEN-QUESTIONS.md`.)*
+4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, the table is walked in order, and each reserved word is accepted by the same rule as step 5 - its first occurrence in the line must start the line or follow a literal space, and nothing after it is checked. So `JOBS` runs the Job entry and `WELL BYE` takes the BYE path (executed on the original). *(Corrected 2026-10-18, issue #299 Q20: this step said a reserved word must be followed by end of input or a space; retracted, R578.)* `NAME` runs the Name entry with the fixed `My name is ` prefix and framing specified below, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below. A typed `BYE` or `THANK` runs the Bye entry **without** printing the `BYE` line; only the empty-line shortcut of step 3 prints it *(added 2026-10-18, issue #299 Q20; executed)*.
 
-5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword is compared against the typed input using a bit-7-stripping, case-insensitive, space-boundary compare. The compare strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII) and folds both sides to upper case. A match requires the keyword to end cleanly and the typed input either to end at the same point or to have a literal space there; there is no substring search or fuzzy matching.
+5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword, in blob order, is looked for in the typed line with the shared text matcher of `systems/commands.md` Section 11.3, which strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII), folds both sides to upper case and keeps its restart rule. The **first** occurrence the matcher finds is accepted if it starts the line or immediately follows a literal space. Nothing after the occurrence is checked. If that first occurrence is mid-word the keyword fails, even when a clean occurrence comes later in the line. The first keyword accepted wins. This is the same rule as the ASK-WHO name match of Section 7.6. Executed examples: `JOINED` and `I WANT TO JOIN` match `join`; `REJOIN` and `JO IN` do not. *(Corrected 2026-10-18, issue #299 Q20: this step said the compare was space-boundary with an end check and "no substring search"; retracted, R577.)*
 
 6. **Match found.** When an ordinary keyword matches, the engine runs the selected response stream through the byte runner. After the response finishes, the loop returns to step 1 to prompt for the next keyword. *(Clarified 2026-10-17, issue #299 Q1.)* "Finishes" means the response reaches its NUL. If it reports a stop, the loop returns that stop at once and the conversation ends without a `BYE` (Section 7.2).
 
 7. **No match.** When both scans complete without a match, the engine prints `I cannot help thee with that.\n\n` and returns to step 1.
 
-The match is space-boundary prefix matching, not arbitrary prefix matching. An NPC with separate `gran` and `grandpa` keywords resolves them independently: `grandpa` does not match `gran` because there is no boundary after `gran`, while `gran something` may match `gran` and leave the remaining words available to the surrounding handler. The keyword's actual length is whatever the NUL terminator says it is; the four-character "U4 convention" is a player-side discipline, not an engine constraint. The fifteen-character input limit on the typed side caps the longest entered phrase.
+The match has a start boundary and no end boundary. A typed `grandpa` matches a `gran` keyword, so when an NPC has both `gran` and `grandpa`, which of them answers is decided by their order in the blob: the earlier one wins for any line it matches. *(Corrected 2026-10-18, issue #299 Q20: this paragraph said `grandpa` does not match `gran`; retracted, R577.)* The keyword's actual length is whatever the NUL terminator says it is; the four-character "U4 convention" is a player-side discipline, not an engine constraint. The fifteen-character input limit on the typed side caps the longest entered phrase.
 
 **NAME response prefix and framing.** Whenever the ordinary reserved `NAME`
 response runs, its fixed words are exactly `My name is `, including one
@@ -418,10 +418,13 @@ level of the conversation treats it the same way: the conversation is over.
     quote and the two row breaks that normally come before the prompt are
     added only when a response ends at its NUL, so a stream ending in `0xFF`
     must carry its own. Shipped streams do.
-  - When the player leaves the nested prompt, that prompt prints `BYE` and
-    runs the Bye entry, then reports a stop. Every outer level passes the stop
-    up and does nothing else, so a conversation prints `BYE` once however deep
-    the nesting goes.
+  - When the player leaves the nested prompt, that prompt runs the Bye entry
+    (printing the `BYE` line first only when the player left with an empty
+    line, Section 6 step 3), then reports a stop. Every outer level passes the
+    stop up and does nothing else, so a conversation prints `BYE` at most once
+    however deep the nesting goes. *(Corrected 2026-10-18, issue #299 Q20:
+    this bullet said leaving always prints `BYE`; a typed `BYE` or `THANK`
+    does not; retracted, R579.)*
   - This is the same stop propagation that the unaffordable-payment prompt
     already follows (Section 7.6, "On an unaffordable payment").
 - **A response that ends at its NUL** goes back to the prompt that ran it,
@@ -529,7 +532,7 @@ These codes are the most semantically rich. Several of them introduce a *multi-b
 
 | Code  | Mnemonic        | Argument bytes following | Effect                                                                                                                          |
 |-------|-----------------|-------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| 0x84  | RECRUIT-SPEAKER | none                    | Recruit the speaking NPC into the active party. **There is no player prompt and no input read.** The engine takes the speaker's *own* name from the Name entry of the loaded blob, and matches its opening characters — case-insensitively, with bit 7 stripped — against the reserve portion of the sixteen-slot character roster, scanned from the last slot downwards. On a match the matched roster record is swapped into the active-party insertion slot, that record's inn-lodging marker is cleared, and the party-size byte is incremented; the engine then removes the NPC from the live scene. If the party is already at the six-member cap the engine prints the "no room for me in thy party / seek me again if one of thy members doth leave thee" refusal and recruits nobody. If no reserve record matches the speaker's name the engine prints its no-match diagnostic. This is the whole of the JOIN mechanism: the visible `JOIN` topic is an ordinary per-NPC keyword whose response stream emits this code. |
+| 0x84  | RECRUIT-SPEAKER | none                    | Recruit the speaking NPC into the active party. **There is no player prompt and no input read.** The engine takes the speaker's *own* name from the Name entry of the loaded blob, and matches its opening characters — case-insensitively, with bit 7 stripped — against the reserve portion of the sixteen-slot character roster, scanned from the last slot downwards. On a match the matched roster record is swapped into the active-party insertion slot, that record's inn-lodging marker is cleared, and the party-size byte is incremented; the engine then removes the NPC from the live scene. If the party is already at the six-member cap the engine prints the "no room for me in thy party / seek me again if one of thy members doth leave thee" refusal and recruits nobody. If no reserve record matches the speaker's name the engine prints its no-match diagnostic. This is the whole of the JOIN mechanism: the visible `JOIN` topic is an ordinary per-NPC keyword whose response stream emits this code. *(Added 2026-10-18, issue #299 Q20; executed.)* A successful recruit reports a stop: the conversation ends at once with no `BYE` and no Bye entry. The party-full refusal does **not** stop; the stream runs on to its NUL, and a scoped answer then falls back to the top-level `Your interest?` prompt (Section 7.7). The no-match diagnostic stops. Where each shipped companion's recruit sits is listed in Section 7.7.1. |
 | 0x85  | GOLD-PAYMENT    | three                   | Collect three argument bytes, mask each to seven bits, interpret them as ASCII decimal digits, and run the gold-payment routine against that three-digit amount. Used for tolls, bribes, and donations. |
 | 0x86  | ACTION-DISPATCH | one                     | Collect one argument byte and mask it to seven bits. Letters `A..K` dispatch through one global fixed-slot action table; small values below the letter range set generic one-conversation signal flags. |
 | 0x87  | KEYWORD-ALIAS   | none                    | Save the current stream position; skip forward past the remainder of the current record, past any run of terminators, and past the whole record that follows; run the record after that as a nested stream. If the nested stream signals stop, the outer stream stops too; otherwise the saved position is restored and the outer stream continues where it left off. No keyword matching, no player input, no flag write. |
@@ -592,7 +595,13 @@ the middle of a longer word - the engine abandons that member and moves on to th
 next slot rather than looking for a later, qualifying occurrence of the same name
 in the same line. A typed line whose first hit is mid-word therefore fails even
 when a clean hit follows it later in the line. The first accepted hit ends the
-scan, sets the bit, and prints the affirmative line. Empty input is its own early
+scan, sets the bit, and prints the affirmative line. The bit is written at the
+moment of the match, in the same bank `0x8C` reads, so an IF-ELSE later in the
+same stream - even the next code in the same block head - sees it and
+transfers *(added 2026-10-18, issue #299 Q21; executed on the Britain wizard's
+stranger block: `AVATAR` and `I AM AVATAR` set the bit and the following
+IF-ELSE transferred, while `XAVATAR` and an empty line left it clear and the
+IF-ELSE fell through)*. Empty input is its own early
 exit and never sets the bit; a line containing only a space is *not* empty, runs
 the scan normally, and ends on the no-match arm.
 
@@ -927,13 +936,110 @@ inclusive), matching the fifteen-label limit stated above; eleven are
 exercised by shipped content, and the four unused values are not evidence of a
 narrower range.
 
-Labelled blocks can do more than skip an IF/ELSE arm. They may open a scoped
-sub-prompt, print a prompt such as "Your interest?", read another free-text
-answer, scan the fixed reserved-word table, and then match label-scoped
-keywords inside the labelled block. Within these blocks, a separator byte marks
-labelled records, and the final label value also participates as an internal
-sub-record separator. This is how an NPC can ask a follow-up question and route
-the answer without returning to the top-level keyword list.
+Labelled blocks can do more than skip an IF/ELSE arm: a block whose head
+reaches its NUL opens a **scoped sub-prompt**, which is how an NPC asks a
+follow-up question and routes the answer. *(Added 2026-10-18, issue #299 Q20;
+the rules below were executed on the original conversation code against the
+shipped blobs and spot-checked in a DOSBox run of the original game.)*
+
+**Block layout.** A labelled block runs from its declaration to the next
+declaration. Its records, each ending at a NUL, are in order:
+
+1. the **head** (the stream after the declaration, up to its first NUL; see
+   "What a GOTO runs first" below);
+2. the **default arm** - the one record immediately after the head. It has no
+   keyword;
+3. zero or more **keyword/answer pairs**: a keyword record, then its answer
+   record.
+
+The scoped keyword scan stops at the next declaration. The record scans also
+treat the final-marker value `0x9F` as a record end, but no shipped head or
+default arm contains that value, so in shipped data every record ends at its
+NUL. A label byte repeated inside a block is not a record separator; met as a
+code it is an ordinary live GOTO. *(Corrected 2026-10-18, issue #299 Q20: this
+paragraph said the scoped prompt prints "a prompt such as Your interest?" and
+that a separator byte and the final label value mark records and sub-records
+inside the block; retracted, R573 and R574.)*
+
+**The scoped state machine.** "Quote" is the ordinary closing-quote sentinel
+(`formats/tlk.md` Section 9.2); "a row break" is one literal newline. Every
+way out of the machine reports a stop to whatever ran the GOTO (the 2026-10-17
+rule below).
+
+1. **HEAD.** Emit the quote, then run the head through the byte runner.
+   - If the head stops (`0x82`, a successful `0x84`, a GOTO, an IF-ELSE that
+     transfers or nests, `0xFF`, or any other stop), the block is finished and
+     reports a stop. No prompt opens.
+   - If the head reaches its NUL, emit the quote and two row breaks and go to
+     PROMPT.
+2. **PROMPT.** Mark the scoped state, which makes the five functional reserved
+   words inert (step 3). Print `You respond-`, a row break and `:`, then read
+   a free-text line of up to fifteen characters through the same input
+   pipeline as the keyword prompt. This is **not** `Your interest?`. Escape
+   only erases what has been typed (`systems/input.md`); only Enter submits.
+   - **Empty line** (including Enter after Escape): print two row breaks,
+     `"What didst thou say?` (an opening quote and no closing one), and two
+     row breaks, then repeat PROMPT. The head is **not** re-run, nothing ends,
+     and no `BYE` is printed. The scoped prompt cannot be left with an empty
+     line.
+   - **Non-empty line:** print two row breaks and go to RESERVED.
+3. **RESERVED.** Scan the fixed thirty-four-word table (Section 5) in order with
+   the keyword-match rule of Section 6 step 5.
+   - `NAME`, `JOB`, `WORK`, `BYE` and `THANK` do nothing here. The scan moves
+     on, and the typed line is left intact, so these words can still match a
+     scoped keyword as text: `NAME` matches a scoped keyword `n`.
+   - A rebuke word prints the rebuke and runs its bounded pause loop exactly as
+     at the top level (Section 5), then the block restarts at HEAD: the head is
+     printed again and a fresh scoped prompt opens.
+   - Otherwise go to SCOPED.
+4. **SCOPED.** Test the block's keyword/answer pairs in blob order with the
+   same keyword-match rule; the first keyword accepted wins.
+   - **Match:** emit the quote, then run that keyword's answer record.
+   - **No match:** emit the quote, then run the **default arm**. The default
+     arm is a whole record - text, a stop, a GOTO, or any mix - not an engine
+     "I cannot help thee" reply.
+   - If the record that ran stops, the block reports a stop (the conversation
+     ends, or a GOTO inside it has already run its own block to completion). If
+     it reaches its NUL, go to FALLBACK.
+5. **FALLBACK.** Emit the quote and two row breaks, then run a fresh top-level
+   keyword loop (Section 6) nested inside the block. It starts with
+   `Your interest?`, and `NAME`, `JOB`, `BYE` and the other reserved words work
+   normally again. When the player leaves it, it runs the Bye entry, printing
+   the `BYE` line first only if the player left with an empty line (a typed
+   `BYE` or `THANK` prints none; Section 6 steps 3 and 4). A stopping answer
+   inside it also ends it. The block then reports a stop, so the conversation
+   runs its farewell at most once.
+
+**After a scoped answer completes, the scoped prompt does not repeat.** A
+scoped answer or default arm that reaches its NUL always leads to the top-level
+keyword loop of step 5; that is the only point where the fallback happens. It
+never happens straight after a failed match, because a failed match runs the
+default arm first. Only three things make the same question appear again:
+
+- an empty line, which repeats the prompt but not the head;
+- a rebuke word, which repeats the head and the prompt;
+- a GOTO back to the block. Shipped blocks do this with a default arm that is
+  nothing but the block's own label (twenty-two blocks), which repeats the head
+  and opens a fresh prompt.
+
+A GOTO met in an answer or in a default arm runs the target block in full;
+because a block always reports a stop, the outer block is finished at that
+point.
+
+Executed matcher examples against a block whose keywords are `n` then `y`:
+
+| Line typed | Record that runs |
+|---|---|
+| `Y`, `YES`, `YONDER`, `GO YES` | the `y` answer |
+| `NAY`, `NO`, `NAME` | the `n` answer |
+| `OKAY`, `MAYBE`, `BYE`, `MAYBE YES` | the default arm (in `MAYBE YES` the first `Y` is mid-word, so the later clean one is never tried) |
+
+**Recruitment inside a scoped answer.** A successful `0x84` stops: the
+conversation ends at once with no `BYE` and no Bye entry, and the speaker
+leaves the scene. When the party is full the refusal is printed and nothing
+stops; the answer runs on to its NUL and play continues at the top-level
+`Your interest?` prompt of step 5. When no reserve roster record matches the
+speaker, the diagnostic is printed and the stream stops.
 
 **What a GOTO runs first.** *(Added 2026-10-16, issue #298 Q20.)* The labelled
 block's head is the stream from the byte after the first declaration of the
@@ -969,31 +1075,54 @@ own label, so a wrong name re-asks the challenge rather than opening the scoped
 prompt. A rule that ended each head at its first repeated label would cut that
 head before the self-GOTO, drop the loop, and send a wrong answer to the scoped
 prompt; in the other 447 heads the first NUL comes first, so such a rule happens
-to give the same split. Labels do repeat after the head in 28 blocks - in nearly
-all of them the label is the whole of the first record after the head, the "ask
-again" arm of a yes/no question - so "a block whose label never repeats" and "a
-block whose head contains its own label" are different counts. What the scoped
-prompt does with the records after the head is described above from static
-reading only; `OPEN-QUESTIONS.md` carries it. Source provenance: derived from private analysis in `u5-decomp/notes/` (static reading of the label handler and the byte runner) and a scan of the shipped `.TLK` files.
+to give the same split. Labels do repeat after the head in 27 blocks; in 22 of
+them the label is the whole of the default arm, the "ask again" arm of a yes/no
+question - so "a block whose label never repeats" and "a block whose head
+contains its own label" are different counts. *(Corrected 2026-10-18, issue
+#299 Q20: a recount gives 27 where this said 28, and 22 where it said "nearly
+all"; a census figure only, with no behavioural consequence, so no
+`RETRACTIONS.md` row. The one-block difference is not itemised;
+`OPEN-QUESTIONS.md` carries it.)*
+
+*Shipped shape (added 2026-10-18, issue #299 Q20).* The 448 declarations are
+313 labelled blocks and 135 final markers. Of the 313 heads, 259 reach their
+NUL and open a scoped prompt; the other 54 stop first. The 259 default arms
+divide as follows: 168 end at their NUL and fall back to the top level; 35 end
+with `0x82`, ending the conversation; 22 are a bare self-GOTO ("ask again");
+31 GOTO another block, 17 bare and 14 after some text; 2 end with `0xFF`; and
+one is malformed - a stray record in keyword position longer than the
+fifteen-character input limit, so it can never match. 191 blocks have exactly
+one scoped keyword and 29 have none; in a keyword-less block every non-empty
+line that is not a rebuke word runs the default arm. Scoped keywords are
+overwhelmingly `y` (183) and `n` (31). The 27 scoped answers that are a lone
+keyword-alias code behave exactly as at the top level (Section 7.6). The
+counts of blocks, final markers, self-GOTO default arms and `y`/`n` keywords
+were recounted independently; the remaining splits come from one census pass
+over the shipped `.TLK` files. Source provenance: derived from private analysis in `u5-decomp/notes/` (static reading of the label handler and the byte runner) and a scan of the shipped `.TLK` files.
 
 The scoped prompt is not a second copy of the top-level conversation loop.
 Before reading its inner answer, it marks the reserved-word handler as already
 inside a BYE-like prompt state. As a result, top-level reserved words such as
 `NAME`, `JOB`, `WORK`, `BYE`, and `THANK` do not run their ordinary global
-responses from inside the scoped prompt. Empty input is also local to the
-scoped prompt: it prints the prompt's BYE line and reissues the scoped prompt
-rather than ending the NPC conversation. After reserved-word handling is
-suppressed or missed, matching continues against the label-scoped keyword
-records. If no scoped keyword response can be run, control falls back through
-the ordinary top-level keyword loop before the label handler returns to the
-byte runner.
+responses from inside the scoped prompt; they stay in the typed line and can
+still match scoped keywords as text. Empty input is also local to the scoped
+prompt: it prints two row breaks, `"What didst thou say?` and two row breaks,
+then reissues `You respond-` without re-running the head; no `BYE` is printed
+and nothing ends. A rebuke word restarts the block from its head. If no scoped
+keyword matches, the default arm runs. *(Corrected 2026-10-18, issue #299 Q20:
+this paragraph said empty input "prints the prompt's BYE line" and that control
+falls back to the top-level keyword loop when no scoped keyword response can be
+run; retracted, R575 and R576.)*
 
 The label-response helpers use the same stream-driver result as ordinary
 responses. A nested response that reaches a byte-runner stop condition reports
 stop to the label handler; a response that simply reaches its NUL terminator
-reports no-stop. After an unmatched scoped keyword or a NUL-ended nested
-response, the handler opens the ordinary top-level keyword loop as the fallback
-path rather than treating the scoped prompt as a permanent terminal state.
+reports no-stop. After an answer or default arm that reaches its NUL, the
+handler emits the closing quote and two row breaks and opens a fresh top-level
+keyword loop, in which the reserved words work again; when that loop ends the
+block reports a stop. An unmatched line is not a fallback by itself: it runs the
+default arm, and only that arm's own NUL leads to the top-level loop
+*(corrected 2026-10-18, issue #299 Q20; R576)*.
 
 IF/ELSE branches reuse the same machinery. The IF-ELSE introducer falls through
 in-stream when the tested flag is clear, and transfers to the labelled record
@@ -1004,6 +1133,51 @@ transferring"; retracted, R562.)* The fall-through arm can end with its
 own label transfer past the taken arm so that the runner does not also execute
 it. The fifteen-label range is per blob, but labels are byte-level flow markers,
 not globally unique names.
+
+#### 7.7.1 Shipped recruitment paths
+
+*(Added 2026-10-18, issue #299 Q20.)* Twelve of the thirteen recruitable
+companions carry their recruit code (`0x84`) only inside a scoped answer, so
+recruitment depends on the state machine of Section 7.7. Every row below was
+run to a successful join on the original conversation code with the shipped
+records - party size up, conversation ended with no `BYE` - by 21 paths in all,
+each with the acquaintance bit both clear and set; Julia was also recruited in
+a DOSBox run of the original game (the save afterwards held her in the party).
+"Block k" means the block of the k-th label value in that NPC's blob. The path
+given is the shortest; any line the keyword-match rule accepts works the same,
+and `Y` stands for any line the rule matches to the scoped `y` keyword.
+
+| Companion | File, dialog index (location) | Record holding the recruit | Keystroke path that recruits |
+|---|---|---|---|
+| Saduj | `CASTLE.TLK` 7 (Lord British's castle) | answer to `y` in block 6 | `JOIN`, `Y` |
+| Gorn | `CASTLE.TLK` 11 (Blackthorn's castle) | answer to `y` in block 4 | `Y`, `Y`, `Y`. The Description jumps to block 1; blocks 1 and 2 accept only `y` and their default arms end the conversation; block 3's head jumps straight to block 4, so no prompt opens in block 3. Gorn has no ordinary keywords. |
+| Geoffrey | `CASTLE.TLK` 40 (Buccaneer's Den) | answer to `y` in block 4 | `Y` or `N` at the Description's block 1, which leads to block 2, whose head opens the top-level prompt; then `JOIN`, `Y`. Alternatively `EVIL` (to block 3), `Y` (to block 4), `Y`. |
+| Gwenno | `TOWNE.TLK` 11 (Britain) | the **head** of block 4 - the only recruit outside a scoped answer | `JOIN`: the top-level answer jumps to block 4, which recruits at once. Alternatively leave with an empty line: the Bye entry jumps to block 3, and `Y` there leads to block 4. |
+| Jaana | `TOWNE.TLK` 35 (Yew) | answer to `y` in block 4 | `Y` (to block 1), then any non-empty line that is not a rebuke word (to block 2, whose three arms all lead on through block 3 to block 4), then `Y`. Or `JOIN`, `Y` at the top-level prompt. |
+| Katrina | `TOWNE.TLK` 47 (New Magincia) | answer to `y` in block 2 | `Y`, `Y`. Or any other non-empty line, then `JOIN`, `Y`. |
+| Johne | `KEEP.TLK` 1 (Ararat) | answer to `y` in block 2 | `SHAD` (or `FEAR`), then `Y`, `Y`, through two blocks reached only by scoped answers. He has no `join` keyword; any other answer in blocks 1 or 2 ends the conversation. |
+| Mariah | `KEEP.TLK` 27 (Lycaeum) | answer to `y` in block 3 | `JOIN`, `Y`. Or `SHAD`, `Y`, `Y`, `Y`. |
+| Toshi | `KEEP.TLK` 28 (Empath Abbey) | answer to `y` in block 1 | `JOIN`, `Y` |
+| Maxwell | `KEEP.TLK` 29 (Serpent's Hold) | answer to `y` in block 1 | Already acquainted: the Greeting jumps to block 1, so `Y`. Otherwise `JOIN`, `Y`. |
+| Dupre | `KEEP.TLK` 30 (Bordermarch) | answer to `y` in block 3 | `Y`, `Y`, `Y` through the Description's chain; an `N` in block 1 ends the conversation. Or `JOIN`, `Y` once at the top-level prompt. |
+| Sentri | `KEEP.TLK` 31 (Bordermarch) | answer to `y` in block 4 | Any non-empty line that is not a rebuke word at block 1, which has no keywords and whose default arm jumps to block 2; then `Y`, `Y`, `Y`. Or `JOIN`, `Y`, `Y` at the top-level prompt. |
+| Julia | `KEEP.TLK` 32 (Empath Abbey) | answer to `y` in block 3 | Any non-empty line that is not a rebuke word at block 1, whose arms both fall back to the top-level prompt; then `JOIN`, `Y`. (DOSBox: `NO`, `JOIN`, `Y`.) |
+
+At block 1 of Julia and Sentri, as at any scoped prompt, an empty line only
+re-asks and a rebuke word restarts the head (Section 7.7). Under these rules
+every shipped recruitment is reachable. A wrong answer either re-asks the
+question or drops back to the top-level prompt, where the player can try
+again; Gorn's and Johne's chains instead end the conversation, and the player
+Talks again. With a full party, a recruit inside a scoped answer prints the
+refusal and play continues at the top-level prompt (Section 7.6, `0x84`).
+
+Source provenance: private analysis in `u5-decomp/notes/` and
+`u5-decomp/functions/TALK_OVL/` - static reading of the label handler, its
+scoped matcher and record helpers, the reserved handler, the keyword loop and
+recruit, confirmed by executing the original conversation code under emulation
+on the shipped `.TLK` and `.NPC` files with the original text matcher and case
+folder, an independent re-run with its own trace of every transition and all
+21 recruitment paths, and a DOSBox run of the original game at Empath Abbey.
 
 ## 8. The common-word dictionary
 
@@ -1142,7 +1316,7 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
 4. **Keyword loop.** Section 6's loop runs until the player exits.
 
-5. **Bye sequence.** When the player leaves the keyword prompt (empty input, or the `BYE`/`THANK` reserved words), the engine emits `BYE\n\n` and runs the Bye entry (entry 5 of the five mandatory leading entries). A keyword or scoped answer that stops (`0x82`) ends the conversation without `BYE` and without the Bye entry. The same is true of any prompt nested by `0xFF`: it runs the farewell itself, and no outer level repeats it (Section 7.2). *(Corrected 2026-10-17, issue #299 Q1: this step said a keyword response that ends the stream leads to `BYE` and the Bye entry; retracted, R564.)*
+5. **Bye sequence.** When the player leaves the keyword prompt, the engine runs the Bye entry (entry 5 of the five mandatory leading entries). Leaving with an empty line prints `BYE\n\n` first; leaving with the `BYE` or `THANK` reserved word prints no `BYE` line (Section 6 steps 3 and 4). *(Corrected 2026-10-18, issue #299 Q20: this step said both ways out emit `BYE\n\n`; retracted, R579.)* A keyword or scoped answer that stops (`0x82`) ends the conversation without `BYE` and without the Bye entry. The same is true of any prompt nested by `0xFF`: it runs the farewell itself, and no outer level repeats it (Section 7.2). *(Corrected 2026-10-17, issue #299 Q1: this step said a keyword response that ends the stream leads to `BYE` and the Bye entry; retracted, R564.)*
 
 **The complete shape of an ordinary entry** *(added 2026-09-12, issue #262)* is
 therefore: a blank row, `You see ` plus the description, a blank row, the
