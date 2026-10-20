@@ -2061,5 +2061,5 @@ absence of the provision pass, world tick and other work is executed as well
 as read statically. The first castle turn's meal and any castle-entry hour
 refire are inferred only. The food repair's position after the spin and the
 absence of any message-window output rest on static reading. Source
-provenance: private analysis in `u5-decomp/notes/`, `u5-decomp/scratch/`,
+provenance: private analysis in `u5-decomp/notes/`,
 `u5-decomp/functions/BLCKTHRN_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
