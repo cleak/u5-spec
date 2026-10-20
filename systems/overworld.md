@@ -1354,12 +1354,74 @@ After the tile is cleared, the hook has two outcomes. If the clock is in hour
 `0` and the minute is below `10`, it reports success to the outer loop; the
 outer loop then dispatches the same shrine/urn kneel overlay used by
 E-Enter at a shrine. The earlier M-Meditate attribution is withdrawn
-(`RETRACTIONS.md` R411). Otherwise, the hook chooses a destination from the cached moon-glyph
+(`RETRACTIONS.md` R411). *(Added 2026-10-18, issue #299 Q29.)* That route does
+not relocate the party. The presentation plays over a display map of its own,
+holds the scene byte at a sentinel while it runs, and restores the scene and
+the actor table afterwards; it never changes the party's coordinates, plane or
+transport. The party is left on the overworld on the former gate cell, which
+step 4 has already rewritten to grass, still mounted or airborne if it was,
+and because the scene byte is back to its old value the loop goes on to read a
+command in the same iteration. The overlay chooses the Codex urn instead of the
+shrine only when the party's cell is terrain `0x11`; the cell is now grass, so
+the shrine meditation runs. Its virtue match compares the party's X and Y
+against the shrine coordinate table with no plane or scene test
+(`systems/karma.md` Section 7), so the result rests on terrain: a gate stands
+only where a Moonstone could be buried, the surface shrine tile is outside the
+burial tile set, and every mapped shrine X/Y on the Underworld map is terrain
+`12` or `13`, also outside it. No gate cell can therefore match a mapped row,
+and the visit resolves to **Spirituality** through the fall-through. While the
+scene byte holds the sentinel, the night-time gate refresh at the head of
+Section 9, which stamps a slot only when its saved scene and floor match the
+current ones, cannot match,
+so the gate does not reappear during the visit; once the scene is restored it
+is still night and the slot still anchors that cell, so the gate rises under
+the party again on a later world tick. What the next transit does then depends
+on the clock: if the visit ended at minute `10` or later of hour `0` it is an
+ordinary warp, and if it ended earlier the shrine route would run again.
+Whether every visit carries the clock past minute `9` is not established
+(`OPEN-QUESTIONS.md`); a short visit, such as one that a blank virtue answer
+ends early, may not. In the verified run the visit ended at 00:18, and the
+next consumed turn produced an ordinary transit to the moon-phase destination.
+Evidence: executed on the original (a midnight transit, the full Spirituality
+meditation with the quest ordained, and a save straight afterwards showing the
+overworld, the same cell and the same marker), with static reading of the
+overlay for the unchanged coordinates. Otherwise, the hook chooses a destination from the cached moon-glyph
 digits: before noon it uses the first cached glyph, and from noon onward it
 uses the second. The glyph digit selects one of the saved Moonstone slots, and
 the hook calls the same saved-slot warp helper used by Gate Travel. If that
 warp changes scene, the outer loop exits through the normal scene-byte check.
 The party's transport marker is restored on every path that ran the transition.
+
+*(Added 2026-10-18, issue #299 Q26.)* Transport therefore survives a transit
+unchanged. The vehicle in use is not a separate object - it is the party's
+transport marker - so a party on a horse or a magic carpet arrives mounted or
+airborne, nothing is left at the source gate, nothing travels separately and
+nothing is placed at the arrival cell. From the overworld, the saved-slot warp
+writes the destination scene, X, Y and floor and returns; it does not run town
+setup itself (it does so only when both the current and the destination scene
+are town-family scenes). A town destination is entered afterwards, when the
+outer loop exits on the scene-byte check as above, and the marker reaches the
+town unchanged, after which `systems/town-mode.md` Section 15.1 governs the
+visit. One byte-level difference from an `E`-Enter entry: the warp writes the
+outdoor object table to the plane's canonical `.OOL` while Stage B still holds
+the marker at zero, so slot zero's type byte in that written table is zero
+rather than the transport marker. `systems/town-mode.md` Section 15.1 step 4
+re-synchronises slot
+zero's type from the marker on exit, so play is unaffected, but a byte compare
+of the plane table written by a moongate arrival will differ from one written
+by Enter. If the selected slot holds the recovered sentinel, the warp reports
+failure only after the whole presentation above has played; the party stays on
+the former gate cell with its marker restored. No transit prints any text. A
+dungeon destination cannot arise: a Moonstone slot can hold only a scene in
+the overworld/town band (written by burial) or the recovered sentinel, and
+every shipped slot is on the surface. Evidence: executed on the original for a
+horse party and a carpet party, each moongated into a town; the save written
+there showed the same marker, the town scene and the arrival cell, and no
+vehicle object in the surface table. The warp's behaviour, the slot writers
+and the sentinel failure are static reading. Not exercised: leaving such a
+town by the edge still mounted (inferred from `systems/town-mode.md`
+Section 15.1), and a frigate or skiff on a gate cell, which the hook
+does not test for (`OPEN-QUESTIONS.md`).
 
 The **endgame overlay reuses this presentation twice**, on the same shared
 counter and with the same fifteen-step counts: once counting up, as a gate rises

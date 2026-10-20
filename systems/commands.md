@@ -101,7 +101,7 @@ Most letters discard whatever their handler returned and report the default
 | `C` Cast | "Acted", except one sub-handler branch that reports "no action". |
 | `E` overworld Enter | "Acted" by default, "no action" after its refusal, otherwise whatever the location-entry path returned. |
 | `K` town | "No action" by default, so both refusals cost nothing; "acted" for both ladder directions, for the no-actor early-out, and for a successful step. |
-| `K` dungeon | "Acted" when a climb, a pit fall, or a cancel is applied; "no action" on both "nothing to klimb here" refusals. Climbing where there is nothing to climb therefore costs the party nothing, and the two refusals are distinct: one for a cell that holds a climbable feature the party lacks the gear for, one for a cell with no feature at all. |
+| `K` dungeon | "Acted" when a climb, a pit fall, or the Space pass at the `Klimb-U/D-` chooser is applied (the chooser has no cancel key; Esc is ignored there, `dungeon-mode.md` Section 13.1; clarified 2026-10-18, issue #299 Q24); "no action" on both "nothing to klimb here" refusals. Climbing where there is nothing to climb therefore costs the party nothing, and the two refusals are distinct: one for a cell that holds a climbable feature the party lacks the gear for, one for a cell with no feature at all. |
 | `Y` Yell | "Acted" for the word-of-power branch and its refusal; forwarded for the town Shadowlord branch. Three paths — hoisting sail, furling sail, and an empty yell — report an *undefined* status in the original: those paths never set a status of their own, so the caller observes whatever value the shared string printer most recently produced. |
 
 The undefined Yell paths are an original-game defect, not designed status codes. An

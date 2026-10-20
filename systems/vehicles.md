@@ -137,7 +137,7 @@ change the clock increment and it is not a player movement-speed table.
 |---------|------------------------|--------------------|----------------|
 | Foot | Default state. | No vehicle object; normal terrain restrictions. | None at this level. |
 | Horse | Boardable. X-Xit can leave a horse object behind. | Overland transport; requires the party to be on foot before boarding. Directional movement uses the ordinary one-cell overland step with mounted-horse passability. | None at this level. |
-| Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; an earlier revision of this row gave that hull as `100`, and that is retracted; boarding warns when hull is below ten or no skiffs are aboard. While aboard, the hull absorbs outdoor impact damage under the closed-interval `[1, 30]` rule in "Hull Condition And What Destroys A Ship" below, and no party member loses hit points while the ship survives. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
+| Ship | Boardable; can fire broadsides; can toggle sails through Y-Yell. | Carries hull condition in active-object byte `+5`, skiff count in byte `+7`, plus heading and sail state in the party transport marker while boarded. Shipwright Frigate purchase creates this family with hull condition `99` and two skiffs; an earlier revision of this row gave that hull as `100`, and that is retracted; boarding warns when hull is below ten or no skiffs are aboard; boarding from a skiff adds that skiff to the carried count first *(added 2026-10-18, issue #299 Q25)*. While aboard, the hull absorbs outdoor impact damage under the closed-interval `[1, 30]` rule in "Hull Condition And What Destroys A Ship" below, and no party member loses hit points while the ship survives. Boarding from the accepted carpet-compatible states stows one carried carpet for later ship exit fallback. Hoisted-sail movement is wind-cadenced as specified in `weather.md`. | No command-level repair path is traced for the analyzed baseline; future repair evidence would belong to shop/item acquisition work, not B-Board, X-Xit, Y-Yell, or F-Fire transitions. |
 | Skiff | Boardable. | Water transport at the ordinary mode turn cost; no vehicle-specific time modifier. The shared movement spec names the facing-sensitive skiff predicate family. Every consumed action ending on exact deep water runs the rough-seas impact specified in `systems/overworld.md` Section 6.2.5. | None at this level. |
 | Magic carpet | Boardable as a carpet. | Boarding changes the party transport state to the carpet transport marker. Boarding does not touch the timing tag byte at all - the `T` tag is Negate Time, never a carpet marker; outdoor Klimb is a separate Grapple-gated command, not a carpet ownership test. The shared movement spec names the carpet predicate family. Every consumed action ending on exact deep water runs the same rough-seas impact as a skiff. | None at this level. |
 | Balloon | Vehicle tile family only in the analyzed baseline. | Balloon art and manual-facing references can be preserved as assets, but no traced B-Board, X-Xit, U-Use, shipwright, or ordinary movement branch promotes a live balloon transport state. | No command-level balloon mechanics are specified for v1; do not infer a boardable vehicle from art alone. |
@@ -158,7 +158,7 @@ boarded-state transitions are byte-compatible:
 |---------------|------------------------|--------------------------|
 | Horse | `0x10..0x11` | Requires the party to be on foot; writes the corresponding mounted-horse marker by adding two to the object byte, producing `0x12..0x13`. |
 | Magic carpet | `0x1B` | Requires the party to be on foot; writes carpet transport marker `0x14`. |
-| Ship | `0x24..0x27` | Accepts the ship-boarding precondition below; preserves the selected ship byte as the party ship marker and copies hull/skiff auxiliary state. Only the furled-sail object run is boardable, so **a boarded frigate always starts with its sails furled**; the hoisted state is reachable only afterwards, through Y-Yell. |
+| Ship | `0x24..0x27` | Accepts the ship-boarding precondition below; preserves the selected ship byte as the party ship marker and copies the hull condition and the carried-skiff count, plus one when the party boards from a skiff (Section 4, Ship bullet). Only the furled-sail object run is boardable, so **a boarded frigate always starts with its sails furled**; the hoisted state is reachable only afterwards, through Y-Yell. |
 | Skiff | `0x28..0x2B` | Requires the party to be on foot; preserves the selected skiff byte as the party skiff marker. |
 
 These bytes are vehicle object and transport-state values. They are also actor
@@ -173,25 +173,35 @@ baseline.
 
 - **Horse.** Requires the party to be on foot. In non-overworld scenes an
   additional availability check can refuse with "Nay!" when the horse/object is
-  occupied or unavailable. On success it prints the horse line and changes the
-  party transport state to mounted horse.
+  occupied or unavailable. That availability check is made **before** the
+  on-foot check, so a party in such a scene that is not on foot and tries to
+  board an occupied horse gets `"Nay!"`, not `On foot` *(added 2026-10-18,
+  issue #299 Q25)*. On success it prints the horse line (Section 4.1) and
+  changes the party transport state to mounted horse.
 - **Carpet.** Requires the party to be on foot. On success it prints the carpet
-  line and changes the party transport state to carpet.
+  line (Section 4.1) and changes the party transport state to carpet.
 - **Skiff.** Requires the party to be on foot. On success it prints the skiff
-  line and changes the party transport state to the selected skiff byte,
-  preserving facing.
+  line (Section 4.1) and changes the party transport state to the selected
+  skiff byte, preserving facing.
 - **Ship.** Uses a broader boarding precondition than the on-foot-only cases.
   The gate accepts the ordinary foot/avatar family, carpet-compatible markers
   `0x14` and `0x15`, and the skiff family; if the current state is outside
   that accepted set it prints the stock "On foot" refusal and makes no state
   change.
-  On success it prints the ship line, copies the selected ship object's byte
-  `+5` hull condition and byte `+7` skiff count into the active vehicle state,
-  warns if hull condition is below ten, warns if no skiffs are aboard, and
-  changes the party transport state to ship. When the accepted starting state
-  is one of the carpet-compatible values, boarding also increments the
-  carried/stowed carpet counter so X-Xit can redeploy that carpet if the ship
-  later has no nearby landing support and no skiffs aboard.
+  On success it prints the ship line (Section 4.1), copies the selected ship
+  object's byte `+5` hull condition into the active vehicle state and warns if
+  hull condition is strictly below ten. When the accepted starting state is one
+  of the carpet-compatible values, boarding then increments the carried/stowed
+  carpet counter so X-Xit can redeploy that carpet if the ship later has no
+  nearby landing support and no skiffs aboard. It then sets the active
+  carried-skiff count from the ship object's byte `+7`, **plus one when the
+  party boards from a skiff** (that skiff is taken aboard), warns if the
+  resulting count is zero - which therefore never happens when boarding from a
+  skiff - and changes the party transport state to ship. *(Corrected
+  2026-10-18, issue #299 Q25.)* Earlier text said boarding copies the byte `+7`
+  skiff count unchanged and warns if no skiffs are aboard; from a skiff the
+  stored count plus one is written, and that is retracted (`RETRACTIONS.md`
+  R581).
 
 The two carpet-compatible values `0x14` and `0x15` are the *only* carpet marker
 values (Section 2), so in practice any airborne party can board a ship. An
@@ -235,6 +245,44 @@ selling shipwright's fixed delivery cell — the per-shipwright coordinate table
 in `systems/shops.md` Section 8.7, which is a sidecar table and not the town's
 exterior entrance or exit cell. Ordinary B-Board then owns boarding the placed
 object.
+
+### 4.1 B-Board transcript
+
+*(Added 2026-10-18, issue #299 Q25.)* The dispatcher first prints `Board_`,
+where `_` marks its trailing space and no line feed follows. The handler then
+adds one of these completions, using `\n` for a literal line feed as in
+Section 5.1:
+
+| Outcome | Text after the dispatcher prefix | Rows as seen |
+|---|---|---|
+| Horse boarded | `horse\n` | `Board horse` |
+| Carpet boarded | `carpet\n` | `Board carpet` |
+| Skiff boarded | `skiff\n` | `Board skiff` |
+| Frigate boarded | `Ship\n` | `Board Ship`, capital `S` unlike the other three |
+| Hull strictly below ten, after the ship line | `\nDANGER: SHIP BADLY DAMAGED!\n` | a blank row, then `DANGER: SHIP` / `BADLY DAMAGED!` |
+| Resulting carried-skiff count zero, after the ship line and any damage warning | `\nWARNING: NO SKIFFS ON BOARD!\n` | a blank row, then `WARNING: NO` / `SKIFFS ON BOARD!` |
+| Dungeon scene | `\nNot here!\n` | `Board`, then `Not here!` |
+| Horse refused by the availability check: a non-overworld scene and the horse object marked occupied (made before the on-foot check) | `"Nay!"\n` | `Board "Nay!"`, double quotes included |
+| Horse, carpet or skiff while not on foot, or a ship from a state outside its boarding gate | `\nOn foot\n` | `Board`, then `On foot`, with no `!` |
+| Nothing boardable under the party | `What?\n` | `Board What?`, capital `W` |
+
+The order on a ship boarding is fixed: the ship line, the hull test, the
+carpet stow when it applies, the skiff-count adjustment, then the skiff test.
+Both warnings can print on one boarding, damage first. Not every horse in a
+non-overworld scene is refused; only one whose object is marked occupied.
+The message window is sixteen columns wide, so each warning wraps onto two
+rows as shown.
+
+Evidence: the literals were checked against the resident data image. The
+horse, carpet and skiff lines and a frigate boarded on foot with hull `5` and
+no carried skiffs were executed on the original under DOSBox; the last showed
+`Board Ship`, a blank row, the damage warning, a blank row, the skiff warning,
+and a hull of `5` on the status panel. A frigate with hull `50` and no carried
+skiffs boarded from a skiff showed only `Board Ship`. The order and the
+increment are also confirmed by static reading of the board handler.
+
+Source provenance: derived from private analysis in `u5-decomp/notes/`,
+issue #299 Q25.
 
 ## 5. X-Xit
 

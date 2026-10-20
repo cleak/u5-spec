@@ -1162,10 +1162,32 @@ The rescue contract:
    (`systems/time.md` Section 7, `systems/stats-panel.md` Section 7); a spin
    that stays on the same day does not repaint the panel, which keeps the
    restoration loop's per-member repaints and already shows the unchanged date.
-   The crossing also runs the ordinary midnight events of `systems/time.md`
-   Section 7, including the Shadowlord relocation roll and its use of the
-   random generator, and a month crossing runs the ordinary month-boundary
-   events of Section 8 there; these side events rest on static reading only.
+   The crossing runs the clock advance's midnight work once, and nothing
+   beyond it. In order: the Shadowlord hideout reroll of `systems/time.md`
+   Section 7, with its random draws (its party-scene rejection is inert,
+   because the scene is already the castle; a vanquished slot stays
+   vanquished); the day advance; the month-boundary bundle of Section 8 there
+   when the day passes 28 (long-period clears, every character record's month
+   counter up by one to the cap of 25, month and year carry); and then the
+   single panel repaint, which therefore shows the rerolled state and the new
+   date. Each hour crossed also lowers the camp cooldown by one, floored at
+   zero (`systems/time.md` Section 6), and rewrites the cached twelve-hour
+   value (`systems/time.md` Section 2); each step recomputes daylight, which
+   reads 50 at 06:00 to 06:08 in the castle. The spin does not run the party
+   status and provision pass (no meal, starvation, poison tick or regeneration
+   roll), the world tick or active objects, NPC schedule work, natural-moongate
+   work or encounters, at midnight or at any other hour. An entry hour of 6
+   runs none of this work: no reroll, repaint, sky or daylight refresh, and no
+   camp cooldown change. After a spin that stepped, the shared previous-hour
+   snapshot (`systems/time.md` Section 2) reads 5 against hour 6. Two
+   consequences are inferred, not traced: the first party upkeep pass in the
+   castle afterwards sees an hour change at a meal hour and takes the 06:00
+   food decrement (by then the food word is at least 63, step 12), and a
+   mode-zero cleanup at castle entry could instead refire the hour bundle once
+   from the stale snapshot (`systems/time.md` Section 5); the moon digits
+   match the final day either way (`OPEN-QUESTIONS.md`). *(Clarified
+   2026-10-18, issue #299 Q28: executed, superseding the earlier note that
+   these side events rest on static reading only; the behaviour is unchanged.)*
    Each hour crossed also runs the ordinary hour-change bundle for the castle
    scene, so the sky strip of `systems/moons.md` (moon phases and time of day)
    refreshes once per hour crossed; it reads the day of the month, so after a
@@ -2026,7 +2048,18 @@ carry, and the single full-panel repaint at midnight only - was established by
 executing the shipped rescue handoff tail with the real resident clock advance
 across twelve starting clocks, with the panel, sky-strip and driver calls
 counted rather than drawn, and re-run by an independent verifier. The midnight
-and month-boundary side events, the food repair's position after the spin and
-the absence of any message-window output rest on static reading. Source
-provenance: private analysis in `u5-decomp/notes/`,
+and month-boundary side events and their order (issue #299 Q28, 2026-10-18) -
+the hideout reroll, day advance, month bundle and one repaint, the per-hour
+camp cooldown and twelve-hour value, daylight, the moon digits, the post-spin
+snapshot and the entry-hour-6 no-op - were then established by executing the
+same tail with the real clock advance, random generator and sky-strip renderer
+from five starting clocks (display drawing stubbed); a verifier re-run logged
+every near-call target and found only the clock advance, the saturating
+helper, the driver clock call, the sky strip and its display callees, the
+random generator and the panel repaint, with no far or indirect calls, so the
+absence of the provision pass, world tick and other work is executed as well
+as read statically. The first castle turn's meal and any castle-entry hour
+refire are inferred only. The food repair's position after the spin and the
+absence of any message-window output rest on static reading. Source
+provenance: private analysis in `u5-decomp/notes/`, `u5-decomp/scratch/`,
 `u5-decomp/functions/BLCKTHRN_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.

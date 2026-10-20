@@ -604,7 +604,10 @@ attempt whose position matches none of the seven mapped shrines resolves to
 on the Britannia surface - is reached. An implementation must therefore treat
 "matched no row" as "Spirituality", not as an error. An older reading of the
 same fall-through as a hidden ninth-virtue Humility case is withdrawn; Humility
-is an ordinary row and matches by position like the rest.
+is an ordinary row and matches by position like the rest. One executed route
+to it is the natural-moongate midnight hook, which runs the meditation on the
+former gate cell (`systems/overworld.md` Section 9.2) *(added 2026-10-18, issue
+#299 Q29)*.
 
 The **Shrine of the Codex** is a separate landmark with its own tile, occurring
 exactly once on the Britannia surface at `(233, 233)` and nowhere in the

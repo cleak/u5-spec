@@ -964,7 +964,7 @@ at whatever cursor column the label left behind.
 | `\n\n_Keys.......` | Keys, dotted leader |
 | `\n_Gems.......` | Gems, dotted leader |
 | `\n_Torches....` | Torches, dotted leader |
-| `\n_Grapple` | Grapple |
+| `\n_Grapple` | Grapple: the label alone, with no value; shown only when the Grapple / legacy magic-powder byte is nonzero (see below) |
 | `\nStatus:_` | Status |
 
 *Added 2026-09-06 (issue #193).* The second line of the attribute page is the
@@ -984,6 +984,20 @@ five-entry status table keyed by the status letter.
 four for torches - which is why the three counts land in the same column with
 no padding logic anywhere. All three labels are twelve characters long after
 their newline, so the counts align at the thirteenth cell of the line.
+
+The Grapple row has no value: it is the bare label, printed only when the
+Grapple / legacy magic-powder byte (`formats/saved-gam.md`) is nonzero, and
+every nonzero value prints it the same way. When the byte is zero the row is
+left out and the page ends after the Torches row, with no blank line in its
+place. Food and Gold are printed right-justified in a four-cell field padded
+with spaces. Keys, Gems and Torches are printed right-justified in a two-cell
+field padded with spaces, starting at that thirteenth cell, so a single digit
+sits in the fourteenth cell; a zero count prints `0` and those three rows are
+always shown. *(Added 2026-10-18, issue #299 Q27. Source provenance: executed
+original Equipment-page code together with the original number printer, at
+grapple values zero and several nonzero values, agreeing with static reading
+and re-run by an independent verifier; private analysis in
+`u5-decomp/notes/`.)*
 
 Empty-state placeholders, both parenthesised:
 

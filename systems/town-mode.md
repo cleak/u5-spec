@@ -1324,7 +1324,11 @@ The object-table handoff is ordered and replacing, not merging:
 
 1. Before installing the interior scene and coordinates, entry writes the
    entire current 32-record outdoor table to the current plane's canonical
-   `.OOL`. Slot zero and all seven of its other bytes are included.
+   `.OOL`. Slot zero and all seven of its other bytes are included. A
+   moongate arrival writes this table from the saved-slot warp while the
+   marker is held at zero, so there slot zero's type byte is written as zero;
+   step 4 restores it on exit (`systems/overworld.md` Section 9.2) *(added
+   2026-10-18, issue #299 Q26)*.
 2. Fresh town setup clears live slots 1 through 31, preserves slot zero, and
    populates town actors. These town records are visit-local and never merge
    into an outdoor plane table.

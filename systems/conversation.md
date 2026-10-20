@@ -194,7 +194,7 @@ The five leading entries are, in order:
 4. **Job.** What the NPC says in response to the keyword `JOB`. By convention the keyword loop reaches the same entry when the player asks `JOB`.
 5. **Bye.** What the NPC says when the player exits the conversation (typed empty input, or the keyword `BYE`).
 
-Each entry is a NUL-terminated stream of post-obfuscation bytes. After the five mandatory entries comes the variable-size keyword body. Each keyword body is a pair: a NUL-terminated keyword string followed by a NUL-terminated response stream. The pairs continue until the end of the blob.
+Each entry is a NUL-terminated stream of post-obfuscation bytes. After the five mandatory entries comes the variable-size keyword body. Each keyword body is a pair: a NUL-terminated keyword string followed by a NUL-terminated response stream. The pairs are found by position alone: counting the five leading entries as records 0-4, keyword k (k = 0, 1, 2, ...) is record 2k+5 and its response is record 2k+6. Nothing in a record marks it as a keyword or a response. The pairs continue only up to the blob's first label declaration (Section 7.7); the labelled blocks that follow are never part of the ordinary keyword list, and no keyword inside or after them is ever tested at the top-level prompt (executed, on a synthetic blob and on shipped NPCs). Because pairing is positional, an odd number of records between the five leading entries and the first declaration shifts every pair after the extra record by one; one shipped NPC has this shape (Section 7.7). Counted this way, shipped NPCs have between zero and twenty-four ordinary keyword/response pairs, and six have none at all (among them `DWELLING.TLK` id 10, `KEEP.TLK` id 10 and `CASTLE.TLK` ids 8, 10 and 11). *(Corrected 2026-10-19, issue #299 Q22: this said the pairs continue until the end of the blob; retracted, R582.)*
 
 Both keywords and response text use a single obfuscation scheme: every printable text byte has the high bit (`0x80`) set on disk. A literal `'A'` (`0x41`) is stored as `0xC1`. The engine strips bit 7 when comparing keywords and when rendering text. This is *not* an encryption — it's a simple bit flag — but it has the side effect that the on-disk text is not casually readable as ASCII strings. The same flag distinguishes text bytes (high bit set) from control codes and dictionary indices (high bit clear), which is how the byte runner classifies each byte without any escape sequences.
 
@@ -261,7 +261,7 @@ After the loader has read the NPC blob and the greeting has been emitted, contro
 
 4. **Reserved-keyword scan.** The engine compares the input against the fixed thirty-four-entry reserved table. The match uses the same normalized string comparison style as ordinary keyword matching: typed input is uppercased, the table is walked in order, and each reserved word is accepted by the same rule as step 5 - its first occurrence in the line must start the line or follow a literal space, and nothing after it is checked. So `JOBS` runs the Job entry and `WELL BYE` takes the BYE path (executed on the original). *(Corrected 2026-10-18, issue #299 Q20: this step said a reserved word must be followed by end of input or a space; retracted, R578.)* `NAME` runs the Name entry with the fixed `My name is ` prefix and framing specified below, `JOB` and `WORK` run the fixed Job entry, `BYE` and `THANK` run the fixed Bye path, and the profanity/default entries print the rebuke path and run the bounded pause loop described below. A typed `BYE` or `THANK` runs the Bye entry **without** printing the `BYE` line; only the empty-line shortcut of step 3 prints it *(added 2026-10-18, issue #299 Q20; executed)*.
 
-5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword, in blob order, is looked for in the typed line with the shared text matcher of `systems/commands.md` Section 11.3, which strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII), folds both sides to upper case and keeps its restart rule. The **first** occurrence the matcher finds is accepted if it starts the line or immediately follows a literal space. Nothing after the occurrence is checked. If that first occurrence is mid-word the keyword fails, even when a clean occurrence comes later in the line. The first keyword accepted wins. This is the same rule as the ASK-WHO name match of Section 7.6. Executed examples: `JOINED` and `I WANT TO JOIN` match `join`; `REJOIN` and `JO IN` do not. *(Corrected 2026-10-18, issue #299 Q20: this step said the compare was space-boundary with an end check and "no substring search"; retracted, R577.)*
+5. **Ordinary keyword scan.** If the reserved table does not handle the input, the engine walks the NPC blob's variable keyword/response pairs after the five mandatory leading entries. Each keyword, in blob order, is looked for in the typed line with the shared text matcher of `systems/commands.md` Section 11.3, which strips bit 7 from both sides (so obfuscated keyword bytes match plain ASCII), folds both sides to upper case and keeps its restart rule. The **first** occurrence the matcher finds is accepted if it starts the line or immediately follows a literal space. Nothing after the occurrence is checked. If that first occurrence is mid-word the keyword fails, even when a clean occurrence comes later in the line. The first keyword accepted wins. This is the same rule as the ASK-WHO name match of Section 7.6. Executed examples: `JOINED` and `I WANT TO JOIN` match `join`; `REJOIN` and `JO IN` do not. *(Corrected 2026-10-18, issue #299 Q20: this step said the compare was space-boundary with an end check and "no substring search"; retracted, R577.)* The walk is by record position (Section 4) and ends at the blob's first label declaration. When the ordinary records pair up evenly, the record that begins at the declaration is tested once as a keyword, but it begins with a value no typed line can contain, so it never matches; an implementation may stop at the declaration without loss. A keyword that lives inside a labelled block, such as a scoped `y`, gets `I cannot help thee with that.` at this prompt (executed). If an NPC has an odd number of records after its five leading entries and before its first declaration, every pair after the extra record is shifted by one; the shipped case is `TOWNE.TLK` id 23, described in Section 7.7. *(Added 2026-10-19, issue #299 Q22.)*
 
 6. **Match found.** When an ordinary keyword matches, the engine runs the selected response stream through the byte runner. After the response finishes, the loop returns to step 1 to prompt for the next keyword. *(Clarified 2026-10-17, issue #299 Q1.)* "Finishes" means the response reaches its NUL. If it reports a stop, the loop returns that stop at once and the conversation ends without a `BYE` (Section 7.2).
 
@@ -913,12 +913,34 @@ A minimal synthetic example is `C1 90 91`: ordinary execution queues `A`, then
 queues the value that will flush as codepoint `0x10`, then treats `91` as a GOTO
 to label `91`. It does not consume `90 91` as a silent separator.
 
-This edge is unreachable in the shipped well-formed response streams. Every
-executable label declaration in the four shipped conversation files is
-immediately preceded by NUL, and the stream driver stops before dispatching
-that NUL or the following marker. The behavior above is therefore a
-compatibility rule for a deliberately repositioned or malformed stream, not a
-normal shipped transcript path.
+Ordinary sequential execution never reaches this edge: every label declaration
+in the four shipped conversation files directly follows a NUL, and the stream
+driver stops at that NUL before dispatching the marker. Shipped content reaches
+it in exactly one place, through a keyword match. `TOWNE.TLK` id 23 (Mario, in
+the stocks) has an odd number of records after his five leading entries and
+before his first declaration: one extra text record after his `crim` answer
+moves every later record over by one position (Section 4). As a result:
+
+- his `caug` and `tort` keywords sit in response positions and can never
+  match; typing either gets `I cannot help thee with that.`;
+- his last keyword-position record is the text `Don't ask!`, and its
+  "response" is the record that begins at the first label declaration.
+
+Typing `DON'T ASK!` therefore matches. The apostrophe and the exclamation mark
+can be typed (the line reader accepts the printable range and the phrase fits
+the fifteen-character limit), and the whole keyword is required: `DON'T ASK`
+without the `!` does not match, while `X DON'T ASK!XYZ` does (Section 6 step
+5). The response opens with the ordinary quote, then the runner is positioned on
+the declaration marker, which it prints as glyph codepoint `0x10` by the rule
+above; the label byte after it is a live GOTO, so his block 1 runs (its head,
+then the `You respond-` prompt). Because a GOTO always reports a stop, the
+keyword prompt at which `DON'T ASK!` was typed ends once block 1 is finished
+and prints no `BYE` of its own; any farewell comes from block 1's own prompts.
+Executed on the original conversation code with the shipped blob; the glyph was
+observed only as the byte the text sink received, not on screen.
+*(Corrected 2026-10-19, issue #299 Q22: this paragraph said the edge is
+unreachable in the shipped response streams and is a compatibility rule only,
+"not a normal shipped transcript path"; retracted, R583.)*
 
 **The label range is `0x91..0x9F`, and that is confirmed by the shipped
 content itself.** Scanning the four shipped conversation files for the
@@ -950,7 +972,23 @@ declaration. Its records, each ending at a NUL, are in order:
 2. the **default arm** - the one record immediately after the head. It has no
    keyword;
 3. zero or more **keyword/answer pairs**: a keyword record, then its answer
-   record.
+   record. Records are paired by position only, as at the top level (Section
+   4). *(Added 2026-10-19, issue #299 Q22.)* Of the 313 shipped blocks, 260
+   have records after the head and 53 do not. Of the 260, 259 open a scoped
+   prompt; the other is the final block of `KEEP.TLK` id 9, whose head stops
+   with `0x82` and is followed by one stray record that can never be reached.
+   Of the 259 prompt-opening blocks, 258 have an odd number of records after
+   the head (a default arm plus whole pairs). The one even case is
+   `DWELLING.TLK` id 15, block 3 (the "true Avatar?" question): after its
+   default arm comes a single unpaired record in keyword position. That record
+   can never match, because it contains a value that folds to a carriage
+   return, which the line reader never accepts, and it is longer than the
+   fifteen-character input limit. (Containing dictionary codes is not by itself
+   a reason: dictionary values at or above `0x20` compare as typeable
+   characters.) So every non-empty, non-rebuke answer there runs the default
+   arm, and the block's intended `'Tis indeed an honor!` path can never be
+   reached in play. An implementation that pairs records by position and stops
+   at the next declaration needs no special case for either block.
 
 The scoped keyword scan stops at the next declaration. The record scans also
 treat the final-marker value `0x9F` as a record end, but no shipped head or
@@ -1086,12 +1124,16 @@ all"; a census figure only, with no behavioural consequence, so no
 
 *Shipped shape (added 2026-10-18, issue #299 Q20).* The 448 declarations are
 313 labelled blocks and 135 final markers. Of the 313 heads, 259 reach their
-NUL and open a scoped prompt; the other 54 stop first. The 259 default arms
-divide as follows: 168 end at their NUL and fall back to the top level; 35 end
-with `0x82`, ending the conversation; 22 are a bare self-GOTO ("ask again");
-31 GOTO another block, 17 bare and 14 after some text; 2 end with `0xFF`; and
-one is malformed - a stray record in keyword position longer than the
-fifteen-character input limit, so it can never match. 191 blocks have exactly
+NUL and open a scoped prompt; the other 54 stop first (53 with nothing after
+the head, one with a stray record after it). The 259 default arms divide as
+follows: 169 end at their NUL and fall back to the top level; 35 end with
+`0x82`, ending the conversation; 22 are a bare self-GOTO ("ask again"); 31 GOTO
+another block, 17 bare and 14 after some text; and 2 end with `0xFF`.
+*(Corrected 2026-10-19, issue #299 Q22: this listed "one is malformed" as a
+default-arm ending beside 168 fall-backs. The block meant, `DWELLING.TLK` id 15
+block 3, has an ordinary default arm that reaches its NUL and falls back; what
+is unusual is the unpaired record after it (Block layout, item 3). A census
+correction with no behavioural consequence, so no `RETRACTIONS.md` row.)* 191 blocks have exactly
 one scoped keyword and 29 have none; in a keyword-less block every non-empty
 line that is not a rebuke word runs the default arm. Scoped keywords are
 overwhelmingly `y` (183) and `n` (31). The 27 scoped answers that are a lone
@@ -1268,6 +1310,19 @@ Putting the pieces together, a single conversation runs through a fixed envelope
 
    Both cases were executed on the original under emulation, and no clock
    read or coin flip happened on the stop paths.
+
+   *(Added 2026-10-19, issue #299 Q22.)* Shipped census: 26 Descriptions end
+   with a live GOTO as their last byte, either a bare GOTO or an IF-ELSE
+   followed by one; `TOWNE.TLK` id 23 (Section 7.7) is one of them. None of
+   those NPCs ever prints its Greeting or introduces itself, whatever the
+   acquaintance bit, and the conversation ends when the Description's block is
+   finished, with at most one `BYE`. Executed with the bit clear and with
+   it set for `TOWNE.TLK` id 4 (whose Greeting `Good day!` is never printed;
+   each branch of his IF-ELSE goes to its own block), `CASTLE.TLK` id 11 and
+   `KEEP.TLK` id 32: no Greeting, no host-clock read, reseed or coin flip, and
+   the opener returns a stop. A control NPC with no Description GOTO showed
+   the clock read, reseed and coin flip with the bit clear, and its Greeting
+   with the bit set.
 
 3. **Opening: acquaintance test, then greeting or introduction.** After the
    description, the engine consults the same per-scene "this NPC has been told

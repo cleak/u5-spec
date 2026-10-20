@@ -343,10 +343,17 @@ ones *is* the test for Spirituality, and "no row matched" must not be treated as
 an error. Entering at the sentinel row itself is executed and paces exactly
 like the seven mapped shrines. What this paragraph does **not** establish is
 how the party physically reaches that shrine: `E`-Enter needs a live shrine
-tile under it, and the other routes into this same presentation - the
-town/location turn loop's own tile-keyed entry, and the natural-moongate
-midnight hook of `systems/overworld.md` Section 9.2 - have not been run.
-`OPEN-QUESTIONS.md` carries it; do not read the fall-through as the answer.
+tile under it. *(Added 2026-10-18, issue #299 Q29.)* The natural-moongate
+midnight hook of `systems/overworld.md` Section 9.2 is executed: entering an
+open gate during hour `0` with the minute below `10` runs this presentation
+where the party stands, resolves to Spirituality through the fall-through, and
+leaves the party on the same overworld cell, so that is one way the Shrine of
+Spirituality is reached, with no separate location. The coordinate match
+compares X and Y only, with no plane or scene test; that a gate cell never
+matches a mapped row rests on terrain, as Section 9.2 there explains. The
+town/location turn loop's own tile-keyed entry into the same presentation has
+still not been run. `OPEN-QUESTIONS.md` carries the remaining town-loop
+route.
 
 Source provenance: derived from private analysis under `u5-decomp/notes/`.
 
