@@ -41,9 +41,14 @@ At a high level the file contains:
 
 The traced consumer reads the first 66 bytes as the directory and indexes it by
 the active scene byte. The resulting offset, if nonzero, is used as the seek
-position for the scene block. The consumer reads a fixed maximum window from
-that block into scratch memory, fills unread scratch with an end sentinel, and
-then scans records until it reaches the sentinel.
+position for the scene block. The consumer first fills a 2000-byte scratch
+window with the all-ones byte (255), then requests 2000 bytes from that absolute
+file offset into it, so the 255 fill survives only where a read near the end of
+the file comes up short. It then scans records from the start of the window
+(Section 5). *(Corrected 2026-10-25, issue #302 Q3: this paragraph said unread
+scratch is filled with an end sentinel and the scan runs until it reaches it;
+the fill lies inside the window, exists only after a short read and never ends a
+scan in the shipped file, `RETRACTIONS.md` R623.)*
 
 The safest public contract is semantic:
 
@@ -84,11 +89,15 @@ and is the basis for the directory ordering.
 After the header, the payload is a NUL-terminated byte stream. The scene-block
 scanner advances from one record to the next by skipping the four-byte header,
 then walking through the payload terminator. A scene block has no terminator of its
-own: the scan ends only at the scratch-buffer end sentinel that follows the
-fixed read window, so it continues across the next scenes' records until the
-window is used up. *(Corrected 2026-10-25, issue #300 Q13: this sentence said a
-block ends at the sentinel, implying the scan stays within the scene; retracted,
-`RETRACTIONS.md` R599.)*
+own, so the scan continues across the next scenes' records. The only end test
+is a 255 byte read where the next header would start, right after a record's
+terminating zero; in the shipped file that never happens (Section 5), so the
+original's scan has no effective end inside the window. *(Corrected 2026-10-25,
+issue #300 Q13: this sentence said a block ends at the sentinel, implying the
+scan stays within the scene; retracted, `RETRACTIONS.md` R599. Corrected
+2026-10-25, issue #302 Q3: the replacement said the scan ends at a sentinel that
+follows the read window once the window is used up; there is no sentinel after
+the window, `RETRACTIONS.md` R623.)*
 
 The formatter has one additional wrinkle: after the four-byte coordinate
 header, it can skip six-byte alias bridges while it sees the line-separator
@@ -165,14 +174,18 @@ The expected lookup pipeline is:
 
 1. Command or movement logic determines that a sign should be read.
 2. The active scene indexes the `SIGNS.DAT` scene directory.
-3. A zero directory entry produces the stock blank/cancel sign response.
-4. A nonzero directory entry gives the start of the scene's block. A fixed-size
-   window is read from there, and the space after whatever was read is filled
-   with the end sentinel.
+3. A zero directory entry prints the placard of Section 6 at once, with no
+   read. *(Corrected 2026-10-25, issue #302 Q3: this step still said "stock
+   blank/cancel sign response", withdrawn with R599; `RETRACTIONS.md` R623.)*
+4. A nonzero directory entry is the absolute file offset of the scene's block.
+   The 2000-byte window is prefilled with 255 and then read, 2000 bytes, from
+   that offset; only a short read at the end of the file leaves any 255 after
+   the data. *(Added 2026-10-25, issue #302 Q3.)*
 5. The window is scanned for a record whose `z`, `x` and `y` match the
    looked-at tile. The scene byte is never compared, and a scene block has no
    terminator of its own, so the scan runs on into the records of later scenes
-   for as long as the window lasts. Executed on shipped data: a lookup in
+   for as long as the window lasts (in the original, past it when nothing
+   matches; see the end-test paragraph below, R623). Executed on shipped data: a lookup in
    scene 3 at a coordinate that has only a scene-4 record printed that scene-4
    sign, not the placard.
 6. The first matching record is printed through the sign formatter and the scan
@@ -180,13 +193,77 @@ The expected lookup pipeline is:
    shipped data: a scene-4 coordinate that a later scene-5 record also uses
    printed one sign.
 7. If nothing in the whole window matches, the placard of Section 6 is printed.
+   *(Clean contract, 2026-10-25, issue #302 Q3.)* An implementation ends the
+   scan at the window's end; this is a deliberate divergence, not what the
+   original does (see the end-test paragraph below).
 
 *(Corrected 2026-10-25, issue #300 Q13.)* Step 6 previously said every matching
 record is printed; only the first is, and that text is retracted
 (`RETRACTIONS.md` R598). Steps 5 and 7 previously bounded the scan by the scene
 block; it is bounded by the read window, which crosses into later scenes, and
-that text is retracted (`RETRACTIONS.md` R599). The window's length is not
-published here (`OPEN-QUESTIONS.md` section 3).
+that text is retracted (`RETRACTIONS.md` R599). *(Added 2026-10-25, issue #302
+Q3: the window's length, formerly unpublished, is given below.)*
+
+**Read window and reach.** *(Added 2026-10-25, issue #302 Q3.)* The window is
+2000 bytes from the absolute offset in the scene's directory entry. It never
+starts before the scene's own block, so a lookup can reach only the scene's own
+records and those of later scenes in file order. Only the record's `z`, `x` and
+`y` bytes are compared. A shipped record can match only if its whole four-byte
+header lies inside the window, that is, if it begins at least four bytes before
+the window's end; the first such record in file order whose coordinate matches
+is the one printed. Executed over the shipped file for every scene and every
+record coordinate (1579 lookups) with no disagreement; about 374 of those were
+matches inside the window that test the rule directly, and the rest were
+lookups with no match inside the window.
+
+Later-scene record headers each shipped window reaches (alias-bridge headers
+count as headers; computed from the shipped file and checked independently):
+
+| Scene | Own headers | Later scenes reached (headers) |
+|---|---|---|
+| 0 | 14 | 1 (2) |
+| 1 | 2 | 2 (3), 3 (1), 4 (12) |
+| 2 | 3 | 3 (1), 4 (14) |
+| 3 | 1 | 4 (14), 5 (3) |
+| 4 | 14 | 5 (3), 6 (1) |
+| 5 | 3 | 6 (1), 7 (2), 8 (10), 9 (1), 11 (1), 14 (2) |
+| 6 | 1 | 7 (2), 8 (10), 9 (1), 11 (1), 14 (3), 17 (2) |
+| 7 | 2 | 8 (10), 9 (1), 11 (1), 14 (3), 17 (3) |
+| 8 | 10 | 9 (1), 11 (1), 14 (3), 17 (4), 18 (1), 19 (1) |
+| 9 | 1 | 11 (1), 14 (3), 17 (4), 18 (1), 19 (11), 20 (1), 22 (1) |
+| 11 | 1 | 14 (3), 17 (4), 18 (1), 19 (11), 20 (1), 22 (1), 28 (2) |
+| 14 | 3 | 17 (4), 18 (1), 19 (11), 20 (1), 22 (1), 28 (2) |
+| 17 | 4 | 18 (1), 19 (11), 20 (1), 22 (1), 28 (2), 30 (2), 32 (1) |
+| 18 | 1 | 19 (11), 20 (1), 22 (1), 28 (2), 30 (2), 32 (1) |
+| 19 | 11 | 20 (1), 22 (1), 28 (2), 30 (2), 32 (1) |
+| 20 | 1 | 22 (1), 28 (2), 30 (2), 32 (1) |
+| 22 | 1 | 28 (2), 30 (2), 32 (1) |
+| 28 | 2 | 30 (2), 32 (1) |
+| 30 | 2 | 32 (1) |
+| 32 | 1 | none |
+
+**The end test, and where the original and a clean implementation part.**
+*(Added 2026-10-25, issue #302 Q3.)* The original tests for the 255 end marker
+only at the byte after a record's terminating zero, and the scan index has no
+bound. In the shipped file that test never succeeds: scene 7's window ends
+partway through a record header, every other scene's window ends inside record
+text or inside the trailing zero padding, and in scenes 18 to 32 that padding
+reads as one empty pseudo-record at level 0, `(0, 0)`, followed by further
+headers. So in the original a lookup with no match inside the window runs past
+the window into whatever memory follows, and it can match a header made of
+bytes beyond the window (for example, a header that starts at the window's
+last byte). What it prints then depends on that memory and is not established
+(`OPEN-QUESTIONS.md` section 2). The original also prints the empty
+pseudo-record if a lookup in scenes 18 to 32 targets level 0, `(0, 0)`.
+
+Two **deliberate divergences** are the clean contract: end the scan at the
+window's end and print the placard (step 7), and ignore the zero-padding
+pseudo-record. A record whose header lies inside the window but whose text runs
+past its end (one shipped case: scene 0 reaching a scene-1 sign) is printed by
+the original from the window and then from following memory; a clean
+implementation may print that record's full text from the file. Whether any
+such coordinate is a real sign tile in the reaching scene is not established
+(`OPEN-QUESTIONS.md` section 3).
 
 Directory holes are normal content holes, not corrupt records.
 
@@ -266,8 +343,10 @@ skips:
 - Directory entries that are explicitly empty are valid.
 - Nonempty directory entries should point inside the file and to plausible
   scene-block starts.
-- A scene block should contain NUL-terminated records and an end sentinel within
-  the maximum read window used by the runtime consumer.
+- A scene block should contain NUL-terminated records. The shipped file has no
+  end sentinel inside any scene's 2000-byte window (Section 5), so a tool should
+  not require one. *(Corrected 2026-10-25, issue #302 Q3, `RETRACTIONS.md`
+  R623.)*
 - Records whose scene byte does not match the directory slot are suspicious in
   authoring tools, but the runtime does not re-check that byte after using the
   directory.
@@ -300,8 +379,9 @@ the sign rather than emitting raw cell bytes as prose.
 The file-format contract is complete at reader depth: scene-directory lookup,
 coordinate-record scanning, first-match selection, alias bridges, formatter
 controls, macro substitution, pause handling, per-byte font selection, the
-no-record placard and the wanted-poster separation are public; the read
-window's length is not.
+no-record placard, the 2000-byte read window and its per-scene reach, and the
+wanted-poster separation are public. *(Corrected 2026-10-25, issue #302 Q3:
+this said the window's length was not public.)*
 
 Remaining work is content cataloguing, not format interpretation:
 
@@ -335,6 +415,14 @@ cross-reference alignment.
   records with the font selector logged, plus a byte census of the shipped
   file and an independent re-run by a verifier; glyph shapes are from the
   shipped runic font. Private analysis in `u5-decomp/notes/` and
+  `u5-decomp/functions/LOOKOBJ_OVL/`.
+- Issue #302 Q3 (2026-10-25): the window length, prefill and read position,
+  the zero-entry placard and the unbounded scan index -- static reading of the
+  sign lookup with the read requests logged under execution; the matchable set
+  -- the original lookup and formatter executed over the shipped file for every
+  scene and record coordinate, re-run by an independent verifier; the per-scene
+  reach and where each window ends -- computed from the shipped file and
+  recomputed independently. Private analysis in `u5-decomp/notes/` and
   `u5-decomp/functions/LOOKOBJ_OVL/`.
 - Shipped `SIGNS.DAT` header, alias-bridge layout, decorator macros, and
   separator-glyph usage were cross-checked against the traced directory offsets

@@ -416,9 +416,40 @@ The pause is presentation only: outside combat and dungeon scenes it
 runs the animated-tile delay when tile animation is enabled, and elsewhere it
 runs a plain timer delay. Neither branch advances the clock.
 
-Mixing costs no game time at all. This matters because almost every other
-world action advances the clock, and a port that charges a turn for M-Mix will
-drift on NPC schedules, light counters, and timed magic effects.
+The mixer itself adds no game time: the pause does not tick the clock, and
+the quantity mixed does not change the cost. The command is not free, though
+*(corrected 2026-10-25, issue #302 Q1)*. M-Mix is one of the letters whose
+handler result the dispatcher discards (`systems/commands.md` Section 3), so it
+reports "acted" on every path, and the mode loop runs its ordinary per-turn
+epilogue exactly once after the command returns. In town that is one minute
+and the party upkeep pass (which advances the saved turn-step counter), with
+the rest of the town epilogue of `systems/town-mode.md` Section 7; that the
+object walker and the schedule step also run, under their usual gates, is
+inferred from the acted status and was not observed separately. On the
+overworld it is the ordinary outdoor turn. Every one of these exits costs that
+one turn, executed in town and on the overworld unless noted:
+
+- a successful mix (`Mixing...`, `Done!`);
+- a wrong mix, after its reagents are spent and its trap resolves (`ACID!` was
+  seen in town, `BOMB!` on the overworld);
+- `No reagents owned!`;
+- `None!` at the spell prompt, after Escape, or after a bare Return (the bare
+  Return executed in town only);
+- Escape at the reagent list;
+- a zero or bare-Return quantity, where the prompt is the last text;
+- `Nothing to mix!` (no reagent selected, positive quantity);
+- `Insufficient reagents!` followed by a zero quantity (town only).
+
+Escape at the quantity prompt does not cancel (Step 4), so it has no cost of
+its own; the player still leaves by one of the exits above. In a dungeon the
+clock advances at the head of each loop pass regardless, so the status there
+decides only the post-action pass (static reading; no dungeon Mix was run).
+The earlier text said "Mixing costs no game time at all" and that a port
+charging a turn for M-Mix would drift; that is retracted (`RETRACTIONS.md`
+R621). Source provenance: a static reading of the shared dispatcher's Mix
+arm, and execution of the unmodified original with the clock and turn-step
+counter read back from a save made right after each action, both recorded in
+private analysis under `u5-decomp/notes/`.
 
 **Step 7 — recipe match and charge increment.** Only after debiting reagents does the handler compare the selected mask to the spell's recipe mask. If the masks match exactly, it prints the completion message and adds the requested quantity to the per-spell charge counter, then clamps that counter to a maximum of 99. The order is add-then-clamp, so an over-large mix is capped rather than refused; the player still loses the full reagent quantity for charges the cap discards. If the masks do not match, the selected reagents are already spent and no spell charges are added. The wrong-mix branch then emits a line break, scans the travelling party for the first member whose status is Good or Poisoned, and invokes the shared trap-effect resolver described in `systems/traps.md` with that slot. Note that the mixer supplies this slot itself; it does **not** use the shared acting-member selection the container callers use (`systems/traps.md` § 2.1).
 

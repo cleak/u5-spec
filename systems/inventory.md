@@ -1028,13 +1028,26 @@ shared-list scenarios verify the returned navigation keys across four
 categories and three stock fixtures. Drawing, cursor position and normalized
 input are controlled observation boundaries, not a fresh full-game capture.
 
+**Message-window echo.** *(Added 2026-10-25, issue #302 Q2.)* After the
+member selector returns a member, the message window shows the selector's
+`Player:_` question with the chosen name, and then the Z-stats routine prints
+`\nStatus:_` there before the pages are drawn. `Done\n` follows in the same
+window when the player leaves. The `\nStatus:_` placement rests on static
+reading only (`OPEN-QUESTIONS.md` section 2), and whether it is also printed
+on the `0` (shared Equipment) answer and on the combat entry that skips the
+selector is not established. It is not an attribute-page label (below).
+
 Leaving the pages prints `Done\n` in the message window. Long pages **do not
 paginate**: the navigator scans forward or backward for the next slot with a
 non-zero count, so empty slots are skipped rather than shown as blank rows.
 
 The attribute page clears the panel, re-widens the window's right edge to column
-39, centres the member's name by emitting leading spaces, emits the record's
-leading glyph, and then appends value after value. Its layout is
+39, centres the member's name on the panel's top frame line (above the text
+window), starts the level line with a per-class indent of spaces, emits the
+record's gender glyph, and then appends value after value. *(Corrected
+2026-10-25, issue #302 Q2: this sentence said the name itself was centred by
+emitting leading spaces before the glyph; those spaces are the per-class indent
+of the level line, `RETRACTIONS.md` R622.)* Its layout is
 **label-driven, not column-driven**: each label carries its own line breaks and
 its own interior spacing, and each value is printed immediately after its label
 at whatever cursor column the label left behind.
@@ -1042,13 +1055,13 @@ at whatever cursor column the label left behind.
 | Literal | Field |
 |---|---|
 | `_Lv-` | Level, followed by one space and then the member's **class name** on the same line (see below) |
-| `Str=` | Strength |
-| `__HP:` | Hit points |
-| `\nInt=` | Intelligence |
-| `__HM:` | Magic points |
-| `\nDex=` | Dexterity |
-| `__Ex:` | Experience |
-| `\n\n____Magic:` | Magic heading |
+| `Str=` | Strength (two cells, zero-padded) |
+| `__HP:` | **Current** hit points (four cells, space-padded) |
+| `\nInt=` | Intelligence (two cells, zero-padded) |
+| `__HM:` | **Maximum** hit points (four cells, space-padded) |
+| `\nDex=` | Dexterity (two cells, zero-padded) |
+| `__Ex:` | Experience (four cells, space-padded) |
+| `\n\n____Magic:` | Current magic points, printed on the same line right after the label (two cells, space-padded) |
 | `Arms\n\n` | Arms heading |
 | `Equipment` | Equipment heading |
 | `\n_Food:_` | Food |
@@ -1057,18 +1070,65 @@ at whatever cursor column the label left behind.
 | `\n_Gems.......` | Gems, dotted leader |
 | `\n_Torches....` | Torches, dotted leader |
 | `\n_Grapple` | Grapple: the label alone, with no value; shown only when the Grapple / legacy magic-powder byte is nonzero (see below) |
-| `\nStatus:_` | Status |
 
-*Added 2026-09-06 (issue #193).* The second line of the attribute page is the
-record's gender glyph, the `_Lv-` literal, the level value, a single space,
+*(Corrected 2026-10-25, issue #302 Q2.)* This table previously gave `__HM:` as
+magic points, `\n\n____Magic:` as a heading with no value, and a
+`\nStatus:_` row as the attribute page's status label. `__HM:` shows maximum
+hit points, `____Magic:` is followed by current magic points, and the page
+prints the status name with no label; `\nStatus:_` is a message-window echo
+(above). That text is retracted (`RETRACTIONS.md` R622).
+
+*Added 2026-09-06 (issue #193).* The first row of the attribute page's text
+window, directly under the name on the frame line, is the per-class indent,
+the record's gender glyph, the `_Lv-` literal, the level value, a single space,
 and the member's class name looked up from the record's class letter through
 the nine-entry class table - `Avatar`, `Mage`, `Bard`, `Fighter`, `Druid`,
 `Tinker`, `Paladin`, `Ranger`, `Shepherd` for letters `A`, `M`, `B`, `F`,
 `D`, `T`, `P`, `R`, `S` in that order (`catalogs/npc-roster.md`, the roster
 class letters). A fresh Shamino therefore reads `Lv-2 Fighter` after his glyph
 and the Avatar `Lv-2 Avatar`; the name is not repeated on that line. The
-status name follows on the next line after the `\nStatus:_` literal, from the
-five-entry status table keyed by the status letter.
+status name follows alone on the next row, centred in a fifteen-column span
+(screen columns 24 to 38), from the five-entry status table keyed by the status
+letter; no `Status:` label is printed. *(Corrected 2026-10-25, issue #302 Q2:
+this paragraph called the level line the page's second line and placed the
+status name after the `\nStatus:_` literal; the level line is the window's first
+row and the page prints no status label, `RETRACTIONS.md` R622.)*
+
+**Attribute-page rows.** *(Added 2026-10-25, issue #302 Q2.)* The text window
+covers screen columns 24 to 39 and rows 1 to 9 and is cleared first; the
+member's name is on the frame line above it. By screen row:
+
+| Row | Content |
+|---|---|
+| 1 | Per-class indent, gender glyph, `_Lv-`, level (one cell), one space, class name |
+| 2 | Status name alone, centred in columns 24 to 38 |
+| 3 | Blank |
+| 4 | `Str=` and strength, then `__HP:` and current hit points |
+| 5 | `Int=` and intelligence, then `__HM:` and maximum hit points |
+| 6 | `Dex=` and dexterity, then `__Ex:` and experience |
+| 7 | Blank |
+| 8 | `____Magic:` and current magic points |
+
+The level-line indent, in spaces, by class: Avatar 1, Mage 2, Bard 2,
+Fighter 1, Druid 1, Tinker 1, Paladin 1, Ranger 1, Shepherd 0. It comes from a
+per-class table in the shipped data, not from the name length.
+
+Field widths: strength, intelligence and dexterity take two cells, zero-padded
+(`Str=09`); hit points, maximum hit points and experience take four cells,
+space-padded (`__HP:___5`, `__HM:_300`, `__Ex:9999`); magic points take two
+cells, space-padded (`Magic:_7`, `Magic:25`). `_` stands for one space cell.
+The rows run strength, intelligence, dexterity, which is not the order the
+record stores them in (`formats/saved-gam.md`). An executed example, rows 4 to
+8: `Str=16__HP:_240`, `Int=12__HM:_300`, `Dex=15__Ex:_123`, a blank row,
+`____Magic:_7`.
+
+Source provenance: executed original attribute-page code with the original
+padded number printer and class and status lookups, text calls and cursor
+placement captured for four classes, re-run by an independent verifier; the
+indent values are read from the shipped per-class table; the name centring on
+the frame line, the status centring and the window rectangle are static
+readings of the page's window and centring controls (the probe stubbed them).
+Private analysis in `u5-decomp/notes/` and `u5-decomp/functions/ZSTATS_OVL/`.
 
 `Str=`, `Int=` and `Dex=` form the left column, and `__HP:`, `__HM:` and
 `__Ex:` sit on the same three rows to their right. The dotted leaders are
