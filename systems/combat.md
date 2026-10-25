@@ -201,6 +201,7 @@ The framing function bridges the world-mode loop and the combat round loop. It m
   is now unattributed rather than identified as Klimb's.
 - Restore the player's coordinates and the scene byte from the saved slots.
 - Mark visibility dirty so the next world frame redraws fully, and refresh the on-screen party-stats panel.
+- Paint no ribbon chrome. Combat itself never draws into either ribbon gap on entry, during rounds or on exit, apart from the camp handler's published strip repaint for a camp made under the framer; any repaint after the fight comes from the calling scene (`systems/moons.md` Section 3 has the per-origin frozen content and resume rules). *(Corrected 2026-10-25, issue #300 Q35.)*
 - Restore the active-player slot — but only if the pre-combat active player has not died or fallen asleep during the fight; if their status is now `'D'` (dead) or `'S'` (asleep), keep the active-player slot cleared and let the player re-select.
 - Inverse-copy the dynamic-objects table from its backup, restoring the world's monsters, NPCs, ships, horses exactly as they were before the fight.
 

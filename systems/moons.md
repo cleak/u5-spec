@@ -316,7 +316,7 @@ complete caller census is:
 | Caller | When it repaints |
 |---|---|
 | The overworld entry pass | Every entry into the overworld framer, whether that is a fresh scene entry or an in-place return — the call sits on the pass's straight-line tail, past every branch, so it is unconditional. |
-| The town-family floor loader | Every town-family scene entry **and every in-place floor change inside a location**: a staircase step up or down, a trapdoor or down-passage fall, and the map reload that follows an NPC death. |
+| The town-family floor loader | Every town-family scene entry **and every in-place floor change inside a location**: a staircase step up or down, a trapdoor or down-passage fall, and the map reload that follows every town fight (the fight chain reloads the floor whatever the outcome; *clarified 2026-10-25, issue #300 Q35*). |
 | The per-turn cleanup's hour-change hook | Only when the pass observes the hour changing, and only in a scene that shows the surface/town status strip and on a floor at or above the entry floor. This is the only caller carrying that below-surface gate (Section 2.2). |
 | The Blackthorn audience cutscene, first repaint | Once on entry to the audience, with the party level already forced below surface. |
 | The Blackthorn audience cutscene, second repaint | **Only on the audience's early-exit path.** On the ordinary cutscene path this call is a no-op — see below. |
@@ -374,7 +374,7 @@ overworld-to-overworld warp for as long as nothing else drives the dispatcher
 round.
 
 **An in-place floor change inside a location refreshes too.** A staircase step,
-a trapdoor or down-passage fall, and the NPC-death map reload all run the same
+a trapdoor or down-passage fall, and the map reload after every town fight all run the same
 town floor loader that a fresh town entry runs, and the loader repaints the
 strip near the head of its body, before it announces the scene. There is no
 scene change involved and no separate "floor changed" repaint: the reload *is*
@@ -477,12 +477,63 @@ over-read:
   entered gate leads; they have no influence on the phase, on which gates are
   present, or on how far open any of them is.
 
-The renderer is suppressed for dungeon-class views, combat, and the underworld
-presentation, even though the same saved clock continues to advance. The dungeon
-view puts its own bracketed level label in the same top-ribbon gap and its own
-bracketed facing label in the bottom-ribbon gap; see `systems/dungeon-mode.md`
-and `display-driver.md` section 7. Combat and the underworld leave both gaps as
-plain chrome.
+The renderer draws no markers for dungeon-class views, combat, or the
+underworld presentation, even though the same saved clock continues to advance.
+The dungeon view puts its own bracketed level label in the same top-ribbon gap
+and its own bracketed facing label in the bottom-ribbon gap; see
+`systems/dungeon-mode.md` and `display-driver.md` section 7. On the underworld
+plane the renderer and the wind banner both take their **erase** arms (the
+underworld is a negative level value, and a negative level takes the
+below-surface erase of Section 2.2 and `systems/weather.md` Section 2.1), so
+both gaps read as plain chrome there; the two erase rectangles cover the
+dungeon label cells completely.
+
+**Combat skips both gaps; it does not erase them** *(corrected 2026-10-25,
+issue #300 Q35)*. Combat itself never draws into either gap: nothing on combat
+entry, in any round, or in the framer's restore phase paints there, apart from
+the camp handler's strip repaint described above for a camp made under the
+framer. The sky renderer and the wind banner return without drawing (and the
+renderer without caching) in the combat scene, the dungeon labels belong to the
+dungeon loop, which is suspended while combat runs, and the arena draws only
+inside the viewport. Each gap therefore keeps, frozen, whatever it showed when
+the fight began:
+
+| Origin | Top gap during combat | Bottom gap during combat |
+|---|---|---|
+| Overworld, surface plane | The pre-combat sky strip, markers as last drawn. | The pre-combat wind banner. |
+| Overworld, underworld plane | The erase arm's plain chrome. | The erase arm's plain chrome. |
+| Town family | Whatever the floor loader last painted: the strip on an ordinary floor; the erase arm's plain chrome on a below-surface floor or in Ararat (Section 2.2). | Whatever the floor loader last painted: the banner on an ordinary floor; the erase arm's plain chrome on a below-surface floor. |
+| Overworld camp ambush (`H`) | The strip as the camp handler repainted it for the underlying scene after its five-hour advance (above). | The pre-camp wind banner. |
+| Dungeon (wandering or contact monster, `A`-Attack, room trigger, dungeon camp ambush) | The framed level label. | The framed `Dir:` facing label. |
+
+Three things change underneath the frozen gaps without being drawn. The hour
+can turn on a round-wrap minute; the hourly repaint is skipped in the combat
+scene. The autonomous wind drift runs from the world tick, which combat drives,
+and has no scene test of its own, so a drift hit stores a new wind and draws
+nothing; it is subject to the world tick's ordinary enable gate exactly as
+outside combat (`systems/weather.md`). Neither deliberate wind change is
+available in combat: the Wind Change spell is overworld-only by its scene mask
+and is refused with `Not here!` (`systems/magic.md`), and the Wind Change scroll
+applies a wind only below scene 33 (`catalogs/item-list.md`). A room trigger
+rewrites the live facing before the fight without repainting the label, so
+during a room fight `Dir:` shows the facing from before the party entered the
+room.
+
+After the fight the gaps resume as follows:
+
+| Origin | First repaint after combat |
+|---|---|
+| Town family | Immediately. Every town fight, whatever its outcome, ends with the NPC slot cleared and the floor reloaded, and the floor loader repaints the slate, the strip and the wind banner from current state. |
+| Dungeon | On the dungeon's ordinary post-action redraw, which repaints both labels with the current level and facing. |
+| Overworld, surface plane | **None by default.** The overworld turn loop never left, so its entry pass does not rerun, and the restore phase repaints only the stats panel. The terrain-combat wrapper ends with a zero-minute clock call made after the scene is restored, and that call repaints the strip only when the fight's **last** clock minute crossed an hour boundary. Otherwise the strip keeps the pre-combat hour's markers until the next hour change, scene entry or camp. The banner keeps the pre-combat wind until the next drift hit, Wind Change, scene entry or load, so it is stale after a fight in which the wind drifted. |
+| Overworld camp ambush (`H`) | As the surface row, except that the camp wrapper makes no trailing clock call, so the hour-edge repaint on exit never happens. |
+| Overworld, underworld plane | Nothing repaints, and nothing needs to: the hour-edge repaint is also blocked, because the hourly repaint requires a level that is not negative. Both gaps stay plain chrome. |
+
+An engine that blanks either gap on combat entry, repaints it during combat, or
+redraws the overworld strip and banner unconditionally on combat exit diverges
+from the original. This paragraph earlier said that combat leaves both gaps as
+plain chrome; that is retracted (`RETRACTIONS.md` R619). What a party wipe-out
+does to the gaps was not traced (`OPEN-QUESTIONS.md`).
 
 ## 4. Sources
 
@@ -541,3 +592,18 @@ glyph dumps, or private address tables.
   four display drivers and the shared data overlay, and does not cover a target
   computed at run time; the day-of-month writer census has the same image scope
   and does not cover an access built through a register-held pointer base.
+- Source provenance (issue #300 Q35): that combat skips rather than erases both
+  ribbon gaps, the per-origin frozen content, the per-origin resume rules and
+  the underworld erase arms -- derived from private analysis in
+  `../u5-decomp/notes/`. The painter gates (no drawing in the combat scene, the
+  wind still stored, the sky cache not written, both erase arms taken for the
+  underworld level value) and the hour-edge behaviour of the zero-minute exit
+  clock call were established by executing the original resident routines with
+  the drawing primitives logged, and re-run independently. The absence of any
+  combat-reachable writer of either gap, the framer's caller census, the town
+  fight chain's unconditional floor reload and the dungeon post-fight label
+  redraw are static readings; the writer census covers near calls across the
+  executable and every overlay and does not cover far or register-indirect
+  transfers. The in-combat freeze agrees with stock arena captures; the
+  overworld exit cases were not captured, and the underworld erase arms were
+  executed in isolation rather than as a full arrival.

@@ -90,8 +90,12 @@ town's floor index, a dungeon's level and the outdoor plane, and the underworld
 plane value simply is a negative value of that byte. The combat case is a
 separate test on the scene byte. The top header band is skipped by the same
 signed test, which is why an arrival in the Underworld has neither
-- `systems/overworld.md` Section 8.1.)* Combat and the underworld
-simply skip it. A below-surface level actively **erases** it: it strokes the rule
+- `systems/overworld.md` Section 8.1.)* Combat simply skips it, so the
+banner shown at combat entry stays frozen and a wind stored during the fight is
+not shown until a later repaint (`systems/moons.md` Section 3). The underworld,
+like any below-surface level, actively **erases** it *(corrected 2026-10-25,
+issue #300 Q35: this said "Combat and the underworld simply skip it"; the
+underworld half is retracted, `RETRACTIONS.md` R620)*. The erase strokes the rule
 `(48, 184)` to `(152, 184)` in the accent colour and then fills
 `(48, 185) - (152, 191)` in the chrome colour, restoring the plain ribbon. Stale
 text is never left behind. The dungeon view then writes its own bracketed facing
@@ -170,9 +174,13 @@ The accepted value routes through the same resident wind set-and-repaint helper
 used by world entry. Supplying a new value stores it as the current wind state
 and clears the cached wind-cadence byte used by sailing and wind-driven actors.
 The store happens before any scene test, so the state is always updated; only
-the banner repaint is conditional. The helper draws nothing in combat-class or
-underworld scenes, and on a below-surface map level it takes the erase branch in
-section 2.1 instead of writing a label.
+the banner repaint is conditional. The helper draws nothing in combat-class
+scenes, and on a below-surface map level, the underworld plane included, it
+takes the erase branch in section 2.1 instead of writing a label *(corrected
+2026-10-25, issue #300 Q35: "draws nothing in ... underworld scenes" is
+retracted, R620)*. The drift itself has no scene test, so it also runs during
+combat and in dungeons, subject only to the world tick's ordinary enable gate,
+and there it stores the new wind without drawing it.
 
 ## 3. Rel Hur
 
