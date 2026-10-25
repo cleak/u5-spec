@@ -225,7 +225,6 @@ Opened 2026-10-25 by the issue #300 Q3, Q6, Q8 and Q15 rest, save and hours-prom
 
 | Item | Where | What settles it |
 |---|---|---|
-| The turn cost of a cancelled town-bed prompt (Space or `0`). It is static reading of the dispatcher's acted result. The one capture (two bed cancels plus a cancelled Set Active Player took 20:00 to 20:02) settles it only if the cancelled Set Active Player costs nothing, which was not shown. *(Issue #300 Q8.)* | `systems/rest-and-camp.md` Section 4 | Time one lone bed cancel from a save at a known clock. |
 | That NumLock-on top-row and keypad `1`-`4` and `6`-`9` are discarded at the town-bed hours prompt. Inferred from the shared command reader it shares with the dungeon hours prompt, where it is executed; not run at the bed. *(Issue #300 Q8.)* | `systems/rest-and-camp.md` Section 4 | Press NumLock digits at an inn bed's hours prompt. |
 | That the town-bed loop reseats the NPCs after every ten-minute step, before the bed test. Static reading of the bed loop, confirmed by a verifier; not executed. *(Issue #300 Q6, R586.)* | `systems/npc-schedules.md` Section 12; `systems/rest-and-camp.md` Section 4 | Sleep several hours in a town bed while watching a mid-route NPC, or log the reseat calls under emulation. |
 | Whether the shared dawn/dusk pass does more than the archway/portcullis toggle. An unpublished static reading suggests that the same pass also rewrites bridge-class cells to shoals at 20:00 and back at 05:00, unless the party stands on one. That would conflict with the published reading of those cells as NPC start markers. This is not published as behaviour. *(Side finding of issue #300 Q6.)* | `systems/town-mode.md` Sections 2 and 6; `formats/location-dat.md` Sections 6 and 10 | A static trace of the whole pass, then a capture at a town bridge across 20:00 and 05:00. |
@@ -238,8 +237,15 @@ Opened 2026-10-25 by the issue #300 Q4/Q17, Q5, Q7 and Q18 town pass:
 | Stonegate's silent removal of the centre-cell Sceptre figure while the Sceptre flag is set, and its return after a reclaim. Static reading plus the shipped roster; not executed. *(Issue #300 Q4, R590.)* | `systems/town-mode.md` Section 13 | Enter Stonegate carrying the Sceptre, then again after a Shadow Lord fight has reclaimed it, and look at the centre cell. |
 | That the Shadowlord notice, its tone and the resident-entry sweep are skipped when the party-capability check finds nobody able to act or asleep. Static reading only. *(Issue #300 Q4.)* | `systems/town-mode.md` Section 13 | Enter a hideout town with every member dead or otherwise unable to act and none asleep. |
 | The endgame viewport bands beyond what was recorded. Observed only through the first box question's `No` and the second question's pending prompt, with facing `North`; the second answer, the refusal branch (endgame Section 6), the victory branch up to the fade, and other facings at the fall are static reading or inference. *(Issue #300 Q5.)* | `systems/endgame.md` Section 3.1 | Record the endgame through both refusal and victory, entering the final room with a facing other than North. |
-| The arrest surrender and refusal contracts as a whole (sequence, case-insensitive key, the hour-8 test, the fresh Yew entry, and the refusal's `Attacked!` fight). Static reading only. *(Issue #300 Q7, R591, R592.)* | `systems/town-mode.md` Section 14 | Get arrested in an ordinary town once at 08:00 and once at another hour, surrender, then refuse on another arrest. |
+| The arrest contracts not yet executed: the case-insensitive key, the hour-8 no-time case, and the refusal's `Attacked!` fight. A surrender at 14:39 was executed (row layout, the 08:19 wake, the silent fresh Yew entry; issue #300 Q33). *(Issue #300 Q7, R591, R592; narrowed 2026-10-25, Q33.)* | `systems/town-mode.md` Section 14 | Get arrested in an ordinary town during the 08:00 hour and surrender, then refuse on another arrest. |
 | The A-Attack Shadowlord fight's aftermath: the post-fight re-install at the home cell (and the further blight pass) is static reading; the one run with the Sceptre carried could not finish the fight. *(Issue #300 Q18.)* | `systems/town-mode.md` Sections 10 and 14; `systems/encounters.md` Section 7 | Finish a town Shadowlord fight (win or flee) and check for the re-installed Shadowlord. |
+
+Opened 2026-10-25 by the issue #300 Q33 and Q34 arrest-wake and digit pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The arrest wake under Quickness, 08:(arrest minute modulo 10). Static reading of the jail loop and the clock step's Quickness halving; only the twenty-minute case was executed. *(Issue #300 Q33.)* | `systems/town-mode.md` Section 14; `systems/time.md` | Get arrested with Quickness active at a minute whose modulo-10 and modulo-20 values differ, surrender, and read the wake time. |
+| That digits typed with Shift or NumLock become directions in the input layer and never reach the active-player selector in town or on the overworld. Not re-executed. *(Issue #300 Q34.)* | `systems/town-mode.md` Section 7.2 | Type a shifted digit and a NumLock keypad digit at the town and overworld prompts and observe whether `Set Active Plr:` prints. |
 
 Opened 2026-10-25 by the issue #300 Q9, Q10, Q26, Q30 and #301 Q1, Q2, Q6 combat pass:
 
@@ -272,6 +278,13 @@ Opened 2026-10-25 by the issue #301 Q4 and Q5 Blackthorn timing pass:
 |---|---|---|
 | That the Blackthorn audience handoff and the captive-cell entry setup contain no tick-paced part. This rests on static reading; the timing fit over three cycle settings (each point ±17 ms) cannot on its own exclude a single one-tick edge wait of up to one tick period. *(Issue #301 Q4, R613.)* | `systems/blackthorn.md` Section 4.2 | Log every BIOS-tick delay request between the end of the exit script and the first town prompt in one executed run, or time the span at more cycle settings with a finer clock than video frames. |
 | What makes up the rest of the reported ~0.5 s lead at the Blackthorn exit beyond the 0.34 s that a handoff at exactly 72 tick periods explains. A stock host slower than the 3000-cycle class, the lag between a physical key press and the original's key poll, and the reporter's capture method are all possible; attributing it to a slower host is inferred. *(Issue #301 Q4.)* | `systems/blackthorn.md` Section 4.2 | The reporter's cycle setting, and a paired capture that times both runs from the frame in which the key-wait cursor glyph is overwritten. |
+
+Opened 2026-10-25 by the issue #300 Q31 and Q32 combat-hit and dungeon-footstep audio pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The wall-clock durations of the combat hit bursts (party about 188 ms, monster about 216 ms), the electric push-back rumble (about 92 ms) and the footstep bursts (about 2.8 / 2.0 / 1.3 / 0.55 ms). The parameters were executed; the durations are the static rumble model. | `systems/audio.md` Sections 5.3 and 10.2; `systems/combat.md` Section 11.1; `systems/dungeon-mode.md` Section 8.1 | A stock speaker capture of a combat exchange (one party hit, one monster hit) and of an electric-field step, with sound on. |
+| When the footstep tail's 7 and 3 sound during an idle command wait. "Roughly 110 and 220 ms into the wait" is inferred from the loop shape: each idle iteration waits to the next BIOS tick edge and also pays a view raster, so the cadence is about one BIOS tick or more per iteration. | `systems/audio.md` Section 7.4; `systems/dungeon-mode.md` Section 8.1 | A stock capture of a single dungeon step followed by no key, timing the four bursts after the step pair. |
 
 ## 3. Needs a further static trace
 
@@ -536,6 +549,19 @@ Opened 2026-10-25 by the issue #300 Q24, Q27 and #301 Q3 dungeon and impact-audi
 |---|---|---|
 | Whether the dungeon-view initialisation's inactivating arm (type and tile zero, X and Y 255, class `0xFF`) runs on resume and on the return from the character screen, the two paths on which the published contract reuses the wandering-monster record instead of re-rolling. It is established for dungeon view entry with the arm selected, including straight after an A-Attack fight, just before the fresh roll. *(Issue #300 Q24, R609.)* | `systems/dungeon-mode.md` Section 4.1 | List every caller of the view initialisation with the argument each passes, and match them to resume, the character-screen return, level change, dungeon entry and the post-fight return. |
 | Which town-mode path calls the overworld impact presentation (stage one). One call site in the town overlay was not examined. The sound cannot differ, because stage one is a fixed routine; only the trigger is unpublished. *(Issue #301 Q3.)* | `systems/overworld.md` Section 6.2.4 | Identify that town-overlay caller and the event it serves. |
+
+Opened 2026-10-25 by the issue #300 Q31 and Q32 combat-hit and dungeon-footstep audio pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| That a combat party hit plays no second, 160-update damage rumble. This rests on a census of direct calls from the combat overlays (COMBAT, COMSUBS) to the resident party-damage routine, the trap effect and the viewport-flash rumble helper, none of which they call; indirect routes into the party-damage helper were not enumerated. | `systems/combat.md` Section 11.1; `systems/audio.md` Sections 5.3 and 8.2 | An enumeration of indirect calls into the party-damage helper from combat, or execution of a full combat party hit through damage application with every speaker call logged. |
+| That after a plain dungeon step only the idle command wait ticks the footstep tail. The post-action handler's redraw arms (room class, trap and event) were not all enumerated, so another redraw could intervene and shift the tail's timing (not its order). | `systems/audio.md` Section 7.4 | A static enumeration of every redraw arm of the dungeon post-action handler after a committed step. |
+
+Opened 2026-10-25 by the issue #300 Q34 digit pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Whether dungeon digits are "a solo-member select that always reports no action". Town and overworld digits reach one shared active-player selector whose `Invalid!` refusal reports "acted"; the dungeon digit route may reach the same selector, and whether the dungeon handler keeps or overrides that status was not re-examined. The dungeon advances its clock at the loop head, so the status there decides only the post-action pass. *(Issue #300 Q34.)* | `systems/dungeon-mode.md` Section 4 inner-loop step 3; `systems/commands.md` Section 9 | A static trace of the dungeon digit route through to the status it returns, or a dungeon capture of `Invalid!` showing whether the post-action pass runs. |
 
 ## 4. Deferred by scope
 

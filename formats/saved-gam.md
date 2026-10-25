@@ -156,7 +156,7 @@ A handful of bytes later in the save image track party control state, transport/
 |----------|--------|------------------------|----------------------------------------------------------------------------------------------------------------|
 | `0x02B5` | 1 byte | Party size             | Number of slots `1..6` that are currently in the travelling party. Iteration cap for any "for each party member" pass, and one of the inputs to inn rest quotes and pickup capacity checks. |
 | `0x02D4` | 1 byte | Timed magic-effect code | The single shared timed-magic-effect slot specified in `systems/magic.md`: it names the one magic effect, scroll effect, or worn regalia aura currently active, and zero means none. The stats panel draws the code as its bottom glyph when nonzero, and the time cleanup reads the Quickness and Negate Time codes as timing modifiers. Not a boarded-vehicle enum of any kind. |
-| `0x02D5` | 1 byte | Active player index    | Slot index `0..7` of the currently selected character. `0xFF` for "none selected" (overworld default).         |
+| `0x02D5` | 1 byte | Active player index    | Slot index `0..7` of the currently selected character. `0xFF` for "none selected"; the overworld defaults to it but does not fix it, since a digit selection on the overworld also writes the slot index (*clarified 2026-10-25, issue #300 Q34*).          |
 | `0x02D6` | 1 byte | Transport/action marker | Avatar or vehicle transport/action marker. B-Board writes this when the party boards horses, carpet, skiffs, or ships; other systems also mask it for light-source and alternate-turn presentation states. |
 | `0x02E8` | 1 byte | Timed magic-effect duration | Remaining world turns for the effect at `0x02D4`. `0x00` is inert and `0xFF` is the permanent sentinel used by the Amulet of Lord British, Crown of Lord British, and Black Badge. |
 
@@ -532,7 +532,7 @@ Several fields in the band have higher-level meaning:
   three sets a bitmap bit. Treat all three as aliases of the existing fields,
   never as private copies.
 - **Timing/status and transport/action bytes.** The three-byte control cluster at `0x02D4..0x02D6` is not a single enum. Preserve the timing/status tag, active-player index, and transport/action marker separately.
-- **Active player sentinel.** A byte that is `0xFF` until the player picks a party member (typically inside towns and combat), then holds the slot index. Used by the gameplay loops as "is anyone currently selected to move".
+- **Active player sentinel.** A byte that is `0xFF` until the player picks a party member (typically inside towns and combat), then holds the slot index. The pick is made by the shared active-player selector (`systems/town-mode.md` Section 7.2), which town and the overworld both reach, so the byte is not necessarily `0xFF` on the overworld: an executed overworld `1` left it at slot `0` with the scene byte at zero. Digit `0` restores `0xFF` *(clarified 2026-10-25, issue #300 Q34)*. Used by the gameplay loops as "is anyone currently selected to move".
 - **NPC-occupied bitmask.** A byte stamped on town entry that records which of the location's NPCs have an active slot in the active-object table. Used by the town entry helper to decide what slots to allocate; refreshed every town entry, so its saved value matters only for the scene the player is currently in.
 - **Dungeon room-clear bitmap.** Sixteen bytes at `0x033A..0x0349` persist
   which dungeon room encounters have already been cleared. Dungeon mode uses

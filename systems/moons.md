@@ -410,8 +410,9 @@ implementation that wires both of the routine's own calls paints an extra
 erase-arm frame the original never paints.
 
 **The town arrest jail relocation refreshes.** The relocation arm — the one
-that moves the party to the Yew jail, runs the clock forward to 08:00 in
-repeated twenty-minute cleanup calls (`systems/town-mode.md` Section 14) and
+that moves the party to the Yew jail, runs the clock forward into the 08:00 hour in
+repeated twenty-minute cleanup calls (`systems/town-mode.md` Section 14; *corrected
+2026-10-25, issue #300 Q33*: the wake is 08:00 to 08:19, not exactly 08:00, R617) and
 sets the floor byte to the entry floor — ends by running the town entry pass,
 so it reaches the floor loader and repaints unconditionally; because it clears the
 floor byte first, that repaint takes the **normal** arm rather than the erase

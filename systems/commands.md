@@ -62,8 +62,8 @@ engine: turn cost travels entirely in this status word.
 
 | Status | Meaning | Producers |
 |---:|---|---|
-| `1` | Acted. The default; the mode loop runs its per-turn epilogue. | The dispatcher's initial value, kept by every letter that does not forward or refuse. |
-| `0` | No action. The loop skips its epilogue, so no world time passes. | Unknown input, the two stock-refusal letters `D` and `W`, the save route `Q`, the typeahead toggle, dungeon `P`, and any forwarded handler that refused. |
+| `1` | Acted. The default; the mode loop runs its per-turn epilogue. | The dispatcher's initial value, kept by every letter that does not forward or refuse; also the active-player selector's `Invalid!` refusal (*added 2026-10-25, issue #300 Q34*). |
+| `0` | No action. The loop skips its epilogue, so no world time passes. | Unknown input, the two stock-refusal letters `D` and `W`, the save route `Q`, the typeahead toggle, dungeon `P`, any forwarded handler that refused, and a successful active-player digit selection or the `0` deselect (town off the harpsichord, overworld; *added 2026-10-25, issue #300 Q34*). |
 | `2` | Request arrest cleanup after a failed Blackthorn guard demand. | One producer only: `T` in a town-family scene when the reserved guard-demand conversation reports refusal or failure. Ordinary NPC conversations, shops, canned replies, and successful payment/password outcomes do not produce this status. |
 | `3` | Re-prompt immediately, without advancing the world. | One producer only: the town digit handler while the party stands at the harpsichord tile, so a player can key in a tune without burning turns. |
 
@@ -162,6 +162,7 @@ result handling, which agrees row for row with the forwarded-route table above.
 | `Y` | - | Treat as acted. The town Shadowlord branch forwards and three paths are undefined; see the forwarded-route table above. | As published |
 | Typeahead toggle | Always | - | Static |
 | Town digit at the harpsichord | Re-prompt (status `3`): no turn and no epilogue | - | As published |
+| Digits `0`-`9` (town off the harpsichord, overworld) | `Set Active Plr:` then `None!` (`0`) or a successful member selection (the member's name) | `Set Active Plr:` then `Invalid!`: beyond the party size, `7`-`9`, or a Dead or Asleep member (`systems/town-mode.md` Section 7.2) | Executed, town and overworld *(added 2026-10-25, issue #300 Q34)* |
 
 The dungeon differs, as published above: its clock advances at the head of each
 loop pass, before any command is read, so there the result decides only whether
@@ -1250,7 +1251,12 @@ party-capability check is not one of those differences: all three exploration
 loops run it identically ahead of the input block, as `systems/main-loop.md`
 Section 6 specifies.
 Dungeon mode also accepts Enter and the period key as movement, and treats
-digits as a solo-member select that always reports "no action". Combat replaces
+digits as a solo-member select that always reports "no action". That dungeon
+claim is under review: town and overworld digits reach one shared active-player
+selector whose `Invalid!` refusal reports "acted" (`systems/town-mode.md`
+Section 7.2), the dungeon digit route may reach the same selector, and the
+dungeon status was not re-examined (`OPEN-QUESTIONS.md`; *flagged 2026-10-25,
+issue #300 Q34*). Combat replaces
 the scheme entirely with its own parser, which adds Escape, Space, the
 actor-select digits and its own buffer toggle. Per-mode detail belongs to
 `input.md`, `overworld.md`, `town-mode.md`, `dungeon-mode.md`, and `combat.md`.

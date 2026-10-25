@@ -4153,7 +4153,7 @@ continues on the same row.
 | **To-hit fails** | **party melee** | `<target> missed!`, following the newline already printed before the roll | **no sound at all** |
 | **To-hit fails** | party ranged or thrown | conditional; when it prints, a newline then `<target> missed!` naming the **originally aimed** actor | none |
 | To-hit fails on a cast issued from the combat command layer | party melee or ranged | `Failed!` - **with no name** - replacing the miss line entirely | none from this arm |
-| **Hit lands** | both | a newline (the party melee path already emitted it before the roll) | **impact presentation runs first**: the impact tile is drawn on the target's cell; for a **party** target that member's stats row is flashed around a noise burst; for a **monster** target a noise burst alone, with a different noise setting and no flash; then a visibility pass. All of this precedes the newline and the damage. |
+| **Hit lands** | both | a newline (the party melee path already emitted it before the roll) | **impact presentation runs first**: the impact tile is drawn on the target's cell; for a **party** target that member's stats row is flashed around a 75-update noise burst (random rumble step 40, target 3000, 100..500 Hz; `audio.md` Section 5.3), which is the only sound of a combat party hit: no direct call from the combat overlays to the 160-update damage rumble was found; for a **monster** target, or any target outside the arena, a 300-update noise burst alone (step 10, target 3000, 100..2000 Hz) with no flash; the party form is selected by the target descriptor's party-side bit (Section 6.1), so a controlled party member keeps it and a controlled monster takes the monster form *(added 2026-10-25, issue #300 Q31)*; then a visibility pass. All of this precedes the newline and the damage. |
 | Damage zero or negative | both | `<target> grazed!` **and nothing else** - the kill, sleep, hit and wound lines are all suppressed | the rising action-snap cue (`audio.md`, 1200 toward 2000 Hz) |
 | Target dies | both | `<target> killed!` | no cue of its own; the party death arm runs a full stats redraw, the monster death arms write their tiles (Section 6.3) |
 | Monster dies, vanish class | party attacker | `<monster> vanishes!` - **no trailing newline** - printed inside the damage handler, which then suppresses the kill line | none |
@@ -4172,8 +4172,10 @@ continues on the same row.
 For a landed **monster melee** attack, the sequence an engine must reproduce:
 
 1. the swing sweep - already played, **before** the roll;
-2. the impact presentation: impact tile, stats-row flash for a party target or
-   noise burst for a monster target, visibility pass;
+2. the impact presentation: impact tile, stats-row flash around the 75-update
+   burst for a party target, or the 300-update burst alone for a monster
+   target, visibility pass *(corrected 2026-10-25, issue #300 Q31; the earlier
+   wording read as if a party hit had no burst, and is retracted, R614)*;
 3. a newline;
 4. damage application - which may itself print the poison line, the shatter
    line, the vanish line or the divide line;
@@ -4409,11 +4411,14 @@ installer's uninstaller is not game code and was excluded.
   The absolute frequencies quoted for the swing sweeps and cues are inherited
   from the existing `audio.md` census rather than re-derived here; only the sweep
   **directions** were established in this pass, and the monster swing runs
-  opposite to the party's. The impact noise burst likewise carries a **different
-  setting** on the party-target and monster-target arms, but which perceptual
-  axis that setting moves - pitch band, duration or loudness - was not
-  established, so no engine should infer that one burst is louder or shorter
-  than the other.
+  opposite to the party's. The impact noise burst differs between the two arms
+  in pitch band and length: the party-target burst is 75 updates in
+  100..500 Hz (about 188 ms) and the monster-target burst is 300 updates in
+  100..2000 Hz (about 216 ms), both under the `audio.md` Section 10.2 model.
+  Loudness is inferred not to differ, because the PC speaker has a single
+  level. *(Corrected 2026-10-25, issue #300 Q31, by executing the original hit
+  presentation; the earlier caution that no engine should infer one burst
+  shorter than the other is retracted, R614.)*
 - **Not covered:** spell-overlay presentation beyond the named attack and
   directed-effect families now specified above, the standing-hazard tier's trigger conditions, and the projectile
   pass that is one of the three ways a monster's ranged miss stays silent. The
@@ -5506,3 +5511,11 @@ The behaviour described here was derived from the private function and format no
   Every literal was re-read from the shipped data rather than carried forward,
   and the negatives are scoped to the message window with the repaint endpoints
   excluded.
+- The hit-presentation burst parameters, their order inside the stats-row
+  flash, and the party-side-bit selector (Section 11.1; issue #300 Q31) were
+  established by executing the original resident hit presentation on five
+  target-descriptor and scene cases with its draw, row, rumble and tick calls
+  logged. The absence of a second damage rumble rests on a census of direct
+  calls from the combat overlays; derived from private analysis in
+  `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/COMBAT_OVL/` and
+  `u5-decomp/notes/`.

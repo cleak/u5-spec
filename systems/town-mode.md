@@ -331,7 +331,7 @@ town setup with the preserving argument.
 
 One traced coordinate edge suppresses the Shadowlord install outright. When the
 town arrest sequence accepts surrender, it sends the party to Yew jail at local
-position `(25, 4, 0)` and advances time until 08:00. On the following
+position `(25, 4, 0)` and advances time into the 08:00 hour (08:00 to 08:19, Section 14; *corrected 2026-10-25, issue #300 Q33*: "until 08:00" is retracted, R617). On the following
 town-entry setup, a party Y coordinate of exactly `4` skips the hideout
 comparison entirely, and because the host selector is reset to its no-host
 marker immediately before that test, the install then returns having done
@@ -371,8 +371,8 @@ After entry, control sits in a tight loop that reads one command per iteration a
 4. **Per-turn epilogue.** When the dispatcher returns and the action consumed a turn, the loop snapshots the current hour, advances the time clock by one minute via the time spec's per-turn cleanup, runs the dawn/dusk gate pass if the new hour is `5` or `20`, runs the underfoot-effect handler described in Section 10, ticks the door auto-close countdown (`systems/doors-and-z-transitions.md` Section 5), and copies the party's current map coordinates into slot zero, so that both town walkers see the party at its post-move position on the same turn. It then runs the turn's movement work in a fixed order: three effect gates, the **town object walker** that moves the location's loose horse-family objects, and finally the NPC schedule processor with the current hour byte. `systems/npc-schedules.md` Section 5 owns the gates and the order; the arrest-cleanup result is **not** the only thing that can stop the processor. The cases are:
 
    - **Transport marker.** While the party's marker is one of the four values `0x12..0x15`, a stored parity bit flips each turn and skips *both* walkers on the turns it comes up set.
-   - **Negate Time.** While that effect is active, *both* walkers are skipped outright — nothing in town moves.
-   - **Quickness.** A second stored parity bit skips *both* walkers on alternate turns.
+   - **Negate Time.** While that effect is active, *both* walkers are skipped outright — nothing in town moves. The gate also jumps past post-action cleanup, so no contact, conflict or arrest can begin on such a turn *(added 2026-10-25, issue #300 Q33)*.
+   - **Quickness.** A second stored parity bit skips *both* walkers on alternate turns, and post-action cleanup with them *(added 2026-10-25, issue #300 Q33)*.
    - **A result code of two or greater,** which includes the explicit-T arrest-cleanup result. This one skips the schedule processor *only*, and it is tested after the object walker has already made its pass. The clock and earlier underfoot/status work still run, and arrest cleanup follows.
 
    *Corrected (R328):* an earlier revision of this step said the processor was called on every turn but the arrest-cleanup one — "the sole exception" — and did not mention the object walker at all.
@@ -440,8 +440,34 @@ town-only "re-prompt without advancing the world" status — the sole producer o
 that status anywhere in the game, and the reason a player can key in a tune
 without burning world turns or letting the NPC schedule run. Section 13 owns the
 instrument's full contract. Anywhere else the same handler falls through to the
-ordinary solo-member selector, which reports "acted" for an ordinary selection
-and "no action" for the deselect-to-whole-party case.
+shared active-player selector, the same one the overworld uses
+*(corrected 2026-10-25, issue #300 Q34; executed)*. It prints
+`Set Active Plr:` on the command row, then one result row:
+
+| Digit | Result row | Effect | Status |
+|---|---|---|---|
+| `0` | `None!` | Clears the active player (none selected, so the whole party moves) and repaints the stats panel. | No action |
+| `1`..`6` naming a member within the party size whose status letter is neither `D` (Dead) nor `S` (Asleep) | the member's name | Makes that member the active player and repaints the stats panel. | No action |
+| any other digit: `1`..`6` beyond the party size, `7`..`9`, or a Dead or Asleep member | `Invalid!` | Leaves the active player unchanged; no repaint. | Acted |
+
+Any other status letter, Poisoned included, is selectable. The ordinary blank
+row and prompt follow each outcome. `None!` and a successful selection are
+free: no clock minute, no walker, no epilogue. `Invalid!` runs the same
+epilogue as any acted turn (Section 7, step 4), with its usual gates, so it
+costs the one-minute town turn. Executed in the unmodified original with the
+clock read back from saves: `1` and `0` left the clock unchanged, while `9`,
+`4` with a party of three, a Dead member's digit and an Asleep member's digit
+each printed `Invalid!` and advanced it by one minute. The earlier text said
+the selector reports "acted" for an ordinary selection and "no action" only
+for the deselect; that is retracted (`RETRACTIONS.md` R616). Digits typed with
+Shift or NumLock are turned into directions by the input layer
+(`systems/input.md` Section 5) and never reach the selector; that routing was
+not re-executed.
+
+Source provenance: static reading of the shared selector and of the town and
+overworld digit routing in `u5-decomp/functions/TOWN_OVL/`,
+`u5-decomp/functions/MAINOUT_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`,
+with the executed runs summarised in `u5-decomp/notes/`.
 
 Cardinal movement in town is a mode-owned wrapper around the shared movement layer. It computes a bounded destination in the current 32-by-32 floor, prints the direction phrase, optionally prefixes it with the active vehicle verb ("Ride", "Row", or "Fly"), samples the target terrain, and asks the shared passability classifier with the current transport marker. A rejected destination prints the standard blocked feedback and leaves the avatar in place.
 
@@ -1287,7 +1313,7 @@ Three routings reach the arrest sequence, and all are now bounded. First, an app
 
 The arrest sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In Blackthorn's castle when nobody can act and nobody is asleep, the arrest helper returns silently without an audience or surrender prompt; the exploration loop's separate defeat check remains responsible for rescue. The earlier ordinary-surrender fallback for this palace case is withdrawn (R442). In every other location it prints the arrest challenge (`"Thou art under arrest!"`, a blank row) and asks whether the party will come quietly (`"Wilt thou come quietly?"`, a blank row, a `:` answer row that echoes `Yes` or `No`; the surrender line is `The guard strikes thee unconscious!` - *literals added 2026-09-06, issue #206*). The answer key is read case-insensitively: `Y` or `y` and `N` or `n` are accepted and every other key is ignored. The refusal echo is `No`, not `No!`; the earlier `No!` literal is retracted (R592) *(corrected 2026-10-25, issue #300 Q7)*.
 
-**Surrender, in order** *(corrected 2026-10-25, issue #300 Q7)*: the colon row completes with `Yes`; a blank row and `The guard strikes thee unconscious!`; the fade; a blank row and `Thou dost awaken to...`; the party is placed in Yew at `(25, 4, 0)` and the view is marked dirty; the hour is tested **before** the first twenty-minute cleanup step, and steps run only while the hour is not 8, so no time passes at all if the hour is already 8 and otherwise the clock runs forward to the next 08:00, which can be almost a full day; the jail-scene latch and the floor are cleared; and then **town entry setup is re-run as a fresh entry of Yew** (Section 5: roster reload, map load, status redraw, capability check, world tick). The install stamps the no-host marker before its row-`4` test and the party now stands on row 4, so no Shadowlord is installed and no notice prints, even when Yew is a hideout. The next loop iteration consumes the fresh-entry latch as after any town entry.
+**Surrender, in order** *(corrected 2026-10-25, issue #300 Q7)*: the colon row completes with `Yes`; a blank row and `The guard strikes thee unconscious!`; the fade; a blank row and `Thou dost awaken to...` (the complete literal, ending with its ellipsis; in the sixteen-column message window it wraps as `Thou dost awaken` / `to...`; nothing completes it and no later line names the place or mentions jail); the party is placed in Yew at `(25, 4, 0)` and the view is marked dirty; the hour is tested **before** the first twenty-minute cleanup step, and steps run only while the hour is not 8, so no time passes at all if the hour is already 8 and otherwise the clock runs forward in twenty-minute steps (ten-minute steps under Quickness, because the ordinary clock step halves its increment while that effect is active, and the jail loop does not age the effect) until a step lands in the 08:00 hour, so the party wakes at eight o'clock plus the arrest minute modulo twenty (modulo ten under Quickness): always between 08:00 and 08:19, exactly 08:00 only when that minute is a multiple of twenty, and possibly almost a full day later. The arrest minute already includes the arresting turn's own epilogue minute; an arrest at 14:39 woke at 08:19 the next day, after 53 steps, with the status panel's date advanced across midnight. The earlier text said the clock runs forward "to the next 08:00"; that is retracted (`RETRACTIONS.md` R617) *(corrected 2026-10-25, issue #300 Q33; the twenty-minute case executed, the Quickness modulo-ten case static reading only)*. No arrest can begin while Negate Time is active: that gate skips post-action cleanup, the arrest's only host, along with both walkers, so the jail loop never runs with a frozen clock (executed: a pursuing guard beside the party did not arrest across twenty Pass turns, and nothing moved). Under Quickness the same holds on the alternate turns whose gate skips the walkers and cleanup, so an arrest under Quickness can begin only on a non-skipped turn *(added 2026-10-25, issue #300 Q33)*; the jail-scene latch and the floor are cleared; and then **town entry setup is re-run as a fresh entry of Yew** (Section 5: roster reload, map load, status redraw, capability check, world tick). Entry setup prints nothing here, so no location banner appears (the banner belongs to the Enter command, not to entry setup), and the rows after `to...` are the ordinary blank row and command prompt *(added 2026-10-25, issue #300 Q33; executed)*. The install stamps the no-host marker before its row-`4` test and the party now stands on row 4, so no Shadowlord is installed and no notice prints, even when Yew is a hideout. The next loop iteration consumes the fresh-entry latch as after any town entry.
 
 **Refusal** *(corrected 2026-10-25, issue #300 Q7)*: the colon row completes with `No`, then a blank row, `"Then defend thyself, rogue!"` and the alarm sweep, and the sequence does **not** end there. Post-action cleanup then takes its conflict follow-up: when the linked object's actor byte is at least `0x40` (a guard's always is) it prints `Attacked!` with its leading line feed and enters the NPC-conflict chain, an ordinary town arena fight (`systems/encounters.md` Section 7). The fight's target is, on every route, the roster index held in the retained contact state, not necessarily the guard the party was dealing with: on the explicit-`T` route (town result `2`) cleanup calls the arrest even when that index is `0` or stale, and which NPC is then fought on that route is not established (`OPEN-QUESTIONS.md`).
 

@@ -37,7 +37,7 @@ Inside Lord Blackthorn's Castle — scene byte eighteen, the gazetteer's
 asleep, it plays this audience and afterwards re-runs town entry setup for the
 same location. Everywhere else the same handler asks the ordinary surrender
 question: accepting prints the knockout line, fades, and wakes the party in the
-Yew jail cell at 08:00; refusing turns the guards hostile. There is no
+Yew jail cell in the 08:00 hour (08:00 to 08:19, `systems/town-mode.md` Section 14; *corrected 2026-10-25, issue #300 Q33*: "at 08:00" is retracted, R617); refusing turns the guards hostile. There is no
 combat-defeat entry into the audience, no capture flag staged by an earlier
 fight, and no alternate death outcome. Being "captive" means nothing more than
 being arrested inside Blackthorn's castle, which the player normally reaches by

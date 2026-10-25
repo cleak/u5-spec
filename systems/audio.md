@@ -277,7 +277,10 @@ Common recipes are:
 |---|---:|---:|---:|---:|
 | Trap or failed reagent mix | 40 | 3000 | 100..500 Hz | 75 |
 | Ordinary damage presentation | 10 | 1600 | 100..2000 Hz | 160 |
-| Impact presentation (`overworld.md` Section 6.2.4 stage one; added 2026-10-25, issues #300 Q27 and #301 Q3) | 10 | 3000 | 100..2000 Hz | 300 |
+| Impact presentation (`overworld.md` Section 6.2.4 stage one; added 2026-10-25, issues #300 Q27 and #301 Q3), and the combat hit presentation for a monster target or for any target outside the combat arena (`combat.md` Section 11.1; added 2026-10-25, issue #300 Q31) | 10 | 3000 | 100..2000 Hz | 300 |
+| Combat hit on a party target inside the arena, between the two halves of the target member's stats-row flash (`combat.md` Section 11.1; added 2026-10-25, issue #300 Q31) | 40 | 3000 | 100..500 Hz | 75 |
+| Dungeon footstep, per emitting tick (Section 7.4; `dungeon-mode.md` Section 8.1; added 2026-10-25, issue #300 Q32) | 1 | the current intensity: 15, 11, 7, 3 | 100..20000 Hz | equal to the target |
+| Dungeon electric-field push-back, once per contact (`dungeon-mode.md` Section 8.1; added 2026-10-25, issue #300 Q32) | 1 | 500 | 100..20000 Hz | 500 |
 | Dungeon sleep or poison field hit, once per affected member (added 2026-10-16, issue #298 Q7; `dungeon-mode.md` Section 8.1) | 1 | 50 | 100..3500 Hz | 50, about 9 ms under the Section 4 anchor (model value, not a capture) |
 | Shared potion/wind lead, variant `v` | 800 | `8000 + 1600v` | 100..700 Hz | 10 through 26 for variants 0 through 8 |
 | Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; movement uses are in Section 7.5, Blackthorn in Section 8.6, and endgame in Section 8.7 |
@@ -295,6 +298,14 @@ cue: the ordinary movement stings of Section 7.5, the Blackthorn cinematic
 movement and stinger pause of Section 8.6 and the endgame tableau movement of
 Section 8.7 all play exactly this cue and differ only in the pauses wrapped
 around it.
+
+**The combat party-hit burst.** *(Added 2026-10-25, issue #300 Q31.)* It has the
+same numbers as the trap row but is a separate call from the combat hit
+presentation, not the shared trap resolver. It is not the 160-update damage
+rumble either: no direct call from the combat overlays to the shared
+party-damage helper that owns that rumble was found, so a party hit in combat
+sounds this one burst and no second rumble. Indirect routes into that helper
+were not enumerated (`OPEN-QUESTIONS.md`).
 
 ### 5.4 Software envelope
 
@@ -1083,6 +1094,43 @@ matters:
 - A successful dungeon step therefore emits two bursts (targets 15 then 11),
   leaving 7 behind; every later redraw - blocked steps, turns, turn-arounds -
   emits the decaying tail on alternating parity until it reaches zero.
+- **The full program.** *(Added 2026-10-25, issue #300 Q32.)* Each burst is a
+  random rumble (Section 5.3) with step 1, target equal to the current
+  intensity and inclusive pitch range 100..20000 Hz, so its update count equals
+  the intensity. An emitting tick subtracts 4 with a floor at zero (any value
+  of 4 or less becomes 0), so the complete program is **15, 11, 7, 3**, about
+  2.8, 2.0, 1.3 and 0.55 ms under the Section 10.2 model, and then silence.
+  The earlier "15/11/7" was correct as far as it went but omitted the final 3.
+- **Both step bursts belong to the step, whatever the earlier parity.** The
+  committed-step path sets the intensity to 15 and clears the parity flag
+  before each of its two ticks, so every committed step emits exactly two
+  bursts. The first (15) plays inside the movement handler, **before** the
+  party position is written and before any redraw, while the old view is
+  still on screen. The position is then written and the shared dungeon redraw
+  runs in this order: the full stats-panel repaint, the 3-D view raster, the
+  viewport blit, **then the second burst (11)**, then the redraw's final
+  status-line step.
+- **The tail.** After the step the parity stands at "just emitted", so later
+  ticks alternate silent and emitting: the **second** later tick plays the 7
+  and the **fourth** plays the 3, and later ticks are silent until the next
+  committed step re-arms 15. It does not matter which entry point ticks. Ticks
+  come from every run of the shared dungeon redraw (turns, blocked steps, the
+  electric routine, the post-room-return arm) and from every idle iteration of
+  the dungeon command wait. An idle iteration draws one cursor frame and polls
+  the keyboard; a pending key leaves the wait **before** that iteration's tick;
+  with no key waiting it pays a one-BIOS-tick idle wait, then rasters and
+  blits the view and ticks. So a fast second command after a step carries the
+  7 on its redraw, and a fourth carries the 3.
+- **Inferred, not captured:** with no key pressed and no other redraw
+  intervening, the 7 and the 3 sound during the first four idle iterations,
+  roughly 110 ms and 220 ms into the wait. The one-tick wait synchronises to
+  the next BIOS tick edge rather than adding a fixed 55 ms, and each iteration
+  also pays a view raster, so the per-iteration cadence is about one BIOS tick
+  or more, not exactly 55 ms. The post-action handler's redraw arms (room
+  class, trap and event) were not all enumerated, so "only the idle wait ticks
+  after a plain step" is not established.
+- Mute keeps every loop and jitter advance; the gameplay generator is not
+  used.
 
 > **The dungeon has a footstep-ish rumble attached to the *accepted* step and no
 > cue attached to the *rejection*.** A frontend that ports the 165 Hz beep into
@@ -1101,10 +1149,13 @@ matters:
   published here says whether a failed spell attack makes a sound; only the
   melee and weapon miss arm was read to its return. This is the one gap that
   could still change the answer for a subset of misses.
-- **Dungeon rumble parity was not simulated.** The mechanism above is
-  established; which specific blocked steps land on the emitting phase is not,
-  because the parity across all redraw and tick entry points was not enumerated.
-  What *is* established is that the rejection branch itself makes no sound call.
+- **Dungeon rumble parity is settled for the step** *(2026-10-25, issue #300
+  Q32)*. The committed-step path, the shared redraw and the tick were executed
+  on the original code, and the two step bursts do not depend on the prior
+  parity; the tail's position follows from counting ticks as above. What is
+  also established is that the rejection branch itself makes no sound call.
+  The wall-clock spacing of the tail during the idle wait remains inferred
+  (`OPEN-QUESTIONS.md`).
 - **The two-tone 220/150 Hz pair is no longer unidentified**, so it is no longer
   an open question here: it is the combat command refused as inapplicable,
   section 8.8. It is still **not** the blocked-step recipe, and must not be
@@ -1162,6 +1213,8 @@ Source provenance: fresh movement dispatch and accepted-position traces in
 |---|---|
 | Trapped surface chest, trapped dungeon chest, or failed reagent mix | On entry to the shared trap resolver, before trap-class selection, play the 75-update 100..500 Hz rumble. A refusal or cancellation that never enters the resolver is silent. |
 | Ordinary damage presentation | The shared damage presentation runs the 160-update 100..2000 Hz rumble. Preserve the caller's own damage/narration order; this is not a global sound for every HP write. |
+| Combat hit lands (`combat.md` Section 11.1; added 2026-10-25, issue #300 Q31) | Party target inside the arena: the target member's stats row is flashed on, the 75-update 100..500 Hz rumble `(40, 3000, 500)` plays, and the row is flashed off; no direct call to the 160-update damage rumble was found on this path, so the burst is the hit's only sound. Monster target, or any target outside the arena: the 300-update 100..2000 Hz impact rumble `(10, 3000, 2000)` with no flash. The form follows the target descriptor's party-side bit, so a controlled party member keeps the party form and a controlled monster takes the monster form. Both advance only the sound-only jitter state; mute keeps the loops. |
+| Dungeon electric-field contact (`dungeon-mode.md` Section 8.1; added 2026-10-25, issue #300 Q32) | Once per contact, after the viewport flash and before the push-back, the 500-update 100..20000 Hz rumble `(1, 500, 20000)`. The whole-party damage pass that follows adds each damaged member's own row flash and 160-update damage rumble, so a contact with `N` damaged members sounds `1 + N` bursts plus footstep bursts. The electric rumble neither reads nor changes the footstep intensity or parity. |
 | Stonegate trapdoor scripted death | After the black viewport fill, play every integer frequency from 1000 down through 251 Hz, 750 tones total, holding each for 40 calibrated units. Stop, then play one 75-update 100..500 Hz rumble for each party member as that member is killed and the stats panel is repainted. The tone count and the loop bound are exact; under the section 4 anchor the sweep alone runs about **26.5 seconds**, which is far longer than the effect intuitively sounds. Section 10.5 records it as confirmed by two independent emulator captures. |
 
 ### 8.3 Spells, projectiles, and supernatural actors
@@ -2211,7 +2264,10 @@ per-iteration constant.
 |---|---:|---:|
 | Trap or failed reagent mix, step 40, target 3000 | 75 | **188 ms** (179 to 198 ms) |
 | Ordinary damage presentation, step 10, target 1600 | 160 | **115 ms** (110 to 121 ms) |
-| Impact presentation (overworld impact stage one: ranged hits, rough seas, each drowning pass), step 10, target 3000 (added 2026-10-25, issues #300 Q27 and #301 Q3) | 300 | **216 ms** (206 to 227 ms) |
+| Impact presentation (overworld impact stage one: ranged hits, rough seas, each drowning pass), step 10, target 3000 (added 2026-10-25, issues #300 Q27 and #301 Q3), and the combat hit on a monster target or outside the arena (issue #300 Q31) | 300 | **216 ms** (206 to 227 ms) |
+| Combat hit on a party target, step 40, target 3000 (added 2026-10-25, issue #300 Q31) | 75 | **188 ms** (179 to 198 ms) |
+| Dungeon electric push-back, step 1, target 500 (added 2026-10-25, issue #300 Q32) | 500 | **about 92 ms** |
+| Dungeon footstep bursts, step 1, targets 15 / 11 / 7 / 3 (added 2026-10-25, issue #300 Q32) | 15 / 11 / 7 / 3 | **about 2.8 / 2.0 / 1.3 / 0.55 ms** |
 | Shared potion/wind lead, variant 0, step 800, target 8000 | 10 | **478 ms** (450 to 506 ms) |
 | Shared potion/wind lead, variant `v` | 10 + 2`v` | **478 ms plus about 96 ms per variant step** |
 | Two-tone sting, each half (step 1, target 25) | 25 | **about 4.6 ms** |
@@ -2420,6 +2476,16 @@ The Blackthorn movement-stinger identity, mute-preserved timing boundary, and
 ordered six-row rescue-envelope table were derived from private analysis under
 `u5-decomp/functions/BLCKTHRN_OVL/`,
 `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
+
+The combat hit bursts, the dungeon footstep program and the electric push-back
+rumble (Sections 5.3, 7.4, 8.2 and 10.2; issue #300 Q31 and Q32) were
+established by executing the original resident hit presentation on five
+target-descriptor and scene cases and the dungeon commit path, shared redraw,
+tick and electric routine in isolation, with their draw, row, rumble and tick
+calls logged; the idle-wait tick placement and the footstep pair after an
+electric contact are static reading. Derived from private analysis under
+`u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/DUNGEON_OVL/` and
+`u5-decomp/notes/`.
 
 Confidence is high for the numeric inputs, step counts, trigger/cancellation
 order, random-stream ownership, and mute behavior. The phase and comparison

@@ -104,12 +104,12 @@ prints. No one sleeps and the bed loop passes no time. This differs from the
 dungeon hours prompt, which echoes the cancelling key. The command still
 reports acted, so a cancel costs the ordinary one-minute town turn and its
 epilogue, and the next command prompt starts on the row after
-`how many hours?`. The turn cost rests on static reading: the dispatcher sets
-the acted result before the command runs and keeps it on this path. One
-capture fits it: two cancelled bed rests and one cancelled Set Active Player
-(`0`) took the clock from 20:00 to 20:02. That capture settles the cost only
-if the cancelled Set Active Player is shown to cost nothing, and that has not
-been shown. A digit `1` through `9` is echoed at the cursor, followed by one
+`how many hours?`. The dispatcher sets the acted result before the command
+runs and keeps it on this path. One capture confirms it: two cancelled bed
+rests and one Set Active Player `0` took the clock from 20:00 to 20:02, and
+digit `0` is now shown to be free (`systems/town-mode.md` Section 7.2,
+executed), so each bed cancel cost one minute *(settled 2026-10-25, issue
+#300 Q34)*. A digit `1` through `9` is echoed at the cursor, followed by one
 line feed. The burst described below runs next. After it, the members are
 put to sleep and the stats panel repaints, and only then does `Zzzzzzz...`
 print. An arrest contact during the burst ends the command, and no

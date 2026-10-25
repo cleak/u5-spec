@@ -98,7 +98,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 **Inner loop.**
 1. **Clock tick.** The iteration's world-clock call (one minute, Section 15) is gated on the shared timed-effect tag of `systems/magic.md` and on nothing else. While Negate Time (`T`) is active the call is not made at all, so no minute passes. While Quickness (`Q`) is active the call is made only on every other iteration, so dungeon time passes at half rate; a call that is made still advances one minute, because the clock routine's own halving of a one-minute increment is forced back to one (`systems/time.md` Section 4). With neither tag the call is made on every iteration. This alternation is reachable in ordinary play by casting Quickness. *(Corrected 2026-10-25, issue #300 Q10: this step earlier called the alternation a "Q-quest mode" pendulum that "Normal play keeps ... disabled" and did not mention Negate Time; retracted, `RETRACTIONS.md` R595. Static reading of the dungeon loop, confirmed by an independent verifier; not executed.)*
 2. **Render and poll.** Drain the stats-panel refresh request first - test it, repaint the whole stats panel if it is set, clear it - then paint the first-person view (§ 6), emit the newline and wait for a keystroke. This is the dungeon's only consumption point for that request (`systems/stats-panel.md` Section 2.3). The primitive blocks until an accepted key arrives; if it returns a negative sentinel rather than a dispatchable key, the loop skips step 3 for that iteration. The sleep line is not produced here — it belongs to the party-capability check of step 7.
-3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes the four cardinal direction codes — and Enter and the period key, which mean "advance" here — to the dungeon movement dispatcher; digits to the solo-member selector, always reporting "no action" afterwards; the four shared Control bindings (exit-to-DOS prompt, moral-standing readout, sound toggle, version banner) to their own arms; and everything else, letters included, to the resident command dispatcher (§ 10). The handler's own default is "acted", so an unrecognised byte forwarded to the dispatcher reports whatever the dispatcher decides.
+3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes the four cardinal direction codes — and Enter and the period key, which mean "advance" here — to the dungeon movement dispatcher; digits to the solo-member selector, always reporting "no action" afterwards (under review: town and overworld digits reach a shared active-player selector whose `Invalid!` refusal reports "acted", `systems/town-mode.md` Section 7.2, and the dungeon digit route may reach the same selector; `OPEN-QUESTIONS.md`, *flagged 2026-10-25, issue #300 Q34*); the four shared Control bindings (exit-to-DOS prompt, moral-standing readout, sound toggle, version banner) to their own arms; and everything else, letters included, to the resident command dispatcher (§ 10). The handler's own default is "acted", so an unrecognised byte forwarded to the dispatcher reports whatever the dispatcher decides.
 4. **Scene-byte exit check.** If the scene byte has dropped to thirty-two or below, the player has climbed out (§ 13) and the loop breaks.
 5. **Refresh tile cache.** Re-read the underfoot tile and update the cached high nibble.
 6. **Post-action hook.** If the dispatch did anything, call a post-action helper for end-of-turn cleanup. Its first act is the dungeon wake roll: each Sleeping member independently wakes (becomes Good) with probability 1 in 16 (a uniform roll over the inclusive range 0..63, waking below 4), and the stats panel is repainted if anyone woke. This is the dungeon's only per-turn wake rule, and like the rest of the helper it runs only after a command that reported "acted". Sleep has no duration counter. *(Added 2026-10-18, issue #299 Q23.)*
@@ -1486,6 +1486,35 @@ output in `u5-decomp/functions/ULTIMA_EXE/`. This was not a live game capture.
 prints `Ouch!\n` then `Electric field!\n` **before** the destination-class test,
 so those two lines precede any `Blocked!` the same step later produces. The
 screen flash, rumble, one-cell push-back and whole-party damage follow.
+*(Added 2026-10-25, issue #300 Q32.)* One contact runs in this order:
+
+1. a shared dungeon redraw at the field cell (the party position is already
+   set to the field cell), whose footstep tick acts on whatever state was
+   pending;
+2. `Ouch!` and `Electric field!`;
+3. the viewport flash: fill the viewport rectangle, hold one BIOS tick, fill
+   again;
+4. the electric rumble, once per contact: a random rumble of step 1, target
+   500, inclusive pitch 100..20000 Hz, 500 updates, about 92 ms under the
+   `audio.md` Section 10.2 model;
+5. the one-cell push-back, which moves the party position directly; the move
+   then takes its target from the pushed-back position (the push-back
+   direction geometry is as published elsewhere in this document and was not
+   re-derived here);
+6. the whole-party damage pass, which adds each damaged member's own row flash
+   and 160-update damage rumble, so the electric rumble is a separate burst and
+   a contact with `N` damaged members sounds `1 + N` bursts besides the
+   footsteps;
+7. a shared redraw, which ticks;
+8. the move then finishes through the ordinary committed-step path onto the
+   origin cell, so the footstep pair (15 then 11) also plays, unless the
+   active monster's cell test refuses it, in which case `Blocked!` prints and
+   only a redraw follows, with no footstep pair (an edge that is probably
+   unreachable in practice).
+
+Steps 1 to 7 were executed on the original code; step 8 is static reading of
+the movement handler. The electric rumble neither reads nor changes the
+footstep intensity or parity.
 
 **Byte `0x8B` - the marked electric variant - is inert.** The movement-time test
 is an exact comparison against `0x83` on the raw cell byte, and the post-action
@@ -1512,8 +1541,16 @@ the party's **own** cell is the point-blank door class, i.e. the turn is refused
 *because* you are standing in a doorway. Read it as "not permitted in a
 doorway".
 
-A **completed** move carries a footstep rumble; a blocked move and a turn are
-both silent. Neither refusal plays the blocked-step tone the town and overworld
+A **completed** move carries a footstep rumble; a blocked move and a turn make
+no sound call of their own, but each runs the shared redraw, whose tick can
+carry the footstep tail: a fast second command after a step plays the 7, and a
+fourth plays the 3. *(Corrected 2026-10-25, issue #300 Q32; the earlier text
+said a blocked move and a turn are both silent, which is retracted, R615.)*
+The footstep is the program of `audio.md` Section 7.4: step 1, inclusive pitch
+100..20000 Hz, target equal to the intensity, 15 before the position changes
+and 11 inside the post-step redraw, then a 7 and a 3 on the second and fourth
+later ticks, where idle iterations of the command wait also tick *(added
+2026-10-25, issue #300 Q32)*. Neither refusal plays the blocked-step tone the town and overworld
 loops use - `systems/audio.md` section 11 records the dungeon as explicitly not
 a site for that tone, on either refusal arm.
 
@@ -1782,7 +1819,9 @@ Before letters reach that dispatcher, the dungeon command parser intercepts
 mode-local controls: the four cardinal direction codes plus Enter and the period
 key as forward movement, the four shared Control bindings (exit-to-DOS prompt,
 moral-standing readout, sound toggle, version banner), digits as a solo-member
-select that always reports "no action", and idle/sleep notifications. The
+select that always reports "no action" (under review, see Section 4
+inner-loop step 3 and `OPEN-QUESTIONS.md`; *flagged 2026-10-25, issue #300 Q34*),
+and idle/sleep notifications. The
 exit-to-DOS prompt is one of those Control bindings, not the `Q` letter — `Q`
 reaching the resident dispatcher is the ordinary save-game route. This is why
 ordinary shared commands such as M-Mix still work in dungeons: they are not
@@ -3158,3 +3197,11 @@ The behaviour described here was derived by reading the private function notes l
   Q15, 2026-10-25) and corrected the Shift case (R589). Sources: `u5-decomp/notes/` and
   `u5-decomp/functions/ULTIMA_EXE/`.
 - 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.
+- The footstep program, the placement of both step bursts, and the electric
+  contact's order and rumble (Section 8.1; issue #300 Q32) were established by
+  executing the dungeon commit path, the shared redraw, its tick and the
+  electric routine in isolation with leaf draws trapped and the rumble calls
+  logged; the idle-wait tick placement and the footstep pair after a contact
+  are static reading. Derived from private analysis in
+  `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/ULTIMA_EXE/` and
+  `u5-decomp/notes/`.

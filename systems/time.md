@@ -420,8 +420,13 @@ The per-turn cleanup is called from each mode loop with the increment shown in S
 - **Combat round.** Combat rounds end with a one-minute increment, applied once when the round counter wraps (rather than once per actor-turn within the round).
 - **Town arrest surrender.** The ordinary town arrest path relocates the party
   to the Yew jail scene, then advances time in repeated twenty-minute cleanup
-  calls until the hour byte reaches 08:00. The loop does not roll back partial
-  time side effects if the start time is not aligned to the target hour.
+  calls until the hour byte reaches 8, testing the hour before each step. The
+  minute is never realigned, so the party wakes at 08:(arrest minute modulo
+  20), between 08:00 and 08:19 (modulo 10 under Quickness, static reading
+  only); an executed arrest at 14:39 woke at 08:19 the next day
+  (`systems/town-mode.md` Section 14; *corrected 2026-10-25, issue #300 Q33*:
+  "reaches 08:00" read as an exact 08:00 wake is retracted, R617). The loop
+  does not roll back partial time side effects.
 - **Mode entry / exit.** Some mode boundaries invoke the cleanup with a zero
   increment to refresh daylight against the new scene without spending a turn.
   This is confirmed for overworld entry and the town map-load path. It is not
