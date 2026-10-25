@@ -75,7 +75,10 @@ a boolean:
 - **Dungeon.** Tests only "is it non-zero", which selects the dungeon's
   post-action pass. Note that the dungeon loop advances its own clock at the
   head of the iteration, before the command is even parsed, so no dungeon
-  command is distinguished by this status for timekeeping purposes.
+  command is distinguished by this status for timekeeping purposes. (That
+  loop-head minute is gated only on the timed-effect tag: none under Negate
+  Time, every other iteration under Quickness; `systems/dungeon-mode.md`
+  Section 4 step 1, added 2026-10-25, issue #300 Q10.)
 - **Town.** `3` jumps straight back to the input parser with no turn and no
   epilogue; `0` skips the epilogue; `1` runs the epilogue *including* both town
   walkers — the object walker and the NPC schedule step — unless one of the
@@ -123,6 +126,46 @@ Source provenance: fresh original command and town-contact execution in
 `u5-decomp/functions/ULTIMA_EXE/`, `u5-decomp/functions/TOWN_OVL/` and
 `u5-decomp/notes/`, issue #261 follow-up; the combined verification is
 summarized in `systems/npc-schedules.md` Section 9.2.
+
+**Refusals and cancellations by letter (overworld and town).** *(Added
+2026-10-25, issue #300 Q14.)* Being a refusal or a cancellation is not what
+makes a command free. Only a route that reports "no action" is free. A route
+that is not forwarded spends the turn on every path, including its own
+refusals and cancelled prompts. In overworld and town play, "acted" means the
+mode's ordinary epilogue runs. In town that is one minute plus the party upkeep
+pass, along with the rest of the epilogue. On the overworld it is the ordinary
+outdoor turn. The upkeep pass is the step that advances the saved turn-step
+counter. In the Evidence column, *executed* means the unmodified original was
+run with the clock and the turn-step counter read back from a save made right
+after the action. *Static* means a reading of the dispatcher's per-letter
+result handling, which agrees row for row with the forwarded-route table above.
+
+| Key | Free (no action) | Spends a turn (acted) | Evidence |
+|---|---|---|---|
+| Unknown key | `What?` | - | Executed |
+| Space | - | `Pass` | Executed |
+| `A` | Overworld: every path, including the attack that opens combat. Town: only the on-foot refusal. | Town: every other path, including `Nothing to attack!` | Town `Nothing to attack!` executed; the rest static |
+| `B` | Only the final unknown-target `What?` | Every boarding and both refusals | Static |
+| `C` | One sub-handler branch, which belongs to a scene-changing path and is not the scene gate | Everything else, including the scene-gate `Not here!` (`systems/magic.md` Section 5) | Static; not measured on the clock |
+| `D` | Always (its stock refusal) | - | Executed |
+| `E` | Overworld: only `Enter What?` on an unrecognised tile | Overworld: every non-transition outcome, namely `ruins`, the shrine arm, `What town?`, `What dungeon?`, `On foot!` and `Attacked at entrance!` (Section 5.5). A successful town or dungeon entry is neither: it leaves the overworld loop before the epilogue. Town and dungeon: `Enter what?` | Overworld `Enter What?`, `Enter ruins` and town `Enter what?` executed; the rest static |
+| `F` | - | Always, including `Fire-What?` | Executed, overworld and town |
+| `G` `I` `J` `L` `M` `O` `R` `S` `U` `X` `Z` | - | Always, including refusals and cancelled pickers or direction prompts | Static |
+| `H` | - | Always, including the town off-bed refusal (`Hole up- Only` / `in bed!`, Section 5.8) | Off-bed refusal executed in town |
+| `K` | Town: `What?` after a direction, and `-On foot!` | Town: Pass at the direction prompt, both ladder directions, a successful step. Overworld: every path, including `With what?` and `On foot!` | Town `What?`, town Pass and overworld `With what?` executed; the rest static |
+| `N` | - | Every outcome (Section 6) | Executed, with two outcomes static (Section 6) |
+| `P` | Only in a dungeon | Overworld and town: every path | Static |
+| `Q` | Always | - | Executed |
+| `T` | - | Always: overworld `Funny, no response!`, town `Nobody's here!`. A failed guard demand reports the arrest-cleanup status, which is not free either. | Both refusals executed |
+| `V` | - | Always, including `You have none!` | Executed, overworld and town |
+| `W` | Always | - | Static |
+| `Y` | - | Treat as acted. The town Shadowlord branch forwards and three paths are undefined; see the forwarded-route table above. | As published |
+| Typeahead toggle | Always | - | Static |
+| Town digit at the harpsichord | Re-prompt (status `3`): no turn and no epilogue | - | As published |
+
+The dungeon differs, as published above: its clock advances at the head of each
+loop pass, before any command is read, so there the result decides only whether
+the post-action pass runs.
 
 Beyond those six routes, a modern implementation should preserve each command's
 observable turn cost rather than depend on numeric equality everywhere. Mode
@@ -381,7 +424,7 @@ key does not select the noun.
 | cave | `cave` |
 | mine | `mine` |
 | dungeon | `dungeon` |
-| ruins | `ruins` with no newline; this is a direct non-transition arm |
+| ruins | `ruins` with no newline; this is a direct non-transition arm. It is acted: it spends the outdoor turn (clock and upkeep pass) as `Pass` does, and the next command's own line feed ends the row *(added 2026-10-25, issue #300 Q28)* |
 | lighthouse | `lighthouse` |
 | Codex shrine | `the_Shrine_of_the_Codex!\n`, then the temporary Codex presentation on live tile `0x11`; see `systems/karma.md` Section 8. |
 | virtue shrine | `the_shrine_of\n` followed by the coordinate-matched virtue name and `\n`. The seven stock surface cells are Honesty, Compassion, Valour, Justice, Sacrifice, Honor, and Humility; Spirituality has no stock surface `0x19` cell. |
@@ -420,6 +463,19 @@ The two coordinate helpers have different no-match tails:
 | Custom clean sidecar row has no narration class | `Enter_What?\n` | Treat the incomplete extension row as unrecognized; do not derive a noun from its key, coordinate, or storage family | No action; no transition |
 | Dungeon row matches, but the party is not on foot | `Enter_<class>\nOn_foot!\n` | The transport refusal follows the tile-selected class | Acted; no transition |
 | Doom row matches before all three Shadowlords are destroyed | `Enter_cave\nAttacked_at_entrance!\n` | Doom omits its proper-name line; the refusal follows `cave` | Acted; no transition; spawn the entrance ambush |
+| Live tile is the ruined shrine | `Enter_ruins` (no newline) | The class word ends the output; nothing follows it, and the next prompt's own line feed closes the row | Acted; ordinary overworld turn; no transition *(added 2026-10-25, issue #300 Q28)* |
+
+*(Added 2026-10-25, issue #300 Q28.)* The ruins arm was executed in the
+unmodified original from a save placed on a shrine cell whose ruin flag was
+set. `Enter ruins` occupied one row, the next prompt marker stood on the row
+directly below it with no blank row between, and the clock and turn-step
+counter read back from a following save had advanced exactly as for `Pass`. As
+far as traced, the arm cannot be reached in ordinary play. Only Blackthorn's
+interrogation sets a ruin flag, the ruined-shrine tile is produced only when
+that region is loaded, and the tile is impassable. Two things were not checked:
+impassability for each transport (carpet and the vessels), and whether any
+teleport or blink path can place the party on the cell (`OPEN-QUESTIONS.md`).
+Neither stored world map contains the ruined-shrine tile.
 
 A coordinate and narration class are independent inputs. If a row matches and
 the live tile is a different member of the **same** helper set, entry still
@@ -457,7 +513,10 @@ The `H`-Hole-up family carries its own literals: `Hole_up_&_` plus
 land, `Sails_must_be\n` plus `lowered!\n\n` and `On_land_or_ship!\n\n` for
 its refusals, and the prompts `For_how_many_hours?_(1-9)_`,
 `\nWilt_thou_set_a_watch?_` (answered `Yes\n\n` or `No\n\n`),
-`Who_will_stand_guard?_` and `None_posted!\n\n`. `On_foot!\n` is shared by
+`Who_will_stand_guard?_` and `None_posted!\n\n`. In a town it prints the
+bed prompt `For_how_many_hours?_` (no range text), the sleep line
+`Zzzzzzz...\n` and the refusal `Thrown_out_of_bed!\n` *(added 2026-10-25,
+issue #300 Q8)*. `On_foot!\n` is shared by
 the Attack-family and dungeon-entry transport refusals.
 
 ### 5.6 Selection prompts and the cancel word
@@ -506,15 +565,15 @@ empty row.
 | `S` + direction (town or overworld) | `Search-North`, then the conditional acting-member exchange below; after a successful selection, an empty search prints `[blank]` ⏎ `Thou dost find` ⏎ `nothing of note.`. Cancellation aborts before the search. |
 | `K` + direction, no feature | `Klimb-North` ⏎ `What?` |
 | `K` in town on an ascent link / on a descent link or grate | `Klimb-Up!` / `Klimb-Down!` on one row, and **nothing else** - no direction prompt, no floor number, no location line |
-| `K` in town, mounted on a horse | `Klimb--On foot!` on one row - two hyphens, because the refusal literal begins with its own. A carpet or a vessel is not refused |
+| `K` in town, mounted on a horse | `Klimb--On foot!` on one row - two hyphens, because the refusal literal begins with its own. A carpet or a vessel is not refused *(inferred 2026-10-25, issue #300 Q22: the fifteen characters exactly fill the cells right of the marker, and by `systems/text-output.md` Section 6 a row-filling string that ends in its own line feed ends at column 0 of the next row; not captured)* |
 | `K` + direction in town onto rubble or a fence | `Klimb-North` and nothing further; the party steps across with no floor change |
-| `K` on the overworld, no Grapple | `Klimb-With what?` on one row - lower case *what*, and no direction is ever requested |
-| `K` on the overworld, not on foot (carpet included) | `Klimb-On foot!` on one row |
+| `K` on the overworld, no Grapple | `Klimb-With` ⏎ `what?`. The refusal continues the echo row, but the sixteen characters do not fit the fifteen cells right of the prompt marker, so the wrap-aware printer breaks at the space and `what?` starts at the window's left edge. The ordinary blank row then follows before the next prompt, as after any result that ends in its own line feed. Lower case *what*; no direction is ever requested; the turn is spent (Section 3). *(Corrected 2026-10-25, issue #300 Q22: this row said `Klimb-With what?` prints "on one row"; retracted, `RETRACTIONS.md` R605.)* |
+| `K` on the overworld, not on foot (carpet included) | `Klimb-On foot!` on one row *(inferred 2026-10-25, issue #300 Q22: fourteen characters fit the fifteen cells by arithmetic; not captured)* |
 | `K` + direction on the overworld, climbable target | `Klimb-North`, then one `Fell!` row per party member who failed the risk roll, and **nothing else** - no success line, no destination or terrain report |
 | `K` + direction on the overworld, other targets | `Klimb-North` ⏎ `Impassable!` when the target map tile is exactly `0x0D`, or `Klimb-North` ⏎ `Not climbable!` for every identity other than the climbable `0x0C` (objects on the cell, water and lava included); no object or walkability test precedes the id tests. |
 | `X` on foot | `X-it what?` on one row (the verb echo and the refusal are two literals) |
 | `E` off an entrance | `Enter what?` |
-| `H` in town, not on an inn bed | `Hole up- Only in bed!` on one row |
+| `H` in town, not on an inn bed | `Hole up- Only` ⏎ `in bed!`. The refusal continues the echo row and wraps at its space; the turn is spent (Section 3). *(Corrected 2026-10-25, issue #300 Q22: this row said `Hole up- Only in bed!` prints "on one row"; retracted, `RETRACTIONS.md` R605.)* |
 | `I` with torches | `Ignite torch!` and nothing else |
 | `I` without torches | `Ignite torch!` ⏎ `None owned!` |
 | `M` then Escape | `Mix Reagents` ⏎ `[blank]` ⏎ `For what spell?` ⏎ `:` (free-text row) ⏎ `None!` |
@@ -526,6 +585,15 @@ empty row.
 | `N`, the leader | `Swap Avatar` ⏎ `[blank]` ⏎ `Avatar must lead!` |
 | `N`, cancelled | `Swap nobody!` |
 | `Space` | `Pass` |
+
+*(Added 2026-10-25, issue #300 Q22.)* The two wrapped refusals were captured in
+the unmodified original and read off the screen. On the overworld,
+`Klimb-With` stood on the prompt row and `what?` on the next row. The row after
+that was blank, and the next prompt marker stood on the row below the blank one.
+`Pass` gives the same layout. The town `Hole up- Only` / `in bed!` wraps the
+same way. The only common result here that has no blank row before the next
+marker is `Enter ruins` (Section 5.5), because it carries no line feed of its
+own.
 
 **An applied Klimb narrates nothing of its own.** *(Added 2026-09-12, issue
 #262.)* Neither the town nor the overworld climb prints a success line, a
@@ -761,16 +829,30 @@ available from the resident world-command dispatcher; combat has its own `N`
 label and does not inherit this party-order effect.
 
 The command prompts for two party members through the shared party-member
-selector. Cancelling either prompt prints the no-selection result and returns
-without consuming a turn. If either selected slot is slot zero, the command
-refuses because the leader must remain first, and it returns without consuming
-a turn.
+selector. Cancelling either prompt prints the no-selection result and ends the
+command. If either selected slot is slot zero, the command refuses because the
+leader must remain first. Neither outcome is free. New Order is not a
+forwarding route (Section 3), so every outcome reports acted and spends the
+ordinary turn: a swap, the same-slot no-op, `Swap nobody!` at either prompt, and
+the leader refusal at either prompt. In town that turn is one minute plus the
+upkeep pass; on the overworld it is the ordinary outdoor turn. *(Corrected
+2026-10-25, issue #300 Q29: this paragraph said both the cancel and the leader
+refusal return "without consuming a turn"; retracted, `RETRACTIONS.md` R607.)*
+The executed cases, with the clock and turn-step counter read back from a save,
+are these: Escape at the first prompt (overworld and town), the leader picked
+first (overworld and town), the leader picked second (overworld), and a real
+swap. The cancel at the second prompt and the same-slot no-op rest on static
+reading of the dispatcher, which discards New Order's result. The selector's
+keys are those of `systems/input.md` Section 9. In particular, a digit moves
+the highlight without committing; this was observed at the first prompt. The
+second prompt's highlight starts on the first slot (observed), so Return
+pressed at once there picks the leader and gives the leader refusal.
 
 On a successful non-leader selection pair, the command exchanges the two
 selected roster records as whole thirty-two-byte character records. Name,
 status, stats, class letter, equipment, and per-record counters all move
 together. The party-size field is not changed, no world object or tile state is
-touched, and the command marks the turn as consumed after the exchange. Picking
+touched, and the turn is consumed as for every other outcome. Picking
 the same nonzero slot twice is accepted: the whole-record exchange is a
 behavioural no-op, but the turn is still consumed.
 
@@ -1181,7 +1263,11 @@ H-Hole-Up is routed by scene before the detailed rest handler runs:
   wrapper. That wrapper performs the wilderness/dungeon rest flow and can turn a
   rest interruption into an ambush-style combat.
 - **Town-family locations.** The dispatcher first requires the party to be on a
-  bed/inn-style tile. If the tile gate fails, the command is refused. If it
+  bed/inn-style tile. If the tile gate fails, the command is refused with
+  `Only in bed!` and still returns the acted result, so it costs the ordinary
+  town turn (added 2026-10-25, issue #300 Q8; executed with the clock read
+  back, issue #300 Q14). The refusal wraps as `Hole up- Only` / `in bed!`
+  (Section 5.8). If it
   succeeds, control enters the hours-prompt rest path.
 - **Combat.** Combat has its own H label and refuses the action; world-mode rest
   is not available inside an arena.
@@ -1274,6 +1360,29 @@ scene context:
   frame, at viewport column 5, row 3 (the cell two rows above the party, where
   the record stands), and then restoring actor byte `0xFC`. The converge costs
   what Section 8.3.1 publishes. The handler then reports its normal success.
+  *(Added 2026-10-25, issue #300 Q3.)* The id is written once the three tests
+  have passed, before the actor is placed and before the message. This Yell
+  is the only writer of that byte, and nothing ever clears it. After the
+  party leaves, the byte still names the last Shadowlord summoned, and saves
+  record it that way (`formats/saved-gam.md` `0x0325`). An implementation
+  must not reset it on leaving. Two other writers touch the Shadowlord table,
+  and both write only the three hideout bytes: the shard destruction step and
+  the midnight relocation. Evidence (private analysis in `u5-decomp/notes/`):
+  a static census of direct and indexed
+  accesses over the shipped executable and every overlay finds this one
+  writer, and the shard compare is its only reader. In an emulator run,
+  Astaroth was summoned in the Lycaeum, then the party walked off the map to
+  the overworld and saved. The byte read `1`, and still read `1` after two
+  Pass turns and a second save. A save made inside a keep straight after a
+  Faulinei summon read `0`. The capture record does not say whether the two
+  summons were separate runs. If they were in one session, the Astaroth Yell
+  must have come after Faulinei had left, because the one-at-a-time test
+  would otherwise refuse it. Either way, the read of `1` shows that the
+  Astaroth summon wrote the byte. *Inferred, not executed:* the stale id has
+  no visible effect in stock play. The destruction step also needs a
+  Shadowlord actor on the flame, only a fresh summon puts one in a keep, and
+  that summon writes the byte again. Resident Shadowlords are installed only
+  in their hideout towns, never in the three keeps.
   Source provenance: static reading, private analysis in
   `u5-decomp/functions/CMDS_OVL/`. The actor takes the highest free active-object slot, searching
   downward from the last slot.

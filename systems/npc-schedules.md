@@ -835,7 +835,7 @@ result-2 turn, published as retained-event precedence in
 |---|---|---|
 | AI 4 or 5 | Nonzero live dialogue | Enter the shared conversation dispatcher for that NPC. Ordinary dialogue starts its conversation; shop triggers enter their shop gate; reserved/canned dialogue follows its own dispatcher case. |
 | AI 4 or 5 | Zero live dialogue | No contact event; continue movement selection. This is not a fallback to combat. |
-| AI 6 or 7 | Dialogue `0xFE` | Shouted brush-off followed by that NPC's flight rewrite. |
+| AI 6 or 7 | Dialogue `0xFE` | Shouted brush-off (`"Begone,` / `vermin!"`), the whole-party damage pass, then that NPC's flight rewrite *(damage added 2026-10-25, issue #300 Q19)*. |
 | AI 6 or 7 | Any other dialogue, linked live sprite byte exactly `0x70` | Arrest interaction. This route does not first ask the reserved regime demand. |
 | AI 6 or 7 | Dialogue other than `0xFE`, linked live sprite other than `0x70` | Conflict outcome: linked actor byte at least `0x40` gives `Attacked!` and the NPC-conflict chain; a lower actor byte clears the NPC slot. |
 
@@ -1092,12 +1092,16 @@ A special-case rule covers the "default human" NPC type: when the type byte is a
 **The clear-and-re-place pass.** Three callers run the same pass that clears
 every non-party active-object record and then re-places each live scheduled NPC
 at the position its schedule gives for the *current* hour: entering the location
-(the initialisation described in Section 4), the H-Hole-Up hours command when it
-finishes its rested hours, and an inn's rest-for-the-night, which ends at 06:00
+(the initialisation described in Section 4), the town-bed H-Hole-Up hours
+command after **every** ten-minute step of its sleep, before that step's bed
+test (`systems/rest-and-camp.md` Section 4), and an inn's rest-for-the-night,
+which ends at 06:00
 and re-places the roster for that hour before returning control
 (`systems/shops.md` Section 8.4). After any of the three, an NPC that was
 mid-route is standing on its scheduled position rather than where it had walked
-to, and its queued route is gone.
+to, and its queued route is gone. *(Corrected 2026-10-25, issue #300 Q6: this
+paragraph previously said the Hole-Up command reseats "when it finishes its
+rested hours"; retracted, `RETRACTIONS.md` R586. The per-step reseat rests on static reading of the bed loop, confirmed by an independent verifier, and was not executed. Private analysis in `u5-decomp/notes/`.)*
 
 **Active objects (sprites).** Sprites are owned by the active-object subsystem;
 the schedule system only holds a slot index in the runtime block and only
@@ -1139,7 +1143,9 @@ the two residues below are what a frontend has to carry.
 Beyond those two, a turn-based frontend that runs the animator once per consumed
 turn is free to do so, and running it more or less often changes appearance
 only. Three things it must keep regardless of cadence: the early-outs, so it
-never animates a hidden, prone or frozen slot; the class floor, so it never
+never animates a hidden, invisible, asleep or frozen slot (the exact
+frame values are in `systems/active-objects.md` Section 8, early-out 4; added
+2026-10-25, issue #300 Q16); the class floor, so it never
 writes a frame value the water-creature movers would misread as a facing; and
 the one class script named above.
 

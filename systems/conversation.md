@@ -12,11 +12,11 @@ This spec describes the Talk command's entry path, the on-disk `.TLK` file struc
 
 The Talk command is one of the per-letter actions accepted by the town/dwelling/castle/keep mode loop; it is *not* available outdoors or in dungeons (there are no scheduled NPCs to address there) and is not available during combat. When the dispatcher routes the keystroke to the conversation overlay, the entry handler performs five steps before the engine proper takes over:
 
-1. **Liveness gate.** A resident "can talk now" predicate decides whether a conversation is allowed at all. If the gate refuses (the most likely reasons are "in combat", "asleep", "starving", or "already in a conversation"), the command returns immediately without printing anything.
+1. **Direction prompt.** After the `Talk-` echo, the handler runs the shared adjacent-direction prompt (`systems/commands.md` Section 5.4, `systems/input.md` Section 10), the same one Search, Jimmy, Open, Get and Push use. A cardinal direction echoes its word and a line feed, and Talk continues. Space echoes `Pass` and a line feed, so the row reads `Talk-Pass`, and Talk ends there with the ordinary acted outcome: the clock advances exactly as for the bed and mirror aborts of step 4. Escape, letters, diagonals and unshifted top-row digits print nothing and the prompt reads again. This is the only early exit. Talk tests no provisions, party status (asleep, poisoned, dead), combat state or conversation state, so a party whose provision counter is zero talks normally; starvation means only the hourly warning and damage of `systems/time.md` Section 5. Outside town-family scenes the resident dispatcher never reaches this handler and decides by scene alone: on the overworld it prints `Talk-`, runs the same prompt, then prints `Funny, no response!`; in a dungeon-band scene it prints the combined `Talk-Funny, no response!`; combat has its own `T` arm (`systems/commands.md` Section 5.2, the `T` row). None of those arms reads provisions either (static reading). *(Corrected 2026-10-25, issue #300 Q12: executed with provisions at 0, 1 and 250 - identical output, and the provision counter was never read; the claim about unshifted digits is static reading of the prompt.)* This step previously described a resident "can talk now" liveness gate that refused silently when in combat, asleep, starving or already in a conversation; no such gate exists, and that text is retracted (`RETRACTIONS.md` R596).
 
-2. **Player position and facing.** The handler reads the party's tile coordinates and the current facing direction (a signed `dx, dy` pair written by the most recent movement command).
+2. **Player position and the chosen direction.** The handler reads the party's tile coordinates and the direction just chosen at the step 1 prompt, a signed `dx, dy` step. The prompt clears the shared direction vector before setting it, so an earlier movement has no effect. *(Corrected 2026-10-25, issue #300 Q12: executed with a stale East vector left in place; choosing North, West or South targeted that cell.)* This step previously said the direction was the facing written by the most recent movement command; that is retracted (`RETRACTIONS.md` R597).
 
-3. **NPC lookup at the facing tile.** The party's facing tile is `(player_x + dx, player_y + dy)`. The resident NPC-occupancy structure is consulted to find an NPC whose live tile matches. If no NPC is at that tile, the handler tests whether the tile is a *talk-through* tile — a fixed white-list of counter-height and waist-height furniture. The shipped white-list is the tile ids `0x29`, `0x94..0x9C`, `0xA5`, `0xAE`, `0xBA..0xBB`, `0xBE` and `0xCA..0xCB`; every other tile id is opaque to Talk. If the tile is talk-through, the handler advances `(dx, dy)` once more and queries again. If still no NPC is found, the handler prints a "Nobody's here!" message and returns. Note that the mirror tile `0x9D` sits immediately outside this range, so Talk never reaches past a mirror — it can only resolve *onto* one.
+3. **NPC lookup in the chosen direction.** The target cell is `(player_x + dx, player_y + dy)`. The resident NPC-occupancy structure is consulted to find an NPC whose live tile matches. If no NPC is at that tile, the handler tests whether the tile is a *talk-through* tile — a fixed white-list of counter-height and waist-height furniture. The shipped white-list is the tile ids `0x29`, `0x94..0x9C`, `0xA5`, `0xAE`, `0xBA..0xBB`, `0xBE` and `0xCA..0xCB`; every other tile id is opaque to Talk. If the tile is talk-through, the handler advances `(dx, dy)` once more and queries again. If still no NPC is found, the handler prints a "Nobody's here!" message and returns. Note that the mirror tile `0x9D` sits immediately outside this range, so Talk never reaches past a mirror — it can only resolve *onto* one.
 
 4. **Status-tile gate.** With an NPC located, the handler reads the **live map tile occupying the resolved cell** and compares it against exactly two values:
 
@@ -36,7 +36,7 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
    Three points that are easy to get wrong:
 
    - **The test object is a map tile, not an NPC sprite.** Both ids are furniture ids in the terrain-description domain of `LOOK2.DAT`, and the byte comes from the same live-map tile query that movement and Look use. The gate fires because the NPC's schedule has parked it on a bed cell or a mirror cell, not because the NPC has a distinct sleeping or praying appearance. An implementation that stores a per-NPC "asleep" flag and tests that instead will diverge.
-   - **The cell tested is the resolved cell**, which may be the faced cell or, when the faced cell is a talk-through tile, the cell one step further along the same direction.
+   - **The cell tested is the resolved cell**, which may be the adjacent cell in the chosen direction or, when that cell is a talk-through tile, the cell one step further along the same direction.
    - **Both branches abort before dispatch.** Neither branch enters the conversation engine, uses the NPC's dialogue index, or reaches shop-trigger dispatch, and both return the ordinary zero Talk outcome. This holds in every town, dwelling, castle and keep scene; the gate has no scene-specific behaviour. The resident `T` arm maps that outcome to the normal acted status, so the town loop advances the clock and runs its scheduler pass; an aborted Talk is not a free action. `systems/town-mode.md` and `systems/time.md` own the exact clock accounting.
 
 5. **Dialog-index dispatch.** Each live NPC carries a *dialog index*, expanded from the location's `.NPC` byte into a runtime word when the scene is entered. The handler reads the dialog index for this NPC and hands it to the conversation engine, which uses it as the key for looking up the NPC's blob in the matching `.TLK` file.
@@ -86,7 +86,31 @@ The Talk command is one of the per-letter actions accepted by the town/dwelling/
    | Dialogue index zero | `No response!` |
    | The silent-figure index | `"` then `Don't hurt me!` ⏎ `Please go away!` then `"` and a line feed |
    | A shop index whose gate does not pass | `A merchant says:` ⏎ `"Come see me at` ⏎ `my shoppe, when` ⏎ `it's open!"` |
-   | The scare index and the reserved regime index | hand off to the town scare-and-flee helper and to the Blackthorn shakedown handler; neither hand-off was entered in this pass, so no literals are established for either |
+   | The scare index (`0xFE`) | `"Begone,` ⏎ `vermin!"` ⏎ - the double quotes are part of the literal and its own line feed ends the second row - then the whole-party damage pass, then the forced-flight helper (`systems/town-mode.md` Section 14); the ordinary zero outcome |
+   | The reserved regime index (`0xFF`), not one of the five | hands off to the regime handler of `systems/blackthorn.md` Section 7a |
+
+   *(Added 2026-10-25, issue #300 Q19.)* The damage pass is the shared one
+   of `systems/overworld.md` Section 6.2.4 and the starvation branch of
+   `systems/time.md` Section 5: each party slot below the party count whose
+   status is not Dead takes its own uniform `1..8`. A `0xFE` Talk is
+   therefore an ordinary acted turn with no arrest and no conflict. On
+   automatic conversation contact the flight helper receives the contacting
+   NPC. **On an explicit typed Talk it does not receive the talked-to NPC's
+   number**, and which record, if any, it rewrites there is not established
+   (`OPEN-QUESTIONS.md` section 2). The number it gets is caller state that
+   neither Talk's entry, the resident `T` arm nor the town loop sets; executed,
+   the talked-to NPC was rewritten only when that leftover happened to equal
+   its index. Static reading (not executed) suggests the leftover is never a
+   valid NPC number: at the first explicit Talk of a session it is a value left
+   from program start-up, well above any NPC number, and after any explicit
+   `0xFE` Talk it is another out-of-range value left by that brush-off itself.
+   If so, an explicit Talk never rewrites the talked-to NPC, and the flight
+   helper instead tests an out-of-range record and may write its flight values
+   outside the NPC table. The automatic-contact route restores its own number
+   and is not affected. Executed on the original dispatcher with
+   only the random draw and the per-member damage routine stubbed, so the
+   per-member flash and rumble on this route are the shared damage path's
+   and were not observed here.
 
    The merchant brush-off is two stored strings printed back to back, the first
    ending with a space after the comma; `systems/shops.md` Section 2 owns it.
@@ -1468,7 +1492,11 @@ surcharge reads, so in ordinary play, away from Faulinei's hiding place, no
 conversation costs the party anything.
 
 While Faulinei is resident there, every completed conversation in that
-settlement ends with a theft. The cleanup prints the stolen-goods line, plays a
+settlement ends with a theft. The cleanup prints the stolen-goods line - the
+single stored line `Something was stolen!`, with no leading spaces, which
+begins and ends with its own line feed, so one blank row separates it from the
+conversation's last row and the cursor is left at column 0 of the row below
+it - then plays a
 fixed descending PC-speaker glissando, makes one fresh host-clock read, and
 assigns the transformed value as the shared random-generator state. Only then
 does it inspect the inventory categories and remove exactly one thing, taking
@@ -1494,6 +1522,15 @@ sound are not a virtue-standing write, and none of this is karma-driven; it is
 purely a consequence of the resident Shadowlord. `quest-flags.md` owns the
 ordering summary and `systems/shops.md` owns the paired overcharge.
 
+*(Added 2026-10-25, issue #300 Q20.)* Executed on the original opener,
+keyword loop, farewell and final cleanup with a shipped blob: with the
+selector naming Falsehood the farewell row was followed by a line feed,
+`Something was stolen!`, a line feed and then the glissando; with the
+selector naming another Shadowlord or none, nothing was printed. The line is
+printed before the sound. The printer was stubbed, so "one blank row" is
+inferred from the rule that a line feed arriving in a later call always costs
+a row (`systems/text-output.md` Section 10.4).
+
 **Town alarm.** The ALARM code (`0x8B`) runs the town alarm sweep owned by `systems/town-mode.md` Section 14; conversation passes no arguments and reads no result. Earlier revisions said this code ticked a resident curse logic that owned per-character byte counters; no such counters exist on this path, and that reading is retracted (R531). *(Corrected 2026-10-16, issue #298 Q14.)*
 
 ## 11. Boundaries and variations
@@ -1507,7 +1544,7 @@ quest-state specs.
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
 
-- The Talk command's entry handler — the liveness gate, facing-tile resolution, talk-through-tile fallback, status-tile gate, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/`.
+- The Talk command's entry handler — the direction prompt and the absence of any food, status or conversation gate (issue #300 Q12, executed with a memory-read watch on the provision counter), target-cell resolution, talk-through-tile fallback, status-tile gate, and dialog-index dispatch — derived from `u5-decomp/functions/TALK_OVL/`.
 - The reserved "not a real NPC" dialog index, the shape of the scene-keyed
   handler it dispatches, that handler's complete write set (party gold only),
   its two-valued result, and the absence of any follow-on path — derived from

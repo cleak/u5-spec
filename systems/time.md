@@ -360,10 +360,19 @@ compares against one of these cookies is guaranteed open on the first day of a
 new month. `formats/saved-gam.md` Section 10 carries the field offsets.
 
 **Per-character month counter.** Each of the sixteen character record slots
-carries a one-byte counter. The month rollover increments it, capped at 25.
+carries a one-byte counter. The month rollover adds one to it only when it is
+below 25. The test is unsigned, so any value of 25 or more is left unchanged.
+The `0xFF` that every shipped seed record carries therefore stays `0xFF` for
+the whole game: it never becomes 25 and is not clamped down to 25. Executed on
+the original clock routine: 0 becomes 1, 1 becomes 2, 24 becomes 25, and 25,
+26, 127, 128 and 255 stay as they are. A live town-bed sleep across a month
+boundary in an emulator showed the same rule on four records: `0xFF` stayed
+`0xFF`, 24 became 25, 0 became 1 and 25 stayed 25. *(Corrected 2026-10-25,
+issue #300 Q8: this sentence previously said "increments it, capped at 25",
+which read as a clamp that would turn `0xFF` into 25; retracted, `RETRACTIONS.md` R587.)*
 This is the same field the inn uses as a lodged guest's stay counter: leaving a
 companion at an inn zeroes the field in the leaving member's own record; each later
-28-day rollover adds one billable unit up to the cap; pickup treats zero as one
+28-day rollover adds one billable unit while the counter is below 25; pickup treats zero as one
 billable unit. The traced baseline has no separate active-party or non-lodged
 consumer for this byte. Implementations should still preserve and age it on all
 character records, because New Order, inn leave/pickup, and save/load move
@@ -399,7 +408,10 @@ The per-turn cleanup is called from each mode loop with the increment shown in S
   elapsed rest through its own loop rather than by passing one large value to the
   cleanup routine. The cleanup routine accepts larger rest/wait increments, and
   the traced town H-Hole-Up hours path advances elapsed rest through repeated
-  ten-minute cleanup calls until the target hour is reached. That same town path
+  ten-minute cleanup calls until the target hour is reached. After each such
+  call it runs the town dawn/dusk gate test (the hour changed and is now 5 or
+  20), as the town turn epilogue does (`systems/town-mode.md` Section 6;
+  added 2026-10-25, issue #300 Q6). That same town path
   also runs one bounded schedule/world-tick burst after a nonzero duration digit
   is accepted; it is not repeated once per requested hour. If the rest path stops
   early, already-applied time and tick side effects are not rolled back. The

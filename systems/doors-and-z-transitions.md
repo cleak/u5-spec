@@ -449,10 +449,14 @@ row.
 
 **Overworld K.** On the surface and underworld planes, K is the outdoor climb
 verb, and the order of its output is fixed. The handler first requires the
-Grapple quest flag; if the party does not have it, the row is completed with
+Grapple quest flag; if the party does not have it, the echo row continues with
 "With what?" — lower case *what*, a different stored string from the dungeon
-handler's "With What?" — and the command ends **without ever asking for a
-direction** and without rolling anything. It then requires the party to be on
+handler's "With What?" — which wraps at its space (`Klimb-With`, then `what?` on
+the next row, `systems/commands.md` Section 5.8), and the command ends **without
+ever asking for a direction** and without rolling anything. The refusal spends
+the outdoor turn. *(Corrected 2026-10-25, issue #300 Q22: this said the row "is
+completed with" the refusal, read as one row; retracted, `RETRACTIONS.md`
+R605.)* It then requires the party to be on
 foot; **every** other transport state is refused with "On foot!", the magic
 carpet included, which is the opposite of the town handler's rule below. Only
 then does it run the shared direction prompt of `systems/commands.md`

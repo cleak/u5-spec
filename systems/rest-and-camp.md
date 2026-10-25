@@ -47,8 +47,15 @@ Accepted terrain can pitch a camp/rest marker and enter the hours prompt.
 Rejected terrain refuses before the simulated rest loop.
 
 Town rest is tile-gated. The known public town-mode rule is that the player
-must be standing on an inn bed/rest surface; off that surface, the command
-prints the stock refusal and does not advance time.
+must be standing on an inn bed/rest surface. Off that surface, the command
+prints `Only in bed!` after its `Hole up- ` echo, wrapped at its space as
+`Hole up- Only` / `in bed!` (`systems/commands.md` Section 5.8), and returns the
+ordinary acted result. So the refusal costs the normal one-minute town turn;
+both were executed with the clock read back *(issue #300 Q14, Q22; the
+one-row reading published on 2026-10-25 is retracted, `RETRACTIONS.md`
+R605)*. *(Corrected
+2026-10-25, issue #300 Q8: this said the refusal "does not advance time";
+retracted, `RETRACTIONS.md` R588.)*
 
 Dungeon rest uses the dungeon mode's own terrain and danger rules. It shares
 the rest-with-watch and interruption concept, but dungeon tile encoding and
@@ -74,7 +81,9 @@ loop rather than by adding the whole duration to the clock at once.
 
 The resident overworld/dungeon rest-with-watch handler accepts the same visible
 duration shape as the town-hours path: Space and `0` cancel, while a digit
-`1` through `9` is echoed and becomes the requested rest duration. Before the
+`1` through `9` is echoed and becomes the requested rest duration. One
+difference: this handler echoes the cancelling Space or `0`, and the town
+path does not *(added 2026-10-25, issue #300 Q8)*. Before the
 dangerous-rest handoff, it counts active party members whose status can
 participate in the watch decision. If more than one eligible member is present,
 it asks whether to set a watch. Answering no, cancelling the member prompt, or
@@ -82,8 +91,37 @@ choosing a member who is not in Good status leaves the watch slot unset.
 Choosing a Good-status member records that member as the watcher for the
 dangerous-rest setup.
 
-The traced town bed/rest path accepts a single duration digit. Space and `0`
-cancel. Digits `1` through `9` define the target hour relative to the current
+The town bed prompt is `For how many hours? ` with no range text, and it
+prints after the command's `Hole up- ` on the same line. In the 16-column
+message window this shows as `Hole up- For` and then `how many hours?`. The
+trailing space fills the second row exactly, so the cursor waits at column 0
+of the next row. The prompt accepts only a digit `0` through `9` or Space.
+Every other key is discarded silently: no echo, line feed, message, reprint
+or cursor movement. Escape does not cancel, and Return, Backspace, letters,
+`-`, Ctrl-C and the arrow and direction keys are discarded the same way.
+Space or `0` cancels, also silently. Neither key is echoed and no line feed
+prints. No one sleeps and the bed loop passes no time. This differs from the
+dungeon hours prompt, which echoes the cancelling key. The command still
+reports acted, so a cancel costs the ordinary one-minute town turn and its
+epilogue, and the next command prompt starts on the row after
+`how many hours?`. The turn cost rests on static reading: the dispatcher sets
+the acted result before the command runs and keeps it on this path. One
+capture fits it: two cancelled bed rests and one cancelled Set Active Player
+(`0`) took the clock from 20:00 to 20:02. That capture settles the cost only
+if the cancelled Set Active Player is shown to cost nothing, and that has not
+been shown. A digit `1` through `9` is echoed at the cursor, followed by one
+line feed. The burst described below runs next. After it, the members are
+put to sleep and the stats panel repaints, and only then does `Zzzzzzz...`
+print. An arrest contact during the burst ends the command, and no
+`Zzzzzzz...` line prints. Waiting at the prompt never advances the clock.
+*Static reading, not run at the bed prompt:* the prompt reads keys through
+the same shared command reader as the dungeon hours prompt. With NumLock on,
+top-row and keypad `1`-`4` and `6`-`9` therefore arrive as direction codes
+and are discarded (`systems/dungeon-mode.md` Section 11;
+`systems/input.md` Section 5). Evidence for the rest of this paragraph:
+executed in an emulator at a Skara Brae inn bed, plus emulation of the
+shipped bed routine. *(Added 2026-10-25, issue #300 Q8.)* Digits `1` through
+`9` define the target hour relative to the current
 hour. If current hour plus digit exceeds 23, the original subtracts 23 rather
 than applying a normal modulo-24 wrap; preserve that compatibility edge. The
 handler then advances time until the current hour reaches that target or the
@@ -101,6 +139,32 @@ Compatibility rules:
   sleep or time *(added 2026-10-16, issue #298 Q30)*.
 - The same town path then advances elapsed rest through repeated ten-minute
   time-cleanup calls until the target hour or thrown-out branch.
+  *(Added 2026-10-25, issue #300 Q6.)* A step that changes the hour to 5 or
+  20 runs the town dawn/dusk gate pass (`systems/town-mode.md` Section 6).
+  This is the same pass, under the same test, that the town turn epilogue
+  uses. It runs straight after that step's clock advance, before the step
+  reseats the NPCs and tests the bed. So when the party is thrown out of bed
+  in the step that crosses 20:00 or 05:00, the gates have already toggled
+  before `Thrown out of bed!` prints. Every step also reseats the town's NPCs
+  for the current hour (`systems/npc-schedules.md` Section 12), and the bed
+  test comes after that reseat. No step advances the clock by more than ten
+  minutes, so each crossing of 05:00 or 20:00 during the sleep runs the pass
+  exactly once, in the step that crosses it. That includes a sleep that
+  wraps past midnight. A sleep that begins during hour 20 or hour 5 does not
+  run the pass for that hour, because none of its steps changes the hour to
+  that value. The gates are already in that hour's state anyway. Either the
+  epilogue ran the pass when the hour arrived with the party in town, or, if
+  the party entered later in the hour, the loader's night-band rule set them.
+  The minute is not reset: a one-hour sleep from 19:55 runs the pass at 20:05
+  and wakes at 20:05. Other executed cases: from 18:00 with `3`, the pass ran
+  at 20:00 and the sleep ended at 21:00; from 03:00 with `9`, 05:00 and
+  12:00; from 23:00 with `9`, 05:00 the next day and 09:00; from 20:00 with
+  `2`, the pass did not run and the sleep ended at 22:00. Evidence: static
+  reading of the bed loop, where the call resolves to the same pass the town
+  epilogue calls under the identical test, confirmed by an independent
+  verifier. Also executed: the shipped bed routine ran under emulation with
+  the real clock routine, and its calls to the pass were logged. The verifier
+  did not re-run the timings.
 - In the town path, an arrest/conflict contact event during the burst ends the
   command before any sleep status or time: only the burst's schedule and
   world-tick effects remain, and the ordinary town epilogue then re-evaluates

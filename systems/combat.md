@@ -2263,15 +2263,50 @@ precede the banner: the active-player gate and the Sword-of-Chaos gate. The
 turn's two status early-outs — the dragged-under (Corpser-held) arm that prints
 `ARGH!` and the asleep arm that prints `Zzzzz...` — come **after** it, so a
 dragged-under or sleeping combatant does get its full banner and then that line
-in place of a command. *The dragged-under arm in full (established 2026-09-04):*
+in place of a command. *(Added 2026-10-25, issue #300 Q26 and #301 Q1, Q2.)*
+Between the banner and either line the handler emits its own line feed and
+then the prompt marker, exactly as before a key read; this handler is one of
+the seven feed-and-marker sites of `systems/text-output.md` Section 10.2, and
+the pair has no gate here. So the status line is written on the marker row,
+directly after the marker: `>Zzzzz...` and `>ARGH!`, where `>` stands for the
+triangle end-cap glyph, not an ASCII character. Both `Zzzzz...` and `ARGH!`
+carry their own trailing line feed (shipped literals). When the banner's last
+row exactly fills the window's sixteen columns (for example
+`with bare hands:`), writing the sixteenth character has already wrapped the
+cursor, and the separate line feed spends the fresh row, so one blank row
+stands between the banner and the marker (the ordinary rule for a separately
+emitted feed, `systems/text-output.md` Section 10.4; the banner's own string
+carries no feed, so no full-row suppression applies). The asleep wake draw
+comes before `Zzzzz...` and prints nothing. In the dragged-under arm the order
+is banner, feed, marker, `ARGH!` and its feed, the short rumble, then the
+release draw below. `ARGH!` belongs only to the dragged-under state, which only
+a Corpser's landed hit on a party-side target sets (Section 11.1); there is no
+stun state, and charm never prints it. A charmed **party member** runs on the
+automatic driver (Section 6.1a) and gets no banner, marker or early-out; a
+charmed **monster** is keyboard-driven, gets its reduced banner, the feed and
+the marker, and can show `>Zzzzz...` but never `>ARGH!`. *The dragged-under arm in full (established 2026-09-04):*
 after `ARGH!` and a short rumble it draws one uniform `1..30` and compares it
 with the actor's **base step** (for a party member, the raw Dexterity copied at
 seating); if the draw is **below** the base step the actor surfaces - its name
-is printed followed by ` regurgitated!`, a longer rumble plays, the
+is printed followed by ` regurgitated!` and a line feed, on the row below
+`ARGH!`, so a release reads `>ARGH!` then `Avatar regurgitated!` on two rows and
+never `ARGH!Avatar regurgitated!` on one *(added 2026-10-25, issue #300 Q30;
+the name is the roster name as stored, since only party members are dragged
+under)*, a longer rumble plays, the
 dragged-under bit clears and the blanked sprite byte is restored from the
 record's primary tile byte - otherwise it stays held. Either way the turn ends
 there with no command read, so a party victim is released on any given turn
-with probability `(Dexterity - 1) / 30`. The asleep arm is independent: it draws one value from the inclusive range
+with probability `(Dexterity - 1) / 30`. *(Evidence for the 2026-10-25
+additions: the order of feed, marker, early-out lines, rumbles and the release
+line was executed on the original turn handler and release routine for a held,
+a released, an asleep, an asleep-and-woken and a Good party member, with the
+printer, marker, sound and generator recorded; the trailing line feeds are the
+shipped literals. Static only: that the wake helper prints nothing, the
+strictly-below boundary of the release comparison (only draws well above and
+well below were run), and the sixteen-column blank row, which rests on the
+issue #301 stock capture plus the printer rule rather than a run of the window
+printer. No capture of `>ARGH!` exists. Provenance: `u5-decomp/notes/`
+and the overlay directories under `u5-decomp/functions/`.)* The asleep arm is independent: it draws one value from the inclusive range
 `0..255` on the gameplay generator, and a value below 16 (probability
 `16/256 = 1/16`) wakes the sleeper - roster status back to Good, displayed
 sprite restored, asleep bit cleared, stats redrawn, no message. `Zzzzz...` then
@@ -2587,11 +2622,19 @@ The consequences for combat:
 - **NumLock off, no shift held.** Typed digits keep their ASCII meaning and reach
   the active-player-selection handler at the command prompt (Section 8), and they
   are inert inside the targeting cursor.
-- **NumLock on, or either shift held.** Eight of the ten digits become direction
-  codes. At the combat command prompt a typed `4` means "step west" rather than
-  "select member 4", and inside the targeting cursor a typed `4` moves the cursor
-  west. **Member selection by digit is therefore only reachable with NumLock
-  off.**
+- **NumLock on.** Eight of the ten digits, from the top row or the keypad,
+  become direction codes. At the combat command prompt a typed `4` means "step
+  west" rather than "select member 4", and inside the targeting cursor a typed
+  `4` moves the cursor west. **Member selection by digit is therefore only
+  reachable with NumLock off.**
+- **Shift held, NumLock off.** Only keypad keys arrive as digits, and their
+  `1`-`4` and `6`-`9` become direction codes. Shift with a top-row key types
+  punctuation (`$` for `4`, and so on), which is not a digit, so it neither
+  selects a member nor moves the cursor as a direction. *(Corrected
+  2026-10-25, issue #300 Q15: this bullet said "NumLock on, or either shift
+  held. Eight of the ten digits become direction codes"; the Shift half is
+  retracted for the top row, `RETRACTIONS.md` R589. The rule was executed at
+  the dungeon hours prompt, which uses the same keyboard layer.)*
 - Only `0` and `5` are unconditionally inert inside the cursor.
 
 This is deliberate: it is how the game reads the numeric keypad when NumLock is
@@ -4114,7 +4157,7 @@ continues on the same row.
 | Damage zero or negative | both | `<target> grazed!` **and nothing else** - the kill, sleep, hit and wound lines are all suppressed | the rising action-snap cue (`audio.md`, 1200 toward 2000 Hz) |
 | Target dies | both | `<target> killed!` | no cue of its own; the party death arm runs a full stats redraw, the monster death arms write their tiles (Section 6.3) |
 | Monster dies, vanish class | party attacker | `<monster> vanishes!` - **no trailing newline** - printed inside the damage handler, which then suppresses the kill line | none |
-| Monster damaged, split class | party attacker | `<monster> divides!` inside the damage handler, and the ordinary result line **still** prints after it | none |
+| Monster damaged, split class | any source (printed by damage application) | `<monster> divides!` with its own trailing line feed, inside the damage handler and only when a clone was placed; the ordinary result line (a wound grade) **still** prints after it, on the next row (Section 12). *(Corrected 2026-10-25, issue #300 Q9: the Side cell said "party attacker"; retracted, `RETRACTIONS.md` R594.)* | none |
 | Target slept | both | `<target> slept!` | none. *(**Corrected**: this row previously read "Target slept or stoned". There is no stoning or petrification effect in combat; the branch that reaches this line applies sleep, and it replaces ordinary damage - Sections 7 and 12.)* |
 | Party target poisoned | monster attacker | `<target> is poisoned!`, printed **inside** damage resolution - after the hit newline and before the result line - and the ordinary result line is then suppressed | none |
 | Ordinary landed hit, **party** target | monster attacker | `<target> hit!` - **flat and ungraded** | none |
@@ -4586,7 +4629,18 @@ player or refusal helpers, out-of-arena/counting helpers, and per-turn combat
 checks. They are not a sweep that converts combat corpse markers into durable
 world loot after the framer restores the pre-combat active-object table.
 
-**Splitting / replicating monsters.** Some classes (slimes, certain gargoyles) carry a "split on damage" flag. When such a monster is *damaged but not killed*, the function looks for an empty slot in the table, copies the parent's class byte into it, and prints `<monster name> divides!`. Up to eight attempts are made to find a free slot.
+**Splitting / replicating monsters.** *(Added/corrected 2026-10-25, issue #300 Q9.)* Exactly two classes carry the "split on damage" flag: Slime (class 24) and Gargoyle (class 30). Damage application tests it only when the damage is nonzero, is not the instant-kill value, and leaves the monster with hit points above zero; a fatal hit never splits. At most one clone is made per damaging event, by up to eight attempts that stop at the first success.
+
+- **Where the clone goes.** Each attempt draws an offset of -1, 0 or +1 on each axis, X first, each value equally likely and the axes independent, so the candidate is one of the nine cells of the 3x3 block centred on the parent. While either coordinate falls outside the arena's `0..10`, both coordinates are redrawn; that redraw belongs to the same attempt and does not count as a new one (static reading). The candidate must then pass the same arena-cell acceptance test a combat step uses (Section 8.1, "A bare direction key does not attack"): its arena terrain must be passable for the parent's own tile; no live combatant may stand there (a dead or dragged-under combatant does not block, an asleep one does); and no blocking object may stand there - Poison, Sleep and Fire markers, corpse markers and empty records do not block, while an Energy Field marker blocks (consistent with the field-contact table of Section 11). The parent's own cell can be drawn but is always refused, because the parent stands on it, so a clone always appears on one of the eight neighbours and never under its parent.
+- **How the attempts choose.** The attempts are independent random cell draws with replacement - not a scan of cells, not a scan of slots, and unrelated to the order of the monster descriptors. An accepted cell goes to the ordinary monster placement, which takes the first free combatant slot in the monster range (slots 6 through 31, twenty-six slots) and the first free object record. A refused cell, or a placement that finds no free monster slot, fails that attempt and the next one begins. So a band of sixteen slimes splits normally while a monster slot is free and a neighbour is open; with all twenty-six monster slots in use, all eight attempts are still drawn and every one fails at placement.
+- **What the clone is.** A fresh hostile, monster-side placement of the parent's class, with no charm, asleep or other status bit (a charmed parent's clone is not charmed), its own speed roll and phase, and the class's base sprite frame. Its current hit points are then overwritten with the **parent's remaining hit points after this hit**, not the class maximum. The parent itself is unchanged by the split.
+- **The line.** Only when a clone was actually placed, `<monster> divides!` prints, naming the damaged monster, with its own trailing line feed (shipped literal). A split whose eight attempts all fail prints nothing and leaves everything as it was.
+- **Order and source.** The line is printed inside damage application (step 4 of "Order, stated once", Section 11.1), so it comes after the impact presentation and the hit line feed and before that attack's result line. The result line still prints after it, on the next row; the target survived, so it is a wound grade, never `killed!`. Because the line belongs to the damaged monster's damage application, it prints whatever dealt the damage - a party member, a charmed monster, a spell that uses the shared result narrator, or any other damage to a split class that does not kill it. For a charmed monster's hit the two rows are `<monster> divides!` then `<monster> <wound grade>`, with nothing between them. That the wound-grade line follows is static reading of the shared narrator (a monster target always takes the wound-grade arm, whoever the attacker is), not an executed run.
+- **Generator use**, for an implementation that replays the gameplay generator: every attempt makes two range draws (executed: a split whose eight attempts all fail made sixteen); each off-arena redraw adds two more; a successful placement adds the one range draw of the ordinary monster speed variation (Section 5.3; static reading).
+
+The earlier text here said the function "looks for an empty slot in the table" and that "up to eight attempts are made to find a free slot"; the attempts are neighbour-cell draws and that wording is retracted (`RETRACTIONS.md` R593).
+
+Source provenance: executed original damage application with the shipped arena-cell test, neighbour-offset routine, terrain reader, terrain-class test and placement routine (six scenarios: own-cell draw then a neighbour, all own-cell draws, a corner with an off-arena redraw, monster slots full, impassable neighbour, fatal hit; printer, range draw and speed roll scripted), the shipped `DATA.OVL` literal, and static reading of the redraw loop, the speed roll and the narrator, recorded in `u5-decomp/notes/` (overlay directories under `u5-decomp/functions/`); re-run by an independent verifier.
 
 **Other status changes** — Sleep, Poison, Charm — are applied by separate
 per-effect handlers (a poison-tick handler firing once per round, a sleep-effect

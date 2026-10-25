@@ -312,6 +312,17 @@ tile under the triggering active object, a water/river predicate, whether the
 party is aboard a ship, and whether the triggering object belongs to the ship
 family. Apart from that one ship-family test, the triggering object's own sprite
 byte is not an input to the arena choice.
+*(Added 2026-10-25, issue #301 Q6.)* The terrain read is the world tile at the
+triggering hostile's own X/Y, never the party's cell. Contact fires with the
+hostile one step away, still on its own cell, and A-Attack reads the target's
+cell, so a party standing in swamp that is engaged by a hostile on grass fights
+in the grass arena; the swamp arena needs the hostile itself to stand on swamp.
+The one case where the two cells coincide is the bridge toll, whose Troll is
+created on the party's own cell. Whether, and how often, outdoor hostiles can
+stand on swamp at all is the outdoor walkability question and is not settled
+here (`OPEN-QUESTIONS.md`). Static reading of the outdoor entry step and its
+callers, recorded in `u5-decomp/notes/` (overlay directories under
+`u5-decomp/functions/`), confirmed by an independent verifier.
 The full selection table is published in `systems/encounters.md` Section 4; in
 outline, ship-versus-ship and party-aboard-ship cases take dedicated arenas,
 water takes a water arena, the Shadow Lord takes his own arena, and everything

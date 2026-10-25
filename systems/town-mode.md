@@ -355,7 +355,7 @@ Town-class maps ship with gate approaches in their daytime, open form. Tile `0x8
 
 The stock assets use a single authored pair: every `0x87` marker that participates in the pass has `0x44` cobble in the paired south cell on disk. Applying the pass changes that byte to `0x99`, the portcullis tile; applying it again changes the byte back to `0x44`. The routine does not validate the paired byte before XORing it, so custom maps should only place `0x87` above a byte whose `value ^ 0xDD` partner is intentional.
 
-On entry and floor reload, the loader runs the pass only in the night band: hours `0..4` and `20..23`. It skips the pass during the daytime band, hours `5..19`, leaving the shipped open-gate bytes in place. While the player remains in town, the normal turn epilogue watches for hour changes; when the new hour is `5` or `20`, it runs the same XOR pass against the current tile buffer. The visible effect is:
+On entry and floor reload, the loader runs the pass only in the night band: hours `0..4` and `20..23`. It skips the pass during the daytime band, hours `5..19`, leaving the shipped open-gate bytes in place. While the player remains in town, the normal turn epilogue watches for hour changes; when the new hour is `5` or `20`, it runs the same XOR pass against the current tile buffer. The town-bed Hole-up loop applies the same test after each of its ten-minute steps (Section 12), so sleeping through 20:00 closes the gates and sleeping through 05:00 opens them *(added 2026-10-25, issue #300 Q6)*. The visible effect is:
 
 - A player who enters at 6 AM sees open gates; if they stay until 8 PM, the boundary pass toggles those paired cells to portcullises.
 - A player who enters at 4 AM has the loader close the gates; when the clock reaches 5 AM, the boundary pass opens them again.
@@ -390,7 +390,7 @@ After entry, control sits in a tight loop that reads one command per iteration a
 
 Ahead of step one, each iteration runs the shared party-capability check that all three exploration modes use, described in `systems/main-loop.md` Section 6: if nobody in the party can act but somebody is asleep, the loop prints the sleep line and passes the turn without reading a command; if nobody can act and nobody is asleep, it runs the total-party-defeat sequence of `systems/blackthorn.md` Section 7 instead. Town mode adds no condition of its own to that opening check. Town is, however, the one mode traced to use the same check a second time, after an acted command and ahead of the epilogue, with a different consequence (the recheck under step 4); that is a second call, not a change to the opening one *(scope added 2026-10-16, issue #298 Q40)*.
 
-The dispatcher's return code decides when to skip parts of the epilogue: actions that take no turn (a cancelled command, a "What?" fallthrough, the buffer-toggle key) skip both the time advance and the schedule tick. Actions that consume more than one turn advance the clock once per inner action.
+The dispatcher's return code decides when to skip parts of the epilogue. Only a route that reports no action skips both the time advance and the schedule tick. In town these are: an unrecognised key (the dispatcher's own `What?`), the `D` and `W` stock refusals, `Q`, the buffer toggle, and the forwarded no-action results of `commands.md` Section 3, namely the `K` `What?` and `-On foot!` refusals, the `A` on-foot refusal and `B`'s final `What?`. Cancelling or refusing is not free in itself. Most letters report acted whatever their handler did. So each of the following spends one minute and the upkeep pass: a direction prompt cancelled with Pass, a cancelled New Order, the New Order leader refusal, `Fire-What?`, `You have none!`, `Nobody's here!`, `Enter what?`, the off-bed `Only in bed!` and `Nothing to attack!`. The per-letter table is in `commands.md` Section 3. *(Corrected 2026-10-25, issue #300 Q14: this sentence said that "a cancelled command" and "a "What?" fallthrough" take no turn; retracted, `RETRACTIONS.md` R602.)* Actions that consume more than one turn advance the clock once per inner action.
 
 Town is the only mode that reads the dispatcher's status as more than a boolean.
 Its four-way test is specified in `commands.md` Section 3: the arrest-cleanup
@@ -501,7 +501,7 @@ unestablished and read the player's position from the world-state globals.
 
 ## 9. Conversation: the Talk command
 
-The Talk command triggers the conversation engine. The handler reads the player's current facing direction, computes the facing tile as `(player_x + dx, player_y + dy)`, and looks for an NPC whose linked sprite occupies that cell. If found, the NPC's dialogue index is handed to the conversation engine. If not found, the handler tests the facing tile for *talk-through* status (shop counters, low fences); if pass-through, it advances once more and queries again. If still no match, "Nobody's here!" is printed.
+The Talk command triggers the conversation engine. The handler prompts for a direction (`systems/commands.md` Section 5.4) and uses the chosen one: Space ends Talk with `Pass` and the ordinary acted outcome, and nothing tests provisions or party status. It computes the target cell as `(player_x + dx, player_y + dy)` and looks for an NPC whose linked sprite occupies that cell. *(Corrected 2026-10-25, issue #300 Q12: this paragraph said the handler reads the player's current facing direction; it uses the direction chosen at its own prompt, and that text is retracted, `RETRACTIONS.md` R597.)* If found, the NPC's dialogue index is handed to the conversation engine. If not found, the handler tests that cell for *talk-through* status (shop counters, low fences); if pass-through, it advances once more and queries again. If still no match, "Nobody's here!" is printed.
 
 A pre-conversation gate then inspects the **live map tile at the resolved cell** — not the NPC's sprite. Tile `0xAB` (the bed tile) produces the "Zzzzzz..." line and tile `0x9D` (the mirror tile) produces the "No response!" line; both return without entering the engine, consuming the dialogue index, or reaching shop-trigger dispatch. Every other tile value falls through. `systems/conversation.md` Section 2 owns the full gate contract, and Section 9 of that document owns the entry sequence a successful Talk produces - a fixed envelope of stored lead-ins, the NPC's own Description and Greeting entries and the keyword prompt, with **no engine-composed sentence** anywhere in it.
 
@@ -532,6 +532,10 @@ lifecycle, and turn results.
 **Retraction (2026-08-22).** This spec previously said town mode adds "a small amount of local policy" to Open — a mounted refusal, a direction prompt, an accepted closed-door and gate family, and a separate town chest path. That paragraph is withdrawn. It described the town **climb** handler, not Open: the mounted refusal, the direction prompt and the accepted fence/gate family all belong to K-Klimb and are already specified under "K-Klimb inside a location" in Section 7. Town mode contributes no local policy to Open at all — O routes straight to the shared Open handler, whose door, gate, and chest behavior is specified in `doors-and-z-transitions.md` and `containers.md`. If opening or stepping through a door exposes a stair transition, the stair/floor-change handling described in Section 7 runs.
 
 **Attack.** A-Attack prompts for a direction and targets the adjacent cell. It refuses attacks from blocked posture/terrain states, resolves a small smashable-prop case, then looks for a live NPC linked to the target sprite. A valid hostile or attackable NPC target plays the attack presentation and either removes the NPC through the death flow or triggers town-wide alarm effects. Invalid targets produce the ordinary failure text. Attacking in town is therefore an in-town scene-state mutator: killing a townsperson or a named character records that slot as permanently removed in the per-scene removal mask (Section 4), while killing a guard or a creature records nothing and that slot is placed again on the next entry.
+
+**Which targets are refused, and the resident Shadowlord** *(added 2026-10-25, issue #300 Q18)*. Apart from the terrain arms above, the only targets refused with `Nothing to attack!` are: a cell with no active object; an object whose type is below `0x40`; a type in the field band `0xE8..0xEF`; and a type in the regalia band `0xB4..0xB7`. Everything else is a valid target. The terrain test, whose cell set includes the stocks, runs **before** the conflict chain, so a target (a Shadowlord included) standing on such a cell takes that terrain arm instead of opening a fight (static reading). The karma penalty and the town alarm apply only to actor types below `0x80`; the lich/death-mage family `0xD8` raises the alarm only; the Shadow Lord actor `0xFC` triggers neither. The per-scene removal mask is written only for types below `0x80` other than guards, and for the regalia band, so it is never written for `0xFC`.
+
+A resident Shadowlord (Section 13) is therefore a **valid conflict target**: the attack reaches the NPC-conflict chain of Section 14 and the ordinary terrain-combat entry, which forces arena 10 for `0xFC..0xFF` (`systems/encounters.md` Section 4). The fight costs no karma, raises no alarm and records no removal. Observed in Britain with the Shadowlord one cell north: `Attack-North`, a blank row, the centred `SHADOW LORD` group banner, a blank row, `*** CONFLICT ***`, a blank row, then the first combat prompt; the arena was the Shadow Lord arena with a single Shadow Lord (the town-style count-one override, since the class is not Guard). With the Sceptre carried, `The Sceptre is reclaimed!` follows the banner's blank row, its sting plays, the flag clears, and `*** CONFLICT ***` follows on the very next row (`systems/encounters.md` Section 4). After the fight, whatever its outcome, the chain clears the Shadowlord's roster slot and its linked active-object record, reloads the map and re-runs the install; with no `0xFC` record left and the hideout slot still naming this town, the Shadowlord is installed again at its fixed home cell with a fresh actor record (Section 14). Stonegate's roster also carries three `0xFC` figures; they are equally valid targets that open arena 10 with no karma loss, no alarm and no removal mark, and because Stonegate is never a host nothing re-installs them after the fight: the next fresh entry's roster load places them again. Turn cost is as for any town A-Attack that fights (Section 7). The transcript, arena and count were observed by running the original under an emulator, with and without the Sceptre; the target, karma, alarm and removal rules, the Stonegate figures and the post-fight re-install are static reading (a run with the Sceptre carried could not finish the fight: the Shadow Lord teleports and the arena walls blocked flight).
 
 **Push.** P-Push is the shared movable-tile command specified in
 `commands.md`. In town-family scenes it samples the adjacent cell relative to
@@ -755,7 +759,7 @@ different town loop.
 
 ## 12. The Hole-up command
 
-H-Hole-up is gated by terrain: in town mode it runs only when the player is standing on a bed tile in an inn. On a bed it prompts for a duration in hours; off it, "Not here!" prints and no turn is consumed. The shared command contract is in `systems/rest-and-camp.md`.
+H-Hole-up is gated by terrain: in town mode it runs only when the player is standing on a bed tile in an inn. On a bed it prompts for a duration in hours. Off a bed, the command prints `Only in bed!` after its `Hole up- ` echo, and the wrap-aware printer breaks it at its space, giving `Hole up- Only` and then `in bed!` on the next row, as `systems/commands.md` Section 5.8 lists. *(Corrected 2026-10-25, issue #300 Q22: this sentence said the refusal prints "on one row"; retracted, `RETRACTIONS.md` R605.)* It returns the ordinary acted result, so the refusal costs the normal one-minute town turn and runs the epilogue. Both the layout and the turn cost were executed in the unmodified original, with the clock and turn-step counter read back from a save made after the refusal *(issue #300 Q14)*. *(Corrected 2026-10-25, issue #300 Q8: this sentence previously said that off a bed "Not here!" prints and "no turn is consumed"; both halves are retracted, `RETRACTIONS.md` R588.)* The shared command contract is in `systems/rest-and-camp.md`.
 
 When the rest is accepted, control hands off to the rest handler in a shared
 overlay. The handler prompts for hours, walks the party status records, and
@@ -768,6 +772,12 @@ no further message; it returns the ordinary acted result, so the normal town
 epilogue follows and re-evaluates contact. A conversation-contact event (kind
 `0x74`) does not interrupt; the next burst pass clears it. Otherwise the party
 sleeps and time advances in ten-minute steps with no further schedule passes.
+Each step runs the dawn/dusk test of Section 6 straight after its clock
+advance, then reseats the NPCs for the current hour and tests the bed, so a
+crossing of 05:00 or 20:00 toggles the gates even in a step that ends with
+`Thrown out of bed!` (`systems/rest-and-camp.md` Section 4). The reseat is
+the clear-and-re-place pass of `systems/npc-schedules.md` Section 12, not a
+schedule walker pass *(added 2026-10-25, issue #300 Q6)*.
 *(Corrected 2026-10-16, issue #298 Q30: this previously described a burst per
 requested hour and an interruption after elapsed time - `RETRACTIONS.md`
 R538.)* If the requested duration completes,
@@ -907,13 +917,61 @@ The actor is also given a stationary three-waypoint schedule pinned to that same
 cell, so it does not wander away from its install position on its own.
 
 The host is also announced to the player. After the map has been loaded and the
-host recorded, a settlement that hosts a Shadowlord prints one line naming
+host recorded, a settlement that hosts a Shadowlord prints one notice naming
 which — an air of falsehood, of hatred, or of cowardice doth surround thee —
-and plays the associated tone. That single line is the only in-town notice, and
+and plays the associated tone. That single notice is the only in-town notice, and
 a settlement hosting none prints nothing. Stonegate's separate entry
-presentation, described at the end of this section, is a different producer: it
-prints one such line per still-living Shadowlord regardless of where each is
-hiding.
+presentation, described at the end of this section, uses the same notice for
+each still-living Shadowlord regardless of where each is hiding.
+
+**The notice's exact shape** *(added 2026-10-25, issue #300 Q4 and Q17)*. Every
+Shadowlord notice, in a hideout town and in Stonegate alike, is the same three
+pieces in the same order: a line feed, the words `An air of`, a line feed, the
+Shadowlord's virtue-opposition word (`falsehood`, `hatred` or `cowardice`),
+then ` doth surround thee...` and a line feed. In the sixteen-column message
+window that renders as one blank row and three text rows:
+
+| Row | Content |
+|---|---|
+| 1 | blank |
+| 2 | `An air of` |
+| 3 | `falsehood doth` (or `hatred doth`, `cowardice doth`) |
+| 4 | `surround thee...` (exactly sixteen characters, so it fills the row) |
+
+The overworld Enter narration ends with a line feed after the centred proper
+name, so the cursor is already at the start of a fresh row when the notice
+begins, and the notice's own leading line feed leaves exactly **one** blank row
+between the centred name and `An air of`. The next command prompt follows after
+the ordinary blank row between commands. Observed on Britain hosting
+Falsehood, the message window reads: the `Enter towne` echo, a blank row, the
+centred `BRITAIN`, a blank row, the three notice rows, a blank row, then the
+prompt. A save loaded inside a hideout town prints the notice too, with no
+narration before it, so the notice follows whatever the window last showed.
+
+After the text, the notice plays one software envelope, `(1, 2000, 60000, 1,
+6600)` in the tuple order of `systems/audio.md` Section 5.4. The five values
+are constants: they do not depend on which Shadowlord is named, so all three
+Shadowlords sound identical. The tone is one unmoving pitch that swells and
+fades, it blocks for its whole length, and muting takes the generator's silent
+arm as every envelope does; `systems/audio.md` Section 8.6 gives the pitch and
+duration.
+
+The notice sits at a fixed point in town entry. In order: the map loads; the
+resident Shadowlord install runs, recording the host before its one-at-a-time
+reject (so a town whose install is rejected still announces its host); the
+status panel is redrawn; the shared party-capability check runs; one world tick
+draws the location; the notice prints and its tone plays; and, in a hideout
+town, the resident-entry sweep described next runs last. **If the capability
+check finds nobody in the party able to act and nobody asleep, entry stops at
+that check**: no notice, no tone and no resident-entry sweep.
+
+Source provenance: the notice producer, the entry order and the envelope
+constants are static reading of the town-entry and presentation routines, recorded in
+private analysis in `u5-decomp/notes/`; the text pieces are the shipped strings. The
+layout, the single blank row, the pitch and the duration were observed by
+running the original under an emulator at a fixed 3000-cycle setting (Britain
+hosting Falsehood, Stonegate with all three Shadowlords living, and a Britain
+save loaded in town). The capability-check gate is static reading only.
 
 Which of the three is hosted also selects a one-shot, town-wide NPC state
 sweep that runs at the end of the same entry pass. This resident-entry sweep is
@@ -958,12 +1016,31 @@ acquiring flight AI. A compatibility implementation should decide deliberately
 whether to reproduce this defect. In a town hosting no Shadowlord, and in a
 town whose install was skipped by the row-`4` guard, the sweep does not run.
 
-Stonegate has a separate entry-time presentation surface. On entry, the town
-setup path can play a Sceptre-gated prelude row when the party carries the
-Sceptre of Lord British. After the location is drawn, the same presentation
-helper walks the three Shadowlord runtime slots and, for every Shadowlord that
-is still alive, prints the corresponding "air of" virtue-opposition line and
-plays the associated tone. This is not Lord British's Castle, not an ordinary
+Stonegate has a separate entry-time presentation surface. On entry, when the
+party's Sceptre flag is set (the flag `systems/encounters.md` Section 4 clears
+when a Shadow Lord fight reclaims the Sceptre), the setup path silently removes
+roster slot 9, the Sceptre item figure that stands on the centre cell ringed by
+the trapdoors. Nothing is printed and nothing sounds. The figure is therefore
+absent while the Sceptre is carried, and it is placed again by the roster load
+of the next entry after a Shadow Lord fight has reclaimed the Sceptre and
+cleared the flag. Earlier text here said this step "can play a Sceptre-gated
+prelude row"; no such row exists and that claim is retracted (R590). *(Corrected
+2026-10-25, issue #300 Q4; the slot clear is static reading plus the shipped
+Stonegate roster, not executed.)* After the location is drawn, the same notice
+producer walks the three Shadowlord runtime slots **from the third down to the
+first** and, for every Shadowlord still below the vanquished marker, prints that
+Shadowlord's notice and plays its tone, so with all three living the order is
+**cowardice, then hatred, then falsehood**. Each notice carries its own leading
+blank row, so the first is separated from the `Enter keep` echo, blank row and
+centred name by one blank row and consecutive notices by one blank row, and
+each tone plays to completion before the next notice's text prints: with all three living
+that is about 7.7 s of blocking on the reference-machine model (three tones of
+about 2.58 s), and about 8.0 s was measured at the 3000-cycle emulator setting. The party-capability gate above applies
+here too. Stonegate never runs the resident-entry sweep: it is never a host,
+and its entry branch skips the hideout path. *(Added 2026-10-25, issue #300 Q4
+and Q17. The all-living order, layout and three tones were observed under the
+emulator; that a vanquished Shadowlord's notice is skipped and the rest keep
+their order is static reading only.)* This is not Lord British's Castle, not an ordinary
 throne-room audience, not a generic town audience-prompt system, and not an
 independent trigger queue. The three-slot producer is the Shadowlord hideout
 state described in `catalogs/quest-graph.md`; values with the vanquished marker
@@ -1116,7 +1193,7 @@ absolute pitch here is a static model carrying the tolerance stated with it.
 
 Some named locations contain hostile NPCs. A guard in Blackthorn's keep, for example, is a normal NPC for most of the game but turns hostile under specific quest conditions; the type byte encodes "hostile when flag X is set". When an NPC's hostile predicate is true, the walker stamps the NPC's current sprite with a hostile tile.
 
-A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). A-Attack directed at a town NPC plays the attack presentation, can smash a small prop, can mark or clear the targeted NPC through the town death flow, and can trigger the town-wide alarm sweep. An earlier revision of this section also said the town overlay "does not call the combat framer or swap to a `.CBT` arena"; that is withdrawn. The town overlay has a live NPC-conflict chain, entered both from A-Attack and from post-action cleanup, that hands the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses, so a town fight is an ordinary arena fight: ordinary town ground resolves to the cobble arena, and the scene-keyed town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). On exit the town chain clears the NPC slot, reloads the town map, and re-runs the Shadowlord install pass of Section 13 (which, in a hideout town whose Shadowlord is still standing in the active-object table, is rejected by the one-at-a-time check and does nothing). The full contract is in `systems/encounters.md` Section 7. The reload after the fight calls the time cleanup with a zero increment (daylight and dirty flag, no minute), applies the night-time dawn/dusk substitution when the hour is before 5 or after 19, runs the hideout blight pass where it applies and marks visibility dirty; it runs neither walker. None of this depends on how the fight ended. The command still counts as acted, and the ordinary epilogue of Section 7 runs once afterwards; a fight raised by contact from post-action cleanup instead comes after that turn's epilogue, and nothing of the epilogue runs after it *(added 2026-10-16, issue #298 Q40)*.
+A hostile NPC adjacent to the player blocks movement onto their cell ("Bump!"). A-Attack directed at a town NPC plays the attack presentation, can smash a small prop, can mark or clear the targeted NPC through the town death flow, and can trigger the town-wide alarm sweep. An earlier revision of this section also said the town overlay "does not call the combat framer or swap to a `.CBT` arena"; that is withdrawn. The town overlay has a live NPC-conflict chain, entered both from A-Attack and from post-action cleanup, that hands the target NPC's linked active-object slot to the same terrain-combat entry the overworld uses, so a town fight is an ordinary arena fight: ordinary town ground resolves to the cobble arena, and the scene-keyed town-style override forces the monster count to one unless the target's class is Guard (whose stat row carries the sentinel count eight). On exit the town chain clears the NPC slot, reloads the town map, and re-runs the Shadowlord install pass of Section 13 (which, in a hideout town whose Shadowlord is still standing in the active-object table, is rejected by the one-at-a-time check and does nothing). The re-run does install a Shadowlord in three cases: when the fight was against the resident Shadowlord itself, whose record the slot clear has just erased; when the entry install had been skipped because the party's Y was `4`; and when the entry install had been rejected because a Shadowlord summoned elsewhere was standing then and has since left. In each the Shadowlord appears at its fixed home cell. The blight pass runs whenever a host is recorded, as Section 3 already says. *(Added 2026-10-25, issue #300 Q18; static reading.)* The full contract is in `systems/encounters.md` Section 7. The reload after the fight calls the time cleanup with a zero increment (daylight and dirty flag, no minute), applies the night-time dawn/dusk substitution when the hour is before 5 or after 19, runs the hideout blight pass where it applies and marks visibility dirty; it runs neither walker. None of this depends on how the fight ended. The command still counts as acted, and the ordinary epilogue of Section 7 runs once afterwards; a fight raised by contact from post-action cleanup instead comes after that turn's epilogue, and nothing of the epilogue runs after it *(added 2026-10-16, issue #298 Q40)*.
 
 NPCs whose hostile predicate is always true remain schedule-driven town actors between fights. When the scheduler reports an engagement event, town post-action cleanup can open ordinary conversation or a shop, handle a regime demand, or take the arrest, frighten, conflict or slot-clear paths described below; those routings are what this section owns, while the arena fight itself belongs to the encounter and combat specs.
 
@@ -1146,8 +1223,14 @@ The two rewrite helpers have these exact contracts:
 
 Talk recognizes `0xFD` as a sentinel independently of the NPC's original
 `.TLK` record and produces the canned cowering response instead of loading that
-record. Sentinel `0xFE` is distinct: Talk routes it to the shouted brush-off and
-then attempts the same forced-flight helper.
+record. Sentinel `0xFE` is distinct: Talk routes it to the shouted brush-off
+(`"Begone,` / `vermin!"`), then the whole-party damage pass (each non-Dead slot
+below the party count takes its own `1..8`, `systems/overworld.md` Section
+6.2.4), then the forced-flight helper; on explicit Talk that helper is not given
+the talked-to NPC's number (`systems/conversation.md` Section 2). *(Corrected
+2026-10-25, issue #300 Q19: this sentence said only that Talk "then attempts the
+same forced-flight helper", omitting the damage and implying the talked-to NPC
+is the target; that reading is retracted, `RETRACTIONS.md` R601.)*
 
 The alarm's routing after the occupancy test is also exact:
 
@@ -1184,8 +1267,11 @@ The earlier attack/non-attack interpretation of these event families is
 withdrawn (R399).
 
 AI values 6/7 produce **arrest/conflict contact**. Dialogue `0xFE` takes
-precedence and prints the shouted brush-off before applying flight to that
-NPC. Otherwise the exact linked live guard sprite byte `0x70` enters arrest;
+precedence and prints the shouted brush-off (a line feed, then the two-row
+literal with its own trailing line feed), runs the whole-party damage pass,
+and then applies flight to that NPC, under the helper's usual type and
+schedule gates; there is no `Attacked!`, no conflict and no arrest *(added
+2026-10-25, issue #300 Q19; executed on the town post-action cleanup)*. Otherwise the exact linked live guard sprite byte `0x70` enters arrest;
 other sprites take the conflict outcome. At that outcome, an actor byte at
 least `0x40` prints `Attacked!` and enters the NPC-conflict chain; a lower byte
 clears the NPC slot. The giant rats around the starting hut were observed
@@ -1199,7 +1285,13 @@ traces in `u5-decomp/functions/NPC_OVL/` and `u5-decomp/functions/TALK_OVL/`.
 
 Three routings reach the arrest sequence, and all are now bounded. First, an approaching guard reaches the party with the ordinary guard sprite and without the cowering-dialogue sentinel. Second, a different flagged-NPC event automatically dispatches that NPC's reserved Blackthorn guard demand; refusal, insufficient gold, a missing Badge aura, or a wrong password produces its sole positive outcome and enters arrest. Third, the player explicitly uses `T` on the same reserved guard-demand figure and receives the same failed outcome. The resident command dispatcher converts only that explicit-T failure into town result `2`; result `2` has no other command producer, skips a fresh schedule walk, and passes the arrest discriminator to cleanup. Because the schedule walker is also the only ordinary clearer of its event bytes, the original examines a retained approach-event code before the result-derived discriminator; that rare prior-event state can take precedence. In the normal no-event state, result `2` enters arrest directly. Ordinary NPC conversations, shops, canned replies, successful payment, and the accepted password all use the normal action result and do not take this route.
 
-The arrest sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In Blackthorn's castle when nobody can act and nobody is asleep, the arrest helper returns silently without an audience or surrender prompt; the exploration loop's separate defeat check remains responsible for rescue. The earlier ordinary-surrender fallback for this palace case is withdrawn (R442). In every other location it prints the arrest challenge (`"Thou art under arrest!"`, a blank row) and asks whether the party will come quietly (`"Wilt thou come quietly?"`, a blank row, a `:` answer row that echoes `Yes` or `No!`; the surrender line is `The guard strikes thee unconscious!` - *literals added 2026-09-06, issue #206*): surrendering prints the knockout and awakening lines, fades, moves the party to the Yew jail scene at `(25, 4, 0)`, marks the view dirty, advances time in twenty-minute cleanup calls until the hour reaches 08:00, clears the jail-scene latch, and returns as a consumed turn. Refusing prints the guards' challenge, triggers the alarm sweep, and consumes the turn. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
+The arrest sequence itself branches on the current location before it prints anything. Inside Lord Blackthorn's Castle, and while the shared party-capability check reports that at least one member can act or is asleep, it plays the Blackthorn audience/capture cinematic and then re-runs town entry setup for the same location; `systems/blackthorn.md` owns that path. In Blackthorn's castle when nobody can act and nobody is asleep, the arrest helper returns silently without an audience or surrender prompt; the exploration loop's separate defeat check remains responsible for rescue. The earlier ordinary-surrender fallback for this palace case is withdrawn (R442). In every other location it prints the arrest challenge (`"Thou art under arrest!"`, a blank row) and asks whether the party will come quietly (`"Wilt thou come quietly?"`, a blank row, a `:` answer row that echoes `Yes` or `No`; the surrender line is `The guard strikes thee unconscious!` - *literals added 2026-09-06, issue #206*). The answer key is read case-insensitively: `Y` or `y` and `N` or `n` are accepted and every other key is ignored. The refusal echo is `No`, not `No!`; the earlier `No!` literal is retracted (R592) *(corrected 2026-10-25, issue #300 Q7)*.
+
+**Surrender, in order** *(corrected 2026-10-25, issue #300 Q7)*: the colon row completes with `Yes`; a blank row and `The guard strikes thee unconscious!`; the fade; a blank row and `Thou dost awaken to...`; the party is placed in Yew at `(25, 4, 0)` and the view is marked dirty; the hour is tested **before** the first twenty-minute cleanup step, and steps run only while the hour is not 8, so no time passes at all if the hour is already 8 and otherwise the clock runs forward to the next 08:00, which can be almost a full day; the jail-scene latch and the floor are cleared; and then **town entry setup is re-run as a fresh entry of Yew** (Section 5: roster reload, map load, status redraw, capability check, world tick). The install stamps the no-host marker before its row-`4` test and the party now stands on row 4, so no Shadowlord is installed and no notice prints, even when Yew is a hideout. The next loop iteration consumes the fresh-entry latch as after any town entry.
+
+**Refusal** *(corrected 2026-10-25, issue #300 Q7)*: the colon row completes with `No`, then a blank row, `"Then defend thyself, rogue!"` and the alarm sweep, and the sequence does **not** end there. Post-action cleanup then takes its conflict follow-up: when the linked object's actor byte is at least `0x40` (a guard's always is) it prints `Attacked!` with its leading line feed and enters the NPC-conflict chain, an ordinary town arena fight (`systems/encounters.md` Section 7). The fight's target is, on every route, the roster index held in the retained contact state, not necessarily the guard the party was dealing with: on the explicit-`T` route (town result `2`) cleanup calls the arrest even when that index is `0` or stale, and which NPC is then fought on that route is not established (`OPEN-QUESTIONS.md`).
+
+**Where the arrest sits in the turn.** The arrest sequence runs inside post-action cleanup, after cleanup's own world tick, and cleanup is the last step of the town turn's epilogue (Section 7). Its result is not a turn result: it only tells cleanup whether to follow up with a fight. Surrender and both Blackthorn-palace arms answer no follow-up; refusal answers follow-up. The turn was already spent by the epilogue that reached cleanup (on the explicit-`T` route that epilogue ran its clock minute but skipped the schedule walk, as above). After cleanup, and after the fight if there is one, the loop goes straight back to its top, so **no further epilogue runs** for either outcome and the next iteration is an ordinary one: the opening party-capability check, then the command prompt. The earlier text said surrendering "returns as a consumed turn" and that refusing "consumes the turn" after the alarm; the first is retracted and the second omitted the follow-on fight (R591). Static reading of the arrest sequence, cleanup and the turn-loop tail, with the literals from the shipped strings; not executed. Monster-class or attack outcomes can route through the NPC death flow, which marks the scene mask, clears the live slot, reloads the floor, and re-runs the Shadowlord install pass of Section 13 (normally a no-op, for the reason given above).
 
 ## 15. Exit
 
@@ -1441,11 +1533,14 @@ preservation behavior, and save/load entry reconstruction are specified.
 Remaining work is data cataloguing and caller-census parity, not a separate
 town-loop mechanism.
 
-- **Stonegate presentation parity.** The entry-time producers are now assigned:
-  the Sceptre carried-item flag gates the prelude row, and the three
-  Shadowlord hideout slots gate the per-living-Shadowlord "air of" rows. Any
-  remaining work is exact presentation-asset parity for the prelude row,
-  timing, and tone, not producer identity or an audience/queue mechanism.
+- **Stonegate presentation parity.** The entry-time producers are assigned:
+  the Sceptre flag gates a silent removal of the centre-cell Sceptre figure
+  (no row and no sound), and the three Shadowlord hideout slots gate the
+  per-living-Shadowlord notices, whose layout, order and tone are specified in
+  Section 13. The earlier wording here, that the flag "gates the prelude row"
+  and that "prelude row" parity remained, is retracted (R590). The vanquished
+  case is static reading only (`OPEN-QUESTIONS.md`). *(Corrected 2026-10-25,
+  issue #300 Q4.)*
 
 - **Authored secret-location inventory.** The runtime mechanisms for
   Search-revealed doors, P-Push movable blockers, hidden pickups, and floor

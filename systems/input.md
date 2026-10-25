@@ -103,7 +103,7 @@ translates them into one internal direction-code set:
 | Numpad diagonals | numpad 7 / numpad 9 / numpad 1 / numpad 3 | northwest / northeast / southwest / southeast |
 | Extended arrow keys | left / right / up / down | west / east / north / south |
 | Home / End / PgUp / PgDn | Home / End / PgUp / PgDn | northwest / southwest / northeast / southeast |
-| Top-row digits with a modifier | digit `1` through `9` while Shift or NumLock is held | same as the numpad layout above |
+| Digits with a modifier | a key that arrives as an ASCII digit `1` through `9` while Shift or NumLock is on: top-row or keypad digits with NumLock on, or keypad digits with Shift held and NumLock off. Shift with a top-row key types punctuation, never a digit, so it is not translated. *(Corrected 2026-10-25, issue #300 Q15: this row said "digit `1` through `9` while Shift or NumLock is held"; retracted, `RETRACTIONS.md` R589.)* | same as the numpad layout above (`5` stays a digit) |
 
 The four cardinals land in a low code block and the four diagonals in a high
 one, and neither collides with printable ASCII, so a single returned byte
@@ -125,7 +125,8 @@ The digit `5` at the centre of the numpad has no direction and is passed through
 as the ordinary character.
 
 A separate flag internal to the keyboard peek marks input that arrived through
-the scancode table or through the shifted top-row-digit rule, so the upper layer
+the scancode table or through the modifier-held digit rule (an ASCII digit
+while Shift or NumLock is on; see the table above), so the upper layer
 can apply the final digit-to-direction translation only to those keys. That flag
 also suppresses the pseudo-code rewrite described below, which is why a cursor
 or numpad key can never be delivered as one of the high pseudo-codes.
@@ -165,7 +166,7 @@ executed against a reconstruction of the shipped poll routine's own decisions
 with the reported modifier byte set and clear, not a capture on hardware or in
 an emulator. The dungeon exception below was not re-executed by that pass.)*
 
-The top-row-digits-with-modifier rule is an accessibility convenience for laptop users without a numpad. Plain unshifted digits remain available as ordinary text input. The modifier check accepts left-shift, right-shift, or NumLock; an implementation that lacks NumLock state can treat shift held as the trigger. Dungeon mode's own command reader is the one exception to the whole rule: that reader polls the keyboard itself, bypassing the shared command reader, so shifted or NumLock-ed top-row digits stay ordinary digits at the dungeon command prompt and select the solo party member like unshifted ones. A resident prompt reached from a dungeon, such as the hole-up hours prompt, reads through the shared reader, whose translation has no scene gate, so modifier-held `1`-`4` and `6`-`9` arrive there as direction codes (`systems/dungeon-mode.md` Section 11; static reading only). *(Corrected 2026-10-17, issue #299 Q18: this sentence previously said dungeon mode "does not run the digit-to-direction translation at all"; that is retracted for resident prompts, see `RETRACTIONS.md` R572.)*
+The modifier rule is how the keypad's digits are told apart from the top row's. The modifier check accepts left-shift, right-shift, or NumLock, but it only ever sees keys that arrive as ASCII digits. With NumLock on, both the top row and the keypad deliver digits, so both are translated. With Shift held and NumLock off, the keypad delivers digits and is translated, while the top row delivers punctuation (`!`, `@`, `%`, ...), which the rule never touches. With no modifier, the keypad delivers the cursor keys of the scancode table, and keypad `5` is discarded at the hours prompt. An implementation must not treat Shift with a top-row digit as a direction. *(Corrected 2026-10-25, issue #300 Q15: this paragraph said that "an implementation that lacks NumLock state can treat shift held as the trigger", and called the rule a top-row convenience under Shift; retracted, `RETRACTIONS.md` R589.)* Plain unmodified top-row digits remain ordinary text input. Dungeon mode's own command reader is the one exception to the whole rule: that reader polls the keyboard itself, bypassing the shared command reader, so NumLock-ed top-row digits stay ordinary digits at the dungeon command prompt and select the solo party member like plain ones. A resident prompt reached from a dungeon, such as the hole-up hours prompt, reads through the shared reader, whose translation has no scene gate, so NumLock-ed `1`-`4` and `6`-`9` from either row, and Shift-held keypad `1`-`4` and `6`-`9`, arrive there as direction codes (`systems/dungeon-mode.md` Section 11; executed 2026-10-25, issue #300 Q15). *(Corrected 2026-10-17, issue #299 Q18: this sentence previously said dungeon mode "does not run the digit-to-direction translation at all"; that is retracted for resident prompts, see `RETRACTIONS.md` R572.)*
 
 The extended-key translation table accepts all four arrow keys plus Home, End,
 PgUp, and PgDn. Left and right arrows reach the same West/East cardinal path as

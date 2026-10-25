@@ -568,7 +568,10 @@ the impact presentation at the party's cell and runs the whole-party damage pass
 of `systems/overworld.md` Section 6.2.4 **once** — that is, one fresh
 independent draw from the closed interval `[1, 8]` per qualifying member, per
 iteration. A party that is already entirely dead when the ladder reaches this
-rung takes no damage at all, because the test comes first.
+rung takes no damage at all, because the test comes first. Each pass's sound -
+the impact rumble once, then one ordinary damage rumble per damaged member, with
+no calibrated wait anywhere in the loop - is specified in `systems/audio.md`
+Section 8.9 *(added 2026-10-25, issues #300 Q27 and #301 Q3)*.
 
 **Status domain and exit predicate.** Shipped gameplay produces only Good,
 Poisoned, Sleeping, and Dead roster statuses. Save loading is byte-preserving,

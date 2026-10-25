@@ -151,7 +151,7 @@ The compact letter-coded form is convenient for fast typing: there are forty-eig
 
 Return or Space completes the prompt, Backspace erases one selector, and Escape cancels. `J` and `O` are ignored because no rune selector is keyed by those letters. An empty completed buffer returns `None!`; a nonempty selector that does not match any of the forty-eight tokens prints `No effect!`.
 
-**Step 3 — context gate.** Each spell carries a four-bit allow-mask describing which scene-types the spell may be cast in: combat, dungeon, indoor/town-mode, or overworld. The dispatcher reads the current scene byte, computes the matching mask bit, and tests it against the spell's mask. If the spell is not allowed in this scene (for example, a combat-only attack spell outside combat), the dispatcher prints `Not here!` and aborts. Time is *not* consumed on this rejection — the player can change scenes and try again. The complete per-spell scene masks and scene-byte-to-mask mapping are in `catalogs/spell-list.md`.
+**Step 3 — context gate.** Each spell carries a four-bit allow-mask describing which scene-types the spell may be cast in: combat, dungeon, indoor/town-mode, or overworld. The dispatcher reads the current scene byte, computes the matching mask bit, and tests it against the spell's mask. If the spell is not allowed in this scene (for example, a combat-only attack spell outside combat), the dispatcher prints `Not here!` and aborts. By static reading, this rejection reports acted, like every C path except one sub-handler branch. That branch belongs to a scene-changing path, not to this gate. So in overworld and town play the rejection costs the ordinary turn (`systems/commands.md` Section 3). It has not been measured on the clock (`OPEN-QUESTIONS.md`). *(Corrected 2026-10-25, issue #300 Q14: this said "Time is *not* consumed on this rejection"; retracted, `RETRACTIONS.md` R604.)* The complete per-spell scene masks and scene-byte-to-mask mapping are in `catalogs/spell-list.md`.
 
 Two special indoor scene states bypass the normal mask test:
 
@@ -352,7 +352,9 @@ ignores.
 while the modifier state is clear. The keyboard layer marks a key byte `1`
 through `9` as a direction request whenever either shift key or NumLock is
 held, and the command reader then translates it into a direction code, which
-this prompt discards (`systems/input.md` Section 5). With NumLock held, `1` and
+this prompt discards (`systems/input.md` Section 5). Shift with a top-row key
+types punctuation, never a digit, so in practice Shift affects only keypad
+digits typed with NumLock off *(clarified 2026-10-25, issue #300 Q15)*. With NumLock held, `1` and
 `2` produce **no echo at all** and the prompt keeps waiting; `5`, which has no
 direction, still echoes; and `4` arrives as the west code and **erases** a
 digit instead of adding one. With no modifier held the same keys are ordinary

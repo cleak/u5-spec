@@ -46,7 +46,9 @@ described in `stat-arithmetic.md` when callers route through that resident
 helper family. Storage width is not the gameplay cap. Known caps should be
 specified by the owning system: examples include gold's normal `9999` cap,
 spell charges and R-Ready equipment stock at `99`, and the inn
-stay/month counter at `25`. Do not infer a global `255` cap merely because a
+stay/month counter, which grows only while below `25` and leaves any larger
+value, `0xFF` included, unchanged (`systems/time.md` Section 8; earlier
+"at `25`" read as a clamp, R587, issue #300 Q8). Do not infer a global `255` cap merely because a
 field is stored in one byte.
 
 ## 2.1 Equipment Burden And Weight
@@ -524,8 +526,8 @@ entries a particular picker shows:
 | Shard of Falsehood; Shard of Hatred; Shard of Cowardice | None |
 | Spyglass; HMS Cape Plans; Sextant; Pocket Watch; Black Badge; Wooden Box | None |
 
-All 48 equipment names, eight reagent names and 48 spell-charge names also
-have **no decoration marker**. Thus a spell-charge row and a scroll of a
+All 48 equipment names, eight reagent names and 48 spell-charge names (the
+Spells page labels, listed in Section 4.7) also have **no decoration marker**. Thus a spell-charge row and a scroll of a
 related spell are different presentation cases. The Sceptre and Skull Keys
 are plain-name rows, despite being special items in gameplay. Grapple and the
 food/gold/ordinary-key/gem/torch counters do not add entries to this 38-name
@@ -925,6 +927,96 @@ The four inventory lists use the Section 4.4 frame and page badge. The Items
 page catalogues **all eight** moonstones by phase glyph whether or not any is
 carried, whereas U-Use lists only carried stones; the two surfaces use
 different predicates.
+
+**The Spells page rows and their labels.** *(Added 2026-10-25, issue #300 Q11.)*
+Each Spells page row is the Section 4.5 counted row with the hyphen as its
+selector: `[count][-][label]`, then padding and a line feed.
+
+- **Count.** Right-aligned in two cells, space-padded, in window columns 1 and
+  2; a count of 100 or more takes three cells and pushes the selector and label
+  one column right. Zero-count spells are skipped by the page scan and never
+  shown, so the renderer's `--` zero form and its no-quantity form are not
+  reachable from this page in ordinary play.
+- **Selector.** A hyphen, `-`, in the text font. The page passes this one
+  constant selector for every row. (R-Ready, the renderer's other caller,
+  passes a space or a glyph instead, Section 4.5.)
+- **Label.** The label from the table below, verbatim, in the text font, with
+  no decoration marker.
+- **Padding.** Spaces are emitted while the cursor is before window column 14,
+  so the last padded cell is column 13 and a short row is thirteen cells; a row
+  already thirteen cells or longer gets no padding. Then a line feed.
+
+Examples, with `_` standing for one space cell: `_5-Grav_Por__` (count 5,
+padded to thirteen cells), `10-In_Flam_Gr` (count 10, thirteen cells, no
+padding), `100-In_Zu_Grav` (count 100, fourteen cells, no padding),
+`_1-An_Tym____` (count 1). No label exceeds ten cells, so even a three-digit
+row's last label cell is column 14, before the column-15 wrap point: this is
+why no spell-charge row takes a second display line (Section 4.5).
+
+The labels are the rune phrases of `catalogs/spell-list.md` cut to ten cells,
+stored that way rather than shortened at run time. Some cuts fall mid-word and
+some keep only initials; use them exactly as given. Spell ids follow
+`catalogs/spell-list.md`.
+
+| Spell id | Code | Label | Cells |
+|---:|---|---|---:|
+| 0 | `IL` | `In Lor` | 6 |
+| 1 | `GP` | `Grav Por` | 8 |
+| 2 | `AZ` | `An Zu` | 5 |
+| 3 | `AN` | `An Nox` | 6 |
+| 4 | `M` | `Mani` | 4 |
+| 5 | `AY` | `An Ylem` | 7 |
+| 6 | `AS` | `An Sanct` | 8 |
+| 7 | `ACX` | `An Xen Cor` | 10 |
+| 8 | `HR` | `Rel Hur` | 7 |
+| 9 | `IW` | `In Wis` | 6 |
+| 10 | `KX` | `Kal Xen` | 7 |
+| 11 | `IMX` | `In Xen Man` | 10 |
+| 12 | `LV` | `Vas Lor` | 7 |
+| 13 | `FV` | `Vas Flam` | 8 |
+| 14 | `FGI` | `In Flam Gr` | 10 |
+| 15 | `GIN` | `In Nox Gr` | 9 |
+| 16 | `GIZ` | `In Zu Grav` | 10 |
+| 17 | `IP` | `In Por` | 6 |
+| 18 | `AG` | `An Grav` | 7 |
+| 19 | `IS` | `In Sanct` | 8 |
+| 20 | `GIS` | `In Sanct G` | 10 |
+| 21 | `PU` | `Uus Por` | 7 |
+| 22 | `DP` | `Des Por` | 7 |
+| 23 | `QW` | `Wis Quas` | 8 |
+| 24 | `BIX` | `In Bet Xen` | 10 |
+| 25 | `AEP` | `An Ex Por` | 9 |
+| 26 | `EIP` | `In Ex Por` | 9 |
+| 27 | `MV` | `Vas Mani` | 8 |
+| 28 | `IZ` | `In Zu` | 5 |
+| 29 | `RT` | `Rel Tym` | 7 |
+| 30 | `IPVY` | `In Vas P Y` | 10 |
+| 31 | `AQW` | `Quas An Wi` | 10 |
+| 32 | `AI` | `In An` | 5 |
+| 33 | `AWY` | `Wis An Yle` | 10 |
+| 34 | `AEX` | `An Xen Ex` | 9 |
+| 35 | `BRX` | `Rel Xen Be` | 10 |
+| 36 | `LS` | `Sanct Lo` | 8 |
+| 37 | `CX` | `Xen Corp` | 8 |
+| 38 | `IQX` | `In Quas Xe` | 10 |
+| 39 | `IQW` | `In Quas Wi` | 10 |
+| 40 | `HIN` | `In Nox Hur` | 10 |
+| 41 | `CIQ` | `In Quas Co` | 10 |
+| 42 | `CIM` | `In Mani Co` | 10 |
+| 43 | `CKX` | `Kal Xen Co` | 10 |
+| 44 | `CGIV` | `In Vas G C` | 10 |
+| 45 | `FHI` | `In Flam Hu` | 10 |
+| 46 | `PRV` | `Vas Rel Po` | 10 |
+| 47 | `AT` | `An Tym` | 6 |
+
+Source provenance: the labels were read from the shipped data through the name
+table this page uses and agree with an independent re-read; the constant hyphen
+selector and the page's single render call are a static reading; the row layout
+comes from executed original code (the original row renderer and number printer
+over all 48 labels at five counts), with columns read back from the harness's
+own cursor model and checked against the published padding rule, not from a
+raster. Private analysis in `u5-decomp/functions/ZSTATS_OVL/` and
+`u5-decomp/notes/`.
 
 Source provenance: fresh original selector, top-level page navigator and
 shared-list navigation analysis in `u5-decomp/functions/ZSTATS_OVL/`,

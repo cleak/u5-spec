@@ -931,7 +931,7 @@ do.)*
 
 **Signs.** Sign-post tiles trigger the read-sign handler — a sign sub-table in `SIGNS.DAT` is indexed by per-location coord.
 
-**Beds.** A bed tile in an inn enables H-Hole-up. Outside an inn or off a bed, H prints "Not here!" and consumes no turn. The hours/rest contract is in `systems/rest-and-camp.md`.
+**Beds.** A bed tile in an inn enables H-Hole-up. In a town-family scene off a bed, H prints `Hole up- Only` and then `in bed!` on the next row, and spends the ordinary one-minute town turn (executed; `systems/commands.md` Sections 3 and 5.8). *(Corrected 2026-10-25, issue #300 Q14: this said H prints "Not here!" and "consumes no turn"; retracted, `RETRACTIONS.md` R603.)* The hours/rest contract is in `systems/rest-and-camp.md`.
 
 **Trapdoor / town step trigger `0x8C`.** Stepping onto live town tile `0x8C`
 runs the town step-interaction handler. Its **general** arm prints

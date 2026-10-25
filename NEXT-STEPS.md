@@ -1,5 +1,17 @@
 # Next Steps for u5-spec
 
+## Issue #300 Talk and signs follow-ups Q12, Q13, Q19, Q20 and Q21 (2026-10-25)
+
+Published: Talk has no liveness gate; its first step is the shared direction prompt (Space prints `Pass` and ends Talk as an acted turn), nothing tests provisions or status, and the target is the direction chosen there (`systems/conversation.md` Section 2, `systems/town-mode.md` Section 9; R596, R597). Signs: per-byte runic/Roman font selection by the high bit, control tests on the raw byte, first-match stop, a read window that crosses into later scenes, the six-row no-record placard, and the preamble line feeds (`formats/signs-dat.md` Sections 1-6, `systems/view.md` Section 3; R598-R600). The `0xFE` brush-off literal, its whole-party damage pass and the flight target on each route (`systems/conversation.md` Section 2, `systems/town-mode.md` Section 14, `systems/npc-schedules.md`; R601). The Falsehood line `Something was stolen!` (`systems/conversation.md` Section 10). Open: the explicit-Talk flight target, three stubbed-printer layouts, the stubbed damage presentation, the sign read-window length and the unshifted-digit case (`OPEN-QUESTIONS.md` sections 2 and 3). No #301 question was answered in this pass.
+
+## Issue #300 Q9, Q10, Q26, Q30 and #301 Q1, Q2, Q6 combat follow-ups (2026-10-25)
+
+Published: the split rule (classes 24 and 30, eight random neighbour-cell attempts through the step test, first free monster slot, clone with the parent's remaining hit points, `divides!` with its own line feed only on success and from any damage source; `systems/combat.md` Sections 11.1 and 12, R593, R594); the combat turn handler's feed-and-marker pair before `Zzzzz...` and `ARGH!`, and the two-row Corpser release (`systems/combat.md` Section 8.1, `systems/text-output.md` Section 10.2); the dungeon A-Attack's time cost and the Quickness/Negate Time gate on the dungeon loop-head minute, replacing the withdrawn "Q-quest pendulum" (`systems/dungeon-mode.md` Sections 4, 10 and 15, R595); and the outdoor arena tile clarification (`formats/cbt.md` Section 6). Four new items are indexed in `OPEN-QUESTIONS.md`; the most useful run is a Corpser drag capture, and the swamp-walkability trace is the likelier explanation of the engine's swamp-arena divergence.
+
+## Issue #300 town follow-ups Q4/Q17, Q5, Q7 and Q18 (2026-10-25)
+
+Published: the Shadowlord notice layout, entry order, capability gate and its constant envelope `(1, 2000, 60000, 1, 6600)` (`systems/town-mode.md` Section 13, `systems/audio.md` Sections 5.4.4, 8.6 and 10.3); Stonegate's third-to-first notice order and its silent Sceptre-figure removal in place of the withdrawn prelude row (R590); the endgame viewport bands (`systems/endgame.md` Section 3.1); the arrest surrender and refusal sequences, the fresh Yew entry, the refusal's follow-on fight and the `No` echo (`systems/town-mode.md` Section 14, R591, R592); and the town A-Attack target rules with the resident Shadowlord as a valid arena-10 target (`systems/town-mode.md` Section 10, `systems/encounters.md` Section 7). Ten new items are indexed in `OPEN-QUESTIONS.md`; the ones worth a run first are a finished town Shadowlord fight and Stonegate entered with the Sceptre and with a Shadowlord vanquished.
+
 ## The issue backlog sweep (2026-10-12 Pacific)
 
 Twenty-four of the twenty-nine issues open since 2026-09-07 were answered and
@@ -4013,6 +4025,7 @@ presentation is produced by the Sceptre carried-item flag for one prelude row
 and by the three Shadowlord hideout slots for per-living-Shadowlord "air of"
 rows. Remaining Stonegate work is presentation-asset/tone parity, not producer
 identity or an audience mechanism.
+*Retracted 2026-10-25 (R590): there is no prelude row; the Sceptre flag gates a silent removal of the centre-cell Sceptre figure, and the notice layout, order and tone are now published (`systems/town-mode.md` Section 13).*
 
 **Current outdoor overlay tracker cleanup:** 2026-05-13 -
 The extraction table now replaces stale verified-slice labels for

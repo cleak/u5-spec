@@ -455,8 +455,21 @@ implied:
    decremented and written back, and then the animator **goes straight to the
    next slot** — such a slot never reaches the frame decision on that pass. Only
    a slot whose phase nibble is already zero falls through to the rest.
-4. A slot whose displayed-frame byte is the hidden value, or either of the two
-   prone/sleeping values, is skipped. This is how gameplay parks an actor.
+4. A slot whose displayed-frame byte is exactly one of three values is skipped:
+   `0x00`, the hidden value; `0x1D`, the party combatant's invisibility frame
+   (written for a party member by Sanct Lor and by the Ring of Invisibility in
+   combat, and written again when a party member wakes while still invisible);
+   or `0x1E`, a party combatant's asleep frame (written for a party member by
+   the sleep application; it is the same tile the combat corpse uses, see
+   `systems/combat.md`). No other frame value is exempt; in particular the
+   moldy-corpse value `0x1F` is not. Both non-hidden frame writes are
+   party-member only: a sleeping **monster** receives no frame write and is
+   instead parked by the all-ones steady phase marker, so early-out 2 skips it,
+   not this one; and a monster's own invisibility (the blink ability) writes the
+   hidden value `0x00`, not `0x1D`. This is how gameplay parks an actor. *(Corrected
+   2026-10-25, issue #300 Q16: this item previously called the two non-hidden
+   values "the two prone/sleeping values"; `0x1D` is the invisibility frame, not
+   a prone or sleeping one, and that wording is retracted (R608).)*
 5. A slot whose class lies **below the sprite-class floor**, or in either of two
    excluded classes, is skipped. Everything the animator can write to the frame
    byte therefore lies at or above that floor — which is exactly why the
@@ -582,7 +595,8 @@ The adjacency reactions, in the order the handler tests them:
 
 - **Adjacent whirlpool engagement** is a plane-transition effect when the party
   is not on foot: it announces the whirlpool, runs the swallow presentation,
-  applies the Section 6.2.4 payload, moves the party to underworld coordinate
+  applies the Section 6.2.4 payload (entering at its absorption stage, with no
+  impact figure and no impact rumble; R612, issue #301 Q3), moves the party to underworld coordinate
   `(34, 18)`, and re-enters overworld setup for the new plane.
 
   *Corrected:* an earlier revision said "the same branch is a no-op if reached
@@ -593,7 +607,8 @@ The adjacency reactions, in the order the handler tests them:
   `systems/overworld.md` Section 8.
 - **Sand Trap family, orthogonally adjacent.** The sprite run `0xE0..0xE3`
   reaches the shared impact-absorption stage directly and **silently** — no
-  message of any kind — so an adjacent sand trap applies exactly the payload the
+  message of any kind, and no impact figure or impact rumble (added 2026-10-25,
+  issue #301 Q3) — so an adjacent sand trap applies exactly the payload the
   ranged attacks apply: the whole-party damage pass, or the frigate hull roll
   when the party is aboard a ship. The payload is specified once, in
   `systems/overworld.md` Section 6.2.4.
@@ -608,7 +623,8 @@ The adjacency reactions, in the order the handler tests them:
   exact equality against `0x88`.
 - **Every other adjacent hostile, Sea Serpent included, takes the generic arm.**
   It rebuilds the viewport, prints the "attacked" line, and then reads the tile
-  under the party. It reaches the same impact payload **only** when that tile is
+  under the party. It reaches the same impact payload (at its absorption stage,
+  with no impact figure and no impact rumble; R612, issue #301 Q3) **only** when that tile is
   in the low water/void family **and** the party marker is a carpet or a skiff;
   otherwise it enters the encounter/combat entry, which looks the slot's class up
   for its banner name. An orthogonally adjacent sea serpent therefore does *not*
@@ -1304,3 +1320,4 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/OUTSUBS_OVL/`, `u5-decomp/functions/CMDS_OVL/`,
   `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
   `u5-decomp/functions/ULTIMA_EXE/`.
+- 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.

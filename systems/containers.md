@@ -92,6 +92,33 @@ scenes.
    reachable laden table. If no fallback applies, Get prints the standard
    nothing-to-get refusal - a second, byte-identical copy of the same text.
 
+**A staged rotting body or moldy corpse is not Get-acceptable.** *(Added
+2026-10-25, issue #300 Q2.)* The two body classes the fixed-treasure table
+stages - rotting body (class 30) and moldy corpse (class 31), `systems/hidden-treasures.md`
+Section 3 - are neither below sixteen nor one of the Moonstone, carpet or
+regalia/shard classes, so step 3 skips such an object exactly as it skips an
+actor, and keeps scanning the other objects at the coordinate. Nothing is
+printed at that point and the dispatcher is never reached. If another
+acceptable object shares the cell, that object is granted with its ordinary
+line. Otherwise Get falls through to the live-tile cascade of step 5: on
+ordinary terrain the transcript is `Get-<Direction>` ⏎ `[blank]` ⏎
+`Nothing to get!` (the cascade's copy of the refusal); on a crop tile it is
+`Crops picked!`; on a laden table approached legally it is `Mmmmm...!`, and
+approached illegally `Can't reach plate!`; a lit wall torch under the body
+would take the torch-borrow branch. In every case the body object stays on the
+cell and the inventory is unchanged by the body. Only Search's corpse branch
+(Section 9) ever removes a moldy corpse; neither Get nor Search removes a
+rotting body. Because
+the two refusal copies are byte-identical, an engine that answers a lone body on
+ordinary terrain with the immediate refusal shows the same screen; it differs
+only when the body sits on a crop, laden-table or wall-torch tile, or shares the
+cell with an item. Whether the cascade's refusal marks anything dirty was not
+checked separately (`OPEN-QUESTIONS.md`). Source provenance: executed original
+Get with a staged moldy corpse and a staged rotting body over six live tiles,
+plus a static reading of the acceptance test, re-run and confirmed by an
+independent verifier; private analysis in `u5-decomp/functions/SJOG_OVL/` and
+`u5-decomp/notes/`.
+
 Dungeon Get acts on the underfoot dungeon cell, prints its own `Get` row before
 looking at anything, and runs **no** acting-member prompt and **no** direction
 prompt. A *closed-chest* cell refuses until opened; an open-chest cell is
@@ -757,11 +784,11 @@ The found-item class code maps to these public result families:
 | `0x03` | Potion | Adds one potion of the supplied potion subtype. Potion ids `0..7` follow the colour order in `catalogs/item-list.md`; each colour counter caps at `99`. |
 | `0x04` | Scroll or HMS Cape plans | Adds one spell scroll of the supplied spell subtype, capped at `99` per scroll counter, or sets the HMS Cape plans flag when the special plans subtype is supplied. Normal scroll grants use the low three bits of the supplied subtype to select the printed scroll label. |
 | `0x05`, `0x06`, `0x09..0x0C` | Equipment | Adds carried equipment stock by the supplied equipment id, capped at `99` per equipment counter. Arrows and Quarrels grant five units per award; other equipment grants add one unit. The canonical equipment id/name table lives in `catalogs/item-list.md`. |
-| `0x07` | Key | Adds the supplied key quantity, capped at `99`. Ordinary subtypes add to skeleton keys. Marked odd-key subtypes print odd-key narration, strip the marker bit for the displayed quantity, and add to the skull/special-key counter instead of the ordinary key counter. |
-| `0x08` | Gem | Adds the supplied gem quantity. |
+| `0x07` | Key | Adds the supplied key quantity, capped at `99`. Ordinary subtypes add to skeleton keys. Marked odd-key subtypes print odd-key narration, strip the marker bit for the displayed quantity, and add to the skull/special-key counter instead of the ordinary key counter. *(Added 2026-10-25, issue #300 Q1: the marker test is "above 127", and only the low seven bits are kept as the quantity, so `133` adds five skull keys.)* |
+| `0x08` | Gem | Adds the supplied gem quantity, capped at `99`; gems share the torch adder and its cap *(added 2026-10-25, issue #300 Q1)*. |
 | `0x0D` | Torch | Adds the supplied torch quantity, capped at `99`. |
 | `0x0E` | Sandalwood Box | Sets the save-backed Sandalwood Box flag used by the endgame. |
-| `0x0F` | Food / grain | Adds the supplied food quantity to the food counter. |
+| `0x0F` | Food / grain | Adds the supplied food quantity to the food counter, capped at `9999` *(added 2026-10-25, issue #300 Q1)*. |
 | `0x19` | Moonstone | Sets the Moonstone ownership flag for the supplied moonstone slot. |
 | `0x1B` | Magic Carpet | Grants the magic-carpet ownership state; one scene-specific acquisition path also raises a quest/event marker. |
 | `0xB4` | Shadowlord shard | Writes the no-quantity marker `255` into the Falsehood, Hatred or Cowardice shard flag for shard subtypes `0..2`, and into no other byte; the U-Use row is then uncounted (`systems/inventory.md` Section 4.5). The subtype is **masked to two bits**, not validated: subtypes congruent to 0, 1 and 2 grant a real shard and print its line, and subtypes congruent to 3 write the unused byte after the third shard flag, printing the Cowardice line while granting nothing usable. See `catalogs/item-list.md` Section 8. |
@@ -896,7 +923,12 @@ The visible consumed-object rules are:
   Search/Get. Once the player searches or gets that object, the corpse/body
   reward rules above own the food/gold/plague staging; combat itself does not
   grant those contents directly, and combat exit does not grant party gold,
-  karma, or a separate victory bonus.
+  karma, or a separate victory bonus. *(Scoped 2026-10-25, issue #300 Q2: Get
+  never acts on a body object of class 30 or 31 - Section 3 - so where such a
+  slot carries one of those classes only Search's corpse branch reaches it, and
+  Get acts only on the food or gold pickup that branch may stage. Which class
+  the reconciler writes into a combat-created body slot was not checked;
+  `OPEN-QUESTIONS.md` indexes it.)*
 - **Fixed hidden treasures.** Ordinary records are one-shot through the
   save-backed found bitmap described in Section 5. Once the bit is set, later
   searches skip that record even if the temporary active-object staging slot has

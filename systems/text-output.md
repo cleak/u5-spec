@@ -523,7 +523,12 @@ its own gate. In addition, the town loop and the overworld loop each carry a
 second pair site of their own, on the arm where the shared party-capability
 check reports that nobody can act: that arm emits the pair itself, prints the
 sleep line, and skips the input helper and the key read entirely
-(`systems/main-loop.md` Section 6).
+(`systems/main-loop.md` Section 6). One of the seven is the combat keyboard
+turn handler: it emits the pair after the turn banner on every pass, before the
+dragged-under and asleep early-outs and before the key read, with no gate, so
+`Zzzzz...` and `ARGH!` stand on the marker row (`systems/combat.md` Section
+8.1). *(Added 2026-10-25, issue #301 Q1; executed on the original turn
+handler.)*
 
 | Loop | Gate on the pair at an ordinary command poll |
 |---|---|
@@ -773,7 +778,9 @@ step-interaction, look-handler, shrine-handler and printer execution in
 no failures, with every address re-derived from the shipped images before
 execution and the pair sites enumerated by requiring the instruction before
 each marker call to be a print of the line-feed byte. The combat loop's own
-prompt cadence was not executed and nothing here is claimed about it.
+prompt cadence was not executed and nothing here is claimed about it. *(Added 2026-10-25, issue #301 Q1: the combat turn handler's feed, marker
+and early-out order was since executed separately; `systems/combat.md`
+Section 8.1.)*
 
 ### 10.5 Scrolling the message window
 
@@ -846,7 +853,9 @@ the bottom row scrolled exactly once and drew the marker on the new bottom row.
 The pair draws the marker alone; the animated cursor beside it belongs to the
 key wait that follows (Section 10.6). The pair was invoked directly rather than
 by running a full turn of a mode loop, and combat's own prompt cadence was not
-executed.
+executed. *(Added 2026-10-25, issue #301 Q1: the combat turn handler's own feed,
+marker and early-out order was since executed separately, `systems/combat.md`
+Section 8.1; its scroll behaviour was not.)*
 
 **No cursor is adjusted to compensate.** The emitter's overflow tail takes the
 active window's descriptor from a single read at entry and decrements only that

@@ -40,7 +40,9 @@ byte, not from a search that happened to stop.
   reached, no plane is written. *Corrected:* an earlier revision called the
   on-foot case "a no-op"; **that is withdrawn.** The on-foot arm still applies
   the impact payload of Section 6.2.4, which under a foot marker damages every
-  living party member. It skips the plane transition, not the damage.
+  living party member. It skips the plane transition, not the damage. Both arms
+  enter that payload at its absorption stage, with no impact figure or impact
+  rumble (Section 6.2.4; R612, issue #301 Q3).
 
 - **Interior exit plane selection.** Town-family exits clear the scene byte and
   restore overworld coordinates from the per-scene exit table. The traced town
@@ -517,11 +519,29 @@ The same payload is also reached from the sand-trap adjacency reaction, the
 whirlpool engagement described in Section 8 and in
 `systems/active-objects.md` Section 8, a refused hoisted-sail movement, and the
 post-action rough-seas check. Section 6.2.5 specifies the latter two triggers.
+Only rough seas and the drowning loop (`systems/vehicles.md` Section 6) run
+stage one as the ranged attacks do. The whirlpool engagement (both its on-foot
+and its vehicle arm), the sand-trap adjacency reaction, the generic adjacent-hostile
+arm's carpet/skiff-on-water case (`systems/active-objects.md` Section 8) and the
+sailing collision all enter at **stage two**: no impact figure is drawn and no
+impact rumble plays on those paths (the sailing collision plays its own rumble,
+Section 6.2.5). *(Corrected 2026-10-25, issue #301 Q3: read with stage one
+below, the earlier wording had every caller in this list reach the whole
+payload, implying an impact rumble on the whirlpool, sand-trap and collision
+paths that the original does not play; retracted, R612.)*
 
-**Stage one — impact presentation.** An impact figure is drawn at the party's
-own map coordinates (converted to viewport-relative coordinates), a short tone
-plays, and the viewport is rebuilt. This stage writes no character state and no
-vehicle state, and prints no narration line.
+**Stage one — impact presentation.** An impact figure (figure zero) is drawn
+at the party's own map coordinates (converted to viewport-relative coordinates),
+the **impact rumble** plays - a random rumble of step 10, target 3000, pitch
+drawn from the inclusive range 100..2000 Hz, 300 updates, about **216 ms**
+(206 to 227 ms) under the static model (`systems/audio.md` Sections 5.3 and
+10.2) - and one world tick repaints the viewport. Stage one has no other sound
+and no calibrated wait, and it is one fixed routine, so the sound is identical
+on every caller: both outdoor ranged attacks (the broadside and the breath),
+rough seas and every drowning pass. This stage writes no character state and no
+vehicle state, and prints no narration line. *(Corrected 2026-10-25, issues
+#300 Q27 and #301 Q3: this stage previously said "a short tone plays"; it plays
+a random rumble, not a tone, and that wording is retracted, R611.)* One call site of this stage in the town overlay was not examined; it cannot change the sound (`OPEN-QUESTIONS.md`).
 
 **Stage two — impact absorption.** This stage takes no arguments and branches on
 exactly one thing: the party's transport marker.
@@ -859,7 +879,8 @@ A small set of tile classes triggers special handling in the per-turn block, rec
 - **Whirlpool.** Outdoor whirlpool active-object engagement can force the
   party to the fixed underworld emergence coordinate `(34, 18)` on the
   underworld plane. This is an active-object engagement effect, not a dungeon
-  or town scene-entry route. It also applies the Section 6.2.4 impact payload,
+  or town scene-entry route. It also applies the Section 6.2.4 impact payload
+  (from its absorption stage, with no impact rumble; R612),
   on foot as well as aboard a vehicle; see the forced-movement table below for
   the two withdrawn statements this corrects. There is **no advance warning
   line**: the swallow banner of Section 8.1 is the first and only text, and
@@ -878,7 +899,7 @@ A small set of tile classes triggers special handling in the per-turn block, rec
   | Ordinary water travel | Player directional movement into a destination cell accepted by the current transport predicate | One committed cardinal step; no sweep, queue, or multi-cell current is installed | Ships accept the deep-water/water predicate; skiffs use the facing-sensitive skiff predicate; foot and horse reject ordinary water through their predicates; carpets use their own carpet predicate; balloon has no promoted live transport path | Normal consumed-turn timing only; no drowning roll or queued forced-movement state |
   | Pre-loop `0xFF` underfoot state | The tile under the party is the special all-ones tile and the exemption state is not active | Suppresses the next movement commit while forcing the cached light/radius to zero | Applies to the mode loop state rather than to a vehicle family | No damage, no status change, and no scene/plane transition; clearing the state recomputes light with a zero-minute cleanup |
   | Surface chasm/falls | A waterfall-family tile `0xD4..0xD7` in the cell south of the party (tested before the turn's key is read) or under the party (tested in the post-action pass), on either plane | Prints the falls presentation and **pushes the party two cells south, unconditionally, on both planes**, with one world tick between the two steps. Only if the party then stands on Britannia `(54, 138)` does it also print the transition line, switch the world plane to the underworld value, and reload the destination plane/object state | Vehicle marker is saved across the damage block and restored **before** the coordinate test, so the plane swap runs with the original transport in place; the falls handler does not force the durable post-transition transport marker to foot | Each non-dead party member is checked once during the fall presentation: draw the shared skewed closed-interval `1..30` roll (the shared roll helper `systems/combat.md` publishes: a uniform `0..60` draw halved with truncation, with a zero result promoted to one); if the member's Dexterity byte is **less than or equal to** the roll, the normal party-damage helper applies `1 HP`, otherwise nothing happens. That helper is the same per-member application specified in Section 6.2.4, and it emits a stats-row flash and a short rumble but **no text**. There is no persistent partial-fall queue; save/load sees only the resulting coordinates, plane, transport marker, party HP/status, and active-object table. *Corrected:* an earlier revision gave the trigger as the coordinate, said nothing about the two forced steps, and specified the check as "draw one random byte `0..255`; if Dexterity is greater than the roll, no damage" - which makes fall damage nearly impossible, where a Dexterity-20 member is really hit about one time in three (`RETRACTIONS.md` R320, R321) |
-  | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, applies the Section 6.2.4 impact payload, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | *Corrected:* an earlier revision said the on-foot state is a no-op defensive branch; **that is withdrawn**. The on-foot arm tests the marker for the published foot/avatar value and reaches the Section 6.2.4 impact-absorption stage, which under a foot marker is the whole-party damage pass. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached, and that branch reaches the same absorption stage immediately before the plane change | *Corrected:* an earlier revision said no drowning damage is applied by the whirlpool branch; **that is withdrawn**. Both arms reach the Section 6.2.4 payload. One mechanism detail matters here: the swallow presentation temporarily overwrites the party marker with the whirlpool sprite and **restores the original marker before** the absorption call, so aboard a frigate the closed-interval `[1, 30]` hull roll really does apply and can sink the ship in the instant before the teleport — with the coordinate change and overworld re-entry still following. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
+  | Whirlpool active object | Orthogonally adjacent outdoor active-object slot in the whirlpool family | If the party is not on foot, clears the whirlpool slot, prints the whirlpool warning, plays the swallow presentation, applies the Section 6.2.4 impact payload, moves the party to `(34, 18)` on the underworld plane, and re-enters overworld setup | *Corrected:* an earlier revision said the on-foot state is a no-op defensive branch; **that is withdrawn**. The on-foot arm tests the marker for the published foot/avatar value and reaches the Section 6.2.4 impact-absorption stage, which under a foot marker is the whole-party damage pass. Ship, skiff, carpet, horse, and any other non-foot marker all take the same forced-underworld branch when this active-object engagement path is reached, and that branch reaches the same absorption stage immediately before the plane change | *Corrected:* an earlier revision said no drowning damage is applied by the whirlpool branch; **that is withdrawn**. Both arms reach the Section 6.2.4 payload, at its absorption stage: no impact figure and no impact rumble (R612, issue #301 Q3). One mechanism detail matters here: the swallow presentation temporarily overwrites the party marker with the whirlpool sprite and **restores the original marker before** the absorption call, so aboard a frigate the closed-interval `[1, 30]` hull roll really does apply and can sink the ship in the instant before the teleport — with the coordinate change and overworld re-entry still following. The transition is immediate and durable in ordinary save state after it completes; there is no queued or partially resolved forced movement |
   | Water-creature / pirate active-object movement | Outdoor active-object slots in the water-creature/pirate frame family | Active objects move one cardinal cell when their cadence and validation allow it; they do not push the player along a current row | This is actor movement, not player transport. Wind cadence controls ship-like water-creature movement; ordinary player ship/skiff movement remains command-driven | May print the attack line or enter the ordinary engagement/combat path when adjacency/collision rules fire; it does not install a water-current sweep |
 
 - **Other plane-transition routes.** None. Outside the falls cell, the
@@ -1801,3 +1822,4 @@ The behaviour described above was derived by reading the function and format not
   into play. The paragraph's own scan scope is kept: the four display drivers
   were not swept, and far transfers and direct writes into the descriptor
   storage were not swept.
+- 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.

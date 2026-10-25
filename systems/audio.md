@@ -277,6 +277,7 @@ Common recipes are:
 |---|---:|---:|---:|---:|
 | Trap or failed reagent mix | 40 | 3000 | 100..500 Hz | 75 |
 | Ordinary damage presentation | 10 | 1600 | 100..2000 Hz | 160 |
+| Impact presentation (`overworld.md` Section 6.2.4 stage one; added 2026-10-25, issues #300 Q27 and #301 Q3) | 10 | 3000 | 100..2000 Hz | 300 |
 | Dungeon sleep or poison field hit, once per affected member (added 2026-10-16, issue #298 Q7; `dungeon-mode.md` Section 8.1) | 1 | 50 | 100..3500 Hz | 50, about 9 ms under the Section 4 anchor (model value, not a capture) |
 | Shared potion/wind lead, variant `v` | 800 | `8000 + 1600v` | 100..700 Hz | 10 through 26 for variants 0 through 8 |
 | Short two-part sting | 1, then 1 | 25, then 25 | 100..1000 Hz, then 100..1500 Hz | 25 + 25, separated by a 20-unit calibrated silent hold; movement uses are in Section 7.5, Blackthorn in Section 8.6, and endgame in Section 8.7 |
@@ -422,6 +423,8 @@ The other named envelopes in sections 8.3 and 8.7 follow the same relation:
 period 2760 gives about 980 Hz, period 3100 about 1,101 Hz, period 5200 about
 1,847 Hz, period 5900 about 2,096 Hz, and period 8800 about 3,126 Hz. Those
 absolute figures inherit the same band; their ratios to each other are exact.
+The Shadowlord presence notice of section 8.6 uses period 6600, about 2,346 Hz
+at baseline under the same band *(added 2026-10-25, issue #300 Q4 and Q17)*.
 
 #### 5.4.5 Machine dependence, and the muted arm
 
@@ -1450,6 +1453,7 @@ stage; that event owns the sound, not the movement command.
 | Return-to-View strip 2 | Each scheduled inner tick runs rumble `(20, 60, 10000)`, exactly three random pitches in 100..10000 Hz. The enclosing tick is BIOS-clock paced. |
 | Return-to-View strip 3 | At local phase 0 play a 3000 Hz blocking tone for 3 calibrated units; at phase 4 play 2000 Hz for 3. The enclosing tick remains BIOS-clock paced. |
 | Harpsichord digit puzzle | Each accepted digit plays its digit-specific note through the software envelope generator, only while sound is enabled. The note **blocks** for its full 4,000 iterations, about 172 ms, and ends in a hard silence. Muting skips the generator call outright and therefore removes the hold as well as the sound - the one caller-level exception to section 3. `town-mode.md` section 13.1 owns the ten-note table, the ascending scale, and the plucked amplitude contour. Ordinary name or text typing does not reuse this behavior. |
+| Shadowlord presence notice: a hideout town's entry notice and each Stonegate notice (`town-mode.md` section 13) | After the notice text prints, run `(1, 2000, 60000, 1, 6600)`. The five values are constants, the same for all three Shadowlords. Pitch: one constant gate rate, period 6600, about 2.35 kHz on the reference-machine model of section 5.4.3 (band about 2.10 to 2.50 kHz, scaling with the rest of the family); that figure is a model value, not a measurement. Contour: the comparison climbs by one per iteration from 2000 to 61,999 and never reaches the 16-bit wrap, so by section 5.4.6 the duty falls from about 97 percent to about 5 percent, crossing 50 percent just after the midpoint: a single swell and fade at one unmoving pitch. The opening is sparse for roughly its first 4,600 iterations, while the comparison is still below the period; the closing sparse stretch is shorter, roughly the last 3,000. It blocks; muting takes the silent arm. Measured under an emulator at a fixed 3000-cycle setting: each tone lasted 2.680 s at 2,260 to 2,270 Hz throughout, with the same swell then fade, in the Britain tone and in all three Stonegate tones, matching the model's 2.67 s and 2,263 Hz for that setting (about 44.5 microseconds per iteration, section 8.6.2). *(Added 2026-10-25, issue #300 Q4 and Q17.)* |
 | Camp apparition opening | After `An_apparition!\n` prints, run `(6, 2500, 10000, 1, 2620)` (`systems/rest-and-camp.md` Section 7). *(Added 2026-10-16, issue #298 Q10.)* |
 | Camp apparition six-note figure | Six envelopes `(13, 200, 5000, 1, P)` with P = 2620, 2620, 2620, 3700, 3900, 4160, in that order, before the old man's converge appearance. *(Added 2026-10-16, issue #298 Q10.)* |
 | Camp apparition per-member pair | For each living member: `(13, 200, 5000, 1, 5500)`, then the whole-viewport inversion, then `(1, 2500, 60000, 1, 5500)`. This pair is the "two-tone sting": both at period 5500, a short one of 5,000 iterations and a long one of 60,000. *(Added 2026-10-16, issue #298 Q10.)* |
@@ -1736,7 +1740,12 @@ not a fixed envelope delay. At the 3000-cycle setting the prelude measured
 2.76 s of silence separated the sequence from the first major flash, and the two
 flashes then sounded back to back for 1.71 s (about 0.86 s each, low-pitched and
 easy to miss under a coarse activity threshold). These are machine-dependent
-sums, not parameters; only the tick counts are contract.
+sums, not parameters; only the tick counts are contract. A later capture at the
+same setting timed the same span, from the end of the Stonegate fall to the
+first envelope, at 4.80 s, within about two video frames of the 4.83 s above; of
+it, the first viewport dissolve alone took 1.65 s (3.05 s at 1500 cycles), and
+`blackthorn.md` Section 7.1 tabulates the segments. *(Added 2026-10-25, issue
+#301 Q5.)*
 
 The six waits this section names are not the whole schedule. The cinematic
 requests **eight**, seventy-four ticks in all: two further four-tick waits
@@ -1910,8 +1919,8 @@ Those two sites are the only users of that recipe in the shipped game.
 
 | Trigger | Mode scope | Sound, and where it sits in the sequence | Suppression | Cancellation boundary | Turn cost |
 |---|---|---|---|---|---|
-| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the damage sequence is scripted: while any Good, Poisoned, or Sleeping member remains, the loop alternates the damage presentation, which plays its own rumble on every pass, with unavoidable damage to every non-Dead member. In the shipped status domain this exits on a total party wipe. Imported outside-domain status values do not keep it alive; see `vehicles.md` Section 6. It has no input branch of its own. | Not applicable; the party is dying. |
-| **Whirlpool.** The party, **in any vehicle**, moves orthogonally adjacent to a whirlpool active object. Diagonal adjacency does not trigger it. | Overworld. | The whirlpool object is cleared, `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool sprite**, and the viewport repaints, so the player watches a whirlpool standing where the party was - **then** the long descent - then the sprite is restored, the shared impact payload runs, and the party is teleported to fixed Underworld coordinates (`overworld.md` section 8). | The global sound toggle, tones only; see the shared recipe below. | **None** during the sound. The state commit - the teleport - happens strictly after it. For about seven seconds the player has a non-interactive cinematic beat. | Owned by `overworld.md`; the sound itself adds none. |
+| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the damage sequence is scripted: while any Good, Poisoned, or Sleeping member remains, the loop runs passes back to back with no calibrated wait or hold anywhere. Each pass is, in order: (1) the impact presentation of `overworld.md` Section 6.2.4 stage one - the impact figure at the party cell, the 300-update impact rumble `(10, 3000, 2000)`, about 216 ms, and one world tick; (2) the whole-party damage pass - for each roster slot below the party size that is not Dead, in slot order, a fresh `1..8` damage draw, then that member's panel row inverted, the 160-update ordinary damage rumble `(10, 1600, 2000)`, about 115 ms, the row restored, the damage subtracted and the whole stats panel repainted; (3) the party-capability test, and if anyone can still act the next pass starts at once. The loop is test-first, so the first pass follows `DROWNING!!!` (and the long descent before it) directly. A pass with `N` damaged members therefore sounds for about `216 + 115N` ms under the Section 10.2 model, about 331 ms for a solo Avatar, in `N + 1` separate bursts divided only by repaint and row-invert work; it advances the sound-only jitter state `300 + 160N` times and the gameplay generator `N` times. *(Added 2026-10-25, issues #300 Q27 and #301 Q3. The modelled period is consistent with the 0.337 s per solo pass measured on the stock game; the sounding fraction is not reconciled - the model predicts two bursts and about 331 ms of sound, against a reported single burst of about 0.30 s - see `OPEN-QUESTIONS.md`.)* In the shipped status domain this exits on a total party wipe. Imported outside-domain status values do not keep it alive; see `vehicles.md` Section 6. It has no input branch of its own. | Not applicable; the party is dying. |
+| **Whirlpool.** The party, **in any vehicle**, moves orthogonally adjacent to a whirlpool active object. Diagonal adjacency does not trigger it. | Overworld. | The whirlpool object is cleared, `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool sprite**, and the viewport repaints, so the player watches a whirlpool standing where the party was - **then** the long descent - then the sprite is restored, the impact-absorption stage (`overworld.md` Section 6.2.4 stage two) runs directly - **no** impact figure and **no** impact rumble (R612, issue #301 Q3) - and the party is teleported to fixed Underworld coordinates (`overworld.md` section 8). | The global sound toggle, tones only; see the shared recipe below. | **None** during the sound. The state commit - the teleport - happens strictly after it. For about seven seconds the player has a non-interactive cinematic beat. | Owned by `overworld.md`; the sound itself adds none. |
 
 **The shared recipe: the long descent.** Both rows play one glissando,
 span 7800, per-update delay 40, initial 660 Hz, nominal target 150 Hz, 195
@@ -1942,8 +1951,12 @@ and that difference is not worth modelling for this recipe (section 3).
 **On foot there is no long descent.** Both the whirlpool's plane change and this
 sound require a vehicle. What the on-foot arm does instead is owned by
 `overworld.md` section 8, which has it reach the shared impact payload; this
-document claims only that the long descent does not play, and makes no claim
-about what that payload sounds like.
+document claims only that the long descent does not play. That arm, like the
+vehicle arm, enters the payload at its absorption stage, so it plays no impact
+rumble; under a foot marker its only sounds are the ordinary damage rumbles of
+the whole-party pass, one per damaged member *(added 2026-10-25, issue #301 Q3;
+the earlier "makes no claim about what that payload sounds like" is superseded
+by this sentence)*.
 
 **Where whirlpools come from.** They are spawned dynamically on surface water
 rather than read from map data, at one chance in eight behind a restricted
@@ -1960,7 +1973,10 @@ cancellation path. **Medium** on the absolute duration, which is the static
 model of section 10. The claim that the drowning death loop *as a whole* is
 input-free is also **medium**: its exit condition and the absence of an explicit
 input branch are established, but one routine it calls on each pass was not read
-to its end.
+to its end. *(Updated 2026-10-25, issue #300 Q27: the impact presentation, the
+whole-party damage pass and the per-member damage helper have since been read
+for this pass's sequence; the capability scan is not recorded as read to its
+end, so this medium still stands.)*
 
 **Unresolved.** Type-ahead across the sweep: neither site flushes the keyboard
 buffer around it, so keys pressed during those seven seconds should survive into
@@ -2195,6 +2211,7 @@ per-iteration constant.
 |---|---:|---:|
 | Trap or failed reagent mix, step 40, target 3000 | 75 | **188 ms** (179 to 198 ms) |
 | Ordinary damage presentation, step 10, target 1600 | 160 | **115 ms** (110 to 121 ms) |
+| Impact presentation (overworld impact stage one: ranged hits, rough seas, each drowning pass), step 10, target 3000 (added 2026-10-25, issues #300 Q27 and #301 Q3) | 300 | **216 ms** (206 to 227 ms) |
 | Shared potion/wind lead, variant 0, step 800, target 8000 | 10 | **478 ms** (450 to 506 ms) |
 | Shared potion/wind lead, variant `v` | 10 + 2`v` | **478 ms plus about 96 ms per variant step** |
 | Two-tone sting, each half (step 1, target 25) | 25 | **about 4.6 ms** |
@@ -2233,6 +2250,7 @@ envelope's idle count does not affect its baseline duration.
 | Shrine offering swell, 920 runs (section 5.4.7) | 184,000 | **7.91 s** | about 6.13 s |
 | Shrine Codex-turn-in swell, 920 runs (section 5.4.7) | 138,000 | **5.93 s** | about 4.60 s |
 | Harpsichord key note (`town-mode.md` 13.1) | 4,000 | **172 ms** | **no note at all** - the handler skips the call |
+| Shadowlord presence notice, each (section 8.6; added 2026-10-25, issue #300 Q4 and Q17) | 60,000 | **2.58 s** | about 2.00 s |
 
 The complete shared sequence of section 6 is its lead rumble plus both
 envelopes. **These totals exclude the two viewport inversions**, which are
@@ -2465,3 +2483,4 @@ head of section 10: counts and orderings are exact program facts, durations and
 absolute pitches are modelled approximations with published tolerance, and the
 two potion viewport inversions are unresolved. `timing.md` section 7.6 lists the
 remaining gaps and says what a single emulator run would settle.
+- 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.

@@ -356,7 +356,9 @@ Several read-only pricing tables live in the resident data segment:
   `raw = base_rate * 10`. Pickup first computes that same adjusted ten-unit
   lodging charge, then multiplies it by the selected guest's stored stay
   counter, with a stored zero billed as one unit. The time system increments
-  that stored counter on each 28-day month rollover, capped at 25.
+  that stored counter on each 28-day month rollover while it is below 25, and
+  leaves any value of 25 or more unchanged (`systems/time.md` Section 8;
+  earlier "capped at 25", R587, issue #300 Q8).
 - **Horse-trader rows** (stable sales). The three shipped Talk-triggered horse
   traders use the base prices listed in Section 3, then apply the same
   adjustment shape as inn charges:
@@ -1264,8 +1266,10 @@ does nothing. Return or Space commits the highlighted guest. Escape prints
 unchanged. Every other key is ignored without a redraw: the digits `0`-`9`,
 letters, the four diagonal codes and line feed. Digits never move the
 highlight and never commit. In physical keys (Section 5 of `systems/input.md`),
-the arrow keys, numpad 8/2/4/6 and the top-row 8/2/4/6 held with Shift or
-NumLock move the highlight; plain top-row digits, numpad 5 and
+the arrow keys, numpad 8/2/4/6 and the top-row 8/2/4/6 with NumLock on move
+the highlight (Shift with a top-row digit types punctuation and does nothing;
+corrected 2026-10-25, issue #300 Q15: this said "held with Shift or NumLock",
+`RETRACTIONS.md` R589); plain top-row digits, numpad 5 and
 Home/End/PgUp/PgDn (diagonals) do nothing. That key mapping is inferred from
 the published translation, not executed at the register. This register is not
 the shared party-member selector that Leave uses, where digits do move the
@@ -1412,7 +1416,7 @@ invalid initial Y/N keys, which wait silently.
 | Shipwright result | Resource and resident envelope |
 |---|---|
 | Ordinary offer | Record `117` for Frigate or `118` for Skiff, then record `126`; confirmation Y/N only. *(added/corrected 2026-10-17, issue #299 Q2)* Record `126` ends with its closing quote and one space and no line feed, and the Y/N wait prints nothing (other keys are ignored silently), so the accepted echo is appended to the record's last row. Stock shows one row ending in the quote, a space and `No`. The same holds for the Frigate and the Skiff offer. |
-| Decline / accept | `No` or `Yes\n\n`. After `No` the F/S menu (record `119`) returns; that record begins with its own two line feeds, so the menu starts below the `No` row *(added/corrected 2026-10-17, issue #299 Q2; the return to record `119` is a single static reading not independently re-traced)* |
+| Decline / accept | `No` or `Yes\n\n`. `No` at an ordinary Frigate or Skiff offer ends the visit. No menu is redrawn, and the shared closing envelope follows at once (`\n\n"`, the bark, a line feed if the cursor is off column 0, then `says $.\n`). On screen that is the take-it row ending in `No`, one blank row, the quoted bark and the attribution. The bark comes from the no-sale row (`109..112`), unless gold was already debited earlier in the same visit, that is, a purchase was paid, the player answered `Yes` to the "anything else" question (record `124`) and then declined a later offer. In that case the bark comes from the sale row (`113..116`). The already-have-a-skiff refusal (record `121`) debits nothing, so a decline after it alone still gives the no-sale bark. Only `No` at the pending-delivery Frigate quote (record `125`) returns to the F/S menu. *(Corrected 2026-10-25, issue #300 Q25: this row said "After `No` the F/S menu (record `119`) returns"; retracted, `RETRACTIONS.md` R606.)* |
 | Affordability failure | Record `122`, then token-expanded `yells $.\n`; suppress ordinary farewell |
 | Pending delivery, another Frigate requested | Record `125`; Y/N only, bare `Yes` or `No` echo. Yes tests the fixed unaffordable special-delivery amount; No reopens the F/S menu. |
 | Standalone delivery newly queued | Record `123`, before payment/refresh and continuation |
@@ -1434,7 +1438,14 @@ selectors were independently resolved to record boundaries. These are static
 traces; no new full-game capture was taken for this table. The take-it
 row placement (issue #299 Q2) rests on the record's terminal content in the
 data file and a static reading of both offer paths, re-checked by a second
-reader, and agrees with the stock capture reported in the issue.
+reader, and agrees with the stock capture reported in the issue. The decline
+contract (issue #300 Q25) is an independent static reading of the shipwright's
+inner and outer routines, confirmed by a verifier. An ordinary-offer `No`
+leaves the offer with no menu re-render. The visit then ends through the
+farewell in the visit's sale or no-sale mode, and only the debit in a completed
+purchase switches the mode to sale. The one other exit, the insufficient-gold
+check, skips the farewell and is not a decline path. This agrees with the
+clean-side stock capture (`bd-shipwright`); no new capture was taken.
 
 ### 8.0 Scene-byte to shop-instance row mapping
 
@@ -2117,7 +2128,7 @@ copied payload; retracted, R569.)* Pickup clears a returned record by writing a
 zero marker; guest enumeration treats any nonmatching marker as "not a guest at
 this inn", so compatible writers should use zero for records that are not lodged. Source provenance (issue #299 Q14): the original Leave and Pickup executed end to end with seeded per-record defense and stay-counter values traced through the moves, plus a static reading of the guest count, the previous/next steps and the register list, in private analysis under `u5-decomp/notes/`.
 
-Because the registry is part of the save image, a player can leave a companion at an inn, save, reload weeks later, and pick up the companion. Each 28-day month rollover advances the stored stay counter, capped at 25, so a long-lodged guest can produce a larger bill.
+Because the registry is part of the save image, a player can leave a companion at an inn, save, reload weeks later, and pick up the companion. Each 28-day month rollover advances the stored stay counter while it is below 25 (a value of 25 or more is left unchanged; earlier "capped at 25", R587, issue #300 Q8), so a long-lodged guest can produce a larger bill.
 
 The stock inn rate rows are:
 
@@ -2403,7 +2414,9 @@ Space or Escape exits that menu. Entry and this menu append to the inherited
 message window. The former immediate-letter-menu and entry-clear descriptions
 are withdrawn (R405). Each shipwright has local prices for both sale classes.
 The flow quotes the selected price, asks for confirmation, runs the ordinary
-affordability check, and debits gold on success.
+affordability check, and debits gold on success. A declined confirmation ends
+the visit with the closing bark; it does not return to the menu (Section 8.C;
+added 2026-10-25, issue #300 Q25).
 
 Source provenance for greeting selection: fresh original shared-helper,
 ship-entry and record-loader traces under `u5-decomp/functions/SHOPPES_OVL/`
@@ -2690,7 +2703,8 @@ Several shop interactions read or write the world clock:
 - **The inn pickup mode** computes an Intelligence-adjusted ten-unit local
   lodging charge first, then multiplies it by the selected guest's stored stay
   counter. A zero counter is billed as one unit. The time system increments the
-  counter on each 28-day month rollover, capped at 25.
+  counter on each 28-day month rollover while it is below 25, and leaves any
+  value of 25 or more unchanged (earlier "capped at 25", R587, issue #300 Q8).
 
 Shop overlays do not consume turns themselves; the time the player spends in a shop menu does not advance the clock. Only the inn rest mode advances time as part of its action.
 

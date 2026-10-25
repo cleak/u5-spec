@@ -190,7 +190,10 @@ The four gates, in the order the handler applies them, are:
    summoned Shadowlord is standing on.
 3. **Handshake.** The active-Shadowlord id recorded by the name/Yell path must
    equal the shard's own index. Using the Shard of Falsehood on a summoned
-   Astaroth refuses.
+   Astaroth refuses. That id is the last Shadowlord summoned, and nothing
+   clears it (`formats/saved-gam.md` `0x0325`). So this gate does not show
+   that the Shadowlord is present; gate 2 does. *(Added 2026-10-25, issue
+   #300 Q3.)*
 4. Only then does the destruction run.
 
 Note the two different offsets: the name/Yell path drops the Shadowlord **two**

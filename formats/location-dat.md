@@ -371,7 +371,7 @@ At floor load, the pass runs if and only if the in-game hour is in the night ban
 
 Authored maps should not place `0x87` in the bottom row unless the implementation deliberately defines bottom-edge wrapping or clamping. The original loader relies on the shipped content avoiding an out-of-grid paired rewrite.
 
-Town mode also runs the same XOR pass against the already-loaded buffer when the normal per-turn clock update changes the hour to `5` or `20`. The pass is therefore stateful: callers should run it exactly when crossing those two boundaries, not on every daylight recompute.
+Town mode also runs the same XOR pass against the already-loaded buffer when the normal per-turn clock update, or a ten-minute step of the town-bed Hole-up loop, changes the hour to `5` or `20` *(added 2026-10-25, issue #300 Q6)*. The pass is therefore stateful: callers should run it exactly when crossing those two boundaries, not on every daylight recompute.
 
 ## 11. `MISCMAPS.DAT`
 

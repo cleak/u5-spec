@@ -438,14 +438,26 @@ to about 3.95 s of tick waits and gave a floor of roughly five seconds; that is
 retracted (`RETRACTIONS.md` R568).*
 
 Measured as emulator timings (DOSBox 0.74, `machine=ega`, normal core, fixed
-cycles), from the PC-speaker capture, which runs on emulated time, and from
-screenshots sampled about every 0.3 s:
+cycles). The first four columns come from the PC-speaker capture, which runs on
+emulated time. The last column is measured on the emulated clock from combined
+video and audio captures, whose frames are 16.7 ms apart, so each figure in it
+carries about ±17 ms of video quantisation. In that column, and in every
+key-relative figure below, **the key** is the moment the original consumes the
+key press: the first video frame in which the key-wait cursor glyph has been
+overwritten. The original's key poll can trail a physical press by up to about
+one tick period, so an implementation that times from its own key event must
+allow for that lag before it compares figures.
 
 | Cycle setting | Stings detected | Median sting spacing | First to last sting | Key to first captive-cell frame |
 |---|---|---|---|---|
-| 10000 | 32 of 36 (the sting is about 6 ms here and four were missed) | 110 ms (2 ticks) | 3.835 s | 4.2 to 4.5 s |
-| 3000 | 36 | 110 ms (2 ticks) | 3.922 s | 4.55 to 4.85 s |
-| 1500 | 36 | 220 ms (4 ticks) | 7.740 s | 8.7 to 9.0 s |
+| 10000 | 32 of 36 (the sting is about 6 ms here and four were missed) | 110 ms (2 ticks) | 3.835 s | 4.09 s |
+| 3000 | 36 | 110 ms (2 ticks) | 3.922 s | 4.29 s |
+| 1500 | 36 | 220 ms (4 ticks) | 7.740 s | 8.58 s |
+
+*(Corrected 2026-10-25, issue #301 Q4: the last column read 4.2 to 4.5 s,
+4.55 to 4.85 s and 8.7 to 9.0 s, timed from the wall clock with screenshots
+sampled about every 0.3 s; those figures are retracted, `RETRACTIONS.md`
+R613.)*
 
 - The cadence comes in whole ticks at all three settings, so the one-tick
   delays were real waits in every run.
@@ -453,13 +465,51 @@ screenshots sampled about every 0.3 s:
   30 ms against a 54.9 ms tick. That split is inferred from the phase of the
   first gaps. The first repetitions overflow (gaps of about 163 and 134 ms,
   which also take in the explicit redraw), and one further 129/91 ms pair
-  appears. Taking the capture's key-to-first-sting offset as about 0.1 to
-  0.15 s, the key to the end of the script came to about 4.05 to 4.2 s, a
-  little over the floor. That end point is computed from the capture, not
-  observed directly.
-- The key-to-cell-frame column also includes the handoff, the captive-cell
-  entry setup and the sampling interval. At 3000 cycles the message window held
-  unchanged for about 4.5 s after the key.
+  appears. The first sting starts about 0.01 s after the key at 3000 cycles
+  (about 0.04 s at 10000 and about 0.10 s at 1500, each ±17 ms of video
+  quantisation). At 3000 cycles the script ends about 4.02 s after the key,
+  about 73 tick periods: the 72 of the floor plus one overflow tick taken by
+  the opening repetitions' long gaps. That end point is computed as the last sting plus
+  its repetition's two tick periods, not observed directly; the viewport keeps
+  redrawing up to it, so no single frame marks it. *(Added and corrected
+  2026-10-25, issue #301 Q4: this bullet took the key-to-first-sting offset as
+  about 0.1 to 0.15 s and the key to the end of the script as about 4.05 to
+  4.2 s; retracted, `RETRACTIONS.md` R613.)*
+- The key-to-cell-frame column also includes the handoff and the captive-cell
+  entry setup that follow the script. Neither contains a tick wait, a key wait
+  or a print, so their cost is untimed work: CPU work plus the disk reads of
+  the entry setup, with no tick component. On the emulated clock it measured
+  about 0.27 s (about 5 tick periods) at 3000 cycles, about 0.52 s (about 9.5
+  tick periods) at 1500 and about 0.11 s (about 2 tick periods) at 10000. At
+  1500 and 3000 that is about 0.8 million emulated cycles either way; the
+  10000 figure, about 1.1 million (±0.17 million), is looser, because its end
+  of script is estimated and that run detected 35 of the 36 stings, the last
+  being assumed from the cadence. The emulator charges almost nothing on its
+  clock for disk reads from a mounted directory, so on period hardware the
+  reads of the location's NPC schedule file, its floor page and an overlay
+  add host- and disk-dependent time on top. That the span has no fixed,
+  tick-paced part rests on static reading; three timing points, each ±17 ms,
+  could not on their own exclude a single one-tick edge wait of up to one
+  tick period. *(Added and corrected 2026-10-25, issue #301 Q4: this bullet
+  attributed part of the column to "the sampling interval"; that is
+  retracted with the figures above, `RETRACTIONS.md` R613.)*
+- The first captive-cell frame is one full viewport repaint, seen across two
+  consecutive video frames. At 3000 cycles the message window's line-feed
+  scroll follows about 50 ms later and the command-row glyph about 17 ms after
+  that, so the message window holds unchanged for about 4.34 s after the key.
+  *(Corrected 2026-10-25, issue #301 Q4: this said about 4.5 s; retracted,
+  `RETRACTIONS.md` R613.)* Two repeat runs at 3000 cycles gave identical
+  timings to the frame.
+- For stock pacing at the 3000-cycle class, measured from the key as defined
+  above: the script ends about 73 tick periods after the key, and the cell
+  appears about 0.27 s (about 5 tick periods) later, 4.29 s after the key. An
+  implementation that hands off exactly 72 tick periods after the key
+  (about 3.95 s) and shows the cell at once is about 0.34 s ahead of that run.
+  How a reported lead of about 0.5 s splits beyond that is not established:
+  a stock host somewhat slower than the 3000 class, the lag between a physical
+  press and the original's key poll, and the reporter's capture method could
+  each account for the remaining 0.16 s or so (inferred; see
+  `OPEN-QUESTIONS.md`). *(Added 2026-10-25, issue #301 Q4.)*
 
 The last visible change in the vector comes on the first redraw of the first of
 the final six stinger repetitions (Section 6.3). The rest of that repetition
@@ -492,6 +542,13 @@ left behind, so both return without drawing. That is a property of the state the
 audience leaves, not of the helpers: at setup, where the scene byte is still the
 town value, the same pair does blank the two panel rows (Section 3). The
 captive-cell entry setup the arrest handler runs next prints nothing either.
+Nothing on the handoff or the entry setup is tick-paced, and neither waits for
+a key: their cost is untimed CPU work plus the entry setup's disk reads, with no
+tick component (figures in the timing bullets above). The Shadowlord presence
+notice of `systems/town-mode.md` Section 13, with its line and tone, belongs to
+Stonegate and to a Shadowlord's current hideout; the Blackthorn palace is
+neither, so the captive-cell entry never plays it. *(Added 2026-10-25, issue
+#301 Q4.)*
 
 The handoff leaves the cutscene presentation flag **raised**, and nothing in
 this overlay lowers it again. The flag is the shared current-actor selector with
@@ -551,8 +608,11 @@ reproduce one identical profile: one key wait, 36 stings, 73 world ticks, 72
 one-tick delay requests, and no print, character, window or input event between
 the record and the end of the handoff. The edge-waiting delay and the
 per-repetition structure are from static reading. The duration figures are
-DOSBox speaker-capture and screenshot timings at the stated cycle settings
-(issue #299 Q10), not period-hardware timings.
+DOSBox speaker-capture timings at the stated cycle settings (issue #299 Q10)
+and, for the key-to-cell column and the handoff cost, DOSBox video and audio
+captures on the emulated clock (issue #301 Q4), not period-hardware timings.
+That the handoff and the entry setup contain no wait, key wait or print, and
+that the presence notice is not reached, is static reading.
 
 ## 5. Failure Reaction
 
@@ -1168,7 +1228,10 @@ The rescue contract:
    because the scene is already the castle; a vanquished slot stays
    vanquished); the day advance; the month-boundary bundle of Section 8 there
    when the day passes 28 (long-period clears, every character record's month
-   counter up by one to the cap of 25, month and year carry); and then the
+   counter up by one while it is below 25 and otherwise left unchanged, as
+   `systems/time.md` Section 8 now states, where this step earlier said "to
+   the cap of 25" (R587, issue #300 Q8); and the month and year carry); and
+   then the
    single panel repaint, which therefore shows the rerolled state and the new
    date. Each hour crossed also lowers the camp cooldown by one, floored at
    zero (`systems/time.md` Section 6), and rewrites the cached twelve-hour
@@ -1295,7 +1358,25 @@ much work step 22 does (one pass per in-party slot, none at all for an empty
 roster), and whether step 22 prints any `Not dead!` lines. The text order and
 the wait order themselves are unconditional - they do not vary with moral
 standing, roster size, member status, provisions, the incoming scene value or
-the clock state.
+the clock state. (The conditional world tick of the next paragraph is neither an
+emission nor a wait, so it does not alter this order.)
+
+**Before step 1: nothing waits.** The list above holds emissions and waits only.
+Between the moment the wipe is complete and step 1's ten-tick wait the original
+waits for nothing: no tick wait, no key wait or key flush, no blocking sound and
+no print. In a town wipe it first finishes the turn the wipe ended, then makes
+the party-capability check that finds nobody able to act, then issues the
+contract step 1 disk-swap request and map-file presence probe (on the hard-disk
+installation captured, the request showed no prompt and the probe succeeded at
+once). When the incoming scene value is below the top of the town range, it then
+runs the one conditional world tick of the contract, which is a single repaint of
+the map viewport from the live grid and waits for nothing. After a Stonegate
+wipe that grid is all molten lava, so the viewport the trapdoor had filled black
+shows a full lava field with one prone figure at the centre cell; that the
+figure is the party's corpse image comes from static reading, while the prone
+figure itself was observed. The field stays up through step 1's wait and beat 1
+until the dissolve of step 3 takes it to black. Measured timings for this stretch
+are in Section 7.1. *(Added 2026-10-25, issue #301 Q5.)*
 
 **The acknowledgement key wait.** Step 19 is the cinematic's only blocking key
 read, and it is on none of the narrative beats: it sits between the verdict's
@@ -1383,6 +1464,50 @@ nominally about 2.86 seconds plus viewport-dissolve, text and redraw work.
 Timer phase affects the actual duration of each separate wait. None of
 these multi-tick requests is removed by the shared wait's one-tick
 slow-machine shortcut. There is no fixed 4.8-second tableau delay.
+
+**Measured Stonegate segments.** *(Added 2026-10-25, issue #301 Q5.)* The
+figures below are emulator timings on the emulated clock (DOSBox 0.74,
+`machine=ega`, normal core, fixed 3000 cycles; video frames 16.7 ms apart, so
+each point carries about ±17 ms), timed from the Up key's `North` echo in a
+Stonegate wipe. **Fall end** is the last party member's rumble and stats repaint
+after the trapdoor sweep.
+
+| Event | Time from echo | Interval |
+|---|---:|---|
+| `A TRAPDOOR!` printed | +0.05 s | |
+| Viewport black fill; the sweep starts | +0.10 s | |
+| Fall end | +27.52 s | |
+| Lava-field viewport repaint (the conditional world tick) | +27.59 s | about 0.07 s after fall end; the repaint itself takes about 17 ms |
+| Beat 1 starts printing | +28.14 s | about 0.53 s after the repaint (the ten-tick wait, its first period partial) |
+| First dissolve, to black | +28.20 to +29.86 s | 1.65 s |
+| Beat 2 | +29.89 s | |
+| Beat 3 | +30.66 s | 14 tick periods |
+| Beat 4 | +32.26 s | 28 tick periods plus print time |
+| Six-row envelope sequence | +32.32 to +43.88 s | 11.56 s |
+| Fall end to envelope start | | 4.80 s |
+
+The audio is silent from fall end until the envelope sequence starts. The 4.80 s from fall end to the envelope covers the same span
+as the 4.83 s prelude of `systems/audio.md` Section 8.6.2, measured in a
+separate capture; the two agree within about two video frames. It is a measured
+sum - 52 requested ticks, the CPU-bound first dissolve, the conditional repaint
+and the text work - not a fixed delay, which is what the sentence above says.
+At 1500 cycles the order is the same: fall end to the repaint took about
+0.13 s, the ten-tick wait about 0.52 s and the first dissolve 3.05 s, while the
+14- and 28-tick refuge waits stayed at their tick counts. The span from fall end
+to the repaint and the first dissolve therefore scale with emulated CPU speed,
+which is consistent with the static reading that neither contains a tick wait. On period hardware both are host-dependent, and the
+span before the repaint is disk-dependent too: the disk-swap request, the
+presence probe and any overlay load cost almost nothing under the emulator.
+Which segment an implementation that runs about 0.5 s ahead of this table has
+shortened cannot be told from the original side; timing the implementation's
+own run against these rows segment by segment would show it. The first dissolve
+and the sweep-and-rumble span are the largest untimed segments. None of these
+figures is from period hardware (`OPEN-QUESTIONS.md`). Source provenance: the
+step order before the first wait is static reading of private analysis in
+`u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/BLCKTHRN_OVL/` and
+`u5-decomp/functions/ULTIMA_EXE/`; the repaint, the silence and every duration
+are from executed original code under DOSBox video and audio capture at 1500
+and 3000 cycles, recorded under `u5-decomp/notes/`.
 
 **The complete BIOS-tick schedule.** The cinematic requests **eight** tick
 waits, not six, and seventy-four ticks in total:

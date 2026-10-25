@@ -157,6 +157,38 @@ Text behaviour inside the message window is the ordinary fixed-cell contract of
 advances one row, and the window scrolls up by one row when the cursor passes
 the bottom.
 
+**The viewport ribbons are left as the dungeon drew them** *(added 2026-10-25,
+issue #300 Q5)*. Nothing in the endgame repaints or blanks the top or bottom
+viewport band. The top band keeps the framed dungeon level label of the final
+room, which in stock data is `L8`: the final room is on the deepest Doom level,
+zero-based index seven, and the label displays one-based. The bottom band keeps
+the framed `Dir:` facing label with the facing the party had when it fell into
+the room. The entry's full-status-panel redraw paints only the stats panel, its
+counters, the date and the divider; the endgame issues no ribbon or label draw
+of its own and positions the text cursor only in its full-screen presentation;
+and the whole-tileset colour remap does not touch the band glyphs. The bands are
+overwritten only when the full-screen phase covers the screen (the section 7.1
+fade on the victory branch). An engine that blanks them, or draws an endgame
+caption there, diverges.
+
+What was observed and what was not: in a recording of the original under an
+emulator, the top band changed from `L7` to `L8` at the fall into the room and
+the bottom band read `Dir: North` throughout; from about ten seconds in to the
+end of the recording every frame had pixel-identical top and bottom bands. That
+recording covers the tableau, the restoration pass, Lord British's walk and
+greeting, the first box question and its `No` answer, and the second box
+question still waiting for its answer. The second answer, the whole refusal
+branch of section 6 and the victory branch up to the fade were not observed;
+that the bands survive them is static reading only. That the fall leaves facing
+unchanged rests on that one sample (`North`). The claim that none of the
+endgame's resident helpers writes either band is the analyst's static reading
+and has not been re-audited independently. These gaps are indexed in
+`OPEN-QUESTIONS.md`.
+
+Source provenance: frame comparison of an existing emulator recording, plus
+static reading of the endgame overlay and the panel redraw, recorded in private
+analysis in `u5-decomp/notes/`.
+
 ## 4. Party tableau and restoration pass
 
 Before Lord British's main dialogue, the endgame walks the active party slots and prepares each visible party member for the throne-room tableau.

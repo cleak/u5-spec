@@ -152,9 +152,25 @@ Special LOOKOBJ look cases include:
   the sign or poster text through the sign/poster helper. One fixed exception
   in Yew, floor `0`, at local coordinate `(x=17, y=21)` renders the
   resident wanted-poster presentation; that poster is not read from
-  `SIGNS.DAT`. Other sign/poster tiles load a scene-indexed `SIGNS.DAT`
-  record by current scene and target coordinate. If no record matches, the
-  sign path prints the blank-sign fallback.
+  `SIGNS.DAT`. Other sign/poster tiles look up the first `SIGNS.DAT` record
+  matching the target coordinate in a fixed window that starts at the current
+  scene's block and can run on into later scenes' records
+  (`formats/signs-dat.md` Section 5). A zero directory entry, or no match in
+  the window, prints the fixed six-row runic "LIVE BY THE / EIGHT LAWS" placard
+  of `formats/signs-dat.md` Section 6, which adds no line feed beyond its own
+  rows. *(Corrected 2026-10-25, issue #300 Q13: this bullet said the record was
+  chosen by current scene and coordinate, with a "blank-sign fallback"; the
+  scan is not bounded by the scene and stops at the first match,
+  `RETRACTIONS.md` R598 and R599.)*
+
+  *Line feeds around a sign (added 2026-10-25, issue #300 Q13).* The shared
+  preamble of entry-dispatch row 3 is a line feed, `Thou dost see`, and a line
+  feed; the sign path's own line break is a second, separate line feed. So
+  after `Look-North` the screen shows one blank row, `Thou dost see`, one more
+  blank row, then the sign rows. Executed on a shipped sign (four sixteen-cell
+  runic rows); the preamble's line feeds are read from its stored strings, and
+  the second blank row follows from `systems/text-output.md` Section 10.4
+  because the printer was stubbed.
 
   The fixed wanted poster is a nine-row framed sign stream. It prints the
   heading `Wanted:`, one blank spacer row, three centered name rows, another
@@ -269,12 +285,18 @@ paragraphs. Their public bytecode is deliberately limited:
 | End marker | Ends the record. |
 | Header-skip marker | Skipped before body rendering. |
 | Pause marker | Waits for a keypress, then resumes rendering. |
-| Two literal placeholders | Emit the same literal placeholder character used by shipped signs. |
-| Macro range | Substitutes one of the sign macro strings from the LOOKOBJ macro pool. |
-| Other bytes | Print the low seven bits as a display character. |
+| Two separator codes (raw byte only) | Print the runic code point of lowercase `l`, a full-width bar. |
+| Macro range (raw byte only) | Switch to the runic font and print one sixteen-cell sign macro string from the LOOKOBJ macro pool. |
+| Other bytes | Print the low seven bits as a display character in the font the byte's high bit selects. |
 
-The high bit of ordinary sign text is not text content; the renderer masks it
-off for output while preserving the path's mode toggle side effect.
+Each byte's high bit selects its font before any control test: clear is the
+runic font, set is the Roman font. The control tests compare the raw byte, so a
+high-bit separator, macro or pause code prints as an ordinary Roman character
+(or, for `0x8D`, a carriage return), and the Roman font is restored after the
+record (`formats/signs-dat.md` Section 4). *(Corrected 2026-10-25, issue #300
+Q13 and Q21: this paragraph said the renderer masks the high bit off "while
+preserving the path's mode toggle side effect"; that is retracted,
+`RETRACTIONS.md` R600.)*
 
 ## 4. Overworld And Town View
 

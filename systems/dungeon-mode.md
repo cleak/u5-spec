@@ -96,7 +96,7 @@ Each consumed turn runs the dungeon turn loop once. Its structure is parallel to
 **Underfoot reaction.** If the cached high nibble is room-helper state (`0xA`) or room trigger (`0xF`), run the room-entry helper — which loads a combat arena from `DUNGEON.CBT` and hands off to combat mode (§ 5, § 14). Otherwise run a brief re-init pass: a visibility hint, the torch burn-down call, and a view-renderer initialise.
 
 **Inner loop.**
-1. **Pendulum tick.** In Q-quest mode the loop alternates between running and skipping the time-advance call so quest scenes pass time at half rate. Normal play keeps the pendulum disabled.
+1. **Clock tick.** The iteration's world-clock call (one minute, Section 15) is gated on the shared timed-effect tag of `systems/magic.md` and on nothing else. While Negate Time (`T`) is active the call is not made at all, so no minute passes. While Quickness (`Q`) is active the call is made only on every other iteration, so dungeon time passes at half rate; a call that is made still advances one minute, because the clock routine's own halving of a one-minute increment is forced back to one (`systems/time.md` Section 4). With neither tag the call is made on every iteration. This alternation is reachable in ordinary play by casting Quickness. *(Corrected 2026-10-25, issue #300 Q10: this step earlier called the alternation a "Q-quest mode" pendulum that "Normal play keeps ... disabled" and did not mention Negate Time; retracted, `RETRACTIONS.md` R595. Static reading of the dungeon loop, confirmed by an independent verifier; not executed.)*
 2. **Render and poll.** Drain the stats-panel refresh request first - test it, repaint the whole stats panel if it is set, clear it - then paint the first-person view (§ 6), emit the newline and wait for a keystroke. This is the dungeon's only consumption point for that request (`systems/stats-panel.md` Section 2.3). The primitive blocks until an accepted key arrives; if it returns a negative sentinel rather than a dispatchable key, the loop skips step 3 for that iteration. The sleep line is not produced here — it belongs to the party-capability check of step 7.
 3. **Dispatch.** The keystroke goes to the dungeon command handler, which routes the four cardinal direction codes — and Enter and the period key, which mean "advance" here — to the dungeon movement dispatcher; digits to the solo-member selector, always reporting "no action" afterwards; the four shared Control bindings (exit-to-DOS prompt, moral-standing readout, sound toggle, version banner) to their own arms; and everything else, letters included, to the resident command dispatcher (§ 10). The handler's own default is "acted", so an unrecognised byte forwarded to the dispatcher reports whatever the dispatcher decides.
 4. **Scene-byte exit check.** If the scene byte has dropped to thirty-two or below, the player has climbed out (§ 13) and the loop breaks.
@@ -303,8 +303,9 @@ under one display-mode condition in which the painter reloads that byte from the
 family's presentation record; which condition that is, is not published here
 (`OPEN-QUESTIONS.md`). Stock never writes an all-zero record: its own inactive
 form (placement failure, below) keeps `0xFF` in the class byte and writes
-off-grid X/Y. A-Attack does not test the inactive marker at all; it relies on
-those off-grid coordinates never matching a cell. Stock fresh-rolls on every
+255 (`0xFF`) into both X and Y *(added 2026-10-25, issue #300 Q24)*. A-Attack
+does not test the inactive marker at all; it relies on those off-grid
+coordinates never matching a cell. Stock fresh-rolls on every
 level change and reuses only on resume and on return from the character
 screen, so on a stock-written save the stamped level always equals the party's
 level; a mismatched level or an all-zero record comes only from a save image
@@ -330,18 +331,41 @@ classes are 20, 21, 22, 23, 24, 25, 28 and 27 in family order. *(Corrected
 2026-10-17, issue #299 Q3: this sentence said "class zero is Giant Rat", which
 named the family byte as the class; retracted, `RETRACTIONS.md` R567.)*
 Placement makes up
-to eight random attempts on the current 8-by-8 level, accepting only cells in
-the pit and open-chest spawn families (`0x6?` or `0x7?`) — both of which the
-renderer paints as passage — and rejecting the party's
-current cell. On success the same X/Y is written to the active-object slot and
-the first dungeon creature slot. On failure the active-object coordinates and
-sprite marker are cleared so no wandering object is drawn. Giant Spider and
+to eight random attempts on the current 8-by-8 level. A candidate cell is
+accepted when its high nibble is `0x0` through `0x5` or `0x7` (passage, the
+three ladder classes, closed chest, fountain, open chest) and rejected when it
+is `0x6` (pit) or `0x8` and above (energy fields, the room/door classes and the
+wall classes); a candidate is also rejected when it shares the party's X **or**
+the party's Y, so the party's whole row and whole column are excluded, not only
+its own cell. *(Corrected 2026-10-25, issue #300 Q24: this sentence said
+placement accepted "only cells in the pit and open-chest spawn families (`0x6?`
+or `0x7?`)" and rejected only "the party's current cell"; both halves are
+retracted (R610).)* On success the same X/Y is written to the active-object slot and
+the first dungeon creature slot. On failure, after the eighth rejected attempt,
+X and Y of both the active-object record and the first dungeon creature slot
+(the slot that would have received the copy) are set to 255, outside the 0..7
+grid; then type and tile are set to zero and the class byte to the inactive
+marker `0xFF`. The sprite-state byte, the placement selector (zero, as the roll
+wrote it) and the stamped level are left as the roll wrote them. No cell can
+match 255, so nothing is drawn, contacted, blocked or attacked. *(Clarified
+2026-10-25, issue #300 Q24: the earlier "coordinates and sprite marker are
+cleared" did not mean zero; a zeroed X/Y would be a live record at cell (0, 0).)*
+Giant Spider and
 Slime alone receive a special upper/ceiling placement test: an inclusive draw
 from 0 through 99 sets the flag when greater than 48 (51/100). It is not an
 invisibility state.
 
-**This setup step is silent, and it is the only writer of the record
-underground.** *(Established 2026-09-12, issue #262.)* Neither its success arm
+**This setup step is silent, and apart from one inactivating write it is the
+only writer of the record underground.** *(Established 2026-09-12, issue #262;
+re-scoped 2026-10-25, issue #300 Q24, R609: the earlier "it is the only writer
+of the record underground" is withdrawn.)* The exception is the dungeon-view
+initialisation: on dungeon view entry (including the entry straight after an
+A-Attack fight) it takes an arm that writes the same inactive form as placement
+failure - type and tile zero, X and Y 255, class `0xFF` - and it does so just
+before the fresh roll, which then overwrites the record. It never writes a live
+record. Whether that arm also runs on the two reuse paths above (resume and the
+return from the character screen) was not established; the reuse contract
+assumes it does not (`OPEN-QUESTIONS.md`). Neither the setup's success arm
 nor its failure arm emits any text - no message, no prefix, no acknowledgement -
 so an accepted level change, a dungeon entry and a return from a dungeon fight
 all re-roll the wandering monster with nothing printed. **No player command
@@ -1007,7 +1031,7 @@ the following dungeon-specific meanings:
 |---|---|
 | `type` | Monster family and `MONn` resource selector, inclusive `0..7`. Zero is Giant Rat and is valid. |
 | `tile` | A mirror of `type` written by fresh setup. The corridor painter does not use it as a separate animation tile. |
-| `x`, `y` | Wrapped dungeon cell coordinates, each `0..7`. |
+| `x`, `y` | Wrapped dungeon cell coordinates, each `0..7`; 255 in each in an inactive record (Section 4.1). *(added 2026-10-25, issue #300 Q24)* |
 | `z` | Dungeon level, stamped by fresh setup (its only writer). No dungeon-mode behaviour depends on it; the one generic search that compares it cannot match this record (Section 4.1). *(added 2026-10-17, issue #299 Q3)* |
 | `dep1` | Combat class id. `0xFF` means this dungeon record is inactive. |
 | `phase` | Packed sprite state: symmetry, animation mode and phase. |
@@ -1739,6 +1763,21 @@ runs the active-object setup step of Section 4.1, which rolls a replacement
 active monster, and redraws the first-person view. Both surface-exit arms clear
 the dungeon scene, which is exactly why that gate exists.
 
+*(Added 2026-10-25, issue #300 Q10.)* A-Attack spends no time of its own. On
+every path, match or `What?`, the handler reports "no action", so the dungeon
+post-action pass (Section 4 step 6: the wake roll, the active-monster step, the
+encounter auto-face, the underfoot reaction) does not run for this command, and
+the handler calls no clock before or after the fight. The only minute that
+precedes the arena is the iteration's loop-head minute (Section 4 step 1,
+Section 15), spent before the key was read - and that one is itself absent
+under Negate Time and on alternate iterations under Quickness. Combat then adds
+only its own round-wrap minutes. So an implementation must neither skip the
+ordinary loop-head minute before a dungeon arena nor charge a second one, nor
+run the post-action pass after it. The overworld A-Attack differs only because
+the overworld minute is gated on "acted" (`systems/town-mode.md` Section 7).
+Static reading of the dungeon loop and the dungeon attack handler in
+`u5-decomp/functions/DUNGEON_OVL/`, confirmed by an independent verifier.
+
 Before letters reach that dispatcher, the dungeon command parser intercepts
 mode-local controls: the four cardinal direction codes plus Enter and the period
 key as forward movement, the four shared Control bindings (exit-to-DOS prompt,
@@ -1750,9 +1789,12 @@ ordinary shared commands such as M-Mix still work in dungeons: they are not
 handled by the local parser and fall through to the resident command dispatcher.
 
 Dungeon mode is also the one mode whose own command reader does not run the
-shifted-digit-to-direction translation of `input.md` Section 5. Shifted or
+modifier-held digit-to-direction translation of `input.md` Section 5.
 NumLock-ed top-row digits stay ordinary digits at the dungeon command prompt and
-select a solo party member like any other digit. Resident prompts reached from
+select a solo party member like any other digit. Shift with a top-row key types
+punctuation rather than a digit, so it selects no member. *(Corrected
+2026-10-25, issue #300 Q15: this said "Shifted or NumLock-ed top-row digits"
+select a solo member; the Shift half is retracted, `RETRACTIONS.md` R589.)* Resident prompts reached from
 a dungeon read keys through the shared resident reader and do translate them
 (Section 11's hours prompt). *(Corrected 2026-10-17, issue #299 Q18: this
 paragraph previously said dungeon mode does not run the translation at all;
@@ -1795,11 +1837,24 @@ count of five. In order: `Hole up & ` then `camp!\n\n`; then
 the cell just after the prompt's trailing space. Every key other than a digit
 or Space is discarded silently - no echo, no reprint, no line feed, no message,
 no cursor movement - and Escape does not cancel. The digit test sees the shared
-resident command reader's output, so with Shift or NumLock held the top-row
+resident command reader's output. With NumLock on, top-row and keypad
 `1`-`4` and `6`-`9` arrive as direction codes and are discarded the same way,
-while `5`, `0` and Space are still accepted; arrow, Home, End, PgUp and PgDn
-keys are likewise discarded (`systems/input.md` Section 5; static reading
-only, not executed). The accepted key is echoed in that cell followed by one
+while `5` from either row, `0` and Space are still accepted. With Shift held
+and NumLock off, keypad `1`-`4` and `6`-`9` are discarded and keypad `5` is
+accepted. Shift with a top-row key types punctuation (`!`, `%`, ...), which is
+never a digit, so under Shift every top-row digit is discarded, `5` included.
+Arrow, Home, End, PgUp and PgDn keys are likewise discarded, and so are keypad
+keys pressed with no modifier, keypad `5` included (`systems/input.md`
+Section 5). Executed in an emulator at this prompt. Shift with top-row `1` or
+`5`, and keypad `1` with NumLock or with Shift, were discarded. Top-row or
+keypad `5` with NumLock, and keypad `5` with Shift, were accepted. An
+independent verifier re-ran it: Shift with `5`, Shift with `1` and keypad End
+left the prompt waiting, a following top-row `5` was accepted, and with
+NumLock on top-row `1` and `4` were discarded while keypad `5` was accepted.
+*(Corrected 2026-10-25, issue #300 Q15: this sentence previously said that
+"with Shift or NumLock held the top-row `1`-`4` and `6`-`9` arrive as
+direction codes" and that `5` is "still accepted"; the Shift half is
+retracted, `RETRACTIONS.md` R589.)* The accepted key is echoed in that cell followed by one
 line feed; Space (echoed as a blank) or `0` (echoed) then aborts with no
 further output. The rows are therefore `Hole up & camp!`, a blank row, then
 `For how many hours? (1-9) N` with N the accepted key. The wait never advances
@@ -2114,8 +2169,11 @@ directions that cell provides:
   accepts: `U` (either case) or the up-direction code for up; `D` (either case)
   or the down-direction code for down; Space for pass. The direction codes come
   from the shared reader's translation (`systems/input.md` Section 5): the Up
-  and Down arrows always, and keypad 8 and 2 as well; and, while Shift or
-  NumLock is held, the digits `8` and `2` from the top row too. Every other key
+  and Down arrows always, and keypad 8 and 2 as well; and, while NumLock is
+  on, the digits `8` and `2` from the top row too. Shift with top-row `8` or
+  `2` types punctuation and is ignored like any other key *(corrected
+  2026-10-25, issue #300 Q15: this said "while Shift or NumLock is held";
+  the Shift half is retracted, `RETRACTIONS.md` R589)*. Every other key
   is ignored and read again with no echo and no tone, including `<`, `>`, Esc,
   Enter, the period, the Left and Right arrows, the other letters, the function
   keys, Home/End/PgUp/PgDn (the diagonals) and control keys. There is no cancel
@@ -2134,7 +2192,7 @@ written to the message window**, on any of these routes.
 | Route and cell | Rows, in order |
 |---|---|
 | K, exactly one direction offered | `Klimb-` then `Up!\n` or `Down!\n` |
-| K, both offered | `Klimb-U/D-`, then a blocking wait: `U`/`u` or the up-direction code (Up arrow, keypad 8, or top-row `8` with Shift or NumLock) gives `Up!\n`, `D`/`d` or the down-direction code (Down arrow, keypad 2, or top-row `2` with Shift or NumLock) gives `Down!\n`, Space gives `Pass\n\n` and changes no level, and any other key is re-read |
+| K, both offered | `Klimb-U/D-`, then a blocking wait: `U`/`u` or the up-direction code (Up arrow, keypad 8, or top-row `8` with NumLock on) gives `Up!\n`, `D`/`d` or the down-direction code (Down arrow, keypad 2, or top-row `2` with NumLock on; Shift with a top-row key is punctuation, R589) gives `Down!\n`, Space gives `Pass\n\n` and changes no level, and any other key is re-read |
 | K, neither offered, cell carries the gear mark | `Klimb-\nWith What?\n` and nothing else |
 | K, neither offered, no climbable feature | `Klimb-what?\n` and nothing else |
 | Up or Down spell, ordinary level change | the same `Up!\n` or `Down!\n`, and only that — the casting framework adds no success line of its own on this route |
@@ -2624,6 +2682,25 @@ conflict banner, and the framer's ambush arm adds no replacement banner.
       in that side's wall line, a door-family neighbour carves five cells, and
       a wall neighbour fills that side's outer strip (row 0 or 10, or column 0
       or 10) with `0xFF`, including that side's two wall stubs.
+      *(Added 2026-10-25, issue #300 Q24.)* The seven-cell carve writes the
+      room floor byte over indexes 2 through 8 of the wall line, and the
+      five-cell carve over indexes 3 through 7: north is row Y = 1 at
+      X = 2..8 or 3..7; east is column X = 9 at Y = 2..8 or 3..7; south is
+      row Y = 9 and west is column X = 1, with the same index runs. The
+      crossing cells at indexes 1 and 9 of each line are never carved. A wall
+      neighbour's strip fill covers that side's whole outer row or column,
+      indexes 0 through 10: row Y = 0 for north, column X = 10 for east, row
+      Y = 10 for south, column X = 0 for west. The neighbour that decides each
+      side is the party's-level cell one step from the party - north (X, Y-1),
+      east (X+1, Y), south (X, Y+1), west (X-1, Y) - with each coordinate
+      wrapped into 0..7. One extra write depends on the class of the party's
+      **own** cell, not the neighbour's: when the party stands on a `0xE?`
+      cell (the door-presentation class, which the party can occupy) and the
+      **north** neighbour is a wall class, the strip step also writes the
+      outline wall byte at the interior cells (5,2) and (5,8); when the
+      **west** neighbour is a wall class it writes them at (2,5) and (8,5).
+      Apart from that exception, the cells listed in steps 1 to 5 are every
+      terrain cell the arena synthesis writes.
 
    These are the same terrain bytes the shipped `DUNGEON.CBT` rooms use: `0xFF`,
    `0x05`, `0x4D`, `0x44`, `0x4F` and `0x45` are that file's six commonest.
@@ -2641,13 +2718,18 @@ conflict banner, and the framer's ambush arm adds no replacement banner.
    > - the **wall** classes carve **nothing**: that side's outer edge strip, one
    >   cell outside the wall line, is filled with the same filler byte the
    >   always-outside corners get, and the side stays sealed;
-   > - the remaining classes (the door families) carve the five-cell opening.
+   > - the remaining classes - high nibbles `0xA` (cleared room), `0xE` (door
+   >   presentation) and `0xF` (room trigger) - carve the five-cell opening;
+   >   `0x0` through `0x9` take the seven-cell route and `0xB` through `0xD`
+   >   are the wall classes *(clarified 2026-10-25, issue #300 Q24; this item
+   >   previously said only "the door families")*.
    >
    > So a chamber can be built with fewer than four openings, and a wall side is
-   > sealed rather than stroked. Two limits on this re-derivation: the room
-   > painter was read only through about half its length, so a later pass in its
-   > unread tail could in principle overwrite edge cells (not verified either
-   > way); and the filler byte is the same `0xFF` the corner markers use,
+   > sealed rather than stroked. *(Upgraded 2026-10-25, issue #300 Q24: the
+   > room painter has now been read to its end; after the outline step it
+   > writes only the metadata band, columns 11 and up, and no terrain cell, so
+   > the earlier "read only through about half its length" limit is removed.)*
+   > One limit remains: the filler byte is the same `0xFF` the corner markers use,
    > which the tile catalogue names darkness (clarified 2026-10-16, issue #298
    > Q13) - the renderer's handling of that byte was not traced.
 
@@ -2811,7 +2893,7 @@ This gives Deceit records `0..15`, Destard `16..31`, Wrong `32..47`, Covetous `4
 
 ## 15. Time integration
 
-Dungeon turns advance the world clock at the indoor rate: one minute per loop iteration (not during the all-asleep cycle of Section 4 step 7, which never reaches the advance; added 2026-10-18, issue #299 Q23). The loop calls the same world-clock advance routine that town turns use, but — unlike the town and overworld loops — it does **not** gate that call on whether the command consumed a turn. The single call site sits at the head of each iteration, ahead of the render-and-poll step and the command dispatch, so a command the dispatcher reports as "no action" (a digit solo-select, a refused Push, the typeahead toggle) still costs a minute underground. Only the dungeon post-action pass is gated on the status word. Earlier wording here calling the call a per-turn epilogue keyed to a consumed turn is withdrawn; see `systems/commands.md` Section 3. The clock cascades normally: daily Shadowlord hideout maintenance runs at midnight, and month-boundary character counters and long-period flag clears run when the day wraps past 28, even though the player is underground.
+Dungeon turns advance the world clock at the indoor rate: one minute per loop iteration, except that no minute is spent while Negate Time is active and the minute is spent only on every other iteration while Quickness is active (Section 4 step 1; added 2026-10-25, issue #300 Q10) (not during the all-asleep cycle of Section 4 step 7, which never reaches the advance; added 2026-10-18, issue #299 Q23). The loop calls the same world-clock advance routine that town turns use, but — unlike the town and overworld loops — it does **not** gate that call on whether the command consumed a turn. The single call site sits at the head of each iteration, ahead of the render-and-poll step and the command dispatch, so a command the dispatcher reports as "no action" (a digit solo-select, a refused Push, the typeahead toggle) still costs a minute underground. Only the dungeon post-action pass is gated on the status word. Earlier wording here calling the call a per-turn epilogue keyed to a consumed turn is withdrawn; see `systems/commands.md` Section 3. The clock cascades normally: daily Shadowlord hideout maintenance runs at midnight, and month-boundary character counters and long-period flag clears run when the day wraps past 28, even though the player is underground.
 
 Two dungeon-specific consequences: **lighting decay** (the torch and
 light-spell counters tick down each turn — § 7), and **record month counters**
@@ -2819,7 +2901,7 @@ light-spell counters tick down each turn — § 7), and **record month counters*
 does in towns; `systems/time.md` owns the inn-billing consumer and the
 no-separate-active-consumer boundary).
 
-Time does *not* advance during prompts (camp duration, Y/N drink, etc.). The Q-mode pendulum mentioned in § 4 is a quest-mode feature; in normal dungeon play it stays disabled.
+Time does *not* advance during prompts (camp duration, Y/N drink, etc.). The every-other-iteration alternation of § 4 step 1 is the Quickness spell's effect and runs in ordinary play whenever Quickness is active; Negate Time suppresses the loop-head minute outright. *(Corrected 2026-10-25, issue #300 Q10: this sentence said the "Q-mode pendulum" "is a quest-mode feature; in normal dungeon play it stays disabled"; retracted, `RETRACTIONS.md` R595.)*
 
 ## 16. Persistence
 
@@ -3070,7 +3152,9 @@ The behaviour described here was derived by reading the private function notes l
   line feed, the Space and `0` abort and the watch-question gate with its
   silent Y/N discard were established by executing the shipped resident
   hole-up wrapper in a dungeon scene with scripted keys, re-run by an
-  independent verifier. The modifier-held digit, arrow and paging-key discard
-  and the absence of the idle redraw tick rest on static reading of the shared
-  resident command reader only. Sources: `u5-decomp/notes/` and
+  independent verifier. The absence of the idle redraw tick rests on static
+  reading of the shared resident command reader only. The modifier-held
+  digit, keypad, arrow and paging-key cases were executed later (issue #300
+  Q15, 2026-10-25) and corrected the Shift case (R589). Sources: `u5-decomp/notes/` and
   `u5-decomp/functions/ULTIMA_EXE/`.
+- 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.

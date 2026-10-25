@@ -531,6 +531,40 @@ effect, and one chance in sixteen replaces the effect with a random potion id
 from `0..7`. This variation changes only the effect branch after the counter is
 spent; the consumed counter is still the colour the player chose.
 
+**Draw order of the variation roll.** *(Added 2026-10-25, issue #300 Q23.)*
+The random-id draw is made **only on the one-in-sixteen branch**. One potion use
+runs, in order:
+
+1. The selected colour's counter is decremented and `Potion` is printed.
+2. The target is chosen. A cancelled or refused target ends the use here: no
+   presentation runs, no variation draw is made, and the counter stays spent.
+   In combat the target is taken from a table rather than prompted, so this
+   exit is not reached there.
+3. The shared presentation below runs for the selected colour.
+4. **First draw**, uniform over `0..15`, on every use that reaches this step: `0`
+   forces the Orange effect and makes no further draw; `1` makes a **second
+   draw**, uniform over `0..7`, whose value becomes the effect id (it may come
+   out as the selected colour or as Orange); `2..15` keep the selected colour.
+5. The chosen effect arm runs; any draw it makes comes after these.
+
+A use therefore consumes one gameplay draw, or two when the first result is
+exactly `1`. Both draws are exactly uniform: the range helper advances the
+gameplay generator once per call and reduces it modulo the span, and the
+generator's span divides evenly by sixteen and by eight. Overall, for a bottle
+other than Orange the effect is the selected colour with probability
+`14/16 + 1/128`, Orange with `1/16 + 1/128`, and each of the other six colours
+with `1/128`; for the Orange bottle it is Orange with `15/16 + 1/128` and each
+of the other seven colours with `1/128`. Source provenance: executed original
+potion handler with the original range helper over 572 seeds plus a
+cancelled-target run, and a static reading, re-run and confirmed by an
+independent verifier; private analysis in `u5-decomp/functions/CAST_OVL/` and
+`u5-decomp/notes/`. The probe stubbed the presentation and the target selector,
+so the two negatives - that the presentation draws nothing from the gameplay
+generator and that a cancelled target consumes no draw - rest on a static
+reading of those helpers (no direct generator call was found) together with
+`systems/audio.md` Section 5.3, which gives the rumble its own private jitter
+state; they were not executed (`OPEN-QUESTIONS.md`).
+
 #### Shared potion flash and timing
 
 After a target is accepted but before the variation roll, every potion runs a
