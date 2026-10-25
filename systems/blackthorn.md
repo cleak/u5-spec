@@ -483,7 +483,8 @@ R613.)*
   tick periods) at 1500 and about 0.11 s (about 2 tick periods) at 10000. At
   1500 and 3000 that is about 0.8 million emulated cycles either way; the
   10000 figure, about 1.1 million (±0.17 million), is looser, because its end
-  of script is estimated and that run detected 35 of the 36 stings, the last
+  of script is estimated and the combined video-and-audio capture used for it
+  (separate from the speaker capture in the table) detected 35 of the 36 stings, the last
   being assumed from the cadence. The emulator charges almost nothing on its
   clock for disk reads from a mounted directory, so on period hardware the
   reads of the location's NPC schedule file, its floor page and an overlay
