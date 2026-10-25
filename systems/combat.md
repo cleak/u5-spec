@@ -1077,7 +1077,7 @@ per-slot per-round state used by every consumer:
 | `0x40` | **Monster-side slot** (self-acting AI actor). Placement stamps this bit when it writes an ordinary monster descriptor, except for the two passive/neutral classes 8 (Pirate) and 9 (the adjacent reserved row), which are stamped `0x20` instead. Bits `0x80` and `0x40` are mutually exclusive as written by placement. |
 | `0x20` | Marked dead or otherwise non-acting. Monster death overwrites the whole flags byte with this value; party death ORs it in. |
 | `0x10` | **Invisible / phase-hidden.** The phase/blink filter (bypassed on scene `'('` `0x28` and on monster type `'/'` `0x2F`). This is the invisibility bit on the paths traced for the combat command handler: it is what the melee cursor's seed gate rejects alongside the marked-dead bit (Section 8.2). Prose elsewhere in this document that separates a "phased/blinked" state from a "hidden/not-yet-revealed" one - the possession-eligibility list in Section 9 among it - predates this correction and has not been re-derived against the bit layout. |
-| `0x08` | **Asleep / magically disabled.** Not charm: charm and every other externally-controlled state live in bit `0x01` alone, and no traced path writes `0x08` for a charm or possession effect. Combat sleep for non-party targets stores into this bit; party sleep uses the character status byte `'S'` instead. Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). The stats panel's combat status letter does not consult this bit, so an asleep party member still shows the roster status letter. |
+| `0x08` | **Asleep / magically disabled.** Not charm: charm and every other externally-controlled state live in bit `0x01` alone, and no traced path writes `0x08` for a charm or possession effect. Every combat sleep path stores into this bit, for party and non-party targets alike: the shared sleep routine of Section 12 (reached by the Gazer's gaze, the sleep attack tier, the Sleep spell and Sleep Field contact) sets it on a party target **as well as** writing the roster status `'S'` and the prone marker. The command handler's asleep arm (Section 8.1) tests this bit, not the status letter. *(Corrected 2026-10-25, issue #302 Q6: this row previously said party sleep uses the status byte `'S'` instead of this bit; that is retracted, `RETRACTIONS.md` R624.)* Party placement also pre-sets this bit when the character's roster status byte at placement time is neither `'G'` (good) nor `'P'` (poisoned). The stats panel's combat status letter does not consult this bit, so an asleep party member still shows the roster status letter. |
 | `0x04` | **Dragged-under (Corpser-held).** Its own turn arm prints `ARGH!` and rolls for release in place of a command (Section 8.1), and the melee occupancy lookup excludes a slot carrying it (Section 8.2). *(**Corrected.** This row previously read "Hidden / not-yet-revealed (invisible)". That name is **withdrawn**: invisibility rides on bit `0x10` above, and no traced path tests `0x04` for it - `RETRACTIONS.md` R380.)* |
 | `0x02` | Fleeing. Set by the wound-morale writer, by the no-target centre fallback, and directly by the Cause Fear and Repel Undead sweeps (Section 9); consumed by the step-vector synthesizer. |
 | `0x01` | **Charmed / under external control.** Set by monster possession, by the Charm spell, by summon/conjure placement, and by the Sword of Chaos compulsion path; see Section 6.1a for the full writer/reader contract. It is *not* a dispatch gate for the round walker. |
@@ -1739,7 +1739,10 @@ it, sets the narration status to the sleep code so the shared narrator prints
 `<target> slept!`, redraws the stats panel, and renders one frame unless the
 rest/camp alternate-entry marker is set, in which case the frame is skipped. For a
 non-party defender it sets the descriptor's disabled bit, sets the same
-narration code, marks the record's spare byte and renders. **It writes no HP on
+narration code, sets the linked record's phase byte to the freeze sentinel
+(`active-objects.md` Section 3), so its animation stops until the wake helper
+zeroes the whole byte and the script restarts at step 0, and renders (naming
+clarified 2026-10-25, issue #302 Q6; formerly "marks the record's spare byte"). **It writes no HP on
 either path, and it carries no sound of its own.** A party defender already
 marked dead is refused outright, with nothing written. One asymmetry is worth
 implementing deliberately: the status letter and the presentation byte are
@@ -2279,8 +2282,10 @@ stands between the banner and the marker (the ordinary rule for a separately
 emitted feed, `systems/text-output.md` Section 10.4; the banner's own string
 carries no feed, so no full-row suppression applies). The asleep wake draw
 comes before `Zzzzz...` and prints nothing. In the dragged-under arm the order
-is banner, feed, marker, `ARGH!` and its feed, the short rumble, then the
-release draw below. `ARGH!` belongs only to the dragged-under state, which only
+is banner, feed, marker, `ARGH!` and its feed, the short rumble - the random
+rumble `(40, 3000, 500)` of `audio.md` Section 5.3, 75 updates at 100..500 Hz,
+about 188 ms - then the release draw below (parameters added 2026-10-25, issue
+#302 Q5). `ARGH!` belongs only to the dragged-under state, which only
 a Corpser's landed hit on a party-side target sets (Section 11.1); there is no
 stun state, and charm never prints it. A charmed **party member** runs on the
 automatic driver (Section 6.1a) and gets no banner, marker or early-out; a
@@ -2293,7 +2298,9 @@ is printed followed by ` regurgitated!` and a line feed, on the row below
 `ARGH!`, so a release reads `>ARGH!` then `Avatar regurgitated!` on two rows and
 never `ARGH!Avatar regurgitated!` on one *(added 2026-10-25, issue #300 Q30;
 the name is the roster name as stored, since only party members are dragged
-under)*, a longer rumble plays, the
+under)*, a longer rumble plays - `(1, 7000, 600)`, 7000 updates at 100..600 Hz,
+about 1.29 s under the `audio.md` Section 10.2 model (added 2026-10-25, issue
+#302 Q5) - the
 dragged-under bit clears and the blanked sprite byte is restored from the
 record's primary tile byte - otherwise it stays held. Either way the turn ends
 there with no command read, so a party victim is released on any given turn
@@ -2306,7 +2313,12 @@ shipped literals. Static only: that the wake helper prints nothing, the
 strictly-below boundary of the release comparison (only draws well above and
 well below were run), and the sixteen-column blank row, which rests on the
 issue #301 stock capture plus the printer rule rather than a run of the window
-printer. No capture of `>ARGH!` exists. Provenance: `u5-decomp/notes/`
+printer. No capture of `>ARGH!` exists. The two rumble parameter sets were
+recorded from the executed handler and release routine, the short one after the
+`ARGH!` print and the long one after the regurgitated print; it is a separate
+call, not the trap resolver or the hit presentation. Both use only the private
+sound jitter state and keep their loops under mute; the durations are model
+values, not captures (added 2026-10-25, issue #302 Q5). Provenance: `u5-decomp/notes/`
 and the overlay directories under `u5-decomp/functions/`.)* The asleep arm is independent: it draws one value from the inclusive range
 `0..255` on the gameplay generator, and a value below 16 (probability
 `16/256 = 1/16`) wakes the sleeper - roster status back to Good, displayed
@@ -3597,9 +3609,37 @@ The per-marker results and random-consumption order are:
 | Field | Hook-level predicates and result | PRNG use after lookup |
 |---|---|---|
 | Poison | Reject contact when the target's linked active-object tile/class byte is at least `0x80`. For an accepted party target whose character status is Good, change the status to Poisoned. Any other accepted target enters the shared damage/status endpoint with no attacker credit. | The linked-record rejection and Good-status test occur before any draw. The Good-to-Poisoned arm consumes none. The damage fallback consumes one inclusive `0..20` draw and passes that raw value directly to damage/status application. It makes no defense draw. |
-| Sleep | Ignore a dead party target; otherwise write asleep status for a party target or the combat sleep/disabled bit for a non-party target. | No hook-local draw. |
+| Sleep | Call the shared sleep routine of Section 12 (the Gazer's). Party target: nothing at all if Dead; otherwise status `'S'` **whatever the current letter, Poisoned included**, descriptor bit `0x08`, prone marker, active-player selection cleared if it named the member, stats panel redrawn, one world tick unless the rest/camp alternate-entry marker is set. Non-party target: bit `0x08`, the linked record's phase byte set to the freeze sentinel (sprite unchanged), one world tick (not suppressed by the rest/camp marker). No message (`slept!` is not printed on this path) and no sound. *(Corrected 2026-10-25, issue #302 Q6: this row formerly gave a party target the status letter only and the bit only to a non-party target; retracted, `RETRACTIONS.md` R624.)* | No draw in the hook or the routine. |
 | Fire | Pass a rolled raw value directly to the shared damage/status endpoint, then run the ordinary no-attacker finalization and status-panel refresh. | After the marker has won the scan, consume one inclusive `0..10` draw. It makes no defense draw. |
 | Energy | The Energy marker is not recognized by this contact hook. The arena movement validator treats it as a blocking marker, while Poison, Sleep, and Fire markers are passable for destination occupancy. | No contact-path draw and no zero-valued damage dispatch. |
+
+**A sleeper on a Sleep Field does not wake for good.** *(Added 2026-10-25, issue
+#302 Q6.)* The narration code the routine leaves is cleared by the round walker
+before the next actor's dispatch and nothing reads it in between, so contact
+prints no `slept!` line; what the player sees is the prone sprite (party
+member), the panel redraw and one frame. The actor's own turns then take the
+asleep arm of Section 8.1 (party member or controlled monster: banner, feed,
+marker, one `0..255` gameplay draw that wakes below 16, `Zzzzz...`, no command)
+or the Section 6.2 driver path (self-acting monster: one inclusive `0..16` draw
+where 16 wakes, nothing printed, dispatch spent). The hook runs after every
+dispatch of the actor, including the asleep no-command dispatch and the one in
+which the wake draw succeeded, so an actor still on the marker is put back to
+sleep straight away, before any other actor acts: the woken party member's `G`
+lasts only until the end of that same dispatch. Markers persist until combat
+exit and a sleeper cannot move, so an actor asleep on a Sleep Field takes no
+further command or AI action in that combat. It still blocks movement onto its
+cell and can still be attacked. A Poisoned member who falls asleep this way and
+later wakes wakes Good, because the wake helper restores `'G'`. If a
+dragged-under member stands on the field, the field paints the prone marker
+over the blanked sprite (melee still excludes the slot); its turns still take
+the `ARGH!` arm, which is tested first, and a release restores the primary
+sprite only for the hook at the end of that dispatch to paint the prone marker
+back. Evidence: executed original contact hook, resident sleep and wake helpers,
+turn handler and release routine, with printer, sound, generator, stats redraw
+and world tick recorded, re-run by a verifier; the absence of a reader of the
+narration code is static, from a direct-operand scan of the resident image and
+all overlays (accesses through a register or pointer were not censused). No
+capture of a sleeper on a field exists.
 
 The ordinary attack damage roller (Section 12) is not called by Poison or Fire
 contact. *(**Corrected.** This sentence formerly described that roller as the
@@ -4583,7 +4623,7 @@ credit**. What the defender gets:
 | Defender | Effect |
 |---|---|
 | Party member | Refused outright, with nothing written, if that character's status byte is already `'D'`. Otherwise the status byte becomes `'S'`, the descriptor's disabled bit is set, the presentation record shows the prone marker, the active-player sentinel is cleared if that member held it, the shared narration status is set to the sleep code, the party stats panel is redrawn, and one frame renders unless the rest/camp alternate-entry marker is set, in which case the frame is skipped. |
-| Non-party actor | The descriptor's disabled bit is set, the shared narration status is set to the sleep code, the record's spare byte is marked, and one frame renders. |
+| Non-party actor | The descriptor's disabled bit is set, the shared narration status is set to the sleep code, the linked record's phase byte is set to the freeze sentinel (`active-objects.md` Section 3; formerly called "the record's spare byte", naming clarified 2026-10-25, issue #302 Q6), and one frame renders; the rest/camp marker does not suppress that frame. |
 
 The message is not printed by the sleep routine itself: the narration code it
 sets is what makes the shared result narrator print `<target> slept!` on the
@@ -4651,11 +4691,19 @@ Source provenance: executed original damage application with the shipped arena-c
 **Other status changes** — Sleep, Poison, Charm — are applied by separate
 per-effect handlers (a poison-tick handler firing once per round, a sleep-effect
 handler invoked when the Sleep spell hits). Sleep writes the character status
-byte to `'S'` for party targets and descriptor byte 2 bit `0x08` for non-party
-combat targets; non-party wake timing is the random own-turn wake check
-described in Section 6.2, not a deterministic countdown. Those handlers update
-the character status byte to `'S'` (asleep) or `'P'` (poisoned) and run their own
-narration.
+byte `'S'` **and** descriptor byte 2 bit `0x08` (plus the prone marker) for party
+targets, and bit `0x08` alone for non-party combat targets; non-party wake timing
+is the random own-turn wake check described in Section 6.2, not a deterministic
+countdown. Every combat sleep path - the Gazer, the sleep attack tier, the Sleep
+spell and Sleep Field contact - calls the shared sleep routine above directly,
+and none passes the poisoned-status guard (that guard is reached only from a
+resident caller), so a Poisoned target is not exempt and wakes Good (static
+reading of the call sites; executed for field contact). Those handlers update the
+character status byte to `'S'` (asleep) or `'P'` (poisoned); narration is not
+their own for every path, since Sleep Field contact prints nothing (Section 11).
+*(Corrected 2026-10-25, issue #302 Q6: this paragraph formerly gave party targets
+the status letter alone and said every handler runs its own narration; both
+retracted, `RETRACTIONS.md` R624.)*
 Inventory counters for carried equipment and use-items live in the same
 resident save image and may be decremented by equipment or combat/spell helper
 paths, but they are inventory stock, not combat effect timers. Do not
@@ -5044,7 +5092,7 @@ without independent behavioral consumers remain opaque metadata.
   victory bonus. Gold/food from a rewritten body-like slot is obtained only
   through the later Search/Get body rules in `containers.md`.
 
-- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, target-only combat-weight acceptance (`roll >= weight`), 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16 and Fireball rolls 1..30. Kill uses the same aiming/attack family, with an attack hit check before its instant-kill damage value; the former creature-target attribution is withdrawn (R446). The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep runs the shared resistance predicate before applying party sleep status or descriptor byte 2 bit `0x08` for non-party targets. Poison Wind uses the distinct target-only combat-weight gate before poison status. Death Wind runs the shared resistance predicate before using the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
+- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, target-only combat-weight acceptance (`roll >= weight`), 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16 and Fireball rolls 1..30. Kill uses the same aiming/attack family, with an attack hit check before its instant-kill damage value; the former creature-target attribution is withdrawn (R446). The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep runs the shared resistance predicate before calling the shared sleep routine of Section 12, which writes status `'S'`, bit `0x08` and the prone marker for a party target and bit `0x08` for a non-party target *(corrected 2026-10-25, issue #302 Q6: formerly "party sleep status or descriptor byte 2 bit `0x08` for non-party targets"; retracted, `RETRACTIONS.md` R624)*. Poison Wind uses the distinct target-only combat-weight gate before poison status. Death Wind runs the shared resistance predicate before using the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
 
 - **Status narration.** "Sleep!", "Poison!", "Charm!" lines are not produced by the damage-and-status handler. They live in separate per-effect handlers (one per status). The exact wording and trigger mechanics belong in those handlers' specs.
 

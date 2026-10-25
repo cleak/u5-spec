@@ -279,6 +279,8 @@ Common recipes are:
 | Ordinary damage presentation | 10 | 1600 | 100..2000 Hz | 160 |
 | Impact presentation (`overworld.md` Section 6.2.4 stage one; added 2026-10-25, issues #300 Q27 and #301 Q3), and the combat hit presentation for a monster target or for any target outside the combat arena (`combat.md` Section 11.1; added 2026-10-25, issue #300 Q31) | 10 | 3000 | 100..2000 Hz | 300 |
 | Combat hit on a party target inside the arena, between the two halves of the target member's stats-row flash (`combat.md` Section 11.1; added 2026-10-25, issue #300 Q31) | 40 | 3000 | 100..500 Hz | 75 |
+| Combat dragged-under turn, after `ARGH!` (`combat.md` Section 8.1; added 2026-10-25, issue #302 Q5) | 40 | 3000 | 100..500 Hz | 75 |
+| Combat dragged-under release, after the regurgitated line (`combat.md` Section 8.1; added 2026-10-25, issue #302 Q5) | 1 | 7000 | 100..600 Hz | 7000 |
 | Dungeon footstep, per emitting tick (Section 7.4; `dungeon-mode.md` Section 8.1; added 2026-10-25, issue #300 Q32) | 1 | the current intensity: 15, 11, 7, 3 | 100..20000 Hz | equal to the target |
 | Dungeon electric-field push-back, once per contact (`dungeon-mode.md` Section 8.1; added 2026-10-25, issue #300 Q32) | 1 | 500 | 100..20000 Hz | 500 |
 | Dungeon sleep or poison field hit, once per affected member (added 2026-10-16, issue #298 Q7; `dungeon-mode.md` Section 8.1) | 1 | 50 | 100..3500 Hz | 50, about 9 ms under the Section 4 anchor (model value, not a capture) |
@@ -306,6 +308,15 @@ rumble either: no direct call from the combat overlays to the shared
 party-damage helper that owns that rumble was found, so a party hit in combat
 sounds this one burst and no second rumble. Indirect routes into that helper
 were not enumerated (`OPEN-QUESTIONS.md`).
+
+**The dragged-under rumbles.** *(Added 2026-10-25, issue #302 Q5.)* The `ARGH!`
+rumble has the trap row's numbers but is its own call from the combat turn
+handler, like the combat party-hit burst, not a call into the trap resolver or
+the hit presentation. The release rumble is the longest random rumble this
+document lists: a release turn sounds about 188 ms, then the release line
+prints, then about 1.29 s more. Both use only the private sound jitter state
+(the release rumble advances it 7000 times), never the gameplay generator, and
+mute keeps both loops and their timing.
 
 ### 5.4 Software envelope
 
@@ -2266,6 +2277,8 @@ per-iteration constant.
 | Ordinary damage presentation, step 10, target 1600 | 160 | **115 ms** (110 to 121 ms) |
 | Impact presentation (overworld impact stage one: ranged hits, rough seas, each drowning pass), step 10, target 3000 (added 2026-10-25, issues #300 Q27 and #301 Q3), and the combat hit on a monster target or outside the arena (issue #300 Q31) | 300 | **216 ms** (206 to 227 ms) |
 | Combat hit on a party target, step 40, target 3000 (added 2026-10-25, issue #300 Q31) | 75 | **188 ms** (179 to 198 ms) |
+| Combat dragged-under turn, step 40, target 3000 (added 2026-10-25, issue #302 Q5) | 75 | **188 ms** (179 to 198 ms) |
+| Combat dragged-under release, step 1, target 7000 (added 2026-10-25, issue #302 Q5) | 7000 | **about 1.29 s** (about 1.23 to 1.36 s, the trap row's relative band; model value, no capture) |
 | Dungeon electric push-back, step 1, target 500 (added 2026-10-25, issue #300 Q32) | 500 | **about 92 ms** |
 | Dungeon footstep bursts, step 1, targets 15 / 11 / 7 / 3 (added 2026-10-25, issue #300 Q32) | 15 / 11 / 7 / 3 | **about 2.8 / 2.0 / 1.3 / 0.55 ms** |
 | Shared potion/wind lead, variant 0, step 800, target 8000 | 10 | **478 ms** (450 to 506 ms) |
