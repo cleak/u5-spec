@@ -114,6 +114,32 @@ seed. Nothing was executed. The generator state at the moment the automatic
 preview starts (presumed to be the shipped zero value) is **not established**;
 it affects only the preview's own frame pattern, which the seed then erases.
 
+*(Added 2026-10-26, issue #304 Q5.)* **Draws per preview tick.** There is no
+fixed count. Each Return-to-View preview tick advances the gameplay stream by
+exactly one active-object animator pass over the preview's actor table as the
+script has it at that moment, with the accounting of
+`systems/active-objects.md` Section 8 ("Random-stream accounting"), and by
+nothing else in the tick: the title tick, the revealed-column repaint and
+reveal widening, the keyboard poll, the one-tick wait, the caption helper,
+strip 3's chime and strip 2's random-pitch rumble take no gameplay draw (the
+rumble uses the separate audio jitter stream of Section 4). The count
+therefore depends on which preview actors exist and their classes, each
+actor's phase state, and the outcomes of the draws themselves. The temporary
+actor draw commands' 31 checkpoints (`formats/location-dat.md` Section 11) are
+full preview ticks and draw by the same rule. Executed on the original with
+the real animator, generator, title tick and caption helper and every
+generator call attributed to its caller: one pass of the shipped command
+stream, from its start to its restart command, is 2,645 preview ticks and took
+about 3,050 to 3,200 draws per pass (first passes from three generator seeds
+and later passes of the same runs); per-tick counts ranged from 0 to 9, and
+about 37% of ticks took none. The first ticks of each pass take none because
+the stream opens by clearing every preview actor slot, and each restart
+repeats that clear. The stream restarts until a key, so a preview's total
+depends on how long it runs. Not established by execution: that the preview's
+entry path (data load, screen snapshot, setup before the first tick) takes no
+draw, which is static reading only, and that the `R` and menu idle-timeout
+previews enter the same routine, also static reading.
+
 Two consequences follow, and both are part of the contract:
 
 - Fresh games are *not* identical, but they are only 4,096 ways distinct. The
@@ -131,8 +157,8 @@ them assigns twice around its terrain walk:
 | Event | Seed source | Effect |
 |---|---|---|
 | Camping hour-change interruption | Host clock | When a wilderness-camp step observes that the game hour changed, it first consumes `random(0, 63)` from the state already in force. Results `1..63` continue without a clock read. Only result `0` samples the host clock, assigns the new seed, and immediately consumes `random(0, 7)` to select the sleep-ambush row. It therefore does **not** re-seed on every elapsed hour. This path is unrelated to the later completed-camp Lord British gate: the final `random(0, 99)` draw has no adjacent clock sample or seed assignment. |
-| Stranger-conversation opener | Host clock | After printing the NPC description, the opener tests whether that NPC knows the party. A known NPC goes directly to its greeting without sampling. A stranger samples and assigns immediately before the `random(0, 1)` introduction coin flip. |
-| Falsehood theft cleanup | Host clock | Only in the settlement where the Shadowlord of Falsehood is resident. After the stolen-goods line and fixed sound, cleanup samples and assigns before it tests the party's inventory categories. The re-seed therefore occurs even when the eventual loss is selected by a deterministic descending scan rather than a random choice. |
+| Stranger-conversation opener | Host clock | After printing the NPC description, the opener tests whether that NPC knows the party. A known NPC goes directly to its greeting without sampling. A stranger samples and assigns immediately before the `random(0, 1)` introduction coin flip; result `1` introduces the NPC and `0` says nothing (added 2026-10-26, issue #304 Q2). |
+| Falsehood theft cleanup | Host clock | Only in the settlement where the Shadowlord of Falsehood is resident. After the stolen-goods line and fixed sound, cleanup samples and assigns before it tests the party's inventory categories. The re-seed therefore occurs even when the eventual loss is selected by a deterministic descending scan rather than a random choice. Then one `random(0, 2)` per pick attempt when keys, gems or torches are held, no draw for the band scans, or one `random(1, 15)` on the gold fallback (added 2026-10-26, issue #304 Q3; `systems/conversation.md` section 10). |
 | Shadowlord farmland/orchard blight | Calendar day-of-month, then host clock | The gated pass first assigns the in-game day-of-month, walks all 1,024 terrain cells, and marks the viewport dirty. It then performs one fresh host-clock read and assignment immediately before returning. Each invocation samples afresh; this is not a restoration of the state that preceded the pass. The entire pair is skipped when no living Shadowlord is resident. |
 
 Note that the pair around the blight walk is a deterministic seed followed by a

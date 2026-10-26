@@ -265,9 +265,21 @@ family roll and placement:
 |---|---|
 | Direct entry from the overworld loop into a dungeon | Fresh |
 | Dungeon state already active when the top-level dispatcher begins, including a loaded or resumed dungeon | Reuse |
-| Accepted level change | Fresh |
+| Accepted level change (K-Klimb; a pit fall chain of any depth counts as one) | Fresh, once; for a fall chain it runs after the last descent's damage sweep and after any room entry, and not at all if the chain or the room fight ends dungeon mode (Section 8) *(added 2026-10-26, issue #304 Q1)* |
 | Return from a dungeon fight or encounter, if the resulting scene is still a dungeon | Fresh |
 | Return from the character/stats presentation | Reuse after restoring the saved record |
+
+*(Added 2026-10-26, issue #304 Q1.)* A turn can see two fresh setups. When
+the turn's monster step reports contact before a fall chain, the contact fight
+ends with its own view initialiser and the fresh setup of the "Return from a
+dungeon fight" row, on the departure level. The chain then runs, and its own
+single setup at the chain's end (Section 8) comes on top of that one. This
+contact-before-fall ordering rests on static reading of the post-action turn
+step; the fight was stubbed in the executed runs. Whether the "Return from a
+dungeon fight" row holds for a room fight entered by stepping onto a room cell
+(not by falling into one) is open: static reading of the turn step's ordinary
+room path found the view initialiser and repaint but no fresh setup there, and
+whether room entry re-rolls by another route was not checked.
 
 The distinction is not inferred from the active record. The dungeon turn loop
 receives a handoff flag: the outer dispatcher sets it only when an overworld
@@ -1286,7 +1298,29 @@ Dead at zero HP, clears the active-member selection if it named that newly
 dead member, and redraws stats. A fall applies one complete sweep **per descent
 step**, after the landing repaint and `...splat!`, before testing whether to
 fall again or enter a room. Members killed on an earlier descent are skipped
-on later sweeps. A bomb applies one sweep after its two lines and its cell
+on later sweeps. *(Added 2026-10-26, issue #304 Q1.)* The fall makes no
+wandering-monster draw between descents: no family, placement or ceiling draw
+happens inside the chain. The active dungeon monster gets its fresh setup
+(Section 4.1) exactly once per chain, after the last descent's sweep. On an
+ordinary landing cell it follows that sweep directly, and the dungeon view
+initialiser is not called. On a room landing the room is entered at once
+(`Entering room...` and the room fight with all of its own draws); if the
+scene is still a dungeon when that fight ends, the view initialiser runs and
+then the one setup. When the chain runs off the bottom, or the room fight ends
+dungeon mode, there is no setup at all. The turn's wake draws for Sleeping
+members and the active monster's step come before the chain, on the departure
+level; if that step reports contact, the contact fight and its own setup come
+first as well (Section 4.1), and the chain's setup is in addition to it. The
+stats redraw and the hourly status tick follow the chain. This order was
+executed on the original under emulation for chains one, two and three levels
+deep, with passage, room and off-bottom landings and a Dead member skipped
+without a draw; the view initialiser's place on the room path is static
+reading. Each landing repaint is an ordinary first-person render, so the
+dungeon-render draw consumers of `systems/prng.md` Section 4 may fire there,
+and during those repaints the active record still holds the departure level's
+monster, matched by X/Y alone on the new level, so it may be painted in the
+landing view. Those repaint draws and that painting rest on static reading
+only (the repaint was stubbed in the executed runs) and are open. A bomb applies one sweep after its two lines and its cell
 rewrite; it causes no descent and the consumed cell cannot fire again as a
 bomb. These are direct floor effects, separate from the shared trap-family
 resolver in `systems/traps.md`.
@@ -1294,7 +1328,11 @@ resolver in `systems/traps.md`.
 Source provenance: the two floor-trap callers, their repetition boundaries,
 the target filters and damage bounds, and the shared HP/death application were
 traced from the shipped program in private analysis under `u5-decomp/notes/`,
-`u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`.
+`u5-decomp/functions/DUNGEON_OVL/` and `u5-decomp/functions/ULTIMA_EXE/`. The
+fall chain's draw order and the single setup at its end (issue #304 Q1) come
+from running the shipped fall-chain routine and turn step under emulation,
+with the damage sweep, generator, setup and placement live, recorded in
+private analysis under `u5-decomp/notes/`.
 
 Exact bytes `0x61` and `0x69` are automatic fall traps. Stepping on either
 prints the three-line pit/fall group of Section 8.1, clears the fired marker bits on the departure
@@ -1435,7 +1473,7 @@ one per message will double the spacing.
 | Sleep field `0x80` / `0x88` | `Sleep spell!\n` | for each member, in slot order, whose save fails (inclusive `1..30` roll at or above Dexterity, not Dead): that member's stats-panel row is inverted (highlighted), then the short status rumble (step 1, target 50, 100..3500 Hz, `systems/audio.md` Section 5.3), then a full stats-panel repaint is requested, which presumably removes the highlight; a member already asleep is hit again *(corrected 2026-10-16, issue #298 Q7; earlier text said "one short rumble per member whose status actually changes", which is retracted, `RETRACTIONS.md` R529)* |
 | Poison field `0x81` / `0x89` | `Poison!\n` | for each member whose save fails: the same short status rumble only, with no row highlight; a member already poisoned is hit again *(corrected 2026-10-16, issue #298 Q7; R529)* |
 | Fire field `0x82` / `0x8A` | `Fire!!\n` - two exclamation marks | only the damage helper's flash and rumble, per damaged member |
-| Fall trap `0x61` / `0x69`, **once per descent step** | `Pit Trap!\n`, then `Falling...\n`, then the level change and view repaint, then `      ...splat!\n` - **six leading spaces** | after `...splat!`, a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots; repeats per descent (Section 8) |
+| Fall trap `0x61` / `0x69`, **once per descent step** | `Pit Trap!\n`, then `Falling...\n`, then the level change and view repaint, then `      ...splat!\n` - **six leading spaces** | after `...splat!`, a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots; repeats per descent (Section 8); no wandering-monster draw per descent: one fresh monster setup after the whole chain (Section 8) *(added 2026-10-26, issue #304 Q1)* |
 | Bomb trap `0x62` / `0x6A` | `Bomb Trap!\n`, then `KABOOM!!\n` | one sweep: a separate `1..8` HP-damage roll, roster flash and rumble for each non-Dead active member in the first six slots (Section 8) |
 | Any other underfoot byte | nothing | none |
 

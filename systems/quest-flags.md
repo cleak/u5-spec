@@ -180,7 +180,10 @@ The theft order is fixed:
 
 1. If the party carries any keys, gems, or torches, the shared random stream
    picks among those three counters, re-drawing until it lands on one the party
-   actually has, and subtracts one with a zero floor.
+   actually has, and subtracts one with a zero floor. *(Added 2026-10-26,
+   issue #304 Q3.)* Each pick is one draw over `0..2`, with `0` keys, `1`
+   gems and `2` torches, and every re-draw is a further draw; see
+   `systems/conversation.md` section 10.
 2. Otherwise the forty-eight-entry carried-equipment band is scanned from the
    highest item id downward and the first nonzero entry is reduced by one.
 3. Otherwise the two eight-entry carried-item bands are scanned the same way,
@@ -188,7 +191,8 @@ The theft order is fixed:
 4. Only when no carried item was found does the cleanup subtract a random
    `1..15` gold from the party's gold total, floored at zero.
 
-The pass then redraws the visible stats/gold panel. At most one item, or one
+The pass then redraws the visible stats/gold panel (open on the item paths;
+see `OPEN-QUESTIONS.md`, issue #304 Q3). At most one item, or one
 gold amount, is lost per conversation.
 
 The same resident-Shadowlord value gates the shop surcharge, where any value

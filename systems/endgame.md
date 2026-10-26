@@ -372,7 +372,7 @@ tested for the final outcome, not to decide whether the second question is
 shown. An initial No therefore does not prevent victory if the clarification
 is answered Yes and the box is owned.
 
-The confirmation is a blocking prompt. While it waits, normal gameplay turns, NPC schedules and time advancement do not run, but **world-animation ticks do**: every key wait in this dialogue - the greeting's any-key read and both yes/no reads - goes through the ordinary command reader, whose idle arm ticks the world, so the tableau sprites keep animating (Section 4). *Corrected 2026-10-16 (issue #298 Q41-43, `RETRACTIONS.md` R558): this sentence previously listed world ticks among the things that do not run.*
+The confirmation is a blocking prompt. While it waits, normal gameplay turns, NPC schedules and time advancement do not run, but **world-animation ticks do**: every key wait in this dialogue - the greeting's any-key read and both yes/no reads - goes through the ordinary command reader, whose idle arm ticks the world, so the tableau sprites keep animating (Section 4). *Corrected 2026-10-16 (issue #298 Q41-43, `RETRACTIONS.md` R558): this sentence previously listed world ticks among the things that do not run.* The rite's page waits (after the `He says:` lead-in and after each of the next five rite records) and the wait after the box becomes the Orb go through the same reader and tick the world the same way; only the final narrative presentation's six page waits do not (Section 8.3). *(Added 2026-10-26, issue #304 Q4; static reading.)*
 
 ### 5.1 Message source and pacing
 
@@ -865,7 +865,12 @@ in order:
 6. Install the window's layout descriptor values.
 7. Read the window's `END.DAT` record into the shared text scratch buffer and
    lay out its prose with the proportional renderer.
-8. For every window except the first, block until a key is pressed.
+8. For every window except the first, block until a key is pressed. This
+   wait, and the one in Section 8.4, is a tight loop on the raw keyboard
+   check: no cursor blink, no world step and no one-tick pacing, and the key
+   is consumed. These six are the only endgame key waits that bypass the
+   shared wait (`systems/input.md` Section 2). *(Added 2026-10-26, issue #304
+   Q4; static reading.)*
 9. Copy the whole hidden page to the visible page in one instantaneous
    full-screen operation.
 
@@ -887,7 +892,9 @@ step-1 contract is specific to that caller.
 
 ### 8.4 The certificate backdrop
 
-After the sixth window the presentation waits for one more key, then prepares
+After the sixth window the presentation waits for one more key (the same
+raw-key tight loop as Section 8.3 step 8, with no world step; added 2026-10-26,
+issue #304 Q4), then prepares
 the certificate page: select the hidden surface, issue the text system's clear
 control, load the end-screen archive, draw its **only** record — a single
 260-by-168 image of a blank torn-edged parchment with a plain light interior —

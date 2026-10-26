@@ -558,7 +558,8 @@ conditional — the two-hundred-pass idle timeout in section 6 and the explicit
 (`systems/prng.md` Section 3) is sampled between the end of this automatic
 preview and the first menu draw, so the preview's animator draws are
 overwritten; the idle-timeout and `R` previews run after the seed and advance
-the gameplay stream.
+the gameplay stream (per tick, exactly one animator pass's draws; see
+`systems/prng.md` Section 3, added 2026-10-26, issue #304 Q5).
 
 *(added 2026-10-16, issue #298 Q39)* **A key first seen inside subtitle
 ignition.** The ignition's keyboard test does not consume the key, and the
@@ -1808,7 +1809,11 @@ are silent, strip `2` emits a random-pitch percussive speaker effect on every
 preview tick, and strip `3` emits a two-tone chime on an eight-tick cycle. The
 sound is the only per-strip difference in the tick; it changes nothing visible
 and can be omitted by an engine that renders silently. See
-`formats/location-dat.md` section 11.
+`formats/location-dat.md` section 11. Strip 2's random pitch comes from the
+audio jitter stream, not the gameplay generator, so omitting the sound leaves
+the gameplay stream unchanged. Each tick's only gameplay draws are its
+animator pass's (`systems/prng.md` Section 3). *(Added 2026-10-26, issue #304
+Q5.)*
 
 ### 12.1 The centered-caption helper
 

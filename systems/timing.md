@@ -856,7 +856,11 @@ one tick per pass and all of them perform the same per-pass world step whenever
 the current scene value permits it. **That shared behaviour belongs to the
 routine, and it is what an engine must reproduce: implementing any of these
 prompts as a plain blocking key read - one that stops the world for as long as
-the prompt is up - is wrong.**
+the prompt is up - is wrong.** The endgame's callers are its ten dialogue and
+rite key waits (the greeting, the two box questions, six rite pages and the
+Orb wait); the six page waits of its final narrative presentation do not use
+this routine (`systems/input.md` Section 2). That split is static reading.
+*(Added 2026-10-26, issue #304 Q4.)*
 
 *What that implies for any one caller is an inference from the shared routine,
 not a traced result for that caller.* On that inference a shop prompt inside a

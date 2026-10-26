@@ -605,9 +605,30 @@ candidate explanations holds is recorded in `OPEN-QUESTIONS.md`.
 **Random-stream cost.** Each world step in the hold takes the unconditional
 1-in-64 wind draw of `systems/animation.md` Section 13.2 from the shared
 generator. A shrine entry as far as the virtue prompt therefore consumes
-**fifty-seven** draws, and an entry abandoned at that prompt consumes **one
-hundred and eight**. An engine that omits them desynchronises every later roll
-(`systems/prng.md`).
+**fifty-seven** draws from the presentation's own counted steps, and an entry
+abandoned at that prompt consumes **one hundred and eight** from them. Those
+are floors, not totals. *(Corrected 2026-10-26, issue #304 Q4.)* Every prompt
+adds to them: the virtue and mantra readers, the ordaining arm's two
+command-key waits and the offering chooser all wait through the shared wait
+(`systems/input.md` Section 2), and the presentation's suspended scene value,
+which it installs before any of these reads and keeps until they are over,
+lies outside that wait's no-step band. Each pass that finds no key therefore
+runs one more world step, at the same per-step cost as a hold step at that
+point, and the pass that returns the key runs none. The hold counts are
+unchanged; only these per-pass steps are added. How many no-key passes occur,
+and so how many extra steps and draws, depends on how long the player takes
+and on the host's poll cadence: the total is unbounded, and is not fixed even
+with keystrokes replayed in sync unless the poll cadence also matches. An
+implementation must not skip these steps in any scene, the Abyss included,
+because the suspended value is always in force at these reads. An engine that
+omits them desynchronises every later roll (`systems/prng.md`). *Evidence:* the
+wrong-answer, blank-virtue and ordaining arms were executed on the original
+with the real typed reader, shared wait and counted hold, at a suspended scene
+value written by the harness; each no-key pass ran one step and a scene value
+inside the band ran none. That the presentation itself installs that value is
+static reading. The per-step draw is inferred from the published step content,
+not counted. The earlier text gave fifty-seven and one hundred and eight as
+the entry's whole draw cost; that is retracted (`RETRACTIONS.md` R628).
 
 **Exit pacing.** Leaving the shrine mirrors the entry. After the meditation
 handler returns, the presentation re-stamps the walking pose - the same value
@@ -1205,6 +1226,11 @@ instead waits ten world steps between its Kneel record and its first prompt
 interval column where the shrine's reads "ten world steps". The approach walk
 that precedes this first key is specified in Section 8; it consumes no input
 and cannot be skipped.
+Like the shrine's prompts, these waits run one world step per no-key pass,
+because the presentation's scene value lies outside the shared wait's no-step
+band; the step count therefore depends on how long the player takes, as in
+Section 7's "Random-stream cost". *(Added 2026-10-26, issue #304 Q4; static
+reading.)*
 The counts begin after the initial approach record `46`:
 
 | Advance key | Result before the next wait or return |

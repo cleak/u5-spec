@@ -1372,13 +1372,20 @@ Putting the pieces together, a single conversation runs through a fixed envelope
    - **Bit clear (a stranger).** After the description has completed and this
      bit test has found the bit clear, the engine makes one fresh host-clock
      read, assigns the transformed value as the shared random-generator state,
-     and immediately flips a fair coin. On one outcome the conversation
-     simply proceeds to the keyword prompt with nothing said after the
-     description. On the other the NPC introduces itself: the engine prints the
+     and immediately takes one draw from the inclusive range `0..1` (the
+     `random(0, 1)` coin of `systems/prng.md` section 3). On result `0` the
+     conversation simply proceeds to the keyword prompt with nothing said
+     after the description. On result `1` the NPC introduces itself: the engine prints the
      stored lead-in `"I am called ` — a single string whose **own** opening
      quote and one trailing space are part of it, unlike the Greeting, whose
      surrounding quotes the renderer emits separately — and runs the **Name** entry (entry 1 of the five
      mandatory leading entries) instead of the Greeting, then closes the quote.
+     *(Added 2026-10-26, issue #304 Q2.)* This draw is the opener's only one.
+     Executed on the original for two shipped `TOWNE.TLK` strangers (ids 1
+     and 2) with each result forced: one clock read, the state assignment,
+     one draw over `0..1`; `0` printed nothing after the description and `1`
+     printed the introduction. The known-NPC arm (no clock read, no draw) was
+     not executed and rests on static reading.
 
    So a stranger volunteers its name roughly half the time and is otherwise
    silent after the description, while an NPC that already knows the party
@@ -1505,17 +1512,33 @@ category uses a deterministic descending scan rather than a random pick. This
 is one of the re-seed sites listed in `systems/prng.md` section 3, so what is
 taken is not reproducible from game state:
 
-1. If the party carries any keys, gems, or torches, one of those three counters
-   is chosen at random — re-drawing until it lands on a counter the party
-   actually has — and reduced by one.
+1. If the party carries any keys, gems, or torches, the cleanup takes one
+   draw from the inclusive range `0..2`: `0` picks keys, `1` gems, `2`
+   torches. If the party has none of the picked item it draws again from
+   `0..2`, one draw per attempt, until it picks a counter the party holds,
+   and that counter is reduced by one. The loop always ends, because it is
+   entered only when at least one of the three is nonzero. *(Added
+   2026-10-26, issue #304 Q3.)* Executed on the original cleanup with
+   scripted draw results and inventories: with only torches held, the
+   results 0, 1, 2 took three draws and removed a torch. Which counter is
+   keys, gems or torches rests on static reading of their other users
+   (lockpicking, the gem view, lighting a torch), not on execution. That
+   every attempt advances the generator follows from `systems/prng.md`
+   section 4 (each call advances the state once); the run replaced the
+   generator with a stub.
 2. Otherwise the forty-eight-entry carried-equipment band is scanned from the
    highest item id downward and the first nonzero entry is reduced by one.
 3. Otherwise the two eight-entry carried-item bands are scanned the same way,
    highest index first, and the first nonzero entry is reduced by one.
 4. Only if the party has none of those does the thief take gold: a random
    `1..15` is subtracted from the party's gold, floored at zero.
+   *(Added 2026-10-26, issue #304 Q3.)* The scans of items 2 and 3 take no
+   draw, and the gold fallback takes exactly one draw over `1..15`
+   (executed with no keys, gems or torches held).
 
-The pass then redraws the gold/stats panel. Exactly one item, or one gold
+The pass then redraws the gold/stats panel (whether this holds on the
+item paths as well as the gold path is open; see `OPEN-QUESTIONS.md`,
+issue #304 Q3). Exactly one item, or one gold
 amount, is lost per conversation, and the loss is silent beyond the single
 stolen-goods line — the game never names what was taken. The warning line and
 sound are not a virtue-standing write, and none of this is karma-driven; it is
