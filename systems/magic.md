@@ -259,6 +259,19 @@ selection cursor moves with the same four directional keys used by compact
 menus, Return or Space toggles the highlighted reagent, `M` accepts the current
 mask, and Escape cancels before any inventory change. The returned value is an
 eight-bit mask in the reagent order documented in `catalogs/spell-list.md`.
+*Escape's echo (added 2026-10-26, issue #303 Q1):* the picker answers Escape
+with a single line feed to the message window and prints no text. It shows no
+`None!` and no `Done`, and the command adds no end-cap. Because
+`Type M to mix:` has no trailing feed, that feed closes the instruction row
+(the waiting cursor cell after the colon is erased to a space). The next
+command poll's leading feed then spends one more row before the prompt marker.
+So exactly one row separates `Type M to mix:` from the marker row, as after any
+feed-terminated result (`systems/text-output.md` Section 10.4). If the turn's
+epilogue prints a notice, the gap falls under that notice. The one-feed, no-text
+exit is a static reading of the picker's Escape arm and the mixer's cancel
+path; the on-screen result (from the bottom row of a full town window: a
+two-row scroll, the row under the instruction skipped, the marker on the next
+row, the cursor cell erased) was executed in DOSBox.
 
 **Step 4 — pick a quantity.** *(Executed end to end 2026-09-13, issue #272.)*
 
@@ -1759,6 +1772,10 @@ The behaviour described here was derived by reading the private function and for
   refusal, their hand-off to the shared dungeon exit at a level edge, and their
   outright refusal inside Doom are derived from private analysis in
   `u5-decomp/notes/`.
+- The M-Mix reagent picker's Escape echo (one line feed, no text, no end-cap;
+  Section 6 Step 3, issue #303 Q1) is derived from private analysis in
+  `u5-decomp/notes/`: a static reading of the picker and the mixer's cancel
+  path, with the on-screen geometry executed in DOSBox 0.74 in town.
 - Arena-field placement, contact, non-consuming markers, Poison/Sleep status
   gates, Dispel Field's dungeon live-cell rewrite and combat active-object
   removal path, and combat-exit marker lifetime are derived from local CAST,

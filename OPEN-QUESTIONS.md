@@ -299,6 +299,12 @@ Opened 2026-10-25 by the issue #302 Q6 Sleep Field pass:
 |---|---|---|
 | A party member falling asleep on a Sleep Field in combat: no `slept!` line, the banner and `>Zzzzz...` on every own turn, and the immediate re-sleep after a successful wake draw, so the member never acts again that combat. Executed on the original routines with printer, generator and frame stubbed; no capture. *(Issue #302 Q6, R624.)* | `systems/combat.md` Sections 8.1 and 11 | A stock capture of a member stepping onto a cast In Zu Grav field and holding through several turns. |
 
+Opened 2026-10-26 by the issue #303 Q2 Stonegate fall-timing pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Which Stonegate fall duration lies nearer period hardware: DOSBox 0.74-3 at fixed 3000 cycles measured 27.49 to 27.52 s with three members and 26.78 s with one; a reported DOSBox Staging run at 3000 cycles measured about 26.8 s with its party size unreported. That a one-member party explains the Staging figure, and that any remaining three-member shortfall (about 2.6 percent) is an emulator difference, is inferred; Staging was not run. The static period model (about 27.5 s or a little more for three members, panel drawing unpriced) and the calibrated unit's band (about 24 to 30 s) cannot separate the two. *(Issue #303 Q2, R625.)* | `systems/blackthorn.md` Section 7.1; `systems/audio.md` Section 10.5 | The party size of the Staging capture; then a period-hardware or cycle-accurate capture of a Stonegate fall with a known party size. |
+
 ## 3. Needs a further static trace
 
 The corridor mirror derivation was completed 2026-09-07: original EGA

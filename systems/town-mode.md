@@ -665,6 +665,11 @@ observable and state transitions in order:
 6. Run the ordinary party status/provision pass, then return to the remaining
    town-turn epilogue.
 
+The trapdoor prefix's damage presentation and steps 2 and 5 are paced only by
+calibrated waits: they contain no BIOS-tick wait, wait for no audio to finish,
+and run at full length with sound off, so the fall's length depends on party
+size (`systems/blackthorn.md` Section 7.1). *(Added 2026-10-26, issue #303 Q2.)*
+
 The roster writes in step 5 are unconditional for every in-party slot: prior
 Dead, Sleeping, Poisoned, Ashes, or other status does not survive, and prior
 current HP does not survive. Maximum HP, party count, transport marker, party

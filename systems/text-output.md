@@ -689,7 +689,9 @@ for every ordinary completed command turn in town, and on the overworld subject
 to the ship gate of Section 10.2. Executed feed-terminated results behave
 identically in this respect: the ordinary look description, the crystal-sphere
 lines, the get refusal, the unrecognised-key refusal, the hole-up refusal, the
-gem refusal and the combat-entry banner each show one blank row beneath them at
+gem refusal, the combat-entry banner and the reagent mixer's Escape at its
+reagent list (one feed closing `Type M to mix:`, `systems/magic.md` Section 6
+step 3; added 2026-10-26, issue #303 Q1) each show one blank row beneath them at
 the moment the next *command* key is awaited. For the two crystal-sphere lines
 that moment is not the next key the game waits for: their producer blocks at a
 modal wait of its own first, and the blank is on screen only once that wait has

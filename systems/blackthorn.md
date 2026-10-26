@@ -1476,8 +1476,11 @@ after the trapdoor sweep.
 | Event | Time from echo | Interval |
 |---|---:|---|
 | `A TRAPDOOR!` printed | +0.05 s | |
-| Viewport black fill; the sweep starts | +0.10 s | |
-| Fall end | +27.52 s | |
+| View rebuild with the transport marker hidden | +0.07 to +0.10 s | +0.10 s in this table's capture, +0.07 s in three later captures |
+| Trapdoor damage presentation, each non-Dead member in slot order | about +0.08 to +0.45 s | about 0.14 s per member (see **What paces the fall** below) |
+| Viewport black fill; the sweep starts | about +0.48 to +0.50 s | about +0.22 s with a one-member party |
+| Sweep ends; the per-member death rumbles start | about +26.8 to +26.9 s | sweep about 26.35 s |
+| Fall end | +27.52 s | three death rumble-and-repaints of about 0.22 s each; this capture had a three-member party (later three-member captures: +27.49 s; one member: +26.78 s) |
 | Lava-field viewport repaint (the conditional world tick) | +27.59 s | about 0.07 s after fall end; the repaint itself takes about 17 ms |
 | Beat 1 starts printing | +28.14 s | about 0.53 s after the repaint (the ten-tick wait, its first period partial) |
 | First dissolve, to black | +28.20 to +29.86 s | 1.65 s |
@@ -1486,6 +1489,8 @@ after the trapdoor sweep.
 | Beat 4 | +32.26 s | 28 tick periods plus print time |
 | Six-row envelope sequence | +32.32 to +43.88 s | 11.56 s |
 | Fall end to envelope start | | 4.80 s |
+
+*(Corrected 2026-10-26, issue #303 Q2: earlier revisions put the black fill and the start of the sweep at +0.10 s; that event is the view rebuild, and the fill follows the damage presentation, at about +0.48 to +0.50 s with three members (R625).)* The rows split by this correction come from captures read at video-frame resolution; adjacent rows can differ by a frame or two between captures, so no row is more precise than about two frames.
 
 The audio is silent from fall end until the envelope sequence starts. The 4.80 s from fall end to the envelope covers the same span
 as the 4.83 s prelude of `systems/audio.md` Section 8.6.2, measured in a
@@ -1502,13 +1507,61 @@ presence probe and any overlay load cost almost nothing under the emulator.
 Which segment an implementation that runs about 0.5 s ahead of this table has
 shortened cannot be told from the original side; timing the implementation's
 own run against these rows segment by segment would show it. The first dissolve
-and the sweep-and-rumble span are the largest untimed segments. None of these
+is the largest segment not split further; the sweep-and-rumble span is split
+above *(corrected 2026-10-26, issue #303 Q2)*. None of these
 figures is from period hardware (`OPEN-QUESTIONS.md`). Source provenance: the
 step order before the first wait is static reading of private analysis in
 `u5-decomp/functions/TOWN_OVL/`, `u5-decomp/functions/BLCKTHRN_OVL/` and
 `u5-decomp/functions/ULTIMA_EXE/`; the repaint, the silence and every duration
 are from executed original code under DOSBox video and audio capture at 1500
 and 3000 cycles, recorded under `u5-decomp/notes/`.
+
+**What paces the fall.** *(Added 2026-10-26, issue #303 Q2.)* The fall contains
+no BIOS-tick wait and waits for no audio playback: its speaker sound is produced
+by the same blocking calibrated loops that set its length (`systems/timing.md`
+Sections 6 and 7). In order it consists of:
+
+1. the view rebuild with the transport marker hidden;
+2. for each non-Dead member in slot order, the trapdoor damage presentation: the
+   member's stats row inverted, the ordinary damage rumble of `systems/audio.md`
+   Section 10.2 (step 10, target 1600, 100..2000 Hz, about 115 ms by the static
+   model of `systems/timing.md` 7.4.2), the row inverted back, the hit-point
+   subtraction, and a full stats-panel repaint; under the emulator the inverted
+   interval measured about 83 ms, shorter than the static figure;
+3. the direct black fill of the viewport;
+4. the descending sweep: 750 tones, 1000 Hz down through 251 Hz, each followed by
+   the ordinary 40-unit calibrated wait (30,000 units, plus the per-tone install
+   cost of `systems/timing.md` 7.4.1);
+5. for each in-party member in slot order, one random rumble with step 40 and
+   target 3000 in the 100..500 Hz range, then a full stats-panel repaint.
+
+The 3000 in step 5 is the rumble's accumulator target, **not** a count of
+calibrated units: by the closed form of `systems/timing.md` 7.4.2 the rumble is
+75 iterations and about 188 ms (static), about 0.19 s measured. The rebuild,
+the row inversions and the repaints wait on nothing; they cost only CPU and
+video time. With sound off every loop still runs and the fall lasts exactly as
+long: a muted three-member capture matched the sound-on captures to within one
+video frame. The total therefore depends on party size. At this table's emulator
+setting, with every member alive, it measured about 26.4 s plus about 0.36 s per
+member (about 0.14 s of damage presentation and about 0.22 s of death rumble and
+repaint): 26.78 s with one member, 27.49 to 27.52 s with three. An
+implementation should schedule the fall from this recipe on the same
+calibrated-unit clock as its other speaker effects, with the same schedule
+whether sound is on or off. It must not express the fall, or a hold after it, as
+a BIOS-tick count, gate it on an audio device's drain or completion, or
+hard-code a total. At the 0.88 ms unit of `systems/timing.md` 7.1 the sweep
+alone is about 26.5 s. After the last repaint nothing waits; the next timed
+event is the rescue's conditional repaint and then its ten-tick wait (table
+above). None of these figures is from period hardware, and which emulator
+figure lies nearer it is open (`OPEN-QUESTIONS.md`). Source provenance: the step
+order and counts, the absence of tick and audio waits, and the mute behaviour
+are static reading of private analysis in `u5-decomp/functions/`; the durations,
+the party-size dependence and the muted equality are from executed original
+code under DOSBox 0.74-3 (normal core, fixed 3000 cycles, emulated-clock video
+and audio) in one one-member and three three-member runs, one of them muted,
+re-analysed frame by frame by a verifier and recorded under `u5-decomp/notes/`
+(in one capture only two of the three death repaints changed the panel
+detectably; the fall-end time is unaffected).
 
 **The complete BIOS-tick schedule.** The cinematic requests **eight** tick
 waits, not six, and seventy-four ticks in total:
