@@ -340,10 +340,11 @@ each reverses published text.
 
 Left open: whether a panel repaint's single-scanline fills can touch the
 message-window rectangle, the level-from-experience curve over its full range,
-what the castle load prints after the handoff, which gate selects the reader's
-world-ticking idle arm, and a pitch figure for the restoration envelope. All are
-in `OPEN-QUESTIONS.md`, as is the owner question of whether to specify the
-`Not dead!` branch or guard against it.
+what the castle load prints after the handoff, and a pitch figure for the
+restoration envelope. All are in `OPEN-QUESTIONS.md`, as is the owner question
+of whether to specify the `Not dead!` branch or guard against it. Which gate
+selects the reader's world-ticking idle arm was closed 2026-10-26 by issue #303
+Q3: it is the scene band alone (`systems/input.md` Section 2).
 
 Changed: `systems/blackthorn.md` Section 7, 7.1 and new 7.2;
 `formats/karma-dat.md` Sections 2, 4 and 7; `systems/audio.md` Section 8.6.2 and

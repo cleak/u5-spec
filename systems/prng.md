@@ -96,6 +96,24 @@ the same sample rather than bypassing it. In both cases it is before the first
 intro-menu draw and key poll. Returning to the menu from a menu sub-flow resumes
 after the seed assignment and does not sample again.
 
+*(Added 2026-10-26, issue #303 Q6.)* On an unskipped start the one-shot
+automatic Return-to-View preview (`systems/intro.md` Section 3) runs
+**before** this sample, immediately after the start/menu screen loads. Its
+ticks run the active-object animator and so advance the shared state, but the
+seed is a plain assignment that overwrites the state, so nothing the automatic
+preview draws reaches gameplay. An implementation must therefore seed after the
+automatic preview, or keep the preview's draws off the gameplay stream. A
+skipped title has no automatic preview and goes straight to the sample. The
+explicit `R` preview and the menu idle-timeout preview run from the menu loop,
+which lies entirely after the seed, and because the state word is not saved
+their animator draws advance the gameplay stream for a new game and a loaded
+game alike. Static reading of the intro controller: the order is skip-flag
+decision, start/menu load, the conditional automatic preview, the seed, then
+the menu draw and poll, and every return into the menu loop lands after the
+seed. Nothing was executed. The generator state at the moment the automatic
+preview starts (presumed to be the shipped zero value) is **not established**;
+it affects only the preview's own frame pattern, which the seed then erases.
+
 Two consequences follow, and both are part of the contract:
 
 - Fresh games are *not* identical, but they are only 4,096 ways distinct. The

@@ -153,7 +153,7 @@ of *real turns* — sailing into the wind, crossing difficult terrain, holing up
 resting at an inn — is not a presentation at all, however much it looks like
 one from the outside.
 
-The input pipeline's idle wait is where the world tick runs most often, but it is not the only caller: presentations, cutscene beats and paced turn loops call it directly, dozens of call sites across the resident image and the overlays (`systems/animation.md` Section 13). What the idle wait owns is the *idle* pump, and that pump does not run when the pipeline is in prompt mode (a Y/N or numeric prompt has set a printable prompt-character byte). Prompt mode freezes the idle world while the player thinks. Cleanup time is gameplay time; prompt time is real time.
+The input pipeline's idle wait is where the world tick runs most often, but it is not the only caller: presentations, cutscene beats and paced turn loops call it directly, dozens of call sites across the resident image and the overlays (`systems/animation.md` Section 13). What the idle wait owns is the *idle* pump, and that pump runs at every prompt exactly as at the command prompt, gated only by the scene band (`systems/timing.md` Section 8.2, `systems/input.md` Section 2); prompts do not freeze it. Cleanup time is gameplay time; prompt time is real time. *(Corrected 2026-10-26, issue #303 Q3: this paragraph previously said a printable prompt-character byte puts the pipeline in a prompt mode that freezes the idle world; withdrawn, see `RETRACTIONS.md` R626.)*
 
 > **Corrected (R319).** This paragraph previously opened "The world tick is only called from inside the input pipeline's idle wait." That is withdrawn. A whole-code-set census of direct calls to the world tick and to the paced-pause helper finds them throughout the command overlays; an engine that can only reach its world tick from an idle poll cannot implement the paced presentations at all. `systems/animation.md` Section 13 published the census; this document had not been updated to match.
 
@@ -192,7 +192,7 @@ Explicit program-exit prompts are mode-loop control paths rather than the reside
 
 **Time.** The per-turn cleanup is the time spec's ingestion point — every tick, hour, day, and month transition flows through it. See `time.md`.
 
-**Input.** The input pipeline is the only blocking call in any mode loop. The pipeline's idle-vs-prompt mode determines whether the world tick runs between polls. See `input.md`.
+**Input.** The input pipeline is the only blocking call in any mode loop. The scene band decides whether the world tick runs between polls, at the command prompt and at every prompt alike. See `input.md`. *(Corrected 2026-10-26, issue #303 Q3: this previously credited an idle-vs-prompt mode with that decision; withdrawn, see `RETRACTIONS.md` R626.)*
 
 **Active objects.** The per-mode loops each own the active-object table during their tenure; the combat framer save-and-restores the table around fights. See `active-objects.md`.
 

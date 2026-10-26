@@ -115,7 +115,7 @@ the arena edge or direction in the vector changes no restored world coordinate. 
 The framing function bridges the world-mode loop and the combat round loop. It must save and restore enough state that the calling mode loop is unaware combat happened.
 
 **Save phase (before round loop).**
-- Snapshot the player's world coordinates (X, Y, Z), the active-player byte, and the *scene byte* — the same scene byte the input system uses to choose between idle and prompt mode and the time system uses to choose between full-darkness and time-of-day daylight.
+- Snapshot the player's world coordinates (X, Y, Z), the active-player byte, and the *scene byte* — the same scene byte whose band decides whether the input wait runs the world tick (`systems/input.md` Section 2) and the time system uses to choose between full-darkness and time-of-day daylight. *(Corrected 2026-10-26, issue #303 Q3: this bullet previously said the input system uses the scene byte to choose between idle and prompt mode; there is no prompt mode, see `RETRACTIONS.md` R626.)*
 - Set the scene byte to a combat sentinel value, so any concurrent system that reads it knows combat is in progress.
 - **Snapshot the entire 32-record dynamic-objects table** into a backup region. The table holds the world's monsters, NPCs, ships, horses, and other moveable entities; combat will overwrite it with its own actors.
 - Run one of the three setup paths (terrain / ambush / rest/camp alternate) to

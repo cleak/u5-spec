@@ -861,10 +861,15 @@ the prompt is up - is wrong.**
 *What that implies for any one caller is an inference from the shared routine,
 not a traced result for that caller.* On that inference a shop prompt inside a
 town, whose scene value lies outside the suppressed band below, keeps the world
-animating and rolling creature AI while it waits for a key. What the shop path
+animating and drawing random numbers while it waits for a key. What the shop path
 does with the returned key was not traced, and the census that places it among
-the callers covers direct near calls only (scope note below), so publish that
-instance as *probable*; a capture at a shop prompt settles it.
+the callers covers direct near calls only (scope note below). The shop's Y/N
+prompt, the direction prompt and the typed-word and numeric readers were since
+executed on the original, and each runs one world step per no-key pass outside
+the band and none inside it; no prompt writes the scene value (`systems/input.md`
+Section 2). A shop prompt has still not been captured live. *(Corrected
+2026-10-26, issue #303 Q3: this paragraph previously said the shop prompt keeps
+"rolling creature AI"; the world step moves no actor, see `RETRACTIONS.md` R626.)*
 
 *Scope.* That census covers direct near calls only; calls routed through the
 overlay trampoline table, indirect calls and computed targets are not covered,

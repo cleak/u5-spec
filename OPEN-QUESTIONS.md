@@ -305,6 +305,21 @@ Opened 2026-10-26 by the issue #303 Q2 Stonegate fall-timing pass:
 |---|---|---|
 | Which Stonegate fall duration lies nearer period hardware: DOSBox 0.74-3 at fixed 3000 cycles measured 27.49 to 27.52 s with three members and 26.78 s with one; a reported DOSBox Staging run at 3000 cycles measured about 26.8 s with its party size unreported. That a one-member party explains the Staging figure, and that any remaining three-member shortfall (about 2.6 percent) is an emulator difference, is inferred; Staging was not run. The static period model (about 27.5 s or a little more for three members, panel drawing unpriced) and the calibrated unit's band (about 24 to 30 s) cannot separate the two. *(Issue #303 Q2, R625.)* | `systems/blackthorn.md` Section 7.1; `systems/audio.md` Section 10.5 | The party size of the Staging capture; then a period-hardware or cycle-accurate capture of a Stonegate fall with a known party size. |
 
+Opened 2026-10-26 by the issue #303 Q3 prompt world-step pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| A shop prompt (entry Y/N or a shop menu) and a Talk, Look or Search direction prompt holding live while the world keeps stepping. The shop Y/N and direction readers were executed with the keyboard poll and world step stubbed and counted; the one reproducible live run is the `Exit to DOS? ` wait in Skara Brae, and the Talk/Look/Search live run cannot be reproduced from its kept provenance. *(Issue #303 Q3, R626.)* | `systems/input.md` Section 2; `systems/timing.md` Section 8.2 | A stock capture at a shop prompt and at a direction prompt, from saves standing beside a shopkeeper and an NPC. |
+| That every gameplay prompt keeps the command prompt's random draws, draw for draw. World steps were counted per no-key pass; draws were not, so this rests on the world step's published content. Whether the cadence of the view's animation at a prompt matches idle exactly (not just that it animates) was likewise not measured. *(Issue #303 Q3, R626.)* | `systems/input.md` Section 2; `systems/conversation.md` Section 10 | A capture of the random stream and frame timing across a held prompt and the same span at the command prompt. |
+| Dungeon-room combat stepping the world at its prompts. It follows from combat's scene value lying outside the band; that value was executed in the reader probe, but that dungeon-room combat stores it rests on static reading of the dungeon code. *(Issue #303 Q3.)* | `systems/input.md` Section 2; `systems/timing.md` Section 8.2 | Execute a prompt inside dungeon-room combat with the scene value and world-step count observed. |
+
+Opened 2026-10-26 by the issue #303 Q4 town horse-walker pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Whether the ordinary per-turn schedule processor ever steps or re-places a schedule-stationary roster horse between reseats, which would snap a walked horse back to its waypoint mid-visit. The reseat triggers (entry, floor reload, inn rest, each Hole-Up bed step) are published; only the ordinary per-turn walker is untraced. *(Issue #303 Q4, R627.)* | `systems/town-mode.md` Section 16 | A capture in a horse location over several turns and one hour boundary, without changing floor or resting, with the horse's sprite position and runtime coordinate observed. |
+| That an X-it dismount inside a town parks a `0x10`/`0x11` riderless horse the town walker then moves, and that the next reseat erases it. Both rest on static reading (the shared X-it handler; the reseat's clear re-placing only roster NPCs); neither was executed in a town. *(Issue #303 Q4.)* | `systems/town-mode.md` Section 16 | Dismount a horse inside a town, wait several turns, then change floor or rest at an inn and observe the riderless horse. |
+
 ## 3. Needs a further static trace
 
 The corridor mirror derivation was completed 2026-09-07: original EGA
@@ -405,7 +420,6 @@ Opened 2026-09-12 by the issue #269 rescue-narration pass:
 | Whether a stats-panel repaint's two single-scanline fills can ever touch rows inside the message-window rectangle. The scroll half is closed - a repaint issues none, and no command against the message window's descriptor - but the fills were recorded by command index only, and their coordinates live in state the intercepted driver call never consumed. | `systems/stats-panel.md` Section 2.1; `systems/blackthorn.md` Section 7.2 | Execute a repaint with the fill coordinates captured, and compare them with the message window's rectangle. |
 | The level-from-experience curve over the full experience range, and whether the level is clamped at the top. The rescue's recomputation was observed only over the experience values the executed standings produced. | `systems/blackthorn.md` Section 7; `formats/saved-gam.md` | Sweep the recomputation across the experience range, including values that would exceed the top level. |
 | What the castle location load prints into or clears from the message window after the cinematic returns. The published handoff frame describes the instant the handler returns and nothing after it. | `systems/blackthorn.md` Section 7.2 | Continue the executed run through the castle location load with the message window observed. |
-| Which test selects the input reader's world-ticking idle arm. `systems/input.md` Section 12 publishes a prompt-character-byte gate; the rescue pass observed the cutscene scene value selecting that arm on its own path. Whether these are one test or two was not established, and neither document is amended on the strength of the other. | `systems/input.md` Section 12; `systems/blackthorn.md` Section 7 | Read the reader's idle arm through to the tick call and name every condition on it. |
 
 Opened 2026-09-12 by the issue #271 closing-sequence pass:
 
@@ -610,6 +624,18 @@ Opened 2026-10-25 by the issue #302 Q6 Sleep Field pass:
 |---|---|---|
 | Whether any effect can move a sleeping combatant off its cell, which would end the Sleep Field re-sleep loop. Not enumerated. *(Issue #302 Q6.)* | `systems/combat.md` Section 11 | Census every combat path that changes an actor's arena position and check whether any applies to an actor with bit `0x08` set. |
 | That nothing reads the sleep narration code between Sleep Field contact and the next dispatch, so contact prints no `slept!`. Static, from a direct-operand scan of the resident image and all overlays; accesses through a register or pointer were not censused. *(Issue #302 Q6.)* | `systems/combat.md` Sections 11 and 12 | Extend the narration-code reader census to indirect accesses, or capture field contact (section 2). |
+
+Opened 2026-10-26 by the issue #303 Q3 prompt world-step pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The complete list of key readers that bypass the shared wait and so never run the world step. Character creation's name reader is executed; the disk-swap and disk-error prompts, intro and menu waits, Look print-and-wait loop, a dungeon-view wait, the endgame's raw-key loops and the mode loops' key-repeat poll are from static reading, and the list is not claimed to be exhaustive. The scene-value writer census likewise excludes block copies and indirect writes. *(Issue #303 Q3.)* | `systems/input.md` Section 2 | A census of every direct caller of the raw keyboard check and blink-and-key routine outside the shared wait, and a trace of block copies that can reach the scene cell. |
+
+Opened 2026-10-26 by the issue #303 Q6 boot-seed placement pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The generator state when the automatic Return-to-View preview starts, presumed to be the shipped zero value. No range draw was found in the intro or title code ahead of it, but not every resident path reachable during the title was proved. Presentation only: the boot seed overwrites the state after the preview. The seed-after-preview order itself rests on static reading; nothing was executed. *(Issue #303 Q6.)* | `systems/prng.md` Section 3 | A census of every generator advance reachable before the automatic preview, or an executed unskipped start with the state word observed at the preview's first tick and at the seed. |
 
 ## 4. Deferred by scope
 

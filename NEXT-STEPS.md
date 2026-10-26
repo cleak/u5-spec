@@ -377,9 +377,10 @@ Next work on this thread, in priority order:
    executed standings.
 4. Continue one executed run through the castle location load, so the handoff
    frame stops being a claim about the instant the handler returns.
-5. Settle which test selects the reader's world-ticking idle arm.
-   `systems/input.md` Section 12 and the rescue pass name different conditions
-   and neither was amended on the strength of the other.
+5. ~~Settle which test selects the reader's world-ticking idle arm.~~ Closed
+   2026-10-26 by issue #303 Q3: there is one test, the scene band; the
+   prompt-character gate `systems/input.md` Section 12 published is withdrawn
+   (`RETRACTIONS.md` R626).
 
 Changed: `systems/blackthorn.md` Sections 7, 7.1 and new 7.2;
 `formats/karma-dat.md` Sections 2, 4 and 7; `systems/audio.md` Section 8.6.2 and

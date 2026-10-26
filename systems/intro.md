@@ -554,7 +554,11 @@ nor becomes its first menu command. A keystroke detected in an earlier title
 phase is different: it changes the caller's flag, enters this loader plain, and
 suppresses the automatic preview. Only this first automatic showing is
 conditional — the two-hundred-pass idle timeout in section 6 and the explicit
-`R` command are unaffected.
+`R` command are unaffected. *(Added 2026-10-26, issue #303 Q6.)* The boot seed
+(`systems/prng.md` Section 3) is sampled between the end of this automatic
+preview and the first menu draw, so the preview's animator draws are
+overwritten; the idle-timeout and `R` previews run after the seed and advance
+the gameplay stream.
 
 *(added 2026-10-16, issue #298 Q39)* **A key first seen inside subtitle
 ignition.** The ignition's keyboard test does not consume the key, and the

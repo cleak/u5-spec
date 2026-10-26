@@ -599,8 +599,10 @@ windows:
 - Cursor-blink base glyph, blink modulus, and current blink phase.
 - The cursor-advance gate shared with the text output primitive, so cursor
   blink frames can be painted in place.
-- The prompt-character byte whose printable/non-printable range decides whether
-  idle polling advances the world tick.
+- No prompt-character byte: idle polling's world-tick decision reads the scene
+  value's band (`systems/timing.md` Section 8.2). *(Corrected 2026-10-26, issue
+  #303 Q3: this bullet previously listed a prompt-character byte that makes that
+  decision; withdrawn, see `RETRACTIONS.md` R626.)*
 - The one-keystroke buffer-flush gate and the numpad-equivalent flag used
   between the low-level keyboard reader and the top-level command translator.
 - A small extended-key translation table. The traced DOS table accepts the four

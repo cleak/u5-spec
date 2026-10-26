@@ -110,9 +110,13 @@ classes (type byte with its low two bits cleared) that select it.
   class but `0x5C` the delay is set to six and the position is held, so the
   pass ends and the snap step is retried after the pause; for class `0x5C` the
   position advances instead of pausing and the pass still ends. Otherwise the
-  position advances and the pass continues with the next step.
+  position advances and the pass continues with the next step. *(Added
+  2026-10-26, issue #303 Q5.)* The draw is `random(0, 255)`; the snap is taken
+  when the result is below 64 and the position advances when it is 64 or more.
 - **6-step** - one draw, accepted three times in four: restart and continue;
-  otherwise advance and continue.
+  otherwise advance and continue. *(Added 2026-10-26, issue #303 Q5.)* The
+  draw is `random(0, 255)`; the script restarts when the result is below 192
+  and advances when it is 192 or more.
 - **restart** - go to step 0 and continue. **goto 2** - go to step 2 and
   continue.
 
@@ -135,8 +139,17 @@ reach a script. The two classes that animate unconditionally, skipping the
 eligibility coin, are `0x5C` and the mimic `0xA8`; for every other class the
 coin is an inclusive `0..255` draw accepted at 128 or above. Each snap step and
 each 6-step takes exactly one draw: these are the "two random script steps" of
-the random-stream accounting in Section 8. The whirlpool description above is
-script A. The beggar family traced in `systems/animation.md` Section 5 is also
+the random-stream accounting in Section 8. *(Added 2026-10-26, issue #303
+Q5.)* All three animator gates (the coin at 128, the snap below 64 and the
+6-step restart below 192) are threshold compares on the whole byte, which is
+the low eight bits of the advanced generator state, so they are decided by its
+high bits, not by low-bit masks. An implementation that tests the low bit or
+the low two bits reproduces the rates but not the stream. Executed: the
+original animator was run with the range primitive returning the boundary
+values of each gate (0, 63, 64 and 255 for the snap; 0, 191, 192 and 255 for
+the 6-step; 0, 127, 128 and 255 for the coin), the two unconditional classes
+took no draw, and static reading shows plain threshold compares. The whirlpool
+description above is script A. The beggar family traced in `systems/animation.md` Section 5 is also
 script A.
 
 The mimic and the corpser show frame 1 and then freeze on their p15 step. Whether
@@ -426,7 +439,7 @@ column or row.
 > overworld (or in towns past their schedule)". The stepping half is withdrawn,
 > and so is the town clause. The animator changes appearance only; ambient
 > creature movement happens in the outdoor per-turn walker below, and a town's
-> non-schedule roamers are walked by a separate town-mode walker. This completes
+> horse-family slots, roster-linked or not, are walked by a separate town-mode walker (R627). This completes
 > the propagation of R315, which withdrew the same reading from
 > `systems/main-loop.md`, `systems/animation.md` and `systems/input.md` but left
 > these sentences standing here. Search scope for the negative: the animator was
@@ -577,7 +590,7 @@ turn the player passes, rather than after a variable delay — and why it does n
 move on that turn, since a returning reaction both consumes the slot's turn and
 zeroes out movement for every remaining slot in that pass.
 
-**Towns do not use this walker.** A town's non-schedule roaming objects are
+**Towns do not use this walker.** A town's horse-family slots are
 advanced by a separate town-mode object walker that runs once per turn,
 immediately before the NPC schedule processor and under the same three effect
 gates (`systems/npc-schedules.md` Section 5). It considers only slots whose type
@@ -585,8 +598,7 @@ byte is in the loose-horse family `0x10..0x11` and whose floor byte matches the
 displayed floor, and it applies its own independent one-in-two per-slot coin
 before probing directions, drawn from the same shared random stream. On a
 committed step it also rewrites the slot's type/frame byte to the facing value
-implied by the direction, exactly as the outdoor water-creature movers do. Town roamers, town schedule NPCs and outdoor
-creatures are three separate movement systems that happen to share this table.
+implied by the direction, exactly as the outdoor water-creature movers do. The town walker selects by type byte and floor only, so it also moves roster NPCs whose type is `0x10`/`0x11`; "loose-horse family" names the type value, not a link state, and in shipped data every horse is a roster NPC. The town object walker and the town schedule processor can therefore both move the same roster-horse slot, and the walker does not update that NPC's schedule-side position (`systems/town-mode.md` Section 16). Outdoor creatures remain a separate system that shares this table. *(Corrected 2026-10-26, issue #303 Q4: this paragraph previously named the town walker's subjects "non-schedule roaming objects" and called town roamers, town schedule NPCs and outdoor creatures "three separate movement systems"; retracted, `RETRACTIONS.md` R627.)*
 *Scope:* established by a call census over the town overlay covering direct near
 calls only; indirect and far call forms were not enumerated, and no claim is
 made here about whether the overworld module is resident during town mode.

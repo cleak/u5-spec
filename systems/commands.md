@@ -543,7 +543,8 @@ label, the brackets are the two end-cap glyphs drawn around a plain literal; see
 ### 5.7 Prompt reentrancy
 
 Handlers are allowed to re-enter the input system for follow-up prompts. The
-input spec owns the cursor, prompt-character, typeahead, and reentrancy rules.
+input spec owns the cursor, world-tick, typeahead, and reentrancy rules (corrected
+2026-10-26, issue #303 Q3: there is no prompt-character rule, see `RETRACTIONS.md` R626).
 The command spec's contract is simply that prompts are synchronous: a handler
 does not return to the mode loop until its prompt sequence has completed or been
 cancelled.

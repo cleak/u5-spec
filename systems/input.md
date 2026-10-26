@@ -6,15 +6,17 @@ Ultima V's input system is a single keystroke-at-a-time pipeline. A central "wai
 
 The pipeline is non-blocking at the bottom: the keyboard is peeked, not waited on. Blocking is achieved by looping over the peek-and-tick step. This is why the cursor blinks at all and why the screen can keep animating while the game is waiting for exactly one command, without spending an in-world turn.
 
-## 2. Idle vs Prompt Modes
+## 2. Idle Ticking at the Command Prompt and at Prompts
 
-The same wait-for-input routine is used in two distinct modes, controlled by a single byte of state — the *prompt-character* byte, written by whichever piece of the UI most recently displayed a Y/N or text prompt.
+The same wait-for-input routine serves the open-ended command prompt and every gameplay prompt: direction prompts, Y/N prompts (shop entry and confirmations, conversation yes/no, the exit confirmation), shop menus and lists, typed words, numbers and party-member selection. Each iteration of the wait loop paints one frame of the blinking cursor and peeks the keyboard; on a miss it runs one *world tick* (the resident redraw orchestrator updates per-frame visual state and re-renders the viewport) **unless the current scene value lies in the band `0x21`..`0x7F` inclusive** (`systems/timing.md` Section 8.2). That band test is the whole decision. No prompt, menu or reader changes the scene value, so a prompt waits exactly as the command prompt does in the same scene: in the overworld, towns, dwellings, castles, keeps, Blackthorn and combat the world keeps animating and drawing random numbers while any prompt is up, and in first-person dungeon scenes no world tick runs at any prompt. The world tick's own gates (the master redraw enable, the Negate Time freeze and the Tandy-only first-pass sentinel, `systems/animation.md` Section 13) are neither set nor cleared by a prompt. *(Corrected 2026-10-26, issue #303 Q3: this section previously described a printable prompt-character byte that switches the routine into a prompt mode in which the world tick is suppressed; no such byte or mode exists, see `RETRACTIONS.md` R626.)*
 
-**Idle / open-ended command mode.** The prompt-character byte is outside the printable-ASCII range. Each iteration of the wait loop paints one frame of the blinking cursor, peeks the keyboard, and — on a miss — runs one *world tick*: the resident redraw orchestrator updates per-frame visual state and re-renders the viewport. **No actor movement of any kind advances from this idle tick** — not scheduled NPC schedule-walking, not ambient creature wandering, and not the in-world clock. (Broadened 2026-08-31, R315: this sentence previously named only NPC schedules and the clock, which left ambient wandering ambiguous and was read elsewhere in the spec as permitting it on the idle tick.) Idle time is real time, not gameplay turn time. The separate question of how often an actor moves on a turn that *is* passed is answered in `systems/npc-schedules.md` Section 9.1 for town NPCs and `systems/active-objects.md` Section 8 for outdoor creatures.
+**No actor movement of any kind advances from this idle tick** — not scheduled NPC schedule-walking, not ambient creature wandering, and not the in-world clock. (Broadened 2026-08-31, R315: this sentence previously named only NPC schedules and the clock, which left ambient wandering ambiguous and was read elsewhere in the spec as permitting it on the idle tick.) Idle time is real time, not gameplay turn time. The separate question of how often an actor moves on a turn that *is* passed is answered in `systems/npc-schedules.md` Section 9.1 for town NPCs and `systems/active-objects.md` Section 8 for outdoor creatures.
 
-**Prompt mode.** The prompt-character byte is a printable ASCII character — typically the last character of a prompt like `Y/N?` or `For how many hours?`. The cursor still blinks and the keyboard is still polled, but the world-tick step is suppressed. The world freezes while the player thinks. This is what makes it safe to ask "Are you sure?" without an attacking NPC crossing a tile in the meantime.
+Every prompt shares every other piece of behaviour with the command prompt: cursor blink, key polling, case folding, direction translation, and one-keystroke-per-call discipline. An implementation must not add a prompt mode that freezes the world.
 
-The two modes share every other piece of behaviour: cursor blink, key polling, case folding, direction translation, and one-keystroke-per-call discipline. Switching modes is a one-byte write by whichever component owned the prompt; nothing in the input system itself toggles modes.
+**Readers that do not use the shared wait.** A few key reads run no world step at all, because they do not go through the shared wait. Character creation's name reader is one (executed on the original). From static reading only, and not claimed to be exhaustive: the floppy disk-swap and disk-error prompts, the intro and menu waits, the Look print-and-wait loop (`systems/timing.md` Section 8.2), one dungeon-view wait inside a dungeon scene (where the step would be suppressed anyway), the endgame sequence's tight loops on the raw key check, and the overworld and dungeon command loops' key-repeat path, which polls the blink-and-key routine directly and is not a prompt. *(Added 2026-10-26, issue #303 Q3.)*
+
+**Evidence.** No prompt writes the scene value: an exhaustive static census of every shipped code image for instructions that address the scene cell, with every register-sourced write traced to a location or scene id (overworld, a town-family id, a dungeon id, combat, the two Blackthorn variants, the Yew arrest scene, and the intro, character-creation and Return-to-View states), confirmed by an independent operand-level census; block copies and indirect writes are outside its scope. The direction-prompt, typed-word, numeric, bare-wait and shop Y/N readers were executed on the original: one world step per no-key pass at overworld, town, Blackthorn and combat scene values, none at two values inside the band (one of them a dungeon scene), and the scene value unchanged afterwards; the character-creation name reader ran none. A live run in Skara Brae with `Exit to DOS? ` waiting showed the viewport animating as at idle and no NPC stepping. That the waits also keep their random draws is inferred from the world step's published content (`systems/timing.md` Section 8.2: animator, wind roll, moongate and beacon steps, re-composition); world steps were counted, draws were not. Combat's stepping rests on its scene value `0xFF` lying outside the band; that value was executed, but dungeon-room combat stepping rests on static reading of the dungeon code's writes of that value. *(Added 2026-10-26, issue #303 Q3; open items in `OPEN-QUESTIONS.md`.)*
 
 ## 3. The Cursor-Blink and Poll Loop
 
@@ -210,14 +212,14 @@ The translated byte that emerges from the wait loop goes to one of the three top
 The central dispatcher routes by letter. Each letter has a unique handler; many letters have *multiple* handlers selected by the engine's *scene* state (overworld / town / dungeon; combat uses its own dispatcher). The full per-letter behaviour belongs in `commands.md`; the input-side relevance is only that:
 
 - The dispatcher prints the verb prefix ("Attack-", "Cast...", "Hole up- ", and so on) and then either runs an in-resident handler or makes a cross-overlay call into one of the per-command overlays.
-- The handler on the other side may *itself* prompt the user — for a direction, a target slot, a string, a digit. It does so by calling back into the same wait-for-input routine, often after writing the prompt-character byte to switch into prompt mode and clearing the buffer-flush gate to allow type-ahead.
-- The wait-for-input routine is therefore *reentrant*. There is no global "I'm reading a key right now" lock and no input queue between nested prompts. Reentrance is enabled by preserving the cursor-advance gate around each nested read (Section 3); the calling handler is responsible for preserving the prompt-character byte and the buffer-flush gate.
+- The handler on the other side may *itself* prompt the user — for a direction, a target slot, a string, a digit. It does so by calling back into the same wait-for-input routine, often after clearing the buffer-flush gate to allow type-ahead. The nested read runs the world tick under the same scene band as the command prompt (Section 2). *(Corrected 2026-10-26, issue #303 Q3: this bullet previously said the handler first writes a prompt-character byte to switch into prompt mode; withdrawn, see `RETRACTIONS.md` R626.)*
+- The wait-for-input routine is therefore *reentrant*. There is no global "I'm reading a key right now" lock and no input queue between nested prompts. Reentrance is enabled by preserving the cursor-advance gate around each nested read (Section 3); the calling handler is responsible for preserving the buffer-flush gate.
 
 ## 8. Free-Text Input
 
 Some prompts need more than one keystroke: NPC conversations accept a four- to six-character keyword; character creation accepts a name; save filenames are typed in full; hours-to-rest is a small unsigned number. All are built on the same wait-for-input routine, with three additions:
 
-1. **Print the prompt and park the cursor.** The prompt is emitted into the active text window. The cursor is left where typed input will appear. The prompt-character byte is set to a printable value so the world-tick step is suppressed (Section 2).
+1. **Print the prompt and park the cursor.** The prompt is emitted into the active text window. The cursor is left where typed input will appear. Nothing about the wait changes: the world tick keeps running under the scene band of Section 2. (Character creation's name entry is the one line reader known not to run it, because it does not use the shared wait.) *(Corrected 2026-10-26, issue #303 Q3: this step previously said a printable prompt-character byte is set here so the world tick is suppressed; withdrawn, see `RETRACTIONS.md` R626.)*
 2. **Disable the buffer flush.** The flush gate (Section 6) is cleared so the player can type ahead. The prompt restores it on exit.
 3. **Loop on the wait-for-input routine, accumulating into a small line buffer.** Each returned byte is one of:
    - A printable ASCII character — appended to the buffer (subject to a maximum length) and echoed at the cursor.
@@ -388,11 +390,11 @@ or no-direction result in their own effect layer.
 
 ## 12. World Tick During Idle
 
-When the wait-for-input routine has no key to consume and the prompt-character byte is outside the printable range, it calls the *world tick*. This is the resident redraw orchestrator that keeps the visible scene alive while the game waits for a command. It runs once per failed peek — typically many times per second — but those calls do not spend game-clock minutes or move scheduled NPCs.
+When the wait-for-input routine has no key to consume and the scene value is outside the band `0x21`..`0x7F`, it calls the *world tick*, whichever prompt is waiting. This is the resident redraw orchestrator that keeps the visible scene alive while the game waits for a command. It runs once per failed peek — typically many times per second — but those calls do not spend game-clock minutes or move scheduled NPCs.
 
 The internals of the tick belong in a separate spec. From the input system's perspective, the contract is simple:
 
-- The tick is invoked exactly once per failed keyboard peek, *only* when the prompt-character byte is non-printable (Section 2).
+- The tick is invoked exactly once per failed keyboard peek, *only* when the scene value is outside that band (Section 2), whichever prompt is waiting. *(Corrected 2026-10-26, issue #303 Q3: this paragraph and bullet previously said the tick runs only when the prompt-character byte is non-printable; withdrawn, see `RETRACTIONS.md` R626.)*
 - The tick can take long enough to be perceptible — a full viewport rebuild or
   active-object animation frames — and the input system trusts it to return
   promptly enough that the cursor blink remains responsive.
@@ -425,11 +427,12 @@ runtime gap: the full recognised set for the game-mode-specific entry stamp.
   diagonal block the other way: its consumers are the combat targeting cursor
   and the paging keys of the stats/inventory and shop lists.
 
-- **Prompt-character byte writers.** Several prompt families select the
-  visible prompt/idle cursor byte before entering the shared input wait. The
-  clean contract is the semantic input mode and cursor presentation state, not
-  the original split of writer sites. A modern implementation should consolidate
-  these into an explicit input-mode enum.
+- **No prompt input mode.** No prompt family writes any state that changes
+  the shared wait's world-tick decision; that decision is the scene band of
+  Section 2 alone. An implementation must not add a prompt-freezes-world mode.
+  *(Corrected 2026-10-26, issue #303 Q3: this bullet previously described
+  prompt families writing a prompt-character byte and advised an explicit
+  input-mode enum for it; withdrawn, see `RETRACTIONS.md` R626.)*
 
 - **Reentrancy and the blink counter.** The cursor-advance gate is local to a
   wait call, while the blink phase is shared process state. This is a visual

@@ -1394,7 +1394,10 @@ space when a key arrives, so it does write cells but neither advances the
 cursor nor scrolls (`systems/input.md` Section 3). The world keeps running
 while it blocks, and that is established rather than inherited: the cinematic
 has already stamped its cutscene scene value before the first beat, and that
-value is what selects the reader's world-ticking idle arm on this path.
+value is what selects the reader's world-ticking idle arm on this path. That is
+the one test the reader has at every prompt: the scene band of `systems/timing.md`
+Section 8.2, with no separate prompt gate (`systems/input.md` Section 2; added
+2026-10-26, issue #303 Q3).
 
 **Party restoration (contract step 7).** For each in-party slot in ascending
 order the cinematic plays one software envelope, dispatches the shared revive

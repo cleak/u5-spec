@@ -226,7 +226,9 @@ point is additionally behind an exact fair coin, so a frame changes on roughly
 half the eligible passes. The gate arithmetic is exact rather than
 approximate: both rolls reduce a fifteen-bit generator value modulo 256, so the
 coin is a true one-in-two and the re-base a true one-in-four, with none of the
-modulo bias a narrower reduction would introduce. Throughout, only the displayed-frame
+modulo bias a narrower reduction would introduce. *(Added 2026-10-26, issue
+#303 Q5.)* The coin passes on results 128..255 and the re-base is taken on
+results 0..63 (`systems/active-objects.md` Section 3). Throughout, only the displayed-frame
 byte moves - the slot's type byte still reads the base at the end of every run -
 which is the Section 4 contract seen from the outside. The per-class script
 table this row comes from has **eleven** rows. All eleven, with the classes

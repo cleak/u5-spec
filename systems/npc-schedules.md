@@ -621,6 +621,15 @@ movement:
    evenly, so the draw is bias-free and the single bit is an exact half.
    Enumerating the generator's whole state space gives an empirical rate of
    `0.5014` for this bit on the dominant state cycle.
+   *(Added 2026-10-26, issue #303 Q5.)* The draw is `random(0, 255)`, which is
+   exactly the low eight bits of the freshly advanced generator state, and the
+   bit tested is its value-8 bit (bit 3): the step proceeds when that bit is
+   **set** (results 8..15, 24..31, and so on up to 248..255) and the turn ends
+   when it is clear. It is not bit 0 and not a test for zero. A clear bit takes
+   no direction draw. A gate that tests bit 0 has the right rate but selects a
+   different half of the stream. Executed: the original wander step was run
+   with the range primitive returning each of the 256 byte values in turn, and
+   static reading agrees.
 2. **One direction.** A single cardinal direction is drawn: a uniform value over
    the sixty-five integers `0..64`, folded to its low two bits and mapped to
    east, north, west, south in that order. Because sixty-five values do not fold
