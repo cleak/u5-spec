@@ -745,6 +745,34 @@ remaining ordinary epilogue; any encounter draw made later is the epilogue's
 normal draw, not part of the rough-seas trigger. A wipe is
 noticed at the next loop head.
 
+**Rough seas line placement.** *(Added 2026-10-27, issue #307 Q3; executed on
+the original.)* The stored line is `Rough seas!` followed by one line feed,
+with no leading feed. Because the move echo ends in its own feed, it lands on
+the row directly below the echo, with no blank row between them, and it leaves
+the cursor at column 0 of a fresh row. The outdoor epilogue's engagement
+notices both begin and end with a line feed (`Attacked!` and `WHIRLPOOL!`), and
+the cursor keeps no open-row state (`systems/text-output.md` Section 10.4), so
+a same-turn engagement's leading feed spends one blank row. The resulting rows,
+top to bottom, are:
+
+| Case | Rows after the move echo |
+|---|---|
+| No engagement | `Rough seas!`, blank, next prompt row |
+| Generic hostile engages | `Rough seas!`, blank, `Attacked!`, blank, next prompt row |
+| Whirlpool engages | `Rough seas!`, blank, `WHIRLPOOL!`, blank, next prompt row (after the swallow, the plane change and the overworld re-entry) |
+
+The impact presentation and the absorption pass write nothing to the message
+window; they only repaint the stats panel. A generic hostile engaging a skiff
+on water runs its absorption stage, which also prints nothing further. A member
+killed by the damage pass adds no message-window line: this was executed, with
+the member's status changing to Dead in the stats panel and nothing written to
+the message window, matching Section 6.2.4. The runs used a skiff; the carpet
+frames print the same stored line by the same path. Source provenance: derived
+from private analysis in `u5-decomp/notes/` (the stored line read from the
+shipped data file; row placement from the shipped overworld module run under
+emulation from a stock-written save, logging every emitted byte and the
+message-window cursor).
+
 Neither trigger owns a durable event flag, queue, or cooldown. Collision clears
 the existing sail-direction cache and its released cadence state and sets the
 ordinary fresh-frame request. That request is presentation state, not a pending
@@ -759,7 +787,7 @@ Conformance vectors:
 | Hoisted north-facing frigate, cached direction, hull 50, refused ordinary destination | Print `COLLISION!`; advance the audio LFSR twenty steps; consume one hull draw; clear the sail cache; keep coordinates; skip the ordinary per-turn tail. |
 | Same setup, rendered destination tile `0x03` (shoal) | Replace only the first line with `BREAKING UP!`; rumble, absorption, refusal, cache clear, and tail skip are unchanged. |
 | Same setup, exact pier destination | Print `Docked!`; become the same-facing furled frigate; clear the cache; consume neither audio-LFSR nor gameplay-PRNG values. |
-| Consumed action on deep water under any skiff facing or either carpet frame, with `N` active non-Dead members | Print `Rough seas!`; advance the audio LFSR `300 + 160N` steps; consume one world tick's draws (at least one `0..63` wind check) and then `N` gameplay draws in `1..8` (R642; previously "exactly `N`"); continue to the ordinary epilogue. Changing the terrain to either neighbouring water value or the marker to a frigate suppresses this trigger. |
+| Consumed action on deep water under any skiff facing or either carpet frame, with `N` active non-Dead members | Print `Rough seas!` and one trailing line feed (no leading feed; issue #307 Q3); advance the audio LFSR `300 + 160N` steps; consume one world tick's draws (at least one `0..63` wind check) and then `N` gameplay draws in `1..8` (R642; previously "exactly `N`"); continue to the ordinary epilogue. Changing the terrain to either neighbouring water value or the marker to a frigate suppresses this trigger. |
 
 #### 6.2.6 Named gaps in this section
 

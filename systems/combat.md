@@ -1209,6 +1209,17 @@ the bit at all and picks the player path from the active-player sentinel (that
 sentinel test is real but lives one level down, inside the command-path handler
 itself). A possessed party member still keeps its place in slot order, still
 draws the `C` status letter, and still uses the redirected attack branch.
+*(Added 2026-10-27, issue #307 Q1.)* The active-player selection can never name
+a party slot that this helper puts in the automatic group. Digit selection
+refuses such a slot (Section 8.4). Possession clears the selection when it
+names the possessed character (Section 9). The Sword of Chaos arm (writer 4
+above) clears the selection unconditionally whenever it takes that arm.
+Charm's gate admits only slots already in the automatic group, so it can
+neither set the bit on nor clear it from the current selection. The command
+handler's sentinel gate therefore never skips the whole group-0 side while the
+selected member sits on the automatic driver, and no key poll or sentinel reset
+in the round walker is involved; the guarantee lives in the digit handler and
+the three writers.
 
 **Sleep is a different bit.** Bit `0x08` is the asleep/magically-disabled
 state and has nothing to do with charm, possession, or any other external
@@ -2681,9 +2692,24 @@ command's title-case `Set Active Plr:` (`systems/commands.md`); the shipped data
 holds both and an engine must keep both. The label prints before the eligibility
 test, so the invalid case is two lines. Digit `0` is one literal that already
 contains `None!`. A member is eligible when it is a party-side actor in the arena
-with that roster slot and none of the disabled, asleep or dead-marked bits; after
-a valid selection the chosen actor's turn banner follows on the next line.
-*(Confirmed 2026-10-12, issue #293.)*
+with that roster slot, none of the disabled, asleep or dead-marked bits is set,
+and the slot-to-group helper of Section 6.1a puts it in the player-command group
+*(corrected 2026-10-27, issue #307 Q1)*. The group test is what refuses a party
+member under control - the controlled bit set by possession, by the Sword of
+Chaos compulsion or by Charm - and the shipped traitor's slot, which the helper
+always places in the automatic group. Such a member is refused exactly as if no
+member matched: the ordinary invalid case, `Set active plr:` on one row and
+`Invalid!` on the next, with no separate message, and the selection is left
+as it was. That no tone accompanies this refusal rests on static reading. Like
+any failed `1`-`6` selection it is a free full re-prompt (Section 8.1) and does
+not spend the turn. After a valid selection the chosen actor's turn banner
+follows on the next line. *(Confirmed 2026-10-12, issue #293; the eligibility
+list previously omitted the group test and admitted any party-side member that
+was not disabled, asleep or dead-marked - that is retracted, see
+`RETRACTIONS.md` R643. Executed on the original selection routine with the real
+group helper: an ordinary member was accepted; a controlled member, the
+traitor's slot, an asleep member and a controlled monster were each refused
+with both rows. Source provenance: private analysis in `u5-decomp/notes/`.)*
 
 | Escape refused by context | `Escape-Not here!\n` |
 | Escape refused while fight remains undecided | `Escape-Not yet!\n` |
@@ -5185,7 +5211,9 @@ is known, its downstream effects are exact:
   synthesizes**. Its one gate is the active-player sentinel: while the sentinel
   is unset — its state on combat entry, and the state it returns to whenever `0`
   is pressed — every group-0 slot is prompted; while a character is selected
-  with `1`-`6`, only the party-side slot that sentinel names is prompted and
+  with `1`-`6`, only the party-side slot that sentinel names is prompted (that
+  slot is always in this group; Section 8.4 gives the eligibility test and
+  Section 6.1a the writers that guarantee it - added 2026-10-27, issue #307 Q1) and
   every other group-0 slot, party or monster, is skipped without a banner, a
   keystroke or an action. A monster descriptor that control moved to group 0 is
   therefore prompted on exactly the same terms as a party member: the reduced

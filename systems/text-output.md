@@ -723,7 +723,10 @@ from the prompt printed after it, from every starting cursor row
 per-turn epilogue prints - a trapdoor, poison, burning or attacked notice - the
 blank falls under that notice rather than under the command's own result,
 because the epilogue runs after the handler returns and before the next poll.
-A separate case is a literal with no trailing feed of its own: the version
+After a result that ends in a feed, such as `Rough seas!`, the leading feed of
+a same-turn `Attacked!` or `WHIRLPOOL!` notice spends a blank row of its own,
+so a blank row sits both above and below that notice (`systems/overworld.md`
+Section 6.2.5; added 2026-10-27, issue #307 Q3). A separate case is a literal with no trailing feed of its own: the version
 banner has none, and the town loop emits one for it explicitly.
 
 **A result that does not end in a feed.** The next poll's leading feed closes
