@@ -86,7 +86,13 @@ therefore not a duration, and a wall-clock sample of one cannot be converted
 back into a count. The largest published example is the shrine entry's approach
 walk, forty-five requests before the kneel and ten more before the virtue
 prompt: `systems/karma.md` Section 7, where a sampled interval about one
-sample shorter than the arithmetic floor is reconciled this way.
+sample shorter than the arithmetic floor is reconciled this way. *(Added
+2026-10-26, issue #304 Q8.)* A stock-emulator capture of that entry (DOSBox,
+3000 cycles, EGA) shows the first consequence directly: each paced step costs
+one tick, and the excess over the request count is untimed record printing and
+repaints that run past an edge. It is longer than the floor, not shorter, so
+it does not explain the earlier sample, which stays open in
+`OPEN-QUESTIONS.md`.
 
 Input-facing modal waits layer on top of the same presentation boundary: they
 poll the blinking-cursor input helper for a bounded number of iterations and
@@ -775,6 +781,13 @@ pending answers and treats them as known gaps:
     terms: the per-frame sting, which those floors take at the shared
     two-part sting's 27 ms on an identification that was assumed rather
     than established, and the per-step viewport rebuild.*
+    *Data point 2026-10-26 (issue #304 Q8): a DOSBox 3000-cycle EGA
+    capture of a shrine entry measured both terms approximately (±0.3
+    tick): the per-frame sting's audio burst at about 20 to 25 ms, and a
+    full per-step viewport rebuild at about 0.3 to 0.5 tick, short enough
+    that each paced walk step cost one tick (`systems/karma.md` Section 7).
+    These are emulator data points, not priced constants; the sting's
+    recipe and the period-hardware cost of both remain unestablished.*
 11. **Whether an implementation applies its per-tone constant to the
     blocking-tone wrapper as well as to sweeps was not established.** If it
     does, the right figure there is 18.8 inner units, not 17.4.

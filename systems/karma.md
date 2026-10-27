@@ -377,8 +377,8 @@ The eight expected mantras are fixed:
 |---|---|---|
 | Enter prefix | none | `E`-Enter prints `Enter `, then `the shrine of\n`, then the virtue's name from the table above, then one line feed. That line feed is the only individual character the whole entry emits; everything else is a whole stored string |
 | Approach | one world step, while the presentation loads the shrine display grid and suspends the scene | Record `45`, including its leading newline and trailing blank row; the final word is `Shrine...` with three dots |
-| Kneel | **the approach walk: nine animation frames, forty-five world steps and forty-five one-tick delay requests, plus the handler's own repaint step - forty-six world steps in all.** See "Entry pacing" below | Record `28`, the kneeling-at-the-altar narration, followed by its blank row Record `28` carries **no leading newline** of its own: it begins with its text, so the blank row between the Approach and Kneel lines is record `45`'s trailing blank row alone, and a reader that gives every record a leading feed prints a second blank here. |
-| Virtue question | ten world steps and ten one-tick delay requests | Record `29`: the question asking which virtue, then a blank row and `:`; read up to twelve characters |
+| Kneel | **the approach walk: nine animation frames, forty-five world steps and forty-five one-tick delay requests, plus the handler's own repaint step - forty-six world steps in all.** See "Entry pacing" below Measured at DOSBox 3000 cycles (EGA): about 48.9 ticks from the echo's first glyph to the Kneel record's, with each walk step costing one tick and the excess untimed printing and repaints; see "Measured stock timeline" below *(added 2026-10-26, issue #304 Q8)* | Record `28`, the kneeling-at-the-altar narration, followed by its blank row Record `28` carries **no leading newline** of its own: it begins with its text, so the blank row between the Approach and Kneel lines is record `45`'s trailing blank row alone, and a reader that gives every record a leading feed prints a second blank here. |
+| Virtue question | ten world steps and ten one-tick delay requests. Measured at DOSBox 3000 cycles: about 11.5 ticks from Kneel text to question text, because the Kneel record's print and the repaints on each side of it run past two edges, so the ten requests end on the twelfth edge after the walk's last *(added 2026-10-26, issue #304 Q8)* | Record `29`: the question asking which virtue, then a blank row and `:`; read up to twelve characters |
 | Mantra questions | six world steps after a nonblank virtue answer, then twelve after each nonblank mantra answer | After a nonblank virtue answer, wait six world ticks and emit a newline. Ask `\nMantra:` three times, reading up to twelve characters each time and waiting twelve world ticks after each nonblank answer |
 | Unfocused result | the third mantra's twelve world steps | If the virtue answer or any of the three mantra answers was wrong, render record `30` after the third nonblank mantra, then return without quest progress |
 
@@ -600,7 +600,89 @@ figure in seconds is wanted at all, the honest one is "roughly two to three
 seconds, machine-dependent", with the calibration gate named. Issue #271's
 sampled capture bounded the interval to `(1800, 2400]` ms, about one 600 ms
 sample below the arithmetic floor from the executed counts; which of the three
-candidate explanations holds is recorded in `OPEN-QUESTIONS.md`.
+candidate explanations holds is recorded in `OPEN-QUESTIONS.md`. The stock
+measurement below does not reproduce that sample and does not explain it: the
+#271 capture's host and cycle count are unknown, so it stays unexplained rather
+than resolved. *(Added 2026-10-26, issue #304 Q8.)*
+
+**Measured stock timeline.** *(Added 2026-10-26, issue #304 Q8.)* The original
+was captured in DOSBox 0.74 at a fixed 3000 cycles with the EGA driver, video
+and audio recorded on the emulated clock, at two shrines (Compassion and
+Honesty). The two runs are identical to the video frame, but one is the other
+shifted by exactly one frame, so they share the same keypress-to-edge phase
+and are one phase sample, not two. Video resolution is one frame, about 0.3
+tick. At this setting the one-tick delays are real waits, and:
+
+- **Each paced walk step costs one tick.** The walk's repaints sit on a
+  one-tick lattice (a fit over its aligned repaints gives one tick per step to
+  within a thousandth), and the nine stings come five ticks apart on that
+  lattice; one audio-measured sting interval read about 5.4 ticks in both runs
+  and is anomalous, unexplained, but the video lattice gives five. A repaint
+  plus a sting fits inside one tick, so the sting never costs an extra edge.
+- **A one-tick request ends at the next edge of a fixed tick lattice**, not one
+  tick after it is issued (Section 4 of `systems/timing.md`). All other work -
+  repaints, stored-record printing, the echo, the display-grid load, the
+  stings - costs host time, and where the work between two requests carries
+  past an edge, that edge is lost and the next request ends one edge later.
+  This is the term the published step counts leave out.
+- **Echo to Kneel: about 48.9 ticks (2687 ms)**, from the echo's first glyph
+  to the Kneel record's first glyph. About 3.7 ticks of untimed preamble (the
+  echo, the actor-table set-aside, the grid load and opening world step, the
+  Approach record's print, and the first walk step's repaint), then the wait to
+  the first edge, then 44 whole tick periods while the remaining 44 walk
+  requests complete, then the handler's kneeling-pose repaint, about 0.7 tick,
+  before the Kneel record begins.
+- **From the `E` keypress the interval is phase-dependent**: about
+  3.7 + *r* + 44 + 0.7 ticks with the phase residual *r* in (0, 1], so about
+  **48.4 to 49.4 ticks**, taking the keypress-to-echo latency as negligible -
+  which was not measured. That range, not a single figure, is what a set of
+  keypress-synced captures should spread across.
+- **Approach record to Kneel record: about 47.4 ticks (2603 ms).**
+- **Kneel to virtue question: about 11.5 ticks (634 ms)**, glyph to glyph.
+  The ten requests take twelve tick periods from the walk's last edge: the
+  Kneel record's print, with the handler's repaint before it and the first
+  wait step's repaint after it, is about 2.5 ticks of work, so the first
+  request ends on the third edge after the walk and the other nine take one
+  tick each. This span is largely independent of keypress phase, but the first
+  request was issued only about 0.2 tick before an edge, so the twelve-edge
+  result has little margin: slightly slower printing would make it thirteen.
+
+All component costs here are **approximate, DOSBox 3000-cycle EGA, ±0.3
+tick**, at the limit of the evidence rather than stock constants: a full
+repaint about 0.3 to 0.5 tick (the figure rests on an edge position inferred
+from where the Kneel record lands, and includes up to one frame of display
+latency); a sting's audio burst about 20 to 25 ms, under half a tick; and a stored
+record's print about one video frame, about 0.3 tick, per text row it emits
+(the Approach record's five line feeds about 1.5 ticks, the Kneel record's
+four about 1.2, the echo's two about 0.6). That rows, rather than characters
+or scrolling as such, drive the print cost is inferred, not measured.
+
+The capture changed the viewport 57 times across the entry, which is
+consistent with the 57 counted world steps to the virtue prompt, but it does
+not confirm them independently: most of the detected changes were small,
+animation-sized deltas, the idle key wait outside the span also changes the
+viewport about once a tick, and a step that changed no pixels would be unseen.
+The counts in the table above, the draw floors of "Random-stream cost" below
+and R628 are unaffected; this capture contains no key wait inside either span.
+Not measured: a real period host's print and repaint costs, a host on the skip
+side of the calibration gate, the keypress-to-echo latency, and the closing
+beat of Section 7.2.
+
+**Pacing rule.** *(Added 2026-10-26, issue #304 Q8.)* To match these
+intervals rather than fix them, model a fixed tick lattice at the stock rate. A
+one-tick request completes at the first lattice edge after it is issued.
+Charge host time for every repaint, sting and printed row, using the
+approximate costs above (DOSBox 3000-cycle EGA, ±0.3 tick) unless a closer
+measurement for the target host exists. On that model the published step
+counts give about 49 and about 11.5 ticks at this setting with no fixed fudge
+constant. Fixed totals of 49 and 11 ticks also match a stock-emulator capture
+to within about half a tick, but they are calibrated to that host's text
+speed; they are not program constants and will not track another host.
+
+Source provenance for the measured timeline and the pacing rule: an
+emulated-clock DOSBox capture of the original, analysed under
+`u5-decomp/notes/` and independently re-measured from the same recordings by a
+verifier.
 
 **Random-stream cost.** Each world step in the hold takes the unconditional
 1-in-64 wind draw of `systems/animation.md` Section 13.2 from the shared
@@ -1041,6 +1123,14 @@ per-frame sting is the shared short two-part sting priced in
 established; and the 0.86 s for the shared flash is the reported DOSBox figure
 of `systems/audio.md` Section 8.4 rather than a period-hardware measurement.
 `OPEN-QUESTIONS.md` carries all four.
+*Data point 2026-10-26 (issue #304 Q8): the stock capture of the entry
+(Section 7, "Measured stock timeline") gives DOSBox 3000-cycle figures for two
+of these terms on the approach walk - a sting's audio burst of about 20 to 25
+ms, and a viewport rebuild of about 0.3 to 0.5 tick that fits inside the tick
+so that each paced step there cost exactly one tick. That supports pricing a
+paced step at one tick at that setting; the closing beat itself was not
+captured, so these rows stay floors, and the sting's identification with the
+shared two-part sting is still not established.*
 
 Two consequences are worth stating for an implementation pacing this beat
 against a capture. On the ordination arm the sound is about 28 per cent of the

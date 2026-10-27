@@ -1,5 +1,9 @@
 # Next Steps for u5-spec
 
+## Issue #304 Q8 shrine kneel timing (2026-10-26)
+
+Published: a measured stock timeline for the shrine entry at DOSBox 3000 cycles (EGA) and a pacing rule (`systems/karma.md` Section 7, Kneel and Virtue-question rows, "Wall clock", "Measured stock timeline", "Pacing rule"; data-point notes in Section 7.2, `systems/timing.md` Sections 4 and 7.6 item 10). Each paced step costs one tick; the excess over the counts is untimed printing and repaints on a fixed tick lattice. Echo to Kneel about 48.9 ticks, about 48.4 to 49.4 from the keypress by phase; Kneel to virtue about 11.5 ticks, twelve edges with little margin. Component costs are approximate (±0.3 tick) emulator figures, not constants. No retraction: the counts stand. Open: issue #271's sub-floor sample (unexplained), keypress-to-echo latency, period-host costs and the closing beat (`OPEN-QUESTIONS.md` section 2).
+
 ## Issue #300 Talk and signs follow-ups Q12, Q13, Q19, Q20 and Q21 (2026-10-25)
 
 Published: Talk has no liveness gate; its first step is the shared direction prompt (Space prints `Pass` and ends Talk as an acted turn), nothing tests provisions or status, and the target is the direction chosen there (`systems/conversation.md` Section 2, `systems/town-mode.md` Section 9; R596, R597). Signs: per-byte runic/Roman font selection by the high bit, control tests on the raw byte, first-match stop, a read window that crosses into later scenes, the six-row no-record placard, and the preamble line feeds (`formats/signs-dat.md` Sections 1-6, `systems/view.md` Section 3; R598-R600). The `0xFE` brush-off literal, its whole-party damage pass and the flight target on each route (`systems/conversation.md` Section 2, `systems/town-mode.md` Section 14, `systems/npc-schedules.md`; R601). The Falsehood line `Something was stolen!` (`systems/conversation.md` Section 10). Open: the explicit-Talk flight target, three stubbed-printer layouts, the stubbed damage presentation, the sign read-window length and the unshifted-digit case (`OPEN-QUESTIONS.md` sections 2 and 3). No #301 question was answered in this pass.
@@ -464,10 +468,12 @@ rest of the cast hidden by a type-byte clear.
 Next work on this thread, in priority order:
 
 1. Capture a shrine entry that also reports the host's boot calibration word.
-   The counts are settled; the seconds are not, and the executed floor is about
-   one sample longer than the issue's `(1800, 2400]` ms bound. The same capture
-   would close the standing question of which side of the signed calibration
-   gate a real install lands on.
+   *Updated 2026-10-26 (issue #304 Q8): the stock seconds are now measured at
+   DOSBox 3000 cycles (`systems/karma.md` Section 7, "Measured stock
+   timeline"), and that capture is longer than the floor. Issue #271's
+   `(1800, 2400]` ms sample remains unexplained, not resolved; what is left is
+   a repeat with host, cycle settings and the calibration word recorded, and a
+   period-host capture.*
 2. Trace the town/location turn loop's automatic entry into the same shrine
    presentation. It is a second, non-`E` route keyed on a different tile, and
    until it is run nothing establishes how the Shrine of Spirituality is
