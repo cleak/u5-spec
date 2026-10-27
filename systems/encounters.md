@@ -24,9 +24,9 @@ continue:
 1. Roll a uniform integer in `[1, 30]` from the engine's RNG primitive (see `prng.md`).
 2. Compare the roll against a *threshold* derived from the tile under the
    party, Z plane, and hour (Section 3).
-3. If the threshold exceeds the roll, fire the *encounter spawner*, which writes one new monster into the active-object table on a tile near the party and lets the world loop's existing collision logic do the rest.
+3. If the threshold exceeds the roll, fire the *encounter spawner*, which writes one new monster into the active-object table on a tile near the party and lets the world loop's existing creature walk and its adjacency reaction do the rest (see the note below).
 
-Note the inverted comparison: the threshold is the chance-of-encounter expressed on the same 1..30 scale as the roll. A higher threshold means encounters more often. The probe never *enters combat directly* — it spawns a monster as an active object, and combat starts the moment the player or that monster steps into the other's tile.
+Note the inverted comparison: the threshold is the chance-of-encounter expressed on the same 1..30 scale as the roll. A higher threshold means encounters more often. The probe never *enters combat directly* — it spawns a monster as an active object, and combat starts later, through the outdoor creature walk's adjacency reaction (`systems/active-objects.md` Section 8). Neither side ever enters the other's cell. A monster's step onto the party's cell is refused by occupancy, because the party's own slot counts as an occupant. A party step into a monster's cell is refused (it prints `Blocked!`, except under sail, where it takes the ship collision path, and for a whirlpool cell aboard a vehicle, which is refused silently; the feedback that follows is in `systems/audio.md` Section 7.4), and outdoors that refusal consumes no turn: no clock advance, no post-action cleanup and no creature walk, so the bump itself never starts combat and the monster does not react to that keypress. Combat follows when a monster that is orthogonally adjacent to the party (one cell on one axis and none on the other, after the world wrap; never diagonally) at the start of its walker visit reacts, with no roll, or when the player uses A-Attack toward it. A newly spawned monster is always more than six cells from the party on both axes (Section 4), so it can never react in the pass that spawned it. *(Corrected 2026-10-27, issue #305 Q4: this sentence previously said combat starts "the moment the player or that monster steps into the other's tile"; retracted, `RETRACTIONS.md` R634.)*
 
 The probe is an overworld-mode-only routine. The town loop's per-turn block does
 not run it, so towns have no random encounters; a town fight instead starts
@@ -208,15 +208,31 @@ When the probe fires, the *spawner* picks a monster type, picks an off-screen ti
 The spawner is retry-based:
 
 1. Roll a candidate coordinate inside the current 32-by-32 scroll window.
+   Each candidate takes two inclusive `0..31` draws from the shared generator,
+   the column first and then the row. Each draw is added to the matching axis
+   of the scroll base (the window's top-left corner, `overworld.md` Section 4);
+   nothing else is added. *(Added 2026-10-27, issue #305 Q3.)* The sum is kept
+   as an 8-bit coordinate, so it wraps modulo 256 on the torus; that wrap is
+   established by static reading only, not under execution.
 2. Accept only coordinates whose absolute X and Y separations from the party
    are both greater than six and both less than two hundred fifty. The first
    bound keeps the spawn outside the immediate visible center; the second bound
-   rejects wrapped-near coordinates on the 256-by-256 torus.
+   rejects wrapped-near coordinates on the 256-by-256 torus. Each separation is
+   the plain absolute difference of the two 0..255 coordinates. A candidate
+   that fails any of the four bounds goes straight back to step 1 for a fresh
+   pair of draws; the bounds take no draws and have no other effect, so the
+   order in which they are tested is not observable. *(Added 2026-10-27, issue
+   #305 Q3.)*
 3. Read the world tile at that candidate coordinate and classify it into a
    monster bucket. A zero result rejects the candidate and restarts the loop.
 4. Reject the sea-creature class on shore/harbor high-nibble terrain and retry.
-5. After one hundred twenty-eight rejected candidates, return silently without
-   spawning.
+5. After one hundred twenty-eight candidates rejected at step 3 or step 4,
+   return silently without spawning. Step 2 rejections do not count toward
+   this limit; they are redrawn as often as needed, and that always ends,
+   because the scroll-base rule keeps the party between offsets 8 and 23 of
+   the window on each axis, so every window holds cells that pass step 2.
+   *(Corrected 2026-10-27, issue #305 Q3: this step previously counted every
+   rejected candidate - `RETRACTIONS.md` R633.)*
 
 On success, the spawner acquires or evicts an active-object slot and initializes
 it as a monster record with tile, tile mirror, X, Y, current Z plane, and a
@@ -353,7 +369,7 @@ gap classes have an all-zero stat row, which is one reason the families that map
 onto them are handled by their own world-mode paths rather than by entering
 combat.
 
-When the player steps onto or attacks an active-object tile that the engine recognises as hostile, or when the generic orthogonally adjacent-hostile reaction in `active-objects.md` falls through to combat, the world loop's terrain-combat entry step selects and loads an outdoor arena and then calls the combat framer with `entry_mode = 0` (terrain combat). All three triggers use the same class, banner, and arena selectors below; the automatic adjacent reaction has no smaller legacy selector of its own. The framer then runs the **terrain-combat setup pipeline** described in `combat.md`. From the encounter system's side, the relevant sub-stages of that pipeline are:
+When the player attacks an active-object tile that the engine recognises as hostile, or when the generic orthogonally adjacent-hostile reaction in `active-objects.md` falls through to combat, the world loop's terrain-combat entry step selects and loads an outdoor arena and then calls the combat framer with `entry_mode = 0` (terrain combat). Both triggers use the same class, banner, and arena selectors below; the automatic adjacent reaction has no smaller legacy selector of its own. Stepping onto a hostile is not a trigger: that step is refused (Section 2.1). *(Corrected 2026-10-27, issue #305 Q4: this paragraph previously listed "steps onto or attacks" and "All three triggers"; the step trigger is retracted, `RETRACTIONS.md` R635.)* The framer then runs the **terrain-combat setup pipeline** described in `combat.md`. From the encounter system's side, the relevant sub-stages of that pipeline are:
 
 Two independent selections happen at entry, and earlier drafts of this
 document conflated them. The **combat class** comes from the hostile active
@@ -755,8 +771,10 @@ nothing (`active-objects.md` Section 4). An earlier revision of this section
 said the spawn silently fails when the table is full; that is withdrawn, and
 Section 4 already describes the spawner as acquiring *or evicting* a slot. The
 only silent no-spawn outcome traced in the spawner itself is the coordinate
-loop giving up after one hundred twenty-eight rejected candidate cells
-(Section 4).
+loop giving up after one hundred twenty-eight candidate cells rejected by
+terrain classification or the shore filter (Section 4, steps 3 to 5).
+*(Corrected 2026-10-27, issue #305 Q3: distance-band rejections never count
+toward that limit - `RETRACTIONS.md` R633.)*
 
 The allocator's slot range is still the natural cap on visible monster density,
 but the number is smaller than the table: the ordinary acquisition path searches
@@ -977,3 +995,15 @@ The behaviour described here was derived from the private function and format no
   paths' own gates are established; which sprite values can actually occupy
   the slots the two ungated paths reach is not, and depends on the world spawn
   tables and the town trigger table, neither of which was established.
+- 2026-10-27 issue #305 Q3 pass: the spawner's two inclusive `0..31`
+  coordinate draws per candidate, column first, each added to the scroll base,
+  and the redraw on a distance-band rejection were executed on the original
+  under emulation with forced draw sequences and confirmed by static reading.
+  The 8-bit wrap of the sum is static reading only (the executed origins never
+  reached it). That the give-up counter counts only step 3 and step 4
+  rejections is static reading of the spawner's retry loop; that the band
+  redraw always terminates is inferred from the scroll-base rule of
+  `overworld.md` Section 4. An independent verifier re-ran the probe and
+  re-read the routines. Source provenance: private analysis in
+  `u5-decomp/notes/`.
+- 2026-10-27 issue #305 Q4 pass: that neither the party nor a monster enters the other's cell, that the outdoor bump is refused with no turn consumed, and that contact combat starts only through the orthogonal adjacency reaction or A-Attack, by static reading of the step validator, the party step permission check, the outdoor loop's consumed-turn test and the creature walk, re-read by an independent verifier. Nothing was executed. Source provenance: private analysis in `u5-decomp/notes/`.

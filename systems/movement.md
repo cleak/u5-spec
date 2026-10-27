@@ -236,15 +236,27 @@ Static terrain acceptance is not enough to commit a move. The destination must
 also be legal with respect to dynamic occupants:
 
 - **Overworld.** Active-object slots represent monsters, vehicles, dropped
-  items, and other objects. Stepping into a hostile monster can enter combat;
-  stepping onto or adjacent to a vehicle/object may route to a command-specific
+  items, and other objects. A step into any occupied cell is refused unless
+  the occupant is a vehicle the current transport can board; no creature is
+  boardable. The refusal prints `Blocked!` and plays the blocked tone, except
+  under sail (collision path), for a whirlpool cell aboard a vehicle (silent),
+  and on one animated-terrain tile, where `OUCH!` and party damage replace the
+  tone (`systems/audio.md` Section 7.4). The refused step consumes no outdoor
+  turn, so it never starts combat; contact combat comes only from the creature
+  walk's orthogonal adjacency reaction or from A-Attack
+  (`systems/active-objects.md` Section 8). *(Corrected 2026-10-27, issue #305
+  Q4: this bullet previously said "Stepping into a hostile monster can enter
+  combat"; retracted, `RETRACTIONS.md` R638.)* Stepping onto or adjacent to a vehicle/object may route to a command-specific
   interaction instead of an ordinary move. The outdoor active-object walker uses
   the same tile-class dispatcher for static terrain validation, passing the
   moving slot's type byte as the caller-side class/query. It then uses the
   reverse active-object lookup against the candidate coordinate and current
   world layer; any returned occupant blocks that active-object step.
 - **Town.** The NPC roster and active-object table supply collision. A hostile
-  adjacent NPC blocks movement and can lead to combat; ordinary NPCs block or
+  adjacent NPC blocks movement with `Blocked!`; the blocked step still counts
+  as acted, so that turn's NPC engagement runs, and an orthogonally adjacent
+  conflict-family NPC can raise its contact there (`systems/town-mode.md`
+  Section 14; added 2026-10-27, issue #305 Q4); ordinary NPCs block or
   move according to the schedule/pathfinding rules.
 - **Dungeon.** Occupancy is represented by dungeon cell features and mode-local
   triggers rather than by town-style schedule slots.
@@ -488,3 +500,4 @@ tables, or implementation-specific addresses.
 - `catalogs/tile-catalog.md`.
 - `catalogs/monster-bestiary.md`.
 - `formats/look2-dat.md`.
+- 2026-10-27 issue #305 Q4 pass: the Section 7 overworld and town step refusals, by static reading of the party step permission check and both mode loops, re-read by an independent verifier. Source provenance: private analysis in `u5-decomp/notes/`.

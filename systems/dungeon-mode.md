@@ -254,7 +254,16 @@ key is available, the helper renders the 3D viewport, blits the appropriate
 viewport rectangle, runs the local presentation tick, and polls again. The
 initial pass may request a full viewport blit; later passes can suppress
 redundant blits when the current dungeon presentation flavour does not require
-them.
+them. *(Clarified 2026-10-27, issue #305 Q1.)* The shared world tick never runs
+in this wait. Each no-key pass first waits one timer tick (skipped on hosts on
+the slow side of the calibration gate, `systems/timing.md` Section 4) and then
+repaints, so every pass consumes the corridor painter's draws: in a lit view
+with the active monster visible, its two pose draws (Section 6.9), plus any
+other corridor-painter draws for what is in view. The number of random draws
+between two commands therefore depends on how long the prompt sat idle.
+Executed on the original: zero, one and three no-key passes with the monster in
+view gave zero, two and six draws and no world tick; the one-tick wait inside the
+poll is static reading only, because the executed runs stubbed the poll.
 
 **Active-object setup.** Dungeon active-object setup is its own step, distinct
 from the view initialiser that loads the corridor/object banks and clears the
@@ -2700,9 +2709,50 @@ sleep-field cells among fields; that is retracted, `RETRACTIONS.md` R551.
 
 When that contact flag is set, dungeon mode determines the cardinal direction
 from the party to the active monster using wrapped adjacency, prints the
-approach-direction feedback if the party was not already facing that way,
-commits the new facing, redraws and pauses briefly, then launches a dungeon
-combat encounter through the wandering-monster path below.
+approach-direction feedback, committing the new facing only if the party was not
+already facing that way, then - in both cases - redraws and pauses briefly, then
+launches a dungeon combat encounter through the wandering-monster path below.
+*(Clarified 2026-10-27, issue #305 Q1.)* There is exactly one pause on this
+path. In order, after the step reports contact:
+
+1. Print `Attacked`; if the computed direction differs from the facing, print
+   the direction fragment and commit the new facing.
+2. Print the closing `!` and line feed (both cases).
+3. One composite redraw (Section 6.9): stats panel, first-person view, viewport
+   blit, the local presentation tick and the dungeon status rows (both cases).
+   The presentation tick's rumble uses its own sound generator, not the
+   gameplay random stream.
+4. Flush type-ahead.
+5. Wait two hardware timer ticks (about 110 ms). This is the plain timer wait of
+   `systems/timing.md` Section 4, not a scripted presentation pause; a two-tick
+   request is never shortened by the one-tick fast path. It runs no world step
+   and takes no random draw.
+6. Tear down the first-person view; the teardown takes no random draw.
+7. Clear the combat result code, set the combat kind and run the Section 14.1
+   painter and framer, in the order given there.
+
+**No world step runs on the contact path,** so there is no wind check
+(`systems/animation.md` Section 13.2) or other world-step draw. The only random
+draws between the contact step's last draw and the room painter's first draw are
+the step 3 redraw's own. In the usual case those are exactly the active
+monster's two inclusive `0..100` pose draws (Section 6.9): after contact the
+monster stands on its pre-step cell, which is the forward cell the new or
+existing facing points at, so it is painted once. The pair is absent when the
+view is unlit (no torch and no light spell: the repaint shows darkness and
+paints no sprite) and under Negate Time (forced poses, no draws). Anything else
+in view that the corridor painter draws for - energy-field strokes, glyph
+twinkle, flavour-3 wall decoration - adds its own published draws to this
+redraw, so the count is exactly two only when nothing else in view draws.
+Executed on the original under emulation with the real generator at two seeds,
+rotated and already-facing: the pose pair was the two draws before the painter,
+which then took its sixteen transpositions and its count draw first; unlit and
+Negate Time runs drew nothing before the painter. That a world step never runs
+in dungeon corridor scenes at all, beyond the contact, A-Attack and idle paths
+executed here, is static reading (a call census of both dungeon overlays finds
+one world-tick call, on the room-enter path) plus the scene-band rule of
+`systems/input.md` Section 12. Issue #305's two black-box contacts were not
+reconstructed, so that these two draws are the only extra draws in those scenes
+is inferred from their two-draw offset, not demonstrated.
 
 That feedback is assembled from fragments rather than stored whole. The line is
 `Attacked`, then - only when the computed direction differs from the party's
@@ -2712,20 +2762,27 @@ exactly `Attacked!` when the party already faces the monster and, for example,
 `Attacked from the north!` when it does not. This is a different string from the
 Doom cave entrance refusal `Attacked_at_entrance!\n` that
 `systems/commands.md` publishes; do not share one literal between them. The line
-is followed by a type-ahead flush and a short pause before the view teardown.
+is followed by the redraw, type-ahead flush and two-tick wait just described;
+this is the same single pause, not a second one *(clarified 2026-10-27, issue
+#305 Q1)*.
 
 ### 14.1 Wandering-monster combat: arena, setup, and slot handling
 
 Both wandering-monster triggers - the A-Attack forward probe (§ 10) and the
-post-action contact/auto-face path above - use the same four-step launch, and it
+post-action contact/auto-face path above - use the four-step launch below, with
+the per-caller differences of order given after step 4, and it
 is **not** the room-trigger `DUNGEON.CBT` path. No arena record is read from disk
 on this path.
 
 Presentation remains caller-owned. The A-Attack path keeps its ordinary Attack
 command transcript before the matching forward contact. The automatic contact
-path, when it must rotate the party, prints its approach-from-direction line,
-commits the new facing, redraws and pauses before launch; when already facing the
-monster it skips that rotation narration. Neither caller prints the outdoor
+path prints its `Attacked` line, with the direction fragment and the facing
+commit only when it must rotate the party, and in both cases then redraws (in a
+lit view, the monster's two pose draws), flushes type-ahead and waits two timer
+ticks before launch (Section 14). The A-Attack path has no `!` line, redraw,
+flush or wait: after the forward match it goes straight into the launch, so it
+consumes no random draw between the command and the painter's first draw
+*(clarified 2026-10-27, issue #305 Q1; executed)*. Neither caller prints the outdoor
 conflict banner, and the framer's ambush arm adds no replacement banner.
 
 1. **Set the combat kind byte to the ambush value.** The contact path also
@@ -2860,6 +2917,18 @@ conflict banner, and the framer's ambush arm adds no replacement banner.
    reads the band just synthesised: party slots take their coordinates from the
    facing-selected party row, and each nonzero source is placed on the ordinary
    path, recovering the same class the painter encoded.
+
+**Per-caller order** *(corrected 2026-10-27, issue #305 Q1)*. The two callers
+do not run steps 1 and 2 in the same order. The automatic contact path tears
+the view down first (step 2), then clears the combat result code, then sets the
+combat kind (step 1), then runs steps 3 and 4. The A-Attack path sets the combat
+kind, tears down the view, stamps the room layout once more, and then runs steps
+3 and 4; it does not clear the combat result code. Neither the reordering nor
+the extra stamp takes a random draw; whether the extra stamp has any other
+observable effect was not examined. Both orders were executed on the original.
+The list above earlier presented one shared order with the clear and the kind
+write ahead of the teardown for both callers; that is retracted,
+`RETRACTIONS.md` R632.
 
 **Monster class derivation.** The active dungeon monster's class byte is not a
 sprite id and needs no shift arithmetic. Dungeon active-object setup rolls one of
@@ -3243,3 +3312,14 @@ The behaviour described here was derived by reading the private function notes l
   are static reading. Derived from private analysis in
   `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/ULTIMA_EXE/` and
   `u5-decomp/notes/`.
+- **Issue #305 Q1, the contact launch (2026-10-27).** The single pause, its
+  order, the two-tick wait with no world step, the redraw in both facing cases,
+  the pose pair as the only draws before the painter (two seeds, rotated and
+  already-facing), the zero-draw unlit and Negate Time cases, both callers'
+  launch orders (R632) and the idle wait's two draws per no-key pass were
+  established by executing the contact handler, the A-Attack launch and the
+  idle poll on the original under emulation with the real generator, and were
+  re-run by an independent verifier. The tick-wait fast path, the one-tick wait
+  inside the poll, the absence of world ticks in corridor scenes beyond those
+  paths, and the other corridor-painter draw sites are static reading. Source
+  provenance: private analysis in `u5-decomp/notes/`.

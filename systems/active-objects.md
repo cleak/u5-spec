@@ -590,6 +590,29 @@ turn the player passes, rather than after a variable delay — and why it does n
 move on that turn, since a returning reaction both consumes the slot's turn and
 zeroes out movement for every remaining slot in that pass.
 
+*Contact geometry and timing (added 2026-10-27, issue #305 Q4).* Orthogonal
+means exactly one cell apart on one axis and zero on the other, with each
+difference folded for the world wrap. Diagonal neighbours never take the
+adjacency reaction; they can still meet the breath and broadside proximity
+tests, and must take a cardinal step to become orthogonally adjacent. The walker
+visits slots from the highest down to slot 1, and on each visit the reaction
+test runs first and the step planner second, so a creature is tested where it
+stood when its visit began. The unit of timing is the **walker pass**, not the
+turn: an ordinary outdoor action runs one pass, and a committed step onto
+difficult terrain runs one or two extra passes inside the step before it
+(`systems/movement.md` Section 8.1). A party step that creates orthogonal
+adjacency is answered in the first pass that runs after the party moved, which
+is an extra terrain pass when the destination has one. A creature that steps
+beside the party during a pass reacts in the next pass that runs, which can be
+later in the same turn. Every pass is subject to the Negate Time, Quickness and
+transport parity gates (`systems/encounters.md` Section 2.1); a gated pass
+tests nothing. The spawner places new monsters before the slot loop and always
+more than six cells from the party on both axes, so a spawn cannot react in its
+own pass. This reaction is the only way outdoor contact starts combat: a
+creature's step onto the party's cell is refused by the step validator's
+occupancy test, which counts slot 0 (the party), and a party step into a
+creature is refused (`systems/encounters.md` Section 2.1).
+
 **Towns do not use this walker.** A town's horse-family slots are
 advanced by a separate town-mode object walker that runs once per turn,
 immediately before the NPC schedule processor and under the same three effect
@@ -818,6 +841,23 @@ committer is called. If neither directed axis can be accepted, the slot falls
 back to the random four-direction walker, which rolls one cardinal direction and
 makes a single attempt at it -- so a blocked creature shuffles rather than
 freezing, and can back itself out of a dead end.
+
+The random four-direction walker takes exactly one inclusive `0..3` draw from
+the shared generator and maps it to one neighbouring cell of the slot's current
+position: 0 is north (same column, row minus one), 1 is east (column plus one,
+same row), 2 is south (same column, row plus one) and 3 is west (column minus
+one, same row). Only that one cell is tested, with the same outdoor
+tile-walkability and occupancy check the directed planner uses. If the check
+refuses it, the slot does not move this turn and the walker takes no further
+draw and no second attempt. If the check accepts it, the step goes to the step
+committer, whose destination-tile chance gates (the table below) may still take
+their own draw and refuse it. The whirlpool branch's "0" arm (above) calls this
+same walker, so the mapping applies there as well. Worked example: a land
+monster at a dead end with both directed axes refused leaves it only on the draw
+that points back toward the cell it came from, and then only if that cell still
+passes the occupancy check and its destination chance gate; on any other draw
+whose cell is water or occupied it stays put for the turn. *(Added 2026-10-27,
+issue #305 Q2.)*
 
 On an exact diagonal, therefore, the creature moves horizontally half the time
 and vertically half the time, re-rolled fresh every turn, exactly as it does in
@@ -1333,3 +1373,19 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/DUNGEON_OVL/`, `u5-decomp/functions/COMBAT_OVL/` and
   `u5-decomp/functions/ULTIMA_EXE/`.
 - 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.
+- 2026-10-27 issue #305 Q2 pass: the fallback four-direction walker's single
+  `0..3` draw, its direction mapping, the one-cell test and the absence of any
+  retry after a refusal were executed on the original under emulation with the
+  shared generator and both step helpers instrumented, and confirmed by a full
+  static reading of the walker; that the whirlpool branch calls the same walker
+  is static reading. An independent verifier re-ran the probe and re-read the
+  routine. Source provenance: private analysis in `u5-decomp/notes/`.
+- 2026-10-27 issue #305 Q4 pass: the outdoor walker's orthogonal-only
+  adjacency test with its wrap fold, its place ahead of any class test, roll
+  and movement, the high-to-low slot order, the step validator's occupancy
+  lookup including slot 0, and the party step's refusal of any occupant other
+  than a boardable vehicle with no turn consumed, by static reading of the
+  shipped code, re-read independently by a verifier; the extra terrain passes
+  inside a difficult-terrain step were confirmed by the verifier in the
+  post-step routine. Nothing was executed. Source provenance: private analysis
+  in `u5-decomp/notes/`.
