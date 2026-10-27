@@ -931,7 +931,7 @@ two is the maximum, reached only on a no-key pass above the Section 8.3
 calibration threshold, and a swallowed-key pass pays one. The entry step carries
 no wait of its own. See `RETRACTIONS.md` row R371. On Journey Onward this entry step is
 also the session's first world tick, and it draws like any other
-(`systems/animation.md` Section 13.2). *(Added 2026-10-27, issue #305 Q5.)*
+(`systems/animation.md` Section 13.2). *(Added 2026-10-27, issue #305 Q5.)* No wait of any kind comes before that entry step on a Journey Onward load. From the menu's key read to the first command-wait pass, the path is untimed work (`systems/intro.md` Section 7, "Timing of the load path"). Under an emulator, a difference in idle draws after a load therefore comes from how fast the host does that work, not from a tick count. At fixed 3000 cycles the original reaches its first idle pass about 216 ms after the load border appears, about four ticks, plus about 1.7 s when the tile archive still has to be loaded. An engine that loads instantly runs correspondingly ahead in draw count, which is correct. A parity harness may model the difference as an emulator-profile latency, never as ticks. *(Added 2026-10-27, issue #306.)*
 
 **Descriptive or prescriptive?** Issue #189 asked whether "never enters the
 command wait at all" merely describes the original's blocking key-read helper, or
