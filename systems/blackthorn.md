@@ -84,20 +84,33 @@ presentation.
 
 The setup contract is:
 
-1. Print the capture narration: the party is overcome, blinded, and dragged
-   away by guards.
+1. Print the first line of the capture narration, `Thou art subdued and
+   blindfolded!`. The rest of the narration is laid out in "Capture narration
+   timeline" below: the blindfold and the dragged-away line follow step 2, and
+   the chained line and `Footsteps!` fall inside step 6. *(Corrected
+   2026-10-26, issue #304 Q6; `RETRACTIONS.md` R630: this step previously
+   printed the whole overcome, blinded and dragged-away narration before the
+   shrine selection of step 2.)*
 2. Select which shrine the interrogation will demand a mantra for: scan the
    eight shrine ruin flags in shrine order and take the first whose flag is
    *exactly* clear — never ruined and never restored. If every flag is
-   non-zero the whole audience is abandoned.
+   non-zero the whole audience is abandoned, and the first narration line is
+   the only one printed.
 3. Clear the active-object table so the audience scene can reuse those records
    as temporary cinematic actors.
 4. Load the Blackthorn audience map from `MISCMAPS.DAT`.
 5. Load the Blackthorn message cluster from `MISCMSG.DAT`.
-6. Place the party, two guards, and the initially suppressed seated-Blackthorn
-   tableau into cutscene actor slots. The party placement is described in
-   "Party placement" below.
-7. Run the scripted throne approach and Blackthorn presentation beats.
+6. Place the party into cutscene actor slots, as described in "Party
+   placement" below. Then come the chained-and-manacled line, `Footsteps!` and
+   the eight footstep stings, and only after those are the two guards placed.
+   The seated-Blackthorn tableau slot (slot 8) is not set up in this step: it
+   still holds only the zeroed record left by the clear of step 3. *(Clarified
+   2026-10-26, issue #304 Q6: this step is split by the narration. The earlier
+   wording, "the initially suppressed seated-Blackthorn tableau", is
+   superseded; `RETRACTIONS.md` R631.)*
+7. Run the scripted throne approach and the Blackthorn presentation beats: the
+   guard-approach script, a blocking software envelope, then slot 8 hidden at
+   the throne and seated Blackthorn revealed there (Section 6.3).
 8. After the quiet 8-tick pause that follows the throne reveal, print
    `\n\nBlackthorn says:\n\n"Ah, `, then the name in **roster record 0** (the
    Avatar's record, never a member chosen any other way), then
@@ -165,7 +178,12 @@ order is a static reading. In an emulator capture (DOSBox, fixed 3000 cycles)
 the prisoner frames first appear between the screenshot samples at about 2.07 s
 and 7.11 s, while the capture narration's dragged-away line is still on screen
 and before its chained-and-manacled line appears at about 8.01 s, which fits
-that order; the exact first frame was not captured. *(Added 2026-10-17, issue
+that order. The prisoners first appear on the first world tick of the quiet
+16-tick pause that follows placement, 16 ticks (about 0.85 s) before the
+chained-and-manacled line (step 9 of the capture narration timeline below;
+an emulator capture timed on the emulated clock). *(Added 2026-10-26, issue
+#304 Q6. This replaces "the exact first frame was not captured"; the
+screenshot figures above are the earlier, coarser sampling.)* *(Added 2026-10-17, issue
 #299 Q11. Source provenance: static reading of the audience setup and of town
 entry, the shipped cutscene map and the overlay's placement tables, and DOSBox
 frames of the stock game, recorded in `u5-decomp/notes/`. In a three-member
@@ -177,6 +195,109 @@ The acknowledgement in step 8 is easy to miss: the audience takes **two**
 blocking key presses before the first demand is ever asked, one after the
 greeting page and one after the preamble record. Section 4.2 counts the whole
 solo audience.
+
+**Keys typed during the capture narration.** None of the narration's steps
+polls the keyboard. The quiet pauses, the timer waits, the stings and the
+footstep helper make no key call. Keys typed during the narration therefore
+wait in the keyboard queue in the order typed. The first key read of the
+audience is the greeting acknowledgement of step 8, and it uses the ordinary
+key reader of `systems/input.md` Section 6. Under the default type-ahead
+setting (off, "Buffer Off"), exactly one of the typed-ahead keys is used up by
+that acknowledgement. No further key is needed, and the preamble of step 9
+then waits for a fresh key. The preamble read empties the queue in the same
+way, so this matters again only for keys typed during the guard-release route:
+one of them answers the preamble and the rest are discarded. With type-ahead
+on ("Buffer On"), nothing is discarded. The queued keys answer the greeting,
+then the preamble, and the rest become the first mantra response, in order.
+*(Added 2026-10-26, issue #304 Q7. Executed on the stock game under an
+emulator. With Buffer Off and five keys typed before the greeting, the
+greeting was acknowledged with no further input, and the preamble then sat
+waiting for more than 6 s. With Buffer On and five keys typed, the greeting
+and the preamble were each acknowledged, and the mantra prompt showed the
+last three keys. Two points are not executed. The first is that the key used
+is the **oldest** queued key. The second is that the greeting acknowledgement
+is the **only** point where the queue is emptied. Both rest on a static
+census of the key calls on this path, plus the Buffer-On run. That run
+cannot exclude a flush inside the narration that is gated on the same
+setting, and the census did not follow the display driver's far calls or the
+indirect calls; see `OPEN-QUESTIONS.md`.)*
+
+**Capture narration timeline.** This is the complete order of the capture
+narration, from the arrest to the greeting. Step 1 of the list is setup
+step 1 and step 2 is setup step 2. Steps 3 to 7 come between setup steps 2
+and 3. Step 8 is setup steps 3 to 5 and the party placement of setup step 6.
+Steps 9 to 14 are the rest of setup step 6, steps 15 to 17 are setup step 7,
+and steps 18 and 19 are setup step 8. The units are as follows:
+
+- A *quiet N-tick pause* is the quiet redraw pause of Section 6: N repetitions
+  of {one world tick, one one-BIOS-tick delay}. It runs only while cinematic
+  animation is enabled, and each one-tick delay is subject to the slow-CPU
+  gate of `systems/timing.md` Section 4.
+- A *5-tick timer wait* is a counted hardware-tick wait of five BIOS timer
+  ticks. The slow-CPU gate skips only a request of exactly one tick, so this
+  wait is never skipped. The cinematic-animation setting does not gate it
+  either.
+- A *sting* is the shared two-part sting of Section 6 and `systems/audio.md`
+  Section 5.3.
+
+The seconds are figures from one emulator capture (DOSBox 0.74-3, EGA, fixed
+3000 cycles), timed on the emulated clock from the frame where the
+`Talk-North` echo appears. They are not normative; the counts are. Two repeat
+runs gave the same line order.
+
+1. One world tick repaints the view. Print `\nThou art subdued and
+   blindfolded!` (+0.12 s).
+2. Select the shrine (setup step 2). If no shrine qualifies, the narration
+   ends here.
+3. Quiet 2-tick pause.
+4. Fill the map viewport black (the blindfold), at +0.25 s. The moon/date row
+   and the wind-or-location row stay blank, as described in the setup
+   paragraph below.
+5. Five repetitions of {5-tick timer wait, sting}, about 0.274 s per
+   repetition.
+6. Print `\n\nStrong guards drag thee away!` (+1.65 s).
+7. With sound on, eighteen repetitions of {5-tick timer wait, sting}; with
+   sound off, three. This is the sound-dependent pause of the retraction
+   paragraph below. With sound on the stretch is about 4.9 s, derived as
+   18 x 0.274 s; the captured span from the first sting to the last was
+   4.67 s. The sound-off count is static reading only and was not executed.
+8. Clear the actor table, load the map and the messages, and place the party
+   (setup steps 3 to 6). There is no wait here, only CPU time (about 0.03 s).
+9. Quiet 16-tick pause. Its first world tick paints the cutscene map with the
+   manacled prisoners (+6.66 s). The pause lasts 0.85 s.
+10. Print `\n\nThou hast been chained and manacled!` (+7.51 s).
+11. Quiet 50-tick pause (2.79 s).
+12. Print `\n\nFootsteps!` (+10.30 s). The span from the first narration line
+    to this one is 10.18 s.
+13. The footsteps: eight repetitions of {sting, quiet 2-tick pause}, about
+    0.11 s each and 0.93 s in all. The guards are not on screen yet.
+14. Place the two guards at (4,10) and (6,10). They first show at the next
+    redraw.
+15. The guard-approach script, the "Guard approach" row of Section 6.3. It
+    plays five stings, each with a quiet 2-tick pause (0.55 s together), and
+    ends with its quiet 8-tick pause (about 0.42 s).
+16. One blocking software envelope, `(5, 100, 13000, 1, 2800)`: comparison
+    delta +5, initial comparison 100, 13,000 iterations, idle count 1, phase
+    period 2800, in the order of `systems/audio.md` Section 5.4. The view does not redraw while it
+    plays. It was audible in the capture and measured 0.58 s.
+17. Hide slot 8 at (5,5) and reveal seated Blackthorn there with the 256-pixel
+    transition. This is CPU-bound and measured about 0.99 s. Then assign actor
+    byte `0x78`.
+18. Quiet 8-tick pause (0.41 s).
+19. The greeting of setup step 8 (+14.20 s), then its acknowledgement wait.
+
+No other text is printed between the arrest and the greeting. The line-feed
+prefixes above are part of each line: one before the first line, and two
+before each later one. With cinematic animation off, every quiet pause does
+nothing, including its world ticks. Static reading only; that path was not
+executed. The timer waits and stings still run. The reveal and envelope
+durations depend on the CPU and on calibration, and only the 3000-cycle class
+was measured. *(Added 2026-10-26, issue #304 Q6. Source provenance: static
+reading of the audience entry and the resident helpers it calls, checked by a
+verifier who repeated the reading. Executed emulator captures of the stock
+game confirmed the line order, the sting counts 5, 18, 8 and 5 and the hold
+durations, using an independent re-analysis of the capture audio. All of this
+is recorded in `u5-decomp/notes/`.)*
 
 Setup also raises the cutscene presentation flag and calls the shared
 moon-phase-row and scene-announce helpers. At setup the scene byte is still the
@@ -204,9 +325,12 @@ objects.
 death-route marker" that could turn the same presentation into a death outcome.
 That is withdrawn in full: there is no death branch and no second outcome here.
 The byte formerly described that way is the game's global sound on/off setting,
-and its only effect inside this cinematic is the length of one scroll pause
-between two lines of the capture narration — a long pause when sound is on, a
-short one when it is off.
+and its only effect inside this cinematic is the length of one pause
+between two lines of the capture narration. After the dragged-away line come
+eighteen repetitions of {five-tick timer wait, sting} when sound is on, and
+three when it is off: about 4.9 s and 0.8 s, derived. See step 7 of the
+capture narration timeline above. *(Made exact 2026-10-26, issue #304 Q6. The
+sound-off count is static reading.)*
 
 The entry runs through the ordinary town NPC-event cleanup, but the
 Blackthorn-castle branch bypasses the normal arrest prompt. In every other
@@ -989,7 +1113,7 @@ text-window clear.
 |------|---------------------|
 | Audience exit (formerly "per-question intermission"; see R490 and Section 4.2) | The acting guard first steps west with one animated stinger pause. Cobble `0x44` is buffered at `(0,4)` and the next explicit world tick exposes it. The subsequent guard/Avatar repositioning remains animated one step at a time. Door `0xBB` replaces the cobble and the following one-repetition stinger pause exposes the door. The seated-Blackthorn tableau and both guards then continue moving or are cleared with per-step redraws; each cleared actor disappears on the next movement or pause redraw. The first repetition of the final six-repetition stinger pause exposes the empty tableau and the remaining five hold it. |
 | Failed challenge | Quiet pause 22; the acting guard moves to and with the second member; quiet pause 3; buffer pendulum `0x82` at `(5,7)` and clear that member; one explicit world tick exposes both changes together. The acting guard returns with animated steps; quiet pause 12; the secondary guard walks west three animated steps; hourglass `0xE9` is buffered at `(5,9)`; the first of that guard's three animated east steps exposes it. The full command list follows the exit vector below. |
-| Guard approach | One stinger-pause repetition; both guards move north together one animated step; then slot 6 moves west while slot 7 moves east for three animated paired steps, opening the centre; quiet pause 8. The caller then hides slot 8 at `(5,5)`, reveals seated Blackthorn `0x178` there with the 256-pixel transition, assigns actor byte `0x78` to preserve it, and performs another quiet pause 8 before Blackthorn's speech. |
+| Guard approach | One stinger-pause repetition; both guards move north together one animated step; then slot 6 moves west while slot 7 moves east for three animated paired steps, opening the centre; quiet pause 8. The caller then plays one blocking software envelope (Section 3, capture narration timeline, step 16; added 2026-10-26, issue #304 Q6). After that it hides slot 8 at `(5,5)`, reveals seated Blackthorn `0x178` there with the 256-pixel transition, assigns actor byte `0x78` to preserve it, and performs another quiet pause 8 before Blackthorn's speech. The eight footstep stings of the narration, each a sting plus a quiet 2-tick pause, come before this script and before the two guards are placed (issue #304 Q6). |
 | Guard release route | After Blackthorn orders the guard to release the captive: quiet pause 11; the acting guard moves west once, north four times, and east once, with a stinger-plus-two-tick redraw after every step. Blackthorn remains seated in slot 8. |
 | Conditional Blackthorn-tableau cleanup | Quiet pause 4; seated Blackthorn and the throne move east once and south five times with an animated redraw after every step; slot 8 is cleared; one explicit world tick repaints the resulting tableau. It does not clear the screen. |
 
