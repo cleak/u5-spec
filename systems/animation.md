@@ -933,8 +933,10 @@ run as the unconditional tail of the **active-object animation step** of Section
 
 1. **The world tick.** The call sits behind a master redraw/animation gate and a
    mode-handshake byte that must be in neither of its two skip states - zero
-   (the first world tick after program start, and every tick while Negate Time
-   is active) and the town-entry hint value, which skips only the animator
+   (restored from the save, so in practice only when a loaded file holds it,
+   and every tick while Negate Time is active; *corrected 2026-10-27, issue #305
+   Q5, R639: this previously read "the first world tick after program start"*)
+   and the town-entry hint value, which skips only the animator
    (`systems/audio.md` Section 8.10; *added 2026-10-16, issue #298 Q16*). The world
    tick is itself invoked from far more than the idle loop: a near-call census
    finds seven distinct sites in the resident image and sixty-one across sixteen
@@ -1019,9 +1021,24 @@ entry to the command wait, and **only when the display adapter is Tandy
 16-colour**. On CGA, EGA and Hercules that state never occurs. On Tandy it
 recurs at every entry to the command wait, which is once per command prompt
 rather than once per mode entry, so on that adapter alone the first idle pass of
-every command wait skips tile and object animation. The shipped initial value of
-the byte is the freeze state, so **the very first world step of a session is a
-bare repaint**.
+every command wait skips tile and object animation. The byte is part of the save
+image (`formats/saved-gam.md` Section 10) and the load restores it. The shipped
+resident data image holds the freeze value, but no world step runs between
+program start and a Journey Onward load (none of the intro, title or font code
+runs one), so that value never takes effect. The new-game seed, the
+character-creation save and every in-play save examined hold the steady value
+one, so on Journey Onward the session's first world step - the overworld input
+helper's entry step at the first command prompt (`systems/overworld.md`
+Section 5) - is a **full** step: it animates eligible on-screen objects and
+takes the wind-check draw. A save made on the Tandy adapter before any no-key
+idle pass can hold the Tandy sentinel instead; that state still takes the wind
+draw. A first step is bare only when the loaded file holds zero in the byte,
+and feeding such a file reproduces one draw fewer at the first prompt and every
+later draw one position earlier. *(Corrected 2026-10-27, issue #305 Q5:
+executed on the original code from a Journey Onward load, with the byte read in
+the seed and in the stock saves; earlier text here said the shipped freeze
+value makes the very first world step of a session a bare repaint, which is
+retracted, `RETRACTIONS.md` R639.)*
 
 ### 13.3 Relative rates within the frame-selector pass
 

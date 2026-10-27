@@ -929,7 +929,9 @@ one world step followed by one one-tick wait". The world-step figure and the
 never-enters-the-command-wait clause stand. **The two-tick figure is withdrawn:**
 two is the maximum, reached only on a no-key pass above the Section 8.3
 calibration threshold, and a swallowed-key pass pays one. The entry step carries
-no wait of its own. See `RETRACTIONS.md` row R371.
+no wait of its own. See `RETRACTIONS.md` row R371. On Journey Onward this entry step is
+also the session's first world tick, and it draws like any other
+(`systems/animation.md` Section 13.2). *(Added 2026-10-27, issue #305 Q5.)*
 
 **Descriptive or prescriptive?** Issue #189 asked whether "never enters the
 command wait at all" merely describes the original's blocking key-read helper, or

@@ -159,11 +159,11 @@ The 1-KiB buffer is the resident representation of "the world right now". The vi
 
 ## 5. The per-turn loop
 
-Every iteration walks the same sequence:
+Step 1 runs once each time the overworld handler is entered; every iteration of the loop then walks steps 2 to 7:
 
-1. **Per-tick init.** Refresh the visibility-dirty flag, the redraw-enabled gate, the master "fresh frame" flags, the found-object cache. Recompute the scroll base; if it changed, reload chunks. Run the world-buffer commit twice with a viewport rebuild between, then flush the screen. None of this advances time.
+1. **Mode entry.** Run once per entry into the overworld handler - after a Journey Onward load, or on return from a town or dungeon - not on every loop iteration. Refresh the visibility-dirty flag, the redraw-enabled gate, the master "fresh frame" flags and the found-object cache. Then, in this order: a zero-minute clock call; recompute the scroll base and, if it changed, reload chunks; a second zero-minute clock call; build the viewport; reprint the wind line; initialise the active objects. The step also flushes the screen. None of this advances time, and none of it is a world tick: it leaves the world tick's gate byte alone and takes no gameplay draw (a zero-minute clock call draws only on a rollover, and the viewport build does not reach the random generator). *(Corrected 2026-10-27, issue #305 Q5: executed on the original code from a Journey Onward load at open sea with no active objects in view; the no-draw claim elsewhere is static reading. This step was previously called a "per-tick init" walked on every iteration, with the viewport rebuild between the two calls; both are retracted, `RETRACTIONS.md` R640.)*
 
-2. **Pre-loop tile probe.** Read the tile under the party. If it is the special underfoot tile byte `0xFF` and the current state tag is not the `0x0E` exemption, raise a latched underfoot-state flag and force the current ambient light/radius value to zero. On the first frame entering that state, mark the view dirty. When the state clears, run a zero-minute cleanup call so daylight is recomputed without advancing time.
+2. **Pre-loop tile probe.** Read the tile under the party. If it is the special underfoot tile byte `0xFF` and the current state tag is not the `0x0E` exemption, raise a latched underfoot-state flag and force the current ambient light/radius value to zero. On the first frame entering that state, run one world tick (a full world step with its draws). On later frames while the latch stays set on that tile the probe runs neither a world tick nor a clock call. On every frame on which the probe does not take the `0xFF` arm, it runs a zero-minute cleanup call so daylight is recomputed without advancing time. *(Corrected 2026-10-27, issue #305 Q5: this previously said the first frame "marks the view dirty" and that the cleanup call runs "when the state clears"; both are retracted, `RETRACTIONS.md` R641.)*
 
 3. **Block on input.** Call into the input system's keystroke fetch. Sub-printable codes are control keys (direction codes and the mode-local Control bindings), and printable bytes are commands like A-attack, E-enter, T-talk, K-klimb. Under sail on the wind-driven cadence, this step does not enter the command wait: the input helper runs its own auto-advance loop and returns the cached sail direction, which is how a ship keeps moving with no keypress. *Corrected (issue #189):* this sentence previously said the step "does not read the keyboard at all". That is withdrawn — the auto-advance loop polls one key on **every** pass. A key matching the cached heading is swallowed and the ship sails on; any other key ends the loop and becomes that turn's command. See `systems/timing.md` Section 8.2 and `RETRACTIONS.md` row R372. A direction taken while the sails are hoisted clears the one-byte flag that gates the next prompt's line feed and marker; a frigate facing change (either sail state) and an under-sail refusal set it again in the same command, so exactly one following prompt emits neither only after a hoisted direction that keeps the facing and is not refused, and a furled ship never touches the flag; the input helper re-arms the flag as soon as it has tested it. That is what keeps a wind-driven voyage from accumulating empty prompt rows (`systems/text-output.md` Section 10.2). *(Corrected 2026-10-16, issue #297, R526.)* *(Added 2026-09-12, issue #270.)*
 
@@ -186,7 +186,7 @@ Every iteration walks the same sequence:
       pendulum gates, roll for a random encounter, then animate/move and prune
       eligible non-player active objects as specified in Section 6.
 
-7. **Loop.** Back to step 1 unless the exit flag is set.
+7. **Loop.** Back to step 2 unless the exit flag is set (R640; this previously read "Back to step 1").
 
 An accepted difficult-terrain movement performs additional object-update
 calls and adds two or four game minutes inside the movement action, before
@@ -242,6 +242,53 @@ against Dexterity; a higher roll poisons that member and prints `Poisoned!\n`.
 upkeep damage. The earlier unqualified once-per-overworld-turn poisoning
 claim is withdrawn (`RETRACTIONS.md` R426). This check remains independent
 of the special-underfoot lighting latch.
+
+**Where the gameplay draws fall in one iteration** *(added 2026-10-27, issue
+#305 Q5)*. Outside the dungeon scene band, a "world tick" below means one world
+step of `systems/animation.md` Section 13.2: the animator's draws for eligible
+on-screen objects, then one `0..63` wind check, with its further draws when it
+fires (`systems/prng.md`). In loop order:
+
+1. Mode entry (step 1, once per entry): no draw and no world tick.
+2. Underfoot probe (step 2): one world tick on the first frame in the `0xFF`
+   state; otherwise no draw.
+3. Party-capability scan: no draw. If everyone is asleep, go to item 7.
+4. The moongate-shimmer underfoot tile `0xDC` only: its arrival presentation, which
+   runs its own paced world ticks (static reading).
+5. Input-helper entry: **one world tick, unconditionally**, at every prompt,
+   the session's first prompt included. Then either the under-sail wait-pass
+   loop of `systems/timing.md` Section 8.2, where each pass is a consumed turn
+   with its own epilogue and one paced world tick, or the command wait, where a
+   poll that finds a key ends the wait with no tick and each poll that finds no
+   key runs **one world tick**. On the Tandy adapter the command wait marks its
+   first no-key tick as animator-skipped, but that tick still takes the wind
+   draw.
+6. The command's own draws.
+7. Consumed-turn tail (step 6), only on a non-zero result. The draw consumers,
+   in order: the underfoot arms (the on-foot swamp arm runs one paced world tick
+   after its poison work, and the lava arm's view rebuild is one world tick
+   before its burn rolls; both static reading); then, **on the Underworld plane
+   only (party Z non-zero), one `0..255` draw on every consumed turn**, where the
+   value 105 prints `EARTHQUAKE!`, runs the full-viewport flash of
+   `systems/audio.md` Section 8.4 (1856 draws) and then one `1..8` damage draw
+   per non-Dead member; then Rough seas when eligible (Section 6.2.5: one world
+   tick in its impact presentation, then one `1..8` per non-Dead member); then
+   the epilogue's one `1..30` encounter roll, spawn draws if it fires, and the
+   per-object animate and move draws. Where the step 6f party-status and
+   provisions work falls relative to the underfoot arms in this list is not
+   re-established here (`OPEN-QUESTIONS.md`).
+
+An executed trace from a Journey Onward load (skiff on open deep water, party of
+three, daytime, `Up` pressed at each prompt with no idle poll) took, in order: no
+draw through the load tail, the stats repaint and mode entry; a `0..63` draw at
+the first prompt's entry tick; after `Row North` and the two-minute clock step, a
+`0..63` draw for the `Rough seas!` impact tick, three `1..8` absorption draws and
+the `1..30` encounter roll; and the same six-draw pattern again on the second
+turn. Each no-key poll at a prompt added exactly one `0..63` draw after that
+prompt's entry draw. Feeding a save that holds zero in the world tick's gate
+byte removed the first prompt's draw and nothing else. The earthquake branch and
+the daytime water encounter threshold of one were also executed; the night
+threshold and the swamp, lava and moongate-tile ticks are static reading.
 
 ## 6. Active objects and the per-turn animator
 
@@ -688,8 +735,12 @@ carpets are not frigates, absorption performs one independent gameplay-PRNG
 draw in `1..8` per active non-Dead member, in roster order. Each member's
 damage application also plays the shared 160-update damage rumble before
 changing HP, as specified in Section 6.2.4. Thus `N` damaged members advance
-the audio LFSR `300 + 160N` times in all, while consuming exactly `N` gameplay
-draws. The rough-seas check adds no second turn cost and does not abort the
+the audio LFSR `300 + 160N` times in all, while consuming the `N` absorption
+draws plus the draws of the impact presentation's world tick (one `0..63` wind
+check, its follow-ups when it fires, and the animator's draws for eligible
+on-screen objects). *(Corrected 2026-10-27, issue #305 Q5: executed, the impact
+tick's wind draw falls between the clock step and the first absorption draw;
+this previously said "exactly `N` gameplay draws", retracted, R642.)* The rough-seas check adds no second turn cost and does not abort the
 remaining ordinary epilogue; any encounter draw made later is the epilogue's
 normal draw, not part of the rough-seas trigger. A wipe is
 noticed at the next loop head.
@@ -708,7 +759,7 @@ Conformance vectors:
 | Hoisted north-facing frigate, cached direction, hull 50, refused ordinary destination | Print `COLLISION!`; advance the audio LFSR twenty steps; consume one hull draw; clear the sail cache; keep coordinates; skip the ordinary per-turn tail. |
 | Same setup, rendered destination tile `0x03` (shoal) | Replace only the first line with `BREAKING UP!`; rumble, absorption, refusal, cache clear, and tail skip are unchanged. |
 | Same setup, exact pier destination | Print `Docked!`; become the same-facing furled frigate; clear the cache; consume neither audio-LFSR nor gameplay-PRNG values. |
-| Consumed action on deep water under any skiff facing or either carpet frame, with `N` active non-Dead members | Print `Rough seas!`; advance the audio LFSR `300 + 160N` steps; consume exactly `N` gameplay draws in `1..8`; continue to the ordinary epilogue. Changing the terrain to either neighbouring water value or the marker to a frigate suppresses this trigger. |
+| Consumed action on deep water under any skiff facing or either carpet frame, with `N` active non-Dead members | Print `Rough seas!`; advance the audio LFSR `300 + 160N` steps; consume one world tick's draws (at least one `0..63` wind check) and then `N` gameplay draws in `1..8` (R642; previously "exactly `N`"); continue to the ordinary epilogue. Changing the terrain to either neighbouring water value or the marker to a frigate suppresses this trigger. |
 
 #### 6.2.6 Named gaps in this section
 
@@ -1696,6 +1747,13 @@ The behaviour described above was derived by reading the function and format not
   `u5-decomp/functions/ULTIMA_EXE/`, and `u5-decomp/notes/`.
 
 - The overworld mode-loop main body — `u5-decomp/functions/MAINOUT_OVL/`.
+- The issue #305 Q5 pass (2026-10-27): the mode-entry step's once-per-entry
+  placement and order, the underfoot-probe world tick, the per-iteration draw
+  order, the Rough seas impact tick's wind draw and the Underworld earthquake
+  check. Established by executing the original resident image and outdoor
+  overlays from a Journey Onward load under a minimal DOS and keyboard shim,
+  with a static census of the world tick's callers and of the gate byte's
+  writers; derived from private analysis in `u5-decomp/notes/`.
 - The shared per-turn party-capability check that precedes the overworld input
   block; the full ordinary consumed-turn processing of its asleep arm; and the
   disk-availability, per-plane whole-table persistence, and rescue ordering of

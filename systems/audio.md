@@ -948,8 +948,10 @@ so the two paths are not interchangeable. And the drift is **not a timer at
 sea**: it reads no clock and tests no transport. It is a per-redraw-tick 1-in-64
 roll gated only on the master-redraw flag and the world tick's ambient/animation
 gate byte (Section 8.10), so like the ambient scenery tick it is also skipped on
-the first world tick after program start and on every world tick while Negate
-Time is active. *(Corrected 2026-10-16, issue #298 Q16: this sentence previously
+a world tick that finds that byte zero (restored from the save; stock saves hold
+the steady value, so a Journey Onward session has no skipped first tick) and on
+every world tick while Negate Time is active *(corrected 2026-10-27, issue #305
+Q5, R639: this previously said "the first world tick after program start")*. *(Corrected 2026-10-16, issue #298 Q16: this sentence previously
 called that byte "a first-tick handshake flag", which read the gate backwards; see
 `RETRACTIONS.md` R539.)*
 
@@ -1381,8 +1383,10 @@ glissando. **There is therefore no such thing as a Blink pass in combat.**
 world tick, which any prompt that pumps it runs, reaches the speaker through the
 ambient scenery tick of Section 8.10. That tick runs at the tail of every
 rendering world tick; it is suppressed only while the redraw-enable byte is
-clear, on the first world tick after program start, and while Negate Time is
-active, and it has no other caller. So during any keyboard prompt that pumps the
+clear, on a world tick that finds the gate byte zero (a value only a loaded
+file can supply, since stock saves hold the steady value; *corrected 2026-10-27,
+issue #305 Q5, R639: this previously said "on the first world tick after program
+start"*), and while Negate Time is active, and it has no other caller. So during any keyboard prompt that pumps the
 world tick, a nearby grandfather clock, waterfall, fountain or drawn minstrel is
 audible. This is scenery audio, not a Blink or pass behaviour. *Earlier text here
 said the tick ran only while a mode-entry handshake flag was clear, "once after
@@ -1986,7 +1990,8 @@ Those two sites are the only users of that recipe in the shipped game.
 
 | Trigger | Mode scope | Sound, and where it sits in the sequence | Suppression | Cancellation boundary | Turn cost |
 |---|---|---|---|---|---|
-| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the damage sequence is scripted: while any Good, Poisoned, or Sleeping member remains, the loop runs passes back to back with no calibrated wait or hold anywhere. Each pass is, in order: (1) the impact presentation of `overworld.md` Section 6.2.4 stage one - the impact figure at the party cell, the 300-update impact rumble `(10, 3000, 2000)`, about 216 ms, and one world tick; (2) the whole-party damage pass - for each roster slot below the party size that is not Dead, in slot order, a fresh `1..8` damage draw, then that member's panel row inverted, the 160-update ordinary damage rumble `(10, 1600, 2000)`, about 115 ms, the row restored, the damage subtracted and the whole stats panel repainted; (3) the party-capability test, and if anyone can still act the next pass starts at once. The loop is test-first, so the first pass follows `DROWNING!!!` (and the long descent before it) directly. A pass with `N` damaged members therefore sounds for about `216 + 115N` ms under the Section 10.2 model, about 331 ms for a solo Avatar, in `N + 1` separate bursts divided only by repaint and row-invert work; it advances the sound-only jitter state `300 + 160N` times and the gameplay generator `N` times. *(Added 2026-10-25, issues #300 Q27 and #301 Q3. The modelled period is consistent with the 0.337 s per solo pass measured on the stock game; the sounding fraction is not reconciled - the model predicts two bursts and about 331 ms of sound, against a reported single burst of about 0.30 s - see `OPEN-QUESTIONS.md`.)* In the shipped status domain this exits on a total party wipe. Imported outside-domain status values do not keep it alive; see `vehicles.md` Section 6. It has no input branch of its own. | Not applicable; the party is dying. |
+| **Drowning.** The party's frigate is destroyed and there is no skiff aboard and no carpet in stock, so the fallback ladder of `vehicles.md` section 6 reaches its last rung. With a skiff or a carpet available the game prints `Abandon ship!`, substitutes the vehicle, and plays **no** long sound. | Overworld. | `Ship sunk!` prints, the party sprite is cleared, the stats panel refreshes, and the viewport is rebuilt so the empty ocean is on screen - **then** the long descent - then `DROWNING!!!`, then the death loop. | The global sound toggle, tones only; see the shared recipe below. | **None**, and the damage sequence is scripted: while any Good, Poisoned, or Sleeping member remains, the loop runs passes back to back with no calibrated wait or hold anywhere. Each pass is, in order: (1) the impact presentation of `overworld.md` Section 6.2.4 stage one - the impact figure at the party cell, the 300-update impact rumble `(10, 3000, 2000)`, about 216 ms, and one world tick, which draws as any world tick does (`animation.md`
+Section 13.2); (2) the whole-party damage pass - for each roster slot below the party size that is not Dead, in slot order, a fresh `1..8` damage draw, then that member's panel row inverted, the 160-update ordinary damage rumble `(10, 1600, 2000)`, about 115 ms, the row restored, the damage subtracted and the whole stats panel repainted; (3) the party-capability test, and if anyone can still act the next pass starts at once. The loop is test-first, so the first pass follows `DROWNING!!!` (and the long descent before it) directly. A pass with `N` damaged members therefore sounds for about `216 + 115N` ms under the Section 10.2 model, about 331 ms for a solo Avatar, in `N + 1` separate bursts divided only by repaint and row-invert work; it advances the sound-only jitter state `300 + 160N` times and the gameplay generator `N` times for the damage draws plus the draws of stage one's world tick - one wind check, its follow-up draws when it fires, and the animator's draws for eligible on-screen objects, unless the world tick's gates skip them. *(Corrected 2026-10-27, issue #305 Q5: this previously said the pass advances the gameplay generator `N` times; the stage-one world tick's wind draw was executed on the Rough seas caller of the same routine; retracted, R642.)* *(Added 2026-10-25, issues #300 Q27 and #301 Q3. The modelled period is consistent with the 0.337 s per solo pass measured on the stock game; the sounding fraction is not reconciled - the model predicts two bursts and about 331 ms of sound, against a reported single burst of about 0.30 s - see `OPEN-QUESTIONS.md`.)* In the shipped status domain this exits on a total party wipe. Imported outside-domain status values do not keep it alive; see `vehicles.md` Section 6. It has no input branch of its own. | Not applicable; the party is dying. |
 | **Whirlpool.** The party, **in any vehicle**, moves orthogonally adjacent to a whirlpool active object. Diagonal adjacency does not trigger it. | Overworld. | The whirlpool object is cleared, `WHIRLPOOL!` prints, the party sprite is **replaced by the whirlpool sprite**, and the viewport repaints, so the player watches a whirlpool standing where the party was - **then** the long descent - then the sprite is restored, the impact-absorption stage (`overworld.md` Section 6.2.4 stage two) runs directly - **no** impact figure and **no** impact rumble (R612, issue #301 Q3) - and the party is teleported to fixed Underworld coordinates (`overworld.md` section 8). | The global sound toggle, tones only; see the shared recipe below. | **None** during the sound. The state commit - the teleport - happens strictly after it. For about seven seconds the player has a non-interactive cinematic beat. | Owned by `overworld.md`; the sound itself adds none. |
 
 **The shared recipe: the long descent.** Both rows play one glissando,
@@ -2067,10 +2072,15 @@ It is skipped in exactly three cases:
 
 - the master redraw-enable byte is clear, so the world tick skips its whole
   body (`formats/saved-gam.md`, the animation/redraw scratch row);
-- the world tick's ambient/animation gate byte is zero. Its shipped initial
-  value is zero, so the **first world tick after program start** skips the
-  ambient tick (and the object animator and the wind drift with it). The world
-  tick sets the byte back to one at its own tail;
+- the world tick's ambient/animation gate byte is zero. The byte is part of
+  the save image (`formats/saved-gam.md` Section 10) and the load restores it.
+  The new-game seed and every stock save examined hold the steady value one,
+  and no world tick runs before a Journey Onward load, so a session's first
+  world tick is **not** skipped; it is skipped only when the loaded file holds
+  zero. The world tick sets the byte back to one at its own tail. *(Corrected
+  2026-10-27, issue #305 Q5: this previously said the shipped initial value of
+  zero makes the first world tick after program start skip the ambient tick,
+  the object animator and the wind drift; retracted, R639.)*
 - **Negate Time** is active: while its `T` tag is set, the world tick forces the
   gate byte to zero at its head on every call, so the ambient tick, the object
   animator and the wind drift are all skipped for the effect's whole duration.
