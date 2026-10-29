@@ -4003,7 +4003,22 @@ directly north of that actor—and accepts a byte whose family masks to
 `0x3C..0x3F`. It does not read the combat arena terrain grid. This predicate and
 the absorption effect consume no gameplay-PRNG draw. On success it narrates the
 absorption and plays the forty-update rising action snap from 1200 through
-1980 Hz, with one calibrated unit per update. A successful directional step
+1980 Hz, with one calibrated unit per update. The narration comes first and is
+three emits: a single line feed printed as one character; the name of the slot
+being dispatched, through the shared actor-name printer; then the stored line
+` is absorbed!` with one trailing line feed. The name is a party member's
+roster name or, for a controlled monster slot, its class name; it is not the
+party leader as such, and names the Avatar only when the Avatar's slot is the
+one dispatched. The gate does not test the party-side bit, so it does not
+restrict the slot to the party side. The tail that runs the hook is also the
+one reached by asleep party dispatches and by controlled and charmed monster
+turns (the dispatch accounting earlier in this section lists the post-action
+Doom check on those arms), so the slot named need not have committed an action.
+Whether a monster slot can reach the qualifying cell in stock Doom data is not
+established (`OPEN-QUESTIONS.md` Section 2). *(Added 2026-10-29, issue #311 Q5:
+static reading of the absorption hook and the shared actor-name printer, with
+the suffix literal read from the shipped data file and re-read by a verifier;
+no capture of the absorption exists.)* A successful directional step
 has already played its separate short two-part movement sting; absorption
 after another committed action need not have that preceding cue. The path
 then invalidates the current active-player selector,

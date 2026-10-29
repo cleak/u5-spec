@@ -904,6 +904,21 @@ quoted unfairness/treachery speech, including its leading two line feeds.
 The execution helper finishes with one line feed. The correct-answer
 execution instead begins with record `5` and omits the sliced-in-half
 narration and record `6`; it also finishes with one line feed.
+No fallback or substitute name exists. Both name sites print the stored roster
+name with no test: the first-wrong-answer threat always prints roster record
+`1`'s name before ` die!" `, even when that member is Dead (Section 4, R441),
+and the fourth-wrong-answer execution prints the name of the record it has just
+parked. The victim is the second record, counting from record `0`, whose status
+is not Dead. Both branches run only when the audience setup found at least two
+nondead members, so in stock play record `1` exists and the scan finds a second
+nondead member; a broken guard, where the scan would fall through to a record
+that is not travelling, is not part of the contract. *(Added 2026-10-29, issue
+#311 Q6: static reading of both name sites, the victim scan and the caller's
+two-member guard, re-read by a verifier. That no member dies during the
+audience before the execution is inference: it assumes the audience's
+two-minute advances are the clock advance alone, without the poison and
+starvation upkeep pass, which `systems/time.md` places in each mode's per-turn
+epilogue; it was not traced for this routine (`OPEN-QUESTIONS.md` Section 3).)*
 These resource selections and resident additions were checked against the
 original execution path in `u5-decomp/functions/BLCKTHRN_OVL/` and
 `u5-decomp/notes/`.

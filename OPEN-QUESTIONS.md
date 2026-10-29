@@ -384,6 +384,21 @@ Opened 2026-10-29 by the issue #310 Q1 and Q2 wake-ring and combat world-tick pa
 | Several per-dispatch world ticks in combat rest on static reading or inference, not execution: accepted Escape's tail tick, the dragged-under and Sword of Chaos tail ticks (reached only with ticks stubbed in the issue #309 runs), the applied in-arena rock climb, and the automatic driver's step tick on the step that leaves the arena. Only `K` then Space `Pass` at the adjacent prompt was executed among the Klimb paths. *(Issue #310 Q2.)* | `systems/combat.md` Section 11 ("Which combat dispatches run a world tick") | Execute those paths in a full original-code harness with every draw attributed to its world tick, or a stock capture of each. |
 | The arena per-tick draw figures come from one grass-arena orc encounter on one seed, and the animator count scales with the combatant set and scripts. Not run in an arena: gazer pauses, mimic and corpser freezes, the two coinless classes, and party-side attack presentations (whether they run the same two presentation ticks as the one executed monster melee hit). *(Issue #310 Q2.)* | `systems/combat.md` Section 11 ("Which combat dispatches run a world tick") | Repeat the attributed-draw run with those monster classes and with party-side melee, missile and spell attacks. |
 
+Opened 2026-10-29 by the issue #311 Q1 to Q3 literal pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The Yell print order for a recognised Word of Power (uttered line, then the flash / rumble, then `No effect!` only when no cardinal neighbour qualifies) and Yell's own line feed after a nonempty input line are static reading of the handler only; the literals themselves were read from the shipped data. *(Issue #311 Q1.)* | `systems/commands.md` Section 11.1 | A capture of the message window after a recognised word at a qualifying entrance, at a wrong coordinate and with no qualifying neighbour. |
+| The full-party `0x84` keystroke wait before the refusal is static reading only, and the refusal's wrapping in the sixteen-column message window is inferred; the emulation run stubbed the key routine, the line reader and wrapping, and confirmed only the on-screen framing and the return to `Your interest?`. *(Issue #311 Q2, R655.)* | `systems/conversation.md` Section 7.6, the `0x84` row | Run `JOIN` with a six-member party under emulation with the real key routine and printer, and observe the pause and the wrapped rows. |
+| The status-name start columns on the attribute page (26, 27, 29, 28, 28) are inferred from the published centring rule because centring was stubbed in the executed probe, and `Dead` and `Charmed` were never looked up in a run (data file only). What the page shows for a status letter outside the five is not established. *(Issue #311 Q3.)* | `systems/inventory.md` Section 4.7 (the status table) | A screen capture of the attribute page for members in each of the five states; a trace of the lookup for an unlisted letter. |
+
+Opened 2026-10-29 by the issue #311 Q4 to Q6 literal pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The dungeon L-Look field lines and their exact-byte selection are static reading with the literals read from the shipped data; no live Look at a placed field cell, plain or visit-marked, has been made. *(Issue #311 Q4.)* | `systems/dungeon-mode.md` Section 12, step 5 | A live dungeon Look at each of `0x80..0x83` and at a visit-marked field cell. |
+| The Doom absorption narration (line feed, dispatched slot's name, ` is absorbed!` and a line feed) is static reading; no capture of the absorption exists, and whether a controlled or charmed monster slot can ever stand on the qualifying cell in stock Doom data, and so be named by class, was not shown either way. *(Issue #311 Q5.)* | `systems/combat.md` Section 11 (the Doom absorption paragraph) | A capture of the absorption in the final Doom room; a census of which slots can reach arena row `2` under the Doom source in stock data. |
+
 ## 3. Needs a further static trace
 
 The corridor mirror derivation was completed 2026-09-07: original EGA
@@ -754,6 +769,12 @@ Opened 2026-10-29 by the issue #310 Q2 combat world-tick pass:
 | Item | Where | What settles it |
 |---|---|---|
 | Whether an in-arena Klimb that accepts an Up/Down departure, and so leaves the arena, still runs the command handler's tail world tick. Not executed and not settled statically. *(Issue #310 Q2.)* | `systems/combat.md` Section 11 ("Which combat dispatches run a world tick") | Trace the accepted departure through to the handler's exit, or execute it with world ticks counted. |
+
+Opened 2026-10-29 by the issue #311 Q6 Blackthorn name pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| That no party member can die during the Blackthorn audience before the execution, so the two-member guard still holds when the victim is chosen, is inference: it assumes the audience's two-minute advances run the clock advance alone and not the poison and starvation upkeep pass. *(Issue #311 Q6.)* | `systems/blackthorn.md` Section 5 ("Execution text") | Trace the audience's time advances for any call into the upkeep pass, or run the audience with a poisoned, low-HP companion. |
 
 ## 4. Deferred by scope
 

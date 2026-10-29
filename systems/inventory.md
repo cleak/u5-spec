@@ -1094,6 +1094,30 @@ this paragraph called the level line the page's second line and placed the
 status name after the `\nStatus:_` literal; the level line is the window's first
 row and the page prints no status label, `RETRACTIONS.md` R622.)*
 
+*(Added 2026-10-29, issue #311 Q3.)* The status table, in its stored order, is:
+
+| Letter | Status name | Characters | Start column (inferred) |
+|---|---|---:|---:|
+| `G` | `Good Health` | 11 | 26 |
+| `P` | `Poisoned` | 8 | 27 |
+| `D` | `Dead` | 4 | 29 |
+| `S` | `Asleep` | 6 | 28 |
+| `C` | `Charmed` | 7 | 28 |
+
+The names carry no padding and no line feed, and no pad characters are
+emitted; the cells around the name are blank only because the text window is
+cleared before the page is drawn. The name is printed with centring on, at
+cursor column 0 of the window spanning screen columns 24 to 38 on screen row 2.
+The window then widens to column 39 and the cursor moves to row 4 (window row
+3), and centring is switched off after that move; nothing visible changes in
+between. The start columns follow from the centring rule in
+`systems/text-output.md` applied to that placement; they are inferred, not
+observed, because centring was stubbed in the executed run. The names and
+their letter order were read from the shipped data file; the `G`, `P` and `S`
+lookups were executed on the original page code (the issue #302 probe), while
+`Dead` and `Charmed` rest on the data file alone. What the page shows for a
+status letter outside these five is not established.
+
 **Attribute-page rows.** *(Added 2026-10-25, issue #302 Q2.)* The text window
 covers screen columns 24 to 39 and rows 1 to 9 and is cleared first; the
 member's name is on the frame line above it. By screen row:
@@ -1101,7 +1125,7 @@ member's name is on the frame line above it. By screen row:
 | Row | Content |
 |---|---|
 | 1 | Per-class indent, gender glyph, `_Lv-`, level (one cell), one space, class name |
-| 2 | Status name alone, centred in columns 24 to 38 |
+| 2 | Status name alone (status table above), centred in columns 24 to 38 |
 | 3 | Blank |
 | 4 | `Str=` and strength, then `__HP:` and current hit points |
 | 5 | `Int=` and intelligence, then `__HM:` and maximum hit points |

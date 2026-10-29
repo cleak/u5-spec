@@ -1426,6 +1426,24 @@ uttered-word result and plays the shared low-rumble / full-viewport flash
 presentation effect, before any location test. An unrecognised word prints the
 no-effect result and nothing else happens.
 
+*(Added 2026-10-29, issue #311 Q1.)* The uttered-word result is the literal
+`\nA_word_of_power_is_uttered\n` (underscore for a space and `\n` for a line
+feed, as in Section 5): a line feed, the sentence with no closing punctuation,
+and a line feed. It does not repeat the word; the word appears on screen only
+in the input echo after the `:` glyph. After a nonempty input line Yell emits
+one line feed of its own before routing, and the line reader emits nothing for
+the Enter that ends the line (`systems/conversation.md`, "Free-text input"), so
+the screen reads `Yell what?`, `:WORD`, a blank line, `A word of power is
+uttered`, with the cursor left at the start of the next line, the same framing
+as the no-effect transcript in Section 5.8. The text is printed on the first
+match only (the first word in table order, as above), and the flash / rumble
+effect follows it. The no-effect literal `\nNo_effect!\n` is printed after it
+only when no cardinal neighbour qualifies (step 1 below), so a blank line then
+separates the two messages; the wrong-coordinate path (step 3) and the
+ruined-shrine hand-off (step 2) print only the uttered line here. The text was
+read from the shipped data file; the print order, the extra line feed and the
+uttered-then-no-effect sequence are static reading of the Yell handler only.
+
 After a recognised match the handler picks a direction, then checks a
 coordinate, then mutates one cell:
 
@@ -1433,8 +1451,8 @@ coordinate, then mutates one cell:
    the currently visible map, in the order west, south, east, north, and takes
    the first one whose tile is any of: that word's own dungeon-entrance tile,
    the sealed collapsed-entrance tile, or the ruined-shrine tile. If no
-   neighbour qualifies, the command additionally prints the no-effect result and
-   stops. **The party stands next to the sealed cell, never on it** — the sealed
+   neighbour qualifies, the command additionally prints the no-effect result
+   (`\nNo_effect!\n`, after a blank line; issue #311 Q1 above) and stops. **The party stands next to the sealed cell, never on it** — the sealed
    tile is impassable, so standing on it is not possible anyway.
 2. **Ruined-shrine branch.** If the neighbour selected in step 1 is a ruined
    shrine, the handler hands off to the shrine restoration prompt with the
