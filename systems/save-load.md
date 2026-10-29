@@ -335,9 +335,16 @@ The original game has a single save slot. There is one `SAVED.GAM`, one `SAVED.O
   saved slab survive by virtue of the flat-image save/load contract.
 
 - **Dungeon rooms.** Cleared dungeon rooms are persisted by a compact
-  room-clear bitmap in `SAVED.GAM`. The loaded dungeon cell image is still
-  rebuilt from `DUNGEON.DAT`; save/load restores room completion by replaying
-  the cleared-room demotion pass, not by saving patched dungeon geometry.
+  room-clear bitmap in `SAVED.GAM`. The working dungeon cell record (the
+  current dungeon's eight levels) is part of the save image, so a save made
+  inside a dungeon restores its visit-local cell edits, including patched room
+  triggers, directly. The cleared-room demotion pass then runs once when dungeon
+  mode is entered, which is harmless on an already-patched record. The record
+  is rebuilt from `DUNGEON.DAT` only when the party enters a dungeon from the
+  overworld, and the bitmap replay is what carries room completion across that
+  rebuild (see `systems/dungeon-mode.md` Section 5). *(Corrected 2026-10-28,
+  issue #308 Q2: this bullet said the loaded cell image is "still rebuilt from
+  `DUNGEON.DAT`" on save/load; retracted, `RETRACTIONS.md` R648.)*
 
 - **Combat.** Combat state is *not* in the save image, and there is no way to reach the save writer while a fight is running. The combat parser has its own `Q` branch, but that branch is a plain refusal: it prints the verb label with a refusal tail and re-prompts without ending the combatant's action. It neither saves nor ends the fight. An implementation that wants to allow mid-combat saves must both extend the save format and add a combat-side entry point that the original does not have.
 

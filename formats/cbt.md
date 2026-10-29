@@ -195,7 +195,25 @@ from the upper active-object tile bank:
 | `0x1E`, `0x1F` | The two corpse variants |
 | `0x3C` | Trapped soul; the final Doom absorption marker |
 | `0xE8` | Poison field |
-| `0xEB` | Force field |
+| `0xE9` | Sleep field |
+| `0xEA` | Fire field |
+| `0xEB` | Energy field (Look text `a force field`) |
+
+*(Added 2026-10-28, issue #308 Q3.)* `0xE9` and `0xEA` take the special path
+like the shipped `0xE8` and `0xEB`: one active-object record with no combat
+descriptor, no terrain change, the raw id as tile pair and auxiliary byte (no
+post-write, since the ids are 16 or higher) and no placement draw; the scan's
+four unconditional palette draws still happen. They draw the actor-half field
+tiles `0x1E9` and `0x1EA`, the same tiles cast fields use. No shipped room places
+`0xE9` or `0xEA`: in the shipped dungeon arena file only three records carry
+field sources (one with twelve Energy sources, two with eight and six Poison
+sources), and the surface arena file has none. When present they behave
+exactly like cast Sleep and Fire markers (`systems/combat.md` Section 11) and
+are subject to the same random dissolution. Evidence: the original room setup
+was executed on synthetic sources with the generic placer stubbed (path choice,
+raw id, no draw); the placer's writes are static reading; shipped placements
+come from a scan of every arena record; the painted tile is inferred from the
+active-object bank rule.
 
 Ids one through fifteen then receive an additional post-placement rule that
 overwrites the auxiliary byte:

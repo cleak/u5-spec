@@ -80,7 +80,7 @@ The currently documented high-nibble dispatch families are:
 | `0xA` | Room-helper / cleared-room state | Routed through the same underfoot helper as room triggers; not authored in the shipped records. |
 | `0xB`-`0xD` | Wall families | Solid blockers with variant-specific presentation. |
 | `0xE` | Door presentation variant | Door-like presentation class used by runtime wall/search variants; not the cleared-room reload state. |
-| `0xF` | Room trigger | Low nibble selects the room arena; combat and reload paths demote cleared triggers to `0xA?`, not `0xE?`. |
+| `0xF` | Room trigger | Low nibble selects the room arena; room combat and the once-per-entry demotion pass demote cleared triggers to `0xA?`, not `0xE?` *(corrected 2026-10-28, issue #308 Q2: earlier "reload paths"; R647)*. |
 
 Earlier revisions of this table demoted cleared triggers to `0xE?` on reload,
 making a cleared and reloaded room a non-walkable wall, and rejected forward
@@ -147,7 +147,10 @@ cell rewrites. The original engine patches the loaded dungeon image after
 combat by changing a `0xF?` trigger into `0xA?`, preserving the low nibble. It
 also sets a saved room-clear bit keyed by dungeon and room id. On later load or
 entry, the demotion pass uses that bitmap to rewrite matching `0xF?` cells in
-the loaded image back to `0xA?`. It does not rewrite them to `0xE?`. The source
+the loaded image back to `0xA?`. It does not rewrite them to `0xE?`. The pass
+runs once per entry into dungeon mode, over all eight levels of the working
+record; a level change within the visit does not rerun it *(added 2026-10-28,
+issue #308 Q2)*. The source
 file still contains the trigger cell and is not rewritten.
 
 The stock Doom record uses room id fifteen as the terminal final-room trigger.

@@ -367,13 +367,15 @@ which are engine-private art.
 | 484..487 | `0xE4..0xE7` | combat class band | troll |
 | 488 | `0xE8` | field (in a class band) | poison field |
 | 489 | `0xE9` | field (in a class band) | sleep field |
-| 490 | `0xEA` | field (in a class band) | energy field (shipped text is garbled) |
-| 491 | `0xEB` | field (in a class band) | force field |
+| 490 | `0xEA` | field (in a class band) | fire field (shipped Look text `a field of field` is garbled) |
+| 491 | `0xEB` | field (in a class band) | energy field (shipped Look text `a force field`) |
 | 492..495 | `0xEC..0xEF` | whirlpool (in a class band) | whirlpool |
 | 496..499 | `0xF0..0xF3` | combat class band | mongbat |
 | 500..503 | `0xF4..0xF7` | combat class band | corpser |
 | 504..507 | `0xF8..0xFB` | combat class band | rot worm |
 | 508..511 | `0xFC..0xFF` | combat class band | shadow lord |
+
+*Corrected 2026-10-28, issue #308 Q3: rows 490 and 491 formerly read "energy field (shipped text is garbled)" and "force field"; `0xEA` is the Fire Field and `0xEB` the Energy Field (`systems/combat.md` Section 11); retracted, `RETRACTIONS.md` R649.*
 
 Three of the thirty-two combat-class bands are not creatures: class 29's band
 `0xB4..0xB7` holds the four regalia items (shard, crown, sceptre, amulet),
@@ -1172,7 +1174,7 @@ The resident transport marker tracks the current boarded vehicle for movement, e
 
 ## 11. Effect tiles
 
-Effect sprites that the description table names live in the actor half: the four fields (poison, sleep, energy, force) at `488..491`, the whirlpool frames at `492..495` and the trapped soul at `316..319`. The transient projectile, impact and spark frames the effect renderers draw carry no description record; their atlas ids are owned by the renderers in `systems/combat.md` and `systems/magic.md`, not fixed here. *Retraction (2026-09-04): this section previously said `448..495`, which is the orc-to-troll band of Section 7; see `RETRACTIONS.md` R388.* Effects are short-lived sprites composited over the rendered buffer by per-effect handlers; they do not live in the persistent map and (mostly) do not occupy active-object slots.
+Effect sprites that the description table names live in the actor half: the four fields (poison, sleep, fire, energy) at `488..491` *(corrected 2026-10-28, issue #308 Q3: formerly "poison, sleep, energy, force"; retracted, `RETRACTIONS.md` R649)*, the whirlpool frames at `492..495` and the trapped soul at `316..319`. The transient projectile, impact and spark frames the effect renderers draw carry no description record; their atlas ids are owned by the renderers in `systems/combat.md` and `systems/magic.md`, not fixed here. *Retraction (2026-09-04): this section previously said `448..495`, which is the orc-to-troll band of Section 7; see `RETRACTIONS.md` R388.* Effects are short-lived sprites composited over the rendered buffer by per-effect handlers; they do not live in the persistent map and (mostly) do not occupy active-object slots.
 
 The principal effect families:
 

@@ -552,9 +552,13 @@ upward transition, match that value's opposite-facing partner for a downward
 transition, and do nothing on side crossings. Both paths implement the Z change
 by rewriting the active floor index and reloading the tile buffer from the page
 that the location's base page plus the new signed floor selects
-(`formats/location-dat.md` Section 4), then re-running the per-map NPC linker so
-that NPCs on the new floor become visible while NPCs on the old floor are
-unlinked from the active-object table. X and Y are preserved; only the floor
+(`formats/location-dat.md` Section 4), then running the town's full NPC reseat: every non-party active-object record
+is cleared, which erases any parked horse or carpet, and every roster NPC is
+re-placed at its current-hour waypoint in the idle state with its route
+discarded, so NPCs on the new floor become visible and those elsewhere stay
+unlinked (`systems/town-mode.md` Section 11). *(Corrected 2026-10-28, issue #308
+Q1: this previously said the floor change only re-runs a per-map NPC linker;
+retracted, `RETRACTIONS.md` R645.)* X and Y are preserved; only the floor
 index and the surrounding 32-by-32 tile content shift. Trapdoors are a separate
 underfoot trigger, not a K path (§ 10).
 
@@ -709,7 +713,7 @@ The transitions across the major boundaries are:
   off-bottom is the one exception: it clears the scene after incrementing beyond
   the deepest dungeon level and keeps the trap-chain X/Y; it does not call the
   exterior-coordinate reset table.
-- **Town floor ↔ town floor.** Klimb on a ladder or grate cell, a walk-on staircase, or a trapdoor step rewrites the active floor index and reloads the tile buffer from the page selected by the location's base page plus the new signed floor (`formats/location-dat.md` Section 4). The scene byte does not change. NPCs on the new floor are linked into the active-object table; NPCs on the old floor are unlinked. Quick and stateless: a single tile-buffer reload, a single NPC re-link, no save-game write.
+- **Town floor ↔ town floor.** Klimb on a ladder or grate cell, a walk-on staircase, or a trapdoor step rewrites the active floor index and reloads the tile buffer from the page selected by the location's base page plus the new signed floor (`formats/location-dat.md` Section 4). The scene byte does not change. The full NPC reseat then runs: every non-party active-object record is cleared (parked X-it horses and carpets are erased) and every roster NPC is re-placed at its current-hour waypoint in the idle state, with its queued route discarded (`systems/town-mode.md` Section 11). A single tile-buffer reload, a single reseat, no save-game write. *(Corrected 2026-10-28, issue #308 Q1: this previously said NPCs are only linked and unlinked by "a single NPC re-link"; retracted, `RETRACTIONS.md` R645.)*
 - **Dungeon level ↔ dungeon level.** Klimb on an up-ladder, down-ladder, or two-way cell, casting either of the two dungeon level-change spells, stepping on an automatic fall-trap pit, or standing on a scripted teleport changes the level index. The new level's eight-by-eight slice of DUNGEON.DAT becomes active. The scene byte does not change unless the change would carry the party past the top or bottom of the stack, in which case the exit contract runs; a fall-trap chain running past the deepest level is the separate off-bottom case.
 - **Surface and underworld.** The confirmed outdoor plane swap is the falls
   chain, which writes the underworld plane and re-initialises the active-object
@@ -968,7 +972,7 @@ the chrome-overwrite reasoning were not re-executed in that second pass.
 
 ## 13. Hooks into the rest of the engine
 
-- **Active-object table.** Vehicle dismount allocates a slot for the abandoned vehicle; `vehicles.md` owns the broader parked-vehicle persistence contract. Town floor changes re-link the NPC table. Combat enter/exit replaces and restores the table wholesale.
+- **Active-object table.** Vehicle dismount allocates a slot for the abandoned vehicle; `vehicles.md` owns the broader parked-vehicle persistence contract. Town floor changes run the full NPC reseat, which clears every non-party record (parked vehicles included) and re-places the roster at its current-hour waypoints. *(Corrected 2026-10-28, issue #308 Q1: previously "re-link the NPC table"; retracted, `RETRACTIONS.md` R645.)* Combat enter/exit replaces and restores the table wholesale.
 - **Per-turn epilogue.** Door auto-close runs from the tile-effect pass. Pit triggers, chasm triggers, and energy-field triggers run from the same pass.
 - **Visibility.** Door state changes mark the dirty flag so the renderer rebuilds the visibility set. Z transitions reset visibility entirely — the new floor or level paints from scratch.
 - **Save image.** Scene byte, floor or level index, party chunk-X / chunk-Y, the
@@ -1111,7 +1115,7 @@ The behaviour described here was derived from the private function notes listed 
   selected, including the fact that the caller passes no trap flavour -- derived
   from `u5-decomp/functions/ULTIMA_EXE/` and sibling
   resident party-damage and status helper notes.
-- The town-mode per-location NPC re-linking on floor change — derived from `u5-decomp/functions/TOWN_OVL/`.
+- The town-mode per-location NPC reseat on floor change — derived from `u5-decomp/functions/TOWN_OVL/`.
 - Source provenance: derived from private analysis note
   `u5-decomp/notes/`. That analysis supplies the
   town climb handler's actual cell set and refusal text, the absence of a

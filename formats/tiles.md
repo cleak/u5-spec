@@ -365,12 +365,13 @@ combat-arena records — index the atlas offset by one sprite bank, so the same
 byte values there are the four **combat field-effect tiles**, second-bank ids
 `0x1E8..0x1EB`. **Refer to these four by id, not by label.** They carry two
 roles at once, and the two roles have produced two different naming habits:
-authored as drawable combat field effects, they are named in `systems/animation.md`
-Section 12.4 as `0x1E8` a poison field, `0x1E9` a sleep field, and `0x1EA` and
-`0x1EB` each a force field, while a "poison, sleep, fire, energy" labelling of the
-same four ids has also circulated in this document. This specification does not
-resolve which of the two labels for `0x1EA`/`0x1EB` matches the shipped
-description table, so nothing here should be keyed off the name. Independently of
+authored as drawable combat field effects, they are `0x1E8` Poison, `0x1E9`
+Sleep, `0x1EA` Fire and `0x1EB` Energy: the combat field-spell placement, the
+contact hook's arms and the movement validator's single blocking id agree
+(`systems/combat.md` Section 11). The shipped Look texts are `a poison field`,
+`a sleep field`, `a field of field` (the garbled Fire text) and `a force field`
+(the Energy Field's Look name). *(Added 2026-10-28, issue #308 Q3: this
+paragraph formerly left the `0x1EA`/`0x1EB` labels unresolved.)* Independently of
 the field-effect role, the display driver reuses the same four tiles as its own
 randomness store: it refreshes all four with fresh pseudo-random pixel bits on
 every animation step and XORs the fire fixtures from `0x1EA` (and the shrine

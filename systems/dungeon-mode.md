@@ -405,7 +405,7 @@ Two underfoot tile classes have *immediate* effects that fire before the player 
 
 **Room-helper state (high nibble `0xA`).** The turn loop routes `0xA?` cells through the same helper as `0xF?` room triggers. The shipped `DUNGEON.DAT` records contain no `0xA?` cells; this class appears as runtime state created after a room trigger resolves, not as ordinary stock geometry. Keep the low nibble intact because the helper still treats it as the room-arena slot.
 
-**Room trigger (high nibble `0xF`).** A subset of cells flagged as "room cells" trigger a room encounter when the party walks onto them. The same room-entry helper used by the `0xA?` state prints `Entering room...\n` as its first act (Section 8.1), loads the appropriate arena from `DUNGEON.CBT`, sets combat-entry state, and hands off to combat. After combat resolves, the player re-emerges in the dungeon at the room cell. The helper patches the loaded dungeon image for that visit by changing `0xF?` to `0xA?`; the on-disk source cell is unchanged.
+**Room trigger (high nibble `0xF`).** A subset of cells flagged as "room cells" trigger a room encounter when the party walks onto them. The same room-entry helper used by the `0xA?` state prints `Entering room...\n` as its first act (Section 8.1), loads the appropriate arena from `DUNGEON.CBT`, sets combat-entry state, and hands off to combat. After combat resolves, the player re-emerges in the dungeon at the room cell. The helper patches the loaded dungeon image for that visit by changing `0xF?` to `0xA?`; the on-disk source cell is unchanged. Room combat runs nested inside the helper, which restores the dungeon scene afterwards, so a room fight does not leave and re-enter the dungeon loop. The in-place patch, and the room-clear bitmap write that goes with it, are made on the normal return from room combat, for every room including the deny-listed rooms below; when room combat returns the loss result (the party side emptied while foes remain) the helper skips both. Whether fleeing a room counts as the loss result is not established (`OPEN-QUESTIONS.md`). *(Added 2026-10-28, issue #308 Q2.)*
 
 Cleared room state also has an overlay-side bitmap keyed by dungeon and room
 id. This bitmap is part of the save image. It has one bit per dungeon-room arena
@@ -413,8 +413,25 @@ record - one hundred twelve bits, which occupy the first fourteen bytes of the
 sixteen-byte save-image field published in `formats/saved-gam.md` Section 10
 (the two trailing bytes are never addressed) - and the bit index is the same
 `arena_bank * 16 + room_id` value used to select the `DUNGEON.CBT` record
-(§ 14). When a level is loaded or reloaded, room-marker cells whose clear bit is
-set are demoted from `0xF?` to `0xA?`, preserving the room id low nibble. They
+(§ 14). Each time dungeon mode is entered - from the overworld, when the
+working dungeon record has just been rebuilt from `DUNGEON.DAT`, or when play
+resumes from a save made in a dungeon, when the record has just been restored
+from the save image - a single pass over the whole working record, all eight
+levels of 64 cells, demotes every room-marker cell whose clear bit is set from
+`0xF?` to `0xA?`, preserving the room id low nibble. The pass runs once, before
+the loop's first underfoot check and first command, and does not run again
+within the visit: K-Klimb, the level-change spells, pit falls (chains
+included) and room combat all happen inside the same run of the dungeon loop,
+and a level change only changes the party's level index without reloading or
+rescanning the record. Because the record already covers every level, nothing
+is left to demote. A room cleared during the visit is instead patched in place
+by the room helper (above), deny-listed rooms included, so a deny-listed room
+cleared on this visit stays in the `0xA?` state for the rest of the visit,
+Klimb round trips included, and re-arms only when the record is next rebuilt
+at an entry from the overworld; on a resumed dungeon save the record already
+holds the patched cells and the entry pass changes nothing already demoted.
+*(Corrected 2026-10-28, issue #308 Q2: this sentence earlier said the pass runs
+"when a level is loaded or reloaded"; retracted, `RETRACTIONS.md` R647.)* They
 are not demoted to `0xE?`. This keeps the cleared-room runtime state consistent
 across save/load without changing `DUNGEON.DAT`.
 
@@ -1422,7 +1439,7 @@ non-ladder K-command route down, and it reaches the exit contract the same
 indirect way a down ladder does - only when the level-step helper reports the
 deepest-level edge.
 
-**Door-like dungeon classes.** High nibbles `0xA`, `0xE`, and `0xF` all have door-like presentation in parts of the dungeon renderer and minimap, but they are not interchangeable storage states. `0xF?` is the stock room-trigger family, with the low nibble selecting the `DUNGEON.CBT` room id. `0xA?` is the runtime room-helper / cleared-room state produced both after room combat and by the save-image room-clear demotion pass on reload. `0xE?` is a separate door-presentation variant used by other runtime wall/search paths; it is not produced by cleared-room replay.
+**Door-like dungeon classes.** High nibbles `0xA`, `0xE`, and `0xF` all have door-like presentation in parts of the dungeon renderer and minimap, but they are not interchangeable storage states. `0xF?` is the stock room-trigger family, with the low nibble selecting the `DUNGEON.CBT` room id. `0xA?` is the runtime room-helper / cleared-room state produced both after room combat and by the room-clear demotion pass that runs once on each entry into dungeon mode *(corrected 2026-10-28, issue #308 Q2: earlier "on reload"; R647)*. `0xE?` is a separate door-presentation variant used by other runtime wall/search paths; it is not produced by cleared-room replay.
 
 The dungeon Open command operates on the **underfoot tile** (not the cell in front). It can affect `0x4?` wooden chest cells and `0x7?` open-chest cells, but no traced Open or Jimmy mechanism mutates `0xA?`, `0xE?`, or `0xF?` dungeon door/room presentation cells. Room-trigger durability is handled by the room helper and the room-clear bitmap instead.
 
@@ -3061,8 +3078,10 @@ as opened doors, dispelled fields, trap rewrites, and the immediate
 room-trigger cell patch. Leaving and later re-entering the dungeon rebuilds the
 working image from `DUNGEON.DAT`; only durable state such as the room-clear
 bitmap is then replayed. Cleared room completion persists separately in that
-bitmap, and the reload-time demotion pass reconstructs the navigable `0xA?`
-room-helper cells from the static `0xF?` source cells. *An Grav*-cleared energy
+bitmap, and the demotion pass that runs once on each entry into dungeon mode
+reconstructs the navigable `0xA?` room-helper cells from the static `0xF?`
+source cells (§ 5) *(corrected 2026-10-28, issue #308 Q2: earlier
+"reload-time"; R647)*. *An Grav*-cleared energy
 fields therefore survive an in-dungeon save/load, but reappear after leaving and
 re-entering from the static dungeon record.
 

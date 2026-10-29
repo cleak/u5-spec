@@ -1098,7 +1098,7 @@ A special-case rule covers the "default human" NPC type: when the type byte is a
 
 **Time.** The scheduler reads the shared hour byte, never writes it. The hour byte is updated by the time spec's per-turn cleanup. A clock running purely in hours is sufficient (Section 3). The cadence of one scheduler tick per player-turn is set by the town turn loop.
 
-**The clear-and-re-place pass.** Three callers run the same pass that clears
+**The clear-and-re-place pass.** Four triggers run the same pass that clears
 every non-party active-object record and then re-places each live scheduled NPC
 at the position its schedule gives for the *current* hour: entering the location
 (the initialisation described in Section 4), the town-bed H-Hole-Up hours
@@ -1106,9 +1106,14 @@ command after **every** ten-minute step of its sleep, before that step's bed
 test (`systems/rest-and-camp.md` Section 4), and an inn's rest-for-the-night,
 which ends at 06:00
 and re-places the roster for that hour before returning control
-(`systems/shops.md` Section 8.4). After any of the three, an NPC that was
-mid-route is standing on its scheduled position rather than where it had walked
-to, and its queued route is gone. *(Corrected 2026-10-25, issue #300 Q6: this
+(`systems/shops.md` Section 8.4), and every floor change inside the location
+(stairs, ladder, grate or trapdoor; `systems/town-mode.md` Section 11), which
+also clears parked vehicles and resets each re-placed NPC to idle. After any of
+the four, an NPC that was mid-route is standing on its scheduled position rather
+than where it had walked to, and its queued route is gone. *(Corrected
+2026-10-28, issue #308 Q1: this paragraph previously named only three callers
+and omitted the floor change; retracted, `RETRACTIONS.md` R646. The ladder case
+was executed on the original; stairs, grate and trapdoor are static reading.)* *(Corrected 2026-10-25, issue #300 Q6: this
 paragraph previously said the Hole-Up command reseats "when it finishes its
 rested hours"; retracted, `RETRACTIONS.md` R586. The per-step reseat rests on static reading of the bed loop, confirmed by an independent verifier, and was not executed. Private analysis in `u5-decomp/notes/`.)*
 

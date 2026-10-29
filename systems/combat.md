@@ -3639,6 +3639,30 @@ The per-marker results and random-consumption order are:
 | Fire | Pass a rolled raw value directly to the shared damage/status endpoint, then run the ordinary no-attacker finalization and status-panel refresh. | After the marker has won the scan, consume one inclusive `0..10` draw. It makes no defense draw. |
 | Energy | The Energy marker is not recognized by this contact hook. The arena movement validator treats it as a blocking marker, while Poison, Sleep, and Fire markers are passable for destination occupancy. | No contact-path draw and no zero-valued damage dispatch. |
 
+**Which id is which, and room-placed markers.** *(Added 2026-10-28, issue
+#308 Q3.)* The four marker ids are `0xE8` Poison, `0xE9` Sleep, `0xEA` Fire
+and `0xEB` Energy. The combat field-spell placement maps Poison Field to
+`0xE8`, Sleep Field to `0xE9`, Energy Field to `0xEB`, and Fire Field (and one
+other fire-type caller) to `0xEA`; the contact arms above and the movement
+validator's single blocking id agree. The shipped Look texts of the four
+field tiles are `a poison field`, `a sleep field`, `a field of field` (the
+garbled Fire text) and `a force field` (the Energy Field's Look name, not a
+fifth field kind). A dungeon-room special source byte `0xE9` or `0xEA`
+(`formats/cbt.md` Section 5) produces a marker that behaves exactly like a cast
+one: `0xE9` sends the actor that ends a dispatch on it through the shared sleep
+routine with no draw, message or sound, whatever its party or monster side;
+`0xEA` plays the target sound, makes one inclusive `0..10` draw, passes that raw
+value to the shared damage/status endpoint with no attacker, then runs the
+no-attacker finalisation and the stats-panel refresh. Both are passable,
+swamp, molten lava and fireplace terrain still win over them, contact leaves
+either marker unchanged, and both are subject to the random dissolution below.
+Evidence: the contact hook was executed against records shaped like room
+placements, with its callees stubbed and logged (call sequence, arguments,
+marker unchanged); "no defense draw" for Fire rests on the already-published
+damage/status endpoint, which was stubbed and not re-executed in that probe.
+The id assignment is static reading of the placement switch and the movement
+validator, with the Look texts read from a data file.
+
 **A sleeper on a Sleep Field does not wake for good.** *(Added 2026-10-25, issue
 #302 Q6.)* The narration code the routine leaves is cleared by the round walker
 before the next actor's dispatch and nothing reads it in between, so contact
@@ -3651,9 +3675,15 @@ where 16 wakes, nothing printed, dispatch spent). The hook runs after every
 dispatch of the actor, including the asleep no-command dispatch and the one in
 which the wake draw succeeded, so an actor still on the marker is put back to
 sleep straight away, before any other actor acts: the woken party member's `G`
-lasts only until the end of that same dispatch. Markers persist until combat
-exit and a sleeper cannot move, so an actor asleep on a Sleep Field takes no
-further command or AI action in that combat. It still blocks movement onto its
+lasts only until the end of that same dispatch. A sleeper cannot move, so an
+actor asleep on a Sleep Field is put back to sleep after each of its dispatches
+for as long as that field lasts. Field markers dissolve at random during
+maintenance (below). Once this one is gone the actor is no longer re-slept, but
+it stays asleep until its own wake draw succeeds (Section 8.1 or Section 6.2
+above); the field dissolving does not wake it. *(Corrected 2026-10-28, issue
+#308 Q3: this formerly said markers persist until combat exit, so that such an
+actor took no further command or AI action in that combat; retracted,
+`RETRACTIONS.md` R650.)* It still blocks movement onto its
 cell and can still be attacked. A Poisoned member who falls asleep this way and
 later wakes wakes Good, because the wake helper restores `'G'`. If a
 dragged-under member stands on the field, the field paints the prone marker
@@ -3675,12 +3705,62 @@ with no draw at all. See `RETRACTIONS.md` R336.)* Their raw damage still enters 
 damage/status endpoint, so its ordinary class modifiers, HP changes, and death
 handling remain applicable.
 
-The traced
-CAST/COMSUBS/COMBAT callbacks, the accepted-placement resident redraw helper,
-the post-action contact hook, the generic active-object tick, and the monster
-death/record-clear path do not contain a field countdown, decrement, or pre-exit
-removal. Placed markers persist until combat exits, when the combat framer
-restores the pre-combat active-object table.
+**Field markers dissolve at random.** *(Added 2026-10-28, issue #308 Q3.)*
+No marker carries a countdown, and the placement callbacks, the
+accepted-placement redraw helper, the contact hook, the generic active-object
+tick and the monster death/record-clear path still neither age nor remove one.
+Removal belongs to the shared combat maintenance endpoint, the same one that
+applies the worn-ring hook and ages the shared timed-magic counter (Section 8
+and Section 12). That endpoint runs three steps in this order:
+
+1. The worn-ring hook.
+2. The field pass. It walks all thirty-two active-object records in ascending
+   index order. Each record whose tile byte is in the `0xE8..0xEB` field family
+   (Poison, Sleep, Fire, Energy alike, whether cast or placed by a room source)
+   gets one inclusive `0..255` gameplay draw. A draw below 16 (a 1-in-16
+   chance) removes that marker: the record's tile, position and auxiliary
+   bytes are cleared. Nothing is printed, no sound plays and no redraw is
+   requested by the pass. The draw is consumed whether or not the marker is
+   removed, so the pass costs one draw per field marker present. Other active
+   objects (items, corpses, actor sprites) are not examined and cost nothing.
+3. The timed-magic counter ageing.
+
+The endpoint is reached on two routes:
+
+- **After a committed command-prompted action.** A party member's or
+  controlled monster's committed non-digit action ends in the committed-action
+  tail of Section 8, which enters the endpoint.
+- **On every skipped turn while an active player is selected.** When a
+  different party member is the selected active player, the turn of every
+  other command-group actor (a party member, or a controlled monster) is
+  denied before its banner by the active-player gate (Section 8.1), and that
+  denial enters the same endpoint directly. So with an active player selected,
+  each skipped turn of every other command-group actor costs one draw per
+  field marker and can dissolve markers.
+
+It is not reached by free re-prompts or the `0` through `6` selection digits
+(Section 8), nor by the turns of self-acting (automatic) actors, which run
+through the automatic driver instead of the command handler. That includes
+automatic party-side slots, such as a traitor or a party slot with the
+controlled bit (`0x01`) set, which are also routed to the automatic driver,
+except for the forwarding arm named next. Three command-handler arms are not
+established either way: the asleep no-command arm (`Zzzzz...`), the
+dragged-under arm (`ARGH!`), and the party-side arm that hands the member's
+turn to the automatic driver and then continues into the committed-action
+tail. On those three the tail's decision to enter the endpoint rests on a
+value the arm never sets, so whether a field pass runs there is not
+established (`OPEN-QUESTIONS.md`, section 3). Any markers that survive are
+discarded at combat exit, when the combat framer restores the pre-combat
+active-object table.
+
+*(Corrected 2026-10-28, issue #308 Q3: this paragraph formerly said no traced
+path contained a pre-exit removal and that "placed markers persist until
+combat exits"; retracted, `RETRACTIONS.md` R650.)* Evidence: the pass was
+executed with the original resident generator and record-clear body over 4000
+calls, giving about 250 removals for each of the four field ids (each near
+1/16) and none for non-field ids; its position inside the maintenance endpoint
+and the endpoint's two routes are static reading, re-read by a verifier. No
+capture shows a field dissolving.
 
 Separate from player-cast field markers and arena-terrain contact, one special
 combat path handles an actor being absorbed by a scripted field-like cell. It
@@ -3716,7 +3796,7 @@ then projects it into the renderer companion band inspected by the absorption
 hook. Thus the Doom family originates as a special active object and is
 observed through render composition, but it is neither an arena-terrain byte
 nor one of the common hook's recognized placed markers (`0xE8`, `0xE9`,
-`0xEA`). It does not participate in terrain-over-marker priority. The result
+`0xEA`: Poison, Sleep, Fire). It does not participate in terrain-over-marker priority. The result
 marker remains the low-level bridge into the terminal endgame handoff when the
 caller is a qualifying dungeon room. The unresolved portion is limited to
 per-subtype labels for unrelated special-placement values in the same dungeon
@@ -4762,7 +4842,9 @@ Negate Magic install a single shared visible tag/counter rather than writing a
 per-character status byte. A resident update helper ages this counter: zero and
 255 are inert, other values decrement when the committed non-digit action tail
 runs, and expiry clears the visible tag and requests a redraw. One early
-active-player denial route enters the same maintenance endpoint directly. This
+active-player denial route enters the same maintenance endpoint directly (it is
+the skipped turn of every non-selected command-group actor while an active
+player is selected; Section 11, field dissolution). This
 counter is not the time system's
 torch/light-spell counter; do not model it as one decrement per minute or per
 full actor-table sweep. Negate Time's `T` tag uses the same counter shape, while
@@ -5039,8 +5121,11 @@ Combat is built on top of several other systems and integrates cleanly with each
   arena, driven by the idle redraw tick rather than by the round loop, and its
   only combat-specific work is blinking the player cursor and optionally
   drawing a secondary marker (Section 7). It applies no hazards and is not the
-  ownership point for placed-field lifetime; field markers persist until combat
-  exit unless an explicit command or spell removes them.
+  ownership point for placed-field lifetime; field markers last until combat
+  exit unless the random maintenance dissolution of Section 11 or an explicit
+  command or spell removes them. *(Corrected 2026-10-28, issue #308 Q3: formerly
+  "field markers persist until combat exit unless an explicit command or spell
+  removes them"; retracted, `RETRACTIONS.md` R650.)*
 
 - **Spell system.** Combat shares the single player/party spell dispatcher
   described in `magic.md`. Combat-specific gates wrap the dispatcher's call
@@ -5118,7 +5203,7 @@ without independent behavioral consumers remain opaque metadata.
   victory bonus. Gold/food from a rewritten body-like slot is obtained only
   through the later Search/Get body rules in `containers.md`.
 
-- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, target-only combat-weight acceptance (`roll >= weight`), 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16 and Fireball rolls 1..30. Kill uses the same aiming/attack family, with an attack hit check before its instant-kill damage value; the former creature-target attribution is withdrawn (R446). The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep runs the shared resistance predicate before calling the shared sleep routine of Section 12, which writes status `'S'`, bit `0x08` and the prone marker for a party target and bit `0x08` for a non-party target *(corrected 2026-10-25, issue #302 Q6: formerly "party sleep status or descriptor byte 2 bit `0x08` for non-party targets"; retracted, `RETRACTIONS.md` R624)*. Poison Wind uses the distinct target-only combat-weight gate before poison status. Death Wind runs the shared resistance predicate before using the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers persist until combat exit restores the pre-combat active-object table.
+- **Multi-target spells.** Several combat spells are AOE or multi-target effects (Tremor, Poison Wind, Death Wind, Flame Wind). The effect-dispatch mechanism handles them by walking the actor table and applying the spell to each cell in the AOE; per-actor effect application can reuse the damage-and-status handler. Tremor's loop is exact at public semantic depth: no faction filter, target-only combat-weight acceptance (`roll >= weight`), 1..20 damage per accepted actor, shared damage/status application, and returned reward credited to caster experience. The separate active-target attack wrappers are also exact at public semantic depth: Magic Missile rolls 1..16 and Fireball rolls 1..30. Kill uses the same aiming/attack family, with an attack hit check before its instant-kill damage value; the former creature-target attribution is withdrawn (R446). The directed wind-cone family prompts for a cardinal direction and builds the widening clipped cone specified in `systems/magic.md`, with up to 63 de-duplicated arena coordinates. The shared scan de-duplicates actors and skips common empty/status-masked records, but neither that scan nor the Sleep/Poison Wind/Death Wind/Flame Wind per-effect branches run the friend/foe lookup or reject same-faction actors. Sleep runs the shared resistance predicate before calling the shared sleep routine of Section 12, which writes status `'S'`, bit `0x08` and the prone marker for a party target and bit `0x08` for a non-party target *(corrected 2026-10-25, issue #302 Q6: formerly "party sleep status or descriptor byte 2 bit `0x08` for non-party targets"; retracted, `RETRACTIONS.md` R624)*. Poison Wind uses the distinct target-only combat-weight gate before poison status. Death Wind runs the shared resistance predicate before using the decimal 99 instant-kill sentinel, and Flame Wind rolls raw 1..30 damage; the two damage winds credit returned monster-kill reward units to the caster with the normal 9999 cap. Mass Charm is now covered as a class-threshold active-effect target-selection remap rather than an actor-table damage/status scan. Field contact runs from the common post-dispatch hook for the current actor slot, not from a successful-step-only hook. Its scan skips the current descriptor's linked renderer record, not the current actor as target, so a separate colocated Poison, Sleep, or Fire marker affects that actor. Poison's accepted Good-party status arm consumes no randomness; its damage fallback rolls raw 0..20 with no defense draw. Fire rolls raw 0..10 with no defense draw. Energy is a blocking marker and has no contact payload in this hook. Before that scan, exact arena bytes for swamp, molten lava, and fireplace select the Poison or Fire result and suppress marker scanning. Doom absorption is a separate committed-action predicate over the renderer companion band, not arena terrain or a common-hook marker. The same terrain/field rule follows both player and AI dispatch, and contact does not consume the marker. Field markers dissolve at random during combat maintenance, one 1-in-16 removal draw per marker per pass (Section 11); any left are discarded at combat exit. *(Corrected 2026-10-28, issue #308 Q3: formerly "Field markers persist until combat exit restores the pre-combat active-object table"; retracted, `RETRACTIONS.md` R650.)*
 
 - **Status narration.** "Sleep!", "Poison!", "Charm!" lines are not produced by the damage-and-status handler. They live in separate per-effect handlers (one per status). The exact wording and trigger mechanics belong in those handlers' specs.
 

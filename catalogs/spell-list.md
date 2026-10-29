@@ -475,9 +475,12 @@ it uses the selected-member prompt and Sleeping-status gate (R409).
   raw `0..20` with no defense draw. Fire Field rolls raw `0..10` with no defense
   draw. Energy Field blocks movement and has no contact-result arm.
   The traced placement/contact/redraw path, generic active-object tick, and
-  monster death/record-clear path show no field countdown/decrement or
-  pre-exit removal; placed field markers persist until combat exit restores
-  the pre-combat active-object table.
+  monster death/record-clear path show no field countdown or decrement, but
+  each combat maintenance pass removes each field marker with a 1-in-16 draw
+  (`systems/combat.md` Section 11); survivors are discarded at combat exit.
+  *(Corrected 2026-10-28, issue #308 Q3: formerly "no ... pre-exit removal;
+  placed field markers persist until combat exit"; retracted, `RETRACTIONS.md`
+  R650.)*
 
 - `CX` / Kill spends its charge and seven MP through the standard cast
   gates, then uses `Aim! ` and the same attack-wrapper family as Magic Missile

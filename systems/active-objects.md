@@ -388,8 +388,12 @@ aging, or rewriting the marker record. Field markers are active-object-only
 records rather than paired combat-effect descriptors, so the monster
 death/record-clear path cannot age or remove them. The accepted-placement
 resident redraw helper and the generic active-object tick do not allocate,
-remove, or decrement field marker records. Their presence is combat-local: they
-persist until the framer restores the pre-combat active-object table on exit.
+remove, or decrement field marker records. Their presence is combat-local:
+each combat maintenance pass gives every field marker a 1-in-16 removal draw
+(`systems/combat.md` Section 11), and survivors are discarded when the framer
+restores the pre-combat active-object table on exit. *(Corrected 2026-10-28,
+issue #308 Q3: formerly "they persist until the framer restores the pre-combat
+active-object table on exit"; retracted, `RETRACTIONS.md` R650.)*
 
 Projectile and impact visuals are not active-object records. The combat and
 spell projectile path builds a temporary line in scratch path buffers, steps
