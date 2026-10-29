@@ -297,7 +297,7 @@ Opened 2026-10-25 by the issue #302 Q6 Sleep Field pass:
 
 | Item | Where | What settles it |
 |---|---|---|
-| A party member falling asleep on a Sleep Field in combat: no `slept!` line, the banner and `>Zzzzz...` on every own turn, and the immediate re-sleep after a successful wake draw, so the member never acts again that combat. Executed on the original routines with printer, generator and frame stubbed; no capture. *(Issue #302 Q6, R624.)* | `systems/combat.md` Sections 8.1 and 11 | A stock capture of a member stepping onto a cast In Zu Grav field and holding through several turns. |
+| A party member falling asleep on a Sleep Field in combat: no `slept!` line, the banner and `>Zzzzz...` on every own turn, and the immediate re-sleep after a successful wake draw, so the member stays asleep while the field lasts; the field dissolves at random during maintenance, which also runs on the sleeper's own asleep dispatches *(corrected 2026-10-28, issue #309: formerly "so the member never acts again that combat"; retracted, `RETRACTIONS.md` R651)*. Executed on the original routines with printer, generator and frame stubbed; no capture. *(Issue #302 Q6, R624.)* | `systems/combat.md` Sections 8.1 and 11 | A stock capture of a member stepping onto a cast In Zu Grav field and holding through several turns. |
 
 Opened 2026-10-26 by the issue #303 Q2 Stonegate fall-timing pass:
 
@@ -375,6 +375,7 @@ Opened 2026-10-28 by the issue #308 Q3 field-marker pass:
 | Item | Where | What settles it |
 |---|---|---|
 | No capture shows a combat field marker dissolving. The 1-in-16 removal pass was executed in isolation on the original code, and its place in the maintenance endpoint is static reading. *(Issue #308 Q3, R650.)* | `systems/combat.md` Section 11 ("Field markers dissolve at random") | A stock save in which a field is placed in combat, followed by several committed actions, with the marker records and draw count observed. |
+| No capture shows a sleeper on a Sleep Field escaping. That the asleep, dragged-under and Sword of Chaos arms enter the maintenance endpoint was executed on the original chain, and the escape statistics (mean 31.6 asleep dispatches over 120 seeds) were executed with world ticks stubbed; the dragged-under release routine, the automatic driver body and the tail's post-action step were stubbed in every run, and the per-living-wearer regeneration rule ran with one wearer only. *(Issue #309.)* | `systems/combat.md` Section 11 ("The three keyless arms enter the endpoint" and the sleeper paragraph) | A stock capture from a dungeon save: a member steps onto a cast In Zu Grav field while the others leave the arena, and the count of `>Zzzzz...` turns before the next prompt is observed over several trials (expected finite, about 31 on average). Shipped room data places no Sleep Field marker (issue #308), so the field must be cast. |
 
 ## 3. Needs a further static trace
 
@@ -740,12 +741,6 @@ Opened 2026-10-28 by the issue #308 Q2 room-demotion pass:
 |---|---|---|
 | Whether fleeing a dungeon room returns the room-combat loss result, in which case the room helper skips both the in-place `0xF?` to `0xA?` patch and the room-clear bit, so a fled room stays armed. Only the party-side-emptied-while-foes-remain case is established as the loss result. *(Issue #308 Q2.)* | `systems/dungeon-mode.md` Section 5 ("Room trigger") | Flee a dungeon room fight in the original and read the trigger cell and the room-clear bit afterwards, or trace the combat exit paths' return value. |
 | That the tail of the K-Klimb path, after the level change is committed (status repaint, monster re-seed, view repaint), never reaches the demotion pass rests on the whole-game static call census; the executed probe stopped during the status repaint. *(Issue #308 Q2, R647.)* | `systems/dungeon-mode.md` Section 5 | Execute K-Klimb through to the next command prompt with the demotion entry watched. |
-
-Opened 2026-10-28 by the issue #308 Q3 field-marker pass:
-
-| Item | Where | What settles it |
-|---|---|---|
-| Whether the combat maintenance endpoint (worn-ring hook, field pass, timed-counter ageing) runs at the end of three command-handler arms: the asleep no-command arm (`Zzzzz...`), the dragged-under arm (`ARGH!`), and the party-side arm that hands the member's turn to the automatic driver and then continues into the committed-action tail. On all three the tail's decision rests on a value the arm never sets, so the outcome depends on leftover state and is not established. *(Issue #308 Q3.)* | `systems/combat.md` Section 11 ("Field markers dissolve at random") | A trace of what that value holds on entry to each arm, or an executed run of each arm from a stock combat with a field marker present and the draw count observed. |
 
 ## 4. Deferred by scope
 

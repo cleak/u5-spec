@@ -2215,6 +2215,10 @@ encounter-entry-only. Digits `0` through `6` use their selection/UI path and
 also skip this tail. Accepted Escape reaches the committed path only after its
 handler has cleared the combat descriptors, so the later ring hook has no
 eligible acting slot and does nothing.
+Eligible means party-side and neither asleep nor removed, so an asleep member's
+maintenance pass makes no regeneration roll, while a dragged-under wearer's
+does (Section 11, "The three keyless arms enter the endpoint"). *(Added
+2026-10-28, issue #309.)*
 
 **Diagonal input and the targeting cursor.** Combat is the one place in the game
 that accepts eight-way input, and it is not movement. The full cursor contract is
@@ -3678,7 +3682,17 @@ sleep straight away, before any other actor acts: the woken party member's `G`
 lasts only until the end of that same dispatch. A sleeper cannot move, so an
 actor asleep on a Sleep Field is put back to sleep after each of its dispatches
 for as long as that field lasts. Field markers dissolve at random during
-maintenance (below). Once this one is gone the actor is no longer re-slept, but
+maintenance (below). Maintenance runs on each of the sleeper's own asleep
+dispatches, so the field under it gets one removal draw per such dispatch,
+after that dispatch's wake draw and before the contact hook; a wake on the
+dispatch in which the field dissolves therefore sticks. An actor alone and
+asleep on a Sleep Field is not stuck: it needs about 31 asleep dispatches on
+average (about 16 for the field to go, then about 15 more for a wake) before it
+gets a keyboard turn. Executed multi-turn runs of the original chain (world
+ticks stubbed) gave a mean of 31.6 over 120 seeds, median 29, range 3 to 98,
+none stuck; a verifier's re-run matched. *(Added 2026-10-28, issue #309; the
+per-dispatch draw accounting is in "The three keyless arms enter the endpoint"
+below.)* Once this one is gone the actor is no longer re-slept, but
 it stays asleep until its own wake draw succeeds (Section 8.1 or Section 6.2
 above); the field dissolving does not wake it. *(Corrected 2026-10-28, issue
 #308 Q3: this formerly said markers persist until combat exit, so that such an
@@ -3725,11 +3739,15 @@ and Section 12). That endpoint runs three steps in this order:
    objects (items, corpses, actor sprites) are not examined and cost nothing.
 3. The timed-magic counter ageing.
 
-The endpoint is reached on two routes:
+The endpoint is reached on three routes *(corrected 2026-10-28, issue #309:
+formerly "two routes", without the third bullet; retracted, `RETRACTIONS.md`
+R651)*:
 
 - **After a committed command-prompted action.** A party member's or
   controlled monster's committed non-digit action ends in the committed-action
   tail of Section 8, which enters the endpoint.
+- **On every asleep, dragged-under or Sword of Chaos dispatch of a
+  command-group actor**, as described below. *(Added 2026-10-28, issue #309.)*
 - **On every skipped turn while an active player is selected.** When a
   different party member is the selected active player, the turn of every
   other command-group actor (a party member, or a controlled monster) is
@@ -3743,15 +3761,82 @@ It is not reached by free re-prompts or the `0` through `6` selection digits
 through the automatic driver instead of the command handler. That includes
 automatic party-side slots, such as a traitor or a party slot with the
 controlled bit (`0x01`) set, which are also routed to the automatic driver,
-except for the forwarding arm named next. Three command-handler arms are not
-established either way: the asleep no-command arm (`Zzzzz...`), the
-dragged-under arm (`ARGH!`), and the party-side arm that hands the member's
-turn to the automatic driver and then continues into the committed-action
-tail. On those three the tail's decision to enter the endpoint rests on a
-value the arm never sets, so whether a field pass runs there is not
-established (`OPEN-QUESTIONS.md`, section 3). Any markers that survive are
+except for the forwarding arm named next. Any markers that survive are
 discarded at combat exit, when the combat framer restores the pre-combat
 active-object table.
+
+**The three keyless arms enter the endpoint.** *(Added/corrected 2026-10-28,
+issue #309.)* Three further command-handler arms enter the endpoint on every
+dispatch, even though none of them reads a key: the asleep no-command arm
+(`Zzzzz...`), the dragged-under arm (`ARGH!`), and the party-side Sword of Chaos
+arm that hands the turn to the automatic driver and then continues into the
+committed-action tail. The tail's digit test on these arms does not see stale
+input from an earlier turn. Just before the round walker calls the command
+handler, its self-acting check leaves the acting slot's own combat-descriptor
+flags, as read on this same dispatch, where the handler later looks for its
+last key, and the handler replaces that value only when it actually reads a
+key. So on these three arms the test sees the slot's flags. The round walker
+dispatches only a slot whose party-side or monster-side bit is set and whose
+removed bit is clear (as read at its dispatch gate), so that value is never a
+`0` through `6` selection digit, and the tail enters the endpoint, then runs its
+usual world tick and post-action step. On the Chaos arm the value is the flags
+as they stood before the arm set the controlled bit, with the same result. The
+outcome is fixed and identical on the first and every later dispatch.
+"Every dispatch" holds deterministically, in program order; only an
+asynchronous hardware interrupt arriving in a window of a few instructions
+between the check and the handler could disturb the value, and at worst that
+skips one maintenance pass, so a clean engine should simply run maintenance on
+every such dispatch. A charmed monster asleep on its keyboard turn takes the
+asleep arm and so also gets maintenance. *(This replaces the earlier statement
+that whether a field pass runs on these three arms was not established.)*
+
+Per-dispatch draw accounting on these arms, in order:
+
+- **Asleep party member:** the wake draw (one inclusive `0..255` gameplay draw,
+  waking below 16, silent); `Zzzzz...` and the tail's stats refresh (no draw);
+  the maintenance endpoint, in which the worn-ring hook does nothing (Section
+  8: an asleep actor is not eligible, so an asleep Ring of Regeneration
+  wearer triggers no regeneration sweep on its asleep turn), the field pass makes one `0..255` draw
+  per field marker in the arena, and ageing makes none; one world tick, with its
+  usual variable draws; the tail's post-action step, which is the Doom-map
+  absorption check described below and makes no draw (it does nothing outside
+  that map); then the post-dispatch contact hook. If a Sleep Field marker is
+  still under the member the sleep routine runs again: no draw of its own, but
+  one more world tick (Section 12). With the marker gone there is no contact and
+  no extra tick. Fixed draws per asleep dispatch are therefore 1 plus the number
+  of field markers, plus one world tick, or two while the member is still on a
+  live Sleep Field.
+- **Asleep charmed monster:** the same, with the ring hook inert because the
+  slot is not party-side.
+- **Dragged-under party member:** the `1..30` release draw; the ring hook, which
+  does run here, so if the held member wears a Ring of Regeneration the
+  party-wide sweep draws one `0..7` value per living wearer (Section 12); the
+  field pass; ageing; a world tick; the post-action step;
+  the contact hook.
+- **Sword of Chaos party member:** the automatic driver's own draws (Section 9),
+  then the ring hook, the field pass, ageing, a world tick, the post-action step
+  and the contact hook.
+
+Evidence for this paragraph and the accounting: the original round walker's
+slot body, its real self-acting check, the real command handler, maintenance
+endpoint, ring hook, field pass and record clear were executed with the
+handler's key storage pre-set to a selection digit, for an asleep party member,
+a dragged-under party member, a Chaos-armed party member and an asleep charmed
+monster; in all four the tail saw the slot's flags and the endpoint ran, and a
+verifier re-ran the probes with matching results. Stubbed in every run: world
+ticks (counted as calls only), the dragged-under release routine and its
+`1..30` draw, the automatic driver's body, and the tail's post-action step, so
+the dragged-under and Chaos draw orders rest partly on the already-published
+arm descriptions, and the one-roll-per-living-wearer rule was executed with a
+single wearer. Static reading, re-read by a verifier: that the handler has a
+single caller, that nothing replaces the stored value between the check and the
+handler on these arms, the dispatch gate, the ring hook's eligibility and that
+the post-action step is the Doom-map check. The check re-reads the flags after
+its every-tenth-dispatch turn-clock call, so "never a digit" strictly describes
+the value at the gate; a digit-range value would also need the party-side and
+monster-side bits cleared within that call, which nothing indicates. No capture
+exists (`OPEN-QUESTIONS.md`, section 2). Source provenance: derived from private
+analysis in `u5-decomp/notes/`.
 
 *(Corrected 2026-10-28, issue #308 Q3: this paragraph formerly said no traced
 path contained a pre-exit removal and that "placed markers persist until
@@ -3759,8 +3844,9 @@ combat exits"; retracted, `RETRACTIONS.md` R650.)* Evidence: the pass was
 executed with the original resident generator and record-clear body over 4000
 calls, giving about 250 removals for each of the four field ids (each near
 1/16) and none for non-field ids; its position inside the maintenance endpoint
-and the endpoint's two routes are static reading, re-read by a verifier. No
-capture shows a field dissolving.
+and the endpoint's first two routes are static reading, re-read by a verifier
+(the third route's evidence is given above, issue #309). No capture shows a
+field dissolving.
 
 Separate from player-cast field markers and arena-terrain contact, one special
 combat path handles an actor being absorbed by a scripted field-like cell. It
@@ -4828,7 +4914,11 @@ worn-ring hook. Later, the combat parser's committed-action tail sends its
 acting party-side slot through the same hook. A free refusal branches back to
 input before this tail (Section 8), so repeatedly pressing `Q` or `X` cannot
 farm regeneration rolls or refresh an effect boundary. This is action-tail
-cadence, not an unconditional once-per-round sweep.
+cadence, not an unconditional once-per-round sweep. The same tail also runs on
+the keyless dragged-under, asleep and Sword of Chaos dispatches (Section 11,
+"The three keyless arms enter the endpoint"); the hook acts there for a
+dragged-under or Chaos-armed member but not for an asleep one, which is not
+eligible. *(Added 2026-10-28, issue #309.)*
 
 The separate 1-in-16 check that destroys a worn Ring of Invisibility or Ring
 of Regeneration — printing `A ring has vanished!`, playing the short timed
