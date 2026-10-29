@@ -945,7 +945,7 @@ that many records to walk; its per-record draw count is record-dependent and is
 not characterised here. **The total could not be pinned statically** - it
 depends on the redraw gate, the first-tick flag, the party size, and which arm
 of the animation dispatch each record takes - so it is a measured quantity, not
-a modelled one.
+a modelled one. *(Added 2026-10-29, issue #310 Q2.)* The per-record recipe for an arena tick, and executed figures for one encounter, are in Section 11, "Which combat dispatches run a world tick"; the count remains unbounded because of the wind check.
 
 *Retracted:* an earlier revision of this paragraph listed the three arms in the
 reverse order (wind first, then the animation pass, then the visibility pass),
@@ -971,7 +971,7 @@ one extra world tick sits between the last monster placement and the first
 actor's action. At that point the object table holds the party *and* every
 placed monster, so this tick has strictly more qualifying records than the
 mid-setup one and its count is at least as undetermined. The prologue's other
-calls draw nothing, directly or transitively.
+calls draw nothing, directly or transitively. *(Added 2026-10-29, issue #310 Q2.)* The per-record recipe for an arena tick, and executed figures for one encounter, are in Section 11, "Which combat dispatches run a world tick"; the count remains unbounded because of the wind check.
 
 **Do not publish or assume a maximum for any of the three world ticks.** The
 autonomous wind-drift roll draws once in the common case; on an uncommon result
@@ -1692,7 +1692,7 @@ nothing, directly or transitively.
    walkability guard freezes actors the original leaves acting. Section 7.1 has
    the full contract.)*
 4. **Decrement the actor's phase counter.** While non-zero, the slot does not act this round. When it reaches zero, the actor *does* act.
-5. **On zero, refresh the counter and act.** The counter is reset to `36 - base_step`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine fires a tile-render pass for animation.
+5. **On zero, refresh the counter and act.** The counter is reset to `36 - base_step`. A round-counter at the table level is incremented and wrapped at ten; on every wrap, the engine runs the ordinary one-minute clock cleanup (`systems/time.md` Section 10, "Combat round"; `systems/inventory.md`), and this call runs no world tick. *(Corrected 2026-10-29, issue #310 Q2: this formerly said the wrap "fires a tile-render pass for animation"; retracted, `RETRACTIONS.md` R654.)*
 6. **Dispatch the actor's turn.** A single faction helper classifies the slot and returns a group id, and the branch on that result is the whole dispatch: a **non-zero** group sends the slot to the **autonomous driver** (Section 9), and a **zero** group sends it to the **player-command driver** (Section 8). *(**Corrected.** An earlier revision of this step described the second arm as "the AI-then-command handler that runs the AI synthesis path before falling into the same dispatch". **That is withdrawn** - there is no synthesis and no shared per-letter dispatch (`RETRACTIONS.md` R353), and the two arms are two separate drivers selected by the polarity above.)* The classification is not simply "player or monster". A slot already marked dead classifies as group zero; an ordinary party member classifies as group zero and an ordinary monster as group one; a monster carrying the controlled/charmed bit classifies as group **zero** and is therefore driven from the player's prompt, while a party member carrying that bit classifies as group **one** and is driven autonomously (Section 6.1a). Independently of the helper, the player-command driver's own Sword-of-Chaos arm hands a party character to the autonomous driver for that one action.
 7. **Mark the slot acted, run the standing-cell hazard pass, then the post-action render.** These are two separate steps and only the second one draws. The hazard pass reads the arena terrain under the actor that just acted, and — if that terrain is not itself damaging — scans the object table for any object other than the actor's own sitting on the same cell. Three damaging kinds are recognized, each with its own effect: a low tier that applies the party status/damage path with the no-attacker sentinel and plays the hit sound, but only while the actor's own object entry is an ordinary live entry; a middle tier that plays the hit sound, rolls a small random amount, feeds it to the damage-and-status resolver, runs the shared finalize hook and **requests a party stats-panel refresh**; and a top tier that routes the actor into the same **sleep** effect a Gazer's gaze applies. *(**Corrected** twice. "Raises the leave-combat flag" is withdrawn: the byte is a display-refresh request and nothing leaves combat on it - see "The middle tier's flag" below. "Petrify-style special effect" is withdrawn: the effect is sleep, not petrification or stoning - see "The top tier's effect" below and Section 12.)* A cell with none of these kinds costs the actor nothing. Only after the hazard pass does the separate render step redraw changed cells and run any post-action sound or particle effect. Death narration runs here when relevant.
 
@@ -2215,10 +2215,17 @@ encounter-entry-only. Digits `0` through `6` use their selection/UI path and
 also skip this tail. Accepted Escape reaches the committed path only after its
 handler has cleared the combat descriptors, so the later ring hook has no
 eligible acting slot and does nothing.
-Eligible means party-side and neither asleep nor removed, so an asleep member's
-maintenance pass makes no regeneration roll, while a dragged-under wearer's
+Eligible means party-side and neither asleep nor removed, so a member still
+asleep at the hook makes no regeneration roll, while a dragged-under wearer's
 does (Section 11, "The three keyless arms enter the endpoint"). *(Added
-2026-10-28, issue #309.)*
+2026-10-28, issue #309.)* Eligibility is read from the acting slot's live
+combat state each time the hook runs, not from anything recorded when the
+dispatch began. On the asleep arm the wake draw comes first, so on the dispatch
+where it succeeds the member is already awake when the hook runs and the hook
+acts for that member's own ring (Section 11). *(Corrected 2026-10-29, issue
+#310 Q1: this formerly read "an asleep member's maintenance pass makes no
+regeneration roll" with no exception for the waking dispatch; retracted,
+`RETRACTIONS.md` R652.)*
 
 **Diagonal input and the targeting cursor.** Combat is the one place in the game
 that accepts eight-way input, and it is not movement. The full cursor contract is
@@ -3754,7 +3761,9 @@ R651)*:
   denied before its banner by the active-player gate (Section 8.1), and that
   denial enters the same endpoint directly. So with an active player selected,
   each skipped turn of every other command-group actor costs one draw per
-  field marker and can dissolve markers.
+  field marker and can dissolve markers. This route enters the endpoint and
+  returns at once: it runs no stats refresh, no world tick and no post-action
+  step. *(Added 2026-10-29, issue #310 Q2.)*
 
 It is not reached by free re-prompts or the `0` through `6` selection digits
 (Section 8), nor by the turns of self-acting (automatic) actors, which run
@@ -3794,9 +3803,22 @@ Per-dispatch draw accounting on these arms, in order:
 
 - **Asleep party member:** the wake draw (one inclusive `0..255` gameplay draw,
   waking below 16, silent); `Zzzzz...` and the tail's stats refresh (no draw);
-  the maintenance endpoint, in which the worn-ring hook does nothing (Section
-  8: an asleep actor is not eligible, so an asleep Ring of Regeneration
-  wearer triggers no regeneration sweep on its asleep turn), the field pass makes one `0..255` draw
+  the maintenance endpoint. Its worn-ring hook checks eligibility against the
+  actor's live state when the hook runs (Section 8). On a dispatch whose wake
+  draw failed, the member is still asleep and the hook does nothing. On the
+  dispatch whose wake draw succeeded, the wake has already restored `G`, the
+  member's frame (or the hidden frame for an invisible member) and the stats
+  panel, and cleared the asleep state, before `Zzzzz...` is printed (it is
+  still printed on that dispatch). So the hook acts for the member's own ring
+  as for any awake member: if the waking member wears a Ring of Regeneration,
+  it triggers the party-wide sweep, one inclusive `0..7` draw per wearer who is
+  not Dead, asleep wearers included, a 7 healing 1 HP up to maximum; if it
+  wears a Ring of Invisibility, its hidden presentation is reasserted. A waking
+  member who wears no ring triggers no sweep, even if other members wear one.
+  *(Corrected 2026-10-29, issue #310 Q1: this formerly said the hook does
+  nothing because "an asleep Ring of Regeneration wearer triggers no
+  regeneration sweep on its asleep turn"; that holds only for failed-wake
+  dispatches; retracted, `RETRACTIONS.md` R652.)* Then the field pass makes one `0..255` draw
   per field marker in the arena, and ageing makes none; one world tick, with its
   usual variable draws; the tail's post-action step, which is the Doom-map
   absorption check described below and makes no draw (it does nothing outside
@@ -3804,8 +3826,13 @@ Per-dispatch draw accounting on these arms, in order:
   still under the member the sleep routine runs again: no draw of its own, but
   one more world tick (Section 12). With the marker gone there is no contact and
   no extra tick. Fixed draws per asleep dispatch are therefore 1 plus the number
-  of field markers, plus one world tick, or two while the member is still on a
-  live Sleep Field.
+  of field markers (plus, on the waking dispatch of a Regeneration wearer, one
+  per wearer who is not Dead), plus one world tick, or two while the member is
+  still on a live Sleep Field. If the member is still on a live Sleep Field,
+  the contact hook re-sleeps it after the sweep has already run. On the waking
+  dispatch the tail's world tick also animates the woken member's sprite
+  again; a sleeping member's prone frame takes no animator draw. *(Added
+  2026-10-29, issue #310 Q1.)*
 - **Asleep charmed monster:** the same, with the ring hook inert because the
   slot is not party-side.
 - **Dragged-under party member:** the `1..30` release draw; the ring hook, which
@@ -3836,6 +3863,118 @@ its every-tenth-dispatch turn-clock call, so "never a digit" strictly describes
 the value at the gate; a digit-range value would also need the party-side and
 monster-side bits cleared within that call, which nothing indicates. No capture
 exists (`OPEN-QUESTIONS.md`, section 2). Source provenance: derived from private
+analysis in `u5-decomp/notes/`.
+
+*Waking-dispatch evidence (added 2026-10-29, issue #310 Q1).* The ring hook's
+reading of live state, and the wake's ordering before it, were executed on the
+original resident and overlay chain twice: over sequential dispatches with
+natural wakes (world ticks stubbed), and in a full-game run that entered a real
+terrain combat with an asleep Ring of Regeneration wearer and a second wearer.
+With the wake draw forced below 16 on one dispatch, that dispatch showed the
+stats redraw, then `Zzzzz...`, then maintenance with two `0..7` draws (one per
+living wearer), then the tail's world tick, whose animator now included the
+woken member's record. The failed-wake dispatches showed maintenance with no
+`0..7` draw, and the other wearer's committed actions each showed two. So the
+one-roll-per-living-wearer rule has now also been executed with two wearers.
+That the hook reads live state on every run is static reading, re-checked by a
+verifier and consistent with every run. Source provenance: derived from
+private analysis in `u5-decomp/notes/`.
+
+**Which combat dispatches run a world tick.** *(Added 2026-10-29, issue #310
+Q2.)* The command handler has exactly two exits. The **active-player denial
+route** enters the maintenance endpoint and returns at once, with no stats
+refresh, no world tick and no post-action step. Every other completed dispatch
+leaves through **the tail**: if the handler's stored key is a selection digit
+`0` through `6` it returns with no maintenance and no tick; otherwise it runs
+maintenance, then exactly one world tick, then the post-action step. Free
+re-prompts loop back inside the handler and reach neither exit. Per path:
+
+| Path | Per-dispatch world tick | Evidence |
+|---|---|---|
+| Committed command-prompted action, including Space `Pass` | One tail tick, after maintenance | Executed |
+| Accepted Escape | One tail tick: the Escape handler's result falls through to the tail with the Escape key stored, so maintenance and the tick run | Static reading |
+| Asleep arm (`Zzzzz...`), failed or successful wake | One tail tick | Executed |
+| Dragged-under (`ARGH!`) and Sword of Chaos arms | One tail tick. The Chaos arm runs the automatic driver first, and that driver can run its own step tick (last row) | Static reading; the tick call itself was reached, stubbed, in the issue #309 runs |
+| Active-player denial | None; maintenance only | Executed |
+| Accepted `1` through `6` selection, `0` clear | None, and no maintenance | Executed |
+| Failed digit (`Invalid!`), refused Escape (`-Not yet!`) | None; re-prompt within the dispatch | Executed |
+| Other free refusals, blocked Klimb (`What?`), refused Up/Down departure | None; re-prompt within the dispatch | Static reading |
+| In-arena Klimb ended by Space `Pass` at the adjacent prompt | One tail tick | Executed |
+| In-arena Klimb that applies a rock climb | One tail tick | Static reading |
+| In-arena Klimb that accepts an Up/Down departure | **Not established.** The action leaves the arena, and whether a tail tick runs there was not executed or settled | Open (`OPEN-QUESTIONS.md`, section 3) |
+| Self-acting turn (monster, or an automatic party-side slot) | No tail. The automatic driver runs one world tick only when its step reports that the actor moved. An attack turn, a sleeping monster's turn (its `0..16` wake draw), a held actor's turn and the driver's other early outs run no driver tick | Moves executed; early outs static reading; the step that leaves the arena is inferred, not executed |
+
+An attack's own presentation can run further ticks: one executed monster melee
+hit ran two, one inside the hit-impact figure and one after the damage report.
+Party-side attack presentations and other attack forms were not checked
+(`OPEN-QUESTIONS.md`, section 2).
+
+Ticks that belong to no dispatch path: every no-key poll at any combat prompt
+(`systems/input.md` Section 2); the mid-setup tick and the round loop's single
+entry prologue tick (Section 5.3, steps 6 and 8); the asleep-member seating
+tick (Section 5.3, step 3); the sleep routine's tick when the contact hook
+re-sleeps an actor (Section 12); and presentation pauses. The every-tenth
+dispatch counter wrap advances the game clock by one minute and runs no world
+tick (Section 7, step 5).
+
+*Draws per world tick in an arena.* While the world tick's gates are open (the
+master redraw gate set and Negate Time not active, `systems/animation.md`
+Section 13.1; under the freeze none of the following runs), one arena tick
+draws in this order:
+
+1. **The active-object animator** walks all thirty-two records under the rules
+   of `systems/active-objects.md` Section 8. A record costs nothing when it is
+   empty; when it is in a delay or frozen phase (an asleep monster is frozen,
+   and a member pausing after a snap is in a delay); when its frame byte is
+   zero, the invisible frame `0x1D`, or `0x1E` (a sleeping member's prone frame
+   or a party corpse); when its class is below `0x34` (corpses `0x1F`, drop
+   markers `0x01`, chests); and for the field markers `0xE8..0xEB` and the
+   regalia band. Of the remaining records, classes `0x5C` and the mimic `0xA8`
+   take no coin and every other class takes one inclusive `0..255` coin; when
+   the coin passes, each snap or 6-step taken in that pass costs one more draw.
+   Combat sprite records sit at a decision point on almost every tick, so in
+   practice each awake, visible, living combatant costs about one coin per
+   tick, and a script-A combatant (party sprites among them) drops out for six
+   ticks after a successful snap.
+2. **The wind check**: one `0..63` draw. When it fires (1 in 64) it takes
+   further draws for the direction and the calm confirmation, with no bound
+   (`systems/prng.md` Section 4).
+3. **Nothing else.** There is no moongate refresh or beacon step in combat
+   (`systems/animation.md` Section 13.2). The viewport composite takes no draw
+   unless a composited actor stands on a selecting cell (stocks, manacles,
+   mirror, or a chair at a laden table; `systems/visibility.md` Section 8), so
+   it costs nothing in an ordinary arena; that exception is inferred from the
+   compositor rules and no such arena was run. The ambient tick draws nothing.
+
+Executed figures, from one grass-arena orc encounter (three party members, four
+orcs, one seed, about 157 world ticks across the runs, every draw attributed to
+its tick and caller): each tail tick and driver step tick cost seven coins,
+zero to two snap draws and one wind draw, 8 to 10 draws in all, falling to 6
+or 7 while a member paused after a snap; the asleep member took no animator
+draw until the tick on its waking dispatch; the prologue tick took 8 (seven
+coins and the wind draw); the mid-setup tick, before any monster was placed,
+took 4 (three party coins and the wind draw); and the wind check fired three
+times, adding 1, 1 and 3 extra draws. The count scales with the combatant set
+and their scripts, and other classes (gazer pauses, mimic and corpser freezes,
+the two coinless classes) were not run in an arena, so these figures are an
+example and not a bound.
+
+An engine that runs no tail tick on combat paths falls one full arena tick
+behind on every committed action and every keyless arm, and one on every
+self-acting move. It does not fall behind on denials, digits, free re-prompts,
+or attack turns apart from their presentation ticks.
+
+Evidence: a full original-code run from a Journey Onward boot into a real
+terrain encounter entered through the game's own entry routine, with every
+draw attributed to its world tick and caller, covered committed `Pass`, `K`
+then Space, an invalid digit, a valid selection, active-player denials, `0`,
+refused Escape, monster moves, a monster melee hit, and asleep and waking
+dispatches. One mis-decoded jump in the emulator was patched to its true
+target, and the overlay in memory was verified identical to the file. The two
+exits, accepted Escape, the dragged-under and Chaos tail order, the driver's
+early outs, blocked and refused Klimb, the applied rock climb and the ten-wrap
+callee are static reading, re-checked by a verifier. No capture exists
+(`OPEN-QUESTIONS.md`, section 2). Source provenance: derived from private
 analysis in `u5-decomp/notes/`.
 
 *(Corrected 2026-10-28, issue #308 Q3: this paragraph formerly said no traced
@@ -4917,8 +5056,11 @@ farm regeneration rolls or refresh an effect boundary. This is action-tail
 cadence, not an unconditional once-per-round sweep. The same tail also runs on
 the keyless dragged-under, asleep and Sword of Chaos dispatches (Section 11,
 "The three keyless arms enter the endpoint"); the hook acts there for a
-dragged-under or Chaos-armed member but not for an asleep one, which is not
-eligible. *(Added 2026-10-28, issue #309.)*
+dragged-under or Chaos-armed member, and for a sleeper on the dispatch in which
+its wake draw succeeds, but not for a member that is still asleep when the hook
+runs. *(Added 2026-10-28, issue #309; corrected 2026-10-29, issue #310 Q1:
+this formerly said the hook does not act for an asleep member at all;
+retracted, `RETRACTIONS.md` R652.)*
 
 The separate 1-in-16 check that destroys a worn Ring of Invisibility or Ring
 of Regeneration — printing `A ring has vanished!`, playing the short timed
@@ -5202,7 +5344,7 @@ Combat is built on top of several other systems and integrates cleanly with each
 
 - **Text output.** All combat narration flows through the per-cell emitter and wrap-aware string printer described in `text-output.md`. Combat does not maintain its own text window; it writes to whichever window was active before the fight.
 
-- **Input.** The player command handler reads via the same wait-for-input routine described in `input.md`. The scene byte is set to the combat sentinel during the fight, so the world-tick step is suppressed; the cursor blink is the only background animation. Free-text and Y/N prompts within combat use the same prompt-mode mechanism.
+- **Input.** The player command handler reads via the same wait-for-input routine described in `input.md`. The scene byte is set to the combat value during the fight, which lies outside the suppressed band, so every no-key poll at a combat prompt runs a world tick, which animates the combat sprites and takes the wind draw (Section 11, "Which combat dispatches run a world tick"). Free-text and Y/N prompts within combat use the same wait. *(Corrected 2026-10-29, issue #310 Q2: this formerly said that in combat "the world-tick step is suppressed; the cursor blink is the only background animation"; retracted, `RETRACTIONS.md` R653.)*
 
 - **Time.** Combat advances time at one specific point — when the round counter wraps inside a round (corresponding to one full actor walk under typical game pacing). The wrap fires the per-turn cleanup with a one-minute increment, exactly as the town and dungeon loops do.
 
@@ -5341,7 +5483,7 @@ without independent behavioral consumers remain opaque metadata.
   suppression-filter exceptions are now labelled as Doom and Shadow Lord, and
   the centre fallback's flee-bit writer is specified above.
 
-- **Round counter wrap at ten.** The per-round counter wraps at ten and fires a tile-render on every wrap. Likely a "render every N actor-turns" cadence balancing CPU cost on original hardware. A modern implementation can treat it as "redraw every frame" without preserving the cadence.
+- **Round counter wrap at ten.** The per-dispatch counter wraps at ten and runs the one-minute clock cleanup on every wrap; it is a game-clock cadence, not a render cadence, and it runs no world tick (Section 7, step 5). *(Corrected 2026-10-29, issue #310 Q2: this formerly said the wrap "fires a tile-render" and could be treated as "redraw every frame" without preserving the cadence; retracted, `RETRACTIONS.md` R654.)*
 
 - **Faction edge cases — closed.** An exhaustive census found no additional
   reachable class-specific faction remaps. Section 16.1 gives the complete

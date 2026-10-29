@@ -518,9 +518,18 @@ layer.
 
 Combat has its own phase-counter system for actor initiative. That combat
 phase model is separate from the active-object visual phase described here.
-During combat, the round loop owns actor timing and actions; the world idle
+During combat, the round loop owns actor timing and actions, but the world step
+is not suppressed. When the world tick's gates are open (not under the Negate
+Time freeze, Section 13.1), every world tick in an arena runs the active-object
+animation step over the combat sprite records and takes the wind-check draw.
+That includes each no-key poll at a combat prompt, the committed-action tail, a
+self-acting actor's move, the round loop's entry prologue and presentation
+pauses; only the moongate refresh and the beacon step are skipped (Section
+13.2). The per-path table and the per-tick draw recipe are in
+`systems/combat.md` Section 11, "Which combat dispatches run a world tick".
+*(Corrected 2026-10-29, issue #310 Q2: this formerly said "the world idle
 animation path is suppressed except for presentation effects that the combat
-loop explicitly invokes.
+loop explicitly invokes"; retracted, `RETRACTIONS.md` R653.)*
 
 When combat exits, the combat framer restores the world active-object table.
 The restored slots bring back their saved phase bytes, so the world resumes
