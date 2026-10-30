@@ -125,7 +125,13 @@ pass runs on every invocation.
 
 *When the pass runs.* Once per turn-consuming action in overworld mode, town
 mode, and dungeon mode, invoked from each mode's per-turn epilogue after the
-cleanup call has already advanced the clock. It also runs once per ten-minute
+cleanup call has already advanced the clock. In the dungeon the minute is
+charged at the head of the iteration, but the pass runs only after a command
+that acted and never on the iteration that leaves the dungeon
+(`systems/dungeon-mode.md` Section 4) *(added 2026-10-30, issue #313 Q1)*. A
+successful Gate Travel reports "no action", so its cast turn runs neither the
+minute nor this pass (`systems/magic.md`, the Gate travel row) *(added
+2026-10-30, issue #313 Q2)*. It also runs once per ten-minute
 step of the town-bed rest loop. It does **not** run in combat mode, and it does
 not run inside the wilderness camp loop, which advances the clock in
 five-minute steps without entering this pass. A command whose result skips
@@ -186,12 +192,34 @@ increment; a zero-minute call returns before that write), the cleanup reads it
 for the post-cascade comparison, and this pass reads it and then writes the
 hour. Because the time-advancing path also rewrites the snapshot at its head, an
 implementation must keep one byte for both uses; separate snapshots change which
-hour crossings the upkeep pass sees. It follows, by inference from the sharing
-rather than from a traced call order, that two time-advancing calls between an
-hour crossing and the next upkeep pass would erase the mismatch and skip that
-hour's starvation or meal branch; whether any shipped turn sequence does this
-was not traced (`OPEN-QUESTIONS.md`) *(added 2026-10-16, issue #298 Q27; static
-reading, private analysis in `u5-decomp/functions/ULTIMA_EXE/`)*. Because the pass runs
+hour crossings the upkeep pass sees. Two time-advancing calls between an hour
+crossing and the next upkeep pass therefore erase the mismatch, and that hour's
+starvation or meal branch is skipped *(added 2026-10-16, issue #298 Q27; static
+reading, private analysis in `u5-decomp/functions/ULTIMA_EXE/`)*. Shipped play
+does this in three places *(added 2026-10-30, issue #313 Q1; private analysis in
+`u5-decomp/notes/`)*:
+
+- A dungeon iteration whose command reports "no action" (both K refusals, the
+  digit selector, unknown keys and the other no-action routes). The dungeon
+  charges an iteration's minute, when its loop-head clock call is made, before
+  reading the command, but runs the upkeep pass only after an acted one, so the
+  next advance erases the crossing. Observed on the original: at 12:59 with no
+  food, a refused K produced no `Starving!` on the following turns, while the
+  same save with a step as the first command printed `Starving!` on that step.
+- The dungeon iteration that leaves the dungeon. It runs no upkeep pass
+  (`systems/dungeon-mode.md` Section 4, step 4), so the first time-consuming
+  overworld turn's advance erases the crossing. Observed on the original for a
+  K out of the dungeon: at 12:59 with no food, the K's minute reached 13:00 and
+  no `Starving!` appeared until 14:00. When the exit turn's minute stays inside
+  the hour (12:58 to 12:59), the first overworld turn crosses the hour itself
+  and charges it on that turn, as also observed.
+- An overworld slow-terrain or very-slow-terrain step whose penalty minutes
+  cross the hour: the penalty's clock call inside the move comes before the
+  turn's own two-minute advance, which comes before the upkeep pass. This case
+  is static reading only and was not executed.
+
+An hour crossed by a dungeon iteration whose command acted is charged normally.
+Because the pass runs
 once per action, repeated rest or wait steps naturally apply the branch once for
 each crossed hour, while several ordinary turns inside the same hour spend food
 only once.

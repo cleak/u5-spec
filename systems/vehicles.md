@@ -683,6 +683,40 @@ it prints "What?". If a source is found, its orientation determines the firing
 direction, the handler prints the blast line, animates the shot, and scans a
 short fixed line for the first blocking target.
 
+**The source probe, its order and the shot's line** *(added 2026-10-30, issue
+#313 Q3)*. After the auto-close pass, the handler examines exactly the four
+cells cardinally adjacent to the party in the currently visible view, in the
+order **north, east, south, west**. Diagonal cells and the party's own cell are
+never examined. This is not the Yell command's order (west, south, east, north;
+`systems/commands.md`), and the harpsichord check of `systems/town-mode.md`
+Section 13 reads only the south cell. A cell qualifies when it holds one of the
+four cannon map tiles, ids `180..183` (`catalogs/tile-catalog.md`, the cannon
+row; these are map tiles, not the active-object type band of the same byte
+values that `systems/town-mode.md` Section 10 calls the regalia band). The
+first qualifying cell in that order is the source and the probe stops there, so
+with cannons on several sides of the party the earliest in the order fires.
+
+- **No qualifying cell.** The handler prints "What?" and does nothing more: no
+  blast line, no firing sound and no shot. The auto-close pass has already run.
+  This describes the handler only; what the town loop charges for the turn is
+  owned by `systems/town-mode.md` Section 7.
+- **A source found.** The shot's line starts at the source cannon's own cell
+  and runs in the cannon's facing, whichever side of the party the cannon stands
+  on, never "away from the party": tile `180` fires north, `181` east, `182`
+  south and `183` west. So a cannon west of the party that faces north fires
+  north. The handler prints `BOOOM!`, animates the shot and steps along the
+  line before each test, so the cannon's own cell is never tested and at most
+  four cells beyond it are. It stops at the first blocking target, with the two
+  target classes below; not every object result blocks the shot, so a cell
+  holding an object is not by itself the end of the line.
+
+The overworld ship broadside (Section 7) runs no neighbour probe at all: it
+fires along the direction the player enters. What happens when a cannon's
+facing points back through the party's own cell is not established
+(`OPEN-QUESTIONS.md` section 2). Static reading of the F-Fire handler,
+cross-checked against the private memory-map analysis for the visible-view
+grid; not executed for this pass.
+
 Two target classes have visible side effects:
 
 - **Door-like targets.** The handler prints "Door destroyed!", rewrites the live
@@ -782,6 +816,12 @@ tables, or implementation-specific addresses.
 - `u5-decomp/functions/CMDS_OVL/`.
 - `u5-decomp/functions/ULTIMA_EXE/`.
 - `u5-decomp/functions/CAST_OVL/`.
+- Source provenance: the issue #313 Q3 answer of 2026-10-30 - the F-Fire
+  cannon probe's cardinal-only cell set and north, east, south, west order, the
+  first-match stop, the no-match refusal, the shot's origin at the cannon's
+  cell, the facing-to-direction mapping and the four-cell reach (Section 8) -
+  derived from a static reading of the F-Fire handler and the visible-view grid
+  layout; private analysis in `u5-decomp/notes/`.
 - Local SHOPPES2 shipwright control-flow analysis and direct `SHOPPE.DAT`
   record inspection.
 - `u5-decomp/functions/MAINOUT_OVL/`.

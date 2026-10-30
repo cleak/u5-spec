@@ -101,7 +101,7 @@ Most letters discard whatever their handler returned and report the default
 | `A` town | "Acted", except the on-foot refusal, which is "no action". The nothing-to-attack message still counts as acted. |
 | `A` dungeon | Always "no action". |
 | `B` Board | "Acted" on every path — all four mounts and both refusals — except the final unknown-target fallthrough, which is "no action". |
-| `C` Cast | "Acted", except one sub-handler branch that reports "no action". |
+| `C` Cast | "Acted", except one sub-handler branch that reports "no action": a successful Gate Travel, so no mode epilogue runs on that cast turn. Every Gate Travel failure (a phase key outside `1`..`8`, a recovered stone, the frigate or skiff refusal) reports "acted" (`systems/magic.md`, the Gate travel row; branch named 2026-10-30, issue #313 Q2). |
 | `E` overworld Enter | "Acted" by default, "no action" after its refusal, otherwise whatever the location-entry path returned. |
 | `K` town | "No action" by default, so both refusals cost nothing; "acted" for both ladder directions, for the no-actor early-out, and for a successful step. |
 | `K` dungeon | "Acted" when a climb, a pit fall, or the Space pass at the `Klimb-U/D-` chooser is applied (the chooser has no cancel key; Esc is ignored there, `dungeon-mode.md` Section 13.1; clarified 2026-10-18, issue #299 Q24); "no action" on both "nothing to klimb here" refusals. Climbing where there is nothing to climb therefore costs the party nothing, and the two refusals are distinct: one for a cell that holds a climbable feature the party lacks the gear for, one for a cell with no feature at all. |
@@ -146,7 +146,7 @@ result handling, which agrees row for row with the forwarded-route table above.
 | Space | - | `Pass` | Executed |
 | `A` | Overworld: every path, including the attack that opens combat. Town: only the on-foot refusal (standing on a water cell and not exactly on foot; Section 5.8). | Town: every other path, including `Nothing to attack!` | Town `Nothing to attack!` and the on-foot refusal executed *(added 2026-10-25, issue #302 Q4)*; the rest static |
 | `B` | Only the final unknown-target `What?` | Every boarding and both refusals | Static |
-| `C` | One sub-handler branch, which belongs to a scene-changing path and is not the scene gate | Everything else, including the scene-gate `Not here!` (`systems/magic.md` Section 5) | Static; not measured on the clock |
+| `C` | One sub-handler branch, which belongs to a scene-changing path and is not the scene gate: a successful Gate Travel | Everything else, including the scene-gate `Not here!` (`systems/magic.md` Section 5) and every Gate Travel failure | Static; not measured on the clock. Gate Travel executed from a town: a successful cast ran no upkeep on the cast turn and a phase key `9` failure ran the full epilogue *(added 2026-10-30, issue #313 Q2)* |
 | `D` | Always (its stock refusal) | - | Executed |
 | `E` | Overworld: only `Enter What?` on an unrecognised tile | Overworld: every non-transition outcome, namely `ruins`, the shrine arm, `What town?`, `What dungeon?`, `On foot!` and `Attacked at entrance!` (Section 5.5). A successful town or dungeon entry is neither: it leaves the overworld loop before the epilogue. Town and dungeon: `Enter what?` | Overworld `Enter What?`, `Enter ruins` and town `Enter what?` executed; the rest static |
 | `F` | - | Always, including `Fire-What?` | Executed, overworld and town |
