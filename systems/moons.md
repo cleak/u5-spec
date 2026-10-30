@@ -514,7 +514,9 @@ nothing; it is subject to the world tick's ordinary enable gate exactly as
 outside combat (`systems/weather.md`). Neither deliberate wind change is
 available in combat: the Wind Change spell is overworld-only by its scene mask
 and is refused with `Not here!` (`systems/magic.md`), and the Wind Change scroll
-applies a wind only below scene 33 (`catalogs/item-list.md`). A room trigger
+applies a wind only below scene 33 (`catalogs/item-list.md`; in combat it
+prints `Failed!` after its direction prompt and the scroll is still spent,
+*added 2026-10-29, issue #312 Q3*). A room trigger
 rewrites the live facing before the fight without repainting the label, so
 during a room fight `Dir:` shows the facing from before the party entered the
 room.

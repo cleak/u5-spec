@@ -768,7 +768,7 @@ decrements its own count, prints its banner, then:
 | Scroll | Banner | Variant | Notes |
 |---:|---|:-:|---|
 | 0 | `Light!` | 0 | Sets a torch radius, then calls the dispatcher directly. |
-| 1 | `Wind change!` | 1 | Through the wind setter with the **scroll** caller tag. |
+| 1 | `Wind change!` | 1 | Through the wind setter with the **scroll** caller tag, only below scene 33. In dungeon-class and combat-class scenes the setter is skipped and no wind sound plays; the U-Use failure tail prints `Failed!` and plays the common cast-failure glissando (Section 8.3, "Common spell failure tail") instead *(corrected 2026-10-29, issue #312 Q3; `RETRACTIONS.md` R656)*. |
 | 2 | `Protection!` | 2 | Through the scene-flag helper. |
 | 3 | `Negate magic!` | 3 | Through the scene-flag helper. |
 | 4 | `View!` | 4 | Dispatcher, then the look helper. Refused with `Not here!` and **no sound** outside the permitted scene class. |

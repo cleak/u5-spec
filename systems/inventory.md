@@ -1842,8 +1842,12 @@ potion use binds the current party combatant without this prompt.
 The Wind Change scroll prints its existing banner and then **`Direction-`**.
 Accepted directions append `North\n`, `East\n`, `South\n` or `West\n`;
 Space appends `Pass\n`. Other unrecognized keys wait for another input.
-This prompt occurs before the scroll's scene gate. Scroll banners and their
-effects remain in `catalogs/item-list.md`.
+This prompt occurs before the scroll's scene gate. In dungeon-class and
+combat-class scenes the gate then fails, and the generic U-Use failure tail
+prints `Failed!\n` on the next row with the common cast-failure glissando
+(`systems/audio.md` Section 8.3, "Common spell failure tail") *(added
+2026-10-29, issue #312 Q3)*. Scroll banners and their effects remain in
+`catalogs/item-list.md`.
 
 **Skull Key targeting.** After `Item: Skull Key\n`, the shared `Direction-`
 prompt accepts a cardinal direction with its ordinary word and newline;

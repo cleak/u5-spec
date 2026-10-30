@@ -399,6 +399,12 @@ Opened 2026-10-29 by the issue #311 Q4 to Q6 literal pass:
 | The dungeon L-Look field lines and their exact-byte selection are static reading with the literals read from the shipped data; no live Look at a placed field cell, plain or visit-marked, has been made. *(Issue #311 Q4.)* | `systems/dungeon-mode.md` Section 12, step 5 | A live dungeon Look at each of `0x80..0x83` and at a visit-marked field cell. |
 | The Doom absorption narration (line feed, dispatched slot's name, ` is absorbed!` and a line feed) is static reading; no capture of the absorption exists, and whether a controlled or charmed monster slot can ever stand on the qualifying cell in stock Doom data, and so be named by class, was not shown either way. *(Issue #311 Q5.)* | `systems/combat.md` Section 11 (the Doom absorption paragraph) | A capture of the absorption in the final Doom room; a census of which slots can reach arena row `2` under the Doom source in stock data. |
 
+Opened 2026-10-29 by the issue #312 Q3 Wind Change scroll pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| The Wind Change scroll's failure transcript outside the wind scenes (`Wind change!`, the `Direction-` prompt, then `Failed!` on its own row with the cast-failure glissando) and the prompt ignoring Escape are static reading plus shipped strings; no use of the scroll in a dungeon or in combat has been captured, and that Escape is ignored assumes the command reader never maps Escape to a cardinal key or Space. *(Issue #312 Q3.)* | `catalogs/item-list.md` Section 7.1, row 1 | One live use of a Wind Change scroll in a dungeon and one in combat, including an Escape press at the direction prompt. |
+
 ## 3. Needs a further static trace
 
 The corridor mirror derivation was completed 2026-09-07: original EGA
