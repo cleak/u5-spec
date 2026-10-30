@@ -199,6 +199,9 @@ banners**. They are not a list of spell success messages, even when a scroll
 and spell share an effect helper. For example, the Light scroll has its own
 `Light!` banner and light duration; neither light spell borrows that banner.
 `catalogs/item-list.md` and `systems/audio.md` specify the scroll cases.
+Each scroll banner closes its own row: the literal plus one line feed, with no
+leading feed, identically for world and combat `U`. *(Added 2026-10-29, issue
+#312 Q1.)*
 
 The following census covers all forty-eight spells in Section 4. It describes
 completion **after an accepted effect**. Earlier context, resource and level

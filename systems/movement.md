@@ -421,9 +421,17 @@ who failed is now Poisoned and takes that hit too. The shared damage and
 subsequent regeneration rules remain as specified in `systems/time.md`
 Section 5; this is not an hourly poison-damage rule.
 
-Horse and carpet travel do not enter this poisoning check. Existing terrain
-passability still applies; the horse does not ordinarily enter swamp in the
-first place. The difficult-terrain surcharge from Section 8.1 neither repeats
+Only a party exactly on foot enters this poisoning check; any other transport
+marker skips it, drawing nothing and printing nothing. The magic carpet
+accepts swamp and flies over it, and it is still never poisoned there. Horse,
+skiff and frigate parties are exempt as well, but they never reach swamp in
+normal play because swamp is impassable to all three (the Section 4
+passability table); the exemption matters for them only if one is placed on a swamp cell
+*(added/corrected 2026-10-29, issue #312 Q2: executed on the original, a
+carpet over Underworld swamp with every member at Dexterity zero passed three
+turns with no poison line and every member still Good, while the on-foot
+control on the same cell printed `Poisoned!` for all three members on the
+first turn)*. Existing terrain passability still applies. The difficult-terrain surcharge from Section 8.1 neither repeats
 the poison save nor adds extra poison-upkeep hits. When a swamp step prints
 its slow-progress line, that line precedes this later poisoning result.
 

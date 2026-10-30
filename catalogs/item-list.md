@@ -489,6 +489,25 @@ Eight scroll labels use the same compact code vocabulary as spell parsing, but
 they are item rows with their own effect constants and gates. U-Use decrements
 the selected scroll counter before any branch-specific scene gate or target
 prompt runs, then prints the scroll-use label and the branch's effect label.
+Every scroll effect label - all eight banners, and `No effect!` - is the
+literal followed by one line feed, with no leading feed. The `Scroll` completion
+before it ends in two line feeds (`systems/inventory.md`), which closes the
+`Item:` prompt row and leaves one empty row, so each banner starts at column
+zero on a fresh row and closes its own row. Nothing is appended to the banner
+row on success: the item-use command's generic failure tail runs only when the
+branch reports failure, and the Light, Protection and Negate Magic branches
+never do. The scroll refusal `Not here!` printed by View, Summon Daemon and
+Resurrection is likewise the literal plus one line feed with no leading feed,
+on the row after the banner, and Wind Change's `Direction-` prompt also starts
+on the row after its banner. World and combat `U` reach the same handler and the
+same scroll branches, so the text and its row framing are identical in both. A
+later line that carries no leading feed of its own, such as a combat hazard
+line, therefore starts on its own row and never joins a banner. The strings and
+their feeds were read from the shipped data file; the single print per branch,
+the success result and the shared combat path are static reading; that a
+following line lands on a fresh row follows from the row being closed before
+control returns, and was not captured on screen. *(Added 2026-10-29, issue #312
+Q1.)*
 Container/Search grants use the same eight ids, mask the grant subtype to the
 low three bits for the displayed scroll label, and cap each scroll counter at
 99. The HMS Cape plans grant is a special subtype in the same grant family, but
@@ -496,10 +515,10 @@ sets the plans flag instead of a scroll counter. The **Code** column below is th
 
 | Scroll id | Code | Cross-reference | U-Use effect and gates |
 |-----------|------|-----------------|------------------------|
-| 0 | `VL` | Vas Lor / Great Light | Prints `Light!`, sets the magic-light counter to 240 minutes, and plays the light presentation effect. It writes the light counter, not the timed-effect slot, and it is not a torch inventory consumer. |
+| 0 | `VL` | Vas Lor / Great Light | Sets the magic-light counter to 240 minutes, prints `Light!` plus one line feed (no leading feed), and plays the light presentation effect; none of the steps after the banner prints text *(added/corrected 2026-10-29, issue #312 Q1: the counter is written before the banner prints, which has no visible consequence)*. It writes the light counter, not the timed-effect slot, and it is not a torch inventory consumer. |
 | 1 | `RH` | Rel Hur / Wind Change | Prints `Wind change!`, prompts for a wind direction, and applies the wind only when the active scene byte is below 33: overworld or named town/castle/keep/dwelling scenes. Dungeon-class scenes return without changing wind after the prompt. |
-| 2 | `IS` | In Sanct / Protection | Prints `Protection!` and installs the shared timed-effect tag `P` with a 100-turn duration, replacing whatever effect the slot held. Like the spell, it has no mechanical consequence in the shipped game: the defence bonus the `P` tag was meant to grant rides on a per-item defence total that is unreachable and never read. See `systems/magic.md`. |
-| 3 | `IA` | In An / Negate Magic | Prints `Negate magic!` and installs the shared timed-effect tag `N` with a 20-turn duration, replacing whatever effect the slot held. The party C-Cast absorption path and the three enemy-side class-special, teleport, and scene-resistant ranged/effect checks read the same tag as the cast spell path; `systems/magic.md` owns their distinct action-consumption rules. |
+| 2 | `IS` | In Sanct / Protection | Prints `Protection!` plus one line feed (no leading feed) *(added 2026-10-29, issue #312 Q1)* and then installs the shared timed-effect tag `P` with a 100-turn duration, replacing whatever effect the slot held. Like the spell, it has no mechanical consequence in the shipped game: the defence bonus the `P` tag was meant to grant rides on a per-item defence total that is unreachable and never read. See `systems/magic.md`. |
+| 3 | `IA` | In An / Negate Magic | Prints `Negate magic!` plus one line feed (no leading feed) *(added 2026-10-29, issue #312 Q1)* and then installs the shared timed-effect tag `N` with a 20-turn duration, replacing whatever effect the slot held. The party C-Cast absorption path and the three enemy-side class-special, teleport, and scene-resistant ranged/effect checks read the same tag as the cast spell path; `systems/magic.md` owns their distinct action-consumption rules. |
 | 4 | `IQW` | In Quas Wis family | Prints `View!`. Combat-class scenes print `Not here!` and stop. Overworld and named interior scenes invoke the surface/local view renderer at the party coordinates; dungeon-class scenes invoke the dungeon V-View renderer. No gem counter is spent by this scroll path. |
 | 5 | `KXC` | Kal Xen Corp / Summon | Prints `Summon Daemon!`. Combat-class scenes invoke the summon **placement** helper; non-combat scenes print `Not here!` and perform no summon. *Corrected 2026-08-23: an earlier revision called it the "summon/target animation helper". That is withdrawn - the helper takes no target (it overwrites any cached coordinate with fresh random draws on its first probe), and its animation step is incidental to what it does, which is create a hostile actor at the first accepted cell. `catalogs/spell-list.md` owns the full contract.* Combat `U` does reach the item-use handler (an earlier note that it did not is withdrawn), so this effect is reachable both from the scroll handler and from the combat command's item-use path where the family's own gates allow. |
 | 6 | `IMC` | In Mani Corp / Resurrect | Prints `Resurrection!`. Non-combat scenes prompt for a party member, invoke the same resurrection helper described in `systems/magic.md`, and refresh the party stats display. A successful scroll resurrection leaves the revived member Good with 1 current HP, class-derived mana, recomputed level, and maximum HP equal to thirty times that level. Combat-class scenes print `Not here!`. |

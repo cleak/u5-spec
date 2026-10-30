@@ -776,6 +776,11 @@ decrements its own count, prints its banner, then:
 | 6 | `Resurrection!` | 6 | Through the resurrect helper; only in the permitted scene class and only if the target is dead. |
 | 7 | `Negate time!` | 7 | Through the scene-flag helper. In two specific scenes it instead prints `No effect!` and plays the 50-update cast-failure glissando. |
 
+Banners in this table are shown without their line feed; each is printed as
+the literal plus one line feed, with no leading feed, and so closes its own row.
+`catalogs/item-list.md` Section 7.1 gives the row framing. *(Added 2026-10-29,
+issue #312 Q1.)*
+
 > **A scroll does not sound like its spell.** The scroll variant disagrees with
 > the corresponding spell's variant in six of the eight cases: Light 0 against
 > 1, Wind Change 1 against 2, Protection 2 against 4, Negate Magic 3 against 6,

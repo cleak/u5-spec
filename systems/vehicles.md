@@ -611,6 +611,35 @@ before rescue begins.
 Y-Yell's word-of-power and Shadowlord-name branches are command-system
 features, not vehicle behavior.
 
+### Underfoot Effects By Transport
+
+*(Added/corrected 2026-10-29, issue #312 Q2.)* The per-turn underfoot passes
+are owned elsewhere; this table only summarises which transports each one
+affects. "If placed" means the transport's passability query rejects the
+tile (`systems/movement.md` Section 4), so it is affected only if it is put
+on that cell some other way.
+
+| Scene | Underfoot effect | Carpet | Horse | Skiff / frigate | On foot |
+|---|---|---|---|---|---|
+| Both world planes | Lava `0x8F`: `Burning!` and `1..8` to each non-Dead member (`systems/overworld.md` Section 5) | Applies | Applies if placed | Applies if placed | Applies |
+| Both world planes | Swamp `0x04` poison save (`systems/movement.md` Section 8.2) | Exempt | Exempt | Exempt | Applies |
+| Britannia | Troll bridge ambush (`systems/overworld.md` Section 7.1) | Exempt; the bridge draw is still consumed | Exempt; draw consumed | Exempt; draw consumed | Applies |
+| Town family | Trapdoor `0x8C`, including Stonegate's ring (`systems/town-mode.md` Section 3) | Exempt: no line, damage, fall or Stonegate script | Applies (a horse can enter the cell) | Applies if placed | Applies |
+| Town family | Fireplace `0xBC`: `Burning!` (`systems/town-mode.md` Section 10) | Applies | Applies (a horse can enter the cell) | Applies if placed | Applies |
+| Town family | Lava `0x8F`: `Burning!` (`systems/town-mode.md` Section 10) | Applies | Applies if placed | Applies if placed | Applies |
+| Town family | Gas `0x04` poison save (`systems/town-mode.md` Section 10) | Exempt | Exempt | Exempt | Applies |
+
+Lava and fireplace test only the tile, never the transport. The swamp and gas
+saves require the transport marker to be exactly the on-foot value, so every
+mount and vessel, and the on-foot alias value, is exempt. The trapdoor's
+carpet test is the only exemption keyed to the carpet itself. Neither the
+world nor the town pass has an arm for fields or any other hazard; rough seas
+on deep water is a separate per-turn trigger that does hit a carpet
+(`systems/overworld.md` Section 6.2.5). Dungeon underfoot handling was not
+surveyed. Evidence: the carpet on Underworld lava and swamp, a horse placed on
+Underworld lava, and the on-foot swamp control were executed on the original;
+Britannia lava and every town row are static reading.
+
 ## 7. F-Fire In The Overworld
 
 In overworld scene zero, public F-Fire delegates to the ship-broadside helper.
