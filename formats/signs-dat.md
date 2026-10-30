@@ -132,7 +132,11 @@ Q13 and Q21)*:
    - Only raw `0x29..0x31` are macros. Each switches to the runic font and prints
      one NUL-terminated decoration fragment from a small resident pool; all nine
      fragments are sixteen cells wide. Shipped records use them for framed-sign
-     edges and corners.
+     edges and corners. The fragments are resident text, not `SIGNS.DAT`
+     content: nine sixteen-cell runic strings in the shared resident data
+     overlay, stored in selector order and ending where the no-record placard's
+     rows (Section 6) begin. Their glyph vocabulary and the frame styles built
+     from them are in Section 9. *(Added 2026-10-30, issue #314 Q1.)*
    - Only raw `0x0D` pauses. It switches to the Roman font and waits for a key; it
      prints nothing and does not echo the key.
 3. **Every other byte prints its low seven bits in the font chosen in step 1.**
@@ -388,7 +392,47 @@ Remaining work is content cataloguing, not format interpretation:
 - **Macro fragment identities.** The formatter's macro selector range and
   substitution role are specified above. The exact resident decoration
   fragments remain a visual-parity boundary; do not copy shipped sign text or
-  resident string dumps into this clean spec.
+  resident string dumps into this clean spec. *(Added 2026-10-30, issue #314
+  Q1.)* What is now public about them is below. Their cell-by-cell contents
+  are not: any table precise enough to rebuild them is in effect a copy of the
+  resident strings, so publishing one would reverse the rule above, and that is
+  an open owner decision (`OPEN-QUESTIONS.md` section 1). Until it is made, an
+  implementation can read the nine fragments from the user's own shared data
+  overlay. They are the nine sixteen-cell strings stored in selector order
+  (`0x29` first, `0x31` last) directly before the no-record placard's first row,
+  and each holds runic-font code points printed one glyph per cell.
+
+  The fragments draw on ten runic glyphs (shapes from the shipped runic font, in
+  the code-point notation of Section 6):
+
+  | Code point | Shape in the runic font |
+  |---|---|
+  | `g` | centred vertical bar (the placard's side wall) |
+  | `l` | full-width horizontal bar at mid height (the separator glyph of Section 4) |
+  | `h` | square corner, the line leaving rightward and downward |
+  | `i` | square corner, the line leaving leftward and downward (mirror of `h`) |
+  | `j` | square corner, the line leaving upward and rightward |
+  | `k` | square corner, the line leaving upward and leftward (mirror of `j`) |
+  | `8` | rounded corner, rightward and downward |
+  | `9` | rounded corner, leftward and downward (mirror of `8`) |
+  | `m` | horizontal bar with a small closed loop (an eyelet) rising above it |
+  | `n` | horizontal bar with a doubled pendant hanging below it |
+
+  Shipped records combine the fragments in three recurring ways. The names and
+  each fragment's role in them are inferred from how the records use them. In
+  all three, the rows between the edges are ordinary text rows whose walls are
+  literal `g` bytes, not a macro.
+
+  - **Framed panel:** `0x2D` (top edge), the text rows, then `0x2C` (bottom
+    edge). `0x29` appears only as a blank padding row next to the top and
+    bottom edges.
+  - **Signpost:** `0x31` (a cap), `0x2E` (the panel top joined to a narrow neck
+    above it), the text rows, `0x2F` (the panel bottom narrowing into a post),
+    then two `0x30` post rows. These records never use `0x29`. Most of them are
+    gravestones.
+  - **Hanging sign:** `0x2B` (the top edge, with the eyelet), the text rows,
+    then `0x2A` (the bottom edge, with the pendant). As in the framed panel,
+    `0x29` appears only as the blank padding row next to the edges.
 - **Full scene-block inventory.** A content pass should enumerate which scenes
   have nonzero directory entries and which coordinates have sign records,
   without copying the shipped sign text into the spec.
@@ -424,6 +468,12 @@ cross-reference alignment.
   reach and where each window ends -- computed from the shipped file and
   recomputed independently. Private analysis in `u5-decomp/notes/` and
   `u5-decomp/functions/LOOKOBJ_OVL/`.
+- Issue #314 Q1 (2026-10-30): where the nine macro fragments are stored and
+  their selector order -- read from the shipped shared data overlay, with a
+  static reading of the formatter's fragment lookup; that macro bytes print
+  them -- executed earlier on a synthetic record; the glyph shapes -- rendered
+  from the shipped runic font; the frame styles -- counted in the shipped file.
+  Re-checked by an independent verifier. Private analysis in `u5-decomp/notes/`.
 - Shipped `SIGNS.DAT` header, alias-bridge layout, decorator macros, and
   separator-glyph usage were cross-checked against the traced directory offsets
   and record scanner.

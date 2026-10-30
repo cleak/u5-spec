@@ -333,7 +333,9 @@ observable. That loop advances the clock in five-minute steps and never enters
 the shared party status/provision pass, so while a camp is elapsing no poison
 damage is taken, no provisions are spent, and no starvation damage is applied,
 regardless of how many hours the camp covers. Only the town-bed loop runs that
-pass. An implementation that routes both rest paths through one per-hour status
+pass. Paid inn Rest (`systems/shops.md` Section 8.4) also runs no pass; it
+rolls the Ring of Regeneration check directly, once per nine-minute step after
+its first sixty minutes *(added 2026-10-30, issue #314 Q3)*. An implementation that routes both rest paths through one per-hour status
 tick will make camping far more punishing than the original.
 
 The Ring of Regeneration tick is time-owned rather than rest-owned, and it is
@@ -341,7 +343,8 @@ per pass rather than per hour. It checks the member's ring equipment slot for
 the Ring of Regeneration item id and can add exactly 1 HP on a 1-in-8 roll.
 During town-bed rest it is reached once per ten-minute step through the shared
 status pass; during a wilderness camp the camp loop calls the same check
-directly, once per five-minute step. H-Hole-up does not set or clear the ring
+directly, once per five-minute step, and paid inn Rest calls it directly once
+per nine-minute step (static reading; added 2026-10-30, issue #314 Q3). H-Hole-up does not set or clear the ring
 slot byte.
 
 ## 6. Interruption And Ambush

@@ -134,7 +134,9 @@ minute nor this pass (`systems/magic.md`, the Gate travel row) *(added
 2026-10-30, issue #313 Q2)*. It also runs once per ten-minute
 step of the town-bed rest loop. It does **not** run in combat mode, and it does
 not run inside the wilderness camp loop, which advances the clock in
-five-minute steps without entering this pass. A command whose result skips
+five-minute steps without entering this pass. Paid inn rest never enters it
+either, at any step or at the end (`systems/shops.md` Section 8.4) *(added
+2026-10-30, issue #314 Q3)*. A command whose result skips
 the owning mode's post-action pass does not trigger it. Look returns acted,
 including cancellation, and follows the normal mode-specific path.
 *Corrected 2026-09-11 (R464): the earlier free-Look example is withdrawn.*
@@ -196,8 +198,8 @@ hour crossings the upkeep pass sees. Two time-advancing calls between an hour
 crossing and the next upkeep pass therefore erase the mismatch, and that hour's
 starvation or meal branch is skipped *(added 2026-10-16, issue #298 Q27; static
 reading, private analysis in `u5-decomp/functions/ULTIMA_EXE/`)*. Shipped play
-does this in three places *(added 2026-10-30, issue #313 Q1; private analysis in
-`u5-decomp/notes/`)*:
+does this in four places *(added 2026-10-30, issue #313 Q1; private analysis in
+`u5-decomp/notes/`; the fourth, paid inn rest, added 2026-10-30, issue #314 Q3)*:
 
 - A dungeon iteration whose command reports "no action" (both K refusals, the
   digit selector, unknown keys and the other no-action routes). The dungeon
@@ -217,11 +219,29 @@ does this in three places *(added 2026-10-30, issue #313 Q1; private analysis in
   cross the hour: the penalty's clock call inside the move comes before the
   turn's own two-minute advance, which comes before the upkeep pass. This case
   is static reading only and was not executed.
+- Paid inn rest (`systems/shops.md` Section 8.4). The rest advances the clock
+  in its own steps and runs no upkeep pass, so every hour it crosses goes
+  uncharged. Each of its clock steps rewrites the snapshot, so when it returns
+  the snapshot holds the hour before its last step: 5 when the rest ends at
+  06:00 to 06:08, and 6 when the room was rented during hour five (executed in
+  emulation of the original rest routine). The Talk command that opened the
+  inn is a consumed town turn; its ordinary one-minute advance then rewrites
+  the snapshot to 6 before that turn's upkeep pass runs, so the pass sees no
+  hour change and 06:00 is not charged either. That last mechanism is static
+  reading of the town turn, supported by the one-minute difference between the
+  emulated rest end (06:06) and a live save taken after the rest (06:07); the
+  turn's own upkeep was not observed in isolation. The outcome was observed
+  live on the original: resting from 22:30 with no food printed no `Starving!`
+  and spent nothing, the first `Starving!` came on the turn reaching 07:00, and
+  with 50 provisions the count was still 50 after waking. The turn after the
+  rest charges no extra hour and keeps its own one-minute advance.
+  *(added 2026-10-30, issue #314 Q3)*
 
 An hour crossed by a dungeon iteration whose command acted is charged normally.
 Because the pass runs
-once per action, repeated rest or wait steps naturally apply the branch once for
-each crossed hour, while several ordinary turns inside the same hour spend food
+once per action, repeated town-bed rest or wait steps naturally apply the branch
+once for each crossed hour (paid inn rest and wilderness camp run no pass;
+added 2026-10-30, issue #314 Q3), while several ordinary turns inside the same hour spend food
 only once.
 
 *The shared party-damage path.* Both the poison point and each starvation roll
@@ -245,7 +265,10 @@ success that member gains exactly 1 current hit point, capped at maximum hit
 points. Like the poison tick, this is per invocation, not per hour: a wearer
 gets one roll per turn-consuming action, one roll per ten-minute town-bed rest
 step, and one roll per five-minute wilderness camp step, the last of these
-issued directly by the camp loop rather than through this pass. Unlike the
+issued directly by the camp loop rather than through this pass. Paid inn rest
+likewise issues the roll directly, once per nine-minute step after its first
+sixty minutes, and never through this pass (static reading of the rest loop;
+`systems/shops.md` Section 8.4) *(added 2026-10-30, issue #314 Q3)*. Unlike the
 damage path above, the ring's gain **files a deferred panel refresh request**
 instead of repainting, so a regenerated hit point appears as the next command
 prompt comes up rather than during the pass (`systems/stats-panel.md`
@@ -255,7 +278,9 @@ Sections 2.2 and 2.3).
 per turn, so poison is a strong pressure on movement rather than a slow hourly
 drip. A poisoned member in a town bed loses six hit points per simulated hour,
 because the rest loop steps every ten minutes. A poisoned member in a wilderness
-camp loses nothing from poison while the camp loop runs.
+camp loses nothing from poison while the camp loop runs. A poisoned member at
+a paid inn loses nothing from poison while the rest's clock runs; the inn's
+recovery pass then kills them *(added 2026-10-30, issue #314 Q3)*.
 
 ## 6. Daylight
 
@@ -546,7 +571,8 @@ boundaries that are already fixed for engine behavior.
   invoked from exactly four places: the overworld per-turn epilogue, the town
   per-turn underfoot handler, the dungeon post-action handler, and the town-bed
   rest loop's ten-minute step. All four sit after the clock advance for that
-  step. Combat mode and the wilderness camp elapse loop never invoke it, so
+  step. Combat mode, the wilderness camp elapse loop and paid inn rest
+  (added 2026-10-30, issue #314 Q3) never invoke it, so
   poison damage and provision consumption do not accrue there. Treating the
   pass as an hourly timer instead of a per-action pass is the single most
   common way to get poison, starvation, and ring regeneration all wrong at
@@ -664,3 +690,10 @@ The behaviour described here was derived from the private function notes listed 
   reference census over the shipped executable, all twenty-three code overlays
   and all four display drivers; accesses computed through a pointer base outside
   the scanned window are not covered. No wall-clock timing was measured.
+- Paid inn rest and the status/provision pass (Section 5, issue #314 Q3,
+  2026-10-30): derived from private analysis in `u5-decomp/notes/`. The
+  original rest routine was executed in emulation with its real clock and ring
+  check and the status pass hooked; the pass was never entered at any of the
+  start hours tried. The uncharged hours, including 06:00, were observed live
+  under DOSBox with no food and with 50 provisions; the one-minute Talk turn's
+  snapshot rewrite is static reading.

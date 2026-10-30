@@ -74,10 +74,34 @@ the capitalised `Nothing of note.` - a different stored string from the treasure
 scan's own lower-case `nothing of note.`, and the only place the capitalised
 form appears on the surface path.
 
-Twelve of the 113 records (`0` through `11`) carry the filler coordinate
-`(233, 233)` at an impossible floor and cannot be reached by an ordinary Search.
-Whether anything rewrites those records at runtime was not traced, so their
-narrated classes are unverified in play.
+Twelve of the 113 records (`0` through `11`) all sit on one Underworld cell:
+scene `0`, Z `255`, `(233, 233)`, directly beneath the Shrine of the Codex tile
+on Britannia. *(Corrected 2026-10-30, issue #314 Q2.)* Search compares each
+record's scene, Z, X and Y for exact equality with the current scene, the
+current plane and the searched cell; the scan starts at record `0`, and the only
+extra conditions are those of records 13, 14 and 15 (Section 2), so there is no
+record-range start and no plane exclusion. On the world planes the
+fixed-treasure scan is the last step of the surface Search cascade, after the
+buried-Moonstone and reagent checks, and it runs on the Underworld exactly as on
+Britannia. A Search of that cell therefore stages the twelve records one per
+Search in table order, by the shared-cell rule of Section 3. Executed on the
+original with the stock tables (the party placed on the Underworld at
+`(232, 233)`, searching east): the three Searches printed `Thou dost find` and
+then `some armour!`, `a weapon!` and `some armour!` in turn; Get then printed
+`Mystic Armour!`; the saved Mystic Armour count went from 0 to 1, Mystic Sword
+stayed 0, and the found bits of records 0, 1 and 2 were set. Each turn there
+also printed `Burning!`, because the party stood on lava
+(`catalogs/tile-catalog.md` Section 6). The claim is scoped to the stock boot-time
+tables: no census of runtime writers to the record arrays was made. The cell is
+the centre of a thirteen-cell pool of molten lava (`0x8F`). On foot it lies in a
+33-cell pocket of that lava and 20 hill cells, with no grass, closed off by
+mountains (`0x0C`) and peaks (`0x0D`); even counting every mountain as passable
+the enlarged 262-cell region, which holds 24 grass cells, is still closed off by
+peaks, which Klimb refuses with `Impassable!`. Whether ordinary play can bring a
+party into the pocket is not established (`OPEN-QUESTIONS.md` section 3). This
+paragraph previously said the records sat "at an impossible floor and cannot be
+reached by an ordinary Search"; Z `255` is the Underworld plane, and that text is
+retracted (`RETRACTIONS.md` R659).
 
 `Z/floor` is the active floor/depth byte. For overworld entries, `0` is
 Britannia and `255` is the Underworld plane. For town-style interiors it is the
@@ -122,9 +146,11 @@ sets the HMS Cape plans and adds no scroll, printing
 `The plans for the HMS Cape!`; record 14's state 133 is the odd-key marker plus
 5, so it adds **five skull keys** and prints `5 odd keys!` (the singular/plural
 test also uses the unmarked quantity). The potion article never changes, so the
-Orange records read `A orange potion!`. Records 0 to 11 stay unreachable filler
-(Section 2.1); their grant column is what the dispatcher gives those values,
-not something seen in play.
+Orange records read `A orange potion!`. Records 0 to 11 are the Underworld
+lava-pool cell of Section 2.1; record 0's grant was seen in play, and the
+others follow the same dispatcher (the odd records' Mystic Sword is that
+dispatcher reading, not a pickup observed in play). *(Corrected 2026-10-30,
+issue #314 Q2: this called them unreachable filler, `RETRACTIONS.md` R659.)*
 
 | Record | Location | Z/floor | X | Y | Pickup class | State | Rule | Get grants | Get line after the leading feed |
 |---:|---|---:|---:|---:|---|---:|---|---|---|
@@ -243,13 +269,14 @@ not something seen in play.
 | 112 | Lord British's Castle | 2 | 12 | 12 | Scroll (4) | 7 | One-shot | one Negate Time scroll (scroll id 7) | `A scroll: AT!` |
 
 **Shared cells.** *(Added 2026-10-25, issue #300 Q1.)* Several records share a
-cell: records 0 to 11 (the filler cell), 43 and 45, 81 and 86, 82 and 85, 94 and
+cell: records 0 to 11 (the Underworld lava-pool cell), 43 and 45, 81 and 86, 82 and 85, 94 and
 95, and 111 and 112. One Search stages at most one record: the first record in
 table order on that cell that is not yet found. On a two-record cell the first
 Search therefore stages the lower-numbered record, the second Search stages the
-other, and a third prints `nothing of note.`. On the twelve-record filler cell,
-if it were reachable, each further Search would stage the next record in turn,
-so the third would stage record 2 (`some armour!`). Each staged record takes the
+other, and a third prints `nothing of note.`. On the twelve-record cell each
+further Search stages the next record in turn, so the third stages record 2
+(`some armour!`); executed on the original *(corrected 2026-10-30, issue #314
+Q2: this was conditional on the cell being reachable, R659)*. Each staged record takes the
 lowest empty active-object slot, so both objects of a two-record cell can sit on
 the cell together, and Get takes the first acceptable one in slot order.
 
@@ -306,3 +333,15 @@ dumps, or private address tables.
   The 9999 food cap, the shared gem/torch adder with its 99 cap and the
   above-127 odd-key test were confirmed by static reading. Re-run by an
   independent verifier.
+- Records 0 to 11 on the Underworld cell of Section 2.1 (issue #314 Q2,
+  2026-10-30): private analysis in `u5-decomp/notes/` and
+  `u5-decomp/functions/SJOG_OVL/`. The record values were read from the shipped
+  shared data overlay; the exact four-field match, the scan's start at record 0
+  with extra conditions only on records 13 to 15, and the scan's place in the
+  surface Search cascade are static reading; the three Searches, the Get line
+  and the inventory and found-bit changes were executed on the stock game under
+  DOSBox and checked against the screen and the saved game afterwards; the lava
+  pool, the pocket and its enclosure were read from the shipped Underworld map.
+  Re-checked by an independent verifier. The Mystic Sword grant of the odd
+  records is static, and runtime writers to the record arrays were not
+  enumerated.

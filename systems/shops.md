@@ -2038,9 +2038,21 @@ The main menu accepts three actions:
   to the inn's bed cell for the duration, so the party is standing on the bed
   while the sequence plays; the cell for each inn, and where the party stands
   when it wakes, are published in the table below. The clock is then run forward
-  in paced steps until the hour byte reads **six** — the rest always ends at
-  06:00, whatever hour it began at, so a party that rents a room at 21:00 sleeps
-  nine hours and one that rents at 04:00 sleeps two. On completion the location runs the same
+  in paced steps until the hour byte reads **six**: first sixty minutes,
+  unconditionally, then nine-minute steps until the hour reads six. The rest
+  therefore ends on the first step that lands in hour six, not at minute zero.
+  A rental made in any hour from 07 through 04 ends between 06:00 and 06:08,
+  the minute depending on the starting minute (from 22:30 it ends at 06:06,
+  from 04:10 at 06:04); a rental during hour five ends exactly sixty minutes
+  later, at 06:mm with the starting minute (05:59 ends at 06:59); a rental
+  during hour six runs on to the next day's hour six, about 23.5 hours later
+  (06:30 ends at the next day's 06:00). Because entering the inn menu clears the
+  shared timed-effect slot (above), Quickness and Negate Time can never alter
+  these step lengths. *(corrected 2026-10-30, issue #314 Q3: this bullet earlier
+  said "the rest always ends at 06:00, whatever hour it began at"; retracted,
+  R660. The end minutes are from executing the original rest routine with its
+  clock in emulation; a live rest from 22:30 read 06:07 one town turn later,
+  which agrees, but the other start hours were not observed live.)* On completion the location runs the same
   clear-and-re-place pass that town entry runs: every non-party active-object
   record is cleared, and every scheduled NPC is re-placed at the position its
   schedule gives for the new hour (`systems/npc-schedules.md` Section 12). That
@@ -2051,8 +2063,27 @@ The main menu accepts three actions:
   and Mage set current MP to Intelligence; Bard sets current MP to half
   Intelligence; other classes do not receive this MP branch. Sleeping status is
   cleared to Good. Poisoned members die during the recovery pass and return
-  with zero current hit points. The shared hourly provision cadence may apply
-  as the clock advances. The quote is
+  with zero current hit points. The rest runs **no** party status/provision
+  pass (`systems/time.md` Section 5), neither once per crossed hour nor once at
+  the end: while its clock runs no provisions are spent, no `Starving!` warning
+  prints, no starvation damage is rolled and no per-turn poison point is taken.
+  After the innkeeper's farewell the message window shows only `Zzzzzz....`,
+  nothing at all while the clock runs, then `Morning!`, then the passed-away
+  line of each member who was Poisoned (Section 8.C). No hour the rest crossed
+  is charged afterwards either, the 06:00 crossing included (`systems/time.md`
+  Section 5, the paid inn rest case): with provisions on hand the 06:00 meal is
+  skipped, with none the 06:00 starvation is skipped, the first hour charged is
+  07:00 and the next meal is the 12:00 one. The one per-step effect is the Ring
+  of Regeneration roll, which the rest loop makes directly once per nine-minute
+  step and not during the first sixty minutes (static reading of the loop; the
+  ring check itself was executed). Evidence: the original rest routine run in
+  emulation never entered the status pass and left food unchanged at four
+  start times; live on the original, a party resting from 22:30 with no food
+  and a Poisoned member printed no `Starving!`, the member was still Poisoned
+  when the clock stopped and died only in the recovery pass, and a second run
+  with 50 provisions still held 50 after waking and after further turns.
+  *(added 2026-10-30, issue #314 Q3: replaces the earlier hedge that the hourly
+  provision cadence "may apply as the clock advances".)* The quote is
   `adjusted(base_rate * travelling_party_size, speaker_intelligence)`. This is
   a paid, safe town rest rather than a wilderness ambush-risk camp. Finishing
   Rest ends the inn visit without asking its continuation question.
@@ -2699,7 +2730,8 @@ Several shop interactions read or write the world clock:
 - **The `@` time-of-day substitution** reads the hour byte on every record render. Greetings vary by morning / afternoon / evening.
 - **The inn rest mode** advances the clock through the rest pipeline until the
   stay completes. It runs the paid inn recovery pass described above, without
-  the wilderness ambush risk.
+  the wilderness ambush risk, and never enters the party status/provision pass
+  (Section 8.4) *(added 2026-10-30, issue #314 Q3)*.
 - **The inn pickup mode** computes an Intelligence-adjusted ten-unit local
   lodging charge first, then multiplies it by the selected guest's stored stay
   counter. A zero counter is billed as one unit. The time system increments the
@@ -2866,3 +2898,9 @@ The behaviour described here was derived from the private function and format no
   pre-affordability ordering; and Blue Boar list count.
 - `u5-decomp/functions/SHOPPES_OVL/` -- arms sell
   browser and its side-panel geometry.
+- `u5-decomp/notes/` -- inn Rest and the party status/provision pass
+  (issue #314 Q3, 2026-10-30): the original rest routine executed in emulation
+  with its real clock and ring check, the status pass hooked and never entered,
+  at several start hours; live DOSBox rests on the original with no food and a
+  Poisoned member, and with 50 provisions; the end-minute arithmetic of the
+  rest's clock steps.
