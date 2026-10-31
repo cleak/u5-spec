@@ -1826,7 +1826,8 @@ the impact-tile draw. Absolute frequencies there are inherited from the
 monster swing sweeps opposite to the party's. Still open: the spell overlays'
 presentation around the shared result narrator, the standing-hazard tier's
 trigger conditions, the projectile pass behind one of the three silent ranged
-cases, and what a player can usefully do with a controlled monster once the
+cases (closed by #315 Q4, 2026-10-31: `systems/combat.md` Section 11.1, "The
+projectile pass"), and what a player can usefully do with a controlled monster once the
 prompt hands them one.
 
 **Addendum — 2026-09-02, issue #183: the ordinary melee to-hit score and the

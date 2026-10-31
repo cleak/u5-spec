@@ -469,7 +469,13 @@ substitutes a textbook line-drawing routine will diverge:
   shot with no column delta always ends one such step off on the column axis.
 
 **Sampling and testing.** The walker does not visit every emitted position. On
-the overworld it visits every thirteenth position, starting with the first. For
+the overworld it visits every thirteenth position, starting with the first.
+*(Added 2026-10-31, issue #315 Q4: the interval and start are set by the
+effect code the caller passes - every eighth position for code 7, and a start
+at the fifth position for code 0, in every scene outside the interior band;
+`systems/combat.md` Section 11.1. Which effect codes the overworld callers pass
+was not checked, so this sentence is established only for callers passing
+neither 0 nor 7; see `OPEN-QUESTIONS.md`.)* For
 each visited position, in this order: convert it to a cell, and stop reporting
 *clear* if either coordinate is outside the valid band; draw the effect figure;
 wait briefly and flush the dirty rectangle; advance the sampling index, and stop
@@ -504,9 +510,13 @@ ordinary creature does not itself obstruct the shot, while an unstamped actor
 does not hide the terrain test.
 
 This bitmap is private to the shared projectile walker. A whole-binary direct
-reader census and a caller census found no other gameplay consumer: the
-walker's five callers are the three player-Fire sites and the two outdoor
-creature ranged-attack sites already described here.
+reader census found no other gameplay consumer of the bitmap. The walker's
+callers include the three player-Fire sites and the two outdoor creature
+ranged-attack sites already described here, and also the combat ranged/effect
+resolver (`systems/combat.md` Section 11.1). *(Corrected 2026-10-31, issue #315
+Q4: this sentence said a caller census found "the walker's five callers are the
+three player-Fire sites and the two outdoor creature ranged-attack sites"; the
+five-caller closure is retracted, `RETRACTIONS.md` R663.)*
 
 Return polarity, stated positively: **a run that reaches the end of the
 generated line reports clear, and clear is what both outdoor call sites treat as
@@ -808,6 +818,11 @@ licence to invent a rule.
   the player's Fire command calls the same walker with a different argument set
   that was not traced, and no combat or dungeon breath analogue was examined. Do
   not carry this section into those modes without redoing the work.
+  *(Re-scoped 2026-10-31, issue #315 Q4: the work has been redone for combat.
+  The combat ranged/effect resolver runs this same walker, and
+  `systems/combat.md` Section 11.1 specifies it there, including the effect-code
+  interval and start; combat is no longer out of scope for this walker, R663.
+  Interior and dungeon modes remain out of scope.)*
 - **Frigate sub-state narrowing.** The absorption stage's ship branch covers both
   hoisted and furled markers. The per-turn walker that reaches the ranged
   branches was not read to its end, so a gate above it that narrows which frigate
@@ -1909,3 +1924,4 @@ The behaviour described above was derived by reading the function and format not
   were not swept, and far transfers and direct writes into the descriptor
   storage were not swept.
 - 2026-10-25 issue #300 Q16, Q24, Q27 and #301 Q3 pass: static reading of the animator's frame gate and the sleep, invisibility and wake frame writers; of the dungeon placement routine, its caller and the view-initialisation arm; of the arena outline routine, its per-side dispatcher and helpers, and the room painter to its end; and of the sinking routine's drowning arm, the impact presentation, the whole-party damage pass and the per-member helper, with a caller census of the impact presentation over the overworld overlay. Each was confirmed or corrected by an independent verifier re-reading. Durations are the Section 10.2 static model of `systems/audio.md`, not a capture. Source provenance: private analysis in `u5-decomp/notes/`.
+- 2026-10-31 issue #315 Q4 pass: the combat ranged/effect resolver's use of the shared projectile walker and the walker's effect-code-dependent sampling interval and start, executed on the original walker and line generator under emulation with drawing stubbed, plus static reading of the walker's interval logic. Which effect codes the overworld callers pass was not checked. Source provenance: private analysis in `u5-decomp/notes/`.

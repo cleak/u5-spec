@@ -4051,8 +4051,21 @@ a nonzero damage row routes to target selection and attack application. AI and
 ranged/effect attacks measure arena distance with the same truncated Euclidean
 slot-range helper used by target selection. If the target is beyond the
 actor's applicable range cap, the attack action exits without applying damage.
-Adjacent targets use the melee damage path; in-range non-adjacent targets use
-the ranged/projectile/effect path.
+On the **automatic driver**, adjacent targets use the melee damage path and
+in-range non-adjacent targets use the ranged/projectile/effect path. The
+spell/weapon dispatcher has **no distance test**. A party attack is routed by
+the readied item's range cap alone: a cap of zero, and bare hands, take the
+melee arm; any non-zero cap takes the ranged/effect arm at **every** distance,
+including an adjacent target. The targeting cursor refuses only distances above
+the cap and hands back the confirmed distance, so an adjacent pick proceeds down
+the ranged/effect arm, and a failed roll against an adjacent target scatters
+(Section 11.1). That covers the Dagger, Sling, Flaming Oil, Spear, Throwing
+Axe, Morning Star, Bow, Crossbow, Halberd, Magic Bow and Magic Axe. A
+controlled monster is routed by its class selector, as in the consumer table
+below. *(Corrected 2026-10-31, issue #315 Q3: this sentence previously read,
+unscoped, "Adjacent targets use the melee damage path; in-range non-adjacent
+targets use the ranged/projectile/effect path"; as a rule for every attacker it
+is retracted, `RETRACTIONS.md` R661. Static reading of both dispatchers.)*
 
 The shared to-hit helper is used by ordinary melee and ranged/effect attacks in
 both directions - a monster attacking a party member and a party member
@@ -4154,7 +4167,7 @@ harder to hit, more accurate, and acting more often.
 **The strength arm.** Five equipment ids select Strength instead of the
 attacker's combat weight, through a per-item to-hit-attribute value that is a
 third per-item side table - separate from the `Attack max` damage value and from
-the non-adjacent range cap. In the analyzed v1 data they are **Spiked Helm,
+the range cap. In the analyzed v1 data they are **Spiked Helm,
 Spiked Shield, Club, Mace and 2H Hammer** - the catalog's own names for ids 3,
 6, 18, 24 and 31: the blunt/impact family.
 Every other readied item, and bare hands, leaves the attacker term as Dexterity,
@@ -4337,9 +4350,16 @@ as turnable by Amulet/Turning. When such an actor targets a living party member
 who has Amulet/Turning readied in the amulet/neck equipment slot, attack setup
 rolls one byte in `[0, 255]`. On rolls below `128`, the ranged/effect helper is
 forced into its scatter mode instead of using the ordinary hit-roll result.
-Scatter mode picks a random adjacent impact cell around the intended target,
-retrying until it is not the attacker's current cell, then resolves projectile
-geometry and any impact at that scattered cell. Rolls `128..255`, attackers
+Scatter mode is the same resolver and the same landing-cell draw as an
+ordinary failed ranged roll (Section 11.1, "The ranged carve-out"): the landing
+cell is drawn from the three-by-three block **centred on** the intended target,
+redrawn while it is off the arena or on the attacker's current cell, then the
+projectile pass and any impact are resolved at that cell. Because the block
+includes its centre, the forced scatter can land back on the **wearer's own
+cell**, and then the full hit chain runs against the wearer. *(Corrected
+2026-10-31, issue #315 Q1: this sentence previously said scatter "picks a random
+adjacent impact cell around the intended target"; the implied exclusion of the
+target's own cell is retracted, `RETRACTIONS.md` R662.)* Rolls `128..255`, attackers
 without the flag, non-party targets, and party members not wearing
 Amulet/Turning use the ordinary ranged/effect hit-roll path.
 
@@ -4436,7 +4456,7 @@ correct one.)*
 | Consumer | Selector `1` (most classes) | A selector above `1` |
 |---|---|---|
 | The **AI attack resolver**, on the autonomous driver's path | treated as **maximum range 1**: the attack is refused unless the target is at truncated-Euclidean distance one, and distance one routes to melee | treated as a **maximum range**: distance one still routes to melee, and any greater distance within the range takes the ranged/effect path with the payload |
-| The **spell/weapon dispatcher**, on its non-party-side arm - the arm a controlled monster acting at the player's prompt reaches, and the arm the no-readied-item attempt reaches | folded to zero, selecting the **melee / Aim-cursor arm** | selects the **cast/effect arm unconditionally, at every distance including one** - this routine contains no distance test at all |
+| The **spell/weapon dispatcher**, on its non-party-side arm - the arm a controlled monster acting at the player's prompt reaches *(corrected 2026-10-31, issue #315 Q3: this cell also said "the arm the no-readied-item attempt reaches"; that is retracted, R661 - the cast entry refuses the no-item value before the dispatcher, and a party member's bare-hand attempt goes to melee through the party-side cap path)* | folded to zero, selecting the **melee / Aim-cursor arm** | selects the **cast/effect arm unconditionally, at every distance including one** - this routine contains no distance test at all |
 
 Both readings are keyed by the acting actor's class byte. They coincide for
 every class carrying selector `1`, which is an ordinary adjacent melee attempt
@@ -4541,6 +4561,7 @@ continues on the same row.
 | **To-hit fails** | party ranged or thrown | conditional; when it prints, a newline then `<target> missed!` naming the **originally aimed** actor | none |
 | To-hit fails on a cast issued from the combat command layer | party melee or ranged | `Failed!` - **with no name** - replacing the miss line entirely | none from this arm |
 | **Hit lands** | both | a newline (the party melee path already emitted it before the roll) | **impact presentation runs first**: the impact tile is drawn on the target's cell; for a **party** target that member's stats row is flashed around a 75-update noise burst (random rumble step 40, target 3000, 100..500 Hz; `audio.md` Section 5.3), which is the only sound of a combat party hit: no direct call from the combat overlays to the 160-update damage rumble was found; for a **monster** target, or any target outside the arena, a 300-update noise burst alone (step 10, target 3000, 100..2000 Hz) with no flash; the party form is selected by the target descriptor's party-side bit (Section 6.1), so a controlled party member keeps it and a controlled monster takes the monster form *(added 2026-10-25, issue #300 Q31)*; then a visibility pass. All of this precedes the newline and the damage. |
+| To-hit succeeds but the projectile pass is blocked *(added 2026-10-31, issue #315 Q4)* | monster ranged; party ranged or thrown | monster: nothing; party: a newline then `<target> missed!` naming the originally aimed actor, or nothing if the aimed cell was empty | the swing sweep already played; the shot is drawn up to the blocking cell and stops; no impact field, no reveal step |
 | Damage zero or negative | both | `<target> grazed!` **and nothing else** - the kill, sleep, hit and wound lines are all suppressed | the rising action-snap cue (`audio.md`, 1200 toward 2000 Hz) |
 | Target dies | both | `<target> killed!` | no cue of its own; the party death arm runs a full stats redraw, the monster death arms write their tiles (Section 6.3) |
 | Monster dies, vanish class | party attacker | `<monster> vanishes!` - **no trailing newline** - printed inside the damage handler, which then suppresses the kill line | none |
@@ -4588,13 +4609,30 @@ this is the one place where "a monster's miss prints nothing" must not be
 generalised. On a failed roll the shot scatters: the impact point is drawn from
 the three-by-three neighbourhood centred on the **aim cell**, redrawn only while
 the draw lands on the **attacker's own** cell. The aim cell is therefore itself a
-legal landing cell. The resolver then reports whoever occupies the landing cell,
+legal landing cell. *(Added 2026-10-31, issue #315 Q1 and Q2.)* The landing
+cell is drawn as two separate draws from the shared range generator
+(`systems/prng.md`), each over the inclusive range 1..3 and read as an offset of
+-1, 0 or +1 from the aim cell: the **column first, then the row**. Both axes are
+drawn on every attempt. If either coordinate falls outside the arena (0..10 on
+either axis), both are drawn again, column first; only an in-arena cell then
+meets the attacker's-cell test, which also redraws both axes. An off-arena
+landing cell is never clamped and never becomes an empty miss, and an in-arena
+cell holding blocking terrain is still a legal landing cell (only the projectile
+pass below looks at terrain). Each attempt costs exactly two generator calls.
+The landing cell is **not uniform** over the block: it is the product of two
+1..3 draws that each carry the generator's modulo bias, which `systems/prng.md`
+requires a compatible implementation to keep, conditioned by the two
+rejections. There is no single eight- or nine-way draw anywhere on this path,
+and the Amulet/Turning forced scatter (Section 11) uses exactly this draw.
+Executed on the original resolver and scatter routine with the generator calls
+scripted and their 1..3 ranges checked, including corner and edge aims. The
+resolver then reports whoever occupies the landing cell,
 and the **full hit chain runs against that actor** - impact presentation,
 newline, damage, result line - whether that actor is a monster or a party member.
 
 The attack stays silent in exactly three cases, the cases where the resolver
-reports no occupant: the projectile pass fails, the landing cell is empty, or the
-landing cell holds the acting slot itself. The resolver does carry a second test
+reports no occupant: the projectile pass is blocked (below), the landing cell
+is empty, or the landing cell holds the acting slot itself. The resolver does carry a second test
 that would turn a failed roll back into "no target", but it is guarded by the
 cast marker, and the round walker clears that marker before **every** actor
 dispatch, so an ordinary monster never reaches it.
@@ -4606,6 +4644,67 @@ the hit chain runs and the miss line is skipped entirely. The party miss line
 prints only when the resolver reports nobody **and** the originally aimed cell
 held a real actor - and it names that originally aimed actor, not the cell the
 shot reached.
+
+**The projectile pass.** *(Added 2026-10-31, issue #315 Q4.)* Every
+ranged/effect resolution, hit or miss, walks the shot from the attacker's cell
+to the landing cell - the aim cell on a successful roll, the scattered cell on a
+failed one. The walk is the shared projectile walker of `systems/overworld.md`
+Section 6.2.2: the same sub-tile line, the same "advance, and only then test" order
+that never tests the last sample, the same 46-id blocking set, and the same
+exemption for the shooter's own cell. The walker's sampling depends on the
+**effect code** the caller passes, and in combat (which lies outside the
+interior band) the rule is: every **thirteenth** emitted position, but every
+**eighth** when the effect code is 7 (the Sling, and any monster class whose
+payload is 7); and when the effect code is 0 (Dagger, Spear, Morning Star, Bow,
+Crossbow, Halberd, Magic Bow and payload-0 monster classes) sampling starts at
+the **fifth** emitted position instead of the first. With effect code 7 a cell
+on the line is typically tested twice. These are rules of the walker itself, not of
+combat. The grid tested is the on-screen grid, which in combat is the arena
+terrain with combatants composited over it; a cell holding a composited
+combatant reads as the passable routing sentinel, as on the overworld, so
+combatants on the line do not shield the target (static reading of the combat
+display refresh; the executed runs used bare terrain).
+
+The pass is **blocked** when a tested sample lies on a cell holding a blocking
+tile id other than the shooter's own cell. The walk stops there with the
+projectile figure already drawn on the blocking cell, so the shot visibly stops
+at the obstacle, and the resolver reports "no occupant" and returns at once.
+That return comes **before** everything that follows an unblocked walk: nobody
+is struck, the post-walk reveal step does not run, and no impact field is placed:
+the field step that Flaming Oil and a small set of spell selectors take after
+the walk, even onto an empty landing cell, is skipped, so a blocked Flaming Oil
+throw leaves no field (static reading). What prints on a block: on the
+**monster** arm, nothing, whether the to-hit roll succeeded or failed - only the
+swing sweep that played before the roll is heard; on the **party** arm, a
+newline and then `<aimed target> missed!` (or `Failed!` under the cast marker)
+when the originally aimed cell held a real actor, **even if the roll
+succeeded**, and nothing when it was empty (static reading of both print paths).
+
+Three further rules:
+
+- **Morning Star and Halberd skip the walk entirely**: on a hit they strike the
+  aimed cell directly. What a failed roll does with either weapon is not
+  established (see "Not covered" below).
+- **The Magic Axe walks twice.** After resolution a second, purely
+  presentational walk runs from the landing cell back to the thrower; when the
+  outbound shot was blocked, the return starts from the blocking cell.
+- **Whether the landing cell itself is tested depends on the geometry**, so
+  reproduce the sampler, not a per-cell rule. Over all 120 in-arena offsets: at
+  the ordinary interval the landing cell is tested in only 6 geometries (offset
+  4 on one axis and 5 on the other); with effect code 0 in 10 (the exact
+  diagonals at 1, 3 and 5, the 1-offset diagonals only on the positive-column
+  side, because of the column overshoot `systems/overworld.md` Section 6.2.2
+  describes); with effect code 7 in 110. Non-launch tests per shot range over
+  0..10, 0..11 and 0..18 respectively. Because an occupied landing cell reads as
+  passable, testing it changes no outcome when a combatant stands there, only
+  how far the animation travels. At distance one the ordinary interval can
+  never block; with the Sling's effect code, terrain on the target cell itself
+  can.
+
+Executed on the original walker, line generator, pixel-to-cell conversion and
+blocking test with drawing and delay stubbed (when the walk runs, the block
+condition, the launch-cell exemption, the effect-code interval and start, and
+the 120-offset sweep); the rest is static reading as marked.
 
 #### The graded wound lines are monster-target only
 
@@ -4807,8 +4906,16 @@ installer's uninstaller is not game code and was excluded.
   presentation; the earlier caution that no engine should infer one burst
   shorter than the other is retracted, R614.)*
 - **Not covered:** spell-overlay presentation beyond the named attack and
-  directed-effect families now specified above, the standing-hazard tier's trigger conditions, and the projectile
-  pass that is one of the three ways a monster's ranged miss stays silent. The
+  directed-effect families now specified above, the standing-hazard tier's trigger conditions, and
+  what a Morning Star or Halberd failed roll does: both skip the projectile
+  pass, and whether the scattered cell's occupant is struck or nobody is struck
+  depends on a value that path never sets itself and inherits from earlier calls
+  in the same party-arm call chain. It is fixed by the code path but **not yet
+  established**; emulating the whole party ranged arm with the real to-hit
+  routine, or an in-game capture, would settle it, and a port should treat it as
+  undetermined rather than guess. *(The projectile pass, formerly listed here as
+  one of the three ways a monster's ranged miss stays silent, is now covered by
+  Section 11.1, issue #315 Q4.)* The
   residue "what a player can usefully do with a controlled monster once the
   prompt hands them one" is now largely closed by Section 8: the whole command
   cascade runs for such an actor, seven letters refuse, `A` takes the
@@ -5735,6 +5842,11 @@ The behaviour described here was derived from the private function and format no
 - Amulet/Turning's combat passive branch and ranged/effect scatter boundary —
   derived from `u5-decomp/functions/COMBAT_OVL/`, and
   `u5-decomp/functions/COMSUBS_OVL/`.
+- The ranged scatter draw, the off-arena redraw, party weapon routing by range
+  cap, and the combat projectile pass (2026-10-31, issue #315 Q1-Q4) — derived
+  from private analysis in `u5-decomp/notes/`: the scatter, resolver and
+  walker executed under emulation with generator calls scripted, plus static
+  reading of both attack dispatchers and the print paths.
 - The weapon/spell damage-row split, target selection handoff, item-id keyed
   range/effect rows, ranged/projectile apply path, and shared to-hit formula --
   derived from

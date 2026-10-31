@@ -329,9 +329,15 @@ across party and monster actors:
 - Target distance for AI and ranged/effect attacks uses the combat arena's
   truncated Euclidean slot range. Attacks beyond the relevant per-class or
   per-weapon range cap do not apply damage.
-- Adjacent targets use the melee damage path. Non-adjacent targets that pass the
-  range gate use the ranged/projectile/effect path and the same shared to-hit
-  helper unless a special effect forces a hit or redirects the impact.
+- On the automatic driver, adjacent targets use the melee damage path and
+  non-adjacent targets that pass the range gate use the ranged/projectile/effect
+  path. A **party** attack is routed by the readied item's range cap alone, with
+  no distance test: cap zero (or bare hands) takes the melee path, and a
+  non-zero cap takes the ranged/projectile/effect path at every distance,
+  adjacent targets included. Both paths use the same shared to-hit helper unless
+  a special effect forces a hit or redirects the impact. *(Corrected 2026-10-31,
+  issue #315 Q3: this bullet previously said, for every attacker, "Adjacent
+  targets use the melee damage path"; retracted, `RETRACTIONS.md` R661.)*
 - The shared to-hit helper accepts certain special action/effect tiles as
   always-hit cases; otherwise it computes a score from attacker and defender
   combat ratings, `(defender - attacker + 30) / 2` truncated toward zero, and
@@ -348,7 +354,7 @@ across party and monster actors:
   term of that score instead of the character's Dexterity: Spiked Helm (3),
   Spiked Shield (6), Club (18), Mace (24) and 2H Hammer (31). Every other readied item, and bare
   hands, leaves the attacker term as Dexterity. This is a third per-item side
-  table, independent of both `Attack max` and the non-adjacent range cap.
+  table, independent of both `Attack max` and the range cap.
 
 The traced weapon-dispatch range table is item-id keyed and independent of the
 `Attack max` damage ceiling. A non-zero range cap does **not** mean "missile
@@ -357,15 +363,21 @@ the Dagger and Spear are throwables. Only the five true missile items - Sling,
 Flaming Oil, Bow, Crossbow and Magic Bow - additionally run the adjacent-attacker
 interference abort specified in `systems/combat.md` Section 8.2, which cancels the
 attempt (while still spending the turn) when an automatic-driver-side actor that
-recently struck the attacker is standing in one of the eight surrounding cells. A range cap of zero means the ordinary
-weapon-dispatch path has no non-adjacent route for that item. A positive cap
-allows targeting any arena cell whose truncated Euclidean distance from the
-attacker is within the cap; cap `15` reaches the whole eleven-by-eleven arena.
+recently struck the attacker is standing in one of the eight surrounding cells. A range cap of zero sends the
+item through the melee path. A positive cap sends it through the ranged/effect
+route at **every** distance, including against an adjacent target, so it has
+the scatter on a failed roll and the projectile pass (`systems/combat.md`
+Section 11.1), and allows targeting any arena cell whose truncated Euclidean
+distance from the attacker is within the cap; cap `15` reaches the whole
+eleven-by-eleven arena. *(Corrected 2026-10-31, issue #315 Q3: this paragraph
+said a zero cap means "no non-adjacent route", implying a positive cap matters
+only beyond adjacency, and the cap column was headed "Non-adjacent range cap";
+retracted, R661.)*
 The companion effect code is the small projectile/impact variant passed into
 the shared ranged/effect resolver. Rows with range cap zero do not make that
 effect code live through this weapon-dispatch path.
 
-| Id | Item | Non-adjacent range cap | Effect code | Compatibility note |
+| Id | Item | Range cap | Effect code | Compatibility note |
 |---:|---|---:|---:|---|
 | 16 | Dagger | 3 | 0 | Throwable or reach-capable through the ranged/effect route. |
 | 17 | Sling | 4 | 7 | Uses the ranged/effect route; no separate sling ammunition stock is traced. |
@@ -393,19 +405,19 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 
 | Item | Family | Known role | Catalog boundary |
 |------|--------|------------|------|
-| Flaming Oil | Thrown/consumable weapon | Listed with weapons and has an ordinary attack max value; non-adjacent range cap 4 with effect code 3. | No attack-time consumption in the analyzed baseline. |
+| Flaming Oil | Thrown/consumable weapon | Listed with weapons and has an ordinary attack max value; range cap 4 with effect code 3. | No attack-time consumption in the analyzed baseline. |
 | Main Gauche | Weapon | Small blade or off-hand weapon with an ordinary attack max value. | Detailed hand rule. |
-| Dagger | Weapon | Small blade with an ordinary attack max value; non-adjacent range cap 3. | No attack-time consumption in the analyzed baseline. |
-| Throwing Axe | Weapon | Throwable axe with an ordinary attack max value; non-adjacent range cap 4 with effect code 2. | No attack-time consumption in the analyzed baseline. |
-| Sling | Ranged weapon | Ranged weapon with an ordinary attack max value; non-adjacent range cap 4 with effect code 7. | No separate ammunition stock is traced. |
+| Dagger | Weapon | Small blade with an ordinary attack max value; range cap 3. | No attack-time consumption in the analyzed baseline. |
+| Throwing Axe | Weapon | Throwable axe with an ordinary attack max value; range cap 4 with effect code 2. | No attack-time consumption in the analyzed baseline. |
+| Sling | Ranged weapon | Ranged weapon with an ordinary attack max value; range cap 4 with effect code 7. | No separate ammunition stock is traced. |
 | Club | Weapon | Simple melee weapon with an ordinary attack max value. | None for ordinary damage. |
-| Spear | Weapon | Pole weapon with an ordinary attack max value; non-adjacent range cap 5. | One- or two-handed rule outside R-Ready's stored class tag. |
+| Spear | Weapon | Pole weapon with an ordinary attack max value; range cap 5. | One- or two-handed rule outside R-Ready's stored class tag. |
 | Mace | Weapon | Melee weapon with an ordinary attack max value. | None for ordinary damage. |
-| Bow | Ranged weapon | Uses arrows at ready time, has an ordinary attack max value, and has non-adjacent range cap 7. | No attack-time ammunition consumption in the analyzed baseline. |
-| Crossbow | Ranged weapon | Uses quarrels at ready time, has an ordinary attack max value, and has non-adjacent range cap 8. | No attack-time ammunition consumption in the analyzed baseline. |
+| Bow | Ranged weapon | Uses arrows at ready time, has an ordinary attack max value, and has range cap 7. | No attack-time ammunition consumption in the analyzed baseline. |
+| Crossbow | Ranged weapon | Uses quarrels at ready time, has an ordinary attack max value, and has range cap 8. | No attack-time ammunition consumption in the analyzed baseline. |
 | Short Sword | Weapon | One-handed sword with an ordinary attack max value. | None for ordinary damage. |
 | Long Sword | Weapon | Sword with an ordinary attack max value. | Detailed hand rule. |
-| Morning Star | Weapon | Heavy melee weapon with an ordinary attack max value; non-adjacent range cap 2. | None for ordinary damage. |
+| Morning Star | Weapon | Heavy melee weapon with an ordinary attack max value; range cap 2. | None for ordinary damage. |
 | Sword of Chaos | Magical weapon | Named high-tier sword using the combat special attack value. Its drawback is now traced: while item id 35 sits in the wielder's weapon-hand or shield-hand readied slot, that character's combat turns are taken away from the player. The combat turn dispatcher stamps the controlled/charmed descriptor bit on the character, clears the active-player sentinel, and runs the turn through the automatic actor driver instead of reading a command, so the character shows the `C` status letter and acts on its own. See `systems/combat.md` Section 6.1a. | Whether any narration accompanies the compulsion. |
 | Silver Sword | Weapon | Special sword, likely effective against specific enemies. | Exact enemy interactions. |
 | Glass Sword | Weapon | Named weapon using the combat special attack value: the damage roller narrates `Thy sword hath shattered!` and substitutes the instant-kill sentinel 99 (`systems/combat.md` Section 12). | The shatter clears the first matching readied Glass Sword slot before the instant-kill result is applied; no carried-inventory count changes. The earlier no-breakage sentence in this row is withdrawn (R390); its removal was missed when that correction first landed. |
@@ -414,7 +426,7 @@ thrown-stock, or glass-breakage path for the analyzed baseline.
 | 2H Hammer | Two-handed weapon | Requires both hands free and has an ordinary attack max value. | Display weight. |
 | 2H Axe | Two-handed weapon | Requires both hands free and has an ordinary attack max value. | Display weight. |
 | 2H Sword | Two-handed weapon | Requires both hands free and has an ordinary attack max value. | Display weight. |
-| Halberd | Two-handed weapon | Polearm with an ordinary attack max value; non-adjacent range cap 2. | Display weight. |
+| Halberd | Two-handed weapon | Polearm with an ordinary attack max value; range cap 2. | Display weight. |
 | Magic Bow | Magical ranged weapon | Uses arrows at ready time, has an ordinary attack max value, and has arena-wide range cap 15. | No attack-time ammunition consumption in the analyzed baseline. |
 | Magic Axe | Magical weapon | Named axe with an ordinary attack max value; arena-wide range cap 15 with effect code 2. | No attack-time consumption in the analyzed baseline. |
 | Arrows | Ammunition | Used by bows. Search/container equipment grants award five-arrow bundles, and traced equipment grant paths cap carried stock at 99. The traced combat attack stack does not decrement this stock. | No attack-time consumer in the analyzed baseline. |
@@ -995,3 +1007,5 @@ ordinary per-turn processing. Source provenance: derived from private analysis
 in `u5-decomp/functions/CAST_OVL/`, `u5-decomp/functions/ULTIMA_EXE/`,
 `u5-decomp/functions/MAINOUT_OVL/`, `u5-decomp/functions/TOWN_OVL/`, and
 `u5-decomp/functions/DUNGEON_OVL/`.
+
+Party weapon routing by range cap (2026-10-31, issue #315 Q3): the spell/weapon dispatcher keys a party attack only on the readied item's range cap and has no distance test, so every non-zero-cap item takes the ranged/effect route against an adjacent target. Static reading of both attack dispatchers, independently re-read. Source provenance: private analysis in `u5-decomp/notes/`.

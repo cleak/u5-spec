@@ -86,6 +86,7 @@ Confirmed non-shrine scalar changes:
 | Town-family chest opening | Opening a matching surface/town object-table chest | Shared moral-standing selector -2, floored at zero |
 | Crop or table-food taking | Picking crop cells or eating reachable table food | Shared moral-standing selector -1 when nonzero |
 | Town-family cannon hit | F-Fire local cannon path after a successful active-object hit | Shared moral-standing selector -5, floored at zero |
+| Town A-Attack *(added 2026-10-31, issue #316 Q1)* | An accepted A-Attack target in a town-family scene (`systems/town-mode.md` Section 10, "Karma cost of A-Attack") | Shared moral-standing selector -5, floored at zero, for actor types below `0x80` (guards included), taken at target acceptance before any terrain test, conflict or arena. On a terrain kill-arm cell (stocks, manacles, `0x9F` or bed) a further -5 for every type except `0x78`, so -10 for a townsperson or guard and -5 for a type at or above `0x80`. Nothing after the fight; refusals cost nothing; no per-virtue byte. Amounts and floor executed; ordering static reading. |
 | Freeing a restrained prisoner | J-Jimmy succeeding on a stocks or manacles tile with an NPC standing on it, which frees that NPC and draws the thankful response. There is no pickpocket path; nothing is transferred to the party. On the large outdoor maps the same success clears the restraint tile instead and awards nothing. | Shared moral-standing selector +2, capped at ninety-nine |
 | Conversation standing-up control code | A dialogue script emits the raise-standing control byte | Shared moral-standing selector +1, capped at ninety-nine. Emits no text; scripts stack the byte to grant more than one |
 | Conversation standing-down control code | A dialogue script emits the lower-standing control byte | Shared moral-standing selector -1, floored at zero. Emits no text; scripts stack the byte to deduct more than one |
@@ -239,7 +240,7 @@ Negative boundaries for unpromoted action families:
 | Betraying a shrine's mantra to Blackthorn | The mantra interrogation in `systems/blackthorn.md` Section 4 | **Confirmed scalar writer.** Each correct answer given to Blackthorn debits five points from the shared moral-standing selector, clamped at zero, and separately sets the interrogated shrine's durable ruin flag. This is the only path that sets a shrine ruined. |
 | Paying or refusing a regime guard | The Blackthorn guard-demand handler in `systems/blackthorn.md` Section 7a: the Minoc "charity" demand, the per-living-member tribute, and the palace-gate password | Resolved as a non-writer. The handler's only durable effect is on party gold; it writes no virtue standing, no scalar selector, and no character status, whether the party pays, refuses, or fails the password. Do not model consenting to the "charity" demand as a Compassion gain or refusing the tribute as a Honesty loss. |
 | Insisting on a fourth tavern drink | After three successful secondary drinks in one tavern visit, answer `N` when asked whether the party has had enough | **Confirmed scalar writer.** The answer subtracts one from shared moral standing with a floor of zero and arms the town drunkenness counter before the fourth drink's affordability check. Primary round/meals and provisions do not reach this writer. |
-| Attacking a non-hostile NPC | Combat-mode strike on a peaceful or friendly actor | No combat-overlay write to the scalar selector or a per-virtue standing byte is promoted in the current census. Town-family cannon hits are the covered hostile/destructive scalar penalty. |
+| Attacking a non-hostile NPC | Combat-mode strike on a peaceful or friendly actor | Inside an arena, no combat-overlay write to the scalar selector or a per-virtue standing byte is promoted in the current census. The town A-Attack command that opens such a fight is a confirmed scalar writer (table above): its debit is taken before the conflict, and nothing more is written after the fight. Town A-Attack and town-family cannon hits are the covered hostile/destructive scalar penalties; neither writes a per-virtue byte. *(Corrected 2026-10-31, issue #316 Q1: this cell previously named the cannon hit as the only covered penalty, which is withdrawn - `RETRACTIONS.md` R665.)* |
 | Initiating or refusing combat | Combat engagement or combat-end stay-and-fight branch | Combat framer, ordinary combat exit, reward, and flee paths have no traced post-combat virtue delta. |
 | Fleeing a winnable combat | Combat-end flee branch while advantaged | No scalar or per-virtue writer is promoted from the traced flee/exit paths. |
 | Completing or defaulting on a stated quest | Quest-flag-setting, quest-fail, or betrayal branch | Quest flags are owned by their quest systems. A flag mutation is not automatically a standing mutation. |
@@ -250,9 +251,13 @@ Characteristics that are firm even where non-shrine magnitudes are not:
 - **Shrine offerings are not stat rewards.** They consume party gold and raise the shared moral-standing selector only after that virtue's shrine quest is already complete.
 - **Shrine quest turn-in is the stat reward.** Returning after the Codex page clears the ordained bit, raises the shared selector, and may increment Avatar stats according to the shrine stat table in Section 7.
 - **Attack and flee karma are not inferred.** Striking peaceful citizens or
-  fleeing combat may be judged by dialogue or by the player-facing fiction, but
-  the traced combat and town attack paths do not publish a separate virtue delta
-  beyond the confirmed cannon-hit scalar penalty.
+  fleeing combat may be judged by dialogue or by the player-facing fiction. The
+  traced combat paths publish no standing delta. Two town actions debit the
+  shared scalar selector: the town A-Attack command (-5 at target acceptance for
+  types below `0x80`, and -5 more on the terrain kill arm) and the cannon hit
+  (-5). Neither writes a per-virtue byte. *(Corrected 2026-10-31, issue #316 Q1:
+  this bullet previously said the town attack path publishes no delta beyond the
+  cannon hit; that is withdrawn - `RETRACTIONS.md` R665.)*
 - **Profanity is not currently a confirmed karma mutator.** The reserved-keyword default branch prints its chastisement and repeatedly invokes a resident timing/presentation helper after a pause. The wrapped helper target is not a stats-panel or virtue-standing writer, so the public contract should not model profanity as a standing change unless a separate producer is traced.
 - **Conversation gold demands are not automatically Compassion changes.** The
   traced three-digit gold-payment control byte decodes a demanded amount and
@@ -1509,6 +1514,12 @@ Section 7.
 ## 13. Sources
 
 The behaviour described here was derived from the private function and format notes listed below, with sibling specs used as cross-checks where noted. This public document paraphrases observed behaviour and field roles; it does not reproduce private source, decompiler output, assembly excerpts, raw dumps, private address tables, or implementation listings.
+
+- The town A-Attack debits (issue #316 Q1): the two 5-point debit points, their
+  gating and order, and the absence of a post-fight writer from a static reading;
+  the amounts and the zero floor from executed runs of the original with the
+  selector read back from the saved game. Source provenance: derived from
+  private analysis under `u5-decomp/notes/`.
 
 - The identity of the `+2` thank-you award as a prisoner release on a restraint
   tile rather than a pickpocket, including the outdoor-map variant that clears
