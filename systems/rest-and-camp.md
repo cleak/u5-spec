@@ -475,19 +475,37 @@ The event's public contract:
 - **Each living member's turn in the pass is presented, not just the ones who
   gain a level.** Before the level line, the handler stamps a class-keyed tile
   into an active-object record chosen as Section 7.2 describes - in an ordinary
-  outdoor camp, by static reading, the party's own map record every time, not a
-  per-member sprite - and plays a two-envelope sting around a whole-viewport
+  outdoor camp, by inference from a capture, that member's own figure in the
+  camp scene, so the member's sleeping figure becomes the class figure and
+  stays so until the camp scene closes - and plays a two-envelope sting around a whole-viewport
   inversion with world-tick pauses (Section 7.1). This runs for every living
   member on every occurrence of the event. *Added 2026-08-23; an implementation
   built from the previous text would have played the sting only on a level-up.*
   *(Corrected 2026-10-16, issue #298 Q10: this bullet said the handler
   "restamps that member's map sprite"; that is retracted, see `RETRACTIONS.md`
-  R547.)*
+  R547.)* *(Corrected 2026-11-01, issue #317 Q3: this bullet said the stamp
+  went into "the party's own map record every time, not a per-member sprite";
+  that is retracted, see `RETRACTIONS.md` R669.)*
 - It refreshes the party/status display before returning to the caller.
-- The old man's on-screen figure is an ordinary temporary entry in the world's
-  active-object table, placed at the centre cell of the viewport — the party's
-  own cell — for the duration of the scene, and cleared to an empty tile at the
-  end. It is not a separate presentation layer.
+- *(added/corrected 2026-11-01, issue #317 Q3)* The event runs inside the
+  outdoor camp scene, the combat-framed arena that the rest/camp alternate
+  setup puts up inside the combat framer (`combat.md` Section 2,
+  `encounters.md` Section 2); it is not run over the map view. In that scene
+  the campfire stands at the centre cell and the sleeping party members lie
+  around it as separate figures. The old man's figure is an ordinary temporary
+  entry, record 10, in the active-object table live in that scene (the camp
+  scene's table; the world table is held aside by the framer). It is placed at
+  arena column 5, row 5, the campfire's cell; no party member stands on that
+  cell. Because the scene is combat-framed, the compositor neither projects his
+  coordinates, nor tests his floor, nor refreshes slot zero (`visibility.md`
+  Section 8, the slot-zero refresh paragraph, and Section 8.1, the paragraph
+  listing the combat differences), so the "slot zero draws on top" rule holds
+  but nothing in this scene triggers it. He is visible from the end of his
+  arrival converge until his departure converge, and at the end the record is
+  cleared to an empty tile and the campfire shows again. It is not a separate
+  presentation layer. *(This bullet said he was placed at "the centre cell of
+  the viewport — the party's own cell" of the world's table; that is retracted,
+  see `RETRACTIONS.md` R668.)*
 - It removes the temporary old-man presentation state and advances the turn
   clock before normal play resumes.
 
@@ -508,6 +526,19 @@ period)`; `\n` is a line feed and `_` a space. Once the event runs, in order:
    single-cell converge (`systems/audio.md` Section 8.3.1) then runs on atlas
    tile `0x174` (`catalogs/tile-catalog.md` actor-half row 372) at `(5, 5)`;
    then the record's actor byte becomes `0x74`, which draws that tile.
+   *(added 2026-11-01, issue #317 Q3)* The record is record 10 of the camp
+   scene's active-object table, and `(5, 5)` is an arena cell of the camp
+   scene, the campfire's cell; his floor byte is not written, and in this
+   combat-framed scene it is not tested. The figure covers the campfire on
+   screen and stays visible until step 7: through every member's world-tick
+   pauses, both envelopes and the three trailing pauses, and through the
+   closing verdict key wait. Each viewport inversion shows him inverted and the
+   next repaint brings him back, not the campfire. During the key waits he
+   animates like any actor; which poses he cycles through was not checked
+   against the tile atlas. That he also stays through level lines is static
+   reading; no level change was captured. Observed in an emulator capture of a
+   three-member party with no level change (EGA); record, cell and floor by
+   static reading.
 4. **Per member, in party order.** A living member is silently healed and cured
    (above), the class tile is stamped (Section 7.2), then one world-tick pause,
    the envelope `(13, 200, 5000, 1, 5500)`, one inversion of the whole gameplay
@@ -544,9 +575,24 @@ period)`; `\n` is a line feed and `_` a space. Once the event runs, in order:
    for the redraw gate and the slot-1 pen. The pen's only writer is the
    start-up rewrite, and the gate's only writers (the outdoor per-tick set-up
    and town) set it; nothing clears it. The reading assumes each gated world tick reaches the
-   rasterizer. No live capture was taken; the apparition is a random event
-   behind camp conditions. Source provenance: private analysis in
+   rasterizer. Source provenance: private analysis in
    `u5-decomp/notes/`.
+   *(added/corrected 2026-11-01, issue #317 Q3)* The argument above was framed
+   for an event drawn over the map view ("in an ordinary outdoor camp", from
+   the outdoor per-tick set-up). The event in fact runs inside the
+   combat-framed camp scene (Section 7, above), so the viewport is the camp
+   arena. The repaint itself is now observed: in an EGA capture of a
+   three-member party, each member's inversion was erased by the following
+   world-tick pause, which restored the old man and the member figures, and
+   no flash accumulated. The census reading (the gate is set before the camp
+   and nothing clears it) still supports the gate being set in the camp
+   scene, but that the gated tick repaints the arena view there is shown by
+   the capture, not traced. The paint-nothing-sentinel caveat is more
+   relevant in the camp scene, because the sentinel is a combat-scene value
+   (`combat.md` section 7) and the viewport is drawn from the arena. The
+   capture was examined cell by cell only over the five-by-five block around
+   the centre; whether any other viewport cell kept inverted pixels was not
+   checked.
 5. **Level line**, only when that member's level changed: `\n"Hail,_`, the
    member's name, `!\nFor_thy_valiant_deeds,_I_shall_reward_thee!\n`,
    `Thou_art_now_level_`, the new level as a plain decimal number, `,_and\n`,
@@ -560,11 +606,15 @@ period)`; `\n` is a line feed and `_` a space. Once the event runs, in order:
 7. **After the pass**: `\n"`, the `KARMA.DAT` verdict record, `"`, a key wait,
    then `\n\nThe_strangely_familiar_old_man_vanishes...\n`. **The old man
    leaves**: his actor byte goes back to `0x16`, the single-cell converge runs
-   at `(5, 5)` on the terrain tile under the viewport centre (inferred from
-   where it reads in the viewport's tile buffer; the figure fades back into
-   the ground), the
+   at `(5, 5)` on the tile under that cell, which in the camp scene is the
+   campfire (observed in capture), the
    record is cleared to actor byte 0, then one world tick, then the turn-clock
-   advance.
+   advance. The member figures are still standing, in class art, when he
+   vanishes; after the departure converge the camp scene gives way to the
+   ordinary map view (observed). *(Corrected 2026-11-01, issue #317 Q3: this
+   step said the converge ran on "the terrain tile under the viewport centre"
+   and the figure faded "back into the ground"; that is retracted with the
+   map-view placement, `RETRACTIONS.md` R668.)*
 
 ### 7.2 The class tile and where it is written
 
@@ -582,24 +632,38 @@ atlas index (`catalogs/tile-catalog.md` Section 3) in parentheses:
 The handler looks in the combat-instance descriptor table for an entry linked
 to the member's party index. On a hit it writes the tile into that entry's
 linked active-object record. On a miss it reuses the previous member's target,
-and before the first hit that target is the old man's own record. When every
-matching entry's object index is zero, member 0 resolves to active-object
-record 0, the party's own map record, and every later member reuses that same
-record, so the party's map sprite is re-stamped once per living member and is
-left showing the last living member's class art. Reproduce this pointer
-behaviour rather than stamping a per-member sprite.
+and before the first hit that target is the old man's own record.
 
-This outcome is **not fully established**. The descriptor table is not
-all-zero after a combat: the actor-clear helper zeroes every descriptor byte
-except the member/class link byte, which it preserves (an executed issue #263
-probe). Record 0 still results when every matching entry's object index is
-zero, but a descriptor whose object index was not scrubbed at combat end would
-redirect the stamp, and that teardown was not traced (`OPEN-QUESTIONS.md`).
+*(added/corrected 2026-11-01, issue #317 Q3)* The event runs inside the camp
+scene (Section 7), so the lookup runs against the descriptor table live in
+that scene, not against the world's table. Observed in an EGA capture of a
+three-member party (Avatar, a Fighter and a Bard, by the saved class letters)
+with no level change: on each living member's turn that member's sleeping
+figure changed to a standing figure, one turn at a time, showing avatar,
+fighter and minstrel art respectively, which matches the table above member
+by member; the change showed at the first world-tick pause of the member's
+turn, before the flash; the figures stayed standing in class art for the rest
+of the event, through the departure converge, and went only when the camp
+scene closed. The Avatar's figure kept avatar art to the end, so the stamps do
+not all land on one record. The reading that each living member's lookup hits
+that member's own camp figure is inferred from this capture: the camp scene's
+descriptor contents and the members' arena slots were not traced, and one
+alternative is not excluded statically - that the silent heal and cure, not
+the stamp, makes the sleeping figure stand. The per-class art match and the
+Avatar's figure never being overwritten argue against it. A six-member party,
+a level change and the miss paths were not run; those remain static reading.
+Earlier text said every member resolved to record 0, the party's own map
+record, re-stamped once per living member and left showing the last living
+member's class art; that assumed the event ran over the world table and is
+retracted (`RETRACTIONS.md` R669).
 
 Source provenance: literals, the class-tile table and the note periods from the
 shipped data; the event order, envelope arguments, converge and inversion calls
-and the pointer rule by static reading of the whole routine; private analysis in
-`u5-decomp/functions/OUTSUBS_OVL/` and `u5-decomp/notes/`.
+and the pointer rule by static reading of the whole routine; the camp-scene
+placement, the old man's visibility and the per-member figure changes from an
+EGA emulator capture of the original with only the event's one-in-four trigger
+roll forced, the event routine itself unmodified (issue #317 Q3); private
+analysis in `u5-decomp/functions/OUTSUBS_OVL/` and `u5-decomp/notes/`.
 
 ## 8. Relationship To Other Systems
 

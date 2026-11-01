@@ -114,6 +114,7 @@ Opened 2026-10-16 by the issue #298 dungeon pass:
 |---|---|---|
 | The first-party-exit record's dungeon consequences - that an in-arena K on a ladder or room grate, or the first party edge departure, steps the party a cell or changes its level once a room or walked-into fight ends - are static only; no live run walked an actor onto an arena ladder or off an arena edge and checked the dungeon position afterwards. | `systems/dungeon-mode.md` Sections 14 and 14.1 | One room fight in which a party member climbs an arena ladder, and one contact fight left by an edge, with the dungeon level, cell and facing read afterwards. |
 | The chamber-name banner and flavour-3 flourish colours on CGA, Hercules and Tandy, and the flourish's 4-in-65 rate, which is static (one hit in about fifteen live EGA frames is consistent with it but does not measure it). | `systems/dungeon-mode.md` Section 6.4 | A capture on each non-EGA driver facing a banner wall and a flavour-3 `0xC?` wall, and a longer EGA run counting flourish frames. |
+| Which Shame banner wall index `n` (1, 2, 3) draws which stored string (DEEP, DEEPER, DEEPEST). The strings, widths and origins are read from shipped data; the `n`-to-string order rests on the static reading of the banner handler's indexing, supported only by the widths fitting their origins. *(Added 2026-11-01, issue #317 Q1.)* | `systems/dungeon-mode.md` Section 6.4 | A capture facing each of Shame's three banner walls, or an executed run of the banner handler for `n` = 1 to 3. |
 
 Opened 2026-10-16 by the issue #298 objects and NPC pass:
 
@@ -125,7 +126,7 @@ Opened 2026-10-16 by the issue #298 commands-misc pass:
 
 | Item | Where | Notes |
 |---|---|---|
-| The camp apparition as drawn: the old man's art at row 372, the converge fade-in and fade-out, the per-member viewport inversions and the class-tile restamping of the party sprite are static only. | `systems/rest-and-camp.md` Sections 7.1 and 7.2 | A capture of a camp event in which at least one member gains a level, from a save with enough experience for a level change. |
+| The camp apparition as drawn: the old man's art at row 372, the converge fade-in and fade-out, the per-member viewport inversions and the class-tile restamping of the party sprite are static only. *Narrowed 2026-11-01 (issue #317 Q3): an EGA capture of a three-member party with no level change now shows the arrival and departure converges, the per-member inversions and each member's own camp figure changing to its class art (the party-sprite restamping is retracted, R669). Still open: the level-change case, including that the old man stays through the level lines, and which poses he cycles through during the key waits (not checked against the tile atlas).* | `systems/rest-and-camp.md` Sections 7.1 and 7.2 | A capture of a camp event in which at least one member gains a level, from a save with enough experience for a level change, with the old man's poses matched against the atlas. |
 
 Opened 2026-10-16 by the issue #298 Q31 Blackthorn panel-drop pass:
 
@@ -153,7 +154,7 @@ Opened 2026-10-17 by the issue #299 Q5 camp-apparition pass:
 
 | Item | Where | Notes |
 |---|---|---|
-| The one-flash-per-member camp apparition rests on static reading only: each world-tick pause is read as repainting the whole viewport, erasing the inversion. No live capture; the apparition is a random event behind camp conditions. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | A paired capture of a camp apparition with two or more living members. |
+| The one-flash-per-member camp apparition rests on static reading only: each world-tick pause is read as repainting the whole viewport, erasing the inversion. No live capture; the apparition is a random event behind camp conditions. *(Issue #299 Q5.)* *Narrowed 2026-11-01 (issue #317 Q3): a three-member EGA capture shows each inversion erased by the next pause, restoring the old man and the member figures, with no accumulation; only the five-by-five block around the centre was examined cell by cell. Still open: the viewport cells outside that block.* | `systems/rest-and-camp.md` Section 7.1 | A cell-by-cell check of the whole viewport in a camp apparition capture. |
 
 Opened 2026-10-17 by the issue #299 Q3 dungeon active-record pass:
 
@@ -609,8 +610,8 @@ Opened 2026-10-16 by the issue #298 commands-misc pass:
 
 | Item | Where | What settles it |
 |---|---|---|
-| Where the camp event's class tile lands after a combat. The record-0 (party sprite) outcome holds when every descriptor linked to a member has a zeroed object index; the actor-clear helper preserves the member/class link byte, so the table is not all-zero after combat, and a descriptor whose object index survives combat teardown would redirect the stamp. *(Issue #298 Q10.)* | `systems/rest-and-camp.md` Section 7.2 | Trace the combat-end descriptor teardown and record what remains in each descriptor's object index. |
-| The camp inversion's highlight pen at event time, and whether the world-tick pauses after each member's unrestored inversion repaint the viewport. *(Issue #298 Q10.)* | `systems/rest-and-camp.md` Section 7.1 | Trace the pen slot's writers before the event and the world tick's repaint behaviour inside it. |
+| Where the camp event's class tile lands. *Narrowed 2026-11-01 (issue #317 Q3): the event runs inside the camp scene, whose table the lookup reads, so leftovers from an earlier fight no longer bear on it, and the record-0 outcome is retracted (R669). Still open: the camp scene's descriptor contents and the members' arena slots were not traced, so that each lookup hits the member's own figure is inferred from a capture; the alternative that the silent heal and cure, not the stamp, makes the sleeping figure stand is not excluded statically; a six-member party and the miss paths were not run.* | `systems/rest-and-camp.md` Section 7.2 | Trace the camp scene's descriptor table and member arena slots at event time, or capture a six-member camp event and one in which a member's figure is already standing before its turn. |
+| The camp inversion's highlight pen at event time, and whether the world-tick pauses after each member's unrestored inversion repaint the viewport. *(Issue #298 Q10.)* *Narrowed 2026-11-01 (issue #317 Q3): the repaint is observed in an EGA capture; the rest of this row stands.* | `systems/rest-and-camp.md` Section 7.1 | Trace the pen slot's writers before the event and the world tick's repaint behaviour inside it. |
 | The shrine/Codex presentation's per-count object positions on the 11-by-11 map, and what actor tile `0x03`'s art is meant to represent there. *(Issue #298 Q5.)* | `systems/karma.md` Section 8 | Read the position table and check the drawn art. |
 
 Opened 2026-10-16 by the issue #298 Q32 ship-cadence pass:
@@ -640,7 +641,7 @@ Opened 2026-10-17 by the issue #299 Q2, Q4 and Q5 pass:
 |---|---|---|
 | Whether a dungeon camp-attack fight can carry the two-way-ladder flag. The arena `U/D-` test accepts the mode bit that dungeon contact and dungeon camp-attack fights share; the published "only place the two-way prompt can appear" rests on the flag being set only by the contact room painter. *(Issue #299 Q4.)* | `systems/dungeon-mode.md` Section 14.1; `systems/combat.md` Section 8.4 | Trace the flag's writers and clears against the dungeon camp-attack entry. |
 | What a town or overworld combat caller does with an Up/Down departure code (5 or 6). No stock `BRIT.CBT` arena can produce one; a custom arena with ladder tiles would. *(Issue #299 Q4.)* | `systems/combat.md` Section 8.4 | Read the town and overworld post-combat paths for exit codes 5 and 6. |
-| Whether any viewport cell holds the companion band's paint-nothing sentinel during the camp member pass. Such a cell is not repainted by the world-tick pause and would keep its inverted pixels. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | Trace the viewport buffers' contents from the old man's appearance through the member pass. |
+| Whether any viewport cell holds the companion band's paint-nothing sentinel during the camp member pass. Such a cell is not repainted by the world-tick pause and would keep its inverted pixels. *(Issue #299 Q5.)* *Updated 2026-11-01 (issue #317 Q3): the event runs in the combat-framed camp scene, where the sentinel is a combat-scene value, so the case is more relevant than first thought; the capture showed each repaint restoring the old man's cell and the member figures, but only the five-by-five block around the centre was examined cell by cell.* | `systems/rest-and-camp.md` Section 7.1 | Trace the viewport buffers' contents from the old man's appearance through the member pass. |
 | Whether the low-colour accent-pen value 3 inverts every pixel on the CGA and Hercules drivers, in particular on the one-bit Hercules mode. On the sixteen-colour drivers 15 is all ones; the low-colour drivers' mapping of 3 for an exclusive-or rectangle was not traced. *(Issue #299 Q5.)* | `systems/rest-and-camp.md` Section 7.1 | Read the CGA and Hercules rectangle routines' colour mapping in exclusive-or mode. |
 | Whether the shipwright's ordinary-offer `No` returns to the F/S menu (record `119`). This rests on one static reading; the second reader confirmed the row placement but did not trace that jump. *(Issue #299 Q2.)* | `systems/shops.md` Section 8.C | Trace the ordinary-offer decline arm to its next print. |
 
@@ -830,6 +831,20 @@ Opened 2026-10-31 by the issue #316 Q2 phase-byte pass:
 | Item | Where | What settles it |
 |---|---|---|
 | What the animator reads when a monster inherits a script position that lies past the end of its own class's shorter script. *(Issue #316 Q2.)* | `systems/active-objects.md` Section 3 ("Byte 6 is not initialised at spawn") | Trace the animator's step lookup for an out-of-range position, or run the original with such a byte placed by hand. |
+
+Opened 2026-11-01 by the issue #317 Q2 endgame restoration-flourish pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| How long the restoration inversion persists with the world-animation gate off. The one-tick pauses then skip their renders, so the inverted tableau lasts until some later viewport render; which one was not traced. *(Issue #317 Q2.)* | `systems/endgame.md` Section 4 | Trace the viewport renders between the restoration and the walk-in with the gate off, or capture an endgame with the gate off. |
+| Whether, with the gate off and two or more Dead members, the second member's inversion cancels the first and shows the tableau un-inverted. That happens only if no viewport render runs between the two restorations, which is unverified. *(Issue #317 Q2.)* | `systems/endgame.md` Section 4 | The same trace or capture as the row above, with a party holding at least two Dead members. |
+| The restoration inversion on CGA, Tandy and Hercules. Colour slot 1 and the CGA driver's inverting fill path are static reading; the Tandy and Hercules inverting paths were not inspected and no low-colour or Tandy run was made. *(Issue #317 Q2.)* | `systems/endgame.md` Section 4 | A capture of one restoration on each non-EGA driver. |
+
+Opened 2026-11-01 by the issue #317 Q3 camp-apparition pass:
+
+| Item | Where | What settles it |
+|---|---|---|
+| Whether the camp apparition's arrival converge, at this site, reveals all 256 plots straight to the final art. Measured against the post-converge frame the matching-pixel count rose steadily with no wholesale wipe, but a few pixels were lost during the build, a large share arrived with the first member's stamp and repaint, and the comparison frame may show a different animation pose. *(Issue #317 Q3.)* | `systems/audio.md` Section 8.3.1 | A capture compared against the converge tile's own atlas art, frame by frame, before the member pass begins. |
 
 ## 4. Deferred by scope
 

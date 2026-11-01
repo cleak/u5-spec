@@ -1324,6 +1324,15 @@ the flash tile, then set the actor's tile to the real creature sprite.
   emulator, and none of them showed any revealed pixel wiped by an intervening
   world tick - a smooth, monotone build-up (`systems/blackthorn.md` Section 6.2).
   The summon site itself was not captured, so this bullet stays open for it.
+  *(added 2026-11-01, issue #317 Q3)* The camp apparition's arrival converge
+  was also captured (EGA). Measured against the frame after the converge, the
+  number of matching pixels in the cell rose steadily across the build-up, and
+  no wholesale wipe of the revealed cell was seen. This is not evidence of a
+  clean 256-plot reveal straight to the final art: a few individual pixels
+  were lost during the build, a large share of the cell arrived in one frame
+  that coincides with the first member's stamp and world-tick repaint, so it
+  came from that repaint and not from the converge, and the comparison frame may show a different
+  animation pose from the converge's own tile.
 - **Wall-clock length**, per the unpriced world ticks above.
 - **What the placeholder tile depicts** - identified from rendered pixels, not
   from any stored name.
@@ -1922,9 +1931,13 @@ fixed-interval contract. The approximately 24 ms movement burst and
 models; neither requires a new software-envelope recipe.
 
 When a Dead party member is restored for the endgame tableau, the sequence
-announces the restoration, fills the gameplay rectangle once, runs software
-envelope `(1, 5000, 40000, 1, 8800)`, and redraws the full stats panel. It is a
-single blocking flourish per restored member.
+announces the restoration, inverts the gameplay rectangle once (an
+exclusive-or fill in user-interface colour slot 1; `endgame.md` section 4),
+runs software envelope `(1, 5000, 40000, 1, 8800)` with the inverted image
+held, and redraws the full stats panel; with the world-animation gate on, the
+tableau is repainted by the next world tick, not by that redraw. It is a
+single blocking flourish per restored member. *(Corrected 2026-11-01, issue
+#317 Q2: earlier text said the rectangle was filled; that is retracted, R667.)*
 
 The later box/tableau presentation uses envelope
 `(1, 10000, 50000, 1, 5200)`. The two-part-sting helper located after the

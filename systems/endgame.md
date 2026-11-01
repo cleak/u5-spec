@@ -112,7 +112,8 @@ selects which of them is active. Everything below follows from that.
 Cells are sixteen pixels square and the grid's top-left corner is pixel
 `(8, 8)`, so the tableau occupies the inclusive square
 `(8, 8)..(183, 183)` — 176 pixels on a side. That is the same rectangle the
-per-character revival flash of section 4 fills, and the same rectangle
+per-character revival flash of section 4 inverts *(corrected 2026-11-01,
+issue #317 Q2: earlier text said "fills"; R667)*, and the same rectangle
 `display-driver-abi.md` section 9.6 lists for the map viewport, so an engine
 that gets one right gets all three.
 
@@ -200,10 +201,38 @@ For each party member:
   health from the stored maximum, plays a short audio/visual flourish, and waits
   briefly. The announcement is a line feed, the character's name, and the
   literal text `" lives!"` followed by a line feed, printed into the message
-  window of section 3.1. The flourish is a **single opaque fill of the whole
-  `(8, 8)..(183, 183)` tableau rectangle** in the resident drawing colour,
-  followed by a speaker tone and then a full status-panel redraw, which is what
-  restores the tableau underneath. It is one flash, not a repeating cycle;
+  window of section 3.1. The flourish is a **single exclusive-or inversion of
+  the whole `(8, 8)..(183, 183)` tableau rectangle**. Immediately before it the
+  sequence sets the drawing colour explicitly to user-interface colour slot 1
+  (`display-driver.md` section 2: 15 on EGA and Tandy, 3 on CGA and Hercules);
+  the colour is set on every restoration and is not inherited from earlier
+  drawing. Every pixel of the rectangle then becomes its colour index
+  exclusive-or that colour, so on EGA the tableau shows as its colour negative
+  (black to white, green to light magenta, light grey to dark grey, yellow to
+  blue), not as a solid square; the frame and everything outside the rectangle
+  are untouched. The speaker envelope `(1, 5000, 40000, 1, 8800)` then plays
+  with the inverted image held, and the full status-panel redraw that follows
+  updates only the panel and leaves the inverted tableau in place. With the
+  world-animation gate on, the inversion is replaced (not undone) by the next
+  world-tick render, which is the one-tick pause the sequence runs after
+  placing the revived member's sprite at the entry cell `(5, 9)` and before the
+  walk-in, so the first normal frame already shows the revived member. It is
+  one flash per Dead member, not a repeating cycle. *(Corrected 2026-11-01,
+  issue #317 Q2: earlier text said an opaque fill in the resident drawing
+  colour that the status-panel redraw restored; that is retracted, R667.)*
+  Evidence: the colour set, the inverting fill and the hold are executed
+  original code (DOSBox EGA capture, one Dead member: exactly the 176-by-176
+  rectangle changes, each index `i` to `i` exclusive-or 15, held through the
+  envelope and the panel update, then repainted with the member at `(5, 9)`;
+  the observed hold of roughly two seconds is emulator timing, not a
+  contract). The CGA, Tandy and Hercules appearance is static reading only.
+  **Not established:** with the world-animation gate off the one-tick pauses
+  skip their renders, so the inversion persists until some later viewport
+  render runs (which render that is was not traced); and with the gate off and
+  two or more Dead members, if no viewport render runs between two members'
+  restorations the second inversion would cancel the first and show the
+  tableau un-inverted. Neither case was executed. Private analysis in
+  `u5-decomp/notes/`;
 - the character's class or role is mapped to a sprite used in the tableau;
 - the character is placed into an active-object slot at the starting position for the scene;
 - the movement helper steps that slot toward its target until it arrives.

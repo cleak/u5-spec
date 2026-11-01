@@ -756,7 +756,10 @@ Two flavour-conditional extras hang off the forward test:
   homed at the origin, the runic font selected, inverse video turned on, the
   banner printed, and inverse video turned off before the font and windows are
   restored. Each banner is stored space-padded to a rectangle, one stored line
-  per screen row, and because inverse video paints the spaces too it appears
+  per screen row (padding exists only on multi-row banners, to square out the
+  shorter lines; the single-row banners, THE CRYPT and the three Shame banners,
+  carry no padding) *(corrected 2026-11-01, issue #317 Q1)*, and because inverse
+  video paints the spaces too it appears
   as a **solid white block with black runes** exactly its rows high and its
   width in cells wide. One digraph glyph (`TH`, `ST`, `NG`, `EE`) occupies one
   cell. The origin cell's pixel corner is (8 x column, 8 x row).
@@ -791,12 +794,22 @@ Two flavour-conditional extras hang off the forward test:
   stalactite.` is an L-Look flavour description of the `0xC?` class and never
   reaches this handler (`RETRACTIONS.md` R325). The banners are stored in the
   runic character set, whose digraph glyphs each stand for two Latin letters.
-  Only the `TH`, `ST` and word-space code points are **established**; the `NG`
-  and `EE` readings that turn the stored bytes into `WRONG`, `DEEP`, `DEEPER`
-  and `DEEPEST` are **probable**, resting on the runic font's glyph shapes plus
-  the fact that they are the only readings that make those bytes into words.
-  Settling them means tracing the runic-font renderer or finding a second
-  corpus that spells a known `NG` or `EE` word. It is also **not traced** whether the
+  *(Corrected 2026-11-01, issue #317 Q1.)* The digraph code points are `[`
+  `TH`, `\` `EE`, `]` `NG` and `_` `ST`, all **established**: the shipped sign
+  text, a second corpus, spells known words with the same glyphs (`EE` in DEEP
+  FOREST, BEEN, SEEN and EMPLOYEES; `NG` in WRONG, KINGS, TRYING and LONGER).
+  The Shame banners are stored as `D\P` (DEEP, 3 cells), `D\PER` (DEEPER, 5
+  cells) and `D\PE_` (DEEPEST: D, `EE`, P, E, `ST`; 5 cells), each a single row
+  exactly as wide as its word, with no padding. Their assignment to `n` = 1, 2
+  and 3 follows the static reading of the banner handler's indexing; the
+  widths fitting their origins (3 cells at column 10, 5 at column 9) support it.
+  Banner padding and word gaps use the ordinary space code, never the `@`
+  word divider used between words in the endgame title, Codex records and sign
+  text. In the runic font the ordinary space is a blank cell, which paints
+  solid white under inverse video, while `@` is a small centred dot, so
+  writing banner spaces as `@` would put dots into the block. The earlier text
+  called the `NG` and `EE` readings only probable; they are now established
+  (`RETRACTIONS.md` R666). It is also **not traced** whether the
   banner clears itself: the handler restores the window and font but does not
   repaint the viewport region it wrote into, so presumably the next
   first-person repaint covers it.

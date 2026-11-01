@@ -79,6 +79,7 @@ sign-style text:
 | `@` | Inter-word space in tile-glyph text |
 | `[` | `TH` digraph |
 | `]` | `NG` digraph |
+| `\` | `EE` digraph (established by the dungeon banners and sign text; see `systems/dungeon-mode.md` Section 6.4; added 2026-11-01, issue #317 Q1) |
 | `_` | `ST` digraph |
 
 The earlier `ER` label for `_` is retracted (`RETRACTIONS.md` R455);
